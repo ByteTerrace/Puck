@@ -77,6 +77,46 @@ public sealed class RecipientOracleLawTests {
         Assert.StartsWith(WorldRecipientMutations.NotDisclosedCode, outcomes[0], StringComparison.Ordinal);
     }
 
+    // An arrangement reads its zone's token domain, a row its subjects do not name; the arena's audience check walks
+    // that row's current cell policies before the kernel runs.
+    [Fact]
+    public void ATransformAnswersAlikeWhateverPolicyAnUnnamedRowItReadsHoldsNow() {
+        var outcomes = new List<string>();
+        foreach (var restricted in new[] { false, true }) {
+            var cards = new WorldStateRow(CellName.Parse("cards"), CellKind.Int, CellVisibility: true,
+                Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(1), Visibility: restricted ? new StateVisibility(Readers: ["seat2"]) : null),
+                    new StateCell(CellName.Parse("b"), CellValue.Int(2))]);
+            var pile = new WorldStateRow(CellName.Parse("pile"), CellKind.Bool, Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true),
+                Cells: [new StateCell(CellName.Parse("b"), CellValue.Bool(true)), new StateCell(CellName.Parse("a"), CellValue.Bool(true))]);
+            var rank = new WorldStateRow(CellName.Parse("rank"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]);
+            var document = Fixtures.BuildDocument().WithWorldState([cards, pile, rank]);
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
+            using var fixture = Fixtures.FreshServer(document);
+            var outcome = Submit(fixture, new WorldMutation.TransformState(Principal.Seat(0), new StateTransform.Arrange("pile", "rank")));
+            outcomes.Add($"{outcome.Code}:{outcome.Detail}");
+        }
+        Assert.Equal(outcomes[0], outcomes[1]);
+    }
+
+    // A keyed row's transaction refuses a key outside its token domain, so the write reads the domain's membership.
+    [Fact]
+    public void AWriteIntoAZoneAnswersAlikeWhetherAWithheldDomainHoldsTheKey() {
+        var outcomes = new List<string>();
+        foreach (var held in new[] { false, true }) {
+            var cards = new WorldStateRow(CellName.Parse("cards"), CellKind.Int, Visibility: new StateVisibility(Readers: []),
+                Cells: held ? [new StateCell(CellName.Parse("a"), CellValue.Int(1)), new StateCell(CellName.Parse("x"), CellValue.Int(2))]
+                    : [new StateCell(CellName.Parse("a"), CellValue.Int(1))]);
+            var hand = new WorldStateRow(CellName.Parse("hand"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")),
+                Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(0))]);
+            var document = Fixtures.BuildDocument().WithWorldState([cards, hand]);
+            Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
+            using var fixture = Fixtures.FreshServer(document);
+            var outcome = Submit(fixture, new WorldMutation.UpsertStateCell(Principal.Seat(0), "hand", "x", 5, WorldDocumentWriteKind.Set));
+            outcomes.Add($"{outcome.Code}:{outcome.Detail}");
+        }
+        Assert.Equal(outcomes[0], outcomes[1]);
+    }
+
     [Fact]
     public void ABatchWhoseMembersCloseAParentCycleIsAnsweredNotOverflowed() {
         var document = Fixtures.BuildDocument() with { CreationsRaw = [CreationFixtures.Sphere(id: "piece", scale: 0.2f)] };

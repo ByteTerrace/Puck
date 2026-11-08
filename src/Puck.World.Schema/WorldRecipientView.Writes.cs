@@ -24,10 +24,15 @@ public sealed partial class WorldRecipientView {
             static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin);
 
     /// <summary>Admits a row from declared policy alone. Absent declarations carry no restriction; ordinary
-    /// composition diagnoses them. A declared set admits only if every row its expression reads admits.</summary>
+    /// composition diagnoses them. A declared set admits only if every row its expression reads admits. A row keyed
+    /// over a token domain admits only if the domain reads whole too: the transaction refuses a key outside the
+    /// domain (<see cref="StateArena.TryValidateRelations(out string)"/>), so a write's outcome reads the domain's membership.</summary>
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
-        if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return ReadsWhole(handle.Ordinal); }
+        if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) {
+            var domain = Arena.Layout[handle.Ordinal].DomainOrdinal;
+            return ReadsWhole(handle.Ordinal) && ((domain < 0) || ReadsWhole(domain));
+        }
         return AdmitsSet(row);
     }
     // Keep the set-name predicate's capture off successful direct-row admission, including bound guest writes.
@@ -38,6 +43,25 @@ public sealed partial class WorldRecipientView {
         RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(Source), set, reads);
         foreach (var ordinal in reads) {
             if (!ReadsWhole(ordinal)) { return false; }
+        }
+        return true;
+    }
+
+    /// <summary>Checks every row a transform touches once resolved, the rows its subjects do not name included (a
+    /// live key's row, a zone's token domain, a pool's fields), since the arena's audience check reads their current
+    /// cells before the kernel runs. A transform that does not resolve adds nothing here: its refusal comes from the
+    /// declarations alone, at composition.</summary>
+    /// <param name="transform">The authored transform.</param>
+    /// <param name="row">The first withheld row, or empty.</param>
+    /// <returns><see langword="true"/> when every resolved row reads whole, or the transform does not resolve.</returns>
+    public bool AdmitsTransform(StateTransform transform, out string row) {
+        row = string.Empty;
+        if (Unrestricted) { return true; }
+        var rows = Writes.GetValue(this, static _ => new()).Sets;
+        rows.Clear();
+        if (!RuleCompiler.TryCollectTransformRows(transform, WorldFactsCompiler.Context(Source), rows, out _)) { return true; }
+        foreach (var ordinal in rows) {
+            if (!ReadsWhole(ordinal)) { row = Arena.Rows[ordinal].Name.Value; return false; }
         }
         return true;
     }

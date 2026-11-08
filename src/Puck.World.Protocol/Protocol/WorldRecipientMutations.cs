@@ -26,6 +26,7 @@ public static class WorldRecipientMutations {
                     if (!view.Admits(subject.Name)) { row = subject.Name; return false; }
                 }
                 if (transform.Guard is { } guard && !view.Admits(guard.Row)) { row = guard.Row; return false; }
+                if (!view.AdmitsTransform(transform.Transform, out row)) { return false; }
                 break;
             case WorldMutation.Batch batch:
                 if (!batch.TryValidateShape(out _)) { return true; }
