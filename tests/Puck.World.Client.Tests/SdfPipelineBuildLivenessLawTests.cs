@@ -193,9 +193,9 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
         // cache lists only the pass pipelines (the region copy, the mesh pass, its occlusion kernel, the shadow cascades'
-        // depth and exit passes and the glass pass), released after the set, the held creations can return: no canceled
-        // build starts another.
-        const int PassPipelines = 6;
+        // depth, exit and glass-extinction passes and the glass pass), released after the set, the held creations can
+        // return: no canceled build starts another.
+        const int PassPipelines = 7;
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
@@ -245,11 +245,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
 
         driver.WaitUntilFull();
 
-        // A release that leaves another holder cancels nothing and returns while the build is still held.
+        // A release that leaves another holder cancels nothing and returns while the build is still held. The set leases
+        // every kernel a view does not acquire on demand, and names the ones still building in kernel order.
+        var leased = SdfWorldPipelines.BuildOrder(kernels: SdfTestPipelines.Kernels()).Order().ToArray();
+
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (14, "building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply)")
+            expected: (leased.Length, $"building (0 of {leased.Length} pipelines created; waiting on {string.Join(separator: ", ", values: leased.Select(selector: static kernel => SdfKernelSet.StemOf(kernel: kernel)))})")
         );
 
         var release = new Thread(start: last.Dispose);
