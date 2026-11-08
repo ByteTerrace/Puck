@@ -60,6 +60,34 @@ public sealed class WorldStateDocumentValuesLawTests {
         Assert.Same(expected: bound.PlacementsRaw, actual: again.PlacementsRaw);
     }
     [Fact]
+    public void ARewriteRebuildsEveryShapeOnThePathAndRefusesAClassItCannotCopy() {
+        var bound = Bound();
+        object[] graphs = [
+            new Pair<Boxed[], int>(Left: [new Boxed(Value: bound)], Right: 0),
+            new Pair<List<DocumentIdentifier>, int>(Left: [new DocumentIdentifier(value: "kept"), bound], Right: 0),
+            new Pair<Dictionary<string, DocumentIdentifier>, int>(Left: new(comparer: StringComparer.Ordinal) { ["key"] = bound }, Right: 0),
+            new Pair<object, int>(Left: new Boxed(Value: bound), Right: 0),
+        ];
+
+        foreach (var graph in graphs) {
+            Assert.True(
+                condition: WorldStateDocumentValues.TryFlatten(flattened: out var flattened, graph: graph, reason: out var reason, source: Source()),
+                userMessage: reason
+            );
+            Assert.False(condition: WorldStateDocumentValues.HasReference(graph: flattened));
+            Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+        }
+
+        var refused = Assert.Throws<NotSupportedException>(testCode: () => WorldStateDocumentValues.TryFlatten<Pair<Base, int>>(
+            flattened: out _,
+            graph: new Pair<Base, int>(Left: new Derived(value: bound), Right: 0),
+            reason: out _,
+            source: Source()
+        ));
+
+        Assert.Contains(expectedSubstring: "left", actualString: refused.Message);
+    }
+    [Fact]
     public void ABoundValueReadsTheArenaItsServerHoldsWhenItIsRead() {
         var first = Placed(spot: "[1,2,3]");
         var live = new WorldLiveValues(clock: static () => ArenaTime.Origin) { Arena = WorldStateReader.Seed(definition: first) };

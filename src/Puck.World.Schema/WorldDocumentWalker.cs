@@ -121,9 +121,19 @@ public sealed class WorldDocumentWalker {
         ArgumentNullException.ThrowIfNull(argument: root);
         ArgumentNullException.ThrowIfNull(argument: visitor);
 
+        new Cursor(
+            tables: CurrentTables(),
+            visitor: visitor
+        ).Visit(
+            declared: null,
+            field: null,
+            value: root
+        );
+    }
+    // Code the runtime replaced derived nothing a walk reads again: the revision moves, the tables are derived anew.
+    private Tables CurrentTables() {
         var tables = m_tables;
 
-        // Code the runtime replaced derived nothing a walk reads again: the revision moves, the tables are derived anew.
         if (tables.Revision != CodeRevision.Current) {
             tables = new Tables(
                 revision: CodeRevision.Current,
@@ -132,14 +142,7 @@ public sealed class WorldDocumentWalker {
             m_tables = tables;
         }
 
-        new Cursor(
-            tables: tables,
-            visitor: visitor
-        ).Visit(
-            declared: null,
-            field: null,
-            value: root
-        );
+        return tables;
     }
     /// <summary>Returns a document, or any model value or object graph, with each surface value the rewriter replaces
     /// put in its place: the values on the path from the root to a replacement are copied as a record's
@@ -159,19 +162,9 @@ public sealed class WorldDocumentWalker {
         ArgumentNullException.ThrowIfNull(argument: root);
         ArgumentNullException.ThrowIfNull(argument: rewriter);
 
-        var tables = m_tables;
-
-        if (tables.Revision != CodeRevision.Current) {
-            tables = new Tables(
-                revision: CodeRevision.Current,
-                walker: this
-            );
-            m_tables = tables;
-        }
-
         var rewritten = new Cursor(
             rewriter: rewriter,
-            tables: tables
+            tables: CurrentTables()
         ).Rewrite(
             declared: null,
             field: null,
@@ -852,7 +845,9 @@ public sealed class WorldDocumentWalker {
                 var comparer = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
                     ? type.GetProperty(name: "Comparer")!.GetValue(obj: original)
                     : null);
-                var rebuilt = (IDictionary)Activator.CreateInstance(type: target, args: [comparer])!;
+                var rebuilt = (IDictionary)((comparer is null)
+                    ? Activator.CreateInstance(type: target)!
+                    : Activator.CreateInstance(type: target, args: [comparer])!);
 
                 for (var index = 0; (index < values.Count); index++) {
                     if (dictionary) {
