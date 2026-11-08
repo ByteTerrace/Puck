@@ -230,6 +230,18 @@ brief:
   out (rule 7). A packet's claim of what is missing or what causes a cost is
   a lead to verify, not a fact. One lane was sent to add a source-generated
   JSON context that already existed, because the packet said none did;
+- no named mechanism to reuse unless the lead found it by capability (rule 7)
+  and checked that it owns that capability. A lead that names a nearby class
+  anchors the lane on it: a pause-menu brief named the chord tracker for a
+  tap-versus-hold decision, two lanes built on it, and the authored input
+  patterns that already own timed press and hold matching
+  (`WorldInputPattern`) went unconsidered until the owner pointed them out.
+  When the owner is unknown, the brief states the capability and asks the lane
+  to find it;
+- for a lane that designs or builds a mechanism, a **Systems considered**
+  section in the hand-back: the capability searched, the decision registers,
+  references and skills read, the candidates found with citations, and why the
+  chosen one owns it. The lead reads it before merging;
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
@@ -1024,7 +1036,9 @@ reading its telemetry device id from the registry ("Requested registry access
 is not allowed"), and copying its CLI into the worktree's `.claude/scratch/`
 was denied part-way. So an Antigravity launch sets
 `DOTNET_CLI_TELEMETRY_OPTOUT=1`, the lead pre-builds and copies the lane's CLI
-before launch, and a coding brief asks for a short edit plan written to the
+before launch to `<worktree>/.tmp/puck-cli/` (its sandbox denies writes under `.claude/`, and a
+copy outside the worktree trips the hook and stops the run, as a duplication audit did) and the
+brief names that path, and a coding brief asks for a short edit plan written to the
 worktree within its first steps and then edits; with `stream-json`, the lead
 counts edit tool calls in the log and treats a long run with none as a stall
 to act on. Re-test with the next bounded coding item before concluding

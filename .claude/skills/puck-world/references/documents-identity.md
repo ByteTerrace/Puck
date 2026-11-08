@@ -72,7 +72,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   `adjacencies` row name, required for `Presence` and refused for `Endowed`)
   and `graceSeconds` are AUTHORED; `contributor` and `retractDeadlineTick` are
   SERVER-STAMPED and a submission naming either is refused BY NAME
-  (`src/Puck.World.Server/WorldTick.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
+  (`src/Puck.World.Server/WorldDocument.Compose.cs`'s `TryComposeUpsertPlacement` reads the
   contributor off the acting principal — accepting an authored one would be the
   laundering the acting-principal rule forbids). An UNFILLED slot shows its own
   `slotCreationId`, so no creationless placement has to be representable, and

@@ -394,6 +394,14 @@ settles a question, decide by that principle and say why.
    world work is mostly wiring its documents to what exists; new code is for a
    gap you can name after that search. A second implementation is a defect,
    and a skill wrong about its own area is corrected in the same change.
+   Search by capability, not only by the name you expect: state what the
+   mechanism does ("tell a tap from a hold", "hold a thing for both sides"),
+   read the area's decision register (`docs/decisions/`) and reference pages
+   for it, then ask the code. The rule binds a plan, a design memo and a brief
+   exactly as it binds code, and a lane that designs or builds a mechanism hands
+   back the systems it considered, with citations. An area with no owning skill,
+   or a skill that does not map a capability its area owns, is a gap fixed when
+   found.
    Act on the code, never on memory (the owner's ruling): before stating how
    something works, naming a cause, briefing a lane or changing code, read the
    current source, document or measurement it rests on, and cite it
