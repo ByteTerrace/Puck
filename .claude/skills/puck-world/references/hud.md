@@ -29,6 +29,7 @@ them and `0` hides them. A new addon panel takes the same gate.
 ## Contents
 
 - Schema and caps
+- Overlay visibility
 - Authoring a panel in `.puck`
 - Templating (`WorldHudElement.Template`)
 - The overlay reservation — what refuses at construction
@@ -177,6 +178,24 @@ declared range, or a plain `state.<row>` binding on a KEYED row with no single
 cell to show) the gauge draws EMPTY — the same "unbound gauge draws empty"
 rule an unbound binding already follows, not a new validation-time refusal
 (only existence is checked).
+
+## Overlay visibility
+
+Every overlay element — a `hud.panels` row, a
+seat's player-scope panel, `hud.defaults` (the gate over every world panel),
+`hud.defaults.cursor`, and a binding overlay's `bindingBar` — takes an optional `visible` predicate
+over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
+`WorldOverlayVisibility.cs`; evaluated by `WorldOverlayFacts`): `now {fact}`,
+`recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
+routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
+`SeatCameraApplication` (the seat's camera control application is active —
+`WorldSeatBindings.IsCameraModeActive`), `ScreenFramed` (the seat is captured
+on a screen and its view shows that picture alone — `WorldPerceptionAnchor.ScreenFramed`).
+Absent = always visible. `{ "$type": "recently", "fact":
+"SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
+seat's last input and shows it on the next; a world-scope panel reads a fact as
+true when it holds for any joined local seat. Windows compile through the world's
+simulation rate; nothing here enters the simulation.
 
 ## Authoring a panel in `.puck`
 
