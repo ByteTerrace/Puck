@@ -113,6 +113,34 @@ public sealed class DeliveryReviewLawTests {
     }
 
     [Fact]
+    public void AStateOnlyTickDeliversItsRowsWithoutComposingTheDisclosedDefinitionAgain() {
+        using var fixture = Fixtures.FreshServer(Document(Row(hidden: HiddenCells.Count)));
+        var sink = new Replica();
+        using var observation = Observe(fixture, sink);
+        fixture.Step();
+        var work = fixture.Server.DisclosureWorkSource;
+        long Read(Puck.Abstractions.Counting.WorkKind kind) {
+            Assert.True(work.TryRead(kind, out var value));
+            return value;
+        }
+        var compositions = Read(WorldDisclosureImages.DefinitionCompositions);
+        var bytes = Read(WorldDisclosureImages.DefinitionBytes);
+        for (var value = 20L; value < 23L; value++) {
+            fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", value, WorldDocumentWriteKind.Set));
+            fixture.Step();
+            Assert.Equal(value, sink.Read("hand", "pub"));
+        }
+        Assert.Equal(compositions, Read(WorldDisclosureImages.DefinitionCompositions));
+        Assert.Equal(bytes, Read(WorldDisclosureImages.DefinitionBytes));
+        // A new row is definition-level content: the next delivery composes the document again and carries it.
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console,
+            new WorldStateRow(Name: CellName.Parse("public"), Kind: CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(4))])));
+        fixture.Step();
+        Assert.True(Read(WorldDisclosureImages.DefinitionCompositions) > compositions);
+        Assert.Equal(4L, sink.Read("public", WorldStateRow.SlotKey.Value));
+    }
+
+    [Fact]
     public void WholeReplicaRowsKeepTheirStorageMetadata() {
         var row = Row() with { Visibility = null, Domain = new StateDomain.Ring(Capacity: 8),
             Cells = [new StateCell(CellName.Parse("0"), CellValue.Int(3))], HistoryCursor = 12 };
