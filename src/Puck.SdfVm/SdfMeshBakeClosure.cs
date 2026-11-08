@@ -10,7 +10,9 @@ namespace Puck.SdfVm;
 /// path) leaves it as it was, and an edit to anything the bake runs changes it.
 /// <para>The bake's roots (<see cref="BakeRoots"/>) are its planning, sampling, contouring and meshing types, the
 /// frame-block rows its kernel reads, the program's derivation of the field words the kernel walks (never its appearance), and the store's entry format.
-/// The walk stops at the library and the store, which hold meshes rather than make them; at the GPU region and its owed
+/// The walk stops at the library and the store, which hold meshes rather than make them; at the bake's report
+/// (<see cref="SdfMeshBakeReport"/>), which words, counts and writes what the bake says about itself and so changes no
+/// mesh, however its text or counters change; at the GPU region and its owed
 /// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at the kernels' interfaces and
 /// the render graph's package, whose declarations reach the bake through the kernels' bytecode; and at assemblies outside
 /// <c>Puck</c>: the runtime is the platform the bake runs on, as the driver is for its kernels. A type a parameter, a
@@ -49,6 +51,7 @@ public sealed class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
+        "Puck.SdfVm.SdfMeshBakeReport",
         "Puck.SdfVm.SdfMeshLibrary",
         "Puck.SdfVm.SdfMeshStore",
         "Puck.SdfVm.SdfWorldInterfaces",

@@ -9,6 +9,7 @@ using Puck.SignedDistance.Baking;
 using Puck.Abstractions.Memory;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
+using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
 namespace Puck.SdfVm;
 
@@ -323,19 +324,8 @@ public sealed partial class SdfMeshPathBake {
     private long m_resampleGroups;
     private long m_coalesced;
     private long m_promoted;
-    private long m_dispatches;
-    private long m_samples;
-    private long m_taps;
-    private long m_discarded;
-    private long m_refinedCells;
-    // The mesh edges the material cuts searched for a boundary, the vertices the field check moved onto the surface, and
-    // the triangles the planar merge took out of the contours.
-    private long m_cutEdges;
-    private long m_softened;
-    private long m_merged;
     private double m_seconds;
     private bool m_reported;
-    private long m_loaded;
 
     /// <summary>Gets the program the bake meshes: the one the last prepared frame carried, or
     /// <see langword="null"/> before the first.</summary>
@@ -602,10 +592,10 @@ public sealed partial class SdfMeshPathBake {
                 candidates.Add(item: (group.Priority, index));
             }
             if (pending) {
-                m_takes++;
-                m_waitingGroups += candidates.Count;
-                m_flyingGroups += flying;
-                m_workingGroups += working;
+                m_accounts.Takes++;
+                m_accounts.WaitingGroups += candidates.Count;
+                m_accounts.FlyingGroups += flying;
+                m_accounts.WorkingGroups += working;
             }
             CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
             var stop = 0;
@@ -656,7 +646,7 @@ public sealed partial class SdfMeshPathBake {
                     if (!availableRead) { available = AvailablePhysicalBytes(); availableRead = true; }
                     if (!group.Memory.TryReserve(available: available, peak: peak)) {
                         if (admitted > 0) {
-                            if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={Residency} group={group.Selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} available={available}"); group.DeferredReported = true; }
+                            if (!group.DeferredReported) { SdfMeshBakeReport.Deferred(admitted: admitted, available: available, peak: peak, residency: Residency, selector: group.Selector); group.DeferredReported = true; }
                             admissionWaits = true;
                             continue;
                         }
@@ -664,7 +654,7 @@ public sealed partial class SdfMeshPathBake {
                         // free memory read, so the bake always progresses, one group at a time. The library's cache
                         // stays: the groups following a leader take its mesh from there rather than baking it again.
                         group.Memory.Reserve(peak: peak);
-                        if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={Residency} group={group.Selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} available={available}"); }
+                        if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(available: available, peak: peak, residency: Residency, selector: group.Selector); }
                     }
                     group.DeferredReported = false;
                     group.Admitted = true;
@@ -679,12 +669,12 @@ public sealed partial class SdfMeshPathBake {
                 foreach (var (handle, snapshot) in group.SampledSnapshots) { m_takenSampled[handle] = snapshot; }
             }
             if (pending) {
-                if (lattices.Count == 0) { m_idleTakes++; }
+                if (lattices.Count == 0) { m_accounts.IdleTakes++; }
                 switch (stop) {
-                    case 1: m_stopTaps++; break;
-                    case 2: m_stopSamples++; break;
-                    case 3: m_stopBatch++; break;
-                    default: m_stopDrained++; break;
+                    case 1: m_accounts.StopTaps++; break;
+                    case 2: m_accounts.StopSamples++; break;
+                    case 3: m_accounts.StopBatch++; break;
+                    default: m_accounts.StopDrained++; break;
                 }
             }
             if (lattices.Count == 0) { return false; }
@@ -694,11 +684,11 @@ public sealed partial class SdfMeshPathBake {
                 Sampled = [.. m_takenSampled.Select(selector: static entry => (entry.Key, entry.Value))],
                 SampledHandles = (m_program?.SampledFields.Count ?? 0),
             };
-            m_batches++;
+            m_accounts.Batches++;
             foreach (var lattice in batch.Lattices) {
-                m_dispatches++;
-                m_samples += lattice.Samples;
-                m_taps += lattice.Taps;
+                m_accounts.Dispatches++;
+                m_accounts.Samples += lattice.Samples;
+                m_accounts.Taps += lattice.Taps;
             }
             return true;
         }
@@ -816,7 +806,7 @@ public sealed partial class SdfMeshPathBake {
         if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
             ticket.Slice.Return(ticket: ticket.Lattice);
         }
-        m_discarded += batch.Lattices[index].Samples;
+        m_accounts.Discarded += batch.Lattices[index].Samples;
         return true;
     }
 
@@ -934,7 +924,7 @@ public sealed partial class SdfMeshPathBake {
                     + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -1181,15 +1171,13 @@ public sealed partial class SdfMeshPathBake {
         public int Baking;
         public int Loading;
         public int Shared;
-        // The first groups begun, each its selector and how it began, which the start line names.
-        public List<string>? Named;
-
-        public const int NamedMost = 8;
+        // The first groups begun, which the start line names.
+        public List<SdfMeshBakeReport.Begun>? Named;
 
         public void Begun(Group group, bool loading) {
             if (loading) { Loading++; } else { Baking++; }
-            if ((Named ??= []).Count < NamedMost) {
-                Named.Add(item: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{group.Selector}/{(group.Dynamic ? $"slot{group.Slot}" : $"union{group.Instances}")}/{(loading ? "load" : "bake")}"));
+            if ((Named ??= []).Count < SdfMeshBakeReport.NamedMost) {
+                Named.Add(item: new(Selector: group.Selector, Dynamic: group.Dynamic, Place: (group.Dynamic ? group.Slot : group.Instances), Loading: loading));
             }
         }
     }
@@ -1297,16 +1285,7 @@ public sealed partial class SdfMeshPathBake {
         var begun = ((started.Baking + started.Loading) + started.Shared);
 
         if ((begun > 0) && (fresh || m_reported || !m_clock.IsRunning)) {
-            m_dispatches = 0;
-            m_samples = 0;
-            m_taps = 0;
-            m_discarded = 0;
-            m_refinedCells = 0;
-            m_cutEdges = 0;
-            m_softened = 0;
-            m_merged = 0;
-            m_loaded = 0;
-            ClearAccounts();
+            m_accounts.Clear();
             m_reported = false;
             m_clock.Restart();
             m_bakeStarted = restarted;
@@ -1314,21 +1293,7 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} baking={started.Baking} loading={started.Loading} shared={started.Shared} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={instances} cause={cause} begun=[{string.Join(separator: ',', values: started.Named ?? [])}{(((started.Baking + started.Loading) > PlaceCounts.NamedMost) ? ",…" : "")}]");
-            // The store's account reads its directory, so it runs off the frame's thread.
-            if (Library.Disk is { } disk) {
-                var parts = Identity;
-                var residency = Residency;
-                var baking = started.Baking;
-
-                _ = Task.Run(action: () => {
-                    if (baking > 0) {
-                        Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={residency} baking={baking}: {disk.ExplainMisses(identity: parts)}");
-                    } else {
-                        disk.Record(identity: parts);
-                    }
-                });
-            }
+            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared);
         } else if (begun > 0) {
             m_loadsQueued += started.Loading;
             if ((started.Loading > 0) && (m_loadFirst == 0)) { m_loadFirst = restarted; }
@@ -1461,7 +1426,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[0] += request.Samples;
+            m_accounts.KindSamples[0] += request.Samples;
             if (empty) {
                 group.Outcome = $"no surface after {group.Refinements} refinements";
                 group.Next = null;
@@ -1615,7 +1580,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[1] += request.Samples;
+            m_accounts.KindSamples[1] += request.Samples;
             if (!complete) {
                 group.Next = SlabOf(group: group);
                 return;
@@ -1671,12 +1636,12 @@ public sealed partial class SdfMeshPathBake {
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             refusal = exception.Message;
         }
-        Account(detail: $"dims={final.Lattice.Dims} factor={final.Sampled?.Refinement} measured={final.Sampled?.MeasuredCells} points={points.Length}", group: group, since: started, stage: BakeStage.Prepare);
+        Account(detail: new(Count: points.Length, Dims: final.Lattice.Dims, Factor: final.Sampled?.Refinement, Measured: final.Sampled?.MeasuredCells), group: group, since: started, stage: BakeStage.Prepare);
 
         var empty = ((refusal is not null) || (points.Length == 0));
 
         if (empty) {
-            if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
             _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)));
@@ -1756,7 +1721,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[(2 + ((int)final.Stage))] += request.Samples;
+            m_accounts.KindSamples[(2 + ((int)final.Stage))] += request.Samples;
             if (final.Answered < final.Points.Length) {
                 group.Next = FinalChunk(final: final, group: group);
                 return;
@@ -1785,14 +1750,14 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
         var points = ChooseCrossingPoints(final: final);
 
-        Account(detail: $"dims={final.Lattice.Dims} factor={final.Sampled!.Refinement} measured={final.Sampled.MeasuredCells} points={points.Length}", group: group, since: started, stage: BakeStage.Crossings);
+        Account(detail: new(Count: points.Length, Dims: final.Lattice.Dims, Factor: final.Sampled!.Refinement, Measured: final.Sampled.MeasuredCells), group: group, since: started, stage: BakeStage.Crossings);
         final.Points = points;
 
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
             final.Answered = 0;
-            if (refined) { m_refinedCells += final.Sampled!.MeasuredCells; }
+            if (refined) { m_accounts.RefinedCells += final.Sampled!.MeasuredCells; }
             group.Next = FinalChunk(final: final, group: group);
         }
     }
@@ -1810,9 +1775,9 @@ public sealed partial class SdfMeshPathBake {
         try {
             contour = lattice.Contour();
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
+            SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
-        Account(detail: $"factor={lattice.Refinement} measured={lattice.MeasuredCells} quads={contour?.QuadCount}", group: group, since: started, stage: BakeStage.Contour);
+        Account(detail: new(Count: contour?.QuadCount, Factor: lattice.Refinement, Measured: lattice.MeasuredCells), group: group, since: started, stage: BakeStage.Contour);
 
         var empty = ((contour is null) || (contour.QuadCount == 0));
         int[] creases = [];
@@ -1931,8 +1896,8 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[5] += request.Samples;
-            m_softened += softened;
+            m_accounts.KindSamples[5] += request.Samples;
+            m_accounts.Softened += softened;
             if (more) {
                 group.Next = CreaseChunk(group: group);
                 return;
@@ -1987,7 +1952,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[kind] += request.Samples;
+            m_accounts.KindSamples[kind] += request.Samples;
             if (group.PointsAnswered < group.Points!.Length) {
                 group.Next = PointChunk(group: group);
                 return;
@@ -2029,7 +1994,7 @@ public sealed partial class SdfMeshPathBake {
         try {
             mesh = group.Cut!.Build();
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
+            SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
         Account(group: group, since: started, stage: BakeStage.Cut);
 
@@ -2055,7 +2020,7 @@ public sealed partial class SdfMeshPathBake {
             group.Skin = mesh;
         }
         lock (m_gate) {
-            m_cutEdges += edges;
+            m_accounts.CutEdges += edges;
             if (skinned) {
                 group.Contouring = false;
                 if (m_groups.Contains(item: group)) { group.Next = PointChunk(group: group); }
@@ -2104,14 +2069,14 @@ public sealed partial class SdfMeshPathBake {
                 ? SdfMeshChunks.Bake(mesh, preserveFeatures: group.Geometry.ContainsGlyph)
                 : SdfMeshChunks.Merge(levels: !group.Glass, mesh: mesh, preserveFeatures: group.Geometry.ContainsGlyph));
             merged = (contoured - mesh.TriangleCount);
-            Account(detail: $"triangles={contoured} kept={mesh.TriangleCount}", group: group, since: started, stage: BakeStage.Land);
+            Account(detail: new(Count: contoured, Kept: mesh.TriangleCount), group: group, since: started, stage: BakeStage.Land);
             started = Stopwatch.GetTimestamp();
             mesh = Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
             Account(since: started, stage: BakeStage.Store);
         }
 
         lock (m_gate) {
-            m_merged += merged;
+            m_accounts.Merged += merged;
             group.Contouring = false;
             group.Done = true;
             Draw(group: group, mesh: mesh);
@@ -2132,13 +2097,13 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone++;
             m_loadLast = Stopwatch.GetTimestamp();
             if (refusal is not null) {
-                Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} store refused: {refusal}");
+                SdfMeshBakeReport.StoreRefused(refusal: refusal, selector: group.Selector);
             }
             if (!loaded) {
                 group.Next = group.Deferred;
                 return;
             }
-            m_loaded++;
+            m_accounts.Loaded++;
             group.Done = true;
             group.Stored = true;
             if (mesh is null) { group.Outcome = "no surface, as stored before"; }
@@ -2163,25 +2128,7 @@ public sealed partial class SdfMeshPathBake {
         if (m_reported) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
-        Console.Error.WriteLine(value: DescribeUnlocked());
-    }
-    private string DescribeUnlocked() {
-        var meshes = m_groups.Count(predicate: static group => (group.Mesh is not null));
-        var triangles = m_groups.Sum(selector: static group => ((long)(group.Mesh?.TriangleCount ?? 0)));
-        var vertices = m_groups.Sum(selector: static group => ((long)(group.Mesh?.Positions.Length ?? 0)));
-        // The meshes some of whose vertices ride a member's slot rather than the group's.
-        var skinned = m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
-        // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
-        // coarsest where it has fewer).
-        var pieces = m_groups.Where(predicate: static group => (group.Mesh is not null)).SelectMany(selector: static group => ((group.Mesh!.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks)).ToArray();
-        var levelled = pieces.Count(predicate: static mesh => (mesh.Levels.Count > 0));
-        var first = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 1).TriangleCount));
-        var second = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 2).TriangleCount));
-
-        // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
-        var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
-
-        return (($"[sdf.mesh-bake] done residency={Residency} residency-id={ResidencyId} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + DescribeAccounts()) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
+        SdfMeshBakeReport.Done(accounts: m_accounts, dispatches: DispatchReport, groups: [.. m_groups.Select(selector: static group => new SdfMeshBakeReport.Finished(Mesh: group.Mesh, Outcome: group.Outcome, Selector: group.Selector))], residency: Residency, residencyId: ResidencyId, seconds: m_seconds);
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it

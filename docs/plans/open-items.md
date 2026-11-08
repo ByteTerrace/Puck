@@ -1769,13 +1769,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · bake identity] Log text sits inside the mesh bake's code closure:
-  `SdfMeshPathBake.BeginAccounts` writes the `[sdf.mesh-bake] start` line and
-  is reached from `PrepareFrame`, inside `SdfMeshBakeClosure.BakeRoots`, so
-  changing a log line moves every backend's store identity and re-bakes the
-  world (the residency-stall lane's start-line change did). Move narration
-  out of the closure (the bake returns what it began; the caller logs it) so
-  the closure holds only code that changes what a bake produces.
+- [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
+  "no surface, as baked before", "contour refused" and the rest) is a string
+  literal in the bake's code closure that only the done line's `empty=[...]`
+  reads, so rewording one still moves the store identity. Make it an outcome
+  value the report words (`SdfMeshBakeReport`), as the lines themselves are.
+  The `m_restarts`, `m_loads*` and `m_planMilliseconds` counters that only
+  `world.residency`'s bake line reads belong in `SdfMeshBakeReport.Accounts`
+  too.
 - [medium · frame thread waits on release] A residency's final release still
   waits on the frame thread for two builds: `SdfWorldPipelineSource.Release`
   cancels and waits its lease acquisition, and releasing a last
