@@ -35,31 +35,31 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 lane : SV_GroupThreadID) {
 
     uint tiles = sdfShadeTileCount();
 
-    if (id.x >= tiles) {
-        return;
-    }
+    // A tile an invocation, striding by the most invocations one dispatch axis may hold (65535 groups of 64), so an
+    // extent past that many tiles still scatters every tile; the host dispatches at most that many groups.
+    for (uint tile = id.x; (tile < tiles); tile += (65535u * 64u)) {
+        uint tileBin = min(sdfShadeTilesRW[sdfShadeTileBinWord(viewIndex, tile)], (SDF_SHADE_BINS - 1u));
+        uint slot;
 
-    uint tileBin = min(sdfShadeTilesRW[sdfShadeTileBinWord(viewIndex, id.x)], (SDF_SHADE_BINS - 1u));
-    uint slot;
+        InterlockedAdd(sdfShadeTilesRW[(base + SdfShadeCursorWord) + tileBin], 1u, slot);
+        sdfShadeTilesRW[sdfShadeListWord(viewIndex, (sdfShadeTilesRW[(base + SdfShadeOffsetWord) + tileBin] + slot))] = tile;
 
-    InterlockedAdd(sdfShadeTilesRW[(base + SdfShadeCursorWord) + tileBin], 1u, slot);
-    sdfShadeTilesRW[sdfShadeListWord(viewIndex, (sdfShadeTilesRW[(base + SdfShadeOffsetWord) + tileBin] + slot))] = id.x;
+        // The invocation's index is a job of every bin: its group count is the bin's tiles past the job's first, at most the
+        // bin's width. The host records each bin's jobs up to the extent's tiles at the bin's width (SdfShadeDispatch).
+        for (uint bin = 0u; (bin < SDF_SHADE_BINS); bin++) {
+            uint width = sdfShadeBinWidth(bin);
 
-    // The invocation's index is a job of every bin: its group count is the bin's tiles past the job's first, at most the
-    // bin's width. The host records each bin's jobs up to the extent's tiles at the bin's width (SdfShadeDispatch).
-    for (uint bin = 0u; (bin < SDF_SHADE_BINS); bin++) {
-        uint width = sdfShadeBinWidth(bin);
+            if ((width == 0u) || (tile >= (((tiles + width) - 1u) / width))) {
+                continue;
+            }
 
-        if ((width == 0u) || (id.x >= (((tiles + width) - 1u) / width))) {
-            continue;
+            uint first = (tile * width);
+            uint count = sdfShadeTilesRW[(base + SdfShadeCountWord) + bin];
+            uint word = sdfShadeArgumentWord(viewIndex, bin, tile);
+
+            sdfShadeArgumentsRW[word] = ((count > first) ? min((count - first), width) : 0u);
+            sdfShadeArgumentsRW[word + 1u] = 1u;
+            sdfShadeArgumentsRW[word + 2u] = 1u;
         }
-
-        uint first = (id.x * width);
-        uint count = sdfShadeTilesRW[(base + SdfShadeCountWord) + bin];
-        uint word = sdfShadeArgumentWord(viewIndex, bin, id.x);
-
-        sdfShadeArgumentsRW[word] = ((count > first) ? min((count - first), width) : 0u);
-        sdfShadeArgumentsRW[word + 1u] = 1u;
-        sdfShadeArgumentsRW[word + 2u] = 1u;
     }
 }

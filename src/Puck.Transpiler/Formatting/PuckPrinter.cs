@@ -769,7 +769,10 @@ public static partial class PuckPrinter {
                                 level: level
                             );
                         } else {
-                            m_builder.Append(value: Quote(text: rule.Name));
+                            m_builder.Append(value: (rule.NameQuoted
+                                ? Quote(text: rule.Name)
+                                : PrintName(name: rule.Name)
+                            ));
                         }
                         if ((rule.PoolForEach is { } pool) && (rule.PoolBinding is { } binding)) {
                             m_builder.Append(value: " for each ").Append(value: binding).Append(value: " in ").Append(value: pool);

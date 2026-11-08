@@ -3545,13 +3545,6 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
-- [high] A template parameter can replace a string literal: in a template at
-  document level with a parameter named `top`, a body row `shape Box "top"` had
-  its name string replaced by the parameter's value (seen by the medium dedup
-  lane building `twoPedestalTable` in `worlds/debug/gametable.puck`, which renamed
-  the parameter to `topScale`; `gameTablePrototype` with the same names did not
-  show it). A quoted string must never be substituted. Reproduce in a scratch
-  document, then fix in the transpiler's lowering. Owner: language.
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
   no code puts or gets a creation document outside a projection

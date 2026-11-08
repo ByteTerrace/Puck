@@ -9,14 +9,14 @@
 let boardRoomFloor = 9.05
 let gameTableTop = 1.25
 
-// The creation shapes of a two-pedestal table: a top of half extents `topScale` over a round leg on a round foot at each
+// The creation shapes of a two-pedestal table: a top of half extents `top` over a round leg on a round foot at each
 // end. A game's own table prototype expands this where its `document` lists shapes and adds its board after it; the
 // creation's floor lies 0.5 m under its origin, as for the single-pedestal tables below.
-template twoPedestalTable(material, topScale = [1.75, 0.05, 0.85]) {
+template twoPedestalTable(material, top = [1.75, 0.05, 0.85]) {
   shape Box "top" {
     material: material
     position [0, gameTableTop, 0]
-    scale: topScale
+    scale: top
   }
   for x in [-1.1, 1.1] {
     shape Cylinder $"leg-{x}" {

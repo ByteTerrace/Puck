@@ -110,7 +110,11 @@ public sealed record RuleBlockNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets a value indicating whether <see cref="Name"/> was written as a quoted string rather than as a
+    /// bare identifier. A bare name that a template parameter bears takes the bound value; a quoted one is a literal.</summary>
+    public bool NameQuoted { get; init; }
+}
 /// <summary><c>local name = &lt;operand&gt;</c>. The rule compiler infers the value's kind from the expression.</summary>
 /// <param name="Name">The local's name.</param>
 /// <param name="Expression">The parsed initializer operand.</param>
