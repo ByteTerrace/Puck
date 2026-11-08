@@ -2548,6 +2548,11 @@ the fixed poses and the approaches already rejected.
   screen-camera views meter by camera sample, so each lighting capture relights
   them on the frame thread (`camera-relights` counts them). Move them into the
   worker's batches.
+- [medium · duplicate] Each lighting capture renders a 64×64 sky map on the
+  frame thread with `SdfSkyEnvironment.Render`, the CPU reference of a GPU
+  kernel, about nine times a second while the sky moves. Read the GPU kernel's
+  map instead, leaving one implementation. Seen by the frame-cpu-2 lane in a
+  trace.
 - [low] The relight budget is per rendered frame, so the relight's rate follows
   the frame rate until the background workers bound it; at a low frame rate it
   cannot hold the 8 s age. A rate in probes a second would decouple them.
