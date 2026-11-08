@@ -913,6 +913,11 @@ including `query.state`, `world.state`, observation replies and later budgets;
 changing the read path cannot undo a public write. `wire.errors` also retains
 write refusal text. Neither these nor the card fixture's intermediate disclosed
 count changes are claimed green by step 2.
+The probe's blind upsert can create a public `secret1` where none existed while
+preserving another variant's existing cell policy. `world.status` then counts
+the view's differing disclosed placements, and `world.state.observe` reads its
+differing public cells. A drawn `world.state.act` exposes the same policy-specific
+refusal as `world.state.transform`; all three follow step 3's write-policy cause.
 The drawn doors move with the registry, since the fuzzer draws over every verb
 anyone may run: a verb added or removed elsewhere changes which lines a seed
 draws. The authored rows (the schedule's and the script's) stay where they are.
