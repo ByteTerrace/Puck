@@ -1917,16 +1917,10 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   version. The stake is about 7 % of a long recording (go-tests), the share of
   resting bodies; a version that also covers moving bodies' unchanged
   fields would not help, since a moving body's pose changes every tick.
-- [medium] Navigation enumerates its neighbour stencil four times:
-  `NavigationRuntime.Domain.Predecessors` (`src/Puck.Physics/Navigation/NavigationRuntime.Shared.cs`)
-  and three loops in `NavigationRuntime.cs` repeat axis counting, connectivity
-  and coordinate bounds. One `Domain` enumerator yielding offset, node and cost
-  serves them; reverse traversal keeps its own `predecessor -> settled` check.
-- [low] `CertifiedLowDiscrepancy.FromQuadraticIrrational` and
-  `QuadraticInflation.FromQuadraticIrrational` (`src/Puck.Maths/Research/`) each
-  grow continued-fraction scratch by catching `ContinuedFraction.Expand`'s
-  short-terms refusal and doubling. Give `ContinuedFraction` the storage-owning
-  expansion.
+- [medium] `WorldOverviewCamera.Resolve` (`src/Puck.World.Client/WorldOverviewCamera.cs`), the view of a world with
+  no local seat or camera, bakes in its eye offset (`[0, 14, 18]`), target lift and PI/3 field of view. Those are an
+  authored look: move them into the standard package's camera program and let the engine fall back to a neutral
+  framing only.
 - [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
   no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
   Decide whether the link-local metadata endpoint needs the same bound.

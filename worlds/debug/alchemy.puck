@@ -3,6 +3,7 @@ import "elements"
 import "../standard/inputs"
 import "../standard/kits"
 import "shapes"
+import "gametable"
 
 // Physical Alchemy at the board room's north-east table on level 2 (hall.puck): 31 element tokens, four starters (Air,
 // Earth, Fire, Water), a cauldron with two hand wells (left and right), and a lectern recipe-book screen showing
@@ -247,23 +248,7 @@ prototypes {
         { color: alchemySlateColor, roughness: 0.7 }
       ]
       schema: "puck.creation.v1"
-      shape Box "top" {
-        material: 0
-        position [0, 1.25, 0]
-        scale [1.75, 0.05, 0.85]
-      }
-      for x in [-1.1, 1.1] {
-        shape Cylinder $"leg-{x}" {
-          material: 0
-          position [x, 0.855, 0]
-          scale [0.08, 0.355, 0.08]
-        }
-        shape Cylinder $"foot-{x}" {
-          material: 0
-          position [x, 0.52, 0]
-          scale [0.35, 0.02, 0.35]
-        }
-      }
+      twoPedestalTable(0)
       // The workbench base and rim enclosing the 8x5 `alchemyGrid`.
       shape Box "base" {
         material: 1

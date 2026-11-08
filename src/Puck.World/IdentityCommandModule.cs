@@ -163,7 +163,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // identity.hud's read-back half: identity.show already reports every other identity-owned setting as one
     // space-delimited key=value line, so the panel state joins it in the SAME space-free-value shape (rather than a
     // separate no-arg identity.hud overload, which would collide with identity.hud's own required <panel-json>
-    // positional argument) — world.hud seat:<n> remains the per-element, per-line read-back for a JOINED seat.
+    // positional argument) — world.hud seat<n> remains the per-element, per-line read-back for a JOINED seat.
     private static string DescribeHudSummary(WorldIdentity identity) =>
         ((identity.Hud is { } panel)
             ? string.Create(
@@ -358,7 +358,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
 
         // Applies inline over loopback — no WorldMutation, exactly like identity.motion. WorldHudFeed.BuildSeatPanels
-        // and world.hud seat:<n> both read roster.ProfileAt(slot).Hud fresh every call, so the panel is live for the
+        // and world.hud seat<n> both read roster.ProfileAt(slot).Hud fresh every call, so the panel is live for the
         // NEXT produced frame and for an Immediate read-back with no revision bump or extra propagation seam needed.
         identity.ReplaceDocument(document: candidate);
         identity.Hud = panel;
@@ -533,7 +533,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.hud",
-            description: "Replaces the identity-owned PRIVATE seat panel: " + IdentityHudForms.Spelling + " — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat:<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.",
+            description: "Replaces the identity-owned PRIVATE seat panel: " + IdentityHudForms.Spelling + " — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.",
             forms: IdentityHudForms,
             handler: SetHud,
             routing: CommandRouting.Simulation

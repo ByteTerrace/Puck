@@ -436,7 +436,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
         }
 
-        return ResolveOverviewCamera(
+        return WorldOverviewCamera.Resolve(
             definition: definition,
             height: height,
             width: width
@@ -468,53 +468,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : null
         );
     }
-    // The spawn-centroid overview — the SAME construction WorldFramePresenter.ResolveSpectatorCamera uses for the
-    // boot world's own no-local-seats fallback, applied here to a destination with no declared camera at all: a
-    // pulled-back, elevated look-at over the centroid of its authored local-seat spawn points.
-    private static CameraSnapshot ResolveOverviewCamera(WorldDefinition definition, uint width, uint height) {
-        var centroid = Vector3.Zero;
-        var resolved = 0;
-
-        foreach (var name in definition.Population.SeatSpawns) {
-            if (WorldDefinitionRows.FindSpawnPoint(
-                spawnPoints: definition.SpawnPoints,
-                id: name
-            ) is { } spawn) {
-                centroid += spawn.Position;
-                resolved++;
-            }
-        }
-
-        if (resolved > 0) {
-            centroid /= resolved;
-        }
-
-        var target = (centroid + new Vector3(
-            x: 0f,
-            y: 1f,
-            z: 0f
-        ));
-        var eye = (centroid + new Vector3(
-            x: 0f,
-            y: 14f,
-            z: 18f
-        ));
-
-        return CameraSnapshot.LookAt(
-            position: eye,
-            target: target,
-            fieldOfViewRadians: (MathF.PI / 3f),
-            viewportWidth: Math.Max(
-                val1: 1u,
-                val2: width
-            ),
-            viewportHeight: Math.Max(
-                val1: 1u,
-                val2: height
-            )
-        );
-    }
-
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(

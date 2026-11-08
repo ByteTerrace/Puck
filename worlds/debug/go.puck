@@ -2,6 +2,7 @@ import "../standard/inputs"
 import "../standard/kits"
 import "../standard/seat"
 import "shapes"
+import "gametable"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
 // world imports this file whole. The table stands north of the chess table, its board's centre at (56.5, 9.905, 30.6)
@@ -243,24 +244,7 @@ prototypes {
         goFaceSlots
       )
       schema: "puck.creation.v1"
-      shape Box "top" {
-        material: goWood
-        position [0, 1.25, 0]
-        scale [1.75, 0.05, 0.92]
-      }
-      for x in [-1.1, 1.1] {
-        // The two pedestals stand on the floor 0.5 m under the creation's origin.
-        shape Cylinder $"leg-{x}" {
-          material: goWood
-          position [x, 0.855, 0]
-          scale [0.08, 0.355, 0.08]
-        }
-        shape Cylinder $"foot-{x}" {
-          material: goWood
-          position [x, 0.52, 0]
-          scale [0.35, 0.02, 0.35]
-        }
-      }
+      twoPedestalTable(goWood, [1.75, 0.05, 0.92])
       // Rectangular prisms have sharp edges, so their flush union has no Box fillet grooves.
       // Paints draw the grid without contact ridges on this one flat supporting face.
       for r in range(0, 4) {

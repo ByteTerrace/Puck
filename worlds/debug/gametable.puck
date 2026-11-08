@@ -1,5 +1,6 @@
 // The board game room's pedestal tables: a library the card table (cardtable.puck) and the hidden-information games'
-// tables (auction.puck, shedding.puck, deduction.puck, skirmish.puck) import and expand in their own `prototypes` block.
+// tables (auction.puck, shedding.puck, deduction.puck, skirmish.puck) import and expand in their own `prototypes` block;
+// the two-pedestal base is shared by the board games' tables (alchemy.puck, granaries.puck, reversi.puck, go.puck).
 // A table is a wooden top on one leg and a round foot, with its game's felt laid on the top; its creation's floor lies
 // 0.5 m under its origin, so a table placed at the board game room's floor height minus 0.5 stands on level 2.
 
@@ -7,6 +8,29 @@
 // not import the gallery to read it.
 let boardRoomFloor = 9.05
 let gameTableTop = 1.25
+
+// The creation shapes of a two-pedestal table: a top of half extents `topScale` over a round leg on a round foot at each
+// end. A game's own table prototype expands this where its `document` lists shapes and adds its board after it; the
+// creation's floor lies 0.5 m under its origin, as for the single-pedestal tables below.
+template twoPedestalTable(material, topScale = [1.75, 0.05, 0.85]) {
+  shape Box "top" {
+    material: material
+    position [0, gameTableTop, 0]
+    scale: topScale
+  }
+  for x in [-1.1, 1.1] {
+    shape Cylinder $"leg-{x}" {
+      material: material
+      position [x, 0.855, 0]
+      scale [0.08, 0.355, 0.08]
+    }
+    shape Cylinder $"foot-{x}" {
+      material: material
+      position [x, 0.52, 0]
+      scale [0.35, 0.02, 0.35]
+    }
+  }
+}
 
 // `top` is the top's half extents; `feltAt` and `felt` the felt's centre and half extents. The defaults are the games'
 // 1.2 m square tables.

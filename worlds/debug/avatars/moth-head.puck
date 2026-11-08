@@ -57,6 +57,60 @@ function mothBlinkFrame(at, s) = {
   )
 }
 
+// The paints on an eye white where each eye's upper lid and lash meet it, in the eye's own frame and scaled by `s`:
+// their curves are half a millimetre wider than the tubes, so the white under a tube's edge reads as the tube rather
+// than two meshes trading pixels. The eyes are `eye-left` and `eye-right` (`mothEye`).
+function mothLidPaints(s) = [
+  {
+    parent: "eye-left"
+    type: "Sweep"
+    curve {
+      a: map([-0.047, 0, 0.027], v => v * s)
+      b: map([0, 0.066, 0.052], v => v * s)
+      c: map([0.047, 0.004, 0.027], v => v * s)
+      radiusStart: 0.0045 * s
+      radiusEnd: 0.0045 * s
+    }
+    color: "#171210"
+  }
+  {
+    parent: "eye-left"
+    type: "Sweep"
+    curve {
+      a: map([0.04, 0.017, 0.03], v => v * s)
+      b: map([0.05, 0.023, 0.023], v => v * s)
+      c: map([0.059, 0.023, 0.016], v => v * s)
+      radiusStart: 0.0035 * s
+      radiusEnd: 0.0035 * s
+    }
+    color: "#171210"
+  }
+  {
+    parent: "eye-right"
+    type: "Sweep"
+    curve {
+      a: map([0.047, 0, 0.027], v => v * s)
+      b: map([0, 0.066, 0.052], v => v * s)
+      c: map([-0.047, 0.004, 0.027], v => v * s)
+      radiusStart: 0.0045 * s
+      radiusEnd: 0.0045 * s
+    }
+    color: "#171210"
+  }
+  {
+    parent: "eye-right"
+    type: "Sweep"
+    curve {
+      a: map([-0.04, 0.017, 0.03], v => v * s)
+      b: map([-0.05, 0.023, 0.023], v => v * s)
+      c: map([-0.059, 0.023, 0.016], v => v * s)
+      radiusStart: 0.0035 * s
+      radiusEnd: 0.0035 * s
+    }
+    color: "#171210"
+  }
+]
+
 // One lock of hair: a tapering sweep from its root on the crown or temple, laid over the scalp and face and smoothly
 // joined to the scalp's group, so the hair reads as one swept mass. `a` is the root in the head's unscaled frame, `b` and
 // `c` the sweep's control and end points relative to it.
