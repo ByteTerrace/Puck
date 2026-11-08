@@ -59,9 +59,9 @@ curated library of families with declared controls, presets and measured
 extents, developed in the debug world's gallery, and the compiler records which
 template and arguments produced each prototype. A library world and a
 federated index wait on the federation order of work the MMO round set, and
-the licence vocabulary, a marketplace and an AI-use policy are the owner's
-calls, each with the condition that brings it back
-([section 5](#5-engineering-versus-the-owners-product-calls)).
+licensing, attribution, sale and usage policy are the authors' concerns, which
+the engine carries but never polices
+([section 5](#5-engineering-versus-authors-concerns)).
 
 ## How the records were weighed
 
@@ -424,11 +424,9 @@ order of federation work, which [the MMO synthesis](mmo-foundations/synthesis.md
 sequenced ahead of any content federation.
 
 **Option 4: a federated index any world hosts.** Mirrorable indexes, remix
-lineage across authorities, a licence vocabulary with compatibility derived
-over the import closure, and whatever product sits on top (a marketplace, an
-AI-use policy). *Cost:* option 3 plus the owner's product calls and their
-engineering (compatibility over a remix tree, a settlement door for anything
-sold). *Unlocks:* the open library the owner asked about. *Evidence:* Poly,
+lineage across authorities, and whatever authors build on top (their own
+licences, credits and stores, carried in the identified bytes). *Cost:* option 3
+plus cross-authority lineage and a settlement door for anything sold. *Unlocks:* the open library the owner asked about. *Evidence:* Poly,
 Sketchfab and Fab show the operator and the licence as the failure points, and
 Puck's model removes the operator; the licence remains a product call.
 
@@ -440,7 +438,7 @@ wasted if they never come. The records' strongest finding is that a library's
 value came from its feeder tools and its one hand, not from its hosting; the
 standard package and the debug world are those for Puck.
 
-## 5. Engineering versus the owner's product calls
+## 5. Engineering versus authors' concerns
 
 **Engineering, decided by the rulings and the lead.** Each is a step with a
 mechanical check; none waits on an owner call.
@@ -458,29 +456,17 @@ mechanical check; none waits on an owner call.
 | The authoring-time creation store: build it or delete the remark (gap 5) | authoring lane ([filed](open-items.md#language-and-authoring)) | Either `puck creation` can put and get a document by pin, or `WorldPrototype`'s remarks no longer name a store |
 | The author-walls log the ruling asks for (gap 10) | lead ([filed](open-items.md#language-and-authoring)) | One page under `docs/plans/` that S11, the open items' language section and the skill evals link to |
 
-**The owner's product calls.** Kept to genuine product questions; each names
-what it waits on, and nothing above waits on any of them.
-
-1. **A content licence vocabulary, and which.** CC0-only removes every
-   compatibility question (Kenney, the Smithsonian); CC-BY needs derived
-   credits (Poly, Fab); anything wider needs compatibility checks over the
-   import closure. *Waits on* a creation leaving the owner's own packages:
-   until then the member has no reader. Engineering consequence: the member's
-   name and the credits derivation (option 2); the extension bag holds a value
-   today if the owner wants one written now.
-2. **A marketplace.** Whether creations are sold, and under what terms. *Waits
-   on* the casino product call and the settlement door
-   ([open items, owner decisions](open-items.md#owner-decisions)): anything sold
-   is scarce value, which settles at one door per domain. Engineering
-   consequence: none until then.
-3. **An AI-use policy.** Whether a library marks or restricts generative use,
-   as Sketchfab's NoAI tag and Fab's filter do. *Waits on* a public index
-   existing (option 3). Engineering consequence: a member on the document if
-   the answer is a mark; Sketchfab itself says such a tag "may not be
-   enforceable" for CC content.
-4. **Likenesses of real products or brands.** Whether a Puck library admits
-   them; ABO's models are branded products and a copyright licence clears no
-   trademark. *Waits on* a public index. Engineering consequence: none.
+**Authors' concerns, not the engine's.** Licensing, attribution, sale, AI-use
+marks and likenesses of real products are the author's business (the owner's
+ruling: "Frankly those are concerns for authors more than they are for me. We
+can't be in the business of 'policing' how authors perform attribution and
+whatnot"; AGENTS.md, "Authors rule"). The engine carries what an author
+writes into a creation's identified bytes (the extension bag already enters
+the pin) and enforces no licence vocabulary, compatibility check, credits
+derivation or usage policy. Where a value is scarce and sold, it settles at the
+settlement door like any other value ([the register](../decisions/worlds-and-federation.md)),
+which is a mechanism, not a policy about content. No owner call remains for
+this memo except whether the library is a direction at all.
 
 ## 6. How the debug world proves the first step
 
@@ -541,9 +527,6 @@ These need fixing whatever the owner decides about a library.
 - A world that discloses prototypes to a recipient it does not run (the
   federation order's transfer and disclosure steps) makes option 3's design
   step current.
-- The owner choosing a licence vocabulary now would move H from conditional to
-  option 2's cheap half: the member is named and written, and only the reader
-  waits.
 - A measurement showing the debug world's families cost more than their
   authored leverage suggests (the lead's measurement window on resident mesh
   bytes per creation, lib-3's open question) would put F ahead of A.

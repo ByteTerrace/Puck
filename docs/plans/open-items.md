@@ -4661,7 +4661,7 @@ read one. The plans that keep open items:
 - [Play](play.md#open-items): the seat's standard chase camera, the finder, MCP's
   surfaces and housekeeping; the population waits for the job-system memo, and
   the One World, content and federation waves are dormant.
-- [The creation library](creation-library.md#5-engineering-versus-the-owners-product-calls):
+- [The creation library](creation-library.md#5-engineering-versus-authors-concerns):
   the engineering steps that pay inside one author's packages (declared
   controls and presets, field extents in `creation stats`, the recorded
   expansion, named attachment frames, a shared role table, creations in the
