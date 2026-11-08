@@ -160,8 +160,11 @@ public static class WorldPrepareCommand {
 
         foreach (var target in (ReadOnlySpan<ShaderTarget>)[ShaderTarget.Dxil, ShaderTarget.Spirv]) {
             try {
+                // Read as a runtime's kernel set reads them at load (SdfKernelSet.Load), so the plans key alike.
+                var sources = SdfShadeKernels.SourcesOf(tree: SdfKernelSet.DeployedTree);
+
                 foreach (var programs in distinct) {
-                    var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, target: target, tree: SdfKernelSet.DeployedTree);
+                    var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, sources: sources, target: target);
 
                     _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
                     foreach (var (_, plan) in plans) {

@@ -15,23 +15,35 @@ public sealed class SdfKernelSet {
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
 
     private readonly ReadOnlyMemory<byte>[] m_bytecode;
+    private readonly SdfKernelSource?[] m_sources;
     private readonly string m_contentKey;
 
-    /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode.</summary>
+    /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode and, where
+    /// known, the source it was compiled from.</summary>
     /// <param name="bytecode">The bytecode of every kernel in <see cref="Kernels"/> order.</param>
+    /// <param name="sources">The source each kernel's bytecode was compiled from in <see cref="Kernels"/> order, an entry
+    /// <see langword="null"/> where it is unknown, or <see langword="null"/> when none is known. Only the sources a
+    /// specialization recompiles are kept (<see cref="SourceOf"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="bytecode"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="bytecode"/> does not hold one entry per kernel.</exception>
-    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode) {
+    /// <exception cref="ArgumentException"><paramref name="bytecode"/> or <paramref name="sources"/> does not hold one
+    /// entry per kernel.</exception>
+    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode, IReadOnlyList<SdfKernelSource?>? sources = null) {
         ArgumentNullException.ThrowIfNull(argument: bytecode);
 
-        if (bytecode.Count != Kernels.Count) {
+        if ((bytecode.Count != Kernels.Count) || ((sources is not null) && (sources.Count != Kernels.Count))) {
             throw new ArgumentException(
-                message: $"A kernel set holds one bytecode per kernel, {Kernels.Count}; {bytecode.Count} were given.",
+                message: $"A kernel set holds one bytecode and one source per kernel, {Kernels.Count}; {bytecode.Count} and {sources?.Count} were given.",
                 paramName: nameof(bytecode)
             );
         }
 
         m_bytecode = [.. bytecode];
+        m_sources = new SdfKernelSource?[Kernels.Count];
+
+        foreach (var kernel in SdfShadeKernels.Specialized) {
+            m_sources[(int)kernel] = sources?[(int)kernel];
+        }
+
         m_contentKey = Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
     }
 
@@ -70,6 +82,13 @@ public sealed class SdfKernelSet {
     /// <param name="kernel">The kernel.</param>
     /// <returns>The bytecode.</returns>
     public ReadOnlyMemory<byte> this[SdfKernel kernel] => m_bytecode[((int)kernel)];
+    /// <summary>Returns the source a kernel's bytecode was compiled from, which only replacing that bytecode replaces
+    /// (<see cref="With"/>). Only the kernels a specialization recompiles (<see cref="SdfShadeKernels.Specialized"/>) keep
+    /// one.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The source, or <see langword="null"/> when it is unknown: the bytecode arrived without its source, or the
+    /// kernel keeps none.</returns>
+    public SdfKernelSource? SourceOf(SdfKernel kernel) => m_sources[((int)kernel)];
 
     /// <summary>Returns the file stem a kernel's bytecode ships under, completed by the backend's extension: the one
     /// spelling of each kernel's name, which its pipeline carries too.</summary>
@@ -203,23 +222,38 @@ public sealed class SdfKernelSet {
             bytecode[((int)kernel)] = bytes;
         }
 
-        return new SdfKernelSet(bytecode: bytecode);
+        // The build publishes each kernel's source beside its bytecode; read together, the source describes the bytecode.
+        var sources = new SdfKernelSource?[Kernels.Count];
+
+        foreach (var kernel in SdfShadeKernels.Specialized) {
+            try {
+                sources[((int)kernel)] = SdfKernelSource.Read(directory: directory, kernel: kernel);
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ShaderClosureRefusedException) {
+                // A tree that ships bytecode alone runs the interpreter; its specializations are refused by name.
+            }
+        }
+
+        return new SdfKernelSet(bytecode: bytecode, sources: sources);
     }
     /// <summary>Returns the kernel set's content key: a hash over every kernel's bytecode, in <see cref="Kernels"/> order.
     /// A host keys its persistent pipeline cache by it (<see cref="Puck.Abstractions.Gpu.GpuPipelineCacheStore"/>), so a
     /// changed kernel starts a new cache file.</summary>
     /// <returns>A lowercase 16-digit hexadecimal key.</returns>
     public string ContentKey() => m_contentKey;
-    /// <summary>Returns a copy of the set with one kernel's bytecode replaced.</summary>
+    /// <summary>Returns a copy of the set with one kernel's bytecode replaced, together with the source it describes.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <param name="bytecode">Its new bytecode.</param>
+    /// <param name="source">The source the new bytecode was compiled from, or <see langword="null"/> when it is unknown;
+    /// the replaced bytecode's source never survives it.</param>
     /// <returns>The new set.</returns>
-    public SdfKernelSet With(SdfKernel kernel, ReadOnlyMemory<byte> bytecode) {
+    public SdfKernelSet With(SdfKernel kernel, ReadOnlyMemory<byte> bytecode, SdfKernelSource? source = null) {
         var copy = m_bytecode.ToArray();
+        var sources = m_sources.ToArray();
 
         copy[((int)kernel)] = bytecode;
+        sources[((int)kernel)] = source;
 
-        return new SdfKernelSet(bytecode: copy);
+        return new SdfKernelSet(bytecode: copy, sources: sources);
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

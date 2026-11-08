@@ -134,8 +134,15 @@ programs together with the documents' declared ones (`SdfFrame.ShadeDeclared`,
 compiles them off the frame thread on `ShaderCompileTurns` through the World's
 `ShaderCompiler` (counted in `shaders.compiler`, a hit runs no tool), reflects
 and builds the pipelines (`SdfShadePipelines`), and publishes only an arrival
-whose identity (programs, op fingerprint, the interpreter's
-`SdfKernelSet.ContentKey`) is still requested and which covers the active set.
+whose identity (programs, op fingerprint, `SdfShadeKernels.InterpreterOf`: the
+kernels' content key and their sources' keys) is still requested and which
+covers the active set. A set compiles the `SdfKernelSource` its kernel set
+carries for views and glass (`SdfKernelSet.SourceOf`, read when the bytecode was
+taken and replaced only with it), never the tree as it stands: an include the
+source lacks refuses the plan, and bytecode installed without its source stays
+interpreted. An overtaken or released build is retired to the catalog's
+`RetiredShadeBuilds`, disposed on the pool as it finishes and drained at device
+loss and World root teardown, so neither waits on the frame thread.
 A frame whose active set leaves the published one retires it at once, so the
 interpreter shows an edit on its next frame. A recording pins the set it records
 with; the pin moves to its submission and drops only on a completion proof,
@@ -144,9 +151,9 @@ at zero pins (or at device teardown and the residency's final idle drain).
 Publication moves no revision; `world.shaders.tier` alone invalidates the
 shading passes. `world.shaders.status` lists each program's state.
 `SdfShadeKernels.Plan` refuses a plan whose closure lacks the generated text: the
-closure looks generated includes up by `Path.GetFullPath`'s spelling, and a key
-spelled otherwise silently compiles the interpreter under the specialization's
-name.
+closure looks generated includes up by `Path.GetFullPath`'s spelling (derived
+from the stage's path, `passes/../isa/`), and a key spelled otherwise silently
+compiles the interpreter under the specialization's name.
 
 Check changes with the `shade-*` spelling pairs and `ShadeLoweringTests` in
 `Puck.World.Transpiler.Tests`, plus `puck test` of those authored admission worlds.
