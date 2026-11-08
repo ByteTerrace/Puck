@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Commands;
 using Puck.DirectX.Presentation;
 using Puck.Vulkan.Presentation;
 using Xunit;
@@ -10,7 +11,14 @@ public sealed class WorldBootCompositionLawTests {
     // A headless boot registers no pointer, cursor or presentation service, so every console module must activate
     // without one: the boot builds its command registry from these at start.
     [Fact]
-    public void AHeadlessBootActivatesEveryCommandModule() {
+    public void AHeadlessBootActivatesEveryCommandModule() => WithHeadlessRegistry(registry => {
+        foreach (var line in (string[])["player.orbit", "player.steer"]) {
+            var result = registry.Submit(line: line);
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+        }
+    });
+
+    private static void WithHeadlessRegistry(Action<CommandRegistry> inspect) {
         using var scratch = new Puck.Testing.TemporaryDirectory(
             bestEffortDelete: true,
             prefix: "puck-headless-boot-"
@@ -51,12 +59,56 @@ public sealed class WorldBootCompositionLawTests {
 
         var registry = new Puck.Commands.CommandRegistry(modules: host.Services.GetServices<Puck.Commands.ICommandModule>());
 
-        // A drag command still applies with no seat camera to turn.
-        foreach (var line in (string[])["player.orbit", "player.steer"]) {
-            var result = registry.Submit(line: line);
+        inspect(registry);
+    }
 
-            Assert.False(condition: result.IsError, userMessage: result.Output);
+    [Theory]
+    [InlineData("world.interactions")]
+    [InlineData("world.fields")]
+    [InlineData("world.flock")]
+    [InlineData("world.navigation")]
+    [InlineData("world.explain")]
+    public void CompiledDiagnosticsAndPixelMaterialsRequireOperator(string verb) => WithHeadlessRegistry(registry => {
+        // Compiled diagnostics and GPU material inspection cannot be reconstructed from a recipient's document.
+        Assert.Equal(CommandAudience.Operator, Assert.Single(registry.Definitions, command => command.Name == verb).Audience);
+
+        var source = new TextCommandSource(registry);
+        using var router = new InputRouter(bindings: new NoBindings(), registry: registry, principalResolver: new SeatPrincipals());
+        var answer = CommandResult.None;
+        var seat = source.CreateSeatSession(router: router, slot: 1, onResult: (_, result) => answer = result);
+        seat.Enqueue(verb);
+        source.Collect();
+        Assert.True(answer.IsError);
+        Assert.Contains("an operator verb", answer.Output);
+        Assert.DoesNotContain("an operator verb", registry.Submit(verb).Output, StringComparison.Ordinal);
+    });
+
+    [Theory]
+    [InlineData("world.status", "sleeping ")]
+    [InlineData("world.gravity", "last globalTargets=")]
+    public void RecipientSummariesExcludeAuthorityWork(string verb, string operatorField) => WithHeadlessRegistry(registry => {
+        var source = new TextCommandSource(registry);
+        using var router = new InputRouter(bindings: new NoBindings(), registry: registry, principalResolver: new SeatPrincipals());
+        var answer = CommandResult.None;
+        var seat = source.CreateSeatSession(router: router, slot: 1, onResult: (_, result) => answer = result);
+        seat.Enqueue(verb);
+        source.Collect();
+        Assert.False(answer.IsError, answer.Output);
+        foreach (var authorityField in new[] { "sleeping ", "source ", "documents ", "last globalTargets=", "areaMatches=" }) {
+            Assert.DoesNotContain(authorityField, answer.Output, StringComparison.Ordinal);
         }
+        Assert.Contains(operatorField, registry.Submit(verb).Output, StringComparison.Ordinal);
+    });
+
+    [Fact]
+    public void SearchAudienceRefusalsAreInTheCatalog() =>
+        Assert.Contains(RefusalCatalog.All(), entry => entry.Id == nameof(RuleRefusal.SearchWidensAudience));
+
+    private sealed class NoBindings : IInputBindings {
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
+    }
+    private sealed class SeatPrincipals : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot);
     }
     // world.counters reads both backends alike: each backend's presenter registration carries its own
     // presentation.skipped source, registered without resolving a device or a presenter.

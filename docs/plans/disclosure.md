@@ -210,10 +210,18 @@ Observe. Resource/work measurements in `world.budget` remain operator reads;
 recipient budgets count only the disclosed document. Search output audiences
 must be enclosed by every dependency of candidate generation, judging and
 scoring, checked before execution and before landing against live policy.
+`SymmetryOperand.CollectReads` includes both the primary row and the other-node
+cell, so search and transform control checks cover either input. Replica field
+declarations pass through `WorldStateDisclosure.FieldProjection` in `Disclose`,
+which the definition image cache also uses. Presentation observations carry an
+explicit slot/keyed storage domain and authored capacity, independent of which
+cells are disclosed.
 The compiler wall against new authority-reading callers remains step 5.
 
 Authority diagnostics (`world.budget.rules`, `world.inspect`, `world.cost`,
 `world.contacts`, `world.collision.status`, `world.rigid`, `world.explain`,
+`world.interactions`, `world.fields`, `world.rule.hazards`, `world.patterns`,
+`world.tables`, `world.topology`, `world.flock`, `world.navigation`,
 `world.debug-view report` and `goto`, and diagnostic finding picks) are
 operator reads. Their counts, work and revisions cannot be reconstructed from
 a recipient's view. A `world.debug-view` mode stays bindable for anyone: it
@@ -905,6 +913,11 @@ including `query.state`, `world.state`, observation replies and later budgets;
 changing the read path cannot undo a public write. `wire.errors` also retains
 write refusal text. Neither these nor the card fixture's intermediate disclosed
 count changes are claimed green by step 2.
+The probe's blind upsert can create a public `secret1` where none existed while
+preserving another variant's existing cell policy. `world.status` then counts
+the view's differing disclosed placements, and `world.state.observe` reads its
+differing public cells. A drawn `world.state.act` exposes the same policy-specific
+refusal as `world.state.transform`; all three follow step 3's write-policy cause.
 The drawn doors move with the registry, since the fuzzer draws over every verb
 anyone may run: a verb added or removed elsewhere changes which lines a seed
 draws. The authored rows (the schedule's and the script's) stay where they are.
@@ -938,19 +951,6 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
-- Argon's adversarial review of step 2 (unverified until a fix lane reopens
-  each quotation; the lead holds the report): [high] `SymmetryOperand.CollectReads`
-  may omit `SymmetryOtherCell`, bypassing `SearchWidensAudience` and
-  `TransformWidensAudience`; [high] non-operator verbs (`world.properties`,
-  `world.interactions`, `world.fields`, `world.rule.hazards`, `world.patterns`,
-  `world.tables`, `world.topology`) may still read the authority's arena or
-  definition; [high] the replica tier's `Disclose` and
-  `WorldDisclosureImages.Definition` may omit `FieldProjection`, leaking
-  restricted field regions; [medium] `world.status`, `world.gravity`,
-  `world.flock` and `world.navigation` may read counters that vary with hidden
-  state; [medium] `WorldProjection.TryObservedRow` may drop `Domain` and
-  `Capacity`; [low] `RuleRefusal.SearchWidensAudience` may lack its catalog
-  attribute. A fix pass follows the step 1 fix pass, which shares files.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.

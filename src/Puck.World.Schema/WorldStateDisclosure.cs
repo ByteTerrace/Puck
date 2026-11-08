@@ -37,12 +37,14 @@ public sealed record WorldObservedCell(string Key, long Value, string? Text = nu
 /// from this observer (placeholders included), zero under <see cref="HiddenCells.Omit"/>. <see cref="Space"/> names
 /// a <see cref="CellKind.Vector"/> row's vector space, and is absent for every other kind. <see cref="Min"/> and
 /// <see cref="Max"/> are the row's declared envelope, which an eased read is clamped to and a bound value is read
-/// against.</summary>
-public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells,
+/// against. <see cref="Domain"/> carries the disclosed storage shape (slot or keys), without authority-only domain
+/// dependencies; <see cref="Capacity"/> is the authored ceiling, never a live reservation or member count.</summary>
+public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells, StateDomain Domain,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int HiddenCount = 0,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Space = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Min = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Max = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Max = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null);
 /// <summary>What one recipient's disclosure withheld from a single state row.</summary>
 /// <param name="Count">The number of the row's published cells the recipient may not read.</param>
 /// <param name="Policy">What the row's own policy shows a reader in place of a withheld cell.</param>
@@ -339,12 +341,15 @@ public static class WorldStateDisclosure {
                 row.Name.Value,
                 row.Kind,
                 cells,
+                // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
+                row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
                 hidden,
                 ((row.Kind == CellKind.Vector)
                     ? row.Space
                     : null),
                 row.Min,
-                row.Max
+                row.Max,
+                row.Capacity
             ));
         }
 
@@ -429,6 +434,25 @@ public static class WorldStateDisclosure {
             // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
             // bookkeeping is a reading of the cells withheld from it, so it goes too.
             rows[index] = WithoutStorageMetadata(row: row) with { Cells = kept };
+        }
+
+        // Fields are authored in state rows and physical topologies. Rebuild that part from the SAME projection
+        // presentation uses; copying the original field traits would disclose their seeds and reaction inputs.
+        if (!unrestricted && definition.FieldRegions.Count > 0 && definition.StateRaw is { } state) {
+            var fields = WorldFieldsSection.ToStateSection(FieldProjection(definition, arena, recipient));
+            var fieldRows = (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal);
+            var authoredFields = authored.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal);
+            var physicalRows = rows.Select(row => !authoredFields.Contains(row.Name.Value) ? row :
+                fieldRows.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
+                // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name
+                // and policy, with no physical topology, trait, seed or paint that could reconstruct the field.
+                new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Keys.Instance,
+                    HostOwned: true, Visibility: row.Visibility)).ToArray();
+            definition = definition with { StateRaw = state with {
+                World = physicalRows,
+                Lattices = [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
+            } };
+            rows = physicalRows;
         }
 
         if (withheld.Count == 0) {

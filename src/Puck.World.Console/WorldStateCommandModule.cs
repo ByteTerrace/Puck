@@ -840,6 +840,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rule.hazards",
+            audience: CommandAudience.Operator,
             description: $"Lists what the rules' document order decides silently (Immediate): {WorldRuleHazardsForms.Spelling}. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
             forms: WorldRuleHazardsForms,
             handler: (context, args) => {

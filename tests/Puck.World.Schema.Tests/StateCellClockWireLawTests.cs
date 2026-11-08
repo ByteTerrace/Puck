@@ -47,7 +47,7 @@ public sealed class StateCellClockWireLawTests {
         ));
         var observedClock = ClockOf(node: JsonSerializer.SerializeToNode(
             jsonTypeInfo: WorldJsonContext.Default.WorldObservedRowArray,
-            value: [new WorldObservedRow(Cells: [new WorldObservedCell(Clock: Clock, Dynamics: new StateDynamics(Row: "chase"), Key: "0", Value: 0L)], Kind: CellKind.Fixed, Name: "follow")]
+            value: [new WorldObservedRow(Cells: [new WorldObservedCell(Clock: Clock, Dynamics: new StateDynamics(Row: "chase"), Key: "0", Value: 0L)], Domain: StateDomain.Keys.Instance, Kind: CellKind.Fixed, Name: "follow")]
         )![0]!["cells"]![0]);
         var expected = JsonNode.Parse(json: """{"epochTick":153,"epochEngineTick":257040,"y0":"1.25","v0":"-0.5"}""");
 

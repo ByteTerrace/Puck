@@ -204,6 +204,10 @@ public sealed partial class ConsoleDisclosureLawTests {
     [InlineData("world.rule.trace")]
     [InlineData("world.rule.failures")]
     [InlineData("world.search")]
+    [InlineData("world.rule.hazards")]
+    [InlineData("world.patterns")]
+    [InlineData("world.tables")]
+    [InlineData("world.topology")]
     [Theory]
     public void AnEvaluationDiagnosticIsAnOperatorVerb(string verb) {
         using var host = new DisclosureHost(definition: Document());

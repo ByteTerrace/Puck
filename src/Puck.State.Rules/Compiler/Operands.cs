@@ -740,6 +740,7 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
             into: into,
             reference: KeyFrom
         );
+        CompiledCellRef.CollectReference(into: into, reference: SymmetryOtherCell);
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;

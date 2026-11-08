@@ -192,6 +192,7 @@ public enum RuleRefusal : byte {
     [Refusal(door: "state.rule.compile", condition: "a transform writes a row whose audience a row it reads does not enclose", kind: RefusalKind.Verdict)]
     TransformWidensAudience,
     /// <summary>A search result would reveal an input to a wider audience.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a search writes an output whose audience a source, score or judge read does not enclose", kind: RefusalKind.Verdict)]
     SearchWidensAudience,
 
     /// <summary>A rule iterates <c>forEach: $bodies</c> against a section whose document declares no bodies.</summary>

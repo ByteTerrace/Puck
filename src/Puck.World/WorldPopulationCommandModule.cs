@@ -303,7 +303,14 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         provider: CultureInfo.InvariantCulture
     );
     private string DescribeGravity(CommandContext context) {
-        var authored = server.ReadView(context).Definition.Gravity;
+        var view = server.ReadView(context);
+        if (!view.Observes) { return "[world.gravity: not disclosed]"; }
+        var authored = view.Definition.Gravity;
+        if (!context.Principal.IsAuthority) {
+            var acceleration = authored.UniformAcceleration;
+            return string.Create(CultureInfo.InvariantCulture,
+                $"[world.gravity: solver {authored.Solver} uniform=({acceleration.X:0.#####},{acceleration.Y:0.#####},{acceleration.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} sources={authored.Attractors.Count} points={authored.Points?.Count ?? 0} areas={authored.Areas?.Count ?? 0}]");
+        }
         var compiled = population.CompiledGravity;
         var statistics = population.GravityStatistics;
         var areaStatistics = population.GravityAreaStatistics;
@@ -486,6 +493,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.flock",
+            audience: CommandAudience.Operator,
             description: "Echoes each kit's authored local flock steering: space, perception range/cone/cadence, candidate and neighbor budgets, sight requirement, steering weights, and last-step work. Available headless; does not change behavior.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
@@ -498,6 +506,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.navigation",
+            audience: CommandAudience.Operator,
             description: "Echoes every authored deterministic navigation domain: surface, free-volume, or medium-constrained; compiled dimensions and clear cells; volume connectivity; medium binding; and hard route search/path limits.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
@@ -534,6 +543,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.fields",
+            audience: CommandAudience.Operator,
             description: "Reads the field lattice back (Immediate): its shape and cadence, and each field's nonzero cell count and mean.",
             handler: (context, args) => new CommandResult(Output: server.DescribeFields()),
             routing: CommandRouting.Immediate

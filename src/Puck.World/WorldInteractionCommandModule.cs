@@ -29,7 +29,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
             name: "world.properties",
             description: $"Reads the property registry back (Immediate): with no argument, the declared vocabulary; with a 0-based body index, which of those registered properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex> in the property's own row): {WorldPropertiesForms.Spelling}.",
             forms: WorldPropertiesForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count > 1) {
                     return WorldPropertiesForms.Refuse();
                 }
@@ -49,7 +49,11 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
 
                 var result = default(CommandResult);
 
-                link.Query(
+                if (link is not IPrincipalServerLink queryLink) {
+                    return CommandResult.Error(output: "[world.properties: no principal-scoped query door]");
+                }
+                queryLink.Query(
+                    principal: context.Principal,
                     query: new WorldQuery.Properties(BodyIndex: bodyIndex),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
@@ -63,6 +67,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.interactions",
+            audience: CommandAudience.Operator,
             description: "Reads every live compiled interaction back (Immediate): its name, its mode, its gate-held latch (latch=held means the co-occurrence held at the last evaluation — the 'an interaction fired' echo, on the SAME terms world.rules gives a rule), its co-occurrence (which tag rows or region, and the range), and its effects.",
             valueKind: CommandValueKind.Digital,
             handler: _ => {
