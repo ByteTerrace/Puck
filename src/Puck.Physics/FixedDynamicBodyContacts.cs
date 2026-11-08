@@ -291,7 +291,6 @@ public static class FixedDynamicBodyContacts {
         FixedQ4816 margin = default
     ) {
         correction = FixedVector3.Zero;
-        var deepestSquared = UInt128.Zero;
 
         foreach (ref readonly var left in leftVolumes) {
             foreach (ref readonly var right in rightVolumes) {
@@ -310,17 +309,12 @@ public static class FixedDynamicBodyContacts {
                 }
 
                 // Keep Q32 through comparison: rounding to Q16 discards shallow, real overlaps.
-                var squared = ((Square(value: candidate.X.Value) + Square(value: candidate.Y.Value)) + Square(value: candidate.Z.Value));
-
-                if (squared > deepestSquared) {
-                    deepestSquared = squared;
+                if (candidate.CompareLengthTo(other: correction) > 0) {
                     correction = candidate;
                 }
             }
         }
 
-        return (deepestSquared > UInt128.Zero);
+        return (correction != FixedVector3.Zero);
     }
-
-    private static UInt128 Square(long value) => ((UInt128)(((Int128)value) * value));
 }

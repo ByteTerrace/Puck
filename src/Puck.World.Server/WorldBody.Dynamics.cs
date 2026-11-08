@@ -9,25 +9,6 @@ public sealed partial class WorldBody {
     // delta by this integer Hz is the ZOH target-velocity term x' = (target − previous) / dt.
     private static FixedQ4816 StepRateHz(in SecondOrderStep step) =>
         FixedQ4816.FromInteger(value: unchecked((long)(step.TicksPerSecond / step.StepTicks)));
-    // Re-seats a follower's position lane exactly from a live value, keeping the velocity lane's own raw untouched —
-    // never an unconditional resync, which would discard the sixteen guard bits every step. Shared by the planar
-    // (per-lane) and vertical (scalar) followers.
-    private static SecondOrderState ReseatFollowerPosition(SecondOrderState follower, FixedQ4816 position) =>
-        follower.WithPosition(position: position);
-    private static SecondOrderState3 ReseatFollowerPosition(SecondOrderState3 follower, FixedVector3 position) => new(
-        X: ReseatFollowerPosition(
-            follower: follower.X,
-            position: position.X
-        ),
-        Y: ReseatFollowerPosition(
-            follower: follower.Y,
-            position: position.Y
-        ),
-        Z: ReseatFollowerPosition(
-            follower: follower.Z,
-            position: position.Z
-        )
-    );
     // Advances the planar dynamics follower by one step and writes m_planarVelocity from it, magnitude-clamped to
     // the resolved planar move speed (sprint included, never the CURRENT target's own magnitude — a released stick's
     // target is zero, and clamping to that would snap the coast-down to zero instead of letting it decay through the
@@ -37,10 +18,7 @@ public sealed partial class WorldBody {
     // reaches the body.
     private FixedVector3 StepPlanarFollower(in SecondOrderStep step, FixedVector3 target, FixedQ4816 ceiling) {
         if (m_planarFollower.Position != m_planarVelocity) {
-            m_planarFollower = ReseatFollowerPosition(
-                follower: m_planarFollower,
-                position: m_planarVelocity
-            );
+            m_planarFollower = m_planarFollower.WithPosition(position: m_planarVelocity);
         }
 
         // The FIRST step after a reset seeds m_planarPreviousTarget rather than differencing it against the zeroed
@@ -68,10 +46,7 @@ public sealed partial class WorldBody {
     // and asymmetric, unlike the planar target's isotropic disc).
     private FixedQ4816 StepVerticalFollower(in SecondOrderStep step, FixedQ4816 target, FixedQ4816 minimum, FixedQ4816 maximum) {
         if (m_verticalFollower.Position != m_verticalVelocity) {
-            m_verticalFollower = ReseatFollowerPosition(
-                follower: m_verticalFollower,
-                position: m_verticalVelocity
-            );
+            m_verticalFollower = m_verticalFollower.WithPosition(position: m_verticalVelocity);
         }
 
         var targetVelocity = (m_verticalFollowerSeeded
