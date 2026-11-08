@@ -11,5 +11,8 @@ model. An application supplies the host that runs rules and persists state.
 - [Quickstart: compile and run a rule](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/quickstart.md) — a ten-minute tour in a console project.
 - [Rows, cells, and values](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/data-model.md) — the data model this project defines.
 - [The state arena](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/arena.md) — storage, journal scopes, hashing, and persistence.
+- [Reads and expressions](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/expressions.md) — `Outcome`, absence, and the single interpreter.
+- [Rules and firing](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/rules.md#make-a-firing-atomic) — cells, latches, decisions and group progress in one journaled firing.
+- [Host and extend the state engine](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/state/hosting.md#the-install-boundary) — prepared arms, the install boundary, population forecasts, and `OutcomeAnalyzer`.
 - [Development and verification](https://github.com/ByteTerrace/Puck/blob/main/tests/Puck.State.Tests/README.md).
 - [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md): Apache 2.0.

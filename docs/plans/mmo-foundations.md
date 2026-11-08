@@ -75,7 +75,7 @@ hold at MMO scale.
    interest management maps onto disclosure tiers.
 6. **The tables.** Escrow for stakes, provable fairness from seeded streams and
    replay, hidden information under [disclosure](disclosure.md), atomic wagers
-   under [rule faults](rule-faults.md), and the regulatory line if stakes ever
+   under [the rule-fault decision](../decisions/state-and-language.md#rule-faults), and the regulatory line if stakes ever
    touch real money (the owner's call when the economy is designed).
 7. **Order of work.** How the hub steps (H1, H2, H7, H14), the custody protocol,
    disclosure and federation reorder around the answers.
