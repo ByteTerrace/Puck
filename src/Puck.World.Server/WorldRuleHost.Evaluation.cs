@@ -233,7 +233,6 @@ public sealed partial class WorldRuleHost {
     // The arena stays authoritative; one journal-driven delivery follows a tick that moved anything.
     internal void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
-        BeginUndoEvaluationTick(tick: tick);
         AdvanceHost(
             engineTick: Host.CompletedEngineTicks,
             tick: tick
