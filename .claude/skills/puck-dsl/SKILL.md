@@ -64,6 +64,10 @@ A document's `schema:` field selects its vocabulary, never the filename.
   statements (locals, `when`, `if`, effects) a rule body calls and splices
   (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`, `export` and
   `use m as a(args)` compose modules.
+- **A template body's block or rule name is a parameter reference only when
+  bare.** `shape Box base { }` takes the value bound to `base`; `shape Box "base" { }`
+  is the literal name, whatever the template's parameters are called. Only a
+  statement directly in the template body is renamed (`DocumentLowering.Rename`).
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
   module library (a source emitting no document) hands over its `let`s and

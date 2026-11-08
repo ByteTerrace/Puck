@@ -1,0 +1,15 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "top" {
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Box "foot" {
+        scale [0.1, 0.1, 0.1]
+      }
+    }
+  }
+}
