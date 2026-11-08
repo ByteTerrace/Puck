@@ -1651,6 +1651,11 @@ document values bind by copying only the paths to their references
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
   lane with and without its change; the disclosure area owns it.
+- [medium · unattributed] A headless debug World allocates about 620 KB a
+  tick by `host.memory` (about 74 MB per 120 ticks, three instances), against
+  `puck bench world`'s 1,832 B server quiet tick: the rest is client,
+  presentation or machine work no one has attributed. A `dotnet-trace`
+  allocation capture of a quiet headless tick names it.
 - A shading edit still runs the whole validator over its candidate (rule
   compilation for validation, the work-budget analysis, every section), and
   canonicalizes and digests the edited creation twice. A `dotnet-trace`
