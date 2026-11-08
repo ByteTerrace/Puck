@@ -2,8 +2,8 @@
 
 This xUnit suite tests [Puck.Analyzers](../../src/Puck.Analyzers/README.md) using
 in-memory Roslyn compilations. It checks the strict-enum,
-unmanaged function-pointer, environment-read, any-address-listener, GPU-trait and
-`InternalsVisibleTo` rules. The function-pointer
+unmanaged function-pointer, environment-read, any-address-listener, GPU-trait,
+rule-outcome and `InternalsVisibleTo` rules. The function-pointer
 cases also call real unmanaged function pointers to show that a pointer to a type parameter and a pointer-typed view of a generic
 signature work, and a by-reference type parameter throws.
 

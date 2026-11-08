@@ -15,3 +15,7 @@ IVT001 | Puck.Accessibility | Error | InternalsVisibleToAnalyzer, [Documentation
 STALE001 | Puck.Replacement | Warning | StaleCaptureAnalyzer, [Documentation not provided]
 STALE002 | Puck.Replacement | Error | StaleCaptureAnalyzer, [Documentation not provided]
 STALE003 | Puck.Replacement | Error | StaleCaptureAnalyzer, [Documentation not provided]
+OUTCOME001 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
+OUTCOME002 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
+OUTCOME003 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
+OUTCOME004 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]

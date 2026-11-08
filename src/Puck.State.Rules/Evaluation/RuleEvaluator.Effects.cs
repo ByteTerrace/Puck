@@ -931,15 +931,20 @@ public sealed partial class RuleEvaluator {
             gate: effect.Condition,
             ruleName: firing.RuleName
         );
-        var open = (verdict is Verdict.Open);
 
-        if (verdict is Verdict.Faulted) {
+        if (verdict == Verdict.Faulted) {
             if (m_traceEntry is not null) {
                 m_traceEffectValue = "condition failed";
             }
 
             return Step.Faulted;
         }
+
+        var open = (verdict switch {
+            Verdict.Open => true,
+            Verdict.Closed => false,
+            _ => throw new System.Diagnostics.UnreachableException(),
+        });
 
         var branch = (open
             ? effect.Then
@@ -1059,7 +1064,10 @@ public sealed partial class RuleEvaluator {
             return Step.Faulted;
         }
 
-        resolved.TryNamed(value: out var key);
+        var key = (resolved.TryNamed(value: out var named)
+            ? named
+            : default);
+
         if (!key.IsValid) {
             if (!strict) {
                 return Step.Done;
@@ -1117,8 +1125,9 @@ public sealed partial class RuleEvaluator {
         var fromRowOrdinal = (fromResolved.TryNamed(value: out var fromNamed) ? fromNamed : -1);
         var toRowOrdinal = (toResolved.TryNamed(value: out var toNamed) ? toNamed : -1);
 
-        keyResolved.TryNamed(value: out var key);
-
+        var key = (keyResolved.TryNamed(value: out var keyNamed)
+            ? keyNamed
+            : default);
         var binding = new ArenaTransformBinding(
             bindsKey: (effect.KeyRef is not null),
             fromRowOrdinal: fromRowOrdinal,
@@ -1464,11 +1473,11 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
-        fact.Outcome.TryFinite(raw: out var finite);
-
         raw = (source.IsOperand
             ? fact.ToRaw(kind: kind)
-            : finite
+            : (fact.Outcome.TryFinite(raw: out var finite)
+                ? finite
+                : 0L)
         );
 
         return true;

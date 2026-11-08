@@ -456,9 +456,9 @@ public static class RuleReads {
                 return WriteKey.Faulted();
             }
 
-            _ = resolved.TryNamed(value: out var named);
-
-            return WriteKey.Resolved(key: named);
+            return WriteKey.Resolved(key: (resolved.TryNamed(value: out var named)
+                ? named
+                : default));
         }
         if (reference.Custom is { } custom) {
             return custom.ResolveForWrite(reader: reader);

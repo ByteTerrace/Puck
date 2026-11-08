@@ -269,8 +269,15 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
             gate: rule.Gate,
             ruleName: rule.Name
         );
-        var open = (gateVerdict == Verdict.Open);
-        var faulted = ((interruptVerdict == Verdict.Faulted) || (gateVerdict == Verdict.Faulted));
+        var faulted = false;
+        var open = Opens(
+            faulted: ref faulted,
+            verdict: gateVerdict
+        );
+        var interruptOpen = Opens(
+            faulted: ref faulted,
+            verdict: interruptVerdict
+        );
         var lostEligibility = (open && (state.Selected >= 0) &&
             (((state.Candidate >= 0) && (!DecisionBodyLive(
             generation: state.Generation,
@@ -292,7 +299,6 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
             return HoldDecision(rule: rule);
         }
 
-        var interruptOpen = (interruptVerdict == Verdict.Open);
         var interrupted = (interruptOpen && !state.InterruptHeld);
         var reconsiders = (open && (!state.Evaluated || interrupted || lostEligibility ||
             ((state.PeriodRemaining == 0) && (state.CommitmentRemaining == 0))));

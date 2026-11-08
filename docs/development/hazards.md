@@ -27,7 +27,7 @@ finds the next instance, while a structure leaves it no representation.
 | Shape | Detection | Where |
 |---|---|---|
 | [An invariant kept by convention](#an-invariant-kept-by-convention) | Review | The fix is a door or a type, which the review names |
-| [A result a caller can drop](#a-result-a-caller-can-drop) | Exact, planned | `OUTCOME001`-`004` in the [rule-faults plan](../plans/rule-faults.md) |
+| [A result a caller can drop](#a-result-a-caller-can-drop) | Exact | `OUTCOME001`-`004`, `OutcomeAnalyzer` |
 | [A reference captured across a replacement](#a-reference-captured-across-a-replacement) | Exact | `STALE001`-`003`, `StaleCaptureAnalyzer` |
 | [Two copies of one computation](#two-copies-of-one-computation) | Heuristic for C#; review for C# and HLSL | `puck scan --only clones` |
 | [Recorded versus derived](#recorded-versus-derived) | Heuristic | `puck scan --only identity-counters` |
@@ -96,10 +96,32 @@ failure.
 
 **Closed by** carrying the fault in the value: `Outcome`, `Resolved<T>` and
 `Verdict` in the [rule-faults design](../plans/rule-faults.md#the-design), whose
-default is the faulted case. **Detected by** `OUTCOME001`-`004`, which that
-plan owns: an unconsumed outcome, an unchecked `TryFinite`/`TryNamed`, a new
-detached evaluator, and an operand holding its own addresses. This page does not
-duplicate them.
+default is the faulted case. **Detected by** `OutcomeAnalyzer`, exactly, from
+the compiler's symbols, in every build:
+
+- **OUTCOME001**: an expression statement, a discard assignment or a discard
+  declaration over `Outcome`, `Resolved<T>`, `Verdict` or `RuleOutcome`. An
+  assignment keeps its value, and a statement in a `catch` that rethrows is let
+  through, since the exception is the caller's answer. `OutcomeDiscardAllowlist`
+  names the two host entries (`RuleEvaluator.Evaluate` and `EvaluateRule`, the
+  bool overloads) that answer only whether the arena moved.
+- **OUTCOME002**: a `TryFinite` or `TryNamed` whose bool is dropped, or a
+  `Verdict` or `FiringDecision` compared (`==`, `!=`, an `is` constant pattern)
+  to a case other than `Faulted`. A comparison to `Faulted` is the handling
+  itself; a `switch` that names every case is the spelling for the rest.
+- **OUTCOME003**: a call of `RuleExpressions.EvaluateDetached` from a file
+  `OutcomeDetachedAllowlist` does not name; each entry states what its
+  `Faulted` arm does.
+- **OUTCOME004**: a member of an `IRuleOperand` that resolves an address
+  against the reader itself (`LiveRow.Resolve`, a `CompiledCellRef` or
+  `IRuleKey` resolution). An operand may hold its declared addresses (its read
+  set, price and `Addresses` list are built from them) and receives them
+  resolved; it may not call them.
+
+Test assemblies (those that reference xUnit v3) are held to none of the four:
+a test watches state or evaluates as the oracle. What the rules cannot see: a
+bool held in a local and never read, an outcome handed to a method that ignores
+it, and a hand-written arena read with a literal key.
 
 ## A reference captured across a replacement
 
