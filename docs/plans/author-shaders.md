@@ -689,8 +689,10 @@ identity, kernel and bin; an `octaves` edit changes all three.
    passes record. A frame whose active set leaves the published set, or whose
    kernels a reload replaced, retires it there before any recording; an arrival
    publishes only while its identity (the sorted program identities, the op
-   fingerprint and the interpreter's `SdfKernelSet.ContentKey`) is still the
-   request and it covers the active set (`SdfShadeKernels.Covers`). Every views
+   fingerprint and `SdfShadeKernels.InterpreterOf`: the kernel set's
+   `SdfKernelSet.ContentKey` and the key of each specialized kernel's
+   `SdfKernelSource`) is still the request and it covers the active set
+   (`SdfShadeKernels.Covers`). Every views
    and glass recording takes its kernel from `SdfShadeSlots.RecordPipeline`
    alone, which reads that selection, so the passes of one frame record one
    selection.
@@ -704,9 +706,35 @@ identity, kernel and bin; an `octaves` edit changes all three.
 3. *Nothing on the frame thread waits for a compile or a driver.* Compilation
    (on the shared `ShaderCompileTurns`), reflection and pipeline creation run in
    `SdfShadePipelines.BuildAsync` on the thread pool; `PrepareShade` only polls
-   it, and an overtaken build is detached and disposed on a later frame.
+   it. A build an edit overtook, and one still running at the residency's final
+   release, is detached into the catalog's `RetiredShadeBuilds`
+   (`RetiredBuilds`), which disposes its result on the pool as it finishes; the
+   sets a final release disposes are built, so their leases wait for nothing.
+   The catalog outlives every residency, so the device's end drains it: a
+   residency's device loss (`RetiredBuilds.Drain`) before recovery, and the World
+   root's teardown (its last `Holdings` entry) while the device is alive. Where
+   it stops: a device loss that reaches no live residency drains nothing (the
+   World root holds its world residency for its whole life), and the residency's
+   own pipeline set and a reload still in flight still wait on release
+   (`SdfWorldPipelineSource.Release`, `CancelShaderReload`; the
+   [refactoring packet](open-items.md#refactoring-campaign) holds that).
 4. *Publication changes no scene revision and no render history.* Only
    `world.shaders.tier`, a diagnostic, invalidates the shading passes.
+5. *A set compiles exactly the source its interpreter was compiled from.* A
+   kernel set carries, beside the views and glass bytecode, the `SdfKernelSource`
+   it was compiled from (`SdfKernelSet.SourceOf`): the stage and every include's
+   text, read once when the bytecode was taken (the deployed tree's at load, a
+   reload's compile plan) and replaced only with that bytecode
+   (`SdfKernelSet.With`). `SdfShadeKernels.Plan` reads nothing else: every
+   include comes from the source (`ShaderCompiler.Plan`'s `readInclude`), so one
+   it does not hold refuses the plan, and a tree edited since cannot enter the
+   set. Bytecode installed without its source refuses the specialization, which
+   stays interpreted. Views and glass each specialize their own interpreter's
+   source, so a reload that has installed one and not yet the other specializes
+   the mixed state the interpreter runs. Where it stops: the deployed tree's
+   sources are taken as its bytecode's because the build publishes them
+   together; a process whose output directory is rebuilt between those two reads
+   is outside it.
 
 **Tier 1, the interpreter.** The views kernel gains one rolled `[loop]` over
 the program's ops with a `switch` over the op table, one per phase, running in
@@ -729,9 +757,10 @@ uses (`SdfKernelTreeLoad`'s one-per-processor semaphore, shortest first,
 extracted so a loader over authored identities shares it; the tree load itself
 enumerates the fixed `SdfKernel` set and stays as it is). The result is a cache
 entry like any kernel's, identified from its inputs, derived again on a miss
-and counted. Its identity also carries the interpreter kernel's content key
-(`SdfKernelSet.ContentKey`), so a helper edit that changes the interpreter
-discards every specialization with it.
+and counted. Its identity also carries the interpreter kernels' content key and
+the sources they were compiled from (`SdfShadeKernels.InterpreterOf`), so a
+helper edit that a reload installs discards every specialization with it, and
+one not yet reloaded never reaches a specialization (invariant 5).
 
 **Publication without a stall.** A finished specialization is not installed
 the way a kernel reload is: `SdfWorldTables.InstallReload` waits for the device

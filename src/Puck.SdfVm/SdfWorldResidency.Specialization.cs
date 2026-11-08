@@ -15,7 +15,6 @@ public sealed record SdfShadeStatus(string Identity, string Name, string State, 
 
 public sealed partial class SdfWorldResidency {
     private readonly BackgroundBuild<SdfShadePipelines> m_shadeBuild = new();
-    private readonly List<CanceledBuild<SdfShadePipelines>> m_shadeCanceled = [];
     private readonly List<SdfShadePipelines> m_shadeRetired = [];
     private SdfShadePipelines? m_shadeCurrent;
     private SdfShadeKernels? m_shadeRequest;
@@ -24,7 +23,6 @@ public sealed partial class SdfWorldResidency {
     private SdfShadeProgram[] m_shadeActive = [];
     private HashSet<string> m_shadeActiveIdentities = new(comparer: StringComparer.Ordinal);
     private SdfShadeStatus[] m_shadeStatus = [];
-    private string? m_shadeTree;
     private bool m_interpretShade;
 
     /// <summary>Gets or sets whether the residency's active programs run through the interpreter even when published
@@ -48,11 +46,6 @@ public sealed partial class SdfWorldResidency {
     // a scene or history revision: a published kernel set shades every frame whose active programs it holds with
     // pixels the interpreter's within the still tolerance, so swapping it is a pointer change.
     private void PrepareShade(SdfFrame frame, IGpuDeviceContext device) {
-        for (var i = m_shadeCanceled.Count - 1; i >= 0; i--) {
-            if (!m_shadeCanceled[i].IsCompleted) { continue; }
-            m_shadeCanceled[i].Wait(discard: static result => result.Dispose());
-            m_shadeCanceled.RemoveAt(index: i);
-        }
         // A replaced set is freed only once no recording or unretired submission pins it (SdfShadeSlots).
         for (var i = m_shadeRetired.Count - 1; i >= 0; i--) {
             if (m_shadeRetired[i].Pins != 0) { continue; }
@@ -68,17 +61,18 @@ public sealed partial class SdfWorldResidency {
             changed = true;
             m_shadeActive = (frame.ShadePrograms ? SdfShadeHlsl.Canonical(programs: frame.ShadingPrograms) : []);
             m_shadeActiveIdentities = new HashSet<string>(collection: m_shadeActive.Select(selector: static p => p.Identity), comparer: StringComparer.Ordinal);
-            var interpreter = m_kernels.ContentKey();
+            var interpreter = SdfShadeKernels.InterpreterOf(kernels: m_kernels);
 
-            // A set that no longer holds every active program, or was compiled against kernels a reload replaced, stops
-            // shading at once: the interpreter shows an edit on its next frame.
+            // A set that no longer holds every active program, or was compiled against kernels or sources a reload
+            // replaced, stops shading at once: the interpreter shows an edit on its next frame.
             if ((m_shadeCurrent is { } current) && ((current.Request.Interpreter != interpreter) || !current.Request.Covers(active: m_shadeActiveIdentities))) {
                 RetireShade();
             }
             if (m_shadeActive.Length != 0) {
                 // The documents' declared programs join the active ones, so the set stays stable while the scene's
-                // composition changes and matches what world prepare compiled for the same documents.
-                var request = new SdfShadeKernels(interpreter: interpreter, programs: m_shadeActive.Concat(second: frame.ShadeDeclared));
+                // composition changes and matches what world prepare compiled for the same documents. The request
+                // compiles the sources m_kernels carries, the ones its interpreter was compiled from, never a tree.
+                var request = new SdfShadeKernels(kernels: m_kernels, programs: m_shadeActive.Concat(second: frame.ShadeDeclared));
 
                 if (request.Identity == m_shadeCurrent?.Request.Identity) {
                     CancelShadeBuild();
@@ -86,7 +80,6 @@ public sealed partial class SdfWorldResidency {
                     CancelShadeBuild();
                     m_shadeRequest = request;
                     m_shadeFailure = null;
-                    var tree = (m_shadeTree ?? SdfKernelSet.DeployedTree);
                     var target = ((BytecodeExtension() == ".dxil") ? ShaderTarget.Dxil : ShaderTarget.Spirv);
                     var catalog = m_pipelines.Catalog;
 
@@ -96,8 +89,7 @@ public sealed partial class SdfWorldResidency {
                         compiler: catalog.ShadeCompiler,
                         device: device,
                         request: request,
-                        target: target,
-                        tree: tree
+                        target: target
                     ));
                 }
             }
@@ -121,10 +113,11 @@ public sealed partial class SdfWorldResidency {
         if (changed) { PublishShadeStatus(); }
     }
 
-    // An overtaken compile is canceled without waiting; a later frame waits it out once it has finished and disposes a
-    // result it completed anyway, and a device loss or release waits it out first (ReleaseShadePipelines).
+    // An overtaken or released compile is canceled without waiting and retired to the catalog, which disposes a result
+    // it completed anyway on the pool as it finishes and outlives this residency; a device loss drains the catalog's
+    // retired builds before the device is recreated (ReleaseShadePipelines), the host's teardown before it is destroyed.
     private void CancelShadeBuild() {
-        if (m_shadeBuild.IsPending) { m_shadeCanceled.Add(item: m_shadeBuild.Detach()); }
+        m_pipelines.Catalog.RetiredShadeBuilds.Retire(build: m_shadeBuild.Detach(), discard: static result => result.Dispose());
         m_shadeRequest = null;
     }
     private void RetireShade() {
@@ -151,11 +144,13 @@ public sealed partial class SdfWorldResidency {
         ? kernel
         : ((kernel == SdfKernel.Views) ? SdfKernel.ViewsPlain : SdfKernel.GlassPlain)));
 
-    // Device teardown and a residency's final idle drain are the only places that free sets regardless of their pins.
-    private void ReleaseShadePipelines() {
-        m_shadeBuild.CancelAndWait(discard: static result => result.Dispose());
-        foreach (var canceled in m_shadeCanceled) { canceled.Wait(discard: static result => result.Dispose()); }
-        m_shadeCanceled.Clear();
+    // Device teardown and a residency's final idle drain are the only places that free sets regardless of their pins. The
+    // final release waits for no compile or driver: a build still running is retired, and the sets disposed here are
+    // built, so their leases hold no build to wait out. A device loss drains every retired build of the composition, so
+    // no lease of the lost device outlives its recovery.
+    private void ReleaseShadePipelines(bool deviceLost) {
+        CancelShadeBuild();
+        if (deviceLost) { m_pipelines.Catalog.RetiredShadeBuilds.Drain(); }
         m_shadeCurrent?.Dispose();
         m_shadeCurrent = null;
         foreach (var retired in m_shadeRetired) { retired.Dispose(); }

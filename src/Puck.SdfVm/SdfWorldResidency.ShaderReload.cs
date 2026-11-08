@@ -150,10 +150,11 @@ public sealed partial class SdfWorldResidency {
         if (ready.Count != 0) {
             var kernels = m_kernels;
 
-            foreach (var (kernel, bytecode) in ready) {
+            foreach (var (kernel, bytecode, source) in ready) {
                 kernels = kernels.With(
                     bytecode: bytecode,
-                    kernel: kernel
+                    kernel: kernel,
+                    source: source
                 );
             }
 
@@ -192,7 +193,6 @@ public sealed partial class SdfWorldResidency {
                 var previous = m_kernels;
 
                 m_kernels = reload!.Kernels; // Device-loss recovery must reconstruct the last successful set too.
-                m_shadeTree = Path.GetDirectoryName(m_reloadRequest!.Directory!);
                 MeshPathBake.Identity = SdfMeshStore.IdentityOf(kernels: m_kernels);
                 m_reloadChanged += changed;
 

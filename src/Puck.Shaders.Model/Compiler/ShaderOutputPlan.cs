@@ -13,6 +13,9 @@ public sealed class ShaderOutputPlan {
 
     /// <summary>Gets the UTF-8 bytes of the closure's distinct files, the stage source included.</summary>
     public long ClosureBytes => Work.Closure.ExpandedBytes;
+    /// <summary>Gets the text the output compiles of every include, by full path: the closure as it was read when the
+    /// output was planned, whatever the files hold since.</summary>
+    public IReadOnlyDictionary<string, string> Contents => Work.Closure.Contents;
     /// <summary>Gets every include the stage source reaches, by full path, in discovery order.</summary>
     public IReadOnlyList<ShaderSourceDependency> Includes => Work.Closure.Includes;
     /// <summary>Gets the hash of everything the output reads apart from the toolchain: the compiler revision, the step's

@@ -262,7 +262,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public const int WatchPollMilliseconds = 50;
 
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
-    private readonly List<CanceledBuild<CompileOutcome>> m_canceledCompilations = [];
+    // Superseded and removed rows' compilations, let go of without waiting and joined at disposal.
+    private readonly RetiredBuilds m_canceledCompilations = new();
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly List<string> m_named = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
@@ -950,38 +951,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         foreach (var entry in m_entries.Values) {
             CancelPending(entry: entry);
         }
-        foreach (var compilation in m_canceledCompilations) {
-            compilation.Wait();
-        }
-        m_canceledCompilations.Clear();
+        m_canceledCompilations.Drain();
     }
 
-    // Supersession and row removal never wait on the frame thread. Keep their canceled builds until they finish, or
-    // join them at disposal before the owner releases the compiler's directory.
-    private void CancelPending(Entry entry) {
-        CollectCanceledCompilations();
-        var compilation = entry.Compilation.Detach();
-
-        if (compilation.IsCompleted) {
-            compilation.Wait();
-        } else {
-            m_canceledCompilations.Add(item: compilation);
-        }
-    }
-    private void CollectCanceledCompilations() {
-        for (var index = (m_canceledCompilations.Count - 1); (index >= 0); index--) {
-            var compilation = m_canceledCompilations[index];
-
-            if (!compilation.IsCompleted) { continue; }
-            compilation.Wait();
-            m_canceledCompilations.RemoveAt(index: index);
-        }
-    }
+    // Supersession and row removal never wait on the frame thread. Their canceled builds finish on their own, and
+    // disposal joins them before the owner releases the compiler's directory.
+    private void CancelPending(Entry entry) =>
+        m_canceledCompilations.Retire(build: entry.Compilation.Detach(), discard: null);
 
     /// <summary>Installs complete candidates and polls dependency watches before this host frame renders.</summary>
     public void PumpWatches() {
         if (m_disposed) { return; }
-        CollectCanceledCompilations();
         var debounce = ((Stopwatch.Frequency * WatchDebounceMilliseconds) / 1000);
         var poll = ((Stopwatch.Frequency * WatchPollMilliseconds) / 1000);
 

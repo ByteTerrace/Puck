@@ -1556,8 +1556,10 @@ Owner: rendering · ordinary · Next:
 Steps 0, 1 and 3 have landed: step 3 specializes each program set into views
 and glass kernels with no interpreter in them, gives a frame with no active
 program plain kernels, and publishes through one door
-(`SdfWorldResidency.PrepareShade`) whose GPU-lifetime invariants the memo's
-section 3.4 states; they await their adversarial review. A player's prewarm
+(`SdfWorldResidency.PrepareShade`) whose GPU-lifetime and provenance invariants
+the memo's section 3.4 states; their adversarial review's two findings (a
+release waiting on a running build, a set compiled from a tree edited since its
+kernels) are fixed there as invariants 3 and 5. A player's prewarm
 compiles each hosted world's declared set in `world prepare`; a Direct3D 12
 player without `dxcompiler.dll` refuses a prewarmed kernel at the reflection
 check (`SdfShadePipelines.BuildAsync`), and a frame holding a program its own
@@ -1710,6 +1712,17 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [medium · frame thread waits on release] A residency's final release still
+  waits on the frame thread for two builds: `SdfWorldPipelineSource.Release`
+  cancels and waits its lease acquisition, and releasing a last
+  `GpuBuildLease` whose entry is still building waits out the creation in the
+  driver (`GpuBuildCache.Retire`); `SdfWorldResidency.CancelShaderReload` waits
+  a reload's pipeline build and its tree load's compiles. A routed residency
+  left while its kernels build cold stalls the frame for that creation. Retire
+  them through `RetiredBuilds` as the specialization does (the catalog's
+  `RetiredShadeBuilds`, drained at device loss and root teardown), moving
+  `GpuBuildCache`'s last-lease retire onto the same table so every holder
+  benefits. Seen by the shade-3 fix lane from the code; not measured.
 - [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
   `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
   `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing

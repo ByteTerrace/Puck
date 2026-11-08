@@ -297,7 +297,8 @@ public static class WorldRenderRoot {
             // The graph host's environment registrations retain residencies. Release those registrations
             // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
             // These services can predate the device context, so their later container disposal is too late for GPU owners.
-            Holdings = [compareCapture, host, binder, residency],
+            // The specializations those residencies retired unfinished are waited out last, while the device lives.
+            Holdings = [compareCapture, host, binder, residency, pipelines.RetiredShadeBuilds],
             Prepare = (in FrameContext context) => {
                 display.Follow(
                     context: in context,

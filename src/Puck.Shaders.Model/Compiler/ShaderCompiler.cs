@@ -107,14 +107,18 @@ public sealed partial class ShaderCompiler {
     /// <param name="target">The output's target.</param>
     /// <param name="tier">The quality tier, or <see langword="null"/> for the variant no tier names.</param>
     /// <param name="generated">Generated includes indexed by full path, replacing only those inputs in the closure.</param>
+    /// <param name="readInclude">Reads every other include's text by full path, <see langword="null"/> when it holds
+    /// none, in place of the file system: a snapshot of the sources an earlier output compiled. <see langword="null"/>
+    /// reads the file system.</param>
     /// <returns>The plan.</returns>
-    /// <exception cref="ShaderClosureRefusedException">The closure is refused; the code names why.</exception>
-    public ShaderOutputPlan Plan(ShaderStageSource stage, ShaderTarget target, QualityTier? tier = null, IReadOnlyDictionary<string, string>? generated = null) {
+    /// <exception cref="ShaderClosureRefusedException">The closure is refused; the code names why. An include
+    /// <paramref name="readInclude"/> does not hold is refused as missing.</exception>
+    public ShaderOutputPlan Plan(ShaderStageSource stage, ShaderTarget target, QualityTier? tier = null, IReadOnlyDictionary<string, string>? generated = null, Func<string, string?>? readInclude = null) {
         ArgumentNullException.ThrowIfNull(argument: stage);
 
         var work = Prepare(
             generated: generated,
-            readInclude: null,
+            readInclude: readInclude,
             stage: stage,
             tier: tier
         );

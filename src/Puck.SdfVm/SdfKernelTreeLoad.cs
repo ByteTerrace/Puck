@@ -13,7 +13,7 @@ namespace Puck.SdfVm;
 /// </summary>
 public sealed class SdfKernelTreeLoad : IDisposable {
     private readonly CancellationTokenSource m_cancellation;
-    private readonly ConcurrentQueue<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode)> m_ready = new();
+    private readonly ConcurrentQueue<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode, SdfKernelSource? Source)> m_ready = new();
     private readonly ConcurrentQueue<string> m_errors = new();
     private readonly Task m_completion;
 
@@ -51,7 +51,7 @@ public sealed class SdfKernelTreeLoad : IDisposable {
                 amount: bytes.LongLength,
                 kind: SdfKernelSet.BytecodeBytes
             );
-            m_ready.Enqueue(item: (kernel, bytes));
+            m_ready.Enqueue(item: (kernel, bytes, null));
         }
 
         if ((sources.Count == 0) && m_ready.IsEmpty) {
@@ -106,13 +106,14 @@ public sealed class SdfKernelTreeLoad : IDisposable {
     }
 
     /// <summary>Removes and returns every kernel read or compiled since the last call.</summary>
-    /// <returns>The ready kernels and their bytecode, possibly none.</returns>
-    public IReadOnlyList<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode)> TakeReady() {
+    /// <returns>The ready kernels, each with its bytecode and the source it compiled (<see langword="null"/> for one the
+    /// tree carried as bytecode), possibly none.</returns>
+    public IReadOnlyList<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode, SdfKernelSource? Source)> TakeReady() {
         if (m_ready.IsEmpty) {
             return [];
         }
 
-        var ready = new List<(SdfKernel, ReadOnlyMemory<byte>)>();
+        var ready = new List<(SdfKernel, ReadOnlyMemory<byte>, SdfKernelSource?)>();
 
         while (m_ready.TryDequeue(result: out var item)) {
             ready.Add(item: item);
@@ -193,7 +194,7 @@ public sealed class SdfKernelTreeLoad : IDisposable {
                     amount: result.Bytecode!.LongLength,
                     kind: SdfKernelSet.BytecodeBytes
                 );
-                m_ready.Enqueue(item: (plan.Kernel, result.Bytecode));
+                m_ready.Enqueue(item: (plan.Kernel, result.Bytecode, SdfKernelSource.Of(plan: plan.Plan)));
         }).ToArray();
 
         await Task.WhenAll(tasks: compiles).ConfigureAwait(continueOnCapturedContext: false);
