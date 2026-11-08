@@ -2628,6 +2628,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public ReadOnlySpan<Vector3> Local => Shading!.Local(index: LightIndex);
         public ReadOnlySpan<uint> Lights => Shading!.Lights(index: LightIndex);
     }
+    // A block's words, zeroed, on the pinned heap. The probe cache's table, a large object that only a gen2 collects,
+    // names the blocks for as long as their probes stand, so words allocated young would be marked through its cards and
+    // copied into gen2 by the young collections the frame thread's allocation sets off; on the pinned heap a young
+    // collection neither copies nor promotes them, and a gen2 reclaims a block no entry names.
+    private static float[] BlockWords(int length) => GC.AllocateArray<float>(length: length, pinned: true);
     // The geometry words of one trace batch's probes, each probe's at its index: six sky shares, the packed octahedral
     // surface map and curvature, then the hit buffer, held as the floats' bits so a batch is one allocation.
     // `hits`, when given, is an array of at least count * HitWords words the block borrows until ReleaseHits; its words
@@ -2635,7 +2640,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class ProbeBlock(int count, uint[]? hits = null) {
         public const int FloatsPerProbe = 6 + SdfMeshIrradianceProbe.DepthWords;
 
-        private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
+        private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
         private uint[]? m_hits = (hits ?? new uint[count * SdfMeshProbeDepth.HitWords]);
 
         public long Bytes => (((long)m_floats.Length) * sizeof(float)) + (m_hits?.LongLength ?? 0) * sizeof(uint);
@@ -2650,7 +2655,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class LightBlock(int count) {
         public const int FloatsPerProbe = (36 + SdfMeshIrradianceProbe.LightWords);
 
-        private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
+        private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
 
         public long Bytes => (((long)m_floats.Length) * sizeof(float));
 

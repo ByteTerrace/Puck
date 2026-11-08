@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
@@ -87,12 +88,19 @@ public sealed class WorldDisclosureImages {
     private readonly System.Buffers.ArrayBufferWriter<byte> m_imageBytes = new();
     private Utf8JsonWriter? m_imageWriter;
     private readonly List<StateCell> m_cellScratch = [];
+    private StateArena? m_exportArena;
+    private StateRow?[] m_exports = [];
     /// <summary>Gets the table's monotonic work totals, an operator measurement like <see cref="Describe"/>.</summary>
     public IWorkCounterSource Work => m_work;
     private StateArena? m_arena;
     private long m_policyRevision = -1;
     private StateVisibility[] m_policies = [];
     private int[][] m_dependencies = [];
+    // Prepare's scratch, refilled on every revision: each row's own policies, and one row's policies and dependencies.
+    private HashSet<StateVisibility>?[] m_rowPolicies = [];
+    private readonly HashSet<StateVisibility> m_policyScratch = [];
+    private readonly HashSet<StateVisibility> m_rowPolicyScratch = [];
+    private readonly List<int> m_dependencyScratch = [];
     private int[][] m_dependents = [];
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
     private readonly Dictionary<ContentPin, WeakReference<WorldRecipientImage>> m_content = [];
@@ -144,32 +152,52 @@ public sealed class WorldDisclosureImages {
         if (ReferenceEquals(m_arena, arena) && m_policyRevision == arena.DisclosureRevision) { return; }
         var sameArena = ReferenceEquals(m_arena, arena);
         m_arena = arena; m_policyRevision = arena.DisclosureRevision;
-        var policies = new HashSet<StateVisibility>();
-        var rowPolicies = new HashSet<StateVisibility>[arena.Rows.Count];
-        for (var row = 0; row < arena.Rows.Count; row++) {
-            var set = rowPolicies[row] = [];
-            if (arena.Rows[row].Visibility is { } policy) { set.Add(policy); }
+        var count = arena.Rows.Count;
+        // Each row's own policies, its declaration's and every cell's, in sets this table keeps and refills.
+        if (m_rowPolicies.Length != count) { m_rowPolicies = new HashSet<StateVisibility>?[count]; }
+        for (var row = 0; row < count; row++) {
+            var set = m_rowPolicies[row];
+            set?.Clear();
+            if (arena.Rows[row].Visibility is { } policy) { (set ??= m_rowPolicies[row] = []).Add(policy); }
             if (!arena.HasCellVisibility(row)) { continue; }
             var cursor = 0;
-            while (arena.TryNextCell(row, ref cursor, out var key)) { if (arena.Visibility(row, key) is { } cell) { set.Add(cell); } }
+            while (arena.TryNextCell(row, ref cursor, out var key)) { if (arena.Visibility(row, key) is { } cell) { (set ??= m_rowPolicies[row] = []).Add(cell); } }
         }
-        var dependencies = new int[arena.Rows.Count][];
-        for (var row = 0; row < arena.Rows.Count; row++) {
-            var rowDependencies = new HashSet<int>();
-            var set = new HashSet<StateVisibility>(rowPolicies[row]);
-            foreach (var zone in arena.Catalog.ContainingZones(row)) { rowDependencies.Add(zone); set.UnionWith(rowPolicies[zone]); }
-            foreach (var policy in set) {
-                policies.Add(policy);
-                if (policy.ReadersFrom is { } readers && arena.Catalog.TryResolve(StateLane.Document, readers, out var source)) { rowDependencies.Add(source.Ordinal); }
-            }
-            dependencies[row] = rowDependencies.Order().ToArray();
-        }
-        var ordered = policies.ToArray();
         // The revision moves on every membership, order, cursor and audience write. Cached images and definitions are
         // keyed by policy bit positions and checked against row and dependency versions, so they hold while the index
-        // they were built under is the same.
-        if (sameArena && ordered.AsSpan().SequenceEqual(m_policies) && SameDependencies(dependencies, m_dependencies)) { return; }
-        m_policies = ordered;
+        // they were built under is the same; a row whose dependencies stand keeps its array, so a revision that changes
+        // no policy allocates nothing.
+        var policies = m_policyScratch;
+        policies.Clear();
+        var dependencies = (sameArena && (m_dependencies.Length == count)) ? m_dependencies : new int[count][];
+        for (var row = 0; row < count; row++) {
+            var rowSet = m_rowPolicyScratch;
+            var rowDependencies = m_dependencyScratch;
+            rowSet.Clear(); rowDependencies.Clear();
+            if (m_rowPolicies[row] is { } own) { foreach (var policy in own) { rowSet.Add(policy); } }
+            var zones = arena.Catalog.ContainingZones(row);
+            for (var index = 0; index < zones.Count; index++) {
+                var zone = zones[index];
+                if (!rowDependencies.Contains(zone)) { rowDependencies.Add(zone); }
+                if (m_rowPolicies[zone] is { } zonePolicies) { foreach (var policy in zonePolicies) { rowSet.Add(policy); } }
+            }
+            foreach (var policy in rowSet) {
+                policies.Add(policy);
+                if (policy.ReadersFrom is { } readers && arena.Catalog.TryResolve(StateLane.Document, readers, out var source) &&
+                    !rowDependencies.Contains(source.Ordinal)) { rowDependencies.Add(source.Ordinal); }
+            }
+            rowDependencies.Sort();
+            if (ReferenceEquals(dependencies, m_dependencies) && CollectionsMarshal.AsSpan(rowDependencies).SequenceEqual(m_dependencies[row])) { continue; }
+            if (ReferenceEquals(dependencies, m_dependencies)) { dependencies = [.. m_dependencies]; }
+            dependencies[row] = [.. rowDependencies];
+        }
+        var samePolicies = sameArena && (policies.Count == m_policies.Length);
+        if (samePolicies) {
+            var index = 0;
+            foreach (var policy in policies) { if (!policy.Equals(m_policies[index++])) { samePolicies = false; break; } }
+        }
+        if (samePolicies && ReferenceEquals(dependencies, m_dependencies)) { return; }
+        m_policies = [.. policies];
         m_dependencies = dependencies;
         var dependents = new List<int>[arena.Rows.Count];
         for (var row = 0; row < dependents.Length; row++) { dependents[row] = []; }
@@ -177,11 +205,6 @@ public sealed class WorldDisclosureImages {
         m_dependents = [.. dependents.Select(rows => rows.ToArray())];
         m_rows.Clear(); m_definitions.Clear();
         m_work.Count(IndexRebuilds);
-    }
-    private static bool SameDependencies(int[][] left, int[][] right) {
-        if (left.Length != right.Length) { return false; }
-        for (var row = 0; row < left.Length; row++) { if (!left[row].AsSpan().SequenceEqual(right[row])) { return false; } }
-        return true;
     }
     // Dependency versions are compared as an exact tuple through a monotone sum: versions only increase within this
     // arena, whose replacement clears the table.
@@ -237,7 +260,7 @@ public sealed class WorldDisclosureImages {
         var observer = view.Observer;
         var includes = view.Includes(row);
         m_cellScratch.Clear();
-        if (includes && (arena.ToRow(row).Cells is { } exported)) {
+        if (includes && (Export(arena, row).Cells is { } exported)) {
             foreach (var cell in exported) {
                 if (!observer.Discloses(row, cell.Key.Value)) { continue; }
                 m_cellScratch.Add((cell.Value.Kind == CellKind.Vector) ? cell with { Value = CellValue.Vector(cell.Value.AsVector.ToArray()) } : cell);
@@ -263,6 +286,14 @@ public sealed class WorldDisclosureImages {
         }
         m_rows[key] = new Entry(version, dependencies, image, keys);
         return image;
+    }
+    // A row's live export, sharing every cell its previous export from the same arena still holds unchanged.
+    private StateRow Export(StateArena arena, int row) {
+        if (!ReferenceEquals(m_exportArena, arena) || (m_exports.Length != arena.Rows.Count)) {
+            m_exportArena = arena;
+            m_exports = new StateRow?[arena.Rows.Count];
+        }
+        return m_exports[row] = arena.ToRow(row, previous: m_exports[row]);
     }
     // The shared image of one disclosed content: the live one with this digest, or a new one the table holds weakly.
     private WorldRecipientImage Intern(ReadOnlySpan<byte> digest, StateCell[] cells, WorldObservedRow? observation, int bytes) {
