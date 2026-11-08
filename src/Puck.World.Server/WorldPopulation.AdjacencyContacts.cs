@@ -11,17 +11,25 @@ public sealed partial class WorldPopulation {
     // Tick scratch, shared by every projection and sweep retry for a body. Rebuilding the contact field does not
     // replenish it. Different body lanes own different slots; the tick owner resets it before dispatching them.
     private FixedQ4816[] m_adjacencyCorrectionSpent = [];
+    private ulong m_adjacencyTick = 1;
+    private ulong? m_adjacencyImageTick;
     // The ownership faces of the definition the contact field composes over, rederived when that definition changes.
     private WorldOwnershipFace[] m_ownershipFaces = [];
     private WorldDefinition? m_ownershipFacesDefinition;
 
     private void BeginAdjacencyContacts() {
-        if (m_adjacencies is null) { return; }
+        if ((m_adjacencies is null) || (m_adjacencyImageTick == m_adjacencyTick)) { return; }
         if (m_adjacencyCorrectionSpent.Length != Capacity) {
             m_adjacencyCorrectionSpent = new FixedQ4816[Capacity];
         } else {
             Array.Clear(m_adjacencyCorrectionSpent);
         }
+        m_adjacencies.BeginTick(tick: m_adjacencyTick);
+        m_adjacencyImageTick = m_adjacencyTick;
+    }
+    internal void BeginAdjacencyContacts(ulong tick) {
+        m_adjacencyTick = tick;
+        BeginAdjacencyContacts();
     }
     private WorldOwnershipFace[] OwnershipFaces() {
         if (!ReferenceEquals(objA: m_ownershipFacesDefinition, objB: m_adjacencyDefinition)) {
@@ -76,11 +84,18 @@ public sealed partial class WorldPopulation {
         admitted = admitted.ClampLength(maximum: FixedQ4816.Max(FixedQ4816.Zero, ceiling - spent));
 
         foreach (var face in faces) {
-            if (face.Owns(point: start) && !face.Owns(point: (start + admitted))) {
+            if (!face.Owns(point: start)) { continue; }
+            var outwardSpeed = FixedVector3.Dot(velocity, face.Frame.Normal);
+            if (!face.Owns(point: (start + admitted)) ||
+                ((outwardSpeed < FixedQ4816.Zero) && (FixedVector3.Dot(admitted, face.Frame.Normal) > FixedQ4816.Zero))) {
                 admitted = FixedVector3.Zero;
-                break;
             }
+            // Quantized normals need not have exact unit length. The final predicate, rather than projection
+            // arithmetic alone, enforces the velocity inequality on every owned face.
+            if (FixedVector3.Dot(admittedVelocity, face.Frame.Normal) > outwardSpeed) { admittedVelocity = velocity; }
         }
+        // No positional response was admitted: the same rejected report cannot still steer or launch the body.
+        if (admitted == FixedVector3.Zero) { admittedVelocity = velocity; }
         if ((admitted != displacement) || (admittedVelocity != proposedVelocity)) {
             WorldBodyWork.Process.Add(kind: WorldBodyWork.AdjacencyCorrectionClamps, amount: 1);
         }
@@ -91,6 +106,18 @@ public sealed partial class WorldPopulation {
         spent += length;
         position = (start + admitted);
         velocity = admittedVelocity;
+    }
+    internal void ApplyCarriedAdjacencyResponse(WorldBody carrier, FixedQ4816 overlapDepth, FixedVector3 displacement) {
+        if (carrier.SweepRefusedThisTick) { return; }
+        var position = carrier.FixedPosition;
+        var velocity = carrier.ApproximateWorldVelocity();
+        var proposedVelocity = velocity;
+        var normal = displacement.Normalize();
+        var inward = FixedVector3.Dot(velocity, normal);
+        if (inward < FixedQ4816.Zero) { proposedVelocity -= normal * inward; }
+        AdmitAdjacencyResponse(entityIndex: carrier.EntityIndex, overlapDepth: overlapDepth, position: ref position,
+            velocity: ref velocity, displacement: displacement, proposedVelocity: proposedVelocity);
+        carrier.ApplyAdmittedContactResponse(position: position, velocity: velocity);
     }
     // Removes the part of value's component along a unit normal that exceeds room.
     private static FixedVector3 Below(FixedVector3 normal, FixedQ4816 room, FixedVector3 value) {

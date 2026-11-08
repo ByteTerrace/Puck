@@ -17,10 +17,11 @@ public interface IFixedContactStep {
     /// <summary>Resolves a support-driven landing. Fields composing untrusted support can admit the descent as
     /// part of the response rather than treating it as the body's own integrated motion.</summary>
     /// <param name="previousPosition">The position before the descent.</param>
+    /// <param name="responseOrigin">The body's own motion endpoint before any support-selected lift or descent.</param>
     /// <param name="position">The proposed landing, then its admitted position.</param>
     /// <param name="velocity">The incoming velocity, then its admitted response.</param>
     /// <returns>The admitted landing's contact verdict.</returns>
-    ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+    ContactResolution SweepSupport(in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position, ref FixedVector3 velocity) =>
         Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity);
     /// <summary>Finds how far the body descends along its up axis from <paramref name="start"/> before anything the
     /// sweep resolves against first comes within the contact skin, as <see cref="IContactField.TrySupportDistance"/>
@@ -68,13 +69,15 @@ public static class FixedStepUp {
     /// <param name="up">The body's unit up axis.</param>
     /// <param name="distance">The greatest permitted descent.</param>
     /// <param name="result">The accepted landing.</param>
+    /// <param name="responseOrigin">The body's own motion endpoint; omitted for an ordinary snap from start.</param>
     /// <param name="uncertain">The pose lowered from's own uncertainty (<see cref="ContactResolution.Uncertainty"/>). The
     /// landing must ground, and may leave uncertain only pairs this one names: the snap moves the body onto support it
     /// proves and adds no volume and collider it cannot prove clear or in contact, so a field that was clear at the start
     /// and is newly unproved at the landing refuses it.</param>
     /// <returns>Whether the search found proven walkable support.</returns>
     public static bool TrySnap<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 velocity,
-        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result, ContactUncertainty uncertain = default)
+        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result, ContactUncertainty uncertain = default,
+        FixedVector3? responseOrigin = null)
         where TStep : IFixedContactStep, allows ref struct {
         result = default;
         if ((distance <= FixedQ4816.Zero) || !step.TrySupportDistance(descent: out var descent, reach: distance, start: in start)) {
@@ -82,7 +85,8 @@ public static class FixedStepUp {
         }
         var landed = (start - (up * (descent + LandingDepth)));
         var moved = velocity;
-        var landing = step.SweepSupport(position: ref landed, previousPosition: in start, velocity: ref moved);
+        var landing = step.SweepSupport(position: ref landed, previousPosition: in start,
+            responseOrigin: responseOrigin ?? start, velocity: ref moved);
 
         if ((landing.Refusal != ContactRefusal.None) || !landing.Uncertainty.IsWithin(earlier: uncertain) || !landing.Grounded) {
             return false;
@@ -167,7 +171,7 @@ public static class FixedStepUp {
         // Lower onto the support, down to where the original step would have ended along up. Nothing met in that range
         // leaves the body in the air, which is not a step.
         if (!TrySnap(distance: (lift - vertical), result: out var landingResult, start: in across, step: ref step,
-            up: in up, velocity: in moved)) {
+            up: in up, velocity: in moved, responseOrigin: intended)) {
             return false;
         }
         var landed = landingResult.Position;

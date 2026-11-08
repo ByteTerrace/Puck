@@ -925,8 +925,10 @@ Neighbour contact replay packet (independent of companion custody):
 - [high] Tape fixed neighbour inputs at their local admission tick.
   `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
   geometry do to a local body each tick and keeps it behind its ownership
-  faces, and contact settles by authority pair through the link's settled
-  identity, but `WorldAdjacencyFields.Handle.Pin`
+  faces, including carried blocks and support-selected lifts. Mapped arrivals
+  share the upcoming tick's pinned image and correction allowance with ordinary
+  advance, and contact settles by authority pair through the authored link's
+  identity across observation replacements, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
