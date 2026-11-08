@@ -8,7 +8,12 @@ vocabulary's `WorldShadeLowering` uses the ordinary parser, lexical scopes,
 template/function expansion and compile-time loops; it does not run a second DSL.
 
 The stamp and allowed phase reads are `SdfShadeOps.Inputs`; output members and
-types are `SdfShadeProgram.OutputType`. There is no author buffer address or
+types are `SdfShadeProgram.OutputType`. A light's direction, reach, probe share
+and visibility are evaluated once (`sdfLightInputs`) and read by both the default
+response and the light phase's stamp: `light.visibility` is the share the default
+response lets through (the cascade slot's, or the probes' where no cascade
+measured it, for a directional; the probes' share for a traced point light; one
+otherwise), and `light.occlusion` is the surface's ambient occlusion. There is no author buffer address or
 neighbour read. Runtime parameters occupy a separate typed block. Structural
 constants enter code; runtime data does not. Canonical words, parameter layout
 and the live semantics fingerprint determine identity. Author names are reporting
@@ -100,8 +105,48 @@ demands every side. `sdfMaterialShadowDemand` drives cascade queries, including
 the exactly opposite face for every-side demand. `sdfLightVisibility` keeps an
 unqueried authored slot at zero even during a shadow handoff. `world.budget` reports admitted program identities,
 author names, static cost and demand. `shade-cost` displays the sum of explicit
-phase work over `MaxPhaseWork`; `shade-tier` distinguishes interpreted pixels from
-the engine path. There are no specialized or quarantined kernels yet.
+phase work over `MaxPhaseWork`; `shade-tier` shows a pixel's tier: grey for no
+program, cyan interpreted, green specialized. There are no quarantined kernels yet.
+
+## The three views and glass kernels
+
+Every views and glass recording takes its kernel from one door,
+`SdfShadeSlots.RecordPipeline`, which asks the residency's selection:
+
+- **Plain** (`sdf-world-views-plain`, `sdf-glass-plain`, fixed kernels compiled
+  with `SDF_SHADE_EMPTY`): a frame with no active program (the lever on layers,
+  or no material and no default with a program). `sdfShadeBinding` folds to none,
+  so every program branch of the stages compiles out, not only the interpreter.
+- **Interpreter** (`sdf-world-views`, `sdf-glass`): a frame with active programs
+  that no published specialized set holds, and `world.shaders.tier interpreted`.
+- **Specialized** (`sdf-world-views.shade-<set>`, `sdf-glass.shade-<set>`):
+  `SdfShadeHlsl.Specialize` spliced in as `isa/sdf-shade.hlsli`, each program an
+  arm of straight-line `precise` phases chosen once a pixel by the identity its
+  header carries (`SdfShadeProgram.IdentityVector`). There is no interpreter arm:
+  one would keep the interpreter's registers allocated for the whole kernel. A
+  set records only a frame whose active programs it holds
+  (`SdfShadeKernels.Covers`).
+
+`SdfWorldResidency.PrepareShade` is the one publication door, once a frame
+after packing, on the frame the passes record. It requests the frame's active
+programs together with the documents' declared ones (`SdfFrame.ShadeDeclared`,
+`WorldRenderSettings.DeclaredShades`, the same set `world prepare` compiles),
+compiles them off the frame thread on `ShaderCompileTurns` through the World's
+`ShaderCompiler` (counted in `shaders.compiler`, a hit runs no tool), reflects
+and builds the pipelines (`SdfShadePipelines`), and publishes only an arrival
+whose identity (programs, op fingerprint, the interpreter's
+`SdfKernelSet.ContentKey`) is still requested and which covers the active set.
+A frame whose active set leaves the published one retires it at once, so the
+interpreter shows an edit on its next frame. A recording pins the set it records
+with; the pin moves to its submission and drops only on a completion proof,
+abandonment before submission or a device loss, and a retired set is freed only
+at zero pins (or at device teardown and the residency's final idle drain).
+Publication moves no revision; `world.shaders.tier` alone invalidates the
+shading passes. `world.shaders.status` lists each program's state.
+`SdfShadeKernels.Plan` refuses a plan whose closure lacks the generated text: the
+closure looks generated includes up by `Path.GetFullPath`'s spelling, and a key
+spelled otherwise silently compiles the interpreter under the specialization's
+name.
 
 Check changes with the `shade-*` spelling pairs and `ShadeLoweringTests` in
 `Puck.World.Transpiler.Tests`, plus `puck test` of those authored admission worlds.

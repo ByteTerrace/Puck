@@ -12,7 +12,8 @@ namespace Puck.SdfVm;
 /// </summary>
 /// <param name="regionCopy">The composition's region copy, whose pipeline every residency leases for its device.</param>
 /// <param name="meshRaster">The composition's mesh pass, whose pipeline every residency leases for its device.</param>
-public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster) {
+/// <param name="compiler">The composition's counted compiler, or a default compiler for a directly constructed harness.</param>
+public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster, ShaderCompiler? compiler = null) {
     private readonly Dictionary<string, SdfKernelSet> m_deployed = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_deployedGate = new();
 
@@ -25,6 +26,8 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
     /// <summary>Gets the detail rows the sky's runs and layers count in, one set every residency of the composition packs
     /// its sky against, so a view keeps its rows when it follows another residency.</summary>
     public SdfSkyDetails SkyDetails { get; } = new();
+    /// <summary>The compiler shared by this composition's background authored specializations.</summary>
+    public ShaderCompiler ShadeCompiler { get; } = compiler ?? new(ShaderCompiler.DefaultCacheDirectory);
 
     /// <summary>Gets the composition's pass-pipeline cache, the region copy's and the mesh pass's own, whose entries the
     /// engine's kernel variants are too.</summary>

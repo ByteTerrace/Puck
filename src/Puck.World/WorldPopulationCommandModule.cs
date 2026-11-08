@@ -155,19 +155,17 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 : string.Empty)}, visibility records {visibilityBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) at {Puck.Shaders.SdfWorldPackage.VisibilityRecordByteLength.ToString(provider: CultureInfo.InvariantCulture)} a pixel, mesh region {node.MeshRegionUsedBytes.ToString(provider: CultureInfo.InvariantCulture)} of {node.MeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) held (at most {Puck.SdfVm.SdfWorldTables.MostMeshRegionBytes.ToString(provider: CultureInfo.InvariantCulture)}) for {node.MeshDrawCount.ToString(provider: CultureInfo.InvariantCulture)} draw(s), mesh attachments {meshAttachmentBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s), glass {glassBytes.ToString(provider: CultureInfo.InvariantCulture)} byte(s) ({node.GlassDrawCount.ToString(provider: CultureInfo.InvariantCulture)} glass draw(s))"
             : "renderer not built yet"
         );
-        var defaultShade = renderProbe?.Residency?.Frame?.ShadeDefault ?? WorldRenderSettings.CompileShade(server.Definition.Render.Shade);
-        var shadeMaterials = server.Definition.Creations.SelectMany(selector: static prototype => (prototype.Document.Palette ?? []))
-            .Concat(second: server.Definition.FieldRegions.SelectMany(selector: static region => region.Fields)
-                .Where(predicate: static field => (field.Material is not null)).Select(selector: static field => field.Material!))
-            .Select(material => (Program: WorldRenderSettings.CompileShade(material.Shade) ?? defaultShade, Wrap: (material.Wrap ?? 0f)))
-            .Where(static material => material.Program is not null)
-            .Select(static material => (Program: material.Program!, material.Wrap)).ToArray();
-        var shades = shadeMaterials.Select(selector: static material => material.Program)
-            .GroupBy(static program => program.Identity, StringComparer.Ordinal).Select(selector: static group => group.First()).ToArray();
+        var shadeMaterials = WorldRenderSettings.DeclaredShadeMaterials(definition: server.Definition, fallback: renderProbe?.Residency?.Frame?.ShadeDefault).ToArray();
+        var shades = WorldRenderSettings.DeclaredShades(definition: server.Definition);
         var worstShade = shades.MaxBy(keySelector: static program => program.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights));
 
-        var interpreted = renderProbe?.Residency?.Frame is { ShadePrograms: true } ? shades.Length : 0;
-        render += $", shading programs {shades.Length}, interpreted {interpreted}, specialized 0, pending 0, quarantined 0";
+        // The residency's execution states, over the programs it shades or compiles; a declared program none of its
+        // frames activates is neither.
+        var shaderStates = renderProbe?.Residency?.ShadeStatus ?? [];
+        var interpreted = shaderStates.Count(static p => p.State == "interpreted");
+        var specialized = shaderStates.Count(static p => p.State == "specialized");
+        var pending = shaderStates.Count(static p => p.State == "compiling");
+        render += $", shading programs {shades.Count}, interpreted {interpreted}, specialized {specialized}, pending {pending}, quarantined 0";
         if (worstShade is not null) {
             render += $", worst static cost {worstShade.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights)} ({worstShade.Name})";
             var worstDemand = shadeMaterials.MinBy(keySelector: static material => material.Program.Demand.Cosine(baseWrap: material.Wrap));

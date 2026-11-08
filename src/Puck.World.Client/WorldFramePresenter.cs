@@ -2236,6 +2236,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
             ShadePrograms = m_settings.ShadePrograms,
             ShadeDefault = m_settings.ResolveShade(m_client.Definition.Render, program),
+            ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_client.Definition),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.

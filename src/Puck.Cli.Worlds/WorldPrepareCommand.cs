@@ -2,6 +2,9 @@ using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.Cli.Automation;
 
@@ -38,6 +41,7 @@ public static class WorldPrepareCommand {
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
         var names = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
         var needs = new PlayerDerivedProducts.Needs();
+        var shadeSets = new List<IReadOnlyList<SdfShadeProgram>>();
 
         pending.Enqueue(item: Path.Combine(
             path1: root,
@@ -127,6 +131,7 @@ public static class WorldPrepareCommand {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
             }
             needs.Note(definition: definition!, documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path));
+            shadeSets.Add(item: WorldRenderSettings.DeclaredShades(definition: definition!));
             File.WriteAllBytes(
                 Path.Combine(
                     path1: output,
@@ -136,8 +141,39 @@ public static class WorldPrepareCommand {
             );
         }
         PlayerDerivedProducts.Prepare(output: output, agbBios: needs.AgbBios, guests: [.. needs.Guests]);
+        PrepareShading(output: output, sets: shadeSets);
         Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
+    }
+
+    // Each hosted world's declared program set specializes the views and glass kernels exactly as its residency requests
+    // them (SdfWorldResidency's PrepareShade), for both targets, from the deployed tree a player compiles against, so a
+    // player's first boot finds them in its shipping cache and interprets only a program its documents did not declare.
+    // The kernels are a cache whose miss the runtime derives again, so a target this machine's toolchain cannot compile
+    // (no dxc, a dxc without SPIR-V, an install without the kernel sources) is skipped and named, never fatal.
+    private static void PrepareShading(IReadOnlyList<IReadOnlyList<SdfShadeProgram>> sets, string output) {
+        var compiler = new ShaderCompiler(cacheDirectory: ShaderCompiler.DefaultCacheDirectory);
+        var store = Path.Combine(path1: output, path2: Puck.Assets.DerivedBytes.ShippingDirectoryName);
+        var distinct = sets.Where(predicate: static set => (set.Count != 0))
+            .DistinctBy(keySelector: static set => string.Join(separator: '\n', values: set.Select(selector: static p => p.Identity)), comparer: StringComparer.Ordinal).ToArray();
+        var kernels = 0;
+
+        foreach (var target in (ReadOnlySpan<ShaderTarget>)[ShaderTarget.Dxil, ShaderTarget.Spirv]) {
+            try {
+                foreach (var programs in distinct) {
+                    var plans = SdfShadeKernels.Plan(compiler: compiler, programs: programs, target: target, tree: SdfKernelSet.DeployedTree);
+
+                    _ = SdfShadeKernels.CompileAsync(compiler: compiler, plans: plans).GetAwaiter().GetResult();
+                    foreach (var (_, plan) in plans) {
+                        compiler.ExportPrepared(directory: store, plan: plan);
+                        kernels++;
+                    }
+                }
+            } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or ShaderToolMissingException or ShaderClosureRefusedException) {
+                Console.Error.WriteLine(value: $"world prepare: specialized shading kernels for {target} skipped, the runtime compiles them on a miss: {exception.Message}");
+            }
+        }
+        Console.WriteLine(value: $"Prepared {kernels} specialized shading kernel(s) for {distinct.Length} program set(s) in {store.Replace(oldChar: '\\', newChar: '/')}.");
     }
 
     public static Command Create() {

@@ -43,6 +43,8 @@
         <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
+        <!-- Runtime specialization snapshots this same include closure through ShaderCompiler. -->
+        <Content Include="Assets/Shaders/**/*.hlsl;Assets/Shaders/**/*.hlsli" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>

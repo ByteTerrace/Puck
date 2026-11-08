@@ -1,17 +1,24 @@
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
 // One submission's shading identities, held by the residency whose commands carry them from its submission
-// (SdfWorldResidency.SubmittedShade). It stays reported in flight until its completion is proven, and only a proof removes it: the node
-// waited the slot it was submitted on (SdfShadeSlots.Completed), or its recorder was released after its submissions
-// completed and its package began another frame (SdfShadeReleases.BeginFrame). A device loss before either proof marks it
-// lost, and a lost submission stays reported until the quarantine reads it. No fence is queried: a reusable slot fence
-// reads signaled after an abandoned submission and after a loss's teardown drain alike.
+// (SdfWorldResidency.SubmittedShade), and the specialized kernel set its dispatches recorded with, which it pins. It stays
+// reported in flight until its completion is proven, and only a proof removes it: the node waited the slot it was
+// submitted on (SdfShadeSlots.Completed), or its recorder was released after its submissions completed and its package
+// began another frame (SdfShadeReleases.BeginFrame). A device loss before either proof marks it lost, and a lost
+// submission stays reported until the quarantine reads it. No fence is queried: a reusable slot fence reads signaled
+// after an abandoned submission and after a loss's teardown drain alike. The pin drops on the proof, on a loss, or when
+// the recording is discarded before any submission; the residency frees a retired set only at zero pins.
 internal sealed class SdfShadeSubmission {
-    internal SdfShadeSubmission(SdfWorldResidency residency, IReadOnlyList<string> identities) {
+    private SdfShadePipelines? m_pipelines;
+
+    internal SdfShadeSubmission(SdfWorldResidency residency, IReadOnlyList<string> identities, SdfShadePipelines? pipelines = null) {
         Residency = residency;
         Identities = identities;
+        m_pipelines = pipelines;
+        m_pipelines?.Pin();
     }
 
     // The residency that recorded the submission's dispatches, whichever residency its recorder follows afterwards.
@@ -20,15 +27,26 @@ internal sealed class SdfShadeSubmission {
     internal bool Lost { get; private set; }
 
     internal void Complete() {
+        Unpin();
         if (!Lost) { Residency.RetireShade(submission: this); }
     }
-    internal void Lose() => Lost = true;
+    internal void Lose() {
+        Lost = true;
+        Unpin();
+    }
+    // A recording that never reached a submission: nothing of it is in flight.
+    internal void Discard() => Unpin();
+
+    private void Unpin() {
+        m_pipelines?.Unpin();
+        m_pipelines = null;
+    }
 }
 
-/// <summary>A shading recorder's submissions by frame slot. A recording captures the residency that recorded and the
-/// shading identities its dispatches may execute; a submission of that slot moves exactly that capture into the
-/// residency's in-flight set (<see cref="SdfWorldResidency.InFlightShadeIdentities"/>); the node's wait of the slot
-/// completes it; releasing the recorder hands every unproven submission to its package's
+/// <summary>A shading recorder's submissions by frame slot. A recording captures the residency that recorded, the
+/// shading identities its dispatches may execute and the specialized kernels it recorded with; a submission of that slot
+/// moves exactly that capture into the residency's in-flight set (<see cref="SdfWorldResidency.InFlightShadeIdentities"/>);
+/// the node's wait of the slot completes it; releasing the recorder hands every unproven submission to its package's
 /// <see cref="SdfShadeReleases"/>. Nothing reaches a residency except through a capture its own recording made, so a pass
 /// that skipped or stood, or a residency the recorder has since followed away from, never receives another recording's
 /// identities. Single-threaded, on the frame thread.</summary>
@@ -39,7 +57,8 @@ public sealed class SdfShadeSlots {
     /// <param name="slots">The frames the recorder's graph keeps in flight; positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slots"/> is not positive.</exception>
     public SdfShadeSlots(int slots) => m_slots = new RenderGraphSlotResults<SdfShadeSubmission>(slots: slots,
-        complete: static submission => submission.Complete(), submit: static submission => submission.Residency.SubmittedShade(submission: submission));
+        complete: static submission => submission.Complete(), discard: static submission => submission.Discard(),
+        submit: static submission => submission.Residency.SubmittedShade(submission: submission));
 
     /// <summary>Captures what a recording into the slot dispatched: the residency that recorded it and the identities its
     /// plan may execute. It replaces any earlier capture of the slot that never reached a submission; a plan that may
@@ -51,11 +70,19 @@ public sealed class SdfShadeSlots {
     public void Recorded(int slot, SdfWorldResidency residency, SdfShadeDispatch plan) {
         ArgumentNullException.ThrowIfNull(residency);
         ArgumentNullException.ThrowIfNull(plan);
-        if (plan.Identities.Count == 0) {
-            m_slots.Withdraw(slot: slot);
-        } else {
-            m_slots.Record(slot: slot, result: new SdfShadeSubmission(residency: residency, identities: plan.Identities));
-        }
+        Capture(pipelines: null, plan: plan, residency: residency, slot: slot);
+    }
+    // The one door through which a views or glass recording takes its kernel: the residency's shading selection, pinned
+    // by the capture before its native handle reaches the recorder, so the pin travels with the submission even if a later
+    // frame publishes another set or this recorder follows another residency. With no published set it is the fixed
+    // interpreter kernel, or the plain one for a frame with no active program.
+    internal IGpuComputePipeline RecordPipeline(int slot, SdfWorldResidency residency, SdfShadeDispatch plan, SdfKernel kernel) {
+        ArgumentNullException.ThrowIfNull(residency);
+        ArgumentNullException.ThrowIfNull(plan);
+        var pipelines = residency.ShadeSelection;
+
+        Capture(pipelines: pipelines, plan: plan, residency: residency, slot: slot);
+        return (pipelines?.Pipeline(kernel: kernel) ?? residency.ShadeFallback(kernel: kernel));
     }
     /// <summary>Reports the slot's recording submitted: its capture enters the recording residency's in-flight set. A slot
     /// with no capture since its last submission submits nothing.</summary>
@@ -71,6 +98,14 @@ public sealed class SdfShadeSlots {
     public void Release(SdfShadeReleases releases) {
         ArgumentNullException.ThrowIfNull(releases);
         m_slots.Release(unproven: releases.Add);
+    }
+
+    private void Capture(int slot, SdfWorldResidency residency, SdfShadeDispatch plan, SdfShadePipelines? pipelines) {
+        if ((plan.Identities.Count == 0) && (pipelines is null)) {
+            m_slots.Withdraw(slot: slot);
+        } else {
+            m_slots.Record(slot: slot, result: new SdfShadeSubmission(identities: plan.Identities, pipelines: pipelines, residency: residency));
+        }
     }
 }
 

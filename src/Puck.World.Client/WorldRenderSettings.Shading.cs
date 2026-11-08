@@ -1,11 +1,13 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 
 namespace Puck.World;
 
 public sealed partial class WorldRenderSettings {
     private static readonly ConditionalWeakTable<SdfShadeDefinition, SdfShadeProgram> CompiledShades = new();
+    private static readonly ConditionalWeakTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
     private SdfShadeProgram? m_shadeOverride;
     private SdfProgram? m_shadeScene;
     private readonly Dictionary<string, SdfShadeProgram> m_namedShades = new(StringComparer.Ordinal);
@@ -15,6 +17,40 @@ public sealed partial class WorldRenderSettings {
 
     /// <summary>Compiles a reloadable default once per immutable definition.</summary>
     public static SdfShadeProgram? CompileShade(SdfShadeDefinition? definition) => definition is null ? null : CompiledShades.GetValue(definition, SdfShadeProgram.Compile);
+
+    /// <summary>Returns every palette slot a world's documents declare that can shade: each creation's palette and each
+    /// field region's material, with the program it runs (its own, or the document's <c>render.shade</c> default when it
+    /// declares none) and its base wrap. A slot that runs no program is left out.</summary>
+    /// <param name="definition">The world definition.</param>
+    /// <param name="fallback">The default a slot with no program of its own runs, or <see langword="null"/> for the
+    /// document's own.</param>
+    /// <returns>The slots, in document order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<(SdfShadeProgram Program, float Wrap)> DeclaredShadeMaterials(WorldDefinition definition, SdfShadeProgram? fallback = null) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        fallback ??= CompileShade(definition.Render.Shade);
+
+        return definition.Creations.SelectMany(selector: static prototype => (prototype.Document.Palette ?? []))
+            .Concat(second: definition.FieldRegions.SelectMany(selector: static region => region.Fields)
+                .Where(predicate: static field => (field.Material is not null)).Select(selector: static field => field.Material!))
+            .Select(selector: material => (Program: (CompileShade(material.Shade) ?? fallback), Wrap: (material.Wrap ?? 0f)))
+            .Where(predicate: static material => (material.Program is not null))
+            .Select(selector: static material => (material.Program!, material.Wrap));
+    }
+    /// <summary>Returns the distinct programs a world's documents declare, the default included, compiled once per
+    /// definition: the set the renderer specializes (<see cref="SdfFrame.ShadeDeclared"/>) and <c>world prepare</c>
+    /// prewarms, one list for one definition.</summary>
+    /// <param name="definition">The world definition.</param>
+    /// <returns>The programs, one per identity, ordered by identity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<SdfShadeProgram> DeclaredShades(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return DeclaredShadeSets.GetValue(key: definition, createValueCallback: static definition => SdfShadeHlsl.Canonical(
+            programs: DeclaredShadeMaterials(definition: definition).Select(selector: static material => material.Program)
+                .Concat(second: ((CompileShade(definition.Render.Shade) is { } fallback) ? [fallback] : []))));
+    }
 
     /// <summary>Resolves the live override or a world's own default and inventories its named material programs.</summary>
     public SdfShadeProgram? ResolveShade(WorldRenderDefaults render, SdfProgram scene) {

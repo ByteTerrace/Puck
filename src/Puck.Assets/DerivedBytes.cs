@@ -9,6 +9,15 @@ namespace Puck.Assets;
 public sealed class DerivedBytes {
     /// <summary>Optional host-selected cache root; all products otherwise use the per-user derived directory.</summary>
     public static string? DefaultDirectory { get; set; }
+    /// <summary>The name of a player's shipping cache directory, which a packaging step writes beside the player.</summary>
+    public const string ShippingDirectoryName = "derived";
+    /// <summary>Returns the shipping caches a player reads prewarmed derived products from, in order: the one beside the
+    /// executable, then the one beside the working directory. Either may be absent.</summary>
+    /// <returns>The directories' full paths.</returns>
+    public static string[] ShippingDirectories() => [
+        Path.Combine(path1: AppContext.BaseDirectory, path2: ShippingDirectoryName),
+        Path.Combine(path1: Environment.CurrentDirectory, path2: ShippingDirectoryName),
+    ];
     private readonly CodeClosure m_code;
     private readonly string m_name;
     private long m_hits;
@@ -50,8 +59,7 @@ public sealed class DerivedBytes {
         var sourcePin = ContentPin.Compute(content: Encoding.UTF8.GetBytes(source));
         // Provenance is a content-addressed shipping input, never an expected output or a repository ledger.
         ContentAddressedStore? package = null;
-        string[] packages = packageDirectory is not null ? [packageDirectory] : toolchain is not null
-            ? [Path.Combine(AppContext.BaseDirectory, "derived"), Path.Combine(Environment.CurrentDirectory, "derived")] : [];
+        var packages = packageDirectory is not null ? [packageDirectory] : toolchain is not null ? ShippingDirectories() : [];
         foreach (var candidate in packages.Where(candidate => prewarm || Directory.Exists(candidate))) {
             try {
                 package = new ContentAddressedStore(candidate);

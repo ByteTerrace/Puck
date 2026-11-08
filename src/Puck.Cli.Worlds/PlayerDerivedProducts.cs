@@ -56,7 +56,7 @@ public static class PlayerDerivedProducts {
     /// <param name="agbBios">Whether to produce the native AGB BIOS.</param>
     /// <param name="guests">The authored Rust guest variants to produce.</param>
     public static void Prepare(string output, bool agbBios, IReadOnlyCollection<WasmGuestBuild> guests) {
-        var cache = Path.Combine(output, "derived");
+        var cache = Path.Combine(output, DerivedBytes.ShippingDirectoryName);
 
         if (agbBios) {
             _ = AgbFirmwareCompiler.GetImage(packageDirectory: cache, prewarm: true);
