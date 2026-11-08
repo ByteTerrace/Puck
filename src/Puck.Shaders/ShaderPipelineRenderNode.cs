@@ -1527,13 +1527,22 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
     }
     private void WaitAll() {
-        foreach (var slot in m_slots) {
-            if (slot.Fence is { } fence) {
-                fence.Wait();
-                NoteWaited(fence: fence);
+        for (var index = 0; (index < m_slots.Length); index++) {
+            if (m_slots[index].Fence is not null) {
+                WaitSlot(slot: index);
             }
-            slot.Leases.RetireAll();
+            m_slots[index].Leases.RetireAll();
         }
+    }
+    // The one door a slot's fence is waited through before the slot is reused or released. A wait that returns proves
+    // the slot's previous submission completed, which the node's completions and every readback pass then retire; a lost
+    // device throws here, so nothing is retired for an interrupted submission.
+    private void WaitSlot(int slot) {
+        var fence = m_slots[slot].Fence!;
+
+        fence.Wait();
+        NoteWaited(fence: fence);
+        CompletePackageReadbacks(slot: slot);
     }
 
     /// <summary>Binds a host-owned buffer for a named external resource other than a host buffer port, which binds a
@@ -1774,8 +1783,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var slotIndex = ((int)(m_frame % m_inFlight));
         var slot = m_slots[slotIndex];
 
-        slot.Fence!.Wait();
-        NoteWaited(fence: slot.Fence);
+        WaitSlot(slot: slotIndex);
         m_latestSlot = slotIndex;
         PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();

@@ -69,32 +69,40 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // Called only by UploadProgram. Grows the program region after the device is idle, since every view's submission
-    // reads it, and the instance capacity the bake's masks are sized by; a new region starts owing every word, so the
-    // program write that follows sends it whole. A new region writes the copy sets reserved for its table, so growth takes no descriptor range.
-    // No per-frame allocations.
-    private void EnsureProgramCapacity(SdfProgram program, int extraWords = 0) {
-        var requiredWords = checked(program.Words.Length + extraWords);
+    // The words the program region holds: the program, then the default shade program's code and parameters after its
+    // last vector (PackShadeDefault). The constructor, UploadProgram and PackShadeDefault all size the region by it.
+    private static int ProgramRegionWords(SdfProgram program, SdfShadeProgram? shade) =>
+        checked(program.Words.Length + ((shade is null) ? 0 : (shade.Words.Length + shade.ParameterWords.Length)));
+
+    // The one growth path of the program region and the instance capacity the bake's masks are sized by. The region grows
+    // without waiting for the device: what it replaces retires after the following upload, which signals only once every
+    // earlier view and background job that bound it has finished. A grown region keeps every word it held (GpuRegion.Grow),
+    // so no caller writes the program again after growth. A size that crosses the ring's share of the aperture
+    // (GpuResidency.Select) needs another policy, which Grow keeps fixed, so that region is replaced from its host copy and
+    // retires the same way. No per-frame allocations.
+    private void EnsureProgramCapacity(SdfProgram program, SdfShadeProgram? shade) {
+        var requiredWords = ProgramRegionWords(program: program, shade: shade);
         if ((requiredWords <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
             return;
         }
 
         var words = GrowCapacity(m_programWordCapacity, requiredWords, (int.MaxValue / sizeof(uint)));
         var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
-        var growProgram = (words != m_programWordCapacity);
-        var growInstances = (instances != m_instanceCapacity);
 
-        m_deviceContext.TryWaitIdle();
+        if (words != m_programWordCapacity) {
+            var bytes = checked(((long)words) * sizeof(uint));
 
-        using var scope = new GpuCreationScope();
-        // Create the entire replacement before releasing an old region.
-        var programRegion = (growProgram ? scope.Own(created: CreateRegion(byteCount: checked((words * sizeof(uint))), region: ProgramRegionIndex)) : m_programRegion);
+            // Retirement allocates nothing once the region has changed.
+            m_retired.EnsureCapacity(capacity: checked((m_retired.Count + 1)));
+            if (GpuResidency.Select(byteCount: ((ulong)bytes), profile: m_deviceContext.MemoryProfile, readersInFlight: true) == m_programRegion.Policy) {
+                Retire(replaced: m_programRegion.Grow(byteCount: bytes));
+            } else {
+                var replacement = CreateRegion(byteCount: checked((int)bytes), region: ProgramRegionIndex);
 
-        scope.Complete();
-
-        if (growProgram) {
-            m_programRegion.Dispose();
-            m_programRegion = programRegion;
+                _ = replacement.Write(bytes: m_programRegion.Contents, offset: 0);
+                Retire(replaced: m_programRegion);
+                m_programRegion = replacement;
+            }
         }
         m_programWordCapacity = words;
         m_instanceCapacity = instances;

@@ -48,7 +48,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void BeginCadenceFrame(int slot) {
         UpdateExternalBufferCadence();
-        foreach (var pass in m_passes) { pass.Recorded = false; }
+        foreach (var pass in m_passes) { pass.Recorded = false; pass.Drew = false; }
         if (m_cadenceResources.Length == 0) { return; }
         m_cadenceRecording = true;
         m_cadenceSlot = slot;
