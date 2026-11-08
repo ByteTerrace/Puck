@@ -12,6 +12,13 @@ cloud SDK; everything here is an extension or a host concern.
 - Host provider boundary
 - Production silo verification
 
+Silo administrative verbs run on the tick thread, which also drains the host's
+mailbox. `SiloCommandModule` sends publication and grain lifecycle tasks through
+its shared completion reporter and immediately answers `requested`; never wait
+synchronously for those tasks in a command handler. For a new row, wait for
+`silo.publish`'s asynchronous `published from` line before `silo.activate`, then
+its `completed` line before reading `silo.status` and `silo.grains`.
+
 ## Run an agent participant
 
 A model-driven participant (a guide, a companion) on a body is configuration,

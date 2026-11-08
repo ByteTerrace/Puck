@@ -35,6 +35,15 @@ reports storage, checkpoint decode, authority construction/restore, and addon wi
 separately, so cold-process work can be distinguished from recovery work. The storage
 phase includes root-qualified definition admission, rather than measuring I/O alone.
 
+An isolated startup `Participant check thread has not completed` warning with a
+duration close to host uptime can come from the Orleans 10.4.2 watchdog's startup
+race: `Watchdog.Start` starts the platform thread before initializing the component
+timestamp that `CheckRuntimeHealth` reads. See the
+[upstream implementation](https://github.com/dotnet/orleans/blob/v10.4.2/src/Orleans.Runtime/Silo/Watchdog.cs).
+This is distinct from a recurring health warning during operation, which requires
+investigation. Keep health monitoring enabled; Puck configures no watchdog interval
+override.
+
 ## Hosted test world
 
 The silo selects Orleans membership through the composition root's registry.
@@ -269,10 +278,16 @@ activation's fence and requires recovery.
   blocking here for a grain turn that itself waits on that mailbox would
   deadlock. Read `silo.grains` for the outcome. `<key>` is
   `owner/{oid}/{world}` or the bare world id (`WorldSiloHost.TryResolveKey`).
-  `silo.publish` publishes the document undrawn, as a release does
+  `silo.publish` uses the same completion reporter and returns `requested` before
+  its publication enters the mailbox; stderr reports `published from` or the
+  failure detail when storage completes. Wait for that completion before activating
+  a newly published row. It publishes the document undrawn, as a release does
   (`WorldFileOrigin.TryReadPublishable`): each instance draws its own cells
   when it admits the bytes, and a release bootstrap of the same composed document
   finds the published bytes equal.
+  The standalone silo has no source composer: prepare `.puck` sources with
+  `puck world prepare worlds/debug --output <hosted-worlds>`, retain the authored
+  assets beside those outputs, and publish the resulting `.world.json` paths.
 - `SiloConsoleRouting`—one `TextCommandSession` per admitted row, created
   and retired in the same tick-thread mailbox action that admits/retires the
   row itself. Each session carries its own `WorldConsoleWaitGate` (`row.
