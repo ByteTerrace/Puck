@@ -52,7 +52,8 @@ public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// <param name="addonInstanceId">The mounted addon instance token the mutation was decoded from.</param>
     /// <param name="actOrdinal">The guest-assigned act ordinal the answer cell is keyed by.</param>
     /// <param name="applied">Whether the document-apply pipeline accepted the decoded mutation.</param>
-    void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied);
+    /// <param name="refusalCode">The actual mutation refusal code, including disclosure policy refusal.</param>
+    void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied, string? refusalCode = null);
     /// <summary>Reports the channels a co-driving grant confers on <paramref name="principal"/> that the guest never
     /// declares, or <see langword="null"/> when every granted channel is declared, the principal names no mounted
     /// guest, or the grant carries no channel mask.</summary>

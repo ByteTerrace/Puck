@@ -118,7 +118,7 @@ template deductionState(seats, moles) {
           readersFrom: "deductionReveal"
         }
       })
-      visibility {}
+      cellVisibility: true
     }
   }
 

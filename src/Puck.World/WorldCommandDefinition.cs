@@ -5,8 +5,9 @@ namespace Puck.World;
 /// <summary>Owns the shared construction rules for simulation-routed world command definitions.</summary>
 internal static class WorldCommandDefinition {
     /// <summary>Creates a simulation-routed row mutation command, including inline JSON parsing and submission.</summary>
-    public static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler, CommandForms? forms = null) =>
+    public static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler, CommandForms? forms = null, CommandAudience audience = CommandAudience.Anyone) =>
         CommandDefinition.WithWireArgs(
+            audience: audience,
             bindability: CommandBindability.Unbindable,
             name: name,
             description: description,

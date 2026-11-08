@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using Puck.World.Protocol;
-using Puck.Maths;
 
 namespace Puck.World.Server;
 
@@ -25,7 +24,8 @@ public sealed partial class WorldDocument {
     // rehydration a hit triggers does. A member that can add or drop a reference — a whole-row write, or an edit to
     // any other section — drops the set, so the next state member collects it again from the document that member
     // produced.
-    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey) {
+    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode) {
+        refusalCode = null;
         var working = current;
         var time = ComposeTime(
             definition: current,
@@ -41,74 +41,39 @@ public sealed partial class WorldDocument {
         foreach (var member in batch.Mutations) {
             if (member is WorldMutation.UpsertStateCell upsert) { seeded.Add(item: upsert.Row); } else if (member is WorldMutation.RemoveStateCell remove) { seeded.Add(item: remove.Row); } else { seeded = null; break; }
         }
+        if (!batch.Principal.IsAuthority && seeded is not null) {
+            // Partial cell composition still needs the public audience rows its targeted declarations read.
+            // Include them before loading scratch, so sequential policy checks see earlier audience writes too.
+            var policies = WorldStateReader.Arena(current);
+            foreach (var member in batch.Mutations) {
+                var name = StateRowOf(member)!;
+                if (!policies.Catalog.TryResolve(StateLane.Document, name, out var handle)) { continue; }
+                if (policies.Rows[handle.Ordinal].Visibility?.ReadersFrom is { } readers) { seeded.Add(readers); }
+                foreach (var zone in policies.Catalog.ContainingZones(handle.Ordinal)) {
+                    if (policies.Rows[zone].Visibility?.ReadersFrom is { } audience) { seeded.Add(audience); }
+                }
+            }
+        }
 
         reason = string.Empty;
         evictedKey = null;
-        if (
-            (batch.ExpectedDefinition is { } expected) &&
-            (expected != WorldDefinitionFingerprint.Compute(
-            definition: current,
-            stateRows: batch.ExpectedStateRows
-        ))
-        ) {
-            candidate = current;
-            reason = "the proposal is stale: its base definition changed; preview again";
-            return false;
-        }
-        if (
-            (batch.ExpectedInputs is { } inputs) &&
-            (inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(
-            definition: current,
-            placementIds: inputs.PlacementIds,
-            stateRows: inputs.StateRows
-        ))
-        ) {
-            candidate = current;
-            reason = "the proposal is stale: its named inputs changed; preview again";
-            return false;
-        }
-        foreach (var spatial in (batch.ExpectedSpatialReads ?? [])) {
-            var region = spatial.Region;
-
-            if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(
-                definition: current,
-                region: region
-            )) {
-                candidate = current;
-                reason = "the proposal is stale: its spatial read changed; preview again";
-                return false;
-            }
-        }
-        foreach (var cell in (batch.ExpectedCells ?? [])) {
-            if (
-                !WorldStateReader.TryRead(
-                current,
-                cell.Row,
-                cell.Key,
-                tick,
-                engineTick,
-                out var row,
-                out var raw,
-                out var text
-            ) ||
-                (raw is not { } value) ||
-                ((cell.Kind is { } kind) && (row.Kind != kind)) ||
-                ((cell.Text is not null) && (text != cell.Text)) ||
-                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(
-                FixedQ4816.FromRawBits(value: value),
-                FixedQ4816.FromRawBits(value: cell.Value)
-            ))
-            ) {
-                candidate = current;
-                reason = $"the proposal is stale: state '{cell.Row}' changed; preview again";
-                return false;
-            }
+        if (batch.ExpectedCells is { Count: > 0 } || batch.ExpectedDefinition is not null || batch.ExpectedInputs is not null || batch.ExpectedSpatialReads is { Count: > 0 }) {
+            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time);
+            if (!view.CheckGuards(batch, out reason)) { candidate = current; return false; }
         }
 
         try {
             for (var index = 0; (index < batch.Mutations.Count); index++) {
                 var member = batch.Mutations[index];
                 string? writtenRow = null;
+                // Recheck against preceding members' declarations, never against a future write's membership.
+                if (!batch.Principal.IsAuthority) {
+                    var memberView = WorldRecipientView.ForComposition(working, batch.Principal, arena, time);
+                    if (!memberView.Admits(member, out var withheld)) {
+                        candidate = current; reason = memberView.Refusal("batch", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
+                    }
+                }
+
 
                 switch (member) {
                     case WorldMutation.UpsertStateCell upsert: {
@@ -194,7 +159,8 @@ public sealed partial class WorldDocument {
                                 instanceIdentity: instanceIdentity,
                                 mutation: member,
                                 reason: out reason,
-                                tick: tick
+                                tick: tick,
+                                refusalCode: out refusalCode
                             )) {
                                 candidate = current;
 

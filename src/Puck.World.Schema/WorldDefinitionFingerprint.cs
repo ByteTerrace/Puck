@@ -129,10 +129,7 @@ public static class WorldDefinitionFingerprint {
                     placement,
                     WorldJsonContext.Default.WorldPlacement
                 );
-                WorldStateDocumentValues.CollectReferencedRows(
-                    graph: placement,
-                    rows: stateRows
-                );
+                CollectPlacementStateInputs(placement, stateRows);
             }
             // Canonical rows retain state references. Include their source values so a bound extent changing
             // inside the same census cannot leave a spatial guard looking unchanged.
@@ -147,6 +144,14 @@ public static class WorldDefinitionFingerprint {
             0,
             checked((int)bytes.Length)
         )).Hex;
+    }
+    /// <summary>Collects a placement's state inputs, including the membership and variants a deal reads.
+    /// Spatial guards, reflow proposals and disclosure admission share this dependency vocabulary.</summary>
+    public static void CollectPlacementStateInputs(WorldPlacement placement, ISet<string> rows) {
+        WorldStateDocumentValues.CollectReferencedRows(placement, rows);
+        if (placement.Deal is not { } deal) { return; }
+        rows.Add(deal.Row);
+        if (deal.Variants is { } variants) { rows.Add(variants.Row); }
     }
     /// <summary>Returns the authored rows observed by a bounded spatial read in document order.</summary>
     public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in WorldSpatialReadRegion region) {
@@ -174,6 +179,14 @@ public static class WorldDefinitionFingerprint {
         foreach (var volume in index.Query(region.Bounds).Volumes) { Include(id: volume.PlacementId); }
         // A dynamic spatial row has no static exclusion proof. Preserve it as an explicit uncertainty dependency.
         foreach (var unsupported in index.Unsupported) { Include(id: unsupported.PlacementId); }
+        // A template's current children are not a negative-dependency proof: an empty source can grow a child,
+        // and preserved child facets/transforms have no static exclusion bound. Include the declaration even
+        // when no child exists, just as an unsupported dynamic volume is included above.
+        foreach (var placement in definition.Placements) {
+            if (placement.Deal is { } deal && (placement.Spatial is { Count: > 0 } || deal.Preserve is { Facets: true })) {
+                Include(placement.Id);
+            }
+        }
         return selected.Where(predicate: lookup.ContainsKey).Select(selector: id => lookup[id]).OrderBy(keySelector: item => item.Ordinal).Select(selector: item => item.Row).ToArray();
     }
 }

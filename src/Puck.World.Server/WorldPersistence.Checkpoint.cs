@@ -44,6 +44,9 @@ public sealed partial class WorldPersistence {
     // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
     // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
     internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId) {
+        if (!principal.IsAuthority) {
+            return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: "world.undo requires the operator");
+        }
         // Journal control is Mutate territory over every section (a replay can rebuild any).
         if (!Host.GrantTable.AllowsAllSections(
             capability: WorldCapability.Mutate,
@@ -107,7 +110,8 @@ public sealed partial class WorldPersistence {
                 instanceIdentity: Host.InstanceIdentity,
                 candidate: out var next,
                 reason: out var composeReason,
-                evictedKey: out _
+                evictedKey: out _,
+                refusalCode: out _
             )) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({WorldServer.Describe(mutation: entry.Mutation)}) — {composeReason}";
 
@@ -390,7 +394,8 @@ public sealed partial class WorldPersistence {
                     instanceIdentity: Host.InstanceIdentity,
                     candidate: out var next,
                     reason: out _,
-                    evictedKey: out _
+                    evictedKey: out _,
+                        refusalCode: out _
                     )) {
                     return;
                 }

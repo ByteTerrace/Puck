@@ -112,6 +112,8 @@ pub enum Verdict {
     PayloadTooLarge = 12,
     /// `Puck.Scripting.AddonVerdict.Rejected` (`13`).
     Rejected = 13,
+    /// `Puck.Scripting.AddonVerdict.NotDisclosed` (`14`).
+    NotDisclosed = 14,
 }
 
 impl Verdict {

@@ -13,6 +13,8 @@ public enum WorldCellWriteVerdict {
     Applied,
     /// <summary>The address no longer belongs to this arena.</summary>
     StaleAddress,
+    /// <summary>The recipient cannot read the row whole under its declared policy.</summary>
+    NotDisclosed,
     /// <summary>The live grant refused the write.</summary>
     Denied,
     /// <summary>The grant's Set/Add mask refused the operation.</summary>
@@ -77,6 +79,7 @@ public sealed partial class WorldServer {
         if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
             return WorldCellWriteVerdict.StaleAddress;
         }
+        if (!ReadView(principal).Admits(descriptor.Name)) { return WorldCellWriteVerdict.NotDisclosed; }
         var subject = GrantSubject.State(name: descriptor.Name);
 
         if (!m_grants.Allows(capability: WorldCapability.Edit, principal: principal, subject: subject).IsAllowed) {
@@ -99,8 +102,6 @@ public sealed partial class WorldServer {
             (m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true })) {
             return WorldCellWriteVerdict.Rejected;
         }
-        if (!WorldGrants.IsTrusted(principal: principal) && !WorldStateDisclosure.CanReadCell(definition: m_document.Definition,
-            arena: m_arena, rowName: descriptor.Name, key: m_arena.Keys[key], recipient: principal)) { return WorldCellWriteVerdict.Rejected; }
         var mark = BeginStateTransaction();
         var applied = ((text is not null)
             ? m_arena.TryWriteText(row.Ordinal, key, text, out _)

@@ -4,6 +4,9 @@ namespace Puck.World;
 
 /// <summary>Resolves stable row names in world-definition collections.</summary>
 public static class WorldDefinitionRows {
+    /// <summary>Resolves one mounted addon declaration by its stable name without a per-read closure.</summary>
+    public static WorldAddonRow? FindAddon(IReadOnlyList<WorldAddonRow>? rows, string name) =>
+        Find(rows, name, static row => row.Name);
     // The one linear scan every Find* below composes: allocation-free (selector is a static, capture-free lambda, so
     // the compiler caches ONE delegate instance rather than allocating one per call) and null-tolerant, so a
     // section's own nullability is never a second thing a caller must guard before resolving a name against it.

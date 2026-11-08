@@ -56,6 +56,14 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**The write boundary.** `WorldRecipientView.Admits` decides from declared policy before any
+recipient mutation or guard reads state; seats are recipients too. The mutation adapter and shared
+guard check live in `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`; the server's complete
+admission, composition, addon bind and typed write doors use that policy. Whole-document load,
+reload, reset and undo are authority-only at apply and operator-only on the console.
+See [mutations](references/mutations.md). A row's `cellVisibility` reserves per-cell policies
+even when empty; its row-level `visibility` alone does not.
+
 **Durable addon state.** `IWorldAddonHost` stages guest checkpoint decoding before
 authority adoption. Persistence, recording and history capture the same live
 memory and retained pinned module sources; arming never restarts guests. The silo

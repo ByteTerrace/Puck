@@ -241,6 +241,10 @@
           "visibility": {
             "$ref": "./common.schema.json#/$defs/StateVisibility"
           },
+          "cellVisibility": {
+            "description": "Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.",
+            "type": "boolean"
+          },
           "knowledge": {
             "description": "A persisted token-keyed knowledge layer refreshed explicitly by the authority.",
             "type": "object",

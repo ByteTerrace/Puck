@@ -75,13 +75,6 @@ public static partial class WorldDefinitionValidator {
                 (cell.Visibility is not null)
             ) {
                 errors.Add(item: $"state row '{row.Name}': slot visibility belongs on the row.");
-            } else if (
-                (cell.Visibility is not null) &&
-                (row.Visibility is null)
-            ) {
-                // Whether a row can withhold a cell is read from its declaration (WorldStateDisclosure.ReadsWholeRow),
-                // and the row's policy is the one declaration that outlives its members.
-                errors.Add(item: $"state row '{row.Name}': cell '{cell.Key}' declares its own readers, so the row must declare a visibility policy (visibility {{}} keeps the row itself public).");
             }
 
             if (

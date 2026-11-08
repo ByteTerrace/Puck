@@ -430,10 +430,11 @@ A `StateVisibility` has three parts:
   `Placeholder` shows each hidden cell in pile order as an anonymous entry, like a
   card back.
 
-A row policy and a cell policy intersect: a reader must pass both. A cell that
-lists its own readers needs its row to declare a policy too (`visibility {}`
-keeps the row itself public), so whether a row can withhold anything is part of
-its declaration. A row or cell can list at most 32 readers of up to 256
+A row policy and a cell policy intersect: a reader must pass both. A seeded cell
+policy reserves its own storage; `cellVisibility: true` declares that capability
+even on an empty row. Use that declaration when hidden members can appear later.
+Row-level `visibility` alone never enables cell-level restrictions: a per-seat
+inbox with only its owner's reader token reads whole for that owner. A row or cell can list at most 32 readers of up to 256
 characters each. The policy filters what Puck.World discloses to ordinary peers
 and what a non-operator's console reads, including the placements a deal draws
 from the row. A peer admitted at the `replica` tier receives declarations with
@@ -443,7 +444,7 @@ Every door decides how to treat a row from that declaration, never from which of
 its cells are hidden right now: a row whose policy, a cell policy it admits, or a
 containing zone's can withhold a cell from a reader answers that reader the same
 way with zero, one or many cells hidden. Such a row omits its storage
-reservation and physical slot order, refuses a whole-row edit and a HUD template
+reservation and physical slot order, refuses every recipient write or guard and a HUD template
 placeholder from that reader, keeps its place in the reader's observations, and
 is re-sent to a replica only when the cells the reader can read change. A cell
 the reader can't read and a cell that doesn't exist answer alike.

@@ -216,7 +216,7 @@ public sealed partial class WorldTick {
                 )
                 : WorldMutationOutcome.RefusedOutcome(
                     binding: binding,
-                    code: "world.mutation.refused",
+                    code: Host.Document.LastMutationFailureCode,
                     detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
                     version: Host.RecipientVersion(binding.Actor)
                 )
@@ -236,7 +236,8 @@ public sealed partial class WorldTick {
             Host.Addons?.CompleteMutation(
                 addonInstanceId: addonMutate.SourceAddonInstanceId,
                 actOrdinal: addonMutate.ActOrdinal,
-                applied: ok
+                applied: ok,
+                refusalCode: ok ? null : Host.Document.LastMutationFailureCode
             );
         }
 

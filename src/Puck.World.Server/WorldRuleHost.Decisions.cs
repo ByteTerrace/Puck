@@ -533,7 +533,8 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
                     instanceIdentity: Host.InstanceIdentity,
                     mutation: unit,
                     reason: out _,
-                    tick: firing.Tick
+                    tick: firing.Tick,
+                    refusalCode: out _
                 )) {
                     return false;
                 }

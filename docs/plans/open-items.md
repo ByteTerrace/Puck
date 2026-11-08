@@ -3773,17 +3773,6 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 3, the write door refuses by policy ([decision 3](disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)):
-    [high] batch `ExpectedCells` is a read oracle, implemented twice
-    (`src/Puck.World.Server/WorldDocument.StateCommands.cs:135`,
-    `WorldDocument.Compose.Batch.cs:82`) behind an Observe-only admission
-    (`WorldDocument.StateTransformAdmission.cs:127`), and `ExpectedSpatialReads`
-    is never checked (`src/Puck.World.Schema/WorldDefinitionFingerprint.cs:109`);
-    [high] transform and generate admission scan current membership
-    (`StateCommands.cs:97-116`); [high] per-cell upsert and remove receipts
-    distinguish hidden from absent for peers, addons and sessions
-    (`WorldDocument.Compose.Cells.cs:292,576,636`, `WorldServer.Arena.cs:98`);
-    [medium] a seat writes under its grants alone (`Compose.Cells.cs:574`).
   - Step 4, the layout ([decision 4](disclosure.md#4-the-physical-layout-follows-the-hidden-policy)):
     [high] dealt children keep hidden-dependent slots and positions
     (`src/Puck.World.Schema/WorldStateDisclosure.cs:481,621`,

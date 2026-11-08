@@ -478,7 +478,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 1L))],
             Kind: CellKind.Int,
             Name: CellName.Parse(candidate: "score"),
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         );
         var quiet = new WorldStateRow(
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 1L))],
