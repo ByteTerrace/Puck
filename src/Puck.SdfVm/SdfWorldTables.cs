@@ -293,10 +293,11 @@ public sealed partial class SdfWorldTables : IDisposable {
             usage: GpuBufferUsage.Storage
         ));
 
-        // The program region holds the live program, not the options' reserve: a probed worst case can run to hundreds
-        // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
+        // The program region holds the live program and the default shade program packed after it, not the options'
+        // reserve: a probed worst case can run to hundreds of megabytes, which a ring holds once per slot. A larger program
+        // grows the region by half again.
         m_programWordReserve = options.ProgramWordCapacity;
-        m_programWordCapacity = options.Program.Words.Length;
+        m_programWordCapacity = ProgramRegionWords(program: options.Program, shade: options.ShadeDefault);
         // Every region's copy sets, before any region writes them: the copy pool the admission states.
         m_regionCopyPool = ReserveRegionCopyPool(scope: scope);
         // The host-written tables, each a region the kernels bind through its slot's buffer (SdfWorldTables.Regions.cs).

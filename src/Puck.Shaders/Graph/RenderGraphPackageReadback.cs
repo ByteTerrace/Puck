@@ -28,9 +28,18 @@ public interface IRenderGraphPackageReadback {
     /// <param name="readback">The source range and destination when requested; default otherwise.</param>
     /// <returns>Whether the graph should copy the requested range.</returns>
     bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback);
-    /// <summary>Arms the latest recording's result with its submission fence. A recorder must read or discard any
-    /// completed result before recording into that slot again. It must never wait for the fence merely to pick.</summary>
+    /// <summary>Arms the latest recording's result with its submission fence. The node calls it only for a pass whose
+    /// recording drew in the frame just submitted (<see cref="RenderGraphPackageOutcome.Drew"/>); a pass that skipped,
+    /// stood or drew nothing is not called, so no recorder re-arms an earlier recording's result. A recorder must read or
+    /// discard any completed result before recording into that slot again. It must never wait for the fence merely to
+    /// pick.</summary>
     /// <param name="slot">The submitted frame slot.</param>
     /// <param name="fence">The reusable fence of the submission containing the copies.</param>
     void Submitted(int slot, IGpuSubmissionFence fence);
+    /// <summary>Reports that the slot's previous submission has completed: the node has just waited its fence, before it
+    /// reuses or releases the slot. The node calls it for every readback pass of its installed graph, whether or not that
+    /// pass recorded into the slot. It is never called for a submission a device loss interrupted, since the node then
+    /// releases its recorders without waiting. The default has nothing to retire.</summary>
+    /// <param name="slot">The frame slot whose previous submission completed.</param>
+    void Completed(int slot) { }
 }

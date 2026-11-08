@@ -405,6 +405,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     /// <remarks>Discards every instance's temporal history: rebuilt tables number their pose revisions afresh.</remarks>
     public void OnDeviceLost() {
+        ShadeReleases.DeviceLost();
         foreach (var entry in m_entries.Values) {
             entry.Picker.Clear();
             entry.DiagnosticPicker.Clear();
@@ -420,6 +421,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// installed, and while a capture keeps the runtime from asking whether its view is unchanged.</remarks>
     public void BeginFrame(in FrameContext context) {
         m_context = context;
+        ShadeReleases.BeginFrame();
 
         foreach (var entry in m_entries.Values) {
             if (entry.Residency is { IsReleased: true } released) {
@@ -474,6 +476,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             residency.BeginFrame();
         }
     }
+    /// <summary>Gets the shading submissions of the package's released recorders, which its next frame completes unless
+    /// a device loss comes first.</summary>
+    public SdfShadeReleases ShadeReleases { get; } = new();
     // Holds a residency the package tells of a device loss.
     internal void Hold(SdfWorldResidency residency) =>
         m_residencies[residency] = (m_residencies.GetValueOrDefault(key: residency) + 1);

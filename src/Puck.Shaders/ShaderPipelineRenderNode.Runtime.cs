@@ -180,6 +180,8 @@ public sealed partial class ShaderPipelineRenderNode {
         public IRenderGraphPackageRecorder? Package;
         public PassCadence? Cadence;
         public bool Recorded;
+        // Whether the package pass's recording this frame drew (RenderGraphPackageOutcome.Drew); cleared with Recorded.
+        public bool Drew;
         public RenderGraphPackageResource[]? PackageInputs;
         public RenderGraphPackageResource[]? PackageOutputs;
         public GpuImageLayout[]? PackageInputLayouts;

@@ -774,6 +774,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Releases every device object after the device was lost, without waiting for any submission; the next
     /// frame rebuilds the tables on the recreated device, and every view renders again.</summary>
     public void OnDeviceLost() {
+        LoseShade();
         Array.Clear(array: m_boundScreenSources);
         Array.Clear(array: m_renderedSignatures);
         m_frameSource.NotifyDeviceLost();
@@ -976,6 +977,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             InstanceCapacity: m_instanceCapacity,
             Program: frame.Program,
             ProgramWordCapacity: m_programWordCapacity,
+            ShadeDefault: frame.ShadeDefault,
             SkyDetails: m_skyDetails,
             WorkLedger: m_work
         );

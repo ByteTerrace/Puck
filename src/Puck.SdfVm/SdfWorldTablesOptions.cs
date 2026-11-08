@@ -26,11 +26,15 @@ namespace Puck.SdfVm;
 /// <param name="SkyDetails">The detail rows the sky's layers count in, shared by every residency of a composition
 /// (<see cref="SdfWorldPipelineCatalog.SkyDetails"/>) so a view's rows never move when it follows another residency.
 /// When <see langword="null"/>, the tables create their own.</param>
+/// <param name="ShadeDefault">The default shade program the first frame packs after <paramref name="Program"/>'s words
+/// (<see cref="SdfFrame.ShadeDefault"/>), which the program region is sized to hold from construction; <see langword="null"/>
+/// when the first frame has none.</param>
 public sealed record SdfWorldTablesOptions(
     SdfProgram Program,
     int DynamicTransformCapacity = 1,
     int ProgramWordCapacity = 0,
     int InstanceCapacity = 0,
     GpuWorkLedger? WorkLedger = null,
-    SdfSkyDetails? SkyDetails = null
+    SdfSkyDetails? SkyDetails = null,
+    SdfShadeProgram? ShadeDefault = null
 );

@@ -1455,9 +1455,10 @@ and the Water packet).
 Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
-landed; step 1's GPU lifetimes (retained identity lists through fence
-retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
-an adversarial review.
+landed and step 1's GPU lifetimes had their adversarial review and fixes
+(`SdfShadeSlots`). Nothing reads `SdfWorldResidency.InFlightShadeIdentities`
+yet: the quarantine step reads, and then clears, the submissions a device loss
+marked lost, which stay reported until it does.
 
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
@@ -1833,13 +1834,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
-  - [low] Growing the program region on `world.reload` waits for the device to go
-    idle (`SdfWorldTables.EnsureProgramCapacity`, `TryWaitIdle`) and rebuilds the
-    region whole. `GpuRegion.Grow` grows any owned region without waiting,
-    but keeps the policy it was created with, while a program can grow past the
-    ring's share of the aperture that `GpuResidency.Select` would stage. Grow it
-    without the idle wait and reselect the policy when the new size crosses the
-    share.
+  - [low] `GpuRegion.Grow` keeps the policy a region was created with, so
+    `SdfWorldTables.EnsureProgramCapacity` grows the program region through it
+    only while `GpuResidency.Select` still picks that policy, and replaces the
+    region from its host copy when a size crosses the ring's share of the
+    aperture. Let `Grow` reselect the policy itself so that branch goes.
   - [medium · owner: rendering] Uniform region growth accepts an unbindable size
     (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
     check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
