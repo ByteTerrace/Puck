@@ -46,6 +46,10 @@ milestone. The owner requested its baseline and implementation plan, which
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
+1. [The visual bar](#the-visual-bar) [high, the owner's ruling, beside the frame
+   bar]: the caldera water as its first proof (glacier, lake, falls, river,
+   pool against the caldera pack), then the per-milestone review across every
+   place.
 1. The frame bar [high]: 60 FPS steady state on the lead machine is not met at
    p99. The far cascade's cadence is settled: a receiver-conditioned cascade's
    coverage identity names the sample grid alone (`SdfWorldPasses.ReceiverSignatureOf`),
@@ -1518,6 +1522,47 @@ worlds in place is rewritten.
   and the combat yard's `arena.puck` district rules
   ([debug world content](#debug-world-content)).
 
+### The visual bar
+
+Owner: look lanes (sdf-authoring, rendering) with a separate critic, the lead
+scheduling · high · Next: the caldera water's first proof. The bar and its
+judging are in [the art README](../game/art/README.md#the-visual-bar); each
+place's look intent is in its guide. The owner's walkthrough found the debug
+world failing it throughout; the readings below are from that session, named
+by `world.view.pick`.
+
+- [high] The caldera water fails its reference (the
+  [caldera pack](../game/art/caldera-water-pack/README.md), intent in
+  `worlds/debug/debug.md#water`). The `glacier` (`water-scenery.puck`,
+  `glacierMass`) is a row of smooth ellipsoid lumps in two flat palette
+  colours: no crevasses, sun planes, ice translucency, scalloped toe, melt
+  channels or rock cradle, so it reads as balloons or clouds. The falls are a
+  flat translucent slab with visible tile seams; the impact is an opaque white
+  disc instead of spray and foam; the pool is flat cyan with a hard rectangular
+  edge, no depth colour, shallows or bank contact; the river runs in a
+  concrete trough. Rebuild each to its panel, building the rendering features
+  the panels need (flowing-sheet shading, foam and spray, depth colour,
+  wet stone) where they are missing; check what exists first (rule 7).
+- [high] Cel shading is off: `world.toon` reads `off` in the debug world, whose
+  selected direction is the Wind Waker treatment. Decide the treatment's
+  authored defaults in the standard package and turn it on, then judge every
+  place under it.
+- [high] The valley's rim and walls (`valley-north-west` and its siblings) are
+  one olive palette colour with low-frequency blotches and lumpy smoothed
+  surfaces: none of Study B's warm layered strata, ledges or vegetation, and a
+  flat blue-purple region with a hard edge at the north-west rim (pick:
+  `valley-north-west.palette[0]`, so terrain, cause unnamed).
+- [high] Night is a void: a flat black sky with a few uniform dots, no moons
+  (the valley brief has two), no gradient or horizon; auto exposure sits at its
+  EV 2 floor, so the terrain is lit like dusk under it.
+- [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
+  under night lighting her purple and cream read as pink and mustard; nothing
+  separates her from the background (no rim light or outline), and a hovering
+  Moth casts no readable shadow. A small floating yellow sprite beside her has
+  no context.
+- [medium] The binding-bar overlay sits over the Moth's legs at the centre
+  bottom of the screen in third person.
+
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) · ordinary ·
@@ -1526,6 +1571,21 @@ specification, the audit, the definition of done and the lanes (A2 to A5 the wor
 authoring, R3 the particle pool, P1 the tour). The items below
 are what the plan defers or the water strained in a system beside it.
 
+- [high] A swimmer cannot leave a walled channel. The swim hold
+  (`swimHold` in `worlds/standard/kits.puck`) floats the body with its origin
+  1.25 m under the surface and pulls a breach back down, and the walk steps up
+  only 0.3 m, so only a shelving bank lets her out; the river's walls are about
+  a metre above her float line, and jump does nothing in water. Give the hold
+  mechanism a way out (a ledge climb or a jump from the surface), with its
+  values in the standard package, not a ramp in one channel. Found on the
+  owner's walkthrough at (-65.6, -0.8, 27.8).
+- [medium] Swimming switched the Moth into flight mode: at tick 2219, in the
+  river, her mode went from walking to flying and `flightFuel` became 1000,
+  though South presses both rise and jump and `fly-1` needs rise without jump.
+  Suspected: jump reads zero for a tick across the hold change while rise stays
+  held (unverified). On land she then walked in flight mode until North.
+- [low] `body.hold` kept answering `hold=swim` for a grounded Moth on the grass
+  after she left the water; the readout is stale or the hold did not release.
 - [low · glass-shadow review F5] Mixed-density faces do not define a thickness
   integral: `src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-optical-depth.hlsli:22`
   accumulates each face's own density. An entry at density 0.8 and an exit at

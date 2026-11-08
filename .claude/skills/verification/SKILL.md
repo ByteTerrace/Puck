@@ -266,6 +266,31 @@ step 1 passed every correctness check and review while re-serializing the whole
 21.7 MB definition every tick, which took the debug world to about 6 FPS; one
 allocation reading per tick would have shown it.
 
+## A look change
+
+A change to how a place looks is verified against
+[the visual bar](../../../docs/game/art/README.md#the-visual-bar), not by "it
+renders": no invalid pixels and backend agreement are necessary and never
+enough. Read the scene from the world before judging any pixel:
+
+1. `body.where` (position, facts) and the place guide (`worlds/debug/debug.md`
+   or `<place>.md`) for what stands there and its reference panels.
+2. `world.view.pick <x> <y>` over every region of the frame (normalized
+   coordinates): it names the placement, prototype and material under a pixel.
+   No region is named from its colour or shape. A lead read the debug world's
+   glacier lumps as clouds and its rim terrain as a stream until picks named
+   them.
+3. The authored intent: the placement's `.puck` source and its comments, and
+   the state that drives it (`world.state`, the day: `world.state day`).
+4. The view's treatment: `world.toon`, `world.exposure`, `world.lighting`.
+5. Only then judge the capture (`puck_capture_frame`, settled at a held sun for
+   a comparison) against the reference panel, heading by heading, and write
+   the verdict with the picks that support it.
+
+The judge is a reader that did not build the change (a fresh `reviewer` or a
+look-critic brief) given the captures, the picks and the reference, never the
+builder's own account.
+
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy

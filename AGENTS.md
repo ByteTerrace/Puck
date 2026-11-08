@@ -242,6 +242,18 @@ agent works in that mode by default, without asking:
     its place: it reads the same data, gives the same result within the
     still tolerance, is measured to pay on that hardware, and falls back to
     the baseline path automatically.
+  - The visual bar (the owner's ruling: "I need you to ensure that some bar
+    is defined and adhered to"), with the frame bar's standing, and both hold
+    at once. Every place in the debug world reads as what it is and meets its
+    reference at the quality a modern stylized game ships, in the selected
+    direction ([the visual bar](docs/game/art/README.md#the-visual-bar)).
+    "It renders" is not done: a glacier that does not read as a glacier fails.
+    Look intent is the lead's and the lanes' artistic freedom, drawn from the
+    concept packs, real-world reference and what agents already know; the
+    owner corrects it, never supplies the obvious. A scene is read from the
+    world (position, place guide, `world.view.pick`, the authored intent),
+    never named from pixels, and a look change lands only when a reader that
+    did not build it judged its captures against the reference.
   - Tests never depend on commercial ROMs. A test or check stage runs on
     committed sources (homebrew and test cartridges); a commercial ROM is used
     only locally, by hand, and is never committed.

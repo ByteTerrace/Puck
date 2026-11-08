@@ -36,6 +36,50 @@ For the [caldera water pack](caldera-water-pack/review.md), the owner explicitly
 assigns the primary artist as the deciding judge. Its written audit records
 that scoped arrangement and does not claim checking-partner approval.
 
+## The visual bar
+
+The owner's ruling: "I need you to ensure that some bar is defined and adhered
+to." The bar stands beside the frame bar, and a place meets both at once.
+
+**The direction.** Painterly, with The Wind Waker and quality toon animation as
+the character of the treatment; cartoony and slightly futuristic; Study B's
+warm layered canyon cliffs, cream and ochre modules and deep teal
+([valley and gallery](valley-and-gallery.md)). The concept packs here are the
+references, and where a place has none, real-world reference and what a modern
+stylized game shows supply it.
+
+**The bar.** Every place in the debug world:
+
+- reads at first sight as what it is: ice as ice, water as water, rock as rock,
+  a cloud as a cloud, a glacier as a glacier;
+- meets its reference panel's material hierarchy and contacts (the caldera
+  pack's builder handoff is the model: grounded ice with crevasses and sun
+  planes, transparent shallows over coloured depth, foam and spray where water
+  breaks, wet stone where it falls, banks the water meets);
+- carries the treatment: stylized shading with a held palette, never smooth
+  generic shading over flat colour;
+- has no unexplained shape, colour or object, and no seam, cut-out, blown-out
+  or clipped region;
+- holds across the day: night is a night sky with its moons and a mood, not a
+  void over a lit model.
+
+**Who decides.** Look intent is the lead's and the lanes' artistic freedom
+(the owner's ruling): they draft it from these references and their own
+knowledge and hold work to it; the owner corrects a specific miss and never has
+to point out the obvious. Each place's guide (`worlds/debug/<place>.md` or its
+section of `worlds/debug/debug.md`) names its reference panels and its look
+intent in a sentence or two.
+
+**How it is judged.** A look change is captured at its place's reference
+views, in the scene-read order (position, place guide, `world.view.pick`
+across the frame, the authored intent, then the pixels), and judged against
+the reference by a reader that did not build it, under the headings above and
+the [concept art review](#concept-art-review)'s attachment, physical coherence,
+perspective and compositing checks. It lands when it passes; a failure is a
+defect fixed at its cause, including the rendering feature the place needs.
+The lead puts current captures beside their references before the owner on a
+regular cadence ([orchestration](../../../.claude/skills/orchestration/SKILL.md#land-in-batches)).
+
 ## Authored avatars
 
 Live avatar implementations, authored SDF primitives, and in-game controls live directly alongside the world assets:

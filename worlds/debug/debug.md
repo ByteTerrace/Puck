@@ -196,7 +196,18 @@ under the floor that fills, gives water back and settles with the river
 [hydrology](../standard/hydrology.puck); [`pool.puck`](pool.puck) is the basin and its
 medium; [`water-scenery.puck`](water-scenery.puck) places the falls, glacier, lake,
 river channel, bridge and the gauge; [`water-site.puck`](water-site.puck) holds the river's course). The Moth swims where the pool or the river has water, floating with her
-shoulders at the surface. The cycle's levers:
+shoulders at the surface.
+
+Look intent ([the visual bar](../../docs/game/art/README.md#the-visual-bar)): the
+[caldera water pack](../../docs/game/art/caldera-water-pack/README.md) is the
+reference, panel by panel. The glacier is a grounded blue-white ice tongue in a
+warm rock cradle, with cobalt crevasses, ivory sun planes and a wet scalloped toe
+whose melt channels visibly reach the lake (panel 2); the lake is flat and
+reflective, clear over its near stones, turquoise in the middle and teal deep
+(panel 2); the falls are a continuous sheet with a transparent core, white
+edges, spray at the impact and foam carried downstream (panel 3); the river and
+pool show riffles, a bank the water meets, transparent margins and reflected
+cliffs (panel 4). The cycle's levers:
 
 | Do | Command |
 |---|---|

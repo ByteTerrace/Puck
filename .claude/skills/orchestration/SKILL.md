@@ -365,6 +365,16 @@ changes and what the lane ran to show them working before merging
 
 ## Land in batches
 
+A look change lands only with a critic's pass against
+[the visual bar](../../../docs/game/art/README.md#the-visual-bar): the lead
+sends its captures, picks and reference panels to a reader that did not build
+it, and a failure goes back to the lane. The lead also keeps the bar in front
+of the owner: at the close of every session that touched a place, and at least
+once per milestone across the debug world's places, it publishes current
+captures beside their reference panels with the critic's verdicts, and queues
+a look lane for the worst place. Look work is scheduled as fundamentals are,
+never left until the owner walks past it.
+
 The main checkout tracks the integration branch (the owner's ruling). Claude
 Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
 the main checkout, not from the lead's worktree, so a lane runs whatever agent
