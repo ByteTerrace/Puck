@@ -1680,7 +1680,7 @@ raised one point it is answered once with every id.
 
 - **1** (the write door, the H9 scope, the missing rules, and 4f before 4d).
   **Accepted in part.** Accepted: the door. `WorldRuleHost.PersistIdentityFact`
-  calls `Host.Profiles.TrySetFact` and never `Decide`, as quoted in decision 4
+  calls `WorldOwnedWorlds.TrySetFact` (through `Host.Profiles`) and never `Decide`, as quoted in decision 4
   **[opened]**, and the hub plan's H2 row ends in-process adoption on return,
   so step 4 sits on `TrySetFact` and `Decide` and not on `TryAdopt`. Accepted:
   the night field and the garden are one package (`worlds/debug`, whose
