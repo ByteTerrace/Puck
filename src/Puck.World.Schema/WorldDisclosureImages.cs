@@ -10,10 +10,13 @@ namespace Puck.World;
 /// <summary>One immutable observable row. Vector payloads are privately copied before content identity is computed.</summary>
 public sealed class WorldRecipientImage {
     internal WorldRecipientImage(byte[] digest, StateCell[] cells, WorldObservedRow? observation, int bytes) {
-        Digest = digest; Identity = ContentPin.FromDigest(digest); Cells = Array.AsReadOnly(cells); Observation = observation; Bytes = bytes;
+        Digest = digest; Cells = Array.AsReadOnly(cells); Observation = observation; Bytes = bytes;
     }
+    // Spelled on first read: most images (a row its audience reads whole) are compared by digest alone. A pin is one
+    // reference, so a racing first read writes it whole and every writer writes the same text.
+    private ContentPin m_identity;
     /// <summary>Content identity, including counts, placeholder order, traits and observations.</summary>
-    public ContentPin Identity { get; }
+    public ContentPin Identity => (m_identity == default) ? (m_identity = ContentPin.FromDigest(Digest)) : m_identity;
     /// <summary>Readable cells in recipient order.</summary>
     public IReadOnlyList<StateCell> Cells { get; }
     /// <summary>The presentation image, or null when the row itself is withheld.</summary>
@@ -103,8 +106,8 @@ public sealed class WorldDisclosureImages {
     private readonly List<int> m_dependencyScratch = [];
     private int[][] m_dependents = [];
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
-    private readonly Dictionary<ContentPin, WeakReference<WorldRecipientImage>> m_content = [];
-    private readonly List<ContentPin> m_reclaimed = [];
+    private readonly Dictionary<ImageDigest, WeakReference<WorldRecipientImage>> m_content = [];
+    private readonly List<ImageDigest> m_reclaimed = [];
     private readonly Dictionary<string, AudienceDefinition> m_definitions = [];
     private ArenaChangedKeys? m_changes;
     private StateArena? m_windowArena;
@@ -297,12 +300,20 @@ public sealed class WorldDisclosureImages {
     }
     // The shared image of one disclosed content: the live one with this digest, or a new one the table holds weakly.
     private WorldRecipientImage Intern(ReadOnlySpan<byte> digest, StateCell[] cells, WorldObservedRow? observation, int bytes) {
-        var pin = ContentPin.FromDigest(digest);
-        if (!m_content.TryGetValue(pin, out var reference) || !reference.TryGetTarget(out var image)) {
+        var key = ImageDigest.Of(digest);
+        if (!m_content.TryGetValue(key, out var reference) || !reference.TryGetTarget(out var image)) {
             image = new WorldRecipientImage(digest.ToArray(), cells, observation, bytes);
-            m_content[pin] = new WeakReference<WorldRecipientImage>(image);
+            m_content[key] = new WeakReference<WorldRecipientImage>(image);
         }
         return image;
+    }
+    // A SHA-256 digest as a value, so interning an image spells no pin.
+    private readonly record struct ImageDigest(ulong A, ulong B, ulong C, ulong D) {
+        public static ImageDigest Of(ReadOnlySpan<byte> digest) => new(
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(digest),
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(digest[8..]),
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(digest[16..]),
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(digest[24..]));
     }
     // Serializes an image's content into the table's reused buffer, valid until the next call: the bytes are digested and
     // measured, never kept.
