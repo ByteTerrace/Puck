@@ -18,6 +18,10 @@ public sealed partial class WorldScopedReplayRuntime {
     private readonly List<(int Tick, WorldCommand Command)> m_commands = [];
     private readonly List<(int Tick, IntentSubmission Intent)> m_intents = [];
 
+    /// <summary>The control row's <c>status</c> of a scope that holds no starting image: an edit re-declared one of its
+    /// rows, or a request found no start or a start it could no longer restore. A capture request leaves it.</summary>
+    public const int NoStartStatus = -2;
+
     private ArenaScopeSnapshot? m_start;
 
     private WorldPopulationEntryCheckpoint[] m_startBodies = [];
@@ -84,6 +88,17 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         var held = ((m_start is not null) || m_active || (m_hashes.Count != 0));
 
+        DropStart();
+        // A load reseeds the control row with the document; an edit leaves it naming a drive that no longer exists.
+        if (held && (continuity == WorldArenaContinuity.Edit)) {
+            Write(arena: arena, key: "status", value: NoStartStatus);
+            Write(arena: arena, key: "cursor", value: 0);
+            m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — an edit re-declared a scope row; capture again]");
+        }
+    }
+
+    // The one place a scope forgets its starting image, with the drive and tape measured from it.
+    private void DropStart() {
         ResetDrive();
         ClearTape();
         m_start = null;
@@ -91,12 +106,6 @@ public sealed partial class WorldScopedReplayRuntime {
         m_startHash = 0;
         m_startImageHash = 0;
         m_startRuleLatch = []; m_startInteractionLatch = []; m_startGroups = [];
-        // A load reseeds the control row with the document; an edit leaves it naming a drive that no longer exists.
-        if (held && (continuity == WorldArenaContinuity.Edit)) {
-            Write(arena: arena, key: "status", value: -1);
-            Write(arena: arena, key: "cursor", value: 0);
-            m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — an edit re-declared a scope row; capture again]");
-        }
     }
 
     private static bool SameDeclaration(StateRow before, StateRow after) => (
@@ -161,7 +170,11 @@ public sealed partial class WorldScopedReplayRuntime {
     private void Restore() {
         if (m_start is null) { throw new InvalidOperationException(message: "Capture the scope's fresh starting state first."); }
         foreach (var image in m_startBodies) {
-            if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) { throw new InvalidOperationException(message: "A scoped body was replaced; capture again."); }
+            if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) {
+                // A start a replaced body can no longer be restored to is no start: the scope holds none until it captures again.
+                DropStart();
+                throw new InvalidOperationException(message: "A scoped body was replaced; capture again.");
+            }
         }
         // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
@@ -187,7 +200,7 @@ public sealed partial class WorldScopedReplayRuntime {
     public void BeforeTick() {
         try { BeforeTickCore(); } catch (InvalidOperationException exception) {
             ResetDrive();
-            Write(key: "status", value: -1);
+            Write(key: "status", value: ((m_start is null) ? NoStartStatus : -1));
             Write(key: "cursor", value: 0);
             m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — {exception.Message}]");
         }
@@ -199,7 +212,12 @@ public sealed partial class WorldScopedReplayRuntime {
         if (request != 0) {
             Write(key: "request", value: 0);
             if (request == 4) {
-                if (m_start is null) { Capture(); }
+                if (m_start is null) {
+                    Capture();
+                    // A capture ends a refusal for want of a start (NoStartStatus); the scope is idle again.
+                    Write(key: "status", value: 0);
+                    Write(key: "cursor", value: 0);
+                }
             } else if (request is 2 or 3) {
                 ResetDrive();
                 Restore();

@@ -539,8 +539,9 @@ What survives an arena install is decided in one place,
   and its recorded hashes still compare, since a row digest folds the row's
   content and not its catalog ordinal (`StateArena.AddRowTo`). An edit that
   re-declares a scope row drops the scope's image and tape, sets its control
-  row's `status` to -1 and names the refusal on stderr; the next capture request
-  records afresh.
+  row's `status` to -2 (`WorldScopedReplayRuntime.NoStartStatus`) and names the
+  refusal on stderr; the next capture request records afresh and returns it to 0.
+  The chess demo's `chess-demo-lost-start` rule reads -2 to clear its `ready` flag.
 - **Load** (`world.load`, `world.reload`, `world.reset`, a history seek, a
   checkpoint restore): the document's state replaces the arena's whether the
   arena is replaced or reloaded in place, so the rule and interaction latches

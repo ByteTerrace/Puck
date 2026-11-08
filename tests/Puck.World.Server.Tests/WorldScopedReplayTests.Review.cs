@@ -76,7 +76,7 @@ public sealed partial class WorldScopedReplayTests {
         fixture.JoinSeat();
         fixture.JoinSeat(slot: 1);
         Request(fixture: fixture, request: 4);
-        Assert.Equal(-1, Read(fixture: fixture, key: "status", row: "control"));
+        Assert.Equal(WorldScopedReplayRuntime.NoStartStatus, Read(fixture: fixture, key: "status", row: "control"));
         Assert.Null(@object: fixture.Server.ScopedReplays[0].Checkpoint().Start);
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.ScopedReplays[0].Hash());
 

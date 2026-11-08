@@ -229,6 +229,9 @@ levers) are judged from their source.
 | Verbs | Audience | Verdict | Fix |
 |---|---|---|---|
 | `replay.record`, `replay.stop`, `replay.cancel`, `replay.drive`, `replay.fork`, `replay.verify`, `replay.inspect`, `replay.list`, `replay.status` | Operator | A tape is the whole authority: its tail hash, authority entries and poses differ with withheld rows (baseline: `replay.stop`, `replay.inspect` and `replay.verify` differed between every pair), and `drive` and `fork` replace the live document through the load door | Operator verbs |
+| `pipeline.load` | Operator | Authors a `views.graphs` row naming a graph, shader source or package on the host's disk: the shared screen's pipeline and host files, which a seat never changes (decision 2: the shared presentation is the operator's) | Operator verb |
+| `world.transfer` | Operator | Moves any body of any instance to any destination path, which a seat's own `player.travel` (hub plan, gap 8) does for its own body under Drive and the destination's admission | Operator verb |
+| `player.claim`, `player.cycle` | Local | Move the pressing device between player slots. A bound press carries the seat's own device and is ordinary play (the roster still asks Drive over the bodies it affects); typed text names the host's keyboard, so a seat's typed line is refused and only the console moves it (the fuzzer had moved a device to player 1). A peer, session, addon or world program has no device here | `Local` audience, and the handlers refuse typed text from a seat |
 | `world.history`, `world.history.drag` | Anyone (seat forms checked against `control history`) | The keyframe cadence and window eviction read checkpoint and input byte counts (baseline: `row`'s keyframe ticks and a step's restored keyframe and re-simulated count differed between `empty` and `full`); whether a restore went through the load door follows the journal, which an operator's edit of a withheld row moves | Keyframes every simulated second and eviction by the window's length in ticks; the memory ceiling evicts earlier only when the window does not fit it (a resource limit outside the guarantee); a seat's seek omits the restore route; the `history.window` HUD gauge reads the window's fill, not bytes |
 | `wire.errors`, `wire.ack` | Operator | The registry's one refusal counter counts every principal's refused lines, the operator's included, and the acknowledgement mode is the operator pipe's | Operator verbs |
 | `world.rate` | Operator | `shed` reads a host-lifetime wall-time counter beside `host.frames`, and pause and resume schedule every seat's world | Operator verb |
@@ -1149,11 +1152,6 @@ commit, as machine readings are not a repository baseline.
 
 ## Open items
 
-- Control verbs anyone can run, outside the console audit's disclosure
-  scope: `pipeline.load`, `player.claim`, `player.cycle` (the fuzzer moved a
-  device to player 1) and `world.transfer` take `CommandAudience.Anyone`.
-  Decide each one's audience by what a seat should be able to change, the way
-  the audit decided reads.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.

@@ -529,7 +529,8 @@ scoped continuation; an invalid tape is refused by scope name.
 `replay.scope [<name> [capture|drive|cancel|reset]]` is operator read-back and
 next-tick control. Its Int control row has `request`, `status`, `cursor`, and
 `completed`: requests 4 capture once, 1 drive, and 2/3 cancel and restore; statuses
-0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, and -1 MISMATCH/refused.
+0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, -1 MISMATCH/refused (the scope still
+holds its start) and -2 holding no start (a capture request returns it to 0).
 The first mismatch names its relative tick and both hashes, without replacing
 the original expectation. Idle detection and loop timing remain ordinary world
 rules. [The debug chess demonstration](../../../worlds/debug/chess.md) is the

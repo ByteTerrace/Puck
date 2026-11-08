@@ -110,7 +110,9 @@ The control row declares `request`, `status`, `cursor`, and `completed`.
 Requests are consumed at the next input boundary: 4 captures a fresh start once,
 1 drives (deriving a tape on the first completed run), and 2 or 3 cancels and
 restores that start. Status is 0 idle, 1 recording, 2 replaying, 3 recorded,
-4 MATCH, or -1 MISMATCH/refused. A cancellation discards an incomplete recording.
+4 MATCH, -1 MISMATCH/refused (the scope still holds its start), or -2 holding no start
+(`WorldScopedReplayRuntime.NoStartStatus`: an edit re-declared a scope row, or a request found none or a
+start whose body was replaced; a capture request returns it to 0). A cancellation discards an incomplete recording.
 The owner authors idle detection, hold time, repetition and cancellation in
 ordinary rules outside the replay scope.
 
@@ -161,7 +163,7 @@ scope tape or hash ledger to commit. A scope outlives arena replacement:
 `WorldServer.ContinueArena` keeps its start and tape across any mutation's
 install that keeps every scope row's declaration (the image moves by row and
 key name, `StateArena.CarryScope`), and drops them on an edit that re-declares a
-scope row (its control row's `status` becomes -1) and on every load
+scope row (its control row's `status` becomes -2) and on every load
 (`world.load`, `world.reload`, `world.reset`, a history seek, a checkpoint
 restore, which then restores its own)
 ([what an install rebuilds](../../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).

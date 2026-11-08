@@ -4054,13 +4054,6 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] The chess demo stops for good after an edit re-declares one of its
-  scope rows: the scope correctly drops its tape and reports
-  `chessTape.status == -1`, but `chess.puck` captures a start only while
-  `chessDemo.ready == 0`, so every idle start is refused ("Capture the scope's
-  fresh starting state first") until a load. The demo recaptures by itself:
-  `chess-demo-diverged` (or a sibling rule) clears `ready` when the scope has
-  no start, so `chess-demo-fresh-start` captures at the next fresh board.
 - [medium] `world.decisions` reports 0 policies in the debug world's boot
   instance, so the pond's decisions may not be running there (seen by the
   rule-faults step 7 lane on a headless boot; unchecked). Read why before
