@@ -72,7 +72,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   `adjacencies` row name, required for `Presence` and refused for `Endowed`)
   and `graceSeconds` are AUTHORED; `contributor` and `retractDeadlineTick` are
   SERVER-STAMPED and a submission naming either is refused BY NAME
-  (`src/Puck.World.Server/WorldTick.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
+  (`src/Puck.World.Server/WorldDocument.Compose.cs`'s `TryComposeUpsertPlacement` reads the
   contributor off the acting principal — accepting an authored one would be the
   laundering the acting-principal rule forbids). An UNFILLED slot shows its own
   `slotCreationId`, so no creationless placement has to be representable, and
@@ -227,7 +227,7 @@ Controllers, Voice, Facts, Records)`; `Records` names the capacity-one record po
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see
-[documents-binding.md](documents-binding.md)); `Hud` is the owned document's first `Hud` panel (the identity's
+[bindings.md](../../input/references/bindings.md)); `Hud` is the owned document's first `Hud` panel (the identity's
 PRIVATE seat-scope HUD panel, see `hud.md`). `Voice` (`WorldVoiceProfile?` —
 a `PatchId` resolving against declared `patches` rows, plus a positive
 `CadenceTicks`) selects the identity's synthesized voice-babble pitch/timbre
