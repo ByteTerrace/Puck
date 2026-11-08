@@ -57,9 +57,10 @@ public sealed record WorldWithheldRow(int Count, HiddenCells Policy, bool WholeR
 /// re-dealt from what remains; the live document itself when nothing is withheld.</param>
 /// <param name="Withheld">What was withheld, keyed by row name; a row absent here is disclosed whole.</param>
 public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld) {
-    // The rows whose disclosed cells the disclosed placements were dealt or answered from; any other row's cells leave
-    // them as they stand.
-    internal IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
+    /// <summary>Gets the names of the rows whose disclosure shaped the disclosed placements: every dealt and variant row
+    /// of a template the recipient is shown re-dealt or masked, and every row a response entry reads. Any other row's
+    /// cells leave the placements as they stand, so a cached composition follows only these rows' images.</summary>
+    public IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
 }
 /// <summary>Composes state observations for one authenticated recipient.</summary>
 /// <remarks>Every value, audience, zone membership and observation stamp is read from the live store, never from a

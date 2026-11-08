@@ -223,7 +223,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
     // child without it is admitted.
     [Fact]
     public void ADealtChildUnderARowThatCanWithholdCarriesOnlyWhatTheReDealDiscloses() {
-        var definition = Rack(hidden: HiddenCells.Omit);
+        var definition = Rack(hidden: HiddenCells.Omit) with { CreationsRaw = [CreationFixtures.UnitSphere(id: "king")] };
         var plain = definition.Placements[2];
         var inhabited = plain with { Inhabit = new WorldPlacementInhabit(Kit: "display", Look: null, Source: IntentSource.Idle) };
         bool Admits(WorldPlacement child) => WorldDefinitionValidator.TryValidateDealtChildren(children: [child], definition: definition, reason: out _, template: definition.Placements[0]);
