@@ -1,3 +1,4 @@
+using Worktree = Puck.Cli.CliWorktree;
 using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
@@ -15,7 +16,6 @@ public static class WorktreeReportCommand {
 
     private sealed record Upstream(string Name, string Track);
     private sealed record Branch(string Name, string Head, Upstream? Upstream);
-    private sealed record Worktree(string Path, string Head, string? Branch, string? Locked, string? Prunable);
     private sealed record Dirty(int Modified, int Untracked);
     private sealed record History(string Landed, int? Unlanded, DateTimeOffset? LastCommit, string? Unreadable);
     private sealed class Entry {
@@ -35,47 +35,8 @@ public static class WorktreeReportCommand {
         [JsonPropertyOrder(1)] public string? Worktree { get; init; }
     }
 
-    // Lazy fetch fills a partial clone's missing objects from its promisor remote, so a report could contact the
-    // network. Git 2.44 added --no-lazy-fetch to forbid it, and an older git rejects the option outright. Without it a
-    // repository with no promisor remote has nothing to fetch lazily, so the report runs there; a partial clone it
-    // refuses by name.
-    private static readonly Lazy<bool> AcceptsNoLazyFetch = new(valueFactory: static () => (CliGit.Run(".", "--no-lazy-fetch", "version").ExitCode == 0));
-    private static readonly string[] NoLazyFetch = ["--no-lazy-fetch"];
-
-    /// <summary>Gets whether this host's git accepts <c>--no-lazy-fetch</c>, which git 2.44 added; probed once per
-    /// process.</summary>
-    public static bool GitAcceptsNoLazyFetch => AcceptsNoLazyFetch.Value;
-
-    /// <summary>Decides whether a report may read a repository without risking a lazy fetch.</summary>
-    /// <param name="gitAcceptsNoLazyFetch">Whether git can forbid lazy fetches (<see cref="GitAcceptsNoLazyFetch"/>).</param>
-    /// <param name="partialClone">Whether the repository is a partial clone, with a promisor remote to fetch from.</param>
-    /// <returns>Null when the report may run; otherwise why it is refused.</returns>
-    public static string? LazyFetchRefusal(bool gitAcceptsNoLazyFetch, bool partialClone) => ((gitAcceptsNoLazyFetch || !partialClone)
-        ? null
-        : "the repository is a partial clone, and this git (before 2.44) has no --no-lazy-fetch to keep the report from fetching missing objects; run it with git 2.44 or later, or from a full clone.");
-
-    // Optional locks refresh indexes; lazy fetch fills missing objects. Neither belongs in a report. Disable
-    // fsmonitor too: even a status query can otherwise start a daemon or invoke a user-supplied hook.
-    private static ChildProcessResult Git(string repository, string[] arguments, string? input = null) => CliGit.RunAsync(
-        repository: repository,
-        arguments: ["--no-optional-locks", .. (GitAcceptsNoLazyFetch ? NoLazyFetch : []), "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0", .. arguments],
-        input: input
-    ).GetAwaiter().GetResult();
-    // A partial clone records extensions.partialClone, and its promisor remote carries remote.<name>.promisor.
-    private static bool IsPartialClone(string repository) {
-        var result = Git(repository: repository, arguments: ["config", "--null", "--get-regexp", @"^(extensions\.partialclone|remote\..*\.promisor)$"]);
-
-        if ((result.ExitCode is not (0 or 1)) || !string.IsNullOrWhiteSpace(value: result.Stderr)) {
-            throw new InvalidOperationException(message: Failure(operation: "config", result: result));
-        }
-        return result.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').Any(predicate: static record => {
-            var newline = record.IndexOf(value: '\n');
-            var key = ((newline < 0) ? record : record[..newline]);
-            var value = ((newline < 0) ? string.Empty : record[(newline + 1)..]);
-
-            return (key.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "extensions.partialclone") || !value.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "false"));
-        });
-    }
+    private static ChildProcessResult Git(string repository, string[] arguments, string? input = null) =>
+        CliGit.ReadOnlyAsync(repository: repository, arguments: arguments, input: input).GetAwaiter().GetResult();
     private static string Failure(string operation, ChildProcessResult result) =>
         $"git {operation} exited {result.ExitCode}: {result.Stderr.Trim().Replace(newChar: '/', oldChar: '\\')}";
     private static string Read(string repository, string[] arguments, string? input = null, List<string>? warnings = null) {
@@ -134,33 +95,8 @@ public static class WorktreeReportCommand {
         warnings.Add(item: $"{reference}: fetch mappings do not identify one local integration branch; removal is blocked.");
         return null;
     }
-    private static List<Worktree> ReadWorktrees(string repository, List<string> warnings) {
-        var listing = Read(repository: repository, arguments: ["worktree", "list", "--porcelain", "-z"], warnings: warnings);
-        var worktrees = new List<Worktree>();
-        string? path = null, branch = null, locked = null, prunable = null;
-        var head = string.Empty;
-
-        foreach (var field in listing.Split(separator: '\0')) {
-            if (field.Length == 0) {
-                if (path is not null) {
-                    worktrees.Add(item: new Worktree(Branch: branch, Head: head, Locked: locked, Path: path, Prunable: prunable));
-                }
-                path = branch = locked = prunable = null;
-                head = string.Empty;
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree ")) {
-                path = PuckPaths.Normalize(path: field[9..]);
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "HEAD ")) {
-                head = field[5..];
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "branch refs/heads/")) {
-                branch = field[18..];
-            } else if ((field == "locked") || field.StartsWith(comparisonType: StringComparison.Ordinal, value: "locked ")) {
-                locked = ((field.Length == 6) ? string.Empty : field[7..]);
-            } else if ((field == "prunable") || field.StartsWith(comparisonType: StringComparison.Ordinal, value: "prunable ")) {
-                prunable = ((field.Length == 8) ? string.Empty : field[9..]);
-            }
-        }
-        return worktrees;
-    }
+    private static List<Worktree> ReadWorktrees(string repository, List<string> warnings) =>
+        CliWorktree.Parse(listing: Read(repository: repository, arguments: ["worktree", "list", "--porcelain", "-z"], warnings: warnings));
     private static Dirty ReadStatus(string repository) {
         var fields = Read(repository: repository, arguments: ["status", "--porcelain=v2", "-z", "--untracked-files=all", "--ignore-submodules=none"]).Split(separator: '\0');
         var modified = 0;
@@ -290,13 +226,6 @@ public static class WorktreeReportCommand {
         var errors = new List<string>();
         Branch[] branches;
 
-        try {
-            if (LazyFetchRefusal(gitAcceptsNoLazyFetch: GitAcceptsNoLazyFetch, partialClone: IsPartialClone(repository: repositoryRoot)) is { } refusal) {
-                return CliExit.Refuse(verb: Verb, what: "lazy fetch", why: refusal);
-            }
-        } catch (InvalidOperationException error) {
-            return CliExit.Refuse(verb: Verb, what: "partial clone", why: error.Message);
-        }
         try {
             branches = ReadBranches(repository: repositoryRoot, warnings: errors);
         } catch (InvalidOperationException error) {

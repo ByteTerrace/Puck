@@ -83,7 +83,8 @@ internal static class DeclarationsWalker {
                 node: node,
                 simpleName: (simpleName + Signature(node: node))
             ),
-            Detail: bases
+            Detail: bases,
+            SimpleName: simpleName
         ));
     }
     // The base list a type declares, each entry flattened and joined canonically — the emitter supplies

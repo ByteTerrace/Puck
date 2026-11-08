@@ -8,6 +8,51 @@ namespace Puck.Abstractions.Tests;
 // AtomicFile is the one temp-then-rename writer. A write either lands whole or leaves the directory as it found it:
 // the destination keeps its old bytes and no temporary file survives the failure.
 public sealed class AtomicFileLawTests : IDisposable {
+    [Fact]
+    public void StagingPublishesOnlyOnCommitAndDiscardRemovesItsTemporary() {
+        var path = PathOf(name: "staged");
+
+        File.WriteAllText(contents: "old", path: path);
+        using (var pending = AtomicFile.StageAllText(contents: "new", path: path)) {
+            Assert.Equal(expected: "old", actual: File.ReadAllText(path: path));
+            Assert.Equal(expected: 2, actual: Entries().Length);
+        }
+        Assert.Equal(expected: new[] { "staged" }, actual: Entries());
+        using var publish = AtomicFile.StageAllText(contents: "new", path: path);
+
+        publish.Commit();
+        Assert.Equal(expected: "new", actual: File.ReadAllText(path: path));
+        Assert.Equal(expected: new[] { "staged" }, actual: Entries());
+    }
+    [Fact]
+    public void CreateOnlyCommitKeepsAConcurrentWinnersBytes() {
+        var path = PathOf(name: "winner");
+        using var pending = AtomicFile.StageAllText(contents: "loser", path: path);
+
+        File.WriteAllText(contents: "winner", path: path);
+        Assert.Throws<IOException>(testCode: () => pending.Commit(overwrite: false));
+        Assert.Equal(expected: "winner", actual: File.ReadAllText(path: path));
+        Assert.Equal(expected: new[] { "winner" }, actual: Entries());
+    }
+    [Fact]
+    public void EqualBytesDoNotAttemptReplacementAndComparisonsReachBeyondOneBuffer() {
+        var path = PathOf(name: "large");
+        var bytes = Enumerable.Range(count: 9001, start: 0).Select(selector: static index => ((byte)index)).ToArray();
+
+        Assert.True(condition: AtomicFile.WriteAllBytesIfChanged(bytes: bytes, path: path));
+        using (var reader = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.Read)) {
+            Assert.False(condition: AtomicFile.WriteAllBytesIfChanged(bytes: bytes, path: path));
+        }
+        var other = PathOf(name: "other");
+
+        File.WriteAllBytes(bytes: bytes, path: other);
+        Assert.True(condition: FileContent.Equals(left: path, right: other));
+        bytes[^1] ^= 1;
+        Assert.False(condition: FileContent.Equals(expected: bytes, path: path));
+        File.WriteAllBytes(bytes: bytes, path: other);
+        Assert.False(condition: FileContent.Equals(left: path, right: other));
+    }
+
     private readonly TemporaryDirectory m_directory = new(prefix: "puck-atomic-file-");
 
     private string PathOf(string name) =>

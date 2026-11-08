@@ -28,17 +28,9 @@ public static partial class CompileCommand {
         var directory = Path.GetFullPath(path: output);
         // Each file this run wrote and the source that wrote it, so a second source claiming a document is refused.
         var written = new Dictionary<string, string>(comparer: DocumentName.Comparer);
-        var outputFromTree = Path.GetRelativePath(
-            path: directory,
-            relativeTo: root
-        );
-
         // The output is swept of every document this run did not write, so it may never hold the tree's own
         // hand-authored documents.
-        if (!outputFromTree.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: ".."
-        ) && !Path.IsPathRooted(path: outputFromTree)) {
+        if (Puck.Abstractions.PuckPaths.IsWithin(path: directory, root: root)) {
             Console.Error.WriteLine(value: $"error: the output '{CliPaths.ToDisplay(fullPath: directory)}' lies inside the tree '{CliPaths.ToDisplay(fullPath: root)}'; a tree run writes outside the sources it compiles.");
 
             return 2;
@@ -90,13 +82,7 @@ public static partial class CompileCommand {
                 relativeTo: root
             );
 
-            if (
-                Path.IsPathRooted(path: relative) ||
-                relative.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".."
-            )
-            ) {
+            if (!Puck.Abstractions.PuckPaths.IsWithin(path: source, root: root)) {
                 Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: source)}' does not lie under the tree '{CliPaths.ToDisplay(fullPath: root)}'.");
 
                 return 2;

@@ -8,6 +8,12 @@ namespace Puck.Cli.Source.Tests;
 /// <summary>Laws for the fragment half of <c>puck docs links</c>: a link's <c>#fragment</c> must name a heading anchor
 /// of the markdown file it points at, slugged as GitHub renders headings.</summary>
 public sealed class DocsLinksCommandTests {
+    [Fact]
+    public void ListIndentedFencesHideLinksAndRequireAWhitespaceOnlyCloser() {
+        var (exit, output) = Check(document: "- Example\n\n    ```text\n    [fake](missing.md)\n    ```still-code\n    [also fake](absent.md)\n    ````\n\n[real](target.md#good-heading)\n");
+        Assert.True(condition: (exit == 0), userMessage: output);
+    }
+
     private const string Target = """
         # Target
 

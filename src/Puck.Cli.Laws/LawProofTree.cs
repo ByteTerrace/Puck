@@ -28,12 +28,8 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
     /// <param name="reason">Why it could not be resolved, or empty.</param>
     /// <returns><see langword="true"/> when resolved.</returns>
     public static bool TryResolveSource(string repository, out string source, out string reason) {
-        var resolved = CliGit.Run(repository, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-
-        source = resolved.Stdout.Trim();
-        reason = (((resolved.ExitCode == 0) && Path.IsPathFullyQualified(path: source))
-            ? string.Empty
-            : $"cannot resolve the repository's common git directory: {resolved.Stderr.Trim()}");
+        source = (CliGit.CommonDirectoryAsync(repository: repository).GetAwaiter().GetResult() ?? string.Empty);
+        reason = ((source.Length == 0) ? "cannot resolve the repository's common git directory." : string.Empty);
         return (reason.Length == 0);
     }
 

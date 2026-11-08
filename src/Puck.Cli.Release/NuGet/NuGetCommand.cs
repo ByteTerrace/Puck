@@ -21,18 +21,13 @@ public static class NuGetCommand {
     internal static async Task<string> ExpectedCommitAsync(string root) {
         return ((Environment.GetEnvironmentVariable(variable: "GITHUB_SHA") is { Length: > 0 } commit)
             ? commit
-            : (await CliProcess.RunCheckedAsync(
-                arguments: ["rev-parse", "HEAD"],
-                fileName: "git",
-                workingDirectory: root,
-                capture: true
-            )).Trim()
+            : await CliGit.CommitAsync(repository: root)
         );
     }
 
     public static async Task<JsonObject> PrepareAsync(string input, string output, string selection, string version, string commit, Func<string, Task<string[]>> publishedVersions) {
         ValidateVersion(version: version);
-        ValidateCommit(commit: commit);
+        CliGit.ValidateCommit(commit: commit);
         RequireEmpty(output: output);
         var (ordered, published) = await SelectAsync(
             ReadPackages(
@@ -136,7 +131,7 @@ public static class NuGetCommand {
     }
     public static JsonObject Verify(string directory, string version, string commit) {
         ValidateVersion(version: version);
-        ValidateCommit(commit: commit);
+        CliGit.ValidateCommit(commit: commit);
         var manifest = JsonNode.Parse(File.ReadAllText(path: Path.Combine(
             path1: directory,
             path2: "release.json"
@@ -488,15 +483,6 @@ public static class NuGetCommand {
             values: manifest["publishedDependencies"]!.AsArray().Select(selector: value => ((string)value!["id"]!))
         )}");
         return text.ToString();
-    }
-    private static void ValidateCommit(string commit) {
-        if (!Regex.IsMatch(
-            input: commit,
-            options: RegexOptions.CultureInvariant,
-            pattern: @"\A[0-9a-f]{40}\z"
-        )) {
-            throw new InvalidDataException(message: "Expected a full lowercase Git commit SHA.");
-        }
     }
     private static async Task<int> VerifyBatchAsync(string directory) {
         var root = RepositoryPaths.RequireRoot();

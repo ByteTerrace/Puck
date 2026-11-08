@@ -1,3 +1,4 @@
+using Worktree = Puck.Cli.CliWorktree;
 using System.CommandLine;
 using System.Globalization;
 using System.Text;
@@ -18,7 +19,6 @@ public static partial class LanesCommand {
 
     private static readonly string[] Leases = ["gpu", "heavy", "build"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    private static readonly string[] GitPrefix = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"];
 
     private const int LogHeadBytes = 4096;
     private const string WriteMode = "write";
@@ -42,7 +42,6 @@ public static partial class LanesCommand {
         /// <returns>The display text.</returns>
         public override string ToString() => ((State == "holding") ? $"{Resource}:holding" : $"{Resource}:queued#{Ticket}({Position}/{Lanes},ahead {Ahead})");
     }
-
     /// <summary>One worktree's state.</summary>
     /// <param name="Name">The worktree directory's name.</param>
     /// <param name="Branch">The checked-out branch, or <c>(detached)</c>.</param>
@@ -90,45 +89,19 @@ public static partial class LanesCommand {
         string? Error
     );
 
-    private sealed record Worktree(string Path, string? Branch, string Head);
-
     private static async Task<(int ExitCode, string Stdout)> GitAsync(string repository, CancellationToken cancellationToken, params string[] arguments) {
-        var run = await CliGit.RunAsync(arguments: [.. GitPrefix, .. arguments], cancellationToken: cancellationToken, repository: repository, timeout: TimeSpan.FromSeconds(seconds: 30)).ConfigureAwait(continueOnCapturedContext: false);
+        var run = await CliGit.ReadOnlyAsync(arguments: arguments, cancellationToken: cancellationToken, repository: repository, timeout: TimeSpan.FromSeconds(seconds: 30)).ConfigureAwait(continueOnCapturedContext: false);
 
         return (run.ExitCode, run.Stdout);
     }
-
-    private static List<Worktree> ParseWorktrees(string listing) {
-        var worktrees = new List<Worktree>();
-        string? path = null, branch = null;
-        var head = string.Empty;
-
-        foreach (var field in listing.Split(separator: '\0')) {
-            if (field.Length == 0) {
-                if (path is not null) { worktrees.Add(item: new Worktree(Branch: branch, Head: head, Path: path)); }
-                path = branch = null;
-                head = string.Empty;
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree ")) {
-                path = field[9..].Replace(oldChar: '\\', newChar: '/');
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "HEAD ")) {
-                head = field[5..];
-            } else if (field.StartsWith(comparisonType: StringComparison.Ordinal, value: "branch refs/heads/")) {
-                branch = field[18..];
-            }
-        }
-        if (path is not null) { worktrees.Add(item: new Worktree(Branch: branch, Head: head, Path: path)); }
-        return worktrees;
-    }
-
     private static DateTimeOffset? Stamp(string path) {
         try {
             var time = File.GetLastWriteTimeUtc(path: path);
 
             return ((time.Year > 1601) ? new DateTimeOffset(dateTime: time) : null);
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
     }
     private static DateTimeOffset? Newest(DateTimeOffset? a, DateTimeOffset? b) => ((a is null) ? b : ((b is null) ? a : ((a > b) ? a : b)));
-
     /// <summary>Resolves a worktree's git directory from its <c>.git</c> entry.</summary>
     private static string? GitDirectory(string worktree) {
         var entry = System.IO.Path.Combine(path1: worktree, path2: ".git");
@@ -142,10 +115,9 @@ public static partial class LanesCommand {
 
                 return (System.IO.Path.IsPathRooted(path: target) ? target : System.IO.Path.GetFullPath(basePath: worktree, path: target));
             }
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
         return null;
     }
-
     /// <summary>The newest top-level write under a worktree's scratch directory: its entries only, never their contents.</summary>
     private static DateTimeOffset? ScratchWrite(string worktree) {
         var scratch = System.IO.Path.Combine(path1: worktree, path2: ".claude", path3: "scratch");
@@ -162,29 +134,27 @@ public static partial class LanesCommand {
                 newest = Newest(a: newest, b: new DateTimeOffset(dateTime: entry.LastWriteTimeUtc));
                 if (++seen >= ScratchEntryCap) { break; }
             }
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
         return newest;
     }
-
     /// <summary>What a lane log says, from its head and tail alone: the final line when it is an exit line, whether
     /// its header names a read-only sandbox, and its length.</summary>
     private static (string? Exit, bool ReadOnly, long Length) ReadLog(string log) {
         try {
-            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: log, share: (FileShare.ReadWrite | FileShare.Delete));
+            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: log, share: FileShare.ReadWrite | FileShare.Delete);
             var length = stream.Length;
-            var head = new byte[(int)Math.Min(val1: length, val2: LogHeadBytes)];
+            var head = new byte[((int)Math.Min(val1: length, val2: LogHeadBytes))];
             var headRead = stream.Read(buffer: head, offset: 0, count: head.Length);
-            var readOnly = ReadOnlySandbox().IsMatch(input: Encoding.UTF8.GetString(bytes: head, index: 0, count: headRead).Replace(oldValue: "\r", newValue: string.Empty));
+            var readOnly = ReadOnlySandbox().IsMatch(input: Encoding.UTF8.GetString(bytes: head, count: headRead, index: 0).Replace(newValue: string.Empty, oldValue: "\r"));
 
             _ = stream.Seek(offset: Math.Max(val1: 0, val2: (length - LogTailBytes)), origin: SeekOrigin.Begin);
-            var buffer = new byte[(int)Math.Min(val1: length, val2: LogTailBytes)];
+            var buffer = new byte[((int)Math.Min(val1: length, val2: LogTailBytes))];
             var read = stream.Read(buffer: buffer, offset: 0, count: buffer.Length);
-            var last = Encoding.UTF8.GetString(bytes: buffer, index: 0, count: read).Split(separator: '\n').Select(selector: static line => line.Trim()).LastOrDefault(predicate: static line => (line.Length > 0));
+            var last = Encoding.UTF8.GetString(bytes: buffer, count: read, index: 0).Split(separator: '\n').Select(selector: static line => line.Trim()).LastOrDefault(predicate: static line => (line.Length > 0));
 
             return ((((last is not null) && ExitLine().IsMatch(input: last)) ? last : null), readOnly, length);
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return (null, false, 0); }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return (null, false, 0); }
     }
-
     /// <summary>Reads a lane's task file, <c>.claude/scratch/&lt;lane&gt;.task</c>: <c>key: value</c> lines, of which
     /// <c>mode</c> (write or findings-only) and <c>report</c> (where a findings-only lane delivers) are read.</summary>
     private static Dictionary<string, string> ReadTask(string path) {
@@ -196,7 +166,7 @@ public static partial class LanesCommand {
 
                 if (colon > 0) { fields[line[..colon].Trim()] = line[(colon + 1)..].Trim(); }
             }
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
         return fields;
     }
     private static bool Delivered(string path) {
@@ -204,16 +174,14 @@ public static partial class LanesCommand {
             var file = new FileInfo(fileName: path);
 
             return (file.Exists && (file.Length > 0));
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) { return false; }
     }
-
     private static string BriefState(string? headBrief) {
-        var words = (headBrief ?? string.Empty).Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+        var words = (headBrief ?? string.Empty).Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
 
         if (words.Length < 2) { return "active"; }
-        return words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "done") ? "done" : (words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "blocked") ? "blocked" : "active");
+        return (words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "done") ? "done" : (words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "blocked") ? "blocked" : "active"));
     }
-
     private static async Task<LaneRow> ReadAsync(Worktree worktree, bool main, string mainRoot, string leaseRoot, string baseRef, TimeSpan stall, DateTimeOffset now, CancellationToken cancellationToken) {
         var name = System.IO.Path.GetFileName(path: worktree.Path.TrimEnd(trimChar: '/'));
         var branch = (worktree.Branch ?? "(detached)");
@@ -234,7 +202,7 @@ public static partial class LanesCommand {
         if (status.ExitCode == 0) {
             var fields = status.Stdout.Split(separator: '\0');
 
-            for (var index = 0; index < fields.Length; index++) {
+            for (var index = 0; (index < fields.Length); index++) {
                 var field = fields[index];
 
                 if (field.Length < 4) { continue; }
@@ -259,7 +227,7 @@ public static partial class LanesCommand {
         string? brief = null;
 
         if (range.ExitCode == 0) {
-            var records = range.Stdout.Split(separator: '\u001e', options: StringSplitOptions.None).Skip(count: 1).ToArray();
+            var records = range.Stdout.Split(options: StringSplitOptions.None, separator: '\u001e').Skip(count: 1).ToArray();
 
             ahead = records.Length;
             brief = records.Select(selector: static record => record.Trim()).FirstOrDefault(predicate: static record => (record.Length > 0));
@@ -306,7 +274,7 @@ public static partial class LanesCommand {
         if (mode == FindingsMode) {
             var reports = ((reportPath is { } declaredPath) ? new[] { declaredPath } : scratchRoots.SelectMany(selector: scratch => LogNames(branch: worktree.Branch, name: name).Select(selector: candidate => System.IO.Path.Combine(path1: scratch, path2: (candidate + "-findings.md")))));
 
-            report = reports.FirstOrDefault(predicate: Delivered)?.Replace(oldChar: '\\', newChar: '/');
+            report = reports.FirstOrDefault(predicate: Delivered)?.Replace(newChar: '/', oldChar: '\\');
         }
         var names = LaneNames(branch: worktree.Branch, name: name);
         // A holder or waiter that recorded its checkout belongs to the worktree at that path, whatever it is called; only
@@ -334,7 +302,6 @@ public static partial class LanesCommand {
 
         return new LaneRow(Ahead: ahead, Branch: branch, Brief: brief, CommitAt: commitAt, Error: error, Files: changed.Count, Leases: uses, LogAt: logAt, LogExit: logExit, Main: main, Mode: mode, Name: name, Path: worktree.Path, Report: report, State: lifecycle, Stall: stalled, Staged: staged, Subject: subject, Unstaged: unstaged, WriteAt: writeAt);
     }
-
     private static IEnumerable<string> LogNames(string? branch, string name) => new[] { name, LaneName(branch: branch) }.Where(predicate: static value => !string.IsNullOrEmpty(value: value)).Distinct(comparer: StringComparer.OrdinalIgnoreCase)!;
     /// <summary>The lane name a branch implies: its last path segment, without the worktree agent prefix.</summary>
     private static string LaneName(string? branch) {
@@ -343,7 +310,7 @@ public static partial class LanesCommand {
 
         return (tail.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree-") ? tail[9..] : tail);
     }
-    private static HashSet<string> LaneNames(string? branch, string name) => new([name, branch ?? string.Empty, LaneName(branch: branch)], comparer: StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> LaneNames(string? branch, string name) => new([name, (branch ?? string.Empty), LaneName(branch: branch)], comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reads every worktree of the repository.</summary>
     /// <param name="repository">Any worktree of the repository.</param>
@@ -357,7 +324,7 @@ public static partial class LanesCommand {
         var listing = await GitAsync(repository, cancellationToken, "worktree", "list", "--porcelain", "-z").ConfigureAwait(continueOnCapturedContext: false);
 
         if (listing.ExitCode != 0) { throw new InvalidOperationException(message: $"{CliPaths.ToDisplay(fullPath: System.IO.Path.GetFullPath(path: repository))} is not a git worktree."); }
-        var worktrees = ParseWorktrees(listing: listing.Stdout);
+        var worktrees = CliWorktree.Parse(listing: listing.Stdout);
         var mainRoot = worktrees[0].Path;
         var leases = (leaseRoot ?? System.IO.Path.Combine(path1: mainRoot, path2: ".claude", path3: "leases"));
         using var gate = new SemaphoreSlim(initialCount: 6);
@@ -370,13 +337,12 @@ public static partial class LanesCommand {
 
         return [.. rows.OrderBy(keySelector: static row => (row.Main ? 0 : 1)).ThenBy(keySelector: static row => row.Name, comparer: StringComparer.Ordinal)];
     }
-
     /// <summary>Formats a span as its largest whole unit: <c>45s</c>, <c>12m</c>, <c>3h</c> or <c>2d</c>.</summary>
     /// <param name="age">The elapsed time; negative reads as zero.</param>
     /// <returns>The short age.</returns>
     public static string Age(TimeSpan age) => ((age < TimeSpan.FromMinutes(minutes: 1))
-        ? $"{Math.Max(val1: 0, val2: (int)age.TotalSeconds)}s"
-        : ((age < TimeSpan.FromHours(hours: 1)) ? $"{(int)age.TotalMinutes}m" : ((age < TimeSpan.FromDays(days: 1)) ? $"{(int)age.TotalHours}h" : $"{(int)age.TotalDays}d")));
+        ? $"{Math.Max(val1: 0, val2: ((int)age.TotalSeconds))}s"
+        : ((age < TimeSpan.FromHours(hours: 1)) ? $"{((int)age.TotalMinutes)}m" : ((age < TimeSpan.FromDays(days: 1)) ? $"{((int)age.TotalHours)}h" : $"{((int)age.TotalDays)}d")));
 
     private static string AgeOf(DateTimeOffset? time, DateTimeOffset now) => ((time is null) ? "-" : Age(age: (now - time.Value)));
     private static string Shorten(string text, int length) => ((text.Length <= length) ? text : (text[..(length - 1)] + "…"));
@@ -390,17 +356,16 @@ public static partial class LanesCommand {
     public static string Line(LaneRow row, DateTimeOffset now) {
         var line = new StringBuilder();
 
-        _ = line.Append(string.Create(CultureInfo.InvariantCulture, $"{StateText(row: row),-7} {Shorten(text: row.Name, length: 26),-26} {Shorten(text: row.Branch, length: 34),-34} ahead {((row.Ahead is null) ? "?" : row.Ahead.Value.ToString(provider: CultureInfo.InvariantCulture))} files {row.Files}"));
-        _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" commit {AgeOf(time: row.CommitAt, now: now)} \"{Shorten(text: row.Subject, length: 60)}\" write {AgeOf(time: row.WriteAt, now: now)}"));
-        if (row.LogAt is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" log {AgeOf(time: row.LogAt, now: now)}{((row.LogExit is null) ? string.Empty : (" (" + row.LogExit + ")"))}")); }
-        _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" lease {LeaseText(row: row)}"));
-        if (row.Mode != WriteMode) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" mode {row.Mode}")); }
-        if (row.Report is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" report {row.Report}")); }
-        if (row.Brief is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" brief {row.Brief}")); }
-        if (row.Error is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" error: {row.Error}")); }
+        _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $"{StateText(row: row),-7} {Shorten(text: row.Name, length: 26),-26} {Shorten(text: row.Branch, length: 34),-34} ahead {((row.Ahead is null) ? "?" : row.Ahead.Value.ToString(provider: CultureInfo.InvariantCulture))} files {row.Files}"));
+        _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" commit {AgeOf(time: row.CommitAt, now: now)} \"{Shorten(text: row.Subject, length: 60)}\" write {AgeOf(time: row.WriteAt, now: now)}"));
+        if (row.LogAt is not null) { _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" log {AgeOf(time: row.LogAt, now: now)}{((row.LogExit is null) ? string.Empty : ((" (" + row.LogExit) + ")"))}")); }
+        _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" lease {LeaseText(row: row)}"));
+        if (row.Mode != WriteMode) { _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" mode {row.Mode}")); }
+        if (row.Report is not null) { _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" report {row.Report}")); }
+        if (row.Brief is not null) { _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" brief {row.Brief}")); }
+        if (row.Error is not null) { _ = line.Append(value: string.Create(CultureInfo.InvariantCulture, $" error: {row.Error}")); }
         return line.ToString();
     }
-
     /// <summary>Lists what changed between two snapshots: a lane appearing or leaving, finishing, stalling or resuming, or its lease state changing.</summary>
     /// <param name="previous">The earlier rows.</param>
     /// <param name="current">The later rows.</param>
@@ -429,7 +394,6 @@ public static partial class LanesCommand {
         foreach (var gone in before.Values) { messages.Add(item: $"{gone.Name}: removed"); }
         return messages;
     }
-
     /// <summary>Prints one snapshot, as lines or as JSON lines (<see cref="CliJsonLines"/>): one record per lane, the row's
     /// members with the base, the reading time, the stall bound and each age in seconds beside them.</summary>
     /// <param name="repository">Any worktree of the repository.</param>
@@ -459,10 +423,11 @@ public static partial class LanesCommand {
                 records.Write(record: record);
             }
         } else {
-            foreach (var row in rows) { Console.Out.WriteLine(value: Line(row: row, now: now)); }
+            foreach (var row in rows) { Console.Out.WriteLine(value: Line(now: now, row: row)); }
         }
         return CliExit.Success;
     }
+
     private static long? AgeSeconds(DateTimeOffset? time, DateTimeOffset now) => ((time is null) ? null : (long)(now - time.Value).TotalSeconds);
 
     /// <summary>Polls the lanes and prints only what changes.</summary>
@@ -482,21 +447,20 @@ public static partial class LanesCommand {
         Console.Out.WriteLine(value: $"lanes: watching {previous.Count} worktrees every {interval.TotalSeconds:0}s for {((minutes == 0) ? "ever" : (minutes + "m"))}; stall {stall.TotalMinutes:0}m; {previous.Count(predicate: static row => (row.State == "active"))} active, {previous.Count(predicate: static row => row.Stall)} stalled");
         while ((minutes == 0) || (clock.GetElapsedTime(startingTimestamp: started) < TimeSpan.FromMinutes(minutes: minutes))) {
             try {
-                await Task.Delay(delay: interval, timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                await Task.Delay(cancellationToken: cancellationToken, delay: interval, timeProvider: clock).ConfigureAwait(continueOnCapturedContext: false);
             } catch (OperationCanceledException) { return CliExit.Success; }
             try {
                 var now = clock.GetUtcNow();
                 var current = await SnapshotAsync(baseRef: baseRef, cancellationToken: cancellationToken, leaseRoot: leaseRoot, now: now, repository: repository, stall: stall).ConfigureAwait(continueOnCapturedContext: false);
 
-                foreach (var message in Changes(previous: previous, current: current, now: now)) { Console.Out.WriteLine(value: $"{clock.GetLocalNow():HH:mm:ss} {message}"); }
+                foreach (var message in Changes(current: current, now: now, previous: previous)) { Console.Out.WriteLine(value: $"{clock.GetLocalNow():HH:mm:ss} {message}"); }
                 previous = current;
-            } catch (OperationCanceledException) { return CliExit.Success; } catch (Exception error) when (error is InvalidOperationException or TimeoutException) {
+            } catch (OperationCanceledException) { return CliExit.Success; } catch (Exception error) when ((error is InvalidOperationException or TimeoutException)) {
                 Console.Error.WriteLine(value: $"puck {Verb}: poll failed: {error.Message}");
             }
         }
         return CliExit.Success;
     }
-
     /// <summary>Creates the lanes command.</summary>
     /// <param name="clock">The CLI clock.</param>
     /// <returns>The command.</returns>
@@ -556,7 +520,7 @@ public static partial class LanesCommand {
 
             if (result.GetValue(option: baseOption) is { Length: > 0 } given) {
                 baseRef = given;
-            } else if (!CliGit.TryResolveIntegrationBranch(repository: ".", branch: out baseRef)) {
+            } else if (!CliGit.TryResolveIntegrationBranch(branch: out baseRef, repository: ".")) {
                 return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--base", why: "has no default: the main checkout holds no branch; pass the integration branch."));
             }
             if (!CliGit.TryResolveCommit(repository: ".", resolved: out _, revision: baseRef)) {

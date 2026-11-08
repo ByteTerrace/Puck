@@ -3893,8 +3893,8 @@ unknown name lists the registered migrations; the registry is empty between
 reshapes, because a migration lands with the reshape it serves and is deleted
 once it has run.
 
-Each source is written by staging its rewrite in a sibling `.migrate-tmp` file
-and moving that over the destination, so an interrupted run leaves every source
+Each source is written by staging its rewrite in a uniquely named sibling temporary,
+flushing it to disk and publishing it through `AtomicFile`, so an interrupted run leaves every source
 either as it was or fully migrated—never truncated, which matters because a
 source that does not parse would refuse every later run. The one thing that is
 not atomic is the *set* of files: if a move fails after earlier moves have

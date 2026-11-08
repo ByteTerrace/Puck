@@ -10,6 +10,20 @@ namespace Puck.Abstractions;
 /// every platform, on purpose, because it is a name and not a file-system path.</para>
 /// </summary>
 public static class PuckPaths {
+    /// <summary>Tests lexical containment after resolving full paths, including the root itself. This does not
+    /// resolve symbolic links; callers requiring physical confinement use <c>ConfinedDirectory</c>.</summary>
+    /// <param name="root">The containing directory.</param>
+    /// <param name="path">The candidate file or directory.</param>
+    /// <returns>Whether the candidate is the root or a descendant, under the host's path comparison.</returns>
+    public static bool IsWithin(string root, string path) {
+        root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: root));
+        path = Path.GetFullPath(path: path);
+        var prefix = (Path.EndsInDirectorySeparator(path: root) ? root : (root + Path.DirectorySeparatorChar));
+
+        return (string.Equals(a: root, b: Path.TrimEndingDirectorySeparator(path: path), comparisonType: Comparison) ||
+            path.StartsWith(value: prefix, comparisonType: Comparison));
+    }
+
     /// <summary>Gets whether this platform's file system ignores case in a path. <see langword="true"/> on Windows,
     /// <see langword="false"/> everywhere else.</summary>
     public static bool FoldsCase { get; } = OperatingSystem.IsWindows();

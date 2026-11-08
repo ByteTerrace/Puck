@@ -25,11 +25,6 @@ public static class CompareCommand {
 
     // The one target every host builds and the comparison holds across hosts.
     private const string Extension = ".spv";
-
-    // Directories that hold build output copies, published payloads, tooling or history rather than the bytecode the
-    // build writes beside its sources.
-    private static readonly string[] Skipped = ["artifacts", "bin", "obj", ".git", ".tmp", "node_modules"];
-
     private const string Verb = "shaders compare";
 
     private static bool IsSpirv(string path) => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: Extension);
@@ -43,7 +38,7 @@ public static class CompareCommand {
 
         while (pending.TryPop(result: out var directory)) {
             foreach (var child in Directory.EnumerateDirectories(path: directory)) {
-                if (!Skipped.Contains(value: Path.GetFileName(path: child), comparer: StringComparer.OrdinalIgnoreCase)) {
+                if (!CliTreeFiles.SkippedDirectories.Contains(item: Path.GetFileName(path: child))) {
                     pending.Push(item: child);
                 }
             }

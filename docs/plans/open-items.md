@@ -1958,7 +1958,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `docs/reference/cli.md`'s `puck gate` section with it.
 - Recursive `Directory.Delete` remains in the assemblies the browser payload
   links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
-  (`Puck.Hosting`) and `WorldStaging` (`Puck.World.Transpiler`, twice). Route them
+  (`Puck.Hosting`). Route them
   through `ConfinedDirectory.RemoveTree` by referencing `Puck.Confinement` from
   `Puck.Abstractions`, after one `browser.yml` AOT publish shows the payload still
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`

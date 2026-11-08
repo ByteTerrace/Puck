@@ -26,7 +26,6 @@ public static class CheckoutContent {
     /// <param name="Path">The path, forward-slashed and relative to the checkout.</param>
     /// <param name="Content">The SHA-256 of the bytes on disk, or <c>absent</c> for a deleted file.</param>
     public sealed record Change(string Entry, string Path, string Content);
-
     /// <summary>What a checkout holds under a set of roots.</summary>
     /// <param name="Committed">The raw <c>git ls-tree -z HEAD -- roots</c> listing.</param>
     /// <param name="Changes">The changed paths, ordered by entry.</param>
@@ -42,7 +41,7 @@ public static class CheckoutContent {
                 hash.AppendData(data: Encoding.UTF8.GetBytes(s: $"{text}\0"));
 
             Append(text: root);
-            foreach (var line in Committed.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+            foreach (var line in Committed.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0')) {
                 var tab = line.IndexOf(value: '\t');
 
                 if ((tab >= 0) && (line[(tab + 1)..] == root)) { Append(text: line); }
@@ -54,15 +53,6 @@ public static class CheckoutContent {
         }
     }
 
-    // A git working tree's top directory holds a .git directory, or a .git file in a linked worktree.
-    private static bool HasOwnGitEntry(string repositoryRoot) {
-        var entry = Path.Combine(
-            path1: repositoryRoot,
-            path2: ".git"
-        );
-
-        return (Directory.Exists(path: entry) || File.Exists(path: entry));
-    }
     // The files under the roots that the tree's own ignore rules keep, as git judges them: an archive carries its
     // .gitignore files, so a throwaway empty repository pointed at the tree lists exactly what a checkout of it would
     // not ignore. A build that writes ignored output beside its sources (compiled shaders) then changes no input. Null
@@ -82,7 +72,7 @@ public static class CheckoutContent {
                 return null;
             }
 
-            return listed.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries).ToHashSet(comparer: StringComparer.Ordinal);
+            return listed.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').ToHashSet(comparer: StringComparer.Ordinal);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
         } finally {
@@ -192,7 +182,7 @@ public static class CheckoutContent {
 
         // A tree with no .git entry of its own (a git archive extraction) would make git resolve the enclosing
         // repository, whose HEAD and status say nothing about this tree's files, so such a tree is read from its disk.
-        if (!HasOwnGitEntry(repositoryRoot: repositoryRoot)) {
+        if (!CliGit.HasOwnGitEntry(repositoryRoot: repositoryRoot)) {
             return TryReadDisk(reason: out reason, repositoryRoot: repositoryRoot, roots: roots, snapshot: out snapshot);
         }
         if (!TryGit(
