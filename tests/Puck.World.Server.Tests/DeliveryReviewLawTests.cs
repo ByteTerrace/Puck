@@ -67,6 +67,7 @@ public sealed class DeliveryReviewLawTests {
         Assert.True(fixture.Server.DrainAdministrative());
         Assert.Equal(0UL, fixture.Server.CompletedTick);
         Assert.Equal(11L, sink.Read("hand", "pub"));
+        fixture.Step();
         Assert.Equal(11L, sink.Read("hand", "pub"));
     }
 
@@ -147,9 +148,9 @@ public sealed class DeliveryReviewLawTests {
         }
         var zero = Run(policy, false);
         var one = Run(policy, true);
-        Assert.All(zero.Metadata.Concat(one.Metadata), Assert.True);
         Assert.Equal(zero.Versions, one.Versions);
         Assert.Equal(zero.Quiet, one.Quiet);
+        Assert.All(zero.Metadata.Concat(one.Metadata), Assert.True);
         Assert.All(one.Quiet, version => Assert.Equal(one.Versions[^1], version));
     }
 

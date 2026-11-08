@@ -21,7 +21,7 @@ internal sealed record WorldRecipientImageContent(StateCell[] Cells, WorldObserv
 /// <summary>World-owned, content-interned row images. Compositions are shared by the set of policies admitting the
 /// reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
 public sealed class WorldDisclosureImages {
-    private sealed record Entry(ulong Version, ulong Dependencies, long Tick, WorldRecipientImage Image, int[] Keys);
+    private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     private StateArena? m_arena;
     private long m_policyRevision = -1;
     private StateVisibility[] m_policies = [];
@@ -31,7 +31,8 @@ public sealed class WorldDisclosureImages {
     private readonly Dictionary<ContentPin, WeakReference<WorldRecipientImage>> m_content = [];
     private readonly Dictionary<string, (WorldDefinition Source, ContentPin[] Rows, WorldDefinition Disclosed, ContentPin Identity)> m_definitions = [];
     private ArenaChangedKeys? m_changes;
-    private long m_tick;
+    private StateArena? m_windowArena;
+    private ulong[] m_windowVersions = [];
     private WorldDefinition? m_presentedSource;
     private IReadOnlySet<string> m_presented = new HashSet<string>();
     internal IReadOnlySet<string> Presented(WorldDefinition source) {
@@ -50,11 +51,12 @@ public sealed class WorldDisclosureImages {
     public long Skipped { get; private set; }
     /// <summary>Starts the world's next disclosure window. The carrier accumulates its committed writes.</summary>
     public void BeginTick(ArenaChangedKeys changes) {
-        m_changes = changes; m_tick++; Compositions = 0; ComposedBytes = 0; Skipped = 0;
-        // Only images still current at the boundary can use the new window's key proof. A throttled stream may
-        // have missed a readable write in the window whose keys its owner just cleared.
-        foreach (var (key, entry) in m_rows.ToArray()) {
-            if (entry.Version == m_arena!.RowVersion(key.Row)) { m_rows[key] = entry with { Tick = m_tick }; }
+        m_changes = changes; m_windowArena = m_arena; Compositions = 0; ComposedBytes = 0; Skipped = 0;
+        // Capture each row once, independently of audience count. Only an image at least this current is covered
+        // by the new window's key proof; a throttled stream may have missed a write whose keys were just cleared.
+        if (m_windowArena is { } arena) {
+            if (m_windowVersions.Length != arena.Rows.Count) { m_windowVersions = new ulong[arena.Rows.Count]; }
+            for (var row = 0; row < m_windowVersions.Length; row++) { m_windowVersions[row] = arena.RowVersion(row); }
         }
         foreach (var pin in m_content.Where(pair => !pair.Value.TryGetTarget(out _)).Select(pair => pair.Key).ToArray()) { m_content.Remove(pin); }
     }
@@ -124,11 +126,12 @@ public sealed class WorldDisclosureImages {
         foreach (var dependency in m_dependencies[row]) { dependencies = checked(dependencies + arena.RowVersion(dependency)); }
         var key = (row, audience);
         if (m_rows.TryGetValue(key, out var entry) && entry.Dependencies == dependencies) {
-            if (entry.Version == version) { m_rows[key] = entry with { Tick = m_tick }; return entry.Image; }
-            if (entry.Tick == m_tick && m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
+            if (entry.Version == version) { return entry.Image; }
+            if (ReferenceEquals(arena, m_windowArena) && entry.Version >= m_windowVersions[row] &&
+                m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
                 !arena.ChangedKeys.Overlaps(row, entry.Keys)) {
                 Skipped++;
-                m_rows[key] = entry with { Version = version, Tick = m_tick };
+                m_rows[key] = entry with { Version = version };
                 return entry.Image;
             }
         }
@@ -147,7 +150,7 @@ public sealed class WorldDisclosureImages {
             m_content[pin] = new WeakReference<WorldRecipientImage>(image);
         }
         Compositions++; ComposedBytes += bytes.Length;
-        m_rows[key] = new Entry(version, dependencies, m_tick, image,
+        m_rows[key] = new Entry(version, dependencies, image,
             cells.Select(cell => arena.Keys.TryResolve(cell.Key, out var interned) ? interned.Ordinal : -1).ToArray());
         return image;
     }
