@@ -44,7 +44,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The confirm command (Gamepad South / Keyboard Enter, press edge) — promotes the pending player owning
     /// the pressing device.</summary>
     public const string ConfirmCommand = Puck.World.Client.PlayerCommandNames.ConfirmCommand;
-    /// <summary>The device-cycle command (Gamepad Start, press edge) — rotates the pressing device to the next slot.</summary>
+    /// <summary>The device-cycle command (press edge) — rotates the pressing device to the next slot.</summary>
     public const string CycleCommand = Puck.World.Client.PlayerCommandNames.CycleCommand;
     /// <summary>The free-orbit Axis2D look command. The Moth basis binds the right stick to <see cref="LookSteerCommand"/>
     /// instead; authors retain this command when camera-only orbit is desired.</summary>
