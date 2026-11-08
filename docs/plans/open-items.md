@@ -707,8 +707,23 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   (`puck mesh audit`), not by byte equality with today's per-backend products
   (AGENTS.md rule 4). The latest native forest legs have different aggregate
   triangle counts, so source equality alone does not show a halved cold cost.
-- [high] The cold bake sits at the one-minute bar on Direct3D 12 and just past
-  it on Vulkan (quiet paired `bench startup --bake`, paused lockstep). Its wall
+- [high] The cold bake sits at the one-minute bar on both backends (quiet paired
+  `bench startup --bake`, paused lockstep), and it is CPU-bound on both, not
+  GPU-bound: the GPU work measures 3 to 4 s of a 60 s bake, and a third to a half
+  of the bake's takes find no lattice to dispatch while hundreds of groups wait
+  on admission (the queue holds a round of every worker's stages,
+  `SdfMeshPathBake.Backlogged`) or on the memory account. The done line's
+  `per-take` figures count groups (waiting for a dispatch, in flight, on the
+  workers), not milliseconds, and `gpu-work`'s low occupancy is GPU time over
+  wall time with a job in flight, which says the GPU is idle, not slow. Vulkan
+  was the further over the bar because about two runs in five lost the device
+  for 7 to 15 s mid-bake: one cause is fixed (a raster part skipped onto stale
+  hits, the hazard in [kernels](../../.claude/skills/rendering/references/kernels.md#the-frame)),
+  and a second loss in the glass passes stays open under
+  [GPU robustness](#vulkan-regressions-and-gpu-robustness);
+  clean Vulkan bakes ran 59 to 66 s beside Direct3D 12's 59 to 63 s in the same
+  quiet windows, with Vulkan presenting more frames while baking and its stage
+  totals a little higher. Its wall
   time no longer follows the worker stages: a 38% cut in summed `land` worker
   time moved wall time within noise. A sampled thread-time timeline finds
   occupied bake workers across the interval, overlapping preparation,
@@ -751,7 +766,8 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   and after an upload), so a job completing mid-frame waits for the next
   frame: moving the pump to a waiter on the slots' fences needs A2's
   thread-safe submission ([graphics plan](graphics-architecture.md#a1-and-a2-portal-sight-and-direct3d-12-submission)),
-  and pays only once the CPU half stops bounding the bake.
+  and pays only once the CPU half stops bounding the bake: on both backends the
+  pumps (about 30 a second while baking) outpace what the bake has ready to take.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB
   within its first minute, and its allocation is a cost on the frame as well as
   on memory (the frame runs several times its budget with hundreds of
@@ -3003,16 +3019,29 @@ failing case is argued from source, not run):
   `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
   a discarded recording that grew history leaves it uninitialized.
 
-- [medium] The bake's output differs by backend and, on Vulkan, from run to
-  run. On one tree, from empty stores, Direct3D 12 bakes the `world` residency
-  to identical sample, triangle and refine-sample counts on repeat, while two
-  Vulkan bakes differ from each other and from Direct3D 12 by a small fraction
-  of each count. The
-  refine and slab counts move between Vulkan runs, so a refinement decision
-  there depends on something besides the field (a readback's order or timing,
-  or a float reduction's); find it with the two runs' `[sdf.mesh-bake] slow`
-  and per-group counts. A bake whose geometry depends on the backend or the
-  run is a defect.
+- [high] A Vulkan cold bake of the debug world can still lose the device once:
+  a page fault (`read invalid`, a 1 MiB-aligned address) with the queue's
+  checkpoints at `started 'session$24$24/sdf.world$glass-shade'`, `finished
+  every pass before 'session$24$24/sdf.world$glass'`, on the first frame that
+  5×3 nested session view drew a glass draw (glass draws 0 to 1, three draws,
+  a 16 MiB mesh region). One of four runs after the stale-target fix; Direct3D
+  12 never loses it, consistent with another read past a buffer that its
+  bounded views answer with zero (the hazard in
+  [hazards](../development/hazards.md#silent-invariants)). Every loss so far
+  was in a tiny nested session view's glass passes. Next: a run with the
+  glass raster's and glass shading's reads bounded by their buffers' lengths
+  under GPU-assisted validation until a run hits it, or the views' extents and
+  each bound buffer's size logged per recording (a scratch diagnostic did this)
+  beside the checkpoints.
+- [medium] The bake's output differs by backend. On one tree, from empty
+  stores, both backends bake the `world` residency to identical sample and
+  triangle counts on repeat, but Vulkan's differ from Direct3D 12's by a small
+  fraction of each count. Vulkan runs that differed from each other were the
+  runs that lost the device mid-bake (their abandoned lattices are sampled and
+  counted again, while their triangle counts matched the clean runs'); the
+  stale-target loss is fixed. Find the backend difference with the two
+  backends' `[sdf.mesh-bake] slow` and per-group counts. A bake whose geometry
+  depends on the backend is a defect.
 
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame and the pixel-pass gap at locked clocks.

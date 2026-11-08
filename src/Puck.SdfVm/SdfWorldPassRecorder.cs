@@ -129,6 +129,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // whether that instance's exit layer has too: a layer drawn in no frame of this graph has no contents.
     private readonly bool[] m_targetsWritten = [];
     private readonly bool[] m_exitsWritten = [];
+    // Whether each instance's target, and a cascade's exit layer, last recorded a frame holding none of the part's draws,
+    // so it holds that recording's clear and no hit a later frame's draw records could misname (PartDrawCount).
+    private readonly bool[] m_targetsClear = [];
+    private readonly bool[] m_exitsClear = [];
+    // What the latest recording writes into its target instance's layers (null for a layer it leaves), which the
+    // instance holds once that recording is submitted (Submitted): an abandoned recording changes no target.
+    private (int Index, bool? Depth, bool? Exit)? m_recordedClear;
 
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
@@ -287,6 +294,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_framebuffers = new IGpuFramebuffer[m_meshTargets.Count];
             m_targetsWritten = new bool[m_meshTargets.Count];
             m_exitsWritten = new bool[m_meshTargets.Count];
+            m_targetsClear = new bool[m_meshTargets.Count];
+            m_exitsClear = new bool[m_meshTargets.Count];
 
             for (var index = 0; (index < m_framebuffers.Length); index++) {
                 m_framebuffers[index] = (IsShadowCascade
@@ -364,8 +373,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The interface every compute part's pass set is laid out by.
     private static ShaderInterfaceLayout PassLayout => SdfWorldInterfaces.WorldLayout;
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
-    private bool TargetsWritten => (Array.TrueForAll(array: m_targetsWritten, match: static written => written) &&
-        (!IsShadowCascade || Array.TrueForAll(array: m_exitsWritten, match: static written => written)));
+    // The draws the part rasterizes: the glass draws for the glass pass, the opaque ones for the mesh pass and the cascades.
+    private uint PartDrawCount(SdfWorldTables tables) => (IsGlass ? tables.GlassDrawCount : tables.OpaqueDrawCount);
+    // Whether a frame holding none of the part's draws may skip: every target instance (and a cascade's every exit layer)
+    // already holds the clear such a frame records. A target that last drew hits keeps them when its part skips, and a
+    // reader of a hit (the glass and surface passes read draw and triangle) would name them against draw records that no
+    // longer hold their meshes.
+    private bool TargetsHoldClear => (Array.TrueForAll(array: m_targetsClear, match: static clear => clear) &&
+        (!IsShadowCascade || Array.TrueForAll(array: m_exitsClear, match: static clear => clear)));
     // Whether every layer of the target instance a recording binds has been drawn in this graph.
     private bool LayersWritten(IGpuImage? target) {
         for (var index = 0; (index < m_meshTargets.Count); index++) {
@@ -405,23 +420,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Leave(view: m_view);
     }
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mesh part
-    // a frame that draws no mesh, and a shadow cascade a frame with no draw or no cascade of its own. A frame that draws no
-    // mesh still records while an instance of the part's target has never been written, as before the first bake lands:
-    // its render pass clears the target the surface pass samples, which would otherwise hold no contents at all. No part
-    // walks the field: the bake samples it as the residency's background GPU work (SdfMeshBakeGpuWork).
+    // a frame that draws no opaque mesh, the glass part one with no glass draw, and a shadow cascade a frame with no draw
+    // or no cascade of its own. A raster part with no draws still records until every instance of its target holds the
+    // clear such a frame records (TargetsHoldClear): before the first bake lands, and after a frame that drew, whose hits a
+    // skipped frame would leave for the surface and glass passes to read. No part walks the field: the bake samples it as
+    // the residency's background GPU work (SdfMeshBakeGpuWork).
     public bool Skips(in FrameContext context) {
         switch (m_part) {
-            case SdfWorldPackage.Parts.Mesh: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
-                    return ((m_view.Residency.Staged(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
-                }
-            // The glass pass skips a frame with no glass draw once its target holds a clear; the clear and the shading
-            // pass never skip, since the shading pass writes the lit image every pass after it reads.
+            // The clear and the glass shading pass never skip: the shading pass writes the lit image every pass after it
+            // reads.
+            case SdfWorldPackage.Parts.Mesh:
             case SdfWorldPackage.Parts.Glass: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return ((m_view.Residency.Staged(context: in context).GlassDrawCount == 0) && TargetsWritten);
+                    return ((PartDrawCount(tables: m_view.Residency.Staged(context: in context)) == 0) && TargetsHoldClear);
                 }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
@@ -444,7 +456,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     var tables = m_view.Residency.Staged(context: in context);
                     var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                    return ((cascades.Count == 0) || ((tables.OpaqueDrawCount == 0) && TargetsWritten) ||
+                    return ((cascades.Count == 0) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear) ||
                         ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
                 }
             default:
@@ -463,6 +475,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
     }
     public void Submitted() {
+        if (m_recordedClear is { } recorded) {
+            if (recorded.Depth is { } depth) { m_targetsClear[recorded.Index] = depth; }
+            if (recorded.Exit is { } exit) { m_exitsClear[recorded.Index] = exit; }
+            m_recordedClear = null;
+        }
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_owner.SubmittedFar(instance: m_context.Instance);
         }
@@ -472,6 +489,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+        m_recordedClear = null;
         Follow();
 
         var residency = m_view.Residency;
@@ -847,6 +865,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 entryLateFramebuffer = m_entryLateFramebuffers.Length > 0 ? m_entryLateFramebuffers[index] : lateFramebuffer;
                 m_targetsWritten[index] |= drawsDepth;
                 m_exitsWritten[index] |= (IsShadowCascade && drawsExit);
+                m_recordedClear = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
                 if (HasShadowOptical) { shadowGlassFramebuffer = m_shadowGlassFramebuffers[index]; }
             }
         }
