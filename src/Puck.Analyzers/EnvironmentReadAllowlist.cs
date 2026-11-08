@@ -11,7 +11,7 @@ public static class EnvironmentReadAllowlist {
     // The puck verb assemblies that read a variable, each named: CliGitHub in Puck.Cli.Core serves every CI-facing verb,
     // and a verb assembly reads a variable of its own only where it names one.
     private static readonly string[] CliCore = ["Puck.Cli.Core"];
-    private static readonly string[] CliCoreAndRelease = ["Puck.Cli.Core", "Puck.Cli.Release"];
+    private static readonly string[] CliCoreAndRelease = ["Puck.Cli.Core", "Puck.Cli.Release", "Puck.Cli.Azure"];
     // The identity team's file-based bootstrap app compiles as its own program and carries no analyzer; its reads are
     // listed so the list stays the whole inventory.
     private static readonly string[] CliCoreAndBootstrap = ["Puck.Cli.Core", "bootstrap"];

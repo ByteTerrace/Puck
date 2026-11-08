@@ -1133,31 +1133,15 @@ retirement.
 
 ### Provider independence
 
-Owner: delivery lane · medium · Next: the CLI's Azure verbs. AGENTS.md's
+Owner: delivery lane · medium · Next: player storage identity. AGENTS.md's
 "Puck is provider-independent" ruling: Azure and Entra are one replaceable
 implementation behind Puck's own abstractions. A provider project declares
 `<PuckProvider>`; the architecture gate (PUCKARCH009, `PuckArchitectureGate`'s
 `CheckProviders`) refuses a provider project or a provider's SDK assemblies
 (`PuckArchitectureProviderAssemblies` in `build/Architecture.props`) in any
-other ranked project's closure. Terminal kinds are exempt, and that exemption
-is what the first item below narrows.
+other project's closure. Only tests compose providers by reference; hosts and
+tools select installed contributions.
 
-- [high] The CLI's Azure deployment verbs live in the provider-neutral
-  `Puck.Cli.Release` (`src/Puck.Cli.Release/Azure/`, namespace `Puck.Cli.Azure`),
-  which therefore references `Puck.Storage.Azure` and the Azure SDK. The generic
-  `puck world release` verbs call them directly
-  (`src/Puck.Cli.Release/Automation/WorldReleaseCommand.cs`: `AzureCommand`
-  calls for status, finalize, resume, deploy, rollback, capture and restore), and
-  `OfficialWorldDocumentScanner.RootDocumentName` reads
-  `AzureCommand.HostedWorldName`. Abstraction: a release host, the driver
-  `WorldReleaseCoordinator`'s runtime results already come from; move the Azure
-  verbs into a `Puck.Cli.Azure` provider project selected through it, then drop
-  the gate's Tool exemption so only tests compose providers by reference. The
-  other Tool edge is `puck embed`: `Puck.Cli.Worlds`' `EmbedCommand` builds an
-  `AzureOpenAiEmbeddingGeneratorFactory` generator directly, so the CLI
-  references `Puck.Embeddings.Azure`; it should select an embedding provider
-  type (`WorldExtensionEmbeddingProviderType`) from installed extensions as a
-  World host does.
 - [medium] Player storage identity is an authored user id
   (`storage.userId` / `--user-id`, `ExplicitOverridePlayerStorageIdentityResolver`),
   which today is an Entra `oid` used as the container name. Abstraction: the

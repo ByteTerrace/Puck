@@ -158,6 +158,14 @@ The contribution kinds, each registered by an extension method on
 | `PuckHostedService` | any | `registry.Add` | every host, started and stopped with it |
 | `HostedControl` | always `control` | `AddHostedControl` | a host with an `IControlSessionHost`; one per host |
 | `McpServicesProvider` | provider name | `registry.Add` | remote MCP, when its configuration names `services` |
+| `WorldReleaseHost` | host name | `registry.Add` | CLI release operations (`--host`), official root document selection, provider command tree |
+
+CLI deployment lives in the installed `Puck.Cli.Azure` extension, which contributes
+the `azure` release host and `puck azure` commands. `CliExtensions` composes the
+installation through the same discovery and selection above. `puck embed` selects
+`WorldExtensionEmbeddingProviderType` with `--provider` and optional `--settings`
+JSON, then binds `IWorldEmbeddingSource`; never construct a provider generator in
+the CLI. Only tests may compose providers by project reference (PUCKARCH009).
 
 A new provider (a GCP or S3 blob store for the silo and the World, say) is one optional
 extension project; a store's `ObjectStorageTarget` subtype and the `IObjectBlobStoreBackend` it names live in the
@@ -184,7 +192,7 @@ connection authentication, retirement observers and health endpoints from contri
 `type` with opaque settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle service
 consumes `IWorldHostRetirementObserver`. Metadata polling, event types and credential handling stay in
 `Puck.World.Azure`, an Optional extensions project no shipped host references.
-A provider project declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses a provider project or provider SDK assembly in any provider-neutral ranked project's closure. Neither simulation nor replay executes physical host retirement. The silo README
+A provider project declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses a provider project or provider SDK assembly in any provider-neutral project's closure except tests. Neither simulation nor replay executes physical host retirement. The silo README
 owns provider-neutral configuration; the Azure README owns Azure provider keys. Verify with
 `ExtensionModelLawTests` (`tests/Puck.World.Silo.Tests`).
 

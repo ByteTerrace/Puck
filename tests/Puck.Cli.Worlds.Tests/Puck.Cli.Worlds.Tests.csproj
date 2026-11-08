@@ -11,6 +11,7 @@
         <RootNamespace>Puck.Cli.Worlds.Tests</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="../../src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
         <!-- The world-authoring verbs. -->
         <ProjectReference Include="../../src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
         <!-- The laws that boot a real World run the repository's own Release output, so that build exists before the suite runs; nothing here links against it. -->

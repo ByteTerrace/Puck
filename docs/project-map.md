@@ -121,11 +121,11 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.World.Protocol.Tests  Puck.World.Schema.Tests
                          Puck.World.Server.Tests  Puck.World.Silo.Tests
                          Puck.World.Tests  Puck.World.Transpiler.Tests
-(Tool)                   Puck.Cli  Puck.Cli.Bench  Puck.Cli.Content
-                         Puck.Cli.Core  Puck.Cli.Format  Puck.Cli.Gate
-                         Puck.Cli.Harness  Puck.Cli.Laws  Puck.Cli.Release
-                         Puck.Cli.Runs  Puck.Cli.Shaders  Puck.Cli.Source
-                         Puck.Cli.Worktrees  Puck.Cli.Worlds
+(Tool)                   Puck.Cli  Puck.Cli.Azure  Puck.Cli.Bench
+                         Puck.Cli.Content  Puck.Cli.Core  Puck.Cli.Format
+                         Puck.Cli.Gate  Puck.Cli.Harness  Puck.Cli.Laws
+                         Puck.Cli.Release  Puck.Cli.Runs  Puck.Cli.Shaders
+                         Puck.Cli.Source  Puck.Cli.Worktrees  Puck.Cli.Worlds
                          Puck.Shaders.Generator
 (Analyzer)               Puck.Analyzers
 ```
@@ -171,7 +171,7 @@ the wrong ones.
 | `PUCKARCH006` | A resolved Puck assembly that arrives by a route other than a project reference (a raw `<Reference>`, or a package)—the route is refused before its layer is ever considered. |
 | `PUCKARCH007` | A resolved reference that declares no `<PuckKind>` at all—outside the gate's scope, so depending on it imports the freedom the gate never checked. |
 | `PUCKARCH008` | A project's compiled output references an assembly `PuckArchitectureDeniedApi` denies it, even though nothing in its declared or resolved references would have caught the edge. |
-| `PUCKARCH009` | Provider independence: a ranked project that declares no `<PuckProvider>` (or another one) holds a provider project or one of that provider's SDK assemblies (`PuckArchitectureProviderAssemblies`) in its resolved closure. Terminal kinds are exempt. |
+| `PUCKARCH009` | Provider independence: a project that declares no `<PuckProvider>` (or another one) holds a provider project or one of that provider's SDK assemblies (`PuckArchitectureProviderAssemblies`) in its resolved closure. Only Test kinds are exempt; tools select installed contributions. |
 
 ## Contracts and data
 

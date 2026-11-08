@@ -651,6 +651,18 @@ The [runtime and delivery programme](../plans/runtime-and-delivery.md#release-pa
 proposes a unified operator workflow for deployment, progress-preserving
 rollback, and explicit restore. The procedure below describes current behavior.
 
+The provider-neutral CLI discovers deployment extensions through `CliExtensions` and
+`PuckExtensionDiscovery`. `Puck.Cli.Azure` contributes the `azure` release host
+(`WorldReleaseHost`) and the `puck azure` command tree. Install it locally with
+`dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
+The artifacts workflow publishes this extension separately as `cli-azure-extension`;
+Azure jobs pass `azure: "true"` to `setup-puck`, which installs that run's artifact
+under the workspace's `extensions/`. The CLI package itself holds no Azure provider.
+`puck world release` operations accept `--host azure`; without a name they require
+exactly one installed release host. Official content scanning uses that single
+host's root document name. Offline release preparation, qualification, exercise,
+and inspection of a supplied group file require no release host.
+
 `puck azure` owns cloud orchestration. Run it from the repository root, where it
 reads the repository's artifact files; `puck azure --help` lists its sub-verbs and
 `puck azure <verb> --help` their typed options, `--commit` taking a full 40-hex

@@ -13,6 +13,7 @@
     <ItemGroup>
         <!-- The release and automation verbs. -->
         <ProjectReference Include="../../src/Puck.Cli.Release/Puck.Cli.Release.csproj" />
+        <ProjectReference Include="../../src/Puck.Cli.Azure/Puck.Cli.Azure.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- DocsWorkflowLawTests reads the GitHub Actions workflows as YAML. -->
