@@ -1682,18 +1682,10 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [low] `FixedFrameSource` is copied in at least three SdfVm tests
-  (`tests/Puck.SdfVm.Tests/SdfWorldPassesLawTests.cs:199`,
-  `SdfWorldPipelineCatalogLawTests.cs:138`, `SdfWorldResidencyBuildRefusalLawTests.cs:351`);
-  move it to `tests/Shared` with the `HeapAllocator` copies below.
 - [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
   `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
   `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing
   array. Seen by the shade-1 GPU-lifetime fix lane; unverified beyond its read.
-- [low] `HeapAllocator` is copied three times in the Vulkan tests
-  (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
-  `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
-  move it to `tests/Shared`.
 - [medium · addons] `WasmModuleDeclarations.WithCheckpointExports`
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:17`) refuses every
   table and every element/data-count section, and the World mount gate
@@ -1876,13 +1868,8 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   version. The stake is about 7 % of a long recording (go-tests), the share of
   resting bodies; a version that also covers moving bodies' unchanged
   fields would not help, since a moving body's pose changes every tick.
-- [low] Five copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
-  (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:155`,
-  `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
-  `VulkanGroupedBindingLawTests.cs:206`, `tests/Puck.World.Tests/SharedFenceLawTests.cs:350`), while `IAllocator`'s documentation names a
-  `NativeMemory`-backed implementation that `src` does not have. One shared allocator
-  serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
-  `puck scan --only clones` finds them as one `type` cluster.
+- [low] `IAllocator`'s documentation names a `NativeMemory`-backed implementation
+  that `src` does not have (the test allocators are now one, `tests/Shared/HeapAllocator.cs`).
 - Duplicates the clone scan's type and expression passes found (the
   [hazards page](../development/hazards.md#two-copies-of-one-computation) says
   how the passes work; paths under `src/` unless named). One implementation each:
