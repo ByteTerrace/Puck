@@ -24,8 +24,18 @@ common expressions do not expand exponentially when serialized.
 integer expectations cross `let`, `select`, conditional and function bindings.
 One source argument may supply float and uint views without changing either slot.
 Admission labels live parameters by their output uses, ignoring declaration order
-and dead slots; symmetric uses order their data consistently. Raw definitions
-cross the same null, type, shape and checked-arithmetic guards in `Compile`.
+and dead slots; symmetric uses order their data consistently. Each slot's label
+recomputes only the nodes that reach it. Raw definitions cross the same null,
+type, shape and checked-arithmetic guards in `Compile`.
+
+`Compile` answers a source equal in content to one admitted under the running
+code revision with that program, or the same refusal, without compiling again:
+a document change rebuilds its object graph, so the validator and presentation
+see fresh definitions of unchanged programs on every edit. The key is
+`SdfShadeProgram`'s private `SourceKey`, which deconstructs every source record
+positionally; a positional member added to a source type is written there or
+the build fails. Callers hold no shade cache of their own.
+`world.counters sdf.shade` counts requests, compiles and content reuses.
 
 The canonical SSA receives deterministic register allocation into the named
 set bounded by `MaxRegisters`. Evicted pure values are rematerialized from their

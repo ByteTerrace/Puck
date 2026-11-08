@@ -128,19 +128,23 @@ public sealed partial class WorldDocument {
         StateArena? arena = null;
 
         // A malformed declaration must be named by the validator before StateCatalog or StateArena construction
-        // can throw while preparing it. Settling can replace derived cells and clocks, so the exact settled
-        // candidate is validated again below and owns the retained compilation.
-        if (
-            installsArena &&
-            !TryValidateMutationCandidate(
-            candidate: candidate,
-            compilation: out _,
-            current: current,
-            mutation: mutation,
-            reason: out reason,
-            retainCompilation: false
-        )) {
-            return false;
+        // can throw while preparing it. Settling can replace derived cells and clocks; a settlement that replaces
+        // nothing returns the very candidate validated here, whose compilation then serves below, and any other
+        // settled candidate is validated again and owns the retained compilation.
+        WorldDefinition? validated = null;
+        WorldRuleCompilation? validatedCompilation = null;
+
+        if (installsArena) {
+            if (!TryValidateMutationCandidate(
+                candidate: candidate,
+                compilation: out validatedCompilation,
+                current: current,
+                mutation: mutation,
+                reason: out reason
+            )) {
+                return false;
+            }
+            validated = candidate;
         }
         if (
             replacesArena &&
@@ -179,7 +183,11 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out var compilation)) {
+        WorldRuleCompilation? compilation;
+
+        if (ReferenceEquals(objA: candidate, objB: validated)) {
+            compilation = validatedCompilation;
+        } else if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out compilation)) {
             return false;
         }
         if (!Host.Input.TryValidateDefinition(candidate, arena, out reason)) { return false; }
