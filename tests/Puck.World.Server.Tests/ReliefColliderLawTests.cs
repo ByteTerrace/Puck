@@ -29,6 +29,7 @@ public sealed class ReliefColliderLawTests {
                 YawDegrees: yawDegrees, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
     }
+
     private static readonly ShapeDocument[] Masses = [
         Shape(id: 0, position: Vector3.Zero, scale: new Vector3(x: 6f, y: 3f, z: 4f), type: SdfSolidPrimitive.Superellipsoid, exponent: 2f),
         Shape(id: 1, position: new Vector3(x: 5f, y: 0f, z: 0f), scale: new Vector3(value: 2f), type: SdfSolidPrimitive.Box),
@@ -67,7 +68,7 @@ public sealed class ReliefColliderLawTests {
         Assert.Equal(expected: 1L, actual: field!.Census.PlacementFieldCount);
 
         // Every witness the diagnostic projects onto the collider lies on the field provider's own relieved field.
-        var witnesses = WorldDiagnosticGeometry.SurfaceSamples(collider: collider).ToArray();
+        var witnesses = WorldDiagnosticGeometry.SurfaceSamples(collider: collider, token: TestContext.Current.CancellationToken).ToArray();
 
         Assert.NotEmpty(collection: witnesses);
         foreach (var witness in witnesses) {
@@ -76,7 +77,6 @@ public sealed class ReliefColliderLawTests {
             Assert.InRange(actual: WorldDiagnosticGeometry.SignedDistance(collider: collider, point: witness), high: 0.002, low: -0.002);
         }
     }
-
     [Fact]
     public void ABodyStandsTheSkinAboveTheReliefAndStaysWhereItStands() {
         var definition = Document(shapes: Masses);
@@ -110,7 +110,6 @@ public sealed class ReliefColliderLawTests {
 
         Assert.InRange(actual: ((double)foot), high: (reach + 0.01d), low: (reach - 0.002d));
     }
-
     [Fact]
     public void ARelievedPlaneHasNoBounds() {
         var set = WorldColliderSet.Build(definition: Document(shapes: [

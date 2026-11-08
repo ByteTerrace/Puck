@@ -139,6 +139,13 @@ held input binding with no text answer; it is not an operator reset.
 
 `world.debug-view report colliders --json` and `world.debug-view report contacts
 --json` are core commands: they run with the view off and in a headless host.
+`WorldDiagnostics.BeginReport` captures authority values and a claimed mesh scene;
+its worker never reads live server, body or renderer state. `Report` polls for the
+overlay; console requests use `TextCommandSession.HoldWhile` and its answer
+deadline (five seconds for stdin). A cutoff names `TextAnswerDeadline` and leaves
+coverage unknown; completed witnesses can be reused on a later call. Each view
+has one outstanding worker. `WorldDiagnosticGeometry.OpensOnto` uses solver
+bounds and a certified field interval before scalar reads, without gradient taps.
 Coverage is serialized once at the report root; a picked finding carries its own coverage. Unknown coverage is a result, never a clean bill of health. Headless checks
 compare the effective analytic colliders and retained support solves with the
 authored solid field (attached solids at the carrier pose the solver sampled);

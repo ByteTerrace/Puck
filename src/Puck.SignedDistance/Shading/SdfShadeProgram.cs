@@ -100,12 +100,6 @@ public sealed partial class SdfShadeProgram {
     public static bool ContainsRange(uint sliceLength, uint offset, uint length) => ((offset <= sliceLength) && (length <= (sliceLength - offset)));
     /// <summary>Reads a word only within this program's slice; a refused read yields zero.</summary>
     public uint ReadWord(uint relativeWord) => ((relativeWord < m_words.Length) ? m_words[relativeWord] : 0u);
-    /// <summary>Compiles expressions to canonical typed SSA, eliminates dead expressions, folds exact constants,
-    /// interns common expressions and prices every live instruction before exposing a program.</summary>
-    public static SdfShadeProgram Compile(SdfShadeDefinition definition) {
-        try { return new Compiler(source: definition).Compile(); }
-        catch (OverflowException) { throw new SdfShadeException("PUCK129", "Shade cost or structural arithmetic overflowed."); }
-    }
 }
 /// <summary>A typed output assignment to one phase.</summary>
 public sealed record SdfShadeBinding(SdfShadePhase Phase, string Name, SdfShadeOperand Value);

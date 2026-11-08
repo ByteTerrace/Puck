@@ -211,18 +211,45 @@ public sealed partial class SdfShadeProgram {
         // Parameter declarations are bindings, not code order. Label live slots by their uses in the output graph,
         // treating commutative edges as unordered. Data breaks only structurally indistinguishable ties, so renaming,
         // reordering or deleting an unused declaration cannot change executable code or misassociate its values.
+        // A slot's description differs from the description with every parameter anonymous only on the nodes that
+        // reach that slot's parameter, so each slot recomputes its cone and reads the shared anonymous description
+        // everywhere else: the same labels as describing the whole graph per slot, in work proportional to the cones.
         private void CanonicalizeParameters(List<(SdfShadePhase Phase, string Name, Node Value)> outputs) {
             var live = new HashSet<uint>();
             var visited = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            var users = new Dictionary<Node, List<Node>>(ReferenceEqualityComparer.Instance);
+            var slots = new Dictionary<uint, List<Node>>();
             foreach (var output in outputs) { Visit(output.Value); }
             void Visit(Node node) {
                 if (!visited.Add(node)) { return; }
-                if (node.Op == SdfShadeOp.Parameter) { live.Add(node.Immediate); }
-                foreach (var arg in node.Args) { Visit(arg); }
+                if (node.Op == SdfShadeOp.Parameter) {
+                    live.Add(node.Immediate);
+                    if (!slots.TryGetValue(node.Immediate, out var uses)) { slots.Add(node.Immediate, uses = []); }
+                    uses.Add(node);
+                }
+                foreach (var arg in node.Args) {
+                    if (!users.TryGetValue(arg, out var parents)) { users.Add(arg, parents = []); }
+                    parents.Add(node);
+                    Visit(arg);
+                }
+            }
+            var anonymous = new Dictionary<Node, string>(ReferenceEqualityComparer.Instance);
+            string Anonymous(Node node) {
+                if (anonymous.TryGetValue(node, out var found)) { return found; }
+                var args = node.Args.Select(Anonymous).ToArray();
+                if (SdfShadeOps.Get(node.Op).Commutative) { Array.Sort(args, StringComparer.Ordinal); }
+                return anonymous[node] = Key(node.Op, node.Type, node.Op == SdfShadeOp.Parameter ? 0u : node.Immediate, node.Bits, args);
             }
             var order = live.Select(slot => {
+                var cone = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+                var pending = new Stack<Node>(slots[slot]);
+                while (pending.TryPop(out var reached)) {
+                    if (!cone.Add(reached) || !users.TryGetValue(reached, out var parents)) { continue; }
+                    foreach (var parent in parents) { pending.Push(parent); }
+                }
                 var cache = new Dictionary<Node, string>(ReferenceEqualityComparer.Instance);
                 string Describe(Node node) {
+                    if (!cone.Contains(node)) { return Anonymous(node); }
                     if (cache.TryGetValue(node, out var found)) { return found; }
                     var args = node.Args.Select(Describe).ToArray();
                     if (SdfShadeOps.Get(node.Op).Commutative) { Array.Sort(args, StringComparer.Ordinal); }
@@ -245,10 +272,34 @@ public sealed partial class SdfShadeProgram {
             for (var i = 0; i < outputs.Count; i++) { var output = outputs[i]; outputs[i] = (output.Phase, output.Name, Rewrite(output.Value)); }
         }
 
+        // The node key: SHA-256 of "op:type:immediate:BITS,…(arg;…)" with each bit word as eight uppercase hex digits.
+        // Arguments are child keys, so a key's length is bounded by its arity, never by the subgraph below it.
         private static string Key(SdfShadeOp op, SdfShadeType type, uint immediate, IEnumerable<uint> bits, IEnumerable<string> args) {
-            var content = $"{(int)op}:{(int)type}:{immediate}:{string.Join(',', bits.Select(b => b.ToString("X8", CultureInfo.InvariantCulture)))}({string.Join(';', args)})";
-            return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
+            var content = KeyText ??= new System.Text.StringBuilder(capacity: 256);
+            content.Clear().Append((int)op).Append(':').Append((int)type).Append(':').Append(immediate).Append(':');
+            var first = true;
+            foreach (var word in bits) {
+                if (!first) { content.Append(','); }
+                content.Append(CultureInfo.InvariantCulture, $"{word:X8}"); first = false;
+            }
+            content.Append('(');
+            first = true;
+            foreach (var arg in args) {
+                if (!first) { content.Append(';'); }
+                content.Append(arg); first = false;
+            }
+            content.Append(')');
+            var length = System.Text.Encoding.UTF8.GetMaxByteCount(content.Length);
+            var rented = System.Buffers.ArrayPool<byte>.Shared.Rent(length);
+            try {
+                var written = 0;
+                foreach (var chunk in content.GetChunks()) { written += System.Text.Encoding.UTF8.GetBytes(chunk.Span, rented.AsSpan(written)); }
+                Span<byte> hash = stackalloc byte[32];
+                System.Security.Cryptography.SHA256.HashData(rented.AsSpan(0, written), hash);
+                return Convert.ToHexStringLower(hash);
+            } finally { System.Buffers.ArrayPool<byte>.Shared.Return(rented); }
         }
+        [ThreadStatic] private static System.Text.StringBuilder? KeyText;
 
         // Bounded named registers, with deterministic rematerialization instead of a GPU spill array. Canonical
         // values remain immutable: an evicted value is recomputed from its pure dependencies. The final stream,

@@ -152,9 +152,9 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         if (!SettlesResults) {
             // The line already published its own result at submit time, and a successful release changes nothing a
             // script reads; only a refusal is news the line's caller would otherwise never see.
-            if (report is { IsError: true } late) {
+            if ((report is { } late) && (late.IsError || hold.PublishResult)) {
                 Publish(callback: m_onResult, line: line, result: late);
-            } else if (report is null && deadlinePassed) {
+            } else if ((report is null) && deadlinePassed) {
                 Publish(callback: m_onResult, line: line, result: CommandResult.Error(output: $"[wire.hold: '{line}' still held its session when this call's answer was due; the session no longer waits for it, so inspect state before any retry]"));
             }
 
@@ -169,6 +169,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
                 : hold.Armed))
         );
     }
+
     internal void BeginSubmit() {
         m_submitting = true;
         m_heldBySubmit = null;
@@ -269,9 +270,10 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
             session: this
         );
     }
+
     /// <summary>Gets or sets the deadline by which the line this session submits next owes its caller an answer, or
     /// <see langword="null"/> when nothing bounds it, as for a piped script. A control attachment sets it for each
-    /// call; a hold armed while it is set ends when it passes (<see cref="HoldWhile(Func{bool}, Func{bool, CommandResult?})"/>).</summary>
+    /// call; a hold armed while it is set ends when it passes (<see cref="HoldWhile(Func{bool}, Func{bool, CommandResult?}, bool)"/>).</summary>
     public TextAnswerDeadline? AnswerDeadline {
         get => m_answerDeadline;
         set => m_answerDeadline = value;
@@ -296,11 +298,14 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     /// <param name="released">The release report, run once on the pump as the hold ends; its argument is
     /// <see langword="true"/> when the answer deadline ended the hold while the predicate still held. <see langword="null"/>
     /// reports nothing. A disposed session's hold ends without a report.</param>
-    public void HoldWhile(Func<bool> hold, Func<bool, CommandResult?>? released) {
+    /// <param name="publishResult">Also publishes a successful release to a session without settlement callbacks,
+    /// such as stdin, when the pending command owes its final result after the hold.</param>
+    public void HoldWhile(Func<bool> hold, Func<bool, CommandResult?>? released, bool publishResult = false) {
         ArgumentNullException.ThrowIfNull(argument: hold);
         var armed = new SessionHold(
             deadline: m_answerDeadline,
             predicate: hold,
+            publishResult: publishResult,
             released: released
         );
 
@@ -344,14 +349,18 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
 
 // One armed session hold: the line whose handler armed it and that line's own result, once the source has reported
 // the line as held rather than settled.
-internal sealed class SessionHold(Func<bool> predicate, Func<bool, CommandResult?>? released, TextAnswerDeadline? deadline) {
+internal sealed class SessionHold(Func<bool> predicate, Func<bool, CommandResult?>? released, TextAnswerDeadline? deadline, bool publishResult) {
+    public bool PublishResult { get; } = publishResult;
+
     public CommandResult Armed { get; set; }
+
     public TextAnswerDeadline? Deadline { get; } = deadline;
+
     public string? Line { get; set; }
+
     public Func<bool> Predicate { get; } = predicate;
     public Func<bool, CommandResult?>? Released { get; } = released;
 }
-
 // Process-local coordination only: the reference rides a live snapshot entry so applying that exact submission
 // releases only its originating session's read-after-write barrier.
 //
