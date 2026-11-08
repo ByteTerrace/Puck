@@ -480,6 +480,12 @@ Implementation choices for step 1:
   alone does not advance a document sequence; delivered document, state-image
   and anchor changes do.
 
+`DeliveryReviewLawTests` checks physical deltas at both tiers, administrative
+and missed-window readable writes, clock corrections without source
+observations, whole-row storage metadata, and policy-shaped replica primers.
+Its restore cases check a document replacement outside the tick, where no
+ordinary snapshot follows to repair missing observation headers.
+
 **Puck builds:** two objects where the first draft had one. The view
 ([decision 1](#1-one-capability-the-recipients-view)) composes; a
 `WorldDeliveryCursor`, owned by each delivery stream (a session sink, a

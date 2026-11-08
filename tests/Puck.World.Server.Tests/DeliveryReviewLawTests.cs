@@ -154,6 +154,27 @@ public sealed class DeliveryReviewLawTests {
         Assert.All(one.Quiet, version => Assert.Equal(one.Versions[^1], version));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReplicaRestoreCompletesItsObservationHeadersBeforeAnyFollowingTick(bool secret) {
+        using var fixture = Fixtures.FreshServer(Document(Row(hidden: HiddenCells.Count, secret: secret)));
+        var sink = new Replica();
+        using var observation = Observe(fixture, sink);
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 11, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.Equal(11L, sink.Read("hand", "pub"));
+        // Restore delivers a document outside the tick, with no ordinary snapshot following it.
+        fixture.Server.RestoreCheckpoint(checkpoint!);
+        Assert.Equal(3L, sink.Read("hand", "pub"));
+        Assert.NotNull(sink.State.Observation(0));
+        Assert.Equal(secret ? 1 : 0, sink.State.Observation(0)!.HiddenCount);
+        var sequence = sink.Versions[^1];
+        fixture.Step();
+        Assert.Equal(sequence, sink.Versions[^1]);
+    }
+
     private sealed class Replica : IClientSink {
         private WorldDefinition m_definition = WorldProjection.Undisclosed;
         public WorldDocumentStateView State { get; }
