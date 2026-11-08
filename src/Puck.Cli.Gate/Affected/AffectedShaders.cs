@@ -1,3 +1,4 @@
+using Puck.Cli.Architecture;
 using System.Xml.Linq;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Puck.Shaders;
@@ -60,22 +61,9 @@ public sealed class AffectedShaders {
 
         // The project's directory and the directory of every project its build references, transitively.
         IReadOnlyList<string> ProjectsOf(AffectedProject project) {
-            var reached = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-            var pending = new Stack<AffectedProject>(collection: [project]);
+            var reached = ArchitectureGraph.Reach(seeds: [project.Name], references: name => byName.TryGetValue(key: name, value: out var member) ? member.References : []);
 
-            while (pending.TryPop(result: out var next)) {
-                if (!reached.Add(item: next.Name)) {
-                    continue;
-                }
-
-                foreach (var reference in next.References) {
-                    if (byName.TryGetValue(key: reference, value: out var referenced)) {
-                        pending.Push(item: referenced);
-                    }
-                }
-            }
-
-            return [.. reached.Select(selector: name => byName[name].Directory).Order(comparer: StringComparer.Ordinal)];
+            return [.. reached.Where(predicate: byName.ContainsKey).Select(selector: name => byName[name].Directory).Order(comparer: StringComparer.Ordinal)];
         }
 
         string? ReadFull(string path) => tree.ReadText(path: Relative(path: path, repositoryRoot: tree.Root));

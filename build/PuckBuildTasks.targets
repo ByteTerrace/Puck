@@ -27,7 +27,8 @@
         <PuckBuildTasksNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))/</PuckBuildTasksNetFrameworkToolsDirectory>
         <PuckBuildTasksReferenceDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'ref'))/</PuckBuildTasksReferenceDirectory>
         <PuckBuildTasksSource>$(MSBuildThisFileDirectory)PuckBuildTasks.cs</PuckBuildTasksSource>
-        <_PuckBuildTasksHash>$([MSBuild]::StableStringHash('$([System.IO.File]::GetLastWriteTime($(PuckBuildTasksSource)).Ticks)|$(MSBuildVersion)|$(MSBuildToolsPath)').ToString('x8'))</_PuckBuildTasksHash>
+        <PuckArchitectureSource>$(MSBuildThisFileDirectory)ProjectArchitecture.cs</PuckArchitectureSource>
+        <_PuckBuildTasksHash>$([MSBuild]::StableStringHash('$([System.IO.File]::GetLastWriteTime($(PuckBuildTasksSource)).Ticks)|$([System.IO.File]::GetLastWriteTime($(PuckArchitectureSource)).Ticks)|$(MSBuildVersion)|$(MSBuildToolsPath)').ToString('x8'))</_PuckBuildTasksHash>
         <PuckBuildTasksAssembly>$(MSBuildThisFileDirectory)obj/build-tasks/$(_PuckBuildTasksHash)/Puck.BuildTasks.dll</PuckBuildTasksAssembly>
     </PropertyGroup>
 
@@ -48,7 +49,7 @@
         </ItemGroup>
         <MakeDir Directories="$(_PuckBuildTasksStaging)" />
         <Csc Deterministic="true" DisabledWarnings="1701;1702" NoConfig="true" NoLogo="true" NoStandardLib="true" Optimize="true"
-             OutputAssembly="$(_PuckBuildTasksStaging)Puck.BuildTasks.dll" References="@(_PuckBuildTasksReference)" Sources="$(PuckBuildTasksSource)"
+             OutputAssembly="$(_PuckBuildTasksStaging)Puck.BuildTasks.dll" References="@(_PuckBuildTasksReference)" Sources="$(PuckBuildTasksSource);$(PuckArchitectureSource)"
              TargetType="library" UseSharedCompilation="true" />
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(PuckBuildTasksAssembly)'))" />
         <Copy Condition="!Exists('$(PuckBuildTasksAssembly)')" ContinueOnError="true" DestinationFiles="$(PuckBuildTasksAssembly)" SourceFiles="$(_PuckBuildTasksStaging)Puck.BuildTasks.dll" />

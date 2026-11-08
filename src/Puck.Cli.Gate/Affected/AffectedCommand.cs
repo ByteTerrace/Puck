@@ -68,18 +68,7 @@ public static class AffectedCommand {
 
     // The projects the seeds are built from, the seeds included.
     private static HashSet<string> Closure(ArchitectureModel model, IEnumerable<string> seeds) {
-        var closure = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var pending = new Stack<string>(collection: seeds);
-
-        while (pending.TryPop(result: out var name)) {
-            if (closure.Add(item: name) && model.Projects.TryGetValue(key: name, value: out var project)) {
-                foreach (var reference in project.References) {
-                    pending.Push(item: reference);
-                }
-            }
-        }
-
-        return closure;
+        return ArchitectureGraph.Reach(seeds: seeds, references: name => model.Projects.TryGetValue(key: name, value: out var project) ? project.References : []);
     }
 
     /// <summary>Reads every canary as selection sees it: its directory, and the worlds, scripts and fixtures its legs

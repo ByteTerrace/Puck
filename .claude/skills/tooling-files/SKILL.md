@@ -7,6 +7,8 @@ description: "Maps shared repository tooling for files, paths, Git queries, proj
 
 Search by capability before adding a helper ([AGENTS.md](../../../AGENTS.md#core-rules)).
 These are the shared homes; callers keep only their domain-specific decisions.
+Build architecture, compiler identities, candidate installation and admission route to
+[tooling](../tooling/SKILL.md).
 
 | Capability | Home |
 |---|---|
