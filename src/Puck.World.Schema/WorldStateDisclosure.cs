@@ -208,8 +208,7 @@ public static class WorldStateDisclosure {
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
     /// <param name="presented">The rows a presentation reads, which cross as observations of the cells the recipient
     /// may read whether or not they declare a policy, or <see langword="null"/> for none.</param>
-    /// <param name="onlyRow">An optional single row to compose for the shared image table.</param>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null, int? onlyRow = null) {
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null) {
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
@@ -226,121 +225,124 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
-
-            if ((onlyRow is { } selected) && (rowOrdinal != selected)) { continue; }
-
-            // Which rows cross is decided by declaration, never by whether a member is restricted now.
-            if (
-                (row.Visibility is null) &&
-                !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
-                (presented?.Contains(item: row.Name.Value) != true)
-            ) {
-                continue;
+            if (ComposeRow(arena: arena, observer: ref observer, presented: (presented?.Contains(item: row.Name.Value) == true), row: row, rowOrdinal: rowOrdinal) is { } observed) {
+                result.Add(item: observed);
             }
-            if (
-                (row.Visibility is { } policy) &&
-                !observer.Allows(policy: policy)
-            ) {
-                continue;
-            }
-
-            var cells = new List<WorldObservedCell>();
-            var hidden = 0;
-            var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
-            var cursor = 0;
-
-            while (arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: rowOrdinal
-            )) {
-                if (!arena.TryRead(
-                    key: key,
-                    rowOrdinal: rowOrdinal,
-                    value: out var value
-                )) {
-                    continue;
-                }
-                if (observer.CanRead(
-                    key: key,
-                    row: row,
-                    rowOrdinal: rowOrdinal
-                )) {
-                    var behavior = arena.LiveBehavior(
-                        key: key,
-                        rowOrdinal: rowOrdinal
-                    );
-
-                    cells.Add(item: new(
-                        arena.Keys[key: key].Value,
-                        (value.Kind switch {
-                            CellKind.Bool => (value.AsBool
-                                ? 1L
-                                : 0L),
-                            CellKind.Fixed => value.AsFixed,
-                            CellKind.Int => value.AsInt,
-                            _ => 0L,
-                        }),
-                        ((value.Kind == CellKind.Text)
-                            ? value.AsText
-                            : null),
-                        arena.Observation(
-                            key: key,
-                            rowOrdinal: rowOrdinal
-                        ),
-                        Hidden: false,
-                        Vector: Vector(
-                            arena: arena,
-                            key: key,
-                            rowOrdinal: rowOrdinal,
-                            value: value
-                        ),
-                        Advance: behavior.Advance,
-                        Cycle: behavior.Cycle,
-                        Dynamics: behavior.Dynamics,
-                        Clock: (behavior.IsNone
-                            ? null
-                            : TraitClock(
-                                arena: arena,
-                                key: key,
-                                rowOrdinal: rowOrdinal
-                            ))
-                    ));
-
-                    continue;
-                }
-                if (hiddenPolicy == HiddenCells.Omit) {
-                    continue;
-                }
-
-                hidden++;
-                if (hiddenPolicy == HiddenCells.Placeholder) {
-                    cells.Add(item: new(
-                        string.Empty,
-                        0L,
-                        Hidden: true
-                    ));
-                }
-            }
-            result.Add(item: new(
-                row.Name.Value,
-                row.Kind,
-                cells,
-                // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
-                row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
-                hidden,
-                ((row.Kind == CellKind.Vector)
-                    ? row.Space
-                    : null),
-                row.Min,
-                row.Max,
-                row.Capacity
-            ));
         }
 
         return ((result.Count == 0)
             ? null
             : result
+        );
+    }
+    // One document row's observation as Compose composes it, or null when the row does not cross: it declares no policy
+    // and is not presented, or its own policy excludes the recipient. The shared image table composes one row through it.
+    internal static WorldObservedRow? ComposeRow(StateArena arena, ref Observer observer, StateRow row, int rowOrdinal, bool presented) {
+        // Which rows cross is decided by declaration, never by whether a member is restricted now.
+        if (
+            (row.Visibility is null) &&
+            !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
+            !presented
+        ) {
+            return null;
+        }
+        if (
+            (row.Visibility is { } policy) &&
+            !observer.Allows(policy: policy)
+        ) {
+            return null;
+        }
+        var cells = new List<WorldObservedCell>();
+        var hidden = 0;
+        var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
+        var cursor = 0;
+
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
+            if (!arena.TryRead(
+                key: key,
+                rowOrdinal: rowOrdinal,
+                value: out var value
+            )) {
+                continue;
+            }
+            if (observer.CanRead(
+                key: key,
+                row: row,
+                rowOrdinal: rowOrdinal
+            )) {
+                var behavior = arena.LiveBehavior(
+                    key: key,
+                    rowOrdinal: rowOrdinal
+                );
+
+                cells.Add(item: new(
+                    arena.Keys[key: key].Value,
+                    (value.Kind switch {
+                        CellKind.Bool => (value.AsBool
+                            ? 1L
+                            : 0L),
+                        CellKind.Fixed => value.AsFixed,
+                        CellKind.Int => value.AsInt,
+                        _ => 0L,
+                    }),
+                    ((value.Kind == CellKind.Text)
+                        ? value.AsText
+                        : null),
+                    arena.Observation(
+                        key: key,
+                        rowOrdinal: rowOrdinal
+                    ),
+                    Hidden: false,
+                    Vector: Vector(
+                        arena: arena,
+                        key: key,
+                        rowOrdinal: rowOrdinal,
+                        value: value
+                    ),
+                    Advance: behavior.Advance,
+                    Cycle: behavior.Cycle,
+                    Dynamics: behavior.Dynamics,
+                    Clock: (behavior.IsNone
+                        ? null
+                        : TraitClock(
+                            arena: arena,
+                            key: key,
+                            rowOrdinal: rowOrdinal
+                        ))
+                ));
+
+                continue;
+            }
+            if (hiddenPolicy == HiddenCells.Omit) {
+                continue;
+            }
+
+            hidden++;
+            if (hiddenPolicy == HiddenCells.Placeholder) {
+                cells.Add(item: new(
+                    string.Empty,
+                    0L,
+                    Hidden: true
+                ));
+            }
+        }
+        return new(
+            row.Name.Value,
+            row.Kind,
+            cells,
+            // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
+            row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
+            hidden,
+            ((row.Kind == CellKind.Vector)
+                ? row.Space
+                : null),
+            row.Min,
+            row.Max,
+            row.Capacity
         );
     }
     /// <summary>Returns the live document as one recipient may read it: every authored state row keeps its

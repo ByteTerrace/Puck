@@ -1989,7 +1989,9 @@ rows) beside each row's image and cell-free skeleton, so a tick that writes cell
 refreshes only the rows it changed. The whole definition is composed again only for
 a new source, a changed policy index, or a withheld row its disclosed placements
 were dealt or answered from; it is assembled as a document only for a delivery or a
-read. `world.budget` reports shared image storage and per-tick work to the operator,
+read. Whether a value-only delivery owes the document (`WorldDeliveryCursor.FrameMoved`)
+reads only the images of those placement-read rows, and a write that leaves a row's
+disclosed content as it was keeps the image it had. `world.budget` reports shared image storage and per-tick work to the operator,
 and `world.counters world.disclosure` its monotonic totals.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`

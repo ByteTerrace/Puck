@@ -5,6 +5,8 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshIrradiance {
     private Task? m_gpuMeterTask;
+    // The meter's lighting rows, which the next meter rewrites once this one's job has answered.
+    private Vector4[]? m_gpuMeterLightingRows;
     // The latest completed GPU reading. Exposure adapts over seconds, so a view reads its own latest row at whatever
     // position its camera now stands; only a cut (fresh) asks for a row scheduled after the view's cut.
     private GpuMeterReading? m_gpuMeter;
@@ -31,6 +33,7 @@ public sealed partial class SdfMeshIrradiance {
         int[] rows;
         long[] cuts;
         Vector4[] origins;
+        Vector4[] lighting;
         int words;
         lock (m_gate) {
             var count = frame.Views.Count;
@@ -70,6 +73,9 @@ public sealed partial class SdfMeshIrradiance {
             if (!frame.ConvergesLighting && !cut && Stopwatch.GetElapsedTime(m_gpuMeterAt) < LightingInterval) { return; }
             if (TakeSnapshot() is not { } captured) { return; }
             snapshot = captured;
+            // Rewritten in place only here, with the one meter a volume runs at a time completed (above), so no job in
+            // flight still reads the rows a new meter rewrites.
+            lighting = (m_gpuMeterLightingRows = LightingRows(snapshot.Lighting, in snapshot, snapshot.Lighting.Feedback && snapshot.Layout.Bounce, rows: m_gpuMeterLightingRows));
             gpu = client;
             words = m_volume.Length;
             origins = new Vector4[positions.Length];
@@ -87,7 +93,6 @@ public sealed partial class SdfMeshIrradiance {
         m_gpuMeterTask = ReadMeter();
         async Task ReadMeter() {
             try {
-                var lighting = LightingRows(snapshot.Lighting, in snapshot, snapshot.Lighting.Feedback && snapshot.Layout.Bounce);
                 var answer = await gpu.Meter(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion).ConfigureAwait(false);
                 // Admission checked the scene and window, and the device read the volume they stood for, so the reading
                 // stands for its positions even when the window has moved on since.

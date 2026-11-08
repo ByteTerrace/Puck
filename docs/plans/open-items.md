@@ -64,29 +64,43 @@ milestone. The owner requested its baseline and implementation plan, which
    reads apart: `host.frames` splits produce into `produce-work` and
    `produce-fence` (time blocked on submission fences) and prints the frame
    thread's allocated bytes per iteration. A headless debug World's tick
-   allocates about 53 KB and collected nothing in a 600-tick window; most of
-   it is `WorldDisclosureImages` re-imaging changed rows for each session
-   sink's `FrameMoved` (about 8.5 row compositions a tick, JSON and SHA-256
-   each), the [disclosure plan](disclosure.md)'s to narrow. A scope restore
-   that changes no capacity asks no reservation admission, whose growth hook
-   compiles every rule (`WorldRuleCompilation.RefuseReservation`); the chess
-   demo's restore tick still costs tens of milliseconds in its mutations and
-   the restore itself, and any tick that grows a reservation still pays the
-   whole compile. Windowed on the RTX 4070 (Direct3D 12, a loaded machine), at
-   spawn, the teal roof, flight B, the studio and the meadow: `produce-fence`
-   averages 0.5 to 2.8 ms (p99 5 to 16 ms) and every sampled wait is
-   `SdfWorldTables.SubmitUpload`'s wait for the previous upload (a ring of two,
-   so frame N waits for frame N-2's GPU work and whatever the queue ran after
-   it); produce on frames without a step exceeds frames with one mostly in
-   `produce-work` (9.2 against 5.5 ms at spawn), the rated work the scheduler
-   moves off step frames, not back-pressure. The frames still over 16.7 ms
-   there are gen1 collections of 15 to 16 ms started off the frame thread
-   (iterations whose frame thread allocated 16 KB), `produce-work` of 20 to 30
-   ms on frames without a step, fence waits of 10 to 16 ms, and windowed frames
-   whose frame thread allocates 4.7 to 5.0 MB in produce. Next on the CPU side:
-   a windowed thread-time trace keyed to the slow no-step frames, what the
-   queue ran after frame N-2 at a fence-wait frame (`world.gpu-timing
-   timeline`), and what allocates the 5 MB produce frames. `views` now leads the root view at every stop
+   allocates about 24 KB on the frame thread (p99 42 KB). Disclosure images are
+   shared by audience, never composed per sink: the debug world's 8.4 row
+   compositions a tick are the public rows one audience reads whole whose values
+   move every tick (the hydrology, glow, clock and watchdog rows), imaged
+   because `WorldDeliveryCursor.DeliveredRows` brings the definition identity
+   current after every delivered snapshot (the disclosure item below). Windowed
+   on the RTX 4070 (Direct3D 12) with `dotnet-trace` (gc-verbose, the GC
+   survival-and-movement keyword read against sampled allocation addresses, and
+   sampled thread time), what remains over 16.7 ms is:
+
+   - A young collection, which the frame thread starts itself (it is the only
+     thread allocating small objects at volume): about 4 to 8 ms at a still
+     stop and 9 to 22 ms in the seconds after a move. Thread suspension is under
+     0.2 ms of it; the rest is marking through the cards of a 400 MB gen2 and a
+     2.2 GB large-object heap and copying what they keep alive, at a still spawn
+     about 1.1 MB through cards. The largest survivors are the disclosure
+     definition identities and what a move builds (meshes, draws, irradiance).
+   - GPU back-pressure, seen as `produce-fence` in `SdfWorldTables.SubmitUpload`:
+     the root view's passes take 12 to 14 ms (`views` 5.8 of it) beside the
+     beacon and session views, and the irradiance's relight and meter jobs share
+     the queue (`world.counters sdf.mesh-gi` at the teal roof: about 42 ms of
+     relight and 12 ms of meter GPU time a second, the lighting recaptured about
+     nine times a second as the sky moves). A deeper upload ring would hide a
+     spike, not remove it.
+   - A step frame whose tick runs long: the tick takes 5 to 9 ms (body contact
+     solves through `FixedFieldColliderContact`'s bounds about a fifth, rule
+     evaluation about a third, snapshot delivery about a tenth). Frames without
+     a step carry the rated work (body poses and their effector surface probes in
+     `WorldSurfaceQuery.March`, nested views, screens, the far cascade), which
+     the scheduler moves off step frames without a budget; their `produce-work`
+     p99 reads 9 to 15 ms at the stops below.
+
+   Readings at the lane's head (`host.frames` over 600 to 1200 iterations after
+   bakes settled and 150 ticks, a lightly loaded machine, not a timing claim):
+   spawn 50 of 1200 iterations over 16.7 ms (p99 23.6), the teal roof 7 of 1199
+   (p99 17.2), flight B 63 of 878 (p99 27.0), the meadow 38 of 899 (p99 19.1).
+   `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
    kernel's base), then the split far cascade (1.1 to 2.2), the resolve (1.2),
@@ -415,11 +429,15 @@ landed geometry).
   - Steady frame: the landed probe blocks (`SdfMeshIrradiance.Batch`'s
     `ProbeBlock` and `LightBlock` floats) are the probe cache's own storage,
     which readers outside the gate hold whole, so recycling one needs an epoch
-    or a slab with per-entry ownership; then `SdfMeshDresser.BuildDrawTopology`
-    draw bindings and the dressed `SdfFrame` copies. A windowed gc-verbose
-    trace at the studio also names the GPU meter's `LightingRows`, allocated
-    per meter round trip (`SdfMeshIrradiance.Meter.cs`, about 3 KB a frame),
-    and, under 1 KB a frame each, `BindingBarSeatComposer.PlacedSlots`
+    or a slab with per-entry ownership; their words sit on the pinned heap
+    (`SdfMeshIrradiance.BlockWords`), so they cost a gen2 to reclaim, not a
+    young collection's promotion. The cache's table itself is replaced whole by
+    `ProbeCache.Retain`, which compacts to the least capacity that holds the kept
+    probes, and then by `Grow` as probes land again (about 7 MB of tables in 26 s
+    at spawn). Then the dressed `SdfFrame` copies. On the bake writer thread,
+    `CacheRetention.EnforceSetsCore` enumerates the store on every write (about
+    12 MB of paths and `FileInfo` in 40 s after a move). Under 1 KB a frame each,
+    `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` (an interface
     dictionary) once a slot, `BindableScalar.AuthoredValues`' iterator and
     `WorldMachineHost.State`'s strings. The dressed-pick arrays (`SdfDressedPickMap`) are immutable
@@ -1713,6 +1731,21 @@ document values bind by copying only the paths to their references
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
   lane with and without its change; the disclosure area owns it.
+- [medium · frame allocation] Every delivered snapshot brings its stream's
+  definition identity current (`WorldDeliveryCursor.DeliveredRows` calls
+  `WorldDisclosureImages.DefinitionIdentity`), so each row whose version moved
+  is imaged again for its audience every tick (export, observation, JSON,
+  SHA-256), about 21 KB of the debug world's 24 KB headless tick, though a
+  session sink reads that identity only at a definition install
+  (`DeliverDefinition`'s check that the stream already holds it) and only the
+  federation sink reads `Holds`. Resolving the identity lazily is exact only
+  while every observable change since the last delivery was delivered: true of
+  a session sink, which delivers every tick or releases its cursor, not of the
+  federation sink's sampled stream (`WorldFederationProjectionSink`'s sampler).
+  Either keep the identity eager only for a stream that reads it, or pin a lazy
+  one to an arena-wide version epoch and treat a moved epoch as not held. The
+  audience a lazy read uses must be the one delivered, so a grant change
+  between delivery and read needs the same treatment.
 - [medium · determinism · unconfirmed] Latches over pools may fire again
   after an edit: a rule's `forEach` over a pool binds `LatchKey.LeftGeneration`
   to the pool handle's generation (`RuleEvaluator`), and interaction pairs bind
