@@ -535,6 +535,15 @@ The native snapshot is independent of row serialization. A complete checkpoint i
 3. The retained undo history (`ExportUndoSnapshot`), when rule groups keep
    one. See [Rule groups and turn undo](rule-groups.md).
 
+A full snapshot, a scoped image and an undo history each restore raw column
+positions, and each passes every position through the same admission before
+writing it: a member key names an interned key, a member link and a member
+count stay inside the row's capacity, a bit column holds 0 or 1, a cell behavior
+is a defined one, text stays under the text ceiling, and a visibility passes its
+storage limits. Whether a cell's value suits its row's declaration is checked
+by the importer each door runs: the full restore's load validation, and the
+undo history's row admission.
+
 ## Scoped replay images
 
 `CaptureScope` retains selected plain document rows, their reservations, ring and
@@ -545,7 +554,8 @@ empty; growth in an unrelated row stays live. Selected keys keep their arena-loc
 identities and newly interned names remain available to unrelated live state.
 
 Validation checks the complete image against the layout it will restore before
-changing any live column. Timed, vector, host-owned and pool rows require a wider
+changing any live column: its inventory, and every position's value under the
+checkpoint admission above. Timed, vector, host-owned and pool rows require a wider
 continuation and are refused by name at capture. World replay cancellation or
 refusal ends the active drive and discards an incomplete first recording, leaving
 the runtime idle and checkpointable.

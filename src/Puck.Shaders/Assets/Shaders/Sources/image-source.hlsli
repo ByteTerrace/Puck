@@ -10,6 +10,7 @@
 #define IMAGE_SOURCE_HLSLI
 
 #include "../Shared/transfer.hlsli"
+#include "../Shared/luma.hlsli"
 
 // ImagePixelFormat codes.
 #define IMAGE_FORMAT_R8G8B8A8 1u
@@ -76,15 +77,15 @@ float4 imageSourceUnpackRgba8(uint word) {
 float3 imageSourceYuvToRgb(uint y, uint cb, uint cr, uint color) {
     uint matrixCode = (color & 0xFFu);
     uint rangeCode = ((color >> 8) & 0xFFu);
-    float kr = 0.2126;
-    float kb = 0.0722;
+    float kr = PuckBt709Kr;
+    float kb = PuckBt709Kb;
 
     if (matrixCode == IMAGE_MATRIX_BT601) {
-        kr = 0.299;
-        kb = 0.114;
+        kr = PuckBt601Kr;
+        kb = PuckBt601Kb;
     } else if (matrixCode == IMAGE_MATRIX_BT2020) {
-        kr = 0.2627;
-        kb = 0.0593;
+        kr = PuckBt2020Kr;
+        kb = PuckBt2020Kb;
     }
 
     float luma;

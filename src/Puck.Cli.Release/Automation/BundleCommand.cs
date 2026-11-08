@@ -1,7 +1,6 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Puck.Cli.Packaging;
 
 namespace Puck.Cli.Automation;
@@ -12,7 +11,7 @@ namespace Puck.Cli.Automation;
 /// </summary>
 public static class BundleCommand {
     public static int CreateManifest(string directory, string commit) {
-        ValidateCommit(commit: commit);
+        CliGit.ValidateCommit(commit: commit);
         var root = Path.GetFullPath(path: directory);
 
         if (File.Exists(path: Path.Combine(
@@ -53,7 +52,7 @@ public static class BundleCommand {
         );
     }
     public static int VerifyManifest(string directory, string commit) {
-        ValidateCommit(commit: commit);
+        CliGit.ValidateCommit(commit: commit);
         var root = Path.GetFullPath(path: directory);
         var manifestPath = Path.Combine(
             path1: root,
@@ -80,10 +79,7 @@ public static class BundleCommand {
             ));
 
             if (
-                !path.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: (root + Path.DirectorySeparatorChar)
-            ) ||
+                !Puck.Abstractions.PuckPaths.IsWithin(path: path, root: root) ||
                 !paths.Add(item: relative) ||
                 (relative == "release.json") ||
                 relative.Split('/').Any(predicate: segment => (segment is "." or ".." or ""))
@@ -116,14 +112,6 @@ public static class BundleCommand {
         Console.WriteLine(value: $"Verified {paths.Count} files for {commit}.");
         return 0;
     }
-
-    private static void ValidateCommit(string commit) {
-        if (!Regex.IsMatch(
-            input: commit,
-            pattern: "\\A[a-f0-9]{40}\\z"
-        )) { throw new ArgumentException(message: "Expected a full lowercase commit SHA."); }
-    }
-
     public static Command Create() {
         var directoryArgument = new Argument<string>(name: "directory") { Description = "The bundle directory." };
         var commitArgument = new Argument<string>(name: "commit") { Description = "The full lowercase commit SHA the bundle was built from." };

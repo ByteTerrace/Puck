@@ -37,6 +37,7 @@
 // binding, so every backend binds them alike.
 #include "overlay-common.hlsli"
 #include "overlay.interface.hlsli"
+#include "../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
 
 // Dispatches to the slot's own scalar image, the switch that stands in for an array binding (see the note above).
 float2 frameSlotDimensions(uint slot) {
@@ -197,7 +198,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         diagnosticFocus = diagnosticFocus || ((maskKind == 7u) && inside);
     }
     if (diagnosticFocus && !diagnosticProtected) {
-        float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+        float luma = dot(color, PuckRec709Luminance);
         color = lerp(luma.xxx, color, 0.2); // mute chroma, preserve luminance; never crush context to black
     }
 

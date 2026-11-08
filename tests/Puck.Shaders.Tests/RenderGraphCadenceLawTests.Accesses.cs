@@ -134,7 +134,7 @@ public sealed partial class RenderGraphCadenceLawTests {
                     SourceOffsetBytes: 0, Version: version);
                 return true;
             }
-            public void Submitted(int slot, IGpuSubmissionFence fence) => m_recorded = false;
+            public void Submitted(int slot) => m_recorded = false;
         }
     }
 }

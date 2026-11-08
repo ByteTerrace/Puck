@@ -267,7 +267,14 @@ public static class EmbedCommand {
                 continue;
             }
 
-            var written = lockFile.Write(lockPath: lockPath);
+            bool written;
+
+            try {
+                written = lockFile.Write(lockPath: lockPath);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                overallExitCode = CliExit.Refuse(verb: LockVerb, what: CliPaths.ToDisplay(fullPath: lockPath), why: $"the lock file could not be read or replaced: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+                continue;
+            }
 
             if (written) {
                 Console.WriteLine(value: $"Updated lock file '{lockPath}'.");

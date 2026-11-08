@@ -89,6 +89,7 @@ public static partial class CanaryCommand {
         if (broken) { File.Delete(path: Path.Combine(path1: payload, path2: "Puck.World.exe")); }
         _ = PublishRelease(key: key, payloadDirectory: payload, releaseDirectory: source, sequence: 2, version: StubReleaseVersion);
         var stub = Path.Combine(path1: install, path2: "Puck.Launcher.Stub.exe");
+
         WorldLaunchRequest Arguments(string version, string state) => new(Artifact: stub, Step: "canary") {
             Arguments = ["--update-config-file", Path.Combine(path1: run, path2: "update-config.json")],
             Executable = stub,
@@ -152,8 +153,8 @@ public static partial class CanaryCommand {
 
         var transcript = new CanaryTranscript(
             RunDirectory: runDirectory,
-            Stderr: [.. SplitLines(text: boot1.Stderr), .. SplitLines(text: boot2.Stderr)],
-            Stdout: [.. SplitLines(text: boot1.Stdout), .. SplitLines(text: boot2.Stdout)]
+            Stderr: [.. CliText.Lines(text: boot1.Stderr), .. CliText.Lines(text: boot2.Stderr)],
+            Stdout: [.. CliText.Lines(text: boot1.Stdout), .. CliText.Lines(text: boot2.Stdout)]
         );
 
         return new CanaryLegRun(

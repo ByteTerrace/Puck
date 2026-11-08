@@ -91,7 +91,8 @@ public sealed partial class SdfWorldTables {
         var bytes = (words * sizeof(uint));
 
         if (bytes > m_frameSampledRegion.ShadowBytes) {
-            Retire(replaced: m_frameSampledRegion.Grow(byteCount: Math.Max(val1: bytes, val2: (m_frameSampledRegion.ShadowBytes + (m_frameSampledRegion.ShadowBytes / 2)))));
+            Retire(replaced: m_frameSampledRegion.Grow(byteCount: (sizeof(uint) * GpuCapacity.Grown(current: (m_frameSampledRegion.ShadowBytes / sizeof(uint)),
+                required: words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 2))));
             m_bindingRevision++;
         }
 

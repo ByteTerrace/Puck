@@ -14,10 +14,7 @@ namespace Puck.SdfVm;
 internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     // Resolve-only values may shift common members. Compile the name-based copies once; native pass blocks retain
     // their established layout, and the one frame writer remains authoritative for common values.
-    private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: static member => (
-        Source: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)),
-        Destination: ((int)SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: member.Name)),
-        Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
+    private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.ResolveParameters);
     // The resolve's buffer inputs after the render-grid color in either mode, by the member each binds at, in port order.
     private static readonly string[] Inputs = [
         SdfWorldPackage.VisibilityRecords,
@@ -63,19 +60,10 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
             return;
         }
         m_disposed = true;
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
-            if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
-                current.Residency.Retain();
-                m_owner.Hold(residency: current.Residency);
-                m_owner.Unhold(residency: m_view.Residency);
-                m_view.Residency.Release();
-            }
-            m_view = current;
-        }
+        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
 
         m_owner.Begin(residency: residency);
@@ -83,17 +71,10 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
         var render = (Width: recording.RenderWidth, Height: recording.RenderHeight);
-        Span<byte> frameBlock = stackalloc byte[SdfFrameBlock.SizeBytes];
-
-        frameBlock.Clear();
-        SdfFrameBlock.Write(block: frameBlock, tables: tables.PassValues, frame: frame, view: index, width: render.Width, height: render.Height);
         var temporal = m_owner.TemporalOf(instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: render.Width, renderHeight: render.Height);
 
-        SdfFrameBlock.WriteTemporal(block: frameBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
-        SdfFrameBlock.WritePreviousView(block: frameBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
-        foreach (var copy in FrameCopies) {
-            frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));
-        }
+        SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
+            width: render.Width, height: render.Height, temporal: temporal, temporalEnabled: m_temporal);
         BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[((int)SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: SdfWorldPackage.UpscaleSharpness))..], value: frame.Views[index].UpscaleSharpness);
         var set = m_sets.PassSet(slot: recording.Slot);
 

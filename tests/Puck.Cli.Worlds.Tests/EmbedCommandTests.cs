@@ -231,6 +231,34 @@ public sealed class EmbedCommandTests {
         Assert.Equal(actual: probeNewCode, expected: 0);
     }
     [Fact]
+    public async Task LockRefusesInsteadOfThrowingWhenTheLockFileCannotBeReadAsync() {
+        using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-embed tests ");
+        var puckPath = Path.Combine(path1: dir.RootPath, path2: "world.puck");
+        var lockPath = Path.Combine(path1: dir.RootPath, path2: "world.embeddings.json");
+
+        await File.WriteAllTextAsync(puckPath, """
+            schema: "puck.world.definition.v1"
+            state {
+              spaces [
+                { name: "lore", dimensions: 8, model: "puck-fixture", revision: "1" }
+              ]
+              world {
+                table t space(lore) {
+                  k1 = "hello"
+                }
+              }
+            }
+            """, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(expected: 0, actual: await SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]));
+
+        // A holder that shares nothing makes the lock file unreadable to the write's comparison with its old bytes.
+        using var holder = new FileStream(path: lockPath, mode: FileMode.Open, access: FileAccess.ReadWrite, share: FileShare.None);
+        var (code, _, error) = await ConsoleCapture.RunSplitAsync(run: () => SuiteRoot.InvokeAsync(args: ["embed", "lock", puckPath]));
+
+        Assert.NotEqual(expected: 0, actual: code);
+        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "the lock file could not be read or replaced");
+    }
+    [Fact]
     public async Task DecompileRefusesJsonThatIsNotAWorldOrACartridgeAsync() {
         using var dir = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-decompile tests ");
         var settings = Path.Combine(path1: dir.RootPath, path2: "settings.json");

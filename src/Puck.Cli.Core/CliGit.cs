@@ -11,6 +11,68 @@ namespace Puck.Cli;
 /// names its own), and one that outlives its bound is killed and refused with the git command it ran.
 /// </summary>
 public static class CliGit {
+    private static readonly Lazy<bool> AcceptsNoLazyFetch = new(valueFactory: static () => (Run(repository: ".", "--no-lazy-fetch", "version").ExitCode == 0));
+    private static readonly string[] ReadOptions = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"];
+
+    /// <summary>Whether this Git supports forbidding object downloads during a local report.</summary>
+    public static bool GitAcceptsNoLazyFetch => AcceptsNoLazyFetch.Value;
+
+    /// <summary>Refuses a partial-clone report when Git cannot forbid lazy fetches.</summary>
+    public static string? LazyFetchRefusal(bool gitAcceptsNoLazyFetch, bool partialClone) => ((gitAcceptsNoLazyFetch || !partialClone)
+        ? null : "the repository is a partial clone, and this git (before 2.44) has no --no-lazy-fetch to keep the report from fetching missing objects; run it with git 2.44 or later, or from a full clone.");
+    /// <summary>Queries Git without index refreshes, hooks, maintenance or object downloads. Older Git must first
+    /// prove the repository has no promisor remote.</summary>
+    public static async Task<ChildProcessResult> ReadOnlyAsync(string repository, IEnumerable<string> arguments, CancellationToken cancellationToken = default, string? input = null, TimeSpan? timeout = null) {
+        if (!GitAcceptsNoLazyFetch) {
+            var configuration = await RunAsync(repository: repository, arguments: [.. ReadOptions, "config", "--null", "--get-regexp", @"^(extensions\.partialclone|remote\..*\.promisor)$"], cancellationToken: cancellationToken, timeout: timeout).ConfigureAwait(continueOnCapturedContext: false);
+
+            if ((configuration.ExitCode is not (0 or 1)) || !string.IsNullOrWhiteSpace(value: configuration.Stderr)) {
+                throw new InvalidOperationException(message: $"Cannot establish a local-only Git query: {configuration.Stderr.Trim()}");
+            }
+            var partialClone = configuration.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').Any(predicate: static record => {
+                var newline = record.IndexOf(value: '\n');
+                var key = ((newline < 0) ? record : record[..newline]);
+                var value = ((newline < 0) ? string.Empty : record[(newline + 1)..]);
+
+                return (key.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "extensions.partialclone") || !value.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "false"));
+            });
+
+            if (LazyFetchRefusal(gitAcceptsNoLazyFetch: false, partialClone: partialClone) is { } refusal) { throw new InvalidOperationException(message: refusal); }
+        }
+        return await RunAsync(repository: repository, arguments: [.. ReadOptions, .. (GitAcceptsNoLazyFetch ? new[] { "--no-lazy-fetch" } : []), .. arguments], cancellationToken: cancellationToken, input: input, timeout: timeout).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    /// <summary>Resolves the absolute common Git directory shared by every checkout.</summary>
+    public static async Task<string?> CommonDirectoryAsync(string repository, CancellationToken cancellationToken = default) {
+        var result = await RunAsync(repository: repository, arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var path = result.Stdout.Trim();
+
+        return (((result.ExitCode == 0) && Path.IsPathFullyQualified(path: path)) ? PuckPaths.Normalize(path: path) : null);
+    }
+    /// <summary>Whether this directory has its own Git entry, including linked worktrees.</summary>
+    public static bool HasOwnGitEntry(string repositoryRoot) => Path.Exists(path: Path.Combine(path1: repositoryRoot, path2: ".git"));
+    /// <summary>Lists tracked and untracked, unignored paths relative to the queried directory.</summary>
+    public static bool TryListFiles(string repository, out string[] paths, out string reason) {
+        var result = Run(repository, "ls-files", "-z", "--cached", "--others", "--exclude-standard");
+
+        paths = ((result.ExitCode == 0) ? result.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0') : []);
+        reason = ((result.ExitCode == 0) ? string.Empty : result.Stderr.Trim());
+        return (result.ExitCode == 0);
+    }
+    /// <summary>Resolves a full commit SHA, refusing an invalid revision or Git failure.</summary>
+    public static async Task<string> CommitAsync(string repository, string revision = "HEAD") {
+        var result = await CaptureAsync(repository: repository, arguments: ["rev-parse", "--verify", "--end-of-options", (revision + "^{commit}")]).ConfigureAwait(continueOnCapturedContext: false);
+        var commit = result.Trim();
+
+        ValidateCommit(commit: commit);
+        return commit;
+    }
+    /// <summary>Requires the full lowercase SHA used in release records.</summary>
+    public static void ValidateCommit(string commit) {
+        if ((commit.Length != 40) || !commit.All(predicate: static c => (c is >= '0' and <= '9' or >= 'a' and <= 'f'))) {
+            throw new ArgumentException(message: "Expected a full lowercase Git commit SHA.");
+        }
+    }
+
     /// <summary>How long a git call may run when the call names no bound of its own.</summary>
     public static readonly TimeSpan Bound = TimeSpan.FromMinutes(minutes: 10);
 
@@ -121,9 +183,9 @@ public static class CliGit {
     /// <param name="mainCheckout">The main checkout's absolute path, or empty when git cannot name it.</param>
     /// <returns><see langword="true"/> when resolved.</returns>
     public static bool TryResolveMainCheckout(string repository, out string mainCheckout) {
-        var common = Run(repository, "rev-parse", "--path-format=absolute", "--git-common-dir").Stdout.Trim();
+        var common = CommonDirectoryAsync(repository: repository).GetAwaiter().GetResult();
 
-        mainCheckout = (Path.IsPathFullyQualified(path: common)
+        mainCheckout = ((common is not null)
             ? (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: common)) ?? string.Empty)
             : string.Empty);
         return (mainCheckout.Length != 0);
@@ -134,7 +196,7 @@ public static class CliGit {
     /// <param name="branch">The branch's short name, or empty when the main checkout cannot be named or is detached.</param>
     /// <returns><see langword="true"/> when resolved.</returns>
     public static bool TryResolveIntegrationBranch(string repository, out string branch) {
-        branch = (TryResolveMainCheckout(repository: repository, mainCheckout: out var mainCheckout)
+        branch = (TryResolveMainCheckout(mainCheckout: out var mainCheckout, repository: repository)
             ? Run(mainCheckout, "symbolic-ref", "--short", "-q", "HEAD").Stdout.Trim()
             : string.Empty);
         return (branch.Length != 0);

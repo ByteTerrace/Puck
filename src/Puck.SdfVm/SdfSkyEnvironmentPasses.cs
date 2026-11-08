@@ -80,7 +80,6 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         if (!residency.Prepare(context: context)) { return false; }
         var tables = residency.Tables!;
 
-        tables.PollSkyEnvironment();
         // Image cadence is decided only after the runtime acquires the same reads that recording would sample.
         return (!tables.SkyEnvironmentHasImages && !tables.SkyEnvironmentOwes &&
             !tables.ScreenEmissionHasImages && !tables.ScreenEmissionOwes);

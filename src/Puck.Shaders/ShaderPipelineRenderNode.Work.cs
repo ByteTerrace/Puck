@@ -60,6 +60,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
 
         m_work.Poll();
         PollTimings();
+        RetireSignaledReadbacks();
         FoldCompletions();
     }
 

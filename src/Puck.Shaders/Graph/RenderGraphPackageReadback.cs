@@ -4,7 +4,8 @@ namespace Puck.Shaders;
 
 /// <summary>A requested byte-range copy of a buffer version a package pass just accessed. The graph records the copy,
 /// its barriers and the transfer-to-host barrier through the pass's counting recorder. The package owns the readback
-/// buffer and reads it only after the fence supplied by <see cref="IRenderGraphPackageReadback.Submitted"/> signals.</summary>
+/// buffer and reads it only once the node reports the copy's slot complete
+/// (<see cref="IRenderGraphPackageReadback.Completed"/>, through <see cref="RenderGraphSlotResults{T}"/>).</summary>
 /// <param name="Version">The buffer version bound to an input or output of this pass.</param>
 /// <param name="SourceOffsetBytes">The first source byte copied.</param>
 /// <param name="SizeBytes">The positive byte count, fitting the source range and the readback buffer's range from
@@ -28,18 +29,18 @@ public interface IRenderGraphPackageReadback {
     /// <param name="readback">The source range and destination when requested; default otherwise.</param>
     /// <returns>Whether the graph should copy the requested range.</returns>
     bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback);
-    /// <summary>Arms the latest recording's result with its submission fence. The node calls it only for a pass whose
-    /// recording drew in the frame just submitted (<see cref="RenderGraphPackageOutcome.Drew"/>); a pass that skipped,
-    /// stood or drew nothing is not called, so no recorder re-arms an earlier recording's result. A recorder must read or
-    /// discard any completed result before recording into that slot again. It must never wait for the fence merely to
-    /// pick.</summary>
+    /// <summary>Reports the latest recording submitted. The node calls it only for a pass whose recording drew in the
+    /// frame just submitted (<see cref="RenderGraphPackageOutcome.Drew"/>); a pass that skipped, stood or drew nothing is
+    /// not called, so no recorder arms an earlier recording's result. No fence is handed over: completion is the node's
+    /// to prove (<see cref="Completed"/>).</summary>
     /// <param name="slot">The submitted frame slot.</param>
-    /// <param name="fence">The reusable fence of the submission containing the copies.</param>
-    void Submitted(int slot, IGpuSubmissionFence fence);
-    /// <summary>Reports that the slot's previous submission has completed: the node has just waited its fence, before it
-    /// reuses or releases the slot. The node calls it for every readback pass of its installed graph, whether or not that
-    /// pass recorded into the slot. It is never called for a submission a device loss interrupted, since the node then
-    /// releases its recorders without waiting. The default has nothing to retire.</summary>
+    void Submitted(int slot);
+    /// <summary>Reports that the slot's previous submission has completed: the node waited its fence, either as it reuses
+    /// or releases the slot or as soon as the fence read signaled between frames, or retired the graph this recorder
+    /// belonged to once every submission of it completed. The node calls it for every readback pass, whether or not that
+    /// pass recorded into the slot, and calls it again harmlessly when it waits the same slot before reusing it; it
+    /// always precedes the next recording into the slot. It is never called for a submission a device loss interrupted,
+    /// since the node then releases its recorders without waiting. The default has nothing to retire.</summary>
     /// <param name="slot">The frame slot whose previous submission completed.</param>
     void Completed(int slot) { }
 }

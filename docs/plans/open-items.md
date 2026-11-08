@@ -41,8 +41,8 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (tooling's architecture, identity, release, lease, path, lock and deletion
-   copies; rendering's readback state machines), then its live copies as a batch, and
+   (done for tooling, physics and world contact, and rendering; the state and
+   rules audit is still open), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -192,7 +192,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   into the `Puck.Cli.Azure` extension, which `artifacts.yml` publishes as the
   `cli-azure-extension` artifact, `setup-puck` installs with `azure: "true"`,
   and `azure.yml` deploys with `puck world release deploy ... --host azure`;
-  no CI run has exercised it, so the first push is also its first test.
+  `setup-puck` also now installs the candidate CLI through the shared
+  `build/CandidateCliInstall.cs` file-based app (`dotnet run --file`), verified
+  locally on both install paths; no CI run has exercised either change, so the
+  first push is also their first test.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -1579,6 +1582,12 @@ JSON round trip in `BindLive`, then a reboot for an edit outside
 `PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
 and warm builds measured.
 
+- [high] `world.reload` cannot reload the debug world: it is refused with
+  `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
+  (`WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`); reload
+  ships the whole composed definition. Decide: a reload that sends what changed
+  (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
+  larger cap alone. Found in the lead's verification window.
 - `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
   definition by serializing and parsing it, the boot's only full serialize, so
   a warm boot's main thread pays every write path's JIT too. Copy only the
@@ -1978,7 +1987,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `docs/reference/cli.md`'s `puck gate` section with it.
 - Recursive `Directory.Delete` remains in the assemblies the browser payload
   links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
-  (`Puck.Hosting`) and `WorldStaging` (`Puck.World.Transpiler`, twice). Route them
+  (`Puck.Hosting`). Route them
   through `ConfinedDirectory.RemoveTree` by referencing `Puck.Confinement` from
   `Puck.Abstractions`, after one `browser.yml` AOT publish shows the payload still
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
@@ -2027,7 +2036,19 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    counts Windows lock violation 33). It sits in a BCL-only leaf below
    `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
    cannot replace it; whether the two contention tests should share one
-   definition is open.
+   definition is open. Two `AtomicFile.PendingWrite.Commit` hazards from the
+   confined-deletion review stay open `[low]`. The overwrite fallback
+   (`File.Replace` with a backup, `Puck.Confinement/AtomicFile.cs`, the `catch`
+   in `Commit`) is reached by Migrate, Compile, `EmbeddingLock`, Measure and the
+   `CliLease` stamp; the reviewer read it as two renames that leave no
+   destination after a crash between them (never a torn file), unverified per
+   platform, and the fix is to confirm which platforms replace non-atomically
+   and either use an atomic replace there or recover the backup on the next
+   open. `Commit(overwrite: false)` preserves a concurrent winner only where
+   `File.Move` without overwrite is itself create-only, and the reviewer
+   suspected the create-only `CliLease` stamp (`CliLease.cs`, the
+   `pending.Commit(overwrite: false)` call) depends on Unix `link()` for that
+   (unverified); a law that races two stamps on each platform settles it.
 2. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`
@@ -2129,33 +2150,23 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   unslotted light) or the probe share alone, never their product. One light-geometry
   function (direction, reach, visibility, probe share) in `sdf-light.hlsli`, read
   by both, removes the second evaluation and the drift.
-- [medium] Three per-slot readback state machines (recorded, submitted with a
-  fence, poll `IsSignaled`, read): `SdfWorldPickReadback`, the occlusion sight
-  slots (`SdfMeshOcclusion.SightSlot`, `Submitted`, `PollSight`), and
-  `SdfShadeSlots`. The first two poll the reusable slot fence, which
-  `SdfShadeSubmissions` documents as reading signaled after an abandoned
-  submission and a device loss's drain, so they can read a readback that never
-  ran. One slot-readback type in `Puck.Shaders` beside
-  `IRenderGraphPackageReadback`, completed by the node's `Completed(slot)` proof
-  rather than a fence poll, serves all three.
-- [low] Retiring a GPU object after its last reader is written five ways, each
-  with its own key: `SdfWorldTables` (upload sequence, `Retire`),
-  `SdfMeshOcclusion.m_retired` (per slot), `LeaseRetireList` (per slot, leases),
-  `ShaderPipelineRenderNode.Retirement` (`RetiredGraph`, fence and submission)
-  and `DirectXSurfaceUpload` (fence value). A fence-value retirement queue in
-  `Puck.Abstractions/Gpu` could hold them; decide the key with the next
-  lifetime change.
-- [low] The next capacity of a growing table is chosen in six places with five
-  factors: `SdfWorldTables.GrowCapacity` (half again), the frame-sampled table's
-  inline half again (`SdfWorldTables.FrameSampled.cs`), `MeshRegionGrownBytes`
-  (an eighth to a granule), `SdfMeshRegionArena.GrownCapacity`,
-  `SdfMeshOcclusion.EnsureBuffers` (power of two) and the probe scene's eighth
-  (`SdfMeshProbeGpuWork.Scene.cs`). One growth helper with the factor as a
-  parameter.
-- [low] Rec. 709 luminance weights are written as literals beside the
-  generated `SDF_LUMINANCE` (`SdfPhotometry`): `Shared/bloom-filter.hlsli`
-  (`bloomSelected`) and `Puck.Overlays/Assets/Shaders/overlay-unified.frag.hlsl`.
-  `Puck.Shaders.Generator` could emit one shared constant both layers include.
+- [low] The render node's own retirement still polls fences beside the slot
+  proof its packages use: `RetiredGraph` disposes on `Fence.IsSignaled`
+  (`ShaderPipelineRenderNode.RetireCompleted`), and the node's completions and
+  timing fold on `IsSignaled` (`FoldCompletions`, `PollTimings`). The
+  sequence-keyed queue (`GpuRetirementQueue`: `SdfWorldTables`,
+  `DirectXSurfaceUpload`) and the per-slot proof (`WaitSlot` to
+  `IRenderGraphPackageReadback.Completed`, `LeaseRetireList`) are the two
+  shapes left; key `RetiredGraph` on the node's submission count through the
+  queue, completed by `WaitSlot`, with the next lifetime change.
+- [medium · unconfirmed] A submission its batch never queued reads complete:
+  `GpuSubmissionBatch.Split`'s failure path aliases every deferred fence to an
+  owner that `AbandonIfDeferred` retires, so both `IsSignaled` and `Wait`
+  report completion (`GpuBatchedSubmissionFence`). The node's `WaitSlot` then
+  proves a slot complete whose copies never ran, and a readback reads stale
+  bytes. Whether `Split` can fail without a device loss (which releases the
+  node without a proof) was not traced; if it can, the fence needs an
+  abandoned state that `Wait` reports.
 
 Duplicates the survey left to the lanes that own their areas:
 
@@ -2184,10 +2195,9 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
    earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
    with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
-2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
-   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
-   `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
-   and `CacheRetention.EnforceOnWrite`,
+2. `WorldCompileCache.Trim`
+   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs`) repeats
+   `CacheRetention.EnforceOnWrite`,
    skipping its per-process write tally (it lists only once its own writes pass
    the bound, or a minute on) on every cache write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
@@ -2286,8 +2296,6 @@ the fixed poses and the approaches already rejected.
     volume instead, keeping the snapshot's timing.
   - `RecordCommit` records one buffer copy per probe because the source
     interleaves records; one scatter dispatch replaces them.
-  - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
-    keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
   - Full relight, selection, metering and hit-cache paths need CPU/GPU parity
     coverage. The trace law covers miss-only directional visibility and the
     gather law covers receiver lookup; `world.probe` supplies the broader
@@ -2883,12 +2891,6 @@ failing case is argued from source, not run):
   printed no `done` after more than five minutes (seen by the mesh-twice lane;
   not compared against a base Vulkan run). Compare base and tip on Vulkan before
   calling it a regression.
-- [low · unchecked] `SdfWorldPickReadback.Dispose` returns its readback's
-  arena range (`DirectXGpuReadbackBuffer.Dispose` now reports the release), but
-  whether every retirement path of the pick readback runs after its fence
-  depends on graph teardown order and was not traced by the deck-memory review.
-  Trace each retirement path; if one can dispose before the fence, retire it
-  through the fence-ordered path the other readbacks use.
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
   `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's
@@ -4179,14 +4181,12 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
-- [high] A `puck measure run` drain holds the machine's quiet priority with no
-  time bound: one window drained queued requests for over three hours, and every
-  other lane's leased build or test queued behind it (a lead law run gave up
-  after 55 minutes; two audit lanes' focused suites were cancelled while
-  queued). The orchestration skill already says a window states when it closes;
-  nothing enforces it. Give `measure run` a window deadline (a `--until` or a
-  per-window budget, default short) after which it starts no further request and
-  releases quiet priority, and report the requests it left pending.
+- [medium] A measurement's readiness probe gives up before a cold first frame:
+  `world.wait ready 1` with a 10 s exec budget (`SweepWorld`, `src/Puck.Cli.Runs/Sweep/SweepWorld.cs`)
+  failed both views-live-state requests, whose World stopped after
+  `[world.warm] prepared ...` with no bake start (inference: a cold driver compile
+  of the new views shader on the first frame blocks the pump). Time warm to first
+  bake on a frozen build, then size the probe from it.
 - [medium] `puck lease quiet` holds what it has while it waits for the rest:
   a frame-measuring lane's quiet acquisition held the build and heavy leases
   while queued behind another lane's GPU leg, so a third lane's heavy test
@@ -4209,7 +4209,7 @@ failing case marked "argued" is read from source, not run.
 - [low] An old-protocol CLI that already holds a lease keeps it. The grant door
   refuses a lower protocol, and `puck lease` checks the recorded stamp
   (`LeaseCommand.cs:82`), but `HostAdmission.Wait`
-  (`src/Puck.Cli.Gate/Host/HostAdmission.cs:98`, `:163`) does not read
+  (`HostAdmission`, `src/Puck.Cli.Harness/Host/HostAdmission.cs`) does not read
   `CliLease.RecordedProtocol` (`src/Puck.Cli.Core/CliLease.cs:193`), so a copy
   speaking an older protocol still passes admission beside newer holders. Check
   it in `Wait`.
@@ -4256,8 +4256,8 @@ Launch and process lifecycles:
   shares one entry per (root, holder, lane) and nothing replaces an entry whose
   lease completed unsuccessfully. Replace it.
 - [low] Under a shared hold the requeue loop logs "released it" while the lease
-  stays held over an idle GPU (`WorldLaunch.cs:228-256`, `gpu.Dispose()` at
-  `:252`): `Share.Dispose` releases only when the last share goes. Have it
+  stays held over an idle GPU (`LeasedAdmission.AcquireAsync`):
+  `WorldGpuHold`'s share releases only when the last share goes. Have it
   report whether it released, and say so.
 - [low] `WorldReadiness.Observe` (`src/Puck.Cli.Core/WorldReadiness.cs:52-64`)
   sets its marked flag before the mark write, so a failed write is never
@@ -4266,11 +4266,6 @@ Launch and process lifecycles:
   `world.wait` forms (`src/Puck.World.Console/WorldWaitCommandModule.cs:253`),
   so admission over-reserves. Have the World print its own readiness line once
   ready, and set the flag after the write.
-- [low] `puck lease gpu --wait 3600` takes the lease and then waits for memory,
-  so the GPU idles under it (`LeaseCommand.cs:49-72`), while `WorldLaunch`
-  waits for headroom first, takes the lease, and judges again
-  (`WorldLaunch.cs:225-257`): two implementations of one admit, lease and
-  rejudge order. Share the one helper.
 - [low] The sweep's budget pause exists twice and canary has neither:
   `SweepBudget.Pause` (`src/Puck.Cli.Runs/Sweep/SweepBudget.cs:41-52`) and
   `WorldOffscreenLeg.Pause` (`src/Puck.Cli.Harness/WorldOffscreenLeg.cs:229-235`)
@@ -4308,10 +4303,6 @@ CLI maturity remainders (each a [low]):
   (`src/Puck.Cli.Runs/Counters/CountersCommand.cs`) and always builds the
   checkout's current sources, so a before/after counter comparison across
   builds cannot be made with it.
-- The standalone `Puck.Cli.Worlds` apphost never installs World admission
-  (`src/Puck.Cli.Worlds/Program.cs`; `puck` does at
-  `src/Puck.Cli/PuckRootCommand.cs:75`), so boots through it skip host
-  admission.
 - `puck compile --watch` watches `*.puck` under the source's own directory only
   (`src/Puck.Cli.Worlds/Transpiler/CompileCommand.cs:307-310`), though its help
   promises the imported dependencies.
@@ -4348,7 +4339,10 @@ Monitor hook check remain supporting work alongside the landscape priority.
   physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
   document references), the dashboard (`src/Puck.Dashboard`), platform
   windowing and transports (`src/Puck.Platform.*`), recording and capture
-  (`src/Puck.Recording`). The duplication audit's map gaps join this list; one
+  (`src/Puck.Recording`), and the state system (`Puck.State` and its `.Rules`,
+  `.Search`, `.Topology`, `.Vectors`, `.Generators` siblings, covered only by
+  `docs/reference/state/` and one puck-world row; the state audit's capability
+  table is the starting point). The duplication audit's map gaps join this list; one
   lane writes the skills by capability after the audit lands.
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build

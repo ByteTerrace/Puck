@@ -615,34 +615,54 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         ? handle.Ordinal
         : -1
     );
-    private int ResolveBodyRef(in CompiledBodyRef bodyRef) => (bodyRef.Kind switch {
-        CompiledBodyRefKind.Literal => bodyRef.Index,
-        CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)bodyRef.Index)),
-        CompiledBodyRefKind.Cell => ((Host.Arena.Keys.TryResolve(
+    // A compiled reference names its cell key by text, resolved against the live key table at each read; an
+    // ordinal-addressed one (WorldBodyRef) carries the key its compile interned. Both resolve through ResolveBody.
+    private int ResolveBodyRef(in CompiledBodyRef bodyRef) => ResolveBody(
+        index: bodyRef.Index,
+        key: (((bodyRef.Kind == CompiledBodyRefKind.Cell) && Host.Arena.Keys.TryResolve(
             key: out var cellKey,
             name: CellName.Parse(candidate: bodyRef.Key!)
-        ) && (IntegerOf(value: Host.ReadArenaCell(
-            key: cellKey,
-            rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
+        ))
+            ? cellKey
+            : default),
+        kind: bodyRef.Kind,
+        placementOrdinals: bodyRef.PlacementOrdinals,
+        rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
+    );
+    private int ResolveWorldBodyRef(WorldBodyRef bodyRef) => ResolveBody(
+        index: bodyRef.Index,
+        key: bodyRef.Key,
+        kind: bodyRef.Kind,
+        placementOrdinals: bodyRef.PlacementOrdinals,
+        rowOrdinal: bodyRef.RowOrdinal
+    );
+    // The one resolution of a body reference for the evaluation in flight, or -1. A cell reference whose key names
+    // no interned key resolves no body.
+    private int ResolveBody(CompiledBodyRefKind kind, int index, int rowOrdinal, CellKey key, IReadOnlyList<int>? placementOrdinals) => (kind switch {
+        CompiledBodyRefKind.Literal => index,
+        CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)index)),
+        CompiledBodyRefKind.Cell => ((key.IsValid && (IntegerOf(value: Host.ReadArenaCell(
+            key: key,
+            rowOrdinal: rowOrdinal
         )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
         ? ((int)cellIndex)
         : -1),
         // 'placement:$each' names the placement whose id is the iterated key, which is what the compile-time
         // ordinal list is keyed by; a key naming no declared placement resolves no body.
-        CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is not null)
+        CompiledBodyRefKind.Placement => ((placementOrdinals is not null)
         ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Keys.TryGetName(
             key: BoundEachKey,
             name: out var placementName
         )
             ? placementName.Value
             : string.Empty)))
-        : Host.Population.BodyForPlacementOrdinal(ordinal: bodyRef.Index)),
+        : Host.Population.BodyForPlacementOrdinal(ordinal: index)),
         _ => Host.ResolveArgBodyOrdinal(
         filterRowOrdinal: -1,
-        op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)
+        op: ((kind == CompiledBodyRefKind.ArgMax)
         ? StateReduceOp.Max
         : StateReduceOp.Min),
-        rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
+        rowOrdinal: rowOrdinal
     ),
     });
 

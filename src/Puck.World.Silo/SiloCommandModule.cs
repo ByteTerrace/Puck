@@ -9,29 +9,36 @@ namespace Puck.World.Silo;
 /// <see cref="WorldSiloHost.TryResolveKey"/>; <c>silo.activate</c>/<c>.deactivate</c>/<c>.checkpoint</c> call the
 /// GRAIN (<see cref="IGrainFactory"/>), never the host directly, and never block the tick thread on a grain call —
 /// this module runs on the SAME thread the host's activation mailbox drains on, so waiting here for a grain turn
-/// that itself waits for that mailbox would deadlock. Those three verbs fire the grain call and report the request
-/// accepted; the outcome lands in <c>silo.grains</c>'/<c>silo.status</c>' next read-back.
+/// that itself waits for that mailbox would deadlock. Publication also waits on that mailbox. All asynchronous verbs
+/// report the request accepted and share one completion reporter; read <c>silo.grains</c>/<c>silo.status</c> for row state.
 /// </summary>
 public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFactory, SiloConsoleRouting routing) : ICommandModule {
     private const string CheckpointForm = "[<key>]";
     private const string PublishForm = "<key> <path>";
+
     private static readonly CommandForms SiloPublishForms = CommandForms.Of(verb: "silo.publish", PublishForm);
     private static readonly CommandForms SiloCheckpointForms = CommandForms.Of(verb: "silo.checkpoint", CheckpointForm);
     private static readonly CommandForms SiloUseForms = CommandForms.Of(verb: "silo.use", "<key>");
     private static readonly CommandForms SiloActivateForms = CommandForms.Of(verb: "silo.activate", "<key>");
     private static readonly CommandForms SiloDeactivateForms = CommandForms.Of(verb: "silo.deactivate", "<key>");
-    private static void FireAndForget(Task work, string verb, string key) {
+
+    // Only the completion continuation reads task results: command dispatch must return before the mailbox drains.
+    private static void FireAndForget(Task work, string verb, string key, string completed = "completed") {
         _ = work.ContinueWith(
             continuationAction: task => {
                 if (task.IsFaulted) {
                     Console.Error.WriteLine(value: $"[{verb}: '{key}' failed — {(task.Exception!.InnerException?.Message ?? task.Exception.Message)}]");
+                } else if (task.IsCanceled) {
+                    Console.Error.WriteLine(value: $"[{verb}: '{key}' canceled]");
                 } else if (
                     (task is Task<bool> boolTask) &&
                     !boolTask.Result
                 ) {
                     Console.Error.WriteLine(value: $"[{verb}: '{key}' did not complete]");
+                } else if ((task is Task<WorldAuthorityStoreOutcome> publication) && !publication.Result.Ok) {
+                    Console.Error.WriteLine(value: $"[{verb}: '{key}' failed — {publication.Result.Detail}]");
                 } else {
-                    Console.Error.WriteLine(value: $"[{verb}: '{key}' completed]");
+                    Console.Error.WriteLine(value: $"[{verb}: '{key}' {completed}]");
                 }
             },
             scheduler: TaskScheduler.Default
@@ -105,7 +112,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
-            description: SiloPublishForms.Spelling + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            description: (SiloPublishForms.Spelling + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and requests publication undrawn, as a release publishes it, through the authority root for the declared row named by <key> (owner/{oid}/{world} or the bare world id). Completion or failure is reported asynchronously."),
             forms: SiloPublishForms,
             handler: (context, args) => {
                 if (args.Count != 2) {
@@ -142,16 +149,18 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
                     return CommandResult.Error(output: $"[silo.publish: '{args[0]}' refused ({loadReason})]");
                 }
 
-                var outcome = host.PublishDefinitionAsync(
-                    ct: CancellationToken.None,
-                    composed: definition!,
-                    identity: identity
-                ).GetAwaiter().GetResult();
-
-                return (outcome.Ok
-                    ? new CommandResult(Output: $"[silo.publish: '{args[0]}' published from '{resolvedPath}']")
-                    : CommandResult.Error(output: $"[silo.publish: '{args[0]}' failed — {outcome.Detail}]")
+                FireAndForget(
+                    key: args[0].ToString(),
+                    verb: "silo.publish",
+                    completed: $"published from '{resolvedPath}'",
+                    work: host.PublishDefinitionAsync(
+                        ct: CancellationToken.None,
+                        composed: definition!,
+                        identity: identity
+                    )
                 );
+
+                return new CommandResult(Output: $"[silo.publish: '{args[0]}' requested from '{resolvedPath}']");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -179,7 +188,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.checkpoint",
-            description: SiloCheckpointForms.Spelling + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome.",
+            description: (SiloCheckpointForms.Spelling + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome."),
             forms: SiloCheckpointForms,
             handler: (context, args) => {
                 if (args.Count > 1) {

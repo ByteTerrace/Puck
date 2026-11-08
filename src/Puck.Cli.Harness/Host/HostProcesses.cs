@@ -1,6 +1,6 @@
 using System.CommandLine.Parsing;
 
-using Puck.Cli.Gate;
+
 
 namespace Puck.Cli.Host;
 
@@ -19,7 +19,7 @@ namespace Puck.Cli.Host;
 /// </summary>
 public static class HostProcesses {
     /// <summary>The test assemblies whose device laws open a GPU device: the gate's device-suite steps.</summary>
-    public static readonly IReadOnlyList<string> DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
+    public static readonly IReadOnlyList<string> DeviceTestAssemblies = ["Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests"];
     /// <summary>The test assemblies whose full run is heavy: the machine takes one at a time, whoever starts it.</summary>
     public static readonly IReadOnlyList<string> HeavyTestAssemblies = ["Puck.SdfVm.Tests", "Puck.World.Presentation.Tests", "Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];

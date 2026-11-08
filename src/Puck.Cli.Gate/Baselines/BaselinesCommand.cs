@@ -71,7 +71,7 @@ public static class BaselinesCommand {
         return command;
     }
     private static bool SameBytes(string left, string right) =>
-        File.ReadAllBytes(path: left).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: right));
+        Puck.Confinement.FileContent.Equals(left: left, right: right);
     private static int Run(BaselineArtifact artifact, bool check) {
         var path = $"{Verb} {artifact.Name}";
 

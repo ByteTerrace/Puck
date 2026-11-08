@@ -85,7 +85,7 @@ public static class AtomicFile {
             // An image still mapped cannot be deleted; its name ends in the temporary extension.
         }
     }
-    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
+    private static PendingWrite Stage<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
         var destination = ExistingSpelling(path: Path.GetFullPath(path: path));
@@ -107,18 +107,15 @@ public static class AtomicFile {
             options.UnixCreateMode = mode;
         }
 
-        // The name a replace moves the old destination to, chosen here rather than left to ReplaceFile: its own name for
-        // the replaced file (<name>~RF<hex>.TMP) is one nothing could find again, and a replace that fails partway, or
-        // lands over a file that cannot be deleted while it is mapped as an image, leaves the replaced file there.
-        string? backup = null;
-
         _ = Directory.CreateDirectory(path: directory);
+        PendingWrite? pending = null;
 
         try {
             using (var stream = new FileStream(
                 options: options,
                 path: temporary
             )) {
+                pending = new PendingWrite(destination: destination, temporary: temporary);
                 if (
                     (unixCreateMode is null) &&
                     !OperatingSystem.IsWindows()
@@ -136,44 +133,79 @@ public static class AtomicFile {
                 stream.Flush(flushToDisk: true);
             }
 
-            try {
-                File.Move(
-                    destFileName: destination,
-                    overwrite: true,
-                    sourceFileName: temporary
-                );
-            } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && File.Exists(path: destination))) {
-                // Windows refuses to rename over a file another process holds mapped; ReplaceFile moves it aside
-                // instead, and the reader's view keeps the old bytes.
-                backup = Path.ChangeExtension(
-                    extension: "replaced.tmp",
-                    path: temporary
-                );
-                File.Replace(
-                    destinationBackupFileName: backup,
-                    destinationFileName: destination,
-                    sourceFileName: temporary
-                );
-            }
-        } finally {
-            try {
-                File.Delete(path: temporary);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                // The failure that brought us here is the one worth reporting; the temporary stays behind.
-            }
+            return pending;
+        } catch {
+            pending?.Dispose();
+            throw;
+        }
+    }
+    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
+        using var pending = Stage(fill: fill, path: path, state: state, unixCreateMode: unixCreateMode);
 
-            if (
-                (backup is not null) &&
-                File.Exists(path: backup)
-            ) {
-                ReleaseBackup(
-                    backup: backup,
-                    destination: destination
-                );
+        pending.Commit();
+    }
+
+    /// <summary>A fully flushed sibling temporary. Publish it once, or dispose it to discard it. The temporary path
+    /// is private so publication and cleanup always use the same atomic-file mechanism.</summary>
+    public sealed class PendingWrite : IDisposable {
+        private readonly string m_temporary;
+        private readonly string m_destination;
+
+        private bool m_finished;
+
+        internal PendingWrite(string temporary, string destination) {
+            m_temporary = temporary;
+            m_destination = destination;
+        }
+
+        /// <summary>Publishes the complete file. With <paramref name="overwrite"/> false, an existing destination
+        /// wins, even when another writer creates it after staging.</summary>
+        /// <param name="overwrite">Whether to replace an existing file.</param>
+        public void Commit(bool overwrite = true) {
+            ObjectDisposedException.ThrowIf(condition: m_finished, instance: this);
+            string? backup = null;
+
+            try {
+                try {
+                    File.Move(destFileName: m_destination, overwrite: overwrite, sourceFileName: m_temporary);
+                } catch (Exception exception) when ((overwrite && (exception is IOException or UnauthorizedAccessException) && File.Exists(path: m_destination))) {
+                    backup = Path.ChangeExtension(extension: "replaced.tmp", path: m_temporary);
+                    File.Replace(destinationBackupFileName: backup, destinationFileName: m_destination, sourceFileName: m_temporary);
+                }
+            } finally {
+                Dispose();
+                if ((backup is not null) && File.Exists(path: backup)) { ReleaseBackup(backup: backup, destination: m_destination); }
             }
+        }
+        /// <summary>Discards an unpublished temporary. Cleanup never hides a publication or staging failure.</summary>
+        public void Dispose() {
+            if (m_finished) { return; }
+            m_finished = true;
+            try { File.Delete(path: m_temporary); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
         }
     }
 
+    /// <summary>Stages complete bytes beside a destination, flushed before returning. The caller owns and disposes
+    /// the returned write, allowing a batch to stage all files before publishing any.</summary>
+    /// <param name="path">The destination.</param>
+    /// <param name="bytes">The complete new content.</param>
+    /// <returns>The unpublished write.</returns>
+    public static PendingWrite StageAllBytes(string path, ReadOnlySpan<byte> bytes) =>
+        Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+    /// <summary>Stages UTF-8 text without a byte order mark.</summary>
+    /// <param name="path">The destination.</param>
+    /// <param name="contents">The complete text.</param>
+    /// <returns>The unpublished write.</returns>
+    public static PendingWrite StageAllText(string path, string contents) => StageAllBytes(path: path, bytes: Encoding.UTF8.GetBytes(s: contents));
+    /// <summary>Atomically replaces a file only when its bytes differ. An unreadable existing file propagates its error.</summary>
+    /// <param name="path">The destination.</param>
+    /// <param name="bytes">The complete new content.</param>
+    /// <returns>Whether the destination was replaced.</returns>
+    public static bool WriteAllBytesIfChanged(string path, ReadOnlySpan<byte> bytes) {
+        if (FileContent.Equals(expected: bytes, path: path)) { return false; }
+        WriteAllBytes(path: path, bytes: bytes);
+        return true;
+    }
     /// <summary>Reads every byte of a file that another thread or process may be renaming into place at the same
     /// moment. A rename holds the file open with delete access until it completes, including after the name has
     /// moved, and Windows refuses an open that does not share delete access while it does, so

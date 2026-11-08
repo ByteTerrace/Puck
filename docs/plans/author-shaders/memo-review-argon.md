@@ -39,7 +39,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Blocker
 - **Memo section:** `§3.3` ([`docs/plans/author-shaders.md:471-473`](../../../docs/plans/author-shaders.md)), `§3.4` ([`docs/plans/author-shaders.md:503-526`](../../../docs/plans/author-shaders.md)), `§4` Door 2 ([`docs/plans/author-shaders.md:679-681`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`.claude/skills/rendering/SKILL.md:729-734`](../../../.claude/skills/rendering/SKILL.md):
+  - [`.claude/skills/rendering/SKILL.md:740-745`](../../../.claude/skills/rendering/SKILL.md):
     ```markdown
     - **Index local arrays by constants only.** NVIDIA's Vulkan compiler keeps a dynamically indexed local array, a `static const` table included, in per-thread local memory. Unroll the loop to the array's length and guard the body (`if (i < count)`), or pick the element by comparison; DXC's SPIR-V unroller leaves a loop with a `break` rolled. RenderDoc's pipeline-executable statistics show the spill as "Local Memory Size" (the low 32 bits).
     ```

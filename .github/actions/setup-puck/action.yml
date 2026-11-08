@@ -32,26 +32,12 @@ runs:
       run: |
         set -euo pipefail
         tool=.tmp/puck-ci
-        if [[ -e "$tool" ]]; then echo "Use a fresh tool directory: $tool" >&2; exit 1; fi
         if [[ -z "$DIRECTORY" ]]; then
           DIRECTORY=.tmp/puck-pack
           dotnet restore src/Puck.Cli --locked-mode
           dotnet pack src/Puck.Cli -c Release --no-restore --output "$DIRECTORY"
         fi
-        package=$(ls "$DIRECTORY"/ByteTerrace.Puck.Cli.*.nupkg)
-        [[ $(wc -l <<< "$package") -eq 1 ]] || { echo "Expected exactly one ByteTerrace.Puck.Cli package in $DIRECTORY" >&2; exit 1; }
-        version=$(basename "$package" .nupkg); version=${version#ByteTerrace.Puck.Cli.}
-        # An exclusive feed and a private package cache keep a same-version official package from replacing the artifact.
-        source=$(mktemp -d)
-        feed=$(cd "$DIRECTORY" && pwd)
-        cache=$source/packages
-        # File contents are not argument-translated, so the feed and cache are spelled natively.
-        if [[ "$RUNNER_OS" == Windows ]]; then feed=$(cygpath -w "$feed"); cache=$(cygpath -w "$cache"); fi
-        printf '<configuration><packageSources><clear /><add key="candidate" value="%s" /></packageSources><config><add key="globalPackagesFolder" value="%s" /></config></configuration>' "$feed" "$cache" > "$source/nuget.config"
-        dotnet tool install byteterrace.puck.cli --version "$version" --tool-path "$tool" --configfile "$source/nuget.config" --no-http-cache
-        installed=$("$tool/puck" --version)
-        [[ "$installed" == "$version" || "$installed" == "$version+"* ]] || { echo "Installed CLI reports $installed; expected $version" >&2; exit 1; }
-        echo "Puck CLI $installed"
+        MSBUILDDISABLENODEREUSE=1 dotnet run --file build/CandidateCliInstall.cs -c Release -- "$DIRECTORY" "$tool"
         echo "$GITHUB_WORKSPACE/$tool" >> "$GITHUB_PATH"
       shell: bash
   using: composite

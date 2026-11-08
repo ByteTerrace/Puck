@@ -1814,13 +1814,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         var replacement = m_buffers.CreateHostVisible(
             name: m_name.At(index: slot),
             sizeBytes: (grows
-                ? Math.Max(
-                    val1: bytes,
-                    val2: Math.Min(
-                        val1: (2UL * buffer.SizeBytes),
-                        val2: reserve
-                    )
-                )
+                ? ((ulong)GpuCapacity.Grown(current: ((long)buffer.SizeBytes), required: ((long)bytes),
+                    ceiling: ((long)Math.Max(val1: bytes, val2: reserve)), divisor: 1))
                 : Math.Min(
                     val1: reserve,
                     val2: Math.Max(

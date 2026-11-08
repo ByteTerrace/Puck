@@ -343,35 +343,6 @@ public static class BrandingCommand {
         }
     }
 
-    private static bool ContainsReparsePoint(string repositoryRoot, string candidate) {
-        var relative = Path.GetRelativePath(
-            path: candidate,
-            relativeTo: repositoryRoot
-        );
-        var current = repositoryRoot;
-
-        foreach (var segment in relative.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]
-        )) {
-            current = Path.Combine(
-                path1: current,
-                path2: segment
-            );
-            if (
-                File.Exists(path: current) ||
-                Directory.Exists(path: current)
-            ) {
-                var attributes = File.GetAttributes(path: current);
-
-                if ((attributes & FileAttributes.ReparsePoint) != 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
     private static string? GetString(JsonElement element, string property) => (((element.ValueKind == JsonValueKind.Object) && element.TryGetProperty(
         propertyName: property,
         value: out var value
@@ -602,25 +573,18 @@ public static class BrandingCommand {
             return false;
         }
 
-        var root = Path.GetFullPath(path: repositoryRoot).TrimEnd(
-            Path.DirectorySeparatorChar,
-            Path.AltDirectorySeparatorChar
-        );
-        var prefix = (root + Path.DirectorySeparatorChar);
+        var root = Path.GetFullPath(path: repositoryRoot);
 
-        if (!fullPath.StartsWith(
-            value: prefix,
-            comparisonType: PuckPaths.Comparison
-        )) {
+        if (!PuckPaths.IsWithin(path: fullPath, root: root) || CliPaths.Same(left: root, right: fullPath)) {
             problem = $"{kind} escapes the repository: {relativePath}";
             return false;
         }
 
         try {
-            if (ContainsReparsePoint(
-                candidate: fullPath,
-                repositoryRoot: root
-            )) {
+            if (CliTreeFiles.LinkedAncestor(
+                path: fullPath,
+                root: root
+            ) is not null) {
                 problem = $"{kind} crosses a reparse point: {relativePath}";
                 return false;
             }

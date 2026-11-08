@@ -4,6 +4,8 @@
 #ifndef PUCK_BLOOM_FILTER_HLSLI
 #define PUCK_BLOOM_FILTER_HLSLI
 
+#include "luma.hlsli"
+
 struct BloomAxis {
     // Cache the common enlargement/downfilter pairs. Placement may reduce an arbitrarily larger
     // source envelope, so count is not bounded by this cache; later pairs use the complete interval.
@@ -151,7 +153,7 @@ float3 bloomTent(Texture2D<float4> image, SamplerState filter, BloomAxis x, Bloo
 float3 bloomSelected(float3 color, float cutoff) {
     float3 selected = color;
     if (cutoff > 0.0) {
-        selected *= smoothstep(cutoff * 0.5, cutoff * 1.5, dot(color, float3(0.2126, 0.7152, 0.0722)));
+        selected *= smoothstep(cutoff * 0.5, cutoff * 1.5, dot(color, PuckRec709Luminance));
     }
     return selected;
 }

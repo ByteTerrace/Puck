@@ -9,11 +9,6 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 60);
     private static readonly TimeSpan StepTimeout = TimeSpan.FromHours(hours: 3);
 
-    private static GateStepResult Captured(CliProcessResult run, TimeSpan timeout) => new(
-        ExitCode: (run.TimedOut ? CliExit.Refused : run.ExitCode),
-        Output: (string.Join(separator: '\n', values: run.OutputLines.Select(selector: static line => line.Line)) + (run.TimedOut ? $"\n(timed out after {timeout})" : string.Empty))
-    );
-
     /// <inheritdoc/>
     public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
         var heavy = ((arguments[0] == "test") ? arguments.FirstOrDefault(predicate: static argument => HostProcesses.IsHeavyTestAssembly(assembly: Path.GetFileNameWithoutExtension(path: argument))) : null);
@@ -22,7 +17,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         if ((heavy is not null) && !WaitForCapacity(device: true, heavySuite: true, repositoryRoot: repositoryRoot, step: heavy)) {
             return new GateStepResult(ExitCode: CliExit.Refused, Output: "Heavy-suite host capacity did not return while holding the lease.");
         }
-        return Captured(
+        return GateStepResult.Captured(
             run: CliProcess.RunCaptured(
                 arguments: arguments,
                 fileName: "dotnet",
@@ -66,7 +61,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         );
     }
     /// <inheritdoc/>
-    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null) => Captured(
+    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null) => GateStepResult.Captured(
         run: CliProcess.RunCaptured(
             arguments: [cli, .. arguments],
             fileName: "dotnet",

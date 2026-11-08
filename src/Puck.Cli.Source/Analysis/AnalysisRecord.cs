@@ -10,7 +10,7 @@ namespace Puck.Cli.Analysis;
 // reference, `impl`/`override`/`derived` for the relationship queries, `cref` for a documentation
 // reference. Kind is the symbol or declaration kind, empty where the relation already says it. Name is
 // the fully qualified symbol; Detail carries a base list where there is one.
-internal readonly record struct AnalysisRecord(string Path, int Line, int Column, string Relation, string Kind, string Name, string? Detail);
+internal readonly record struct AnalysisRecord(string Path, int Line, int Column, string Relation, string Kind, string Name, string? Detail, string? SimpleName = null);
 // Renders analysis records and reports the process exit code. Records are printed in the order the verb
 // produced them — each verb owns its own ordering, and both orderings are total — so the emitter never
 // reorders and never adds a summary line: stdout carries records and nothing else.
