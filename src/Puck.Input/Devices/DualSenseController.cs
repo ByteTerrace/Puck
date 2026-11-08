@@ -93,7 +93,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private const int StatusOffset = 52;              // battery: charge (low nibble), charger state (high nibble)
     private const int StatusPluggedOffset = 53;       // bit 0 headphones, bit 1 microphone
     private const int StickCenter = 128;
-    private const float StickDeadzone = 0.12f;
+    private const float StickDeadzone = GamepadNormalization.DefaultStickDeadzone;
     private const float StickRange = 127f;
     private const int Touch0Offset = 32;
     private const int Touch1Offset = 36;

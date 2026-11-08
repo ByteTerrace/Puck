@@ -961,11 +961,10 @@ public static class BindingProfile {
                 );
             }
 
-            if (
-                !float.IsFinite(f: modifier.PressThreshold) ||
-                !float.IsFinite(f: modifier.ReleaseThreshold) ||
-                (modifier.ReleaseThreshold > modifier.PressThreshold)
-            ) {
+            if (!HeldOrderTracker.IsValidThresholdPair(
+                pressThreshold: modifier.PressThreshold,
+                releaseThreshold: modifier.ReleaseThreshold
+            )) {
                 throw new ArgumentException(
                     message: $"Modifier \"{modifier.Id}\" must carry finite thresholds with release at or below press.",
                     paramName: nameof(document)

@@ -197,6 +197,15 @@ public sealed record ShapeDocument(
     /// <summary>Gets the document names of the members whose zero is the member omitted: a zero
     /// <see cref="Chamfer"/> or <see cref="Rounding"/> shapes nothing, so canonical form never writes one.</summary>
     public static IReadOnlyList<string> ZeroIsAbsent { get; } = ["chamfer", "rounding"];
+    /// <summary>Gets each member a shape row may omit and the canonical JSON text of the value its omission means, in
+    /// document order. A row omitting <c>id</c> takes its own position in its list. Composition refines a basis row
+    /// by naming only the members it changes, so an omitted member is completed once, where a document is read
+    /// (<see cref="CreationDocumentJson.Read"/>), after every layer has composed.</summary>
+    public static IReadOnlyList<(string Key, string Json)> OmittedMembers { get; } = [
+        ("position", "[0, 0, 0]"),
+        ("rotation", "[0, 0, 0, 1]"),
+        ("scale", "[1, 1, 1]"),
+    ];
 
     /// <summary>The largest half-extent <see cref="Elongate"/> sweeps a cross-section over, per axis.</summary>
     public const float MaxElongate = 2f;

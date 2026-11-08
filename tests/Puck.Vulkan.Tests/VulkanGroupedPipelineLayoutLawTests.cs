@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Memory;
 using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interop;
@@ -230,20 +229,6 @@ public sealed unsafe class VulkanGroupedPipelineLayoutLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Trap(nint first, nint second, nint third, nint fourth) => 0;
 
-    private sealed class HeapAllocator : IAllocator {
-        public void* Allocate(nuint size, nuint alignment = 0) => NativeMemory.Alloc(byteCount: Math.Max(
-            val1: size,
-            val2: 1
-        ));
-        public void Free(void* ptr) => NativeMemory.Free(ptr: ptr);
-        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => NativeMemory.Realloc(
-            byteCount: Math.Max(
-                val1: newSize,
-                val2: 1
-            ),
-            ptr: ptr
-        );
-    }
     private sealed record Recording(int FailSetLayout) {
         public List<nint> Destroyed { get; } = [];
         public nint[]? PipelineLayoutSets { get; set; }

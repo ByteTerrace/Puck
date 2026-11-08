@@ -28,14 +28,7 @@ public static class VerbsCommand {
 
         return [.. json.RootElement.GetProperty(propertyName: "commands").EnumerateArray()
             .Where(predicate: static verb => !(verb.TryGetProperty(propertyName: "authored", value: out var authored) && authored.GetBoolean()))
-            .Select(selector: static verb => new CommandMetadata(
-                AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
-                Audience: ((verb.GetProperty(propertyName: "audience").GetString() == "operator") ? CommandAudience.Operator : CommandAudience.Anyone),
-                Bindability: (verb.GetProperty(propertyName: "bindable").GetBoolean() ? CommandBindability.Bindable : CommandBindability.Unbindable),
-                Name: verb.GetProperty(propertyName: "name").GetString()!,
-                Routing: CommandRouting.Immediate,
-                ValueKind: Enum.Parse<CommandValueKind>(ignoreCase: true, value: verb.GetProperty(propertyName: "valueKind").GetString()!)
-            ))];
+            .Select(selector: WorldConsoleVerbCatalog.ReadVerb)];
     }
     // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.
     private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless, string? cacheDirectory) {

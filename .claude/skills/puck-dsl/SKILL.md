@@ -262,6 +262,7 @@ After editing a world, run it (`dotnet run --project src/Puck.World -c Release
 |---|---|
 | `puck-world` | World-document sugar (`rule`/`decision`/effects, `forEach`), section rules, world refusals, booting `--world`. |
 | `sdf-authoring` | Creation shapes, materials and rigs in `.puck`. |
+| `input` | What `channels`, `inputModes`, `inputHistory`, `inputPatterns` and `bindingOverlays` rows mean. |
 | `rom-forge` | The cartridge vocabulary and the compile/`forge.play` loop. |
 | `gaming-bricks` | Emulator behavior once a cartridge is compiled. |
 | `symbol-analysis`, `content-search` | C# semantics and text search; `.puck` name resolution goes through `puck lint` or the language server. |

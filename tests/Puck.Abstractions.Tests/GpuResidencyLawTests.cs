@@ -1450,6 +1450,76 @@ public sealed class GpuResidencyLawTests {
 
         replaced.Dispose();
     }
+    // A region created from the device's profile chooses its policy again at each size it grows to: within a ring's
+    // share of the aperture it keeps its ring (or in-place buffer), and past it moves to the staged policy, staging
+    // through its owner's reserved sets or a pool of its own, with every slot reading the grown region exact.
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void ARegionThatChoosesItsResidencyIsRestagedWhenItGrowsPastARingsShare(bool coherentUnified, bool reserved) {
+        const int Slots = 3;
+        // An aperture of 4 KiB: a ring's share is 256 bytes.
+        var profile = new GpuMemoryProfile(
+            CoherentUnifiedMemory: coherentUnified,
+            DeviceLocalBytes: GiB,
+            HostVisibleDeviceLocalBytes: (4UL * 1024UL),
+            LargestDeviceLocalHeapBytes: GiB,
+            UnifiedMemory: coherentUnified
+        );
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var pool = new GpuRegionCopyPool(
+            bindings: gpu.Services.Bindings,
+            copyPipeline: copy,
+            name: default,
+            regions: [default],
+            slotCount: Slots
+        );
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            copySets: (reserved ? pool.Region(index: 0) : null),
+            name: default,
+            profile: profile,
+            readersInFlight: !coherentUnified,
+            recorder: gpu.Services.Recorder,
+            slotCount: Slots
+        );
+        var direct = (coherentUnified ? GpuResidencyPolicy.InPlace : GpuResidencyPolicy.Ring);
+        var held = new byte[64];
+
+        Assert.Equal(expected: direct, actual: region.Policy);
+        new Random(Seed: 5).NextBytes(buffer: held);
+        _ = region.Write(bytes: held, offset: 0);
+        for (var slot = 0; (slot < Slots); slot++) { region.Flush(slot: slot); }
+
+        region.Grow(byteCount: 256).Dispose();
+        Assert.Equal(expected: direct, actual: region.Policy);
+
+        var poolsBefore = gpu.PoolsCreated.Count;
+        var before = region.Buffer(slot: 0);
+        var replaced = region.Grow(byteCount: 512);
+
+        Assert.Equal(expected: GpuResidencyPolicy.Staged, actual: region.Policy);
+        Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: region.Memory);
+        Assert.Equal(expected: (reserved ? poolsBefore : (poolsBefore + 1)), actual: gpu.PoolsCreated.Count);
+        Assert.Equal(expected: GpuRegion.BytesOf(byteCount: 512, policy: GpuResidencyPolicy.Staged, slotCount: Slots), actual: (region.OwnedBytes.DeviceLocal + region.OwnedBytes.HostVisible));
+        Assert.Equal(expected: held, actual: region.Contents[..64].ToArray());
+        Assert.Equal(expected: 512L, actual: region.OwedCopyBytes);
+        _ = region.Write(bytes: [5, 6, 7, 8], offset: 400);
+
+        for (var slot = 0; (slot < Slots); slot++) {
+            Copy(gpu: gpu, region: region, slot: slot);
+            Assert.NotSame(expected: before, actual: region.Buffer(slot: slot));
+            Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..512]);
+        }
+
+        replaced.Dispose();
+    }
     [Fact]
     public void OnlyARegionOwningItsBuffersGrowsAndOnlyAStagedOneShrinks() {
         var gpu = new UploadModelGpu();
@@ -1583,11 +1653,12 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: 3, actual: buffers.Created.Count);
         Assert.Equal(expected: GpuRegion.StagingFloorBytes, actual: staging.SizeBytes);
         var header = Assert.Single(collection: staging.Writes, predicate: static write => (write.Offset == 0UL));
-        var words = MemoryMarshal.Cast<byte, uint>(span: header.Head.AsSpan(length: 32, start: 0)).ToArray();
+        var words = MemoryMarshal.Cast<byte, uint>(span: header.Head.AsSpan(length: ((GpuRegion.CopyHeaderWords + 4) * sizeof(uint)), start: 0)).ToArray();
 
+        // A packed region's copy states no row width or strides (header words 4 to 6).
         Assert.Equal(
             actual: words,
-            expected: [3U, 2U, ((uint)BlockBase), 0U, (uint)((2L << 30) / sizeof(uint)), 0U, (uint)((Bytes - 8) / sizeof(uint)), 1U]
+            expected: [3U, 2U, ((uint)BlockBase), 0U, 0U, 0U, 0U, (uint)((2L << 30) / sizeof(uint)), 0U, (uint)((Bytes - 8) / sizeof(uint)), 1U]
         );
         Assert.Equal(
             actual: staging.Writes.Where(predicate: static write => (write.Offset != 0UL)).Select(selector: static write => (write.Offset, write.Length)),

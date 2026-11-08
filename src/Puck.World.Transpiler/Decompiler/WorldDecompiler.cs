@@ -109,6 +109,10 @@ public static partial class WorldDecompiler {
         return into.ToString();
     }
 
+    // Whether the document being printed names a basis or imports. Its rows refine rows of the documents it
+    // composes, so a member written at its default is an override that printing must keep.
+    private static readonly AsyncLocal<bool> ComposesDocuments = new();
+
     /// <summary>Decompiles a root <see cref="JsonObject"/> into formatted Puck source code.</summary>
     /// <param name="root">The root JSON object representing the world definition.</param>
     /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
@@ -121,11 +125,18 @@ public static partial class WorldDecompiler {
         // 0. Header: the source is what a reader edits, so the file says which direction is authoritative. A
         // decompile BOOTSTRAPS a source from a document and is one-way -- `let`, `template` and `for` are a source
         // idea the JSON no longer carries, so re-running it over an edited source discards that work.
-        return (Header + DecompileDocument(
-            embeddings: embeddings,
-            moduleBody: false,
-            root: root
-        ));
+        var previous = ComposesDocuments.Value;
+
+        ComposesDocuments.Value = ((root["basis"] is not null) || (root["imports"] is not null));
+        try {
+            return (Header + DecompileDocument(
+                embeddings: embeddings,
+                moduleBody: false,
+                root: root
+            ));
+        } finally {
+            ComposesDocuments.Value = previous;
+        }
     }
 
     private const string Header = """

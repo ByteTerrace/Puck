@@ -16,8 +16,7 @@ public static partial class WorldFederationCodec {
 
         var writer = new WireWriter();
 
-        writer.WriteString(value: key.SourceAuthority);
-        writer.WriteUInt64(value: key.TransferId);
+        WorldWireLeaves.WriteTransferKey(writer: writer, key: key);
         writer.WriteByte(value: (byte)phase);
         writer.WriteArray(
             items: incarnations,
@@ -35,10 +34,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeHopQuery(ReadOnlySpan<byte> body, out WorldTransferKey key, out WorldEntityAddress[] incarnations, out WorldHopPhase phase, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        key = new WorldTransferKey(
-            SourceAuthority: reader.ReadRequiredString(field: "hop key source authority"),
-            TransferId: reader.ReadUInt64()
-        );
+        key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
         phase = (WorldHopPhase)reader.ReadByte();
         if (!Enum.IsDefined(value: phase)) {
             incarnations = [];
@@ -105,8 +101,7 @@ public static partial class WorldFederationCodec {
 
         var writer = new WireWriter();
 
-        writer.WriteString(value: key.SourceAuthority);
-        writer.WriteUInt64(value: key.TransferId);
+        WorldWireLeaves.WriteTransferKey(writer: writer, key: key);
         writer.WriteString(value: destination);
         writer.WriteArray(
             items: members,
@@ -130,10 +125,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeHopRequest(ReadOnlySpan<byte> body, out WorldTransferKey key, out string destination, out WorldHopRequestMember[] members, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        key = new WorldTransferKey(
-            SourceAuthority: reader.ReadRequiredString(field: "hop key source authority"),
-            TransferId: reader.ReadUInt64()
-        );
+        key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
         destination = reader.ReadRequiredString(field: "hop destination");
         members = reader.ReadArray(
             field: "hop request companions",
@@ -211,8 +203,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeCompanionHop(WorldTransferKey key, WorldEntityAddress incarnation) {
         var writer = new WireWriter();
 
-        writer.WriteString(value: key.SourceAuthority);
-        writer.WriteUInt64(value: key.TransferId);
+        WorldWireLeaves.WriteTransferKey(writer: writer, key: key);
         WorldWireLeaves.WriteEntityAddress(
             address: incarnation,
             writer: writer
@@ -228,10 +219,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeCompanionHop(ReadOnlySpan<byte> body, out WorldTransferKey key, out WorldEntityAddress incarnation, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        key = new WorldTransferKey(
-            SourceAuthority: reader.ReadRequiredString(field: "hop key source authority"),
-            TransferId: reader.ReadUInt64()
-        );
+        key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
         incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         return Finish(
             failure: out failure,

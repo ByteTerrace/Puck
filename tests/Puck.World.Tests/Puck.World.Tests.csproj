@@ -77,4 +77,8 @@
         <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
         <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/HeapAllocator.cs" Link="HeapAllocator.cs" />
+        <Compile Include="../Shared/FixedFrameSource.cs" Link="FixedFrameSource.cs" />
+    </ItemGroup>
 </Project>

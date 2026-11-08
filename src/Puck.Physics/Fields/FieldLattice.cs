@@ -452,12 +452,8 @@ public sealed class FieldLattice {
         minimum: m_min[field],
         value: value
     );
-    private static FixedQ4816 ClampRate(FixedQ4816 rate) => ((rate < FixedQ4816.Zero)
-        ? FixedQ4816.Zero
-        : ((rate > FixedQ4816.One)
-            ? FixedQ4816.One
-            : rate
-    ));
+    private static FixedQ4816 ClampRate(FixedQ4816 rate) =>
+        FixedQ4816.Clamp(value: rate, minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
     private void ClearDeltas() {
         foreach (var key in m_deltas) {
             var field = (key / CellCount);

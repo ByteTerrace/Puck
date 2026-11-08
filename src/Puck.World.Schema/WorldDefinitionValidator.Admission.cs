@@ -263,23 +263,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 try {
-                    var pinnedId = new KeyId {
-                        Algorithm = (row.Algorithm ?? string.Empty),
-                        Domain = (row.Domain ?? string.Empty),
-                        KeyHash = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki),
-                        Subject = ((row.Mode == WorldAdmissionTrustMode.Vouches)
-                        ? null
-                        : row.Subject),
-                    };
-                    var entry = new TrustListEntry(
-                        PinnedId: pinnedId,
-                        PublicKeySubjectPublicKeyInfo: spki,
-                        Mode: ((row.Mode == WorldAdmissionTrustMode.Vouches)
-                        ? AttestationTrustMode.Vouches
-                        : AttestationTrustMode.SignsDirectly),
-                        Reach: WorldAdmissionEmptyReach,
-                        MaximumAge: null
-                    );
+                    var entry = WorldAdmissionDoor.TrustEntry(entry: row, spki: spki);
 
                     entry.ValidateShape();
 
@@ -773,8 +757,4 @@ public static partial class WorldDefinitionValidator {
         return groupIds;
     }
 
-    // Mirrors WorldAdmissionDoor's own s_noReach: this section's authorization vocabulary is
-    // WorldAdmissionEntry.Grants, never Puck.Attestation's slot-reach mechanism, so every entry validates against an
-    // empty reach set here too.
-    private static readonly IReadOnlySet<string> WorldAdmissionEmptyReach = new HashSet<string>(comparer: StringComparer.Ordinal);
 }

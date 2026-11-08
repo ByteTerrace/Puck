@@ -50,7 +50,6 @@ public sealed partial class WorldInputOwner {
         ArgumentNullException.ThrowIfNull(mapping);
         ArgumentNullException.ThrowIfNull(policy);
         policy.Validate();
-        if (sources.Count > WorldInputCatalog.MaximumSources) { throw new ArgumentException(message: $"input sources exceed {WorldInputCatalog.MaximumSources}", paramName: nameof(sources)); }
         m_catalog = catalog;
         Mapping = mapping;
         Revision = revision;
@@ -58,25 +57,11 @@ public sealed partial class WorldInputOwner {
         m_retention = Parse(value: policy.RetentionSeconds);
         m_lateness = Parse(value: policy.MaximumLatenessSeconds);
         m_calibrationLimit = Parse(value: policy.CalibrationLimitSeconds);
-        m_sources = new WorldInputSourceState[sources.Count];
+        m_sources = catalog.CompileSources(sources: sources, handles: out m_handles);
         m_sourceScratch = new WorldInputSourceState[sources.Count];
         m_seen = new bool[sources.Count];
-        m_handles = new Dictionary<ushort, int>(capacity: sources.Count);
         m_reboundActivations = new HashSet<ulong>(capacity: sources.Count);
         m_reboundSources = new HashSet<string>(capacity: sources.Count, comparer: StringComparer.Ordinal);
-        var identities = new HashSet<(string, ushort)>();
-
-        for (var index = 0; (index < sources.Count); index++) {
-            var source = sources[index];
-
-            if (string.IsNullOrWhiteSpace(value: source.Name) || (source.Name.Length > 256) || (source.Binding is null) || (source.Binding.Length > 4096) ||
-                !identities.Add(item: (source.Name, source.Channel)) || (source.Channel >= catalog.Channels.Length) || !m_handles.TryAdd(key: source.Handle, value: index) ||
-                !Enum.IsDefined(value: source.Kind) || (catalog.Channels[source.Channel].Shape == ChannelShape.Text) ||
-                ((source.Kind == WorldInputContributionKind.Relative) != (catalog.Channels[source.Channel].Shape == ChannelShape.Relative))) {
-                throw new ArgumentException(message: $"input source {source.Handle} has an invalid channel, kind or duplicate handle", paramName: nameof(sources));
-            }
-            m_sources[index] = new(Activation: 0, AwaitingNeutral: false, RawValue: 0, Source: source);
-        }
         m_history = new WorldInputRecord[catalog.HistoryCapacity(ingressCapacity: policy.EventCapacity)];
         m_switches = new WorldInputSwitch[policy.EventCapacity];
         m_eventScratch = new WorldInputRecord[policy.MaximumEventsPerStep];
