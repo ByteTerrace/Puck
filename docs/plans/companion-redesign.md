@@ -365,7 +365,9 @@ Only home ends or recalls a title.
   second notice. Every pending hop of `I` is superseded. A copy abroad at
   a lower epoch is stale; its next `Reserve` or `HopRequest` is refused `Stale` and it
   retires. Recall happens by the player's request or an author's declared recall window;
-  the default is to wait.
+  the engine's default is to wait, and the standard package declares the window as the
+  margin by which a custodian may miss its lease
+  ([lease-missed recall](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
 - **Release.** Only the taped install that removes the placement's role releases a
   title (`Install(I)`); `Noticed(I, released)` follows the same way. An install honours the
   pending-authorization fence: a title whose hop is pending stays pending, home confirms no
@@ -561,7 +563,14 @@ real authority fixtures as evidence:
    `ABindingNamesTheFollowedGeneration`, `AStrandingDoesNotCarryIntoALaterVisit`, `ReleaseIsHomesRecordAndTheCustodianRetiresOnContact`,
    `AForgedReturnToHomeIsStaleWhileTheCurrentCustodianKeepsCustody`.
 7. **Recall and release.** `Recall` from `Away` only, under its preconditions, with the
-   `Noticed` obligation; `Install` as release; the player's notices. Laws:
+   `Noticed` obligation; `Install` as release; the player's notices. The lease-missed
+   recall: a title whose custodian has missed its lease by the authored margin is
+   recallable by home, and the same rule covers a home restarted without its checkpoint,
+   whose `NotMyTitle` answer this step must turn into a recallable title rather than a
+   wait (the MMO round's step 8; [the decision](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
+   A scarce companion whose title sits at a settlement domain takes that domain as home
+   and the player's host as custodian, which waits for
+   [the settlement door](open-items.md#settlement-trust-roles-and-revocation). Laws:
    `Recall_SupersedesTheAwayCopyWhichRetiresOnReappearance`, `ALaterHopDoesNotContradictAnEarlierRecall`,
    `EveryRecallIsNoticedOnItsOwn`, `APendingTitleWaitsForItsHopBeforeARecall`, `AReleaseDuringAPendingHopWaitsForTheHopToResolve`,
    `H5_ReleaseIsHomesRecordAndTheCustodianRetiresOnIt`.
@@ -586,16 +595,14 @@ captures demonstrate the composed behavior.
 
 ## 10. Owner calls
 
-- Recall is by the player's request or an author's recall window, default wait, exactly
-  as the decision says; the spec adds no automatic recall.
-- A title whose pending hop's destination is gone for good waits in custody forever: the
-  fence forbids recalling it from under a destination that may hold home's confirmation.
-  Whether the engine should offer the player a recall at some point (accepting a possible
-  second embodiment at that destination) is a product call.
-- A home restarted without its checkpoint is a new authority (`NotMyTitle`): its
-  companions abroad wait forever by the decision's rule, and its placement is empty until
-  the author declares the role disposable or the owner restores the checkpoint. Whether the
-  engine should offer the player a recall at that point is a product call.
+- Decided by the MMO foundations round
+  ([lease-missed recall](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)):
+  waiting forever and recalling are one mechanism. A title whose custodian, or whose
+  pending hop's destination, has missed its lease by the margin the standard package
+  authors is recallable, and so is a title of a home restarted without its checkpoint. A
+  second embodiment left at the dead destination earns nothing settled and issues claims
+  only in that host's namespace, so it costs nothing; waiting forever would let a host with
+  a `*` admission row trap every companion and character that visits it. Step 7 builds it.
 - A companion that follows its player into a world reachable from home but whose hop home
   refuses as `Pending` for longer than the destination holds the lease crosses later or not
   at all (the player goes on alone and is told). Whether the player should be able to wait

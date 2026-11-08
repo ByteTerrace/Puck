@@ -86,4 +86,4 @@ The running World as the editor and debugger a builder needs, as one page of pac
 
 The cross-system invariants that prove the pipeline foundation holds together, and the scenarios still unbuilt: refusal arrangements and the crossing and restore variants. Dormant while test requirements are suspended.
 
-The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
+The current world architecture is owned by [Worlds and federation](../architecture/worlds.md), and where it is going by [its decision register](../decisions/worlds-and-federation.md), which the closed [MMO foundations round](mmo-foundations.md) settled and whose records are its evidence. The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).

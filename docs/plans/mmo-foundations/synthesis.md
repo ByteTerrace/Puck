@@ -11,7 +11,10 @@ second attack pass
 ([attacks on the synthesis](synthesis-attacks.md)) and two adversarial reviews
 read the first revision of this memo; [the review answers](#9-review-answers)
 take every finding one by one, and the sections above them carry the changes
-those findings forced.
+those findings forced. The decisions now live in
+[the decision register](../../decisions/worlds-and-federation.md), and the
+order of work in the plans and work packets it names; this memo stays as their
+evidence.
 
 Labels: **[record]** means the claim is taken from a named record's section;
 **[opened]** means this memo reopened the code or document at this tree and
@@ -167,7 +170,7 @@ make opposite calls on who may issue value.
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md#the-frame)) **[record]** | One paragraph | Nothing; it is prose |
+| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md), which read [the idea in plain terms](../../architecture/worlds.md#the-idea-in-plain-terms) first) **[record]** | One paragraph | Nothing; it is prose |
 | 1b. Record the purpose in a decision page only | Decision pages hold settled design | Same | A ruling in a decision page does not reach every agent's rules file |
 
 **Favoured.** 1a. **Strongest case against:** a rules file that grows a purpose
@@ -180,8 +183,8 @@ holds it: "Puck exists to make it possible, eventually, to build an MMO at the
 scale of World of Warcraft that redefines the genre the way WoW did. The
 emulators and the screen-within-a-screen work were envisioned as seamless parts
 of that MMO." This memo takes those words as the purpose and weighs every
-decision at that scale. Writing the paragraph and the weighing rule into
-`AGENTS.md` (option 1a) is the lead's task after the round closes.
+decision at that scale. The paragraph and the weighing rule are in
+`AGENTS.md` (option 1a, [Puck's purpose](../../../AGENTS.md#pucks-purpose)).
 
 ### Decision 2: player state across author edits
 
@@ -1664,7 +1667,9 @@ became of them.
   ordering, a held-input horizon, a match-entry reservation that forfeits on
   an attested stall, and "invalid history" until the replay attributes; step
   18 is the witness's own step; check 8 (C2) gains the five fault legs; the
-  LAN duel is a draw on stall by agreement, in [owner call 13](#7-owner-calls).
+  LAN duel is a draw on stall by agreement, as the first revision's owner call 13
+  stated it and [decision 8](#decision-8-where-a-contested-place-runs) now
+  decides.
 - **B14, with Codex R7 and Argon 4** (pinned at the seam; A10 claimed closed).
   **Accepted.** Decision 8 names exactly what the clamp closes and leaves
   (the aggregate bound, no neighbour-induced crossing, protected retreat,

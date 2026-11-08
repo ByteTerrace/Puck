@@ -53,8 +53,15 @@ contracts belong in the subsystem guides; proposed changes belong in
   irradiance volume traced on the CPU against baked meshes, shared by the
   residency's views, with sampled first-hit surface visibility and nearest-clear
   probe relocation.
-- [Worlds and federation](../architecture/worlds.md): authority, admission,
-  transfers, and the relationships between worlds.
+- [Worlds and federation](worlds-and-federation.md): what the MMO foundations
+  round settled about trust between worlds: three answers for anything worth
+  fighting over, scarce value at one settlement door per sealed domain,
+  neutrality as a vouched role, bodies under custody with the active seat as
+  the domain's right, what a visited world may write, state across author
+  edits, hidden and visible seams, the tables, contested places, revocation,
+  player hosts, and identity, storage and hosting as abstractions. The model
+  itself (authority, admission, transfers, and the relationships between
+  worlds) is [the architecture page](../architecture/worlds.md).
 
 A decision should state the problem, the chosen approach, and its consequences.
 When it changes, update both the decision and the affected contract. Preserve
