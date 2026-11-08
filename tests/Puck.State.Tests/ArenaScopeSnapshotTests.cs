@@ -10,7 +10,7 @@ public sealed class ArenaScopeSnapshotTests {
     public void AGrowingKeyedRowRestoresItsCapturedReservationAndContents(int initialCells) {
         var section = new StateSection(Rows: [
             new StateRow(Name: CellName.Parse("selected"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance, Visibility: new StateVisibility(Readers: ["seat1"]),
-                Cells: Enumerable.Range(0, initialCells).Select(index => new StateCell(CellName.Parse($"seed{index}"), CellValue.Int(3))).ToArray()),
+                CellVisibility: true, Cells: Enumerable.Range(0, initialCells).Select(index => new StateCell(CellName.Parse($"seed{index}"), CellValue.Int(3))).ToArray()),
             new StateRow(Name: CellName.Parse("outside"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance)
         ]);
         var arena = new StateArena(catalog: StateCatalog.Compile(section), section: section, time: ArenaTime.Origin);

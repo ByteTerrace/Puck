@@ -276,6 +276,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
                 Kind: CellKind.Int,
                 Capacity: capacity,
                 Visibility: new StateVisibility(Readers: []),
+                CellVisibility: true,
                 Cells: cells
             )]);
         var catalog = StateCatalog.Compile(section: section);

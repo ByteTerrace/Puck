@@ -201,6 +201,7 @@ that erase key faults) are not disclosure and stay in the
 | [high] A new row keyed over a hidden domain is accepted or refused by the domain's membership (`WorldDefinitionValidator.Discrete.cs`) | Closed: `WorldRecipientView.AdmitsDeclaration` admits every row an incoming declaration names | 3, landed |
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
+| [high] Removing an absent key from a public row answers one text when no row ever minted the name and another when a hidden row did (the arena's key table is shared) | Closed: the compose door answers `StateArena.MissingCellReason`, the arena's own text, when the name does not resolve | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
 | [high] `replay.inspect`, `replay.stop` and `replay.verify` answer any principal with the authoritative tail hash, unprojected authority entries and every body pose | Closed: every `replay.*` verb is `CommandAudience.Operator` | console audit, landed |
 | [medium] `world.history` keyframe ticks, window start and a seek's restored keyframe and re-simulated count follow checkpoint byte counts, which fold withheld rows | Closed: the window's shape is a function of ticks alone (`WorldHistory.Interval`, `WorldHistory.WindowTicks`) | console audit, landed |
@@ -473,6 +474,17 @@ keeps that invariant in one of two ways, and every check is one or the other:
   relation check at commit, binding revalidation when a bound row is written),
   so an edit that changes no member revalidates a document whose validity no
   hidden member decides.
+
+One store is neither a row's members nor a declaration: the arena's key table
+(`StateArena.Keys`), which every row shares and which grows whenever any row,
+hidden ones included, mints a name. A door that answers one way for a name the
+table resolves and another for a name it does not is an oracle over every row's
+history. The remove door answered "has no cell keyed" for an unminted name and
+the arena's "holds no cell" for a minted one the row lacked; both arms now answer
+the arena's text (`StateArena.MissingCellReason`). The rule for a door: a name
+the table does not resolve is answered exactly as a resolved key the row does
+not hold, so a read answers absent, a write refuses as absent, and nothing
+mints a key on a recipient's behalf.
 
 Enforcement is the one predicate, `WorldRecipientView.Admits(mutation)`, which
 every recipient door already calls; the class was closed by widening what it

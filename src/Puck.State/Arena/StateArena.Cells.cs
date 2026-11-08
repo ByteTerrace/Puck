@@ -574,13 +574,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: out slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_keys.TryGetName(
-                key: key,
-                name: out var missing
-            )
-                ? missing.Value
-                : "?"
-            )}'; a write never mints a key";
+            reason = MissingCellReason(row: RowName(rowOrdinal: rowOrdinal), key: (m_keys.TryGetName(key: key, name: out var missing) ? missing.Value : "?"));
 
             return false;
         }
@@ -605,6 +599,13 @@ public sealed partial class StateArena {
 
         return true;
     }
+    /// <summary>Returns the refusal for removing a cell a row does not hold. The key table is shared by every row,
+    /// so a door that cannot resolve a key name answers with this same text rather than one that says whether any
+    /// row ever minted the name.</summary>
+    /// <param name="row">The row's name.</param>
+    /// <param name="key">The key as the caller spelled it.</param>
+    /// <returns>The refusal text.</returns>
+    public static string MissingCellReason(string row, string key) => $"row '{row}' holds no cell '{key}'; a write never mints a key";
     // The one slot reader. A vector case aliases the arena's own storage; ArenaExport copies it instead, because an
     // exported row outlives the arena it was read from.
     private CellValue ValueAt(in ArenaRowLayout layout, int slot) => (layout.Kind switch {
