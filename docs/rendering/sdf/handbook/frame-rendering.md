@@ -1333,8 +1333,10 @@ packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
 Placed meshes never land in a frame's upload: they stream through the
 residency's background GPU work (`SdfWorldTables.MeshLanding.cs`, a client of
-`SdfGpuWork`), in jobs of at most `SdfGpuWork.UploadChunkBytes` under that
-service's byte, host-time and GPU-share budget, the meshes the views see largest
+`SdfGpuWork`), in jobs of at most `SdfGpuWork.MostUploadJobBytes` under that
+service's byte, host-time and GPU-share budgets, each a rate of wall time
+(`SdfGpuWork.UploadBytesPerSecond`), so a slow or throttled frame lands as many
+bytes a second as a fast one, the meshes the views see largest
 first (`SdfMeshDemand`). A draw whose mesh is still owed waits out of the staged
 records until its last job has completed, so a boot, a relocation or a body whose
 meshes all arrive at once fills in from the cameras outward over several frames

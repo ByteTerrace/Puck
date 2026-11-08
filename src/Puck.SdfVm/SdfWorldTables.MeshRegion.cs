@@ -74,13 +74,27 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Gets whether the current staged mesh geometry owes no mesh words and its required upload has
     /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
-    public bool MeshesResident {
-        get {
-            if (m_disposed || (m_owedWords != 0)) { return false; }
-            var required = m_meshRequiredUpload;
-            return ((required == 0UL) || ((required <= m_uploads) &&
-                ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled)));
+    public bool MeshesResident => (MeshResidencyPending() is null);
+
+    /// <summary>Names what keeps <see cref="MeshesResident"/> false: the owed words and meshes of the staged list, how many
+    /// of those wait on a store restore, whether background work may bind the latest upload, and the required upload
+    /// against the submitted and completed ones and its fence; <see langword="null"/> once resident. Read on the frame
+    /// thread; never waits.</summary>
+    /// <returns>The reason, or <see langword="null"/>.</returns>
+    public string? MeshResidencyPending() {
+        if (m_disposed) { return "the tables are disposed"; }
+        var owed = Volatile.Read(location: ref m_owedWords);
+        var required = m_meshRequiredUpload;
+        if (owed != 0) {
+            var restoring = 0;
+            foreach (var mesh in m_activeOwed) { if (!mesh.Resident) { restoring++; } }
+            return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
+                $"owes {(owed * sizeof(uint))}B of {m_activeOwed.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved}");
         }
+        if ((required == 0UL) || ((required <= m_uploads) &&
+            ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled))) { return null; }
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
+            $"requires upload {required}; submitted {m_uploads}, completed {m_completedUploads}{((required <= m_uploads) ? ", its fence unsignalled" : ", not yet submitted")}");
     }
 
     // Invalidate before staging words or replacing their buffer: until the next submission completes, the geometry
@@ -280,6 +294,7 @@ public sealed partial class SdfWorldTables {
                 } else {
                     m_meshesOwed.UnionWith(meshes: m_meshArena.Placed);
                     foreach (var mesh in m_meshArena.Moved) {
+                        m_meshMoved++;
                         ForgetLanding(mesh: mesh);
                         // A moved mesh whose normals and levels are still coming back from the store stays owed and
                         // lands through the background work, its draws held out until it does.
@@ -447,6 +462,8 @@ public sealed partial class SdfWorldTables {
     // The mesh words the region has written, the frames and time it spent owing words, the words it owes now, and since
     // when it has owed them (a Stopwatch timestamp; zero while it owes none).
     private long m_meshWordsWritten;
+    // The meshes a grown draw reserve moved, over the tables' life.
+    private long m_meshMoved;
     private long m_owedFrames;
     private long m_owedTicks;
     private long m_owedWords;
@@ -512,7 +529,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} {DescribeLandingJobs()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} {DescribeLandingJobs()}");
     }
 
     // The mesh whose words the mesh scratch holds, which a landing slicing it over several jobs reads again.

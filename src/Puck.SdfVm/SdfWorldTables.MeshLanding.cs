@@ -4,7 +4,8 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 // The mesh region's landing: every placed mesh's words reach the region through the tables' background GPU work
-// (SdfGpuWork), in jobs of at most SdfGpuWork.UploadChunkBytes under that service's byte, host-time and GPU-share budget,
+// (SdfGpuWork), in jobs of what that service's upload budget allows (at most SdfGpuWork.MostUploadJobBytes) under its byte,
+// host-time and GPU-share rates,
 // never through a frame's upload. The meshes the latest staged list names and the region still owes are taken in the
 // order the views see them largest (MeshDemand), so the scene fills in from the cameras outward; a large mesh lands in
 // several jobs. Each job owes its words to the region (GpuRegion.OweSourced), which stages them from the meshes' own
@@ -89,18 +90,18 @@ public sealed partial class SdfWorldTables {
     // Takes the next owed words in landing order, up to one chunk, from as many meshes as fit and at most LandingSlices of
     // them, each slice one run of the region's copy, so the copy never merges runs across the words between them; none
     // when every ordered mesh's words are taken.
-    private bool TryTakeLanding([System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out LandingJob? job) {
+    private bool TryTakeLanding(int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out LandingJob? job) {
         job = null;
         if (m_meshesOwed.Count == 0) { return false; }
 
-        const int Budget = (SdfGpuWork.UploadChunkBytes / sizeof(uint));
+        var budget = (uploadBytes / sizeof(uint));
         var taken = 0;
 
         // A mesh whose storage is still coming back from the store (SdfMesh.Resident) is passed over, and the cursor stays
         // at the first such mesh so a later take finds it restored.
         var waiting = -1;
 
-        while ((m_landingCursor < m_landingOrder.Count) && (taken < Budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
+        while ((m_landingCursor < m_landingOrder.Count) && (taken < budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
             var mesh = m_landingOrder[m_landingCursor];
 
             if (!m_meshesOwed.Contains(mesh: mesh)) { m_landingCursor++; continue; }
@@ -114,7 +115,7 @@ public sealed partial class SdfWorldTables {
                 m_landing.Add(key: mesh, value: progress);
             }
 
-            var take = Math.Min(val1: (progress.Words - progress.Taken), val2: (Budget - taken));
+            var take = Math.Min(val1: (progress.Words - progress.Taken), val2: (budget - taken));
 
             if (take > 0) {
                 (job ??= new LandingJob()).Slices.Add(item: new LandingSlice(Mesh: mesh, Progress: progress, Word: progress.Taken, Count: take));
@@ -184,7 +185,7 @@ public sealed partial class SdfWorldTables {
 
     // The landing's counts for DescribeLanding.
     private string DescribeLandingJobs() => string.Create(provider: CultureInfo.InvariantCulture,
-        handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-chunk={SdfGpuWork.UploadChunkBytes}B");
+        handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-job-most={SdfGpuWork.MostUploadJobBytes}B");
 
     // The placed meshes whose words the region owes. An owed mesh the latest list names holds a need on its storage
     // (SdfMesh.Need), so its normals and coarser levels stay in memory, or come back from the store off the frame thread,
@@ -264,8 +265,8 @@ public sealed partial class SdfWorldTables {
         public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
 
-        public bool TryTake(SdfWorldTables current, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
-            if (current.TryTakeLanding(job: out var landing)) {
+        public bool TryTake(SdfWorldTables current, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+            if (current.TryTakeLanding(uploadBytes: uploadBytes, job: out var landing)) {
                 job = landing;
                 estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: (((long)landing.Words) * sizeof(uint)));
                 return true;

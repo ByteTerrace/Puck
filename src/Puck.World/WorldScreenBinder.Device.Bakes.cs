@@ -55,8 +55,10 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
     public bool IsResidentSince(long mark) => IsSettledSince(mark) && PendingMeshResidency is null;
     /// <inheritdoc/>
     public string? PendingResidencyReasonSince(long mark) => PendingReasonSince(mark) ?? PendingMeshResidency;
-    private string? PendingMeshResidency => ViewHost is not { MeshesResident: true }
-        ? "the world's residency still owes mesh landing or its GPU upload completion"
+    private string? PendingMeshResidency => (ViewHost is not { } host)
+        ? "the world has no residency"
+        : (host.MeshResidencyPending is { } pending)
+        ? $"the world's residency {pending}"
         : m_renderProbe is { Root.Runtime: { } runtime, Views: { } views }
             ? views.PendingMeshesIn(runtime)
             : "the render graph is not ready";

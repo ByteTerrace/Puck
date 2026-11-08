@@ -72,6 +72,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
     public IReadOnlySet<SdfMesh> Moved => m_moved;
     /// <summary>Gets whether the latest plan moved every mesh, so the region owes every word.</summary>
     public bool Relocated { get; private set; }
+    /// <summary>Gets how many plans relocated every mesh, the first plan included.</summary>
+    public long Relocations { get; private set; }
+    /// <summary>Gets why the latest relocating plan relocated, or <see langword="null"/> before the first.</summary>
+    public string? RelocationReason { get; private set; }
     /// <summary>Gets whether the latest plan's list named the meshes the plan before it named, in the same order, so every
     /// placement and the reserve stand as they were and only the draws' own values can have moved.</summary>
     public bool Unchanged { get; private set; }
@@ -140,6 +144,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
         );
 
         if (relocate) {
+            Relocations++;
+            RelocationReason = ((m_drawCapacity == 0)
+                ? "first plan"
+                : (((ulong)appendedWords) > (SdfWorldTables.MostMeshRegionBytes / sizeof(uint)))
+                ? $"appending {(namedWords - placedNamedWords) * sizeof(uint)}B would pass the region's limit"
+                : $"{unnamed * sizeof(uint)}B no draw names exceeds the {namedWords * sizeof(uint)}B named");
             if (!grown) {
                 m_drawCapacity = GrownCapacity(drawCount: draws.Count);
             }
