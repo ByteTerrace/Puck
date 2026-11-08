@@ -13702,17 +13702,9 @@ export type WorldStateSection = {
 
 export type WorldStorageDefaults = {
   /**
-   * The per-user blob endpoint (a URI, e.g. https://blob.byteterrace.com), or null for none. Validated as an absolute URI when present. Feeds WorldStorageSyncHandle's target construction; a URI here is edge-shaped (platform-managed containers), a connection-string override (CLI-only — see the validator) is raw-shaped.
-   */
-  endpoint?: string | null;
-  /**
    * An explicit user-id override (a UUID string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver's explicit-override source.
    */
   userId?: string | null;
-  /**
-   * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
-   */
-  discoveryEndpoint?: string | null;
 };
 
 /**

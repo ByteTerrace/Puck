@@ -148,25 +148,14 @@ scheduling a step:
   Every composer takes `(definition, arena, recipient)` as three separate
   arguments, so nothing stops a caller passing the authority with a recipient
   it never checked.
-- Delivery metadata is the authority's. Every install bumps one sequence
-  (`src/Puck.World.Server/WorldDocument.cs:28-30`) that sinks pass through as
-  `WorldDocumentVersion` and projections carry as `Population.Revision`; a
-  traveller stream's validity compares the raw definition by reference
-  (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`) and ends the stream
-  with `world.observation.invalidated` when it moved
-  (`WorldFederationProjectionSink.cs:52-55`), so an install that changed
-  nothing the recipient may read still changes what the recipient sees.
-- The delta cache is a comparator, not a seed. `WorldStateChangeDisclosure.Filter`
-  (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:22-93`) marks whole rows
-  changed from row headers (`:41`), because the change carrier sends every cell
-  of a changed row (`WorldServer.Arena.cs:45-56`, `CopyPublishedCells`),
-  recomposes each restricted row and suppresses the replacement only when
-  `m_sent[ordinal]` holds an equal image (`:85`); `Forget` (`:97`) clears it, so
-  the first hidden-only change after a definition delivery sends an unchanged
-  replacement, and the stored image's vector payloads alias arena memory
-  (`:90`, `ReadCellImage`). Each sink holds its own cache and its own
-  `WorldProjectionFeed`, which serializes and diffs the whole projection
-  (`src/Puck.World.Schema/WorldProjectionFeed.cs:56-57,75-103`).
+- Step 1 replaced authority-derived delivery metadata and the comparator-only
+  delta cache with `WorldDeliveryCursor`, `WorldRecipientView` and
+  `WorldDisclosureImages`. Definitions seed delivery history; reads do not.
+  `WorldTravelerProjection` compares the projection the stream last delivered.
+  The shared image table copies vector bytes and caches by audience; the
+  presentation feed retains shared observation rows rather than a state JSON
+  tree per recipient. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)
+  records the carrier, dependency and sequence choices.
 - The deal's slots are authority history. A child takes the lowest free slot
   (`src/Puck.World.Server/WorldTick.Deals.cs:426`, `FirstFreeSlot`), is built at
   `Position = offsets[slot]` with the template's `Solid`, `Grip`, `Region`,
@@ -203,15 +192,12 @@ that erase key faults) are not disclosure and stay in the
 
 | Finding | Cause today | Step |
 |---|---|---|
-| [high] Replica resume delivers the raw definition and neither seeds nor forgets the delta cache (`WorldSessionSink.cs:188`) | A sink discloses by hand on one path and forgets on another | 1, 2 |
 | [high] Batch `ExpectedCells` is a read oracle over undisclosed cells, implemented twice (`StateCommands.cs:135`, `Compose.Batch.cs:82`); admission checks the Observe grant only (`StateTransformAdmission.cs:127`); `ExpectedSpatialReads` is never checked | A guard is a read that never passed the policy; two implementations | 3 |
 | [high] Transform and Generate admission test current hidden membership (`StateCommands.cs:97-116`) | A second whole-row predicate beside `ReadsWhole` | 3 |
 | [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions (`Compose.Cells.cs:292,576,636`; `WorldServer.Arena.cs:98`) | `CanReadCell` reads current visibility; an absent key passes a public row policy | 3 |
 | [medium] A seat writes under its grants alone and learns which hidden keys exist (`Compose.Cells.cs:574`) | Seats are not recipients at the write door | 3 |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
 | [high] `world.budget` publishes raw placement counts (`WorldPopulationCommandModule.cs:225`) | A diagnostic reads `server.Definition` with no audience | 2 |
-| [high] Forgetting the delta cache reopens a timing oracle after re-disclosure (`WorldStateChangeDisclosure.cs:85,97`) | A comparator cache seeded by nothing | 1 |
-| [medium] The last-sent image aliases live vector memory (`WorldStateChangeDisclosure.cs:90`) | The image is a view of the arena, not a copy | 1 |
 | [low] `world.identify` hashes authored hidden seeds for a seat with Control over a screen (`WorldIdentifyCommandModule.cs:72`) | Reads `server.Definition` | 2 |
 | [low] `world.timeline` withholds through a predicate of its own, provable only windowed (`WorldTimelineCommandModule.cs:137-140`) | A door with its own check | 2 |
 | [unconfirmed] A search over an arena holding private keyed sites may compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`) | Search runs as the authority; its outputs are rows with their own policy | 2 (confirm), see [what serves authors](#what-serves-authors) |
@@ -415,6 +401,43 @@ policy only shows is a look, and a visible card's own id already works, so the
 plan drops the physical form rather than building that translation.
 
 ### 5. A delta is a difference of views, owned by the stream
+
+Step 1 implementation invariant: `WorldDeliveryCursor` alone owns the hashes
+and sequence of a stream's delivered images. `WorldRecipientView` reads live
+sources at its fixed ceiling; neither a read nor the world-owned
+`WorldDisclosureImages` table changes a cursor. Images copy vector bytes before
+hashing. Committed value and clock writes carry interned key bits; membership,
+order and audience changes conservatively invalidate a whole row. The shared
+table indexes `readersFrom` and containing-zone dependencies at installation
+and after structural changes. Resource measurements are visible only in the
+operator's `world.budget` answer.
+
+Implementation choices for step 1:
+
+- Audience classes are the current policy-admission bit vector plus the tier;
+  policy dependencies include containing ordered zones and their `readersFrom`
+  rows. Structural and audience writes rebuild that index. The world owns it;
+  a cursor holds only hashes, sequence and any pending observation headers.
+- Replica definitions carry readable cells. Their immediate snapshot primers
+  carry a row's hidden count and anonymous backs in `FieldCellDelta.Observation`;
+  those headers are pending even when no cell changed on the resumed tick.
+  Later count, order and deletion changes compare the complete image.
+- Typed receipts use the actor's sole attached delivery cursor. With no stream,
+  or several streams at different ceilings and no stream identity on the
+  submission, the sequence is zero. They never borrow an authority counter or
+  choose a higher-fidelity stream. The activation identity remains the world's.
+- A traveller compares against the projection its sink last delivered, with
+  the feed's held clock anchors and sequence. The raw definition reference is
+  only an invalidation hint for when to compare content. Route, live principal,
+  admission tier and Observe grant checks still apply on every delivery.
+- Presentation feeds retain shared typed observation rows, removing state from
+  their retained JSON diff tree. A read may warm the shared image cache but
+  changes neither a cursor nor a feed. The earlier composer overloads remain
+  for existing callers until the read and retirement steps migrate them.
+- The shared table's work/byte counters are visible only in the operator's
+  budget; a recipient receives a fixed message in their place. Snapshot cadence
+  alone does not advance a document sequence; delivered document, state-image
+  and anchor changes do.
 
 **Puck builds:** two objects where the first draft had one. The view
 ([decision 1](#1-one-capability-the-recipients-view)) composes; a
@@ -701,14 +724,13 @@ its path is separate code the in-process session never runs:
   records (`ProjectionInvalidated` with its reason) are not the hydrated
   definitions a session sink is handed.
 - **Observe revoked and regranted mid-run**, through the operator in both worlds
-  at the same tick, recorded at the session sink's withheld span and resume: the
-  replica resume path delivers `server.Definition` directly after withholding
-  (`src/Puck.World.Server/WorldSessionSink.cs:180-193`), which an always-observing
-  session never reaches.
+  at the same tick, recorded at the session sink's withheld span and resume.
+  Step 1 routes `WorldSessionSink.Resume` through the cursor and tests both
+  document tiers; an always-observing fixture does not exercise that path.
 - **A federated traveller**, with transfer credentials and forwarding state:
-  traveller stream validity depends on the authority definition object's
-  identity (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`), so a
-  hidden-only install can invalidate that stream.
+  step 1's `WorldTravelerProjection` compares delivered projection identity,
+  admission and route, with an authenticated-stream law for a hidden install.
+  Step 0b still must drive those lifetimes in every paired game.
 - **A mounted addon** (a WASM guest that records what it receives), at the ABI
   boundary: binds and writes use their own cached handles and verdicts
   (`src/Puck.World.Addons/WorldAddonRuntime.Cells.cs:76-128`).
@@ -803,10 +825,9 @@ from that tick the variants' worlds differ by what those blind writes did:
 | `deliver.state`, `deliver.definition` | every session | any hidden member | the re-deal after seat2's blind removal moves `pub`'s dealt position (`$.placements.rows[2].position[0]`) | 3, 4 |
 | `world.state.transform`, `world.state.act` | seat2 | two hidden members | after seat2 overwrites the hidden `secret1`, a transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` | 3 |
 | `outcome.transform`, `outcome.act` | writer | two hidden members | the same refusal texts on the typed outcome | 3 |
-| `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 1, 2, 3 |
+| `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 2, 3 |
 | `world.state.observe`, `world.observe`, `world.state` | seat2 | two hidden members | the observations of `hand` after the blind overwrite | 2, 3 |
-| `deliver.state`, `deliver.definition`, `deliver.snapshot` | every session | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other at tick 40, the replica's moved-row list, and a field delta for the installed row | 1 |
-| `outcome.*`, `query.state` | every session | `late` | the typed outcome's document version, and the observations after the install | 1, 3 |
+| `deliver.definition`, `deliver.snapshot`, `outcome.*`, `query.state` | every session | `late`, after the blind writes and fuzz | the re-authored row restores `pub` and removes keys the earlier writes made readable; that visible change advances the recipient's sequence | 2, 3, 4 |
 | `echo`, `world.state.transform` | seat2 | `late` | a drawn transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` (a drawn `Generate 'hand'` likewise as `draw site is not disclosed` against `requires a redrawable draw site`) | 3 |
 | `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 2, 4 |
 
@@ -826,7 +847,7 @@ one wins.
 | Step | Lands | Check |
 |---|---|---|
 | 0. The harness and the games | The noninterference harness (above): paired boots differing only in hidden state, one principal of each kind driven identically in both, byte-for-byte comparison of everything it receives, leaks named by door; the input fuzzer over the principal's grants; `DisclosureHarnessLawTests` and `puck disclosure <world>`. The four fixtures as authored Puck games in `worlds/debug/`, each at a table in the tables room and each with its pair script and its hidden difference: **the auction** (sealed bids into an authority-only row, the reveal, the winner; its pair differs by one bid present or absent), **the card game** (a draw pile, a discard pile and dealt hands under `Count` and `Placeholder`, a displaced visible card; its pair differs by one hidden card), **social deduction** (roles in a restricted row, private chat channels through `chat.whisper` inboxes with `readersFrom` audiences, a vote; its pair differs by one role and one whisper), **the skirmish** (units with hidden positions under fog, a `search` job over what a side can see, physics on a small board; its pair differs by one unit in the fog). The existing probe is the fifth, smallest fixture | The harness runs over the five fixtures and the fuzzer and is red on today's code at exactly the findings' doors, naming each. The games settle what the plan left open: the auction shows whether an authored private inbox gives a sealed bid everything it needs (if it does, blind writes stay rejected; if it cannot, decision 3 is revisited with the auction's requirement in hand); the skirmish shows whether a `search` with public outputs over hidden rows leaks and so decides the lint; the card game decides the `$back` contract and the layout; social deduction decides whether `readersFrom` audiences and inbox eviction (`chat.whisper`'s bounded inbox) need a door of their own |
-| 1. The view and the cursor, deltas first | `WorldRecipientView` in Schema, stateless, with its ceiling, beside the old types (nothing deleted); `WorldDeliveryCursor` with the shared image table and the per-key change bitset in the carrier; `Advance` over images; recipient-scoped sequence shown on deliveries, outcomes and provenance; traveller validity by projection identity; both sinks deliver through a cursor, `Resume` included; `WorldStateChangeDisclosure` and `Forget` deleted; `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` registered Operator; the spectator measurement in `world.budget` | Harness: the replica, presentation and peer principals' deliveries, counts, sizes, versions and stream lifetimes compare equal across every pair, on the hidden-only tick and across a read between deliveries; `StateChangeDisclosureLawTests` rewritten over `Advance` with the in-place vector write; the measurement law reports N spectators × M vectors with one composition per audience class per changed row |
+| 1. The view and the cursor, deltas first — landed | `WorldRecipientView`, `WorldDeliveryCursor`, `WorldDisclosureImages` and the carrier's key bitsets; both sinks use `Advance` and seed on definition/Resume; recipient sequences on deliveries, outcomes and provenance; traveller validity by delivered projection identity; the old change-disclosure cache and its forget path removed. `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` are Operator; the operator's budget reports image work/storage. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream) records the choices | `DisclosureHarnessLawTests` compares hidden-only installs with intervening reads; `StateChangeDisclosureLawTests` covers independent cursors, in-place vectors, count primers, seat receipts and shared spectator composition; `WorldProjectionBackpressureLawTests` compares both peer tiers' wire bytes using the harness nonce normalization. Session Resume, authenticated traveller lifetime and observation/anchor restore laws cover boundaries step 0b has not yet added to every fixture. The five fixtures still expose the read/write/layout causes below; equality is required while the actual disclosed image remains equal |
 | 2. Reads through the view | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; the skirmish's `search` doors confirmed | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
 | 3. The write door refuses by policy | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Harness: every write the fuzzer makes (set, add, remove, transform, generate, guarded batches, addon binds and writes) compares equal in reply, typed outcome and later deliveries; the auction plays to its reveal with each bidder's receipts on its own row; `TransformDisclosureLawTests` updated to the one text |
 | 4. The layout | The view re-deals restricted templates with base and displacement split; `$back` children under `Placeholder` with their pick and submission contract; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template; `world.placements`, the projection and reflow from the re-deal | Harness: the card game's and the skirmish's `world.placements`, `world.reflow.preview`, picks and projections compare equal across their pairs, the displaced card included; `puck compile --validate` refuses the card game's template with `solid` by name; `PlacementResponseDisclosureLawTests` and `WorldDeckAndDisclosureLawTests` updated to the renumbered slots |
@@ -895,17 +916,19 @@ pool later declares enters through `ReadsWhole` alone.
   replica and editor sessions (tick 15) in each of its three fog pairs: the
   public `skirmishSharpBest` row (`to`/`score` 25/-4 against 26/-7, 24/-4 and
   24/-5), which is the search door; its late in-fog move is green. The card
-  game is red at the step-1 doors (`deliver.snapshot`, `deliver.state` and
-  `deliver.definition` on the hidden-only installs, and every session
-  `outcome.*` carrying the install-counting version), at `world.budget` and
-  `world.projection` (step 2), at the sessions' `query.state` in the two pairs
-  that swap a hand's card with the deck's (the `Placeholder` row a session
-  reads moves with the hidden swap), and at `world.placements` in the pair
-  where hidden cards leave seat 1's hand and return before a card is shown
-  (the shown card's `dealSlot` and position, step 4). The auction is red only when a bid is sealed mid-run
-  (`deliver.snapshot` to the replica and editor sessions at the bid's tick);
-  a bid present or absent, of another amount or over the purse, sealed before
-  the observed window, is green. Social deduction is green over another pair
+  game remains red at `world.budget`, `world.projection` and session
+  `query.state` (step 2), at policy-dependent write refusals including
+  `world.reset` (step 3), and at dealt slots and placements (step 4). Its
+  swap removes cards before returning them two ticks later: `Count` and
+  `Placeholder` deliberately disclose that intermediate change. Those
+  observations and the remaining layout differences legitimately cause
+  deliveries and recipient sequence changes; the fixture must preserve the
+  disclosed count/order at every tick to isolate a hidden-only swap. This is
+  a step-0b fixture refinement, not a reason to suppress live counts.
+  Likewise, the probe's late whole-row install overwrites public changes
+  caused by its earlier blind writes and fuzz. The focused step-1 laws hold
+  the public image fixed to isolate the delivery invariant. The auction's
+  pairs, including the mid-run sealed bid, are green. Social deduction is green over another pair
   of moles, a whisper between two other seats, a line in the den and two
   other seats' votes: its hidden changes are rule writes into per-cell and
   per-seat rows that move nothing a crew seat or a session is delivered.

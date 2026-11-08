@@ -1883,22 +1883,24 @@ applies body-relative snapshot disclosure. A route seed precedes the definition
 and snapshots. The stream's documents, and every `Route` answer, are composed
 for the traveler's own peer principal through `WorldStateDisclosure.Disclose`
 (`WorldFederationCodec.EncodeRoute` derives it from the route's entity), so a
-traveler reads its own hidden rows and none of another's. Ownership, definition, or final Observe-grant changes invalidate
+traveler reads its own hidden rows and none of another's. Ownership, disclosed projection identity, or final Observe-grant changes invalidate
 the stream, and the client reopens through its original authenticated entry rather
 than dialing a private world name. Projection queues are bounded; a slow consumer
 disconnects instead of blocking the simulation. Disposing the client lease cancels
 observation, and consumer disconnect detaches the server subscription even when
 the world is paused.
 
-Each session or federation sink owns a `WorldStateChangeDisclosure` workspace.
-Its filtered cell memory is borrowed until the next delivery; consumers copy what
-they retain. Row, cell, zone and live reader-list policies are checked again for
-every delivery. A row whose declared policy can withhold from the recipient
-(`WorldStateDisclosure.ReadsWholeRow`) is replaced only when the cells the
-recipient reads differ from the replacement it was last sent, so a change to
-hidden cells alone sends nothing; a definition delivery that reseeds the
-recipient's rows forgets those replacements. Public reads do not format a
-principal token.
+Each session or federation sink owns a `WorldDeliveryCursor` over a live
+`WorldRecipientView`. The world's `WorldDisclosureImages` shares immutable row
+images by content and audience, copying vector bytes before hashing. A cursor
+holds delivered hashes and a recipient sequence; reads cannot advance it.
+Definitions seed the cursor, snapshots replace only changed observable images,
+and resuming Observe uses the same path. Snapshot row headers carry hidden-count
+and placeholder metadata. Key bits skip hidden value writes; structural changes
+and the reverse index of zone and reader-list dependencies invalidate the rows
+they affect. Traveller validity compares the projection last delivered, including
+snapshot updates, rather than an authority install counter or object identity.
+`world.budget` reports shared image storage and per-tick work to the operator.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
@@ -2305,7 +2307,7 @@ recognition is stored through named text state rows in the owned world.
 `--user-id` and `--state-dir` still resolve who is playing and where those
 worlds live. `WorldOwnedWorldSync` pushes and pulls those documents against the
 per-user cloud container—one blob per world tip under `puck/worlds/`, ETag-guarded,
-refuse-and-surface—when the composition root wires an endpoint and a resolved
+refuse-and-surface—when the composition root wires a store and a resolved
 identity. A world naming a basis pushes and pulls its WHOLE chain, not just its
 flattened tip: each chain link lives under its own `puck/worlds/basis/{name}`
 key, and a pull composing a chain-derived document writes each link to the
@@ -2320,32 +2322,14 @@ key space a read or write address carries, whichever route served the list); a
 whole-catalog `storage.pull` uses it to list the cloud `puck/worlds/` namespace
 and DISCOVER worlds the catalog has never seen.
 
-The platform edge (`AzureBlobObjectStorageTarget.EdgeNamespace`) cannot serve a
-container list AT ALL—its path rewrite has no segment for a query-string-only
-List Blobs request to occupy, so it 404s unconditionally before reaching blob
-storage (verified live). An edge-shaped endpoint therefore never
-sends `ListAsync` through the edge: it routes to
-`AzureBlobObjectStorageTarget.DirectEndpoint`—the world doc's
-`storage.discoveryEndpoint` / its `--storage-discovery-uri` CLI reflection—
-or `WorldOwnedWorldSync.DiscoverCloudIds` refuses whole-catalog discovery BY
-NAME, before any network call, when no discovery endpoint is authored. A
-genuine 404 through the direct connection (the edge-shaped container is
-platform-managed and never legitimately absent) propagates as a named refusal
-too, rather than reading as an empty prefix—only the raw/dev-emulator shape
-(`EdgeNamespace` null, self-managed containers) swallows a 404 as "nothing
-written yet."
-
-Going direct means addressing a DIFFERENT layout of the same blob, and that is
-the part easy to get wrong: the edge rewrite maps `/{namespace}/{container}/{rest}`
-onto container `{container}`, blob `{namespace}/{rest}`, so what the edge route
-addresses as container `{namespace}`, blob `{objectId}/{key}` is *stored* as
-container `{objectId}`, blob `{namespace}/{key}`. The direct list therefore
-enumerates the object's own container beneath a `{namespace}/` prefix—which is
-also the only shape the per-user access policy grants—and strips that prefix
-back off, so both routes hand the caller the same object-relative keys.
-Enumerating the edge's view instead (a container named for the namespace) asks
-for something no account layout has, and an emulator that has been laid out to
-match the edge's view will pass while production 404s.
+The store is whatever the deployment's `--storage-config-file` selects: an
+installed storage provider's `type` and settings, built into an
+`ObjectStorageTarget` before the World composes. This README names no provider.
+A store that cannot serve a list refuses whole-catalog discovery by name rather
+than reporting an empty catalog, and a 404 is "nothing written yet" only where
+the store itself creates containers. Azure Blob's edge and direct-list shapes
+are its provider's own
+([`azure.blob` storage](../Puck.World.Azure/README.md#azure-blob-storage)).
 
 `WorldDocumentName` (in `Puck.World.Schema`, because the earliest door that
 has to enforce it is document validation) is the id↔file/blob-name mapping. It
@@ -2373,12 +2357,10 @@ the pull's outcome list rather than being silently dropped.
 
 The identity half is `Puck.World`'s `IPlayerStorageIdentityResolver`
 (`WorldStorageIdentity.cs`)—an authored `storage.userId` / `--user-id`
-override, or the local-only decline. There is no app registration and no
-interactive sign-in: game clients ARE users, so a player's machine authenticates
-ambiently and a hosted server runs as a user-assigned managed identity, both
-through the one `DefaultAzureCredential` the blob backend already uses.
-`storage.credential` probes whether that ambient credential can issue a storage
-token from this machine and records the verdict for `storage.status`. Parsing a
+override, or the local-only decline. How the store authenticates is its
+provider's concern; `storage.credential` asks the configured store
+(`IObjectBlobStore.ProbeAccessAsync`) whether this machine could reach it and
+records the verdict for `storage.status`. Parsing a
 STORAGE access token for identity remains ruled out—it says what a credential
 is scoped to, never who is playing.
 

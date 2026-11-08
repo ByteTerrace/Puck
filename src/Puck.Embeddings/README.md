@@ -21,13 +21,15 @@ so this package references `Puck.State`. See
 Embedding generation standardizes on Microsoft's provider-agnostic
 `IEmbeddingGenerator<string, Embedding<float>>` (`Microsoft.Extensions.AI`).
 
-Two generators are provided:
-1. `FixtureEmbeddingGenerator`: offline reference generator answering model `puck-fixture`.
-   Component `i` is signed byte `i mod 32` of
-   `SHA-256(model ‖ 0 ‖ revision ‖ 0 ‖ dimensions ‖ 0 ‖ text ‖ 0 ‖ ⌊i/32⌋)`, with `-128 → -127`, then normalized.
-2. `OpenAiEmbeddingGeneratorFactory`: factory constructing `IEmbeddingGenerator<string, Embedding<float>>`
-   backed by `Azure.AI.OpenAI` and `Microsoft.Extensions.AI.OpenAI` using passwordless identity
-   authentication via `TokenCredential` (`DefaultAzureCredential`).
+This package provides the provider-neutral reference generator,
+`FixtureEmbeddingGenerator`: an offline generator answering model `puck-fixture`.
+Component `i` is signed byte `i mod 32` of
+`SHA-256(model ‖ 0 ‖ revision ‖ 0 ‖ dimensions ‖ 0 ‖ text ‖ 0 ‖ ⌊i/32⌋)`, with `-128 → -127`, then normalized.
+
+A hosted model is a provider's implementation of the same interface, in that
+provider's own project: `Puck.Embeddings.Azure`'s
+`AzureOpenAiEmbeddingGeneratorFactory` builds one over an Azure OpenAI
+deployment with an Azure token credential. This package carries no provider SDK.
 
 ## Quantization
 

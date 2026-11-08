@@ -14,7 +14,7 @@ namespace Puck.World.Server.Tests;
 /// pushes a whole chain — never just its flattened tip.</summary>
 public sealed class StorageCompositionLawTests {
     private static readonly Guid ContainerId = Guid.Parse(input: "11111111-2222-3333-4444-555555555555");
-    private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
 
     private static string BasisKey(string name) => WorldOwnedWorldSync.BasisAddressFor(
         containerId: ContainerId,

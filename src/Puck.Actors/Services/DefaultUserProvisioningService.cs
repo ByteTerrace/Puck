@@ -11,7 +11,7 @@ using Microsoft.Kiota.Abstractions.Serialization;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Puck.Azure;
-using Puck.Storage;
+using Puck.Storage.Azure;
 
 namespace Puck.Actors.Services;
 

@@ -174,8 +174,9 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   mirror of the front ([rendering plan](rendering.md)).
 - Whether the engine ships or requires the GameInput redistributable
   ([input](#input-channels)).
-- Whether proof of possession is a product requirement for Entra bearer tokens
-  and for initial binding issuance ([security](#security-review)).
+- Whether proof of possession is a product requirement for the identity
+  provider's bearer tokens (Entra's today) and for initial binding issuance
+  ([security](#security-review)).
 - Looks in the transmission design ([transmission](transmission.md)), each
   with the design's choice first:
   - A body's own overhangs and hollows shadow its wrapped dark side (the
@@ -913,9 +914,11 @@ travel.
 
 Neighbour contact replay packet (independent of companion custody):
 
-- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
-  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
-  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+- [high] Tape fixed neighbour inputs at their local admission tick.
+  `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
+  geometry do to a local body each tick and keeps it behind its ownership
+  faces, and contact settles by authority pair through the link's settled
+  identity, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
@@ -936,6 +939,29 @@ Neighbour contact replay packet (independent of companion custody):
   clamp counts. This is a transport/admission/tape change, beyond the bounded
   depenetration fix; the bound does not claim replay determinism or prove a
   neighbour's bodies exist.
+- [medium] A neighbour can still hold a local body still: a refusal from its
+  geometry's sweep (`ContactRefusal`) returns the body to its previous position
+  in `WorldAdjacencyContactField.ResolveCore` before the door, so hostile
+  geometry can pin a body in the band. Bound or ignore a refusal the
+  neighbour's field raises against a body this world owns; show it with a law
+  whose neighbour field refuses every sweep.
+- [medium] `WorldAdjacencyContactField.TrySupportDistance` takes the least
+  support distance a neighbour's field reports, and ground snap then moves the
+  body down that far within its authored reach without passing the door, so a
+  reported floor can draw a body toward a floor/ceiling ownership face. Route
+  the snap's displacement through `AdmitAdjacencyResponse` when the support came
+  from a neighbour.
+- [medium] The rest of C3's residual rules
+  ([synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
+  a neighbour correction a body's own motion does not ask for still carries a
+  still body toward the plane up to its ownership threshold, and phantom
+  bodies reported every tick hold a visitor indefinitely. Both belong in
+  `WorldPopulation.AdmitAdjacencyResponse`, which would need the body's own
+  motion this tick and a per-body hold count that decays the admitted budget;
+  check 8 (C3) names the witness.
+- [medium] The settlement's remote identity is the link's first claimed
+  `Authority`; a neighbour that picks its identity before linking still picks
+  which side of a pair yields. Attested authority identities close it.
 
 Still open from the companion build:
 
@@ -1111,6 +1137,62 @@ retirement.
   the defect ([toolchain cautions](../development/contributing.md#hardware-and-toolchain-cautions));
   on each SDK bump, scan a running World's jitted methods for the pattern before
   removing the attribute. Reporting it to dotnet/runtime is the owner's.
+
+### Provider independence
+
+Owner: delivery lane · medium · Next: the CLI's Azure verbs. AGENTS.md's
+"Puck is provider-independent" ruling: Azure and Entra are one replaceable
+implementation behind Puck's own abstractions. A provider project declares
+`<PuckProvider>`; the architecture gate (PUCKARCH009, `PuckArchitectureGate`'s
+`CheckProviders`) refuses a provider project or a provider's SDK assemblies
+(`PuckArchitectureProviderAssemblies` in `build/Architecture.props`) in any
+other ranked project's closure. Terminal kinds are exempt, and that exemption
+is what the first item below narrows.
+
+- [high] The CLI's Azure deployment verbs live in the provider-neutral
+  `Puck.Cli.Release` (`src/Puck.Cli.Release/Azure/`, namespace `Puck.Cli.Azure`),
+  which therefore references `Puck.Storage.Azure` and the Azure SDK. The generic
+  `puck world release` verbs call them directly
+  (`src/Puck.Cli.Release/Automation/WorldReleaseCommand.cs`: `AzureCommand`
+  calls for status, finalize, resume, deploy, rollback, capture and restore), and
+  `OfficialWorldDocumentScanner.RootDocumentName` reads
+  `AzureCommand.HostedWorldName`. Abstraction: a release host, the driver
+  `WorldReleaseCoordinator`'s runtime results already come from; move the Azure
+  verbs into a `Puck.Cli.Azure` provider project selected through it, then drop
+  the gate's Tool exemption so only tests compose providers by reference. The
+  other Tool edge is `puck embed`: `Puck.Cli.Worlds`' `EmbedCommand` builds an
+  `AzureOpenAiEmbeddingGeneratorFactory` generator directly, so the CLI
+  references `Puck.Embeddings.Azure`; it should select an embedding provider
+  type (`WorldExtensionEmbeddingProviderType`) from installed extensions as a
+  World host does.
+- [medium] Player storage identity is an authored user id
+  (`storage.userId` / `--user-id`, `ExplicitOverridePlayerStorageIdentityResolver`),
+  which today is an Entra `oid` used as the container name. Abstraction: the
+  authentication provider already returns the client's verified subject
+  (`WorldAuthenticationProvider.Client`); resolve the storage identity from the
+  configured identity provider the way the store is resolved from its
+  provider, and keep the container mapping a store concern.
+- [medium] `Puck.Actors` (declared `<PuckProvider>Azure</PuckProvider>`) is the
+  Azure deployment's onboarding tier through and through: Entra `oid` grain
+  keys, Microsoft Graph directory provisioning, on-behalf-of blob containers,
+  App Configuration and Orleans Azure Storage clustering
+  (`src/Puck.Actors/Program.cs`, `src/Puck.Actors/Extensions.cs`). Nothing
+  references it. Name it for its provider (a `Puck.Azure` prefix) once the MMO
+  round's research pages, which cite its paths, are synthesized; a non-Azure
+  deployment needs a provisioning abstraction (identity, storage, keys) before
+  it can onboard users.
+- [medium] The dashboard portal and host sign in through MSAL and talk to Azure
+  Blob directly (`src/Puck.Dashboard/src/host/src/tokenCredential.ts`,
+  `@azure/msal-browser`, `@azure/storage-blob`;
+  `isByteTerraceStorageUrl` and `resolveStorageEndpoint` in
+  `src/Puck.Dashboard/src/portal/src/clients/resolveStorageEndpoint.ts`). The
+  architecture gate does not see `npm` projects. Abstraction: a sign-in and a
+  store seam the portal is handed, with the Azure pair as one implementation.
+- [low] Remote MCP's OIDC options encode Entra's claim shape: `SubjectClaim`
+  accepts only `sub` or `oid`, and `oid` requires `TenantId`, an exact `tid`
+  claim (`RemoteMcpOptions.Validate`, `RemoteMcpCaller.TenantId`). Abstraction:
+  a subject claim name plus a map of required exact claims, so `tid` is one
+  configured claim rather than a field.
 
 ### Author leaks to the standard
 
@@ -3465,18 +3547,8 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 1, deltas and versions first ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)):
-    [high] forgetting the delta cache reopens a timing oracle after
-    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
-    [medium] the last-sent image aliases live vector memory (`:90`); [high]
-    versions, revisions, delivery counts and stream invalidation signal hidden
-    installs (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`,
-    `WorldFederationProjectionSink.cs:52-55`); `host.frames`, `host.memory`,
-    `world.counters`, `world.gpu-timing` and `world.collision.probe` become
-    Operator.
   - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
-    [high] replica resume delivers `server.Definition` raw
-    (`src/Puck.World.Server/WorldSessionSink.cs:188`); [high] `world.budget`
+    [high] `world.budget`
     publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:226`,
     no audience at `:461`); [high] `world.reflow.preview` runs over the
     authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);
@@ -3549,7 +3621,9 @@ brief's priorities ([security review](../development/security-review.md)).
   public key under their own prefix and trigger issuance when `binding.cbor` is
   absent; the subject is that caller. Establish the proof-of-possession policy
   and a concrete authority crossing before classifying it.
-- The Entra bearer-token trust model
+- The bearer-token admission trust model, asked of the authentication provider
+  contract (`WorldAuthenticationProvider`) and checked against today's
+  implementation, the Entra authenticator
   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:137`,
   `src/Puck.World.Server/WorldRemoteAuthority.cs:1225`): the challenge and
   session are compared but not signed by the bearer, so replay across challenges

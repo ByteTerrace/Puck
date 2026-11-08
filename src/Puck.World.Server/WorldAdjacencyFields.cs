@@ -86,11 +86,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Neighbour: neighbour.CounterpartFrame,
                             Source: frame,
                             OverlapDepth: depth,
-                            OwnershipThreshold: OwnershipThreshold(
-                                adjacency: row,
-                                definition: definition,
-                                frame: in frame
-                            )
+                            OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: row, definition: definition).Threshold
                         )],
                     OverlapDepth: depth,
                     Direct: true
@@ -172,11 +168,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Neighbour: corner.CounterpartFrame,
                             Source: intermediateFrame,
                             OverlapDepth: cornerDepth,
-                            OwnershipThreshold: OwnershipThreshold(
-                                adjacency: intermediateRow,
-                                definition: leftNeighbour.Definition,
-                                frame: in intermediateFrame
-                            )
+                            OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: intermediateRow, definition: leftNeighbour.Definition).Threshold
                         ),
                         new WorldAdjacencyFramePair(
                             Neighbour: leftNeighbour.CounterpartFrame,
@@ -186,11 +178,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                                 b: leftRow.Name.Value,
                                 comparisonType: StringComparison.Ordinal
                             ))).OverlapDepth,
-                            OwnershipThreshold: OwnershipThreshold(
-                                adjacency: leftRow,
-                                definition: definition,
-                                frame: in localFrame
-                            )
+                            OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: leftRow, definition: definition).Threshold
                         ),
                     ],
                     OverlapDepth: cornerDepth,
@@ -200,34 +188,6 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         }
 
         return visuals.ToArray();
-    }
-    // The threshold the ownership scan hands a body over at, derived from the document that authors the face. A
-    // document whose envelope does not derive still preserves the explicit authored lower bound.
-    private static FixedQ4816 OwnershipThreshold(WorldDefinition definition, WorldAdjacency adjacency, in WorldFaceFrame frame) {
-        var authored = FixedQ4816.FromDouble(value: adjacency.Hysteresis);
-
-        if (
-            !WorldAdjacencyPolicy.TryReciprocalHysteresis(
-            definition: definition,
-            depth: out var hysteresis,
-            reason: out _
-        ) ||
-            !WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
-            definition: definition,
-            depth: out var deadband,
-            reason: out _
-        )
-        ) {
-            return authored;
-        }
-
-        return FixedQ4816.Max(
-            x: authored,
-            y: WorldAdjacencyPolicy.OwnershipThreshold(
-            frame: in frame,
-            reciprocalHysteresis: hysteresis,
-            verticalOwnershipDeadband: deadband
-        ));
     }
     private static FixedQ4816 ProjectionOverlapDepth(FixedQ4816 derived, WorldAdjacency adjacency) => FixedQ4816.Max(
         x: derived,
@@ -515,7 +475,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         private ulong m_pinnedSnapshotTick;
         private float m_pinnedStepSeconds;
 
-        public string Authority => mirror.Authority;
+        // Settled at the first frozen image naming one; a link is replaced, never re-identified.
+        private string? m_settledAuthority;
+
+        public string Authority => (m_settledAuthority ?? mirror.Authority);
         public WorldFaceFrame CounterpartFrame => (m_hasPin
             ? m_pinnedFrame
             : m_frame
@@ -691,6 +654,9 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 stepSeconds: out m_pinnedStepSeconds,
                 tick: out m_pinnedSnapshotTick
             );
+            if ((m_settledAuthority is null) && (mirror.Authority is { Length: > 0 } delivered)) {
+                m_settledAuthority = delivered;
+            }
             m_pinnedDefinition = mirror.Definition;
             m_pinnedFrame = m_frame;
             m_pinnedField = m_field;

@@ -535,20 +535,37 @@ once per authority tick; contact must not rebuild that graph per body.
 `WorldAdjacencyContactField` walks the same projection set as rendering,
 including a diagonal peer whose two overlap bands meet at a four-way corner. It
 maps the body through every path stage, resolves neighbour terrain and eligible
-generation-addressed dynamic bodies, then maps the answer back through the
-inverse path. Querying only authored direct edges leaves a physical hole at the
-literal corner even when the rendered diagonal floor is present.
+dynamic bodies, then maps the answer back through the inverse path. Querying
+only authored direct edges leaves a physical hole at the literal corner even
+when the rendered diagonal floor is present.
 
-Neighbour-body pushes pass through `WorldPopulation.BoundAdjacencyCorrection`
-before application. Its per-body tick scratch is shared across projections and
-sweep retries, including failed retries, and survives contact-field rebuilds.
-The sum of admitted lengths is bounded by the local body's scaled collider
-reach, with each request also limited by the consulted overlap depth minus
-spent budget. Remote body counts, sizes and speed claims cannot widen the local
-reach. The cap applies to dynamic body reports, not neighbour terrain contact.
-`WorldBodyWork.AdjacencyCorrectionClamps` counts shortened or rejected requests
-in `world.counters physics.bodies`; its class is pacing until neighbour inputs
-are taped. The fixed arithmetic is deterministic for the same admitted images.
+A neighbour's answer moves a local body only through
+`WorldPopulation.AdmitAdjacencyResponse`: its bodies' pushes and its geometry's
+resolution cross back as one displacement and one velocity per projection.
+Every sweep that moves a body names it (`WorldBody.SweepContact`); a probe that
+names no body takes nothing from a neighbour. The door keeps two invariants per
+local body per tick:
+
+- The sum of admitted lengths is bounded by the local body's scaled collider
+  reach, each also limited by the consulted overlap depth minus spent budget.
+  The per-body scratch is shared across projections and sweep retries,
+  including failed retries, and survives contact-field rebuilds. Remote body
+  counts, sizes, geometry and speed claims cannot widen it.
+- Behind every ownership face (`WorldAdjacencyPolicy.OwnershipFaces`) the body
+  is still owned behind, the admitted end stays owned (`WorldOwnershipFace.Owns`,
+  the test `WorldAdjacencyRegion.Sweep` applies to a step's end) and the body's
+  outward speed through the face does not grow. A crossing the ownership sweep
+  reports therefore comes from the body's own motion; a neighbour can push a
+  still body up to its face but not across it.
+
+Body contacts are settled by one responder per authority pair
+(`WorldCrossAuthoritySettlement.LocalResponds`), from this authority's identity
+and the identity the neighbour's link settled on at its first frozen image, so
+respawning bodies under new generations cannot choose who yields.
+`WorldBodyWork.AdjacencyCorrectionClamps` counts shortened, rejected or slowed
+responses in `world.counters physics.bodies`; its class is pacing until
+neighbour inputs are taped. The fixed arithmetic is deterministic for the same
+admitted images.
 
 Outward of a boundary plane the neighbour's geometry decides the vertical. This
 world's own terrain has ended there by construction, so ground its field still

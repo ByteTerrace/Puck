@@ -151,7 +151,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         var catalog = new WorldMachineCatalog(engines: []);
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true"),
+            target: new DirectoryObjectStorageTarget(rootPath: "fake-store"),
             machines: catalog
         );
         var identity = new WorldAuthorityIdentity(

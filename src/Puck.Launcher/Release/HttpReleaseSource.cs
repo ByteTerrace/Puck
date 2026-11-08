@@ -9,7 +9,7 @@ namespace Puck.Launcher.Release;
 /// <c>update</c> section), never a <c>PUCK_*</c> environment variable. Layout mirrors <see cref="DirectoryReleaseSource"/>'s directory tree over
 /// HTTP: <c>&lt;baseUri&gt;/&lt;channel&gt;/manifest.json</c> and
 /// <c>&lt;baseUri&gt;/objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c>. Genuinely distinct from
-/// <c>Puck.Storage</c> (credentialed Azure SDK, per-user containers) and <c>Puck.Assets.IAssetSource</c>
+/// <c>Puck.Storage</c> (a credentialed provider store, per-user containers) and <c>Puck.Assets.IAssetSource</c>
 /// (synchronous, path-addressed, no network) — a release is anonymous, cached, public-content data.
 /// </summary>
 /// <param name="httpClient">The client to issue requests through. The caller owns its lifetime.</param>

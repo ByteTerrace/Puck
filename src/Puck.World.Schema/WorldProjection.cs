@@ -254,7 +254,8 @@ public static class WorldProjection {
     /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten: a fault, not
     /// a refusal.</exception>
     /// <param name="content">The store receiving disclosed prototype bodies, or the shared store.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null, ContentAddressedStore? content = null) {
+    /// <param name="view">The capability supplying shared observable row images, when composing a delivery.</param>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null, ContentAddressedStore? content = null, WorldRecipientView? view = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
@@ -366,7 +367,7 @@ public static class WorldProjection {
             recipient: recipient,
             unrestricted: unrestricted
         );
-        var observations = WorldStateDisclosure.Compose(
+        var observations = view is not null ? view.Observations(PresentedRows(definition, bound)) : WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
             presented: PresentedRows(
@@ -480,7 +481,7 @@ public static class WorldProjection {
     }
     // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
     // presents rather than its fallback; a field row crosses as the field it is, never also as an observation.
-    private static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
+    internal static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
         if (bound.Count == 0) {
             return null;
         }

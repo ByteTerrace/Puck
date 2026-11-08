@@ -154,9 +154,8 @@ The roots are types, not instances: a call that replaces a shadow server's
 arena counts against a capture of the live one. A read that can only name an
 instance the call leaves alone is suppressed at the read, with its reason
 (`ArenaSearch.StepJob`, whose search owns its arena). A member of an assembly
-that cannot see `StateArena` (`IFixedStepSimulation.Step` in `Puck.Hosting`,
-`IWorldGrain.ActivateAsync` in `Puck.Actors`) carries
-`[Replaces(typeof(object))]`, which covers every root. Test assemblies are not
+that cannot see `StateArena` (`IFixedStepSimulation.Step` in `Puck.Hosting`)
+carries `[Replaces(typeof(object))]`, which covers every root. Test assemblies are not
 held to STALE001: a test keeps the retired arena on purpose, or drives a host
 whose commit never replaces. STALE001 is an error like every other warning
 (`TreatWarningsAsErrors`).

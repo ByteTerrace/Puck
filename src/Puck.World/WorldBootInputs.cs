@@ -56,11 +56,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the schedule output directory (<c>--schedule-dir</c>), which also arms the document's
     /// <c>schedule</c> section, or <see langword="null"/> for a boot that runs no schedule.</summary>
     public string? ScheduleDirectory { get; init; }
-    /// <summary>Gets the <c>--storage-discovery-uri</c> override, or <see langword="null"/> to let the document
-    /// decide.</summary>
-    public string? StorageDiscoveryEndpoint { get; init; }
-    /// <summary>Gets the <c>--storage-uri</c> override, or <see langword="null"/> to let the document decide.</summary>
-    public string? StorageEndpoint { get; init; }
+    /// <summary>Gets the per-user cloud store an installed provider built from <c>--storage-config-file</c>, or
+    /// <see langword="null"/> for a local-only catalog.</summary>
+    public Puck.Storage.ObjectStorageTarget? StorageTarget { get; init; }
     /// <summary>Gets the <c>--user-id</c> override, or <see langword="null"/> to let the document decide.</summary>
     public string? StorageUserId { get; init; }
     /// <summary>Gets whether the headless tick host runs without pacing (<c>--unpaced</c>).</summary>

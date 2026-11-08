@@ -30,7 +30,11 @@ public sealed partial class WorldServer {
     private bool[] m_publicationRows = [];
     private bool[] m_snapshotRows = [];
 
-    internal void EnterArenaTick() { Array.Clear(array: m_snapshotRows); }
+    internal void EnterArenaTick() {
+        Array.Clear(array: m_snapshotRows);
+        m_snapshotKeys.Clear();
+        m_disclosureImages.BeginTick(m_snapshotKeys);
+    }
     internal void LeaveArenaTick() { }
     // Explicit export/edit boundary. The installed definition retains declarations and seeds.
     internal WorldDefinition MaterializeArena() => WorldStateReader.Export(m_document.Definition, m_arena);
@@ -422,6 +426,7 @@ public sealed partial class WorldServer {
         var proposal = ProposePublication();
 
         if (proposal.Moved) {
+            m_snapshotKeys.Include(m_arena.ChangedKeys);
             m_arena.CopyChangedRows(clear: true, rows: m_publicationRows);
             for (var row = 0; (row < m_documentRowCount); row++) {
                 if (!m_publicationRows[row]) { continue; }

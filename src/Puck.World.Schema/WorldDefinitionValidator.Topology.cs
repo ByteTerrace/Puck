@@ -8,8 +8,8 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     // The host section (PRESENTATION-ONLY): window extents bounded, exit/pacing non-negative, the closed engine enums
     // in range (a mutation can carry an out-of-range cast the JSON converter alone would not catch), and the surface
-    // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace) — unlike storage.endpoint (nothing yet
-    // consumes it), genlock IS wired at boot into the external-clock election, which tolerates an unknown source id.
+    // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace): it is wired at boot into the
+    // external-clock election, which tolerates an unknown source id.
     /// <summary>Refuses, at authoring, a backend-row source that can emit anything naming no backend. Left to the
     /// settle-time parse alone this would be a coin-flip refusal: a weighted table carrying one bad token boots fine
     /// on every seed that does not draw it, so whether the world starts would move with the world seed and the

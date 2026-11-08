@@ -8,8 +8,4 @@
         <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
-    <ItemGroup>
-        <PackageReference Include="Azure.Identity" Version="[1.*, )" />
-        <PackageReference Include="Azure.Storage.Blobs" Version="[12.*, )" />
-    </ItemGroup>
 </Project>

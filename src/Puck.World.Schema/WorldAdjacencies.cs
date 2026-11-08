@@ -191,6 +191,25 @@ public sealed record WorldAdjacency(
 /// <param name="SeamU">Horizontal coordinate on the boundary frame.</param>
 /// <param name="SeamV">Vertical coordinate on the boundary frame.</param>
 public readonly record struct WorldAdjacencyCrossing(bool Crossed, FixedQ4816 Parameter, FixedQ4816 SeamU, FixedQ4816 SeamV);
+/// <summary>One authored adjacency's ownership face: where a body is handed to the neighbour
+/// (<see cref="WorldAdjacencyPolicy.OwnershipFace"/>).</summary>
+/// <param name="Adjacency">The authored row.</param>
+/// <param name="Frame">The row's compiled boundary frame.</param>
+/// <param name="Threshold">The non-negative outward distance past <paramref name="Frame"/> at which ownership changes.</param>
+public readonly record struct WorldOwnershipFace(WorldAdjacency Adjacency, WorldFaceFrame Frame, FixedQ4816 Threshold) {
+    /// <summary>Gets a point's signed distance past the face's plane, measured exactly as
+    /// <see cref="WorldAdjacencyRegion.Sweep(WorldFaceFrame, FixedVector3, FixedVector3, FixedQ4816)"/> measures a
+    /// segment end.</summary>
+    /// <param name="point">The point, in the authoring document's frame.</param>
+    /// <returns>The outward distance; non-positive inside the owned half-space.</returns>
+    public FixedQ4816 Outward(FixedVector3 point) => FixedVector3.Dot(left: (point - Frame.Origin), right: Frame.Normal);
+    /// <summary>Gets whether a point still lies on the owned side of the threshold, where
+    /// <see cref="WorldAdjacencyRegion.Sweep(WorldFaceFrame, FixedVector3, FixedVector3, FixedQ4816)"/> reports no
+    /// crossing for a segment ending there.</summary>
+    /// <param name="point">The point, in the authoring document's frame.</param>
+    /// <returns><see langword="true"/> while the point is owned here.</returns>
+    public bool Owns(FixedVector3 point) => (Outward(point: point) <= Threshold);
+}
 /// <summary>Fixed-point ownership-boundary crossing shared by handoff and verification.</summary>
 public static class WorldAdjacencyRegion {
     /// <summary>Tests a body-center segment against an adjacency rectangle, from owned to neighbouring space.</summary>
@@ -529,6 +548,55 @@ public static class WorldAdjacencyPolicy {
         return (frame.IsYawOnly
             ? reciprocalHysteresis
             : verticalOwnershipDeadband
+        );
+    }
+    /// <summary>Returns the ownership face <paramref name="adjacency"/> hands a body over at, derived from the document
+    /// <paramref name="definition"/> that authors it: the larger of the row's authored hysteresis and the geometry's
+    /// derived threshold (<see cref="OwnershipThreshold(in WorldFaceFrame, FixedQ4816, FixedQ4816)"/>). A derivation
+    /// the document cannot represent contributes zero, so the authored lower bound always holds. The ownership scan,
+    /// contact projections, the seam clamp and the console read this one derivation.</summary>
+    /// <param name="definition">The document that authors <paramref name="adjacency"/>.</param>
+    /// <param name="adjacency">The authored row.</param>
+    /// <returns>The row's compiled face and threshold.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="adjacency"/> is
+    /// <see langword="null"/>.</exception>
+    public static WorldOwnershipFace OwnershipFace(WorldDefinition definition, WorldAdjacency adjacency) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: adjacency);
+        _ = TryReciprocalHysteresis(definition: definition, depth: out var hysteresis, reason: out _);
+        _ = TryVerticalOwnershipDeadband(definition: definition, depth: out var deadband, reason: out _);
+
+        return Face(adjacency: adjacency, hysteresis: hysteresis, deadband: deadband);
+    }
+    /// <summary>Returns every ownership face <paramref name="definition"/> authors, in row order, deriving the
+    /// document's envelope once (<see cref="OwnershipFace"/>).</summary>
+    /// <param name="definition">The authoring document.</param>
+    /// <returns>The faces; empty for a document authoring no adjacency.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static WorldOwnershipFace[] OwnershipFaces(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        if (definition.Adjacencies is not { Count: > 0 } rows) { return []; }
+
+        _ = TryReciprocalHysteresis(definition: definition, depth: out var hysteresis, reason: out _);
+        _ = TryVerticalOwnershipDeadband(definition: definition, depth: out var deadband, reason: out _);
+        var faces = new List<WorldOwnershipFace>(capacity: rows.Count);
+
+        foreach (var row in rows) {
+            if (row is not null) { faces.Add(item: Face(adjacency: row, hysteresis: hysteresis, deadband: deadband)); }
+        }
+
+        return faces.ToArray();
+    }
+    private static WorldOwnershipFace Face(WorldAdjacency adjacency, FixedQ4816 hysteresis, FixedQ4816 deadband) {
+        var frame = adjacency.Boundary.CompileFrame();
+
+        return new WorldOwnershipFace(
+            Adjacency: adjacency,
+            Frame: frame,
+            Threshold: FixedQ4816.Max(
+                x: FixedQ4816.FromDouble(value: adjacency.Hysteresis),
+                y: OwnershipThreshold(frame: in frame, reciprocalHysteresis: hysteresis, verticalOwnershipDeadband: deadband)
+            )
         );
     }
     /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs.</summary>

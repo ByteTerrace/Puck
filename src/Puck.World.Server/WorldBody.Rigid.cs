@@ -715,7 +715,9 @@ public sealed partial class WorldBody {
             return new RigidSurfaceProbe(Count: count, Refused: false, ResolvedRoot: resolved);
         }
 
-        var resolution = field.ResolveSweep(
+        var resolution = SweepContact(
+            entityIndex: m_entityIndex,
+            field: field,
             orientation: in m_orientation,
             position: ref resolved,
             previousPosition: in root,
@@ -801,7 +803,9 @@ public sealed partial class WorldBody {
             guarded = true;
 
             var start = m_position;
-            var resolution = field.ResolveSweep(
+            var resolution = SweepContact(
+                entityIndex: m_entityIndex,
+                field: field,
                 orientation: in orientation,
                 position: ref root,
                 previousPosition: in start,

@@ -8,6 +8,7 @@
         <PuckKind>Production</PuckKind>
         <!-- Installed beside a host and discovered, never referenced by one. -->
         <PuckLayer>Optional extensions</PuckLayer>
+        <PuckProvider>Azure</PuckProvider>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="1.21.0" />

@@ -76,17 +76,15 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "The recording document (puck.recording.configuration.v1) the capture verbs use; a missing or invalid file falls back loudly to the baked default. Default: Assets/recordings/default.recording.json beside the executable.",
     };
-    var storageUriOption = new Option<string?>(name: "--storage-uri") {
+    // Deployment configuration, like --authentication-config-file: a document travels, and a store's settings can carry
+    // an account secret.
+    var storageConfigFileOption = new Option<string?>(name: "--storage-config-file") {
         DefaultValueFactory = static _ => null,
-        Description = "The per-user blob endpoint (a service URI for the platform edge, or a dev/emulator connection string), overriding the world doc's storage.endpoint. With a resolved user identity it wires storage.push/storage.pull; storage.status echoes it.",
+        Description = "The per-user cloud store: an installed storage provider's type and its settings (the silo document's store shape). With a resolved user identity it wires storage.push/storage.pull; storage.status echoes the store. Absent keeps the owned-world catalog local-only.",
     };
     var userIdOption = new Option<string?>(name: "--user-id") {
         DefaultValueFactory = static _ => null,
-        Description = "The explicit storage user-id override (an Entra oid Guid), overriding the world doc's storage.userId. Feeds the identity resolver's explicit-override source; storage.status reports the resolution.",
-    };
-    var storageDiscoveryUriOption = new Option<string?>(name: "--storage-discovery-uri") {
-        DefaultValueFactory = static _ => null,
-        Description = "The direct-to-account endpoint (a service URI or a dev/emulator connection string) container LIST uses when --storage-uri resolves to the platform edge, overriding the world doc's storage.discoveryEndpoint. The edge cannot serve a container list at all, so an edge-shaped endpoint with no discovery endpoint refuses cloud-world discovery by name; storage.status echoes the resolution.",
+        Description = "The explicit storage user-id override (a user id Guid, the per-user container), overriding the world doc's storage.userId. Feeds the identity resolver's explicit-override source; storage.status reports the resolution.",
     };
     var stateDirOption = new Option<string?>(name: "--state-dir") {
         DefaultValueFactory = static _ => null,
@@ -238,8 +236,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         listenOption,
         presentModeOption,
         recordingOption,
-        storageDiscoveryUriOption,
-        storageUriOption,
+        storageConfigFileOption,
         updateConfigFileOption,
         extensionsConfigFileOption,
         userIdOption,
@@ -391,8 +388,21 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             connectionSubject = connection.Subject;
             // A user's local authority is an instance namespace, not a published listening endpoint.
             bootOverrides = static definition => (definition with { HostRaw = definition.Host with { Authority = null, Listen = null } });
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException)) {
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)) {
             Console.Error.WriteLine(value: $"[world.authentication: configuration refused: {error.Message}]");
+            return 1;
+        }
+    }
+    Puck.Storage.ObjectStorageTarget? storageTarget = null;
+
+    if (parseResult.GetValue(option: storageConfigFileOption) is { } storagePath) {
+        try {
+            storageTarget = WorldConnectionAuthentication.LoadStorage(
+                extensions: extensions,
+                path: storagePath
+            );
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or PuckExtensionException or System.Text.Json.JsonException)) {
+            Console.Error.WriteLine(value: $"[storage: configuration refused: {error.Message}]");
             return 1;
         }
     }
@@ -594,8 +604,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         ExtensionsConfiguration = extensionsConfiguration,
         FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
         ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
-        StorageDiscoveryEndpoint = parseResult.GetValue(option: storageDiscoveryUriOption),
-        StorageEndpoint = parseResult.GetValue(option: storageUriOption),
+        StorageTarget = storageTarget,
         StorageUserId = parseResult.GetValue(option: userIdOption),
         Unpaced = unpaced,
         Workers = workers,

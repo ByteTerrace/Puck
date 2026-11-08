@@ -9,7 +9,7 @@ namespace Puck.World.Server.Tests;
 /// checkpoint content-address/create-only path, the authority root compare-and-swap, the journal's
 /// read-modify-write append, and the published-definition round trip.</summary>
 public sealed class WorldAuthorityBlobStoreTests {
-    private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
 
     private static WorldAuthorityIdentity Identity(Guid? owner = null) => new(
         Owner: (owner ?? Guid.NewGuid()),

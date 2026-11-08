@@ -23,18 +23,19 @@ public sealed class WorldFieldLatticeLawTests {
                 Cells: [new StateCell(CellName.Parse(candidate: "allowed"), CellValue.Text(value: "seat1"))])
         ]);
         using var fixture = Fixtures.FreshServer(definition);
-        ReadOnlyMemory<FieldCellDelta> changes = new FieldCellDelta[] { new(Cell: 0, Field: 0, Raw: 123, Region: "grid", FieldName: "drawn") };
         var first = Principal.Seat(slot: 0);
         var second = Principal.Seat(slot: 1);
-        var disclosure = new WorldStateChangeDisclosure();
+        var images = new WorldDisclosureImages();
+        WorldRecipientView View(Principal recipient) => new(() => fixture.Server.Definition, () => fixture.Server.Arena,
+            recipient, WorldDisclosureTier.Replica, () => true, images, "boot", () => fixture.Server.DeliveryTime);
 
-        Assert.Single(collection: disclosure.Filter(fixture.Server, first, changes, rows: true).ToArray());
-        Assert.Empty(collection: disclosure.Filter(fixture.Server, second, changes, rows: true).ToArray());
+        Assert.True(View(first).Discloses("drawn", "0"));
+        Assert.False(View(second).Discloses("drawn", "0"));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "readers", "allowed", 0,
             WorldDocumentWriteKind.Set, Text: "seat2"));
         fixture.Step();
-        Assert.Empty(collection: disclosure.Filter(fixture.Server, first, changes, rows: true).ToArray());
-        Assert.Single(collection: disclosure.Filter(fixture.Server, second, changes, rows: true).ToArray());
+        Assert.False(View(first).Discloses("drawn", "0"));
+        Assert.True(View(second).Discloses("drawn", "0"));
     }
 
     private static WorldDefinition DrawLatticeDefinition(long cursor = 0L) {

@@ -23,23 +23,6 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    private int AvailableCensusSlots() {
-        var count = 0;
-
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            var entry = m_entries[index];
-
-            if (
-                (entry.PlacementId is null) &&
-                !entry.IsRemoteHuman &&
-                !entry.IsAuthorityTransferred &&
-                !IsHeld(index: index)
-            ) {
-                count++;
-            }
-        }
-        return count;
-    }
     private static void ClearDesignations(Entry entry) {
         Array.Fill(
             array: entry.Designations,
@@ -64,31 +47,6 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
-    // A placement's inhabitants: its bodies here, and the held slots of its bodies away, which a reconcile must not
-    // replace while their titles may bring them back.
-    private int CountInhabitants(string placementId) {
-        var count = 0;
-
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            if (
-                string.Equals(
-                a: m_entries[index].PlacementId,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                ((m_entries[index].PlacementId is null) && string.Equals(a: HeldPlacement(index: index), b: placementId, comparisonType: StringComparison.Ordinal))
-            ) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-    // What holds an empty index for a body that may come back to it, or null when nothing does (Holds).
-    private string? HeldPlacement(int index) => ((!m_entries[index].Active && (Holds is { } holds))
-        ? holds(arg: index)
-        : null);
-    private bool IsHeld(int index) => (HeldPlacement(index: index) is not null);
     private static WorldPlacement? FindInhabited(WorldDefinition definition, string placementId) {
         foreach (var placement in definition.Placements) {
             if (
@@ -104,37 +62,6 @@ public sealed partial class WorldPopulation {
         }
 
         return null;
-    }
-    // The highest slot (capacity minus one downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
-    // new inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer. A free slot is one
-    // that holds no placement back-reference and no active census body.
-    private int HighestFreeSlot() {
-        for (var index = (Capacity - 1); (index >= LocalSeatCount); index--) {
-            var entry = m_entries[index];
-
-            if (
-                (entry.PlacementId is null) &&
-                !entry.Active &&
-                !IsHeld(index: index)
-            ) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
-    private int LowestInhabitant(string placementId) {
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            if (string.Equals(
-                a: m_entries[index].PlacementId,
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
     }
     private WorldTargetDesignation[] NewDesignations() {
         var values = new WorldTargetDesignation[m_targets.Count];
@@ -1010,73 +937,6 @@ public sealed partial class WorldPopulation {
         }
         body.Profile = profile;
         entry.BodyColor = profile.Color;
-    }
-    /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to
-    /// <c>0..</c><see cref="MaxSimulated"/>, and deactivates the rest. A newly-activated
-    /// entry is re-seeded to a fresh spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that
-    /// pose); a deactivated entry drops its body; entries already active keep running their producers. Bumps the revision only when an
-    /// occupancy flips.</summary>
-    /// <param name="count">The requested active census count.</param>
-    /// <param name="admitted">Optional sink for the peer generations admitted by the census change.</param>
-    /// <param name="disconnected">Optional sink for the peer generations disconnected by the census change.</param>
-    /// <returns>The clamped count actually applied.</returns>
-    public int SetSimulatedCount(int count, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
-        // Clamp against every non-census occupant's physical slot; the networkPlayers cap counts humans only.
-        var clamped = Math.Clamp(
-            value: count,
-            min: 0,
-            max: SimulatedCeiling
-        );
-        var changed = false;
-        var remaining = clamped;
-
-        for (var offset = 0; (offset < PeerCapacity); offset++) {
-            var index = (LocalSeatCount + offset);
-            var entry = m_entries[index];
-
-            // Inhabited and authority-transferred slots are owned by their own lifecycles. They may occupy any index
-            // after a mapped handoff, so census selection counts eligible slots instead of assuming all exclusions
-            // live at the top of the table.
-            if (
-                (entry.PlacementId is not null) ||
-                entry.IsRemoteHuman ||
-                entry.IsAuthorityTransferred ||
-                IsHeld(index: index)
-            ) {
-                continue;
-            }
-
-            var desired = (remaining > 0);
-
-            if (desired) {
-                remaining--;
-            }
-
-            if (entry.Active == desired) {
-                continue;
-            }
-
-            if (desired) {
-                ActivateSimulated(index: index);
-                entry.Active = true;
-                admitted?.Add(item: PeerEventEntry(index: index));
-            } else {
-                disconnected?.Add(item: PeerEventEntry(index: index));
-                // A re-activation mints a fresh body at the canonical spawn.
-                entry.Body = null;
-                entry.Active = false;
-            }
-
-            changed = true;
-        }
-
-        m_simulatedCount = clamped;
-
-        if (changed) {
-            m_revision++;
-        }
-
-        return clamped;
     }
     /// <summary>The most recent <c>body.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
     /// attempt succeeded (or none has been made). <c>body.stop</c>'s handler checks this before

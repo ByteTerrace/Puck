@@ -212,13 +212,13 @@ public sealed partial class WorldTick {
                 ? WorldMutationOutcome.AppliedOutcome(
                     binding: binding,
                     code: "world.mutation.applied",
-                    version: Host.DocumentVersion
+                    version: Host.RecipientVersion(binding.Actor)
                 )
                 : WorldMutationOutcome.RefusedOutcome(
                     binding: binding,
                     code: "world.mutation.refused",
                     detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
-                    version: Host.DocumentVersion
+                    version: Host.RecipientVersion(binding.Actor)
                 )
             );
 
