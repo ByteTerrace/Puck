@@ -34,11 +34,11 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
     private SdfWorldView m_view;
     private bool m_disposed;
     private SdfShadeDispatch? m_shadePlan;
-    private readonly IGpuSubmissionFence?[] m_shadeFences;
+    private readonly SdfShadeSlots m_shade;
 
     internal SdfGlassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
-        m_shadeFences = new IGpuSubmissionFence?[context.InFlightFrames];
+        m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
         m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
@@ -52,6 +52,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
             return;
         }
         m_disposed = true;
+        m_shade.Release(releases: m_owner.ShadeReleases);
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
@@ -68,7 +69,6 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
             m_view = current;
         }
         var residency = m_view.Residency;
-        residency.RetireShade(m_shadeFences[recording.Slot]);
 
         m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
@@ -103,16 +103,15 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         m_shadePlan = SdfShadeDispatch.For(m_shadePlan, frame, recording.Width, recording.Height,
             tables.PassValues.ScreenCount, glass: true);
         m_shadePlan.Record(in recording, pipeline);
+        m_shade.Recorded(slot: recording.Slot, residency: residency, plan: m_shadePlan);
         return RenderGraphPackageOutcome.Drew;
     }
     public void Submitted() {
     }
     public ulong ReadbackBytes => 0;
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
-    public void Submitted(int slot, IGpuSubmissionFence fence) {
-        m_shadeFences[slot] = fence;
-        if (m_shadePlan is { } shade) { m_view.Residency.SubmittedShade(shade, fence); }
-    }
+    public void Submitted(int slot, IGpuSubmissionFence fence) => m_shade.Submitted(slot: slot);
+    public void Completed(int slot) => m_shade.Completed(slot: slot);
 
     // Writes, once per slot and tables, each port at the member its version reads or writes it through, and the tables'
     // dummy at the reactivity of a view that resolves nothing over time. A slot's ports stay the same storages for the

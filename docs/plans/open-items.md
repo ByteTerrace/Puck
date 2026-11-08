@@ -52,13 +52,17 @@ milestone. The owner requested its baseline and implementation plan, which
    view. Below 60 FPS two frames no longer fit in
    the 30 Hz floor, so every refresh redraws both far layers, the frame stays
    slow, and a view that drops below 60 there tends to stay below it until the
-   far cascade itself costs less. Next: the views pass's live state. It is
-   register-limited on both backends (128 registers with spills on Vulkan,
-   near 97 % register allocation at a quarter of the warps on Direct3D 12), and
-   the irradiance gather (`sdfMeshProbesAt`, whose sixteen addresses and
-   weights stay live through the light walk, the indirect and the reflection)
-   is a third of it on Vulkan by `world.indirect off`; then the remaining caster
-   geometry after receiver and light-space culling
+   far cascade itself costs less. Next: the views pass's registers, which the
+   authored-shading interpreter now sets: 255 on Vulkan (8 of 48 warps on the
+   RTX 4070), 98 % register allocation with 16 % of the warps active on
+   Direct3D 12. Its light phase, inlined in the light walk, raises views from
+   168 registers to 255, and taking the probe gather's state out of the walk
+   moves no count, so the cure is keeping the interpreter out of the pixels that
+   run no program ([author shaders](author-shaders.md) steps 3 and 4, which
+   step 2's reading makes required). The gather's weights still spill to
+   local memory on Direct3D 12, and `world.indirect off` still removes a third
+   of views on Vulkan as the gather's work. Then the
+   remaining caster geometry after receiver and light-space culling
    ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
    The far cascade now classifies through `SdfMeshOcclusion`'s current receiver
    mask and two-phase entry depth; its exit list remains independent of entry
@@ -914,9 +918,11 @@ travel.
 
 Neighbour contact replay packet (independent of companion custody):
 
-- [high] Tape fixed neighbour inputs at their local admission tick. The dynamic
-  correction budget is enforced by `WorldPopulation.BoundAdjacencyCorrection`,
-  but `WorldAdjacencyFields.Handle.Pin` (`src/Puck.World.Server/WorldAdjacencyFields.cs:669`)
+- [high] Tape fixed neighbour inputs at their local admission tick.
+  `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
+  geometry do to a local body each tick and keeps it behind its ownership
+  faces, and contact settles by authority pair through the link's settled
+  identity, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
@@ -937,6 +943,29 @@ Neighbour contact replay packet (independent of companion custody):
   clamp counts. This is a transport/admission/tape change, beyond the bounded
   depenetration fix; the bound does not claim replay determinism or prove a
   neighbour's bodies exist.
+- [medium] A neighbour can still hold a local body still: a refusal from its
+  geometry's sweep (`ContactRefusal`) returns the body to its previous position
+  in `WorldAdjacencyContactField.ResolveCore` before the door, so hostile
+  geometry can pin a body in the band. Bound or ignore a refusal the
+  neighbour's field raises against a body this world owns; show it with a law
+  whose neighbour field refuses every sweep.
+- [medium] `WorldAdjacencyContactField.TrySupportDistance` takes the least
+  support distance a neighbour's field reports, and ground snap then moves the
+  body down that far within its authored reach without passing the door, so a
+  reported floor can draw a body toward a floor/ceiling ownership face. Route
+  the snap's displacement through `AdmitAdjacencyResponse` when the support came
+  from a neighbour.
+- [medium] The rest of C3's residual rules
+  ([synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
+  a neighbour correction a body's own motion does not ask for still carries a
+  still body toward the plane up to its ownership threshold, and phantom
+  bodies reported every tick hold a visitor indefinitely. Both belong in
+  `WorldPopulation.AdmitAdjacencyResponse`, which would need the body's own
+  motion this tick and a per-body hold count that decays the admitted budget;
+  check 8 (C3) names the witness.
+- [medium] The settlement's remote identity is the link's first claimed
+  `Authority`; a neighbour that picks its identity before linking still picks
+  which side of a pair yields. Attested authority identities close it.
 
 Still open from the companion build:
 
@@ -1430,9 +1459,10 @@ and the Water packet).
 Owner: rendering · ordinary · Next:
 [step 2 of the design memo](author-shaders.md#6-implementation-steps) (the
 interpreter's cost and registers on the bar devices). Steps 0 and 1 have
-landed; step 1's GPU lifetimes (retained identity lists through fence
-retirement in `SdfWorldResidency`, the bounded `SdfShadeDispatch` records) owe
-an adversarial review.
+landed and step 1's GPU lifetimes had their adversarial review and fixes
+(`SdfShadeSlots`). Nothing reads `SdfWorldResidency.InFlightShadeIdentities`
+yet: the quarantine step reads, and then clears, the submissions a device loss
+marked lost, which stay reported until it does.
 
 The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
 shaders, so a look is never limited to what the engine's shading offers.
@@ -1571,6 +1601,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low] `FixedFrameSource` is copied in at least three SdfVm tests
+  (`tests/Puck.SdfVm.Tests/SdfWorldPassesLawTests.cs:199`,
+  `SdfWorldPipelineCatalogLawTests.cs:138`, `SdfWorldResidencyBuildRefusalLawTests.cs:351`);
+  move it to `tests/Shared` with the `HeapAllocator` copies below.
+- [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
+  `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
+  `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing
+  array. Seen by the shade-1 GPU-lifetime fix lane; unverified beyond its read.
 - [low] `HeapAllocator` is copied three times in the Vulkan tests
   (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
   `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
@@ -1808,13 +1846,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
-  - [low] Growing the program region on `world.reload` waits for the device to go
-    idle (`SdfWorldTables.EnsureProgramCapacity`, `TryWaitIdle`) and rebuilds the
-    region whole. `GpuRegion.Grow` grows any owned region without waiting,
-    but keeps the policy it was created with, while a program can grow past the
-    ring's share of the aperture that `GpuResidency.Select` would stage. Grow it
-    without the idle wait and reselect the policy when the new size crosses the
-    share.
+  - [low] `GpuRegion.Grow` keeps the policy a region was created with, so
+    `SdfWorldTables.EnsureProgramCapacity` grows the program region through it
+    only while `GpuResidency.Select` still picks that policy, and replaces the
+    region from its host copy when a size crosses the ring's share of the
+    aperture. Let `Grow` reselect the policy itself so that branch goes.
   - [medium · owner: rendering] Uniform region growth accepts an unbindable size
     (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
     check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
@@ -3761,6 +3797,12 @@ ordinary · Next: new content and art on the owner's call.
   instance, so the pond's decisions may not be running there (seen by the
   rule-faults step 7 lane on a headless boot; unchecked). Read why before
   treating it as a defect.
+- [low] A census body an install's re-clamp moves into a new slot gets no
+  `PeerAdmitted` and so no default peer control grant through
+  `ApplyLifecycleEvents`, while a body `world.population` seats does
+  (`SelectCensus`'s `reports` flag in `WorldPopulation.Reconcile.cs`; the
+  parent behaved the same). Decide whether a moved census body should keep
+  its grant.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:

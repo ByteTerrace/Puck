@@ -18,9 +18,12 @@ uint sdfMeshIrradianceKey(int3 cell) {
 // The cell's coordinates modulo the volume's size, from 0, wrapped unsigned after a lift by 2^16 sizes, which covers every
 // cell within 2^16 volumes of the origin: NVIDIA's Vulkan driver answers a signed remainder (OpSRem) of a negative operand
 // wrongly, where Direct3D 12 answers it right.
+uint3 sdfMeshIrradianceWrapped(int3 cell, int3 dims) {
+    return ((uint3)(cell + (dims * 65536)) % (uint3)dims);
+}
 uint sdfMeshIrradianceSlot(int3 cell, int3 dims) {
     uint3 size = (uint3)dims;
-    uint3 wrapped = ((uint3)(cell + (dims * 65536)) % size);
+    uint3 wrapped = sdfMeshIrradianceWrapped(cell, dims);
     return (wrapped.x + (size.x * (wrapped.y + (size.y * wrapped.z))));
 }
 float sdfMeshIrradianceHalf(uint word, uint high) {
@@ -48,8 +51,7 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
 // a short distance fade in front of the receiver times angular surface visibility.
 // Continuous hemisphere weighting excludes probes behind a surface without a discrete front/back fallback.
-// Unwritten, invalid and invisible probes take no part.
-static const uint SdfMeshProbeNone = 0xffffffffu;
+// Unwritten, invalid and invisible probes take no part: their weight is zero.
 
 // Where the probe stands, relative to its cell's centre: the offset the trace moved it by out of geometry or off a
 // face it lay on, zero for a probe at its centre. Every position the gather reads is the centre plus this.
@@ -179,29 +181,6 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
     }
     return sdfMeshProbeCoverageVisibility(blocked, blockedSheets);
 }
-// One stage's eight corners about a receiver, as one level's gather fills them.
-struct SdfMeshProbeCage {
-    uint address[8];
-    float weight[8];
-};
-// The probes a receiver reads (SdfMeshIrradiance.GatherSlots): corners 0 to 7 the chosen stage's, 8 to 15 the remainder
-// stage's, each weight pre-scaled by its stage's share so the weights sum to one. KEEP IN SYNC with
-// SdfMeshProbeSelection.
-struct SdfMeshProbes {
-    uint address[16];
-    float weight[16];
-    // The chosen stage's share of the answer: one where no remainder stage answers, zero where no stage answers.
-    float share;
-    // Whether each stage read its probes bounded by their measured reach; false where it read them past it, blocked
-    // only by the surfaces they measured.
-    bool measured;
-    bool remainderMeasured;
-};
-
-// Whether a gathered probe answers.
-bool sdfMeshProbeAnswers(SdfMeshProbes probes, uint corner) {
-    return (probes.address[corner] != SdfMeshProbeNone);
-}
 // A level's probe spacing along each axis, zero for a level not published, and its window: first cell and probes along
 // each axis.
 float3 sdfMeshIrradianceSpacing(uint level) {
@@ -211,6 +190,93 @@ int3 sdfMeshIrradianceDims(uint level) {
     uint packed = (uint)passGroup.meshIrradianceLevels[level].w;
     return int3((packed & 1023u), ((packed >> 10) & 1023u), ((packed >> 20) & 1023u));
 }
+// A level's first slot in the volume: its slots follow the finer levels' windows.
+uint sdfMeshIrradianceBase(uint level) {
+    uint base = 0u;
+
+    [unroll] for (uint finer = 0u; (finer < SDF_MESH_IRRADIANCE_LEVELS); finer++) {
+        uint3 size = (uint3)sdfMeshIrradianceDims(finer);
+
+        base += ((finer < level) ? (size.x * size.y * size.z) : 0u);
+    }
+    return base;
+}
+
+// A stage's eight corners at one level, as a cage word: the wrapped window coordinates of its first corner (its lowest
+// cell, which lies inside the level's window wherever the stage answers), ten bits an axis as the window's packing bounds
+// them (sdfMeshIrradianceDims), and the level in the top two bits. The cage alone names each corner's probe
+// (sdfMeshProbeStageOf), so a gather carries two words for its sixteen probes.
+uint sdfMeshProbeCageWord(uint level, int3 first, int3 dims) {
+    uint3 wrapped = sdfMeshIrradianceWrapped(first, dims);
+
+    return (wrapped.x | (wrapped.y << 10) | (wrapped.z << 20) | (level << 30));
+}
+// A cage's corners as word addresses in the volume: its first corner's, and the step to the corner one cell along each
+// axis, which wraps back by the window's size where the first corner stands on the window's last probe along that axis.
+// The steps add in unsigned arithmetic, so a wrapping step is the stride times one less the size, modulo 2^32.
+struct SdfMeshProbeStage {
+    uint first;
+    uint3 step;
+};
+SdfMeshProbeStage sdfMeshProbeStageOf(uint cage) {
+    uint level = (cage >> 30);
+    uint3 wrapped = uint3((cage & 1023u), ((cage >> 10) & 1023u), ((cage >> 20) & 1023u));
+    uint3 size = (uint3)sdfMeshIrradianceDims(level);
+    uint3 stride = uint3(1u, size.x, (size.x * size.y));
+    uint3 back = (stride * (1u - size));
+    SdfMeshProbeStage stage;
+
+    stage.first = ((sdfMeshIrradianceBase(level) + wrapped.x + (stride.y * wrapped.y) + (stride.z * wrapped.z)) * SDF_MESH_IRRADIANCE_PROBE_WORDS);
+    stage.step = (uint3((((wrapped.x + 1u) == size.x) ? back.x : stride.x), (((wrapped.y + 1u) == size.y) ? back.y : stride.y),
+        (((wrapped.z + 1u) == size.z) ? back.z : stride.z)) * SDF_MESH_IRRADIANCE_PROBE_WORDS);
+    return stage;
+}
+// The first word of a cage corner's probe; corner bits 0, 1 and 2 step along x, y and z. KEEP IN SYNC with
+// SdfMeshIrradiance.SlotOf, which this equals for every corner inside the level's window.
+uint sdfMeshProbeStageAddress(SdfMeshProbeStage stage, uint corner) {
+    return (stage.first + (((corner & 1u) != 0u) ? stage.step.x : 0u) + (((corner & 2u) != 0u) ? stage.step.y : 0u)
+        + (((corner & 4u) != 0u) ? stage.step.z : 0u));
+}
+
+// One stage's eight corners about a receiver, as one level's gather fills them: its cage, and each corner's weight, zero
+// for a corner that does not answer.
+struct SdfMeshProbeCage {
+    uint cage;
+    float weight[8];
+};
+// The probes a receiver reads (SdfMeshIrradiance.GatherSlots): corners 0 to 7 the chosen stage's, 8 to 15 the remainder
+// stage's, each weight pre-scaled by its stage's share so the weights sum to one, and each stage's cage
+// (sdfMeshProbeCageWord). A corner answers exactly where its weight is positive, and only such a corner lies inside its
+// stage's window, so sdfMeshProbeAt is the one door to a corner's probe. KEEP IN SYNC with SdfMeshProbeSelection.
+struct SdfMeshProbes {
+    uint cage;
+    uint remainderCage;
+    float weight[16];
+    // The chosen stage's share of the answer: one where no remainder stage answers, zero where no stage answers.
+    float share;
+    // Whether each stage read its probes bounded by their measured reach; false where it read them past it, blocked
+    // only by the surfaces they measured.
+    bool measured;
+    bool remainderMeasured;
+};
+
+// The two stages' cages a reader of the gathered probes resolves once before its corners (sdfMeshProbeAt).
+struct SdfMeshProbeStages {
+    SdfMeshProbeStage chosen;
+    SdfMeshProbeStage remainder;
+};
+SdfMeshProbeStages sdfMeshProbeStagesOf(SdfMeshProbes probes) {
+    SdfMeshProbeStages stages;
+
+    stages.chosen = sdfMeshProbeStageOf(probes.cage);
+    stages.remainder = sdfMeshProbeStageOf(probes.remainderCage);
+    return stages;
+}
+// Whether a gathered corner answers, and its probe's first word where it does.
+bool sdfMeshProbeAt(SdfMeshProbes probes, SdfMeshProbeStages stages, uint corner, out uint address) {
+    address = ((corner < 8u) ? sdfMeshProbeStageAddress(stages.chosen, corner) : sdfMeshProbeStageAddress(stages.remainder, corner));
+    return (probes.weight[corner] > 0.0);
+}
 // One level's eight probes about the pushed receiver, its lookup clamped to the level's boundary probes: each corner's
 // weight is its trilinear share times the facing fade (at least `behind`, so a receiver whose every visible probe lies
 // behind its plane still reads them) times the angular surface visibility of the pushed receiver, `bounded` by each
@@ -218,7 +284,7 @@ int3 sdfMeshIrradianceDims(uint level) {
 // Returns the total weight, and in `front` the cage's weight before visibility with the facing fade alone (no behind
 // floor) over every present probe, invalid ones included: the support a share is measured against. KEEP IN SYNC with
 // SdfMeshIrradiance.Gather.
-float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, out float front, out SdfMeshProbeCage probes) {
+float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, out float front, out SdfMeshProbeCage probes) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
@@ -237,9 +303,11 @@ float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3
     float total = 0.0;
 
     front = 0.0;
+    probes.cage = sdfMeshProbeCageWord(level, first, dims);
+
+    SdfMeshProbeStage stage = sdfMeshProbeStageOf(probes.cage);
 
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
 
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
@@ -249,7 +317,7 @@ float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3
             continue;
         }
 
-        uint address = ((base + sdfMeshIrradianceSlot(cell, dims)) * SDF_MESH_IRRADIANCE_PROBE_WORDS);
+        uint address = sdfMeshProbeStageAddress(stage, corner);
 
         if ((address + SDF_MESH_IRRADIANCE_PROBE_WORDS) > count) {
             continue;
@@ -278,7 +346,6 @@ float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3
         if (weight <= 0.0) {
             continue;
         }
-        probes.address[corner] = address;
         probes.weight[corner] = weight;
         total += weight;
     }
@@ -314,11 +381,12 @@ float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims
 SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     SdfMeshProbes probes;
 
+    probes.cage = 0u;
+    probes.remainderCage = 0u;
     probes.share = 0.0;
     probes.measured = false;
     probes.remainderMeasured = false;
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
-        probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
     }
     if ((passGroup.meshIrradianceVolume == 0u) || any(!isfinite(position))) {
@@ -358,13 +426,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         float3 spacing = sdfMeshIrradianceSpacing(level);
         int3 low = passGroup.meshIrradianceLevels[level].xyz;
         int3 dims = sdfMeshIrradianceDims(level);
-        uint base = 0u;
 
-        [unroll] for (uint finer = 0u; (finer < SDF_MESH_IRRADIANCE_LEVELS); finer++) {
-            int3 finerDims = sdfMeshIrradianceDims(finer);
-
-            base += ((finer < level) ? (uint)(finerDims.x * finerDims.y * finerDims.z) : 0u);
-        }
         if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!all(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
             continue;
         }
@@ -383,7 +445,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
         SdfMeshProbeCage cage;
         float front;
-        float total = sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, cage);
+        float total = sdfMeshProbesGather(level, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, cage);
 
         if (!(total > 0.0)) {
             continue;
@@ -393,9 +455,9 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
             first = level;
             firstTotal = total;
             probes.measured = bounded;
+            probes.cage = cage.cage;
             share = (((front > total) ? (total / front) : 1.0) * reachShare);
             [unroll] for (uint chosenCorner = 0u; (chosenCorner < 8u); chosenCorner++) {
-                probes.address[chosenCorner] = cage.address[chosenCorner];
                 probes.weight[chosenCorner] = cage.weight[chosenCorner];
             }
             if (share >= 1.0) {
@@ -405,8 +467,8 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         }
         remainder = true;
         probes.remainderMeasured = bounded;
+        probes.remainderCage = cage.cage;
         [unroll] for (uint restCorner = 0u; (restCorner < 8u); restCorner++) {
-            probes.address[8u + restCorner] = cage.address[restCorner];
             probes.weight[8u + restCorner] = (cage.weight[restCorner] * ((1.0 - share) / total));
         }
         break;
@@ -432,14 +494,18 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
 
     skyVisibility = 0.0;
     radiance = 0.0;
+
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
+
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
-        if (!sdfMeshProbeAnswers(probes, corner)) {
+        uint address;
+        if (!sdfMeshProbeAt(probes, stages, corner, address)) {
             continue;
         }
 
         float probeSky;
         float3 probeRadiance;
-        sdfMeshIrradianceProbe(probes.address[corner], direction, probeSky, probeRadiance);
+        sdfMeshIrradianceProbe(address, direction, probeSky, probeRadiance);
         sky += (probeSky * probes.weight[corner]);
         reflected += (probeRadiance * probes.weight[corner]);
         total += probes.weight[corner];
@@ -464,11 +530,15 @@ float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     if (lightIndex >= (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)) {
         return 1.0;
     }
+
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
+
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
-        if (!sdfMeshProbeAnswers(probes, corner) || !((corner < 8u) ? probes.measured : probes.remainderMeasured)) {
+        uint address;
+        if (!sdfMeshProbeAt(probes, stages, corner, address) || !((corner < 8u) ? probes.measured : probes.remainderMeasured)) {
             continue;
         }
-        if ((sdfMeshIrradiance[probes.address[corner] + word] & bit) != 0u) {
+        if ((sdfMeshIrradiance[address + word] & bit) != 0u) {
             visible += probes.weight[corner];
         }
     }

@@ -1,4 +1,3 @@
-using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -6,20 +5,10 @@ namespace Puck.World.Server.Tests;
 public sealed class CrossAuthoritySettlementLawTests {
     [Fact]
     public void ARepeatedPairIsStickyAndASelfPairNeverResponds() {
-        var first = new WorldEntityAddress(
-            Authority: "world/alpha",
-            Generation: 3,
-            Index: 7
-        );
-        var second = new WorldEntityAddress(
-            Authority: "world/beta",
-            Generation: 11,
-            Index: 2
-        );
         var expected = WorldCrossAuthoritySettlement.LocalResponds(
             interaction: "physical-contact",
-            local: in first,
-            remote: in second
+            localAuthority: "world/alpha",
+            remoteAuthority: "world/beta"
         );
 
         for (var attempt = 0; (attempt < 32); attempt++) {
@@ -27,44 +16,25 @@ public sealed class CrossAuthoritySettlementLawTests {
                 expected: expected,
                 actual: WorldCrossAuthoritySettlement.LocalResponds(
                     interaction: "physical-contact",
-                    local: in first,
-                    remote: in second
+                    localAuthority: "world/alpha",
+                    remoteAuthority: "world/beta"
                 )
             );
         }
         Assert.False(condition: WorldCrossAuthoritySettlement.LocalResponds(
             interaction: "physical-contact",
-            local: in first,
-            remote: in first
+            localAuthority: "world/alpha",
+            remoteAuthority: "world/alpha"
         ));
     }
-    [Fact]
-    public void ReversingTheSamePairStillSelectsExactlyOneOwner() {
-        var first = new WorldEntityAddress(
-            Authority: "world/alpha",
-            Generation: 3,
-            Index: 7
-        );
-        var second = new WorldEntityAddress(
-            Authority: "world/beta",
-            Generation: 11,
-            Index: 2
-        );
-
-        var firstResponds = WorldCrossAuthoritySettlement.LocalResponds(
-            interaction: "physical-contact",
-            local: in first,
-            remote: in second
-        );
-        var secondResponds = WorldCrossAuthoritySettlement.LocalResponds(
-            interaction: "physical-contact",
-            local: in second,
-            remote: in first
-        );
-
+    [Theory]
+    [InlineData("world/alpha", "world/beta")]
+    [InlineData("a", "b")]
+    [InlineData("local", "remote")]
+    public void ReversingTheSamePairStillSelectsExactlyOneOwner(string first, string second) {
         Assert.NotEqual(
-            actual: secondResponds,
-            expected: firstResponds
+            expected: WorldCrossAuthoritySettlement.LocalResponds(interaction: "physical-contact", localAuthority: first, remoteAuthority: second),
+            actual: WorldCrossAuthoritySettlement.LocalResponds(interaction: "physical-contact", localAuthority: second, remoteAuthority: first)
         );
     }
 }

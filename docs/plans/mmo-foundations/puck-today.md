@@ -32,9 +32,10 @@ levers are expiry, live admission edits (which evict a live connection within a
 second) and Entra group membership. The resolver's generation counter is not
 persisted, but no host both restores rows and spawns resolver instances, and
 recovery never addresses a destination by generation, so A13's split is not
-reachable today. Seam contact applies a sum of per-neighbour overlap
-corrections with no per-tick cap, from poses and collider shapes the neighbour
-delivers, and the code itself names that input as not replay-deterministic. No
+reachable today. Seam contact admits a neighbour's body pushes and geometry
+resolution through one per-body tick budget that cannot carry a body across
+its ownership face, from poses and collider shapes the neighbour delivers, and
+the code itself names that input as not replay-deterministic. No
 avatar claim exists, so A12's bake question is moot until H10. Companion
 custody steps 1 to 5 are in the code; the records for steps 6 and 7 decode and
 fold but nothing mints them. Branch `lane/companion-v1` is superseded for
@@ -573,24 +574,24 @@ of an admission edit that no longer admits it **[inference]**.
 
 ### The contact field and the settlement
 
-`WorldCrossAuthoritySettlement.LocalResponds` picks one responder per pair and
-interaction by an FNV-1a hash of both entity addresses **[opened]**
-(`src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:6-9`):
+`WorldCrossAuthoritySettlement.LocalResponds` picks one responder per
+authority pair and interaction by an FNV-1a hash of the two authority
+identities **[opened]** (`WorldCrossAuthoritySettlement`):
 
 ```csharp
-/// <summary>Deterministically selects one entity owner to settle a cross-authority interaction. Both authorities
-/// evaluate the same canonical address pair and interaction name, so there is exactly one responder without a host
-/// leader, packet-order race, or topology preference. Entity generations make the choice sticky only for the
-/// lifetime of those concrete occupants.</summary>
+/// <summary>Deterministically selects one authority to settle a cross-authority interaction. Both authorities
+/// evaluate the same unordered pair of authority identities and the interaction name, so there is exactly one
+/// responder without a host leader, packet-order race, or topology preference.</summary>
 ```
 
-Its one caller is the adjacency contact field, for `"physical-contact"`
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:106-110`; a search for
-`LocalResponds(` over `src/` finds only that call and the definition)
-**[opened]**. The field corrects the local body out of each solid neighbour
-body the pair hash assigns to it. Corrections now enter through
-`WorldPopulation.BoundAdjacencyCorrection`, sharing a per-body tick budget
-across all projections and sweep retries. See the A10 verdict below.
+Its one caller is the adjacency contact field, for `"physical-contact"`, with
+this authority's identity and the identity the neighbour's link settled on at
+its first frozen image (`IWorldAdjacencyNeighbour.Authority`) **[opened]**.
+Entity indices and generations, which the neighbour mints, are not inputs. The
+field corrects the local body out of each solid neighbour body when the pair
+assigns the contact to it; those pushes and the neighbour geometry's resolution
+enter through `WorldPopulation.AdmitAdjacencyResponse`, sharing a per-body tick
+budget across all projections and sweep retries. See the A10 verdict below.
 
 Neighbour colliders are compiled from the neighbour's delivered definition,
 and positions come from its snapshots (`src/Puck.World.Protocol/Protocol/WorldSessionMirror.cs:479-489`,
@@ -786,19 +787,8 @@ Compared with this tree **[opened]**:
   `CompanionTrustLawTests`, `CompanionRoleLawTests` and
   `worlds/debug/companion-body.puck` do not exist in this tree.
 
-The repository already records this verdict **[opened]**
-(`docs/plans/open-items.md:977-984`):
-
-```text
-- [low] Branch `lane/companion-v1` on `origin` (companions v1) is superseded
-  for custody and trust by the protocol build, but holds step 9 and 10 prior art
-  no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
-  drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
-  and budget fields, `CompanionTrustLawTests`' driver laws, and the debug world's
-  faerie split (`companion-body.puck`, role rows in `night` and `garden`). Step 9
-  ports them onto the custody bindings (`WorldCompanionCustody.TryBinding`); keep
-  the branch until then.
-```
+The [open-items packet](../open-items.md) keeps that branch as prior art for
+steps 9 and 10 until the custody-based role implementation replaces it.
 
 ## 7. Disclosure
 
@@ -811,28 +801,19 @@ Three filters exist **[opened]**:
 - The per-observer body policy `population.disclosure`, `All` (default),
   `Radius` or `SelfOnly`, applied at the output hub's sink boundary
   (`src/Puck.World.Schema/WorldObserverDisclosure.cs:8-22`).
-- State visibility: `WorldStateDisclosure` composes a recipient's rows, and
-  `WorldStateReadView` is the console's per-principal read
-  (`src/Puck.World.Schema/WorldStateDisclosure.cs:57-61`,
-  `src/Puck.World.Server/WorldStateReadView.cs:5-10`).
+- State visibility and admission tier meet in `WorldRecipientView`.
+  `WorldStateReadView` adapts it for console reads; `WorldSessionObservation`
+  supplies the same live capability to session reads and delivery.
 
-The disclosure plan's own inventory says the chokepoint is partial and every
-delivery sink discloses by hand (`docs/plans/disclosure.md:80-150`)
-**[opened]**. `WorldRecipientView` does not exist (a search over `src/` finds
-none) **[opened]**.
+Disclosure steps 1 and 2 have landed. `WorldDeliveryCursor` owns delivery history;
+a read never advances it. The remaining write, layout and compiler work is in
+the [disclosure plan](../disclosure.md).
 
 ### What the authority sees
 
-Everything. The operator reads the live document whole **[opened]**
-(`src/Puck.World.Server/WorldStateReadView.cs:5-9`):
-
-```csharp
-/// <summary>One principal's read of a live world's state: the document as <see cref="WorldStateDisclosure"/>
-/// discloses it to that principal, and the refusal a read of anything withheld answers with.
-/// <para>A console read-back verb reads state through this view rather than through <see cref="WorldServer.Definition"/>,
-/// so a seat, an addon or a peer is shown what its visibility admits and nothing else. The operator — the
-/// <see cref="PrincipalKind.Console"/> principal — reads the live document whole.</para></summary>
-```
+The operator reads the live document whole (`WorldStateReadView.IsOperator`,
+`WorldRecipientView.Definition`). Non-operator views retain their ceiling and
+current visibility.
 
 Local and colocated sinks take every body **[opened]**
 (`src/Puck.World.Server/WorldOutputHub.cs:11-15`):
@@ -1004,17 +985,22 @@ would let a fresh generation resolve to a restored old instance of the same
 name **[inference]**.
 
 **A10, a per-tick bound on seam correction: implemented.**
-`WorldPopulation.BoundAdjacencyCorrection` admits each dynamic correction
-before application in `WorldAdjacencyContactField.ResolveCore`. The sum of
-admitted lengths cannot exceed the local body's scaled collider reach; each
-request is also limited by the overlap depth minus spent budget. Enlarging the
-remote collider, speed claims, or body count cannot enlarge that local reach.
-`WorldAdjacencyCorrectionLawTests` drives phantom reports at each tick and an
-honest shallow contact through the real server; `WorldBodyWork.AdjacencyCorrectionClamps`
-is visible in `world.counters`. This bounds displacement; it does not prove
-reported bodies exist, prevent repeated bounded shoves or guarantee no
-ownership crossing. Neighbour terrain contact and untaped delivery timing
-remain outside this guarantee; the replay packet is in
+`WorldPopulation.AdmitAdjacencyResponse` admits a neighbour's whole answer per
+projection (its bodies' pushes and its geometry's resolution) before it moves
+a body in `WorldAdjacencyContactField.ResolveCore`. The sum of admitted lengths
+cannot exceed the local body's scaled collider reach; each is also limited by
+the overlap depth minus spent budget. Enlarging the remote collider, geometry,
+speed claims, or body count cannot enlarge that local reach. Behind every
+ownership face the body is still owned behind, the admitted end stays owned
+and the outward speed does not grow, so repeated bounded shoves carry a still
+body to its face but never across it; a crossing comes from the body's own
+motion. `WorldAdjacencyCorrectionLawTests` drives phantom reports, embedded
+neighbour geometry, sixty-four ticks of herding, generation grinding and an
+honest shallow contact through the real server;
+`WorldBodyWork.AdjacencyCorrectionClamps` is visible in `world.counters`. This
+does not prove reported bodies exist. A neighbour field's sweep refusal, the
+support distance ground snap reads, and untaped delivery timing remain outside
+this guarantee; those packets are in
 [open items](../open-items.md#transfers-federation-and-server).
 
 **Critique 1.2, group membership proof on the federation wire: confirmed

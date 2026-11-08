@@ -147,24 +147,12 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 destination: neighbour.CounterpartFrame,
                 source: localFrame
             )) * 180d) / Math.PI);
-            var threshold = ((WorldAdjacencyPolicy.TryReciprocalHysteresis(
-                definition: definition,
-                depth: out var hysteresis,
-                reason: out _
-            ) && WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
-                definition: definition,
-                depth: out var deadband,
-                reason: out _
-            ))
-                ? ((double)WorldAdjacencyPolicy.OwnershipThreshold(
-                    frame: in localFrame,
-                    reciprocalHysteresis: hysteresis,
-                    verticalOwnershipDeadband: deadband
-                )).ToString(
-                    format: "0.####",
-                    provider: CultureInfo.InvariantCulture
-                )
-                : "REFUSED"
+            var threshold = ((double)WorldAdjacencyPolicy.OwnershipFace(
+                adjacency: adjacency,
+                definition: definition
+            ).Threshold).ToString(
+                format: "0.####",
+                provider: CultureInfo.InvariantCulture
             );
 
             _ = builder.Append(value: $" state=open overlap={overlap} threshold={threshold} turn={turn.ToString(

@@ -908,14 +908,6 @@ bindingOverlays [
               { command: "console", id: "dbgConsole", label: "Console", sources: padDown }
               { command: "world.screenshot", id: "dbgCapture", label: "Capture", sources: padLeft }
               {
-                command: "world.inspect"
-                id: "dbgInspect"
-                label: "Inspector"
-                text: "toggle"
-                sources: padLeftShoulder
-              }
-              { command: "world.debug-view", id: "dbgDebugView", label: "Debug view", text: "next", sources: padNorth }
-              {
                 command: "world.compare"
                 id: "dbgHold"
                 label: "Hold frame"

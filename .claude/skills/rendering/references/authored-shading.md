@@ -79,8 +79,15 @@ padded extent into whole groups under that bound and the backend group-count
 limit. Its `Record` door pushes each job's first group; both recorders use it.
 The shared pixel entry remaps that ordinal to the original grid, preserving the
 views filter's local lanes and barrier. `SdfWorldResidency.InFlightShadeIdentities`
-retains submitted identities until fence retirement and conservatively retains
-lost submissions. Quarantine and specialization belong to the remaining
+holds each submission's identities on the residency that recorded it, until a
+proof of completion removes them, and never asks a fence: a reusable slot fence
+reads signaled after an abandoned submission and after a loss's teardown drain
+alike. `SdfShadeSlots` is the one door: a recording captures its residency and
+plan, only a pass that drew is armed (`ShaderPipelineRenderNode.SubmitPackageReadbacks`),
+and the node's wait of the slot (`IRenderGraphPackageReadback.Completed`) or a
+released recorder's next package frame (`SdfShadeReleases`) completes it. A device
+loss before either proof marks the submission lost, and it stays reported for the
+quarantine. Quarantine and specialization belong to the remaining
 [shader plan](../../../../docs/plans/author-shaders.md).
 
 Read flags come only from live input ops. `SdfAppearance.ResolveShadeReads`

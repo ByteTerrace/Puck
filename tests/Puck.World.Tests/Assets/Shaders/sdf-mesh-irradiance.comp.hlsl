@@ -26,10 +26,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     passGroup.indirectSourceGains = 0.0;
 
     SdfMeshProbes probes = sdfMeshProbesAt(gatherReceivers[2u * id.x].xyz, gatherReceivers[(2u * id.x) + 1u].xyz);
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
     float slots[16];
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         // A probe index is exact in a float below 2^24; -1 marks a slot that does not answer.
-        slots[corner] = (sdfMeshProbeAnswers(probes, corner) ? (float)(probes.address[corner] / SDF_MESH_IRRADIANCE_PROBE_WORDS) : -1.0);
+        uint address;
+        slots[corner] = (sdfMeshProbeAt(probes, stages, corner, address) ? (float)(address / SDF_MESH_IRRADIANCE_PROBE_WORDS) : -1.0);
     }
     [unroll] for (uint row = 0u; (row < 4u); row++) {
         gatherResults[uint2(id.x, row)] = float4(probes.weight[4u * row], probes.weight[(4u * row) + 1u], probes.weight[(4u * row) + 2u], probes.weight[(4u * row) + 3u]);

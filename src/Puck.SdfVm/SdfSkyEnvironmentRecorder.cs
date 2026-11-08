@@ -16,7 +16,6 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
     private readonly SdfWorldPasses m_views;
     private readonly RenderGraphPackageSets m_sets;
     private readonly RenderGraphPackageWorkCounters m_work;
-    private readonly bool[] m_recorded;
 
     private long m_submission;
 
@@ -27,7 +26,6 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         m_views = views;
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: built.Tables.Pipeline(kernel: Kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
-        m_recorded = new bool[context.InFlightFrames];
     }
 
     private SdfKernel Kernel => (Screens ? SdfKernel.ScreenEmission : (Reduces ? SdfKernel.SkyEnvironmentReduce : SdfKernel.SkyEnvironment));
@@ -38,7 +36,6 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => (Screens ? ScreenWorkDetails : (Reduces ? [] : m_built.Residency.SkyDetails.Labels));
     public bool Skips(in FrameContext context) {
-        Array.Clear(array: m_recorded);
         m_views.Begin(residency: m_built.Residency);
         m_built.Tables.PollSkyEnvironment();
         return (!m_built.Residency.Prepare(context: context) ||
@@ -83,13 +80,11 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? SdfWorldTables.MaxScreenSurfaces : groups),
             groupCountY: (Screens ? 1u : groups), groupCountZ: 1);
-        m_recorded[recording.Slot] = true;
         return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
+    // Called only after this frame's recording drew (ShaderPipelineRenderNode.SubmitPackageReadbacks).
     public void Submitted(int slot, IGpuSubmissionFence fence) {
-        if (!m_recorded[slot]) { return; }
-        m_recorded[slot] = false;
         if (Reduces) { m_submission = m_built.Tables.SubmitSkyEnvironment(fence: fence); }
         if (Screens) { m_submission = m_built.Tables.SubmitScreenEmission(fence: fence); }
     }

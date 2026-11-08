@@ -201,6 +201,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.contacts",
+            audience: CommandAudience.Operator,
             description: $"Reports the solidity state (Immediate read): {WorldContactsForms.Spelling}: with no argument it prints the analytic collider census and placement contribution; with a body index it prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the medium facts (inMedium/atMediumBand — always false for a kit authoring no medium hold), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
             forms: WorldContactsForms,
             handler: (context, args) => {
@@ -259,6 +260,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rigid",
+            audience: CommandAudience.Operator,
             description: "Reports the rigid solver's live census (Immediate): every active rigid-kit body's mass, linear/angular velocity, and resting latch, plus quiescent=1|0 — the same value $physics:quiescent reads. 'no active rigid body' with quiescent=1 when the world authors none.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
@@ -271,6 +273,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
+            audience: CommandAudience.Operator,
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,

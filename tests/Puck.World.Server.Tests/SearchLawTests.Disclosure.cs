@@ -10,7 +10,7 @@ public sealed partial class SearchLawTests {
             new WorldStateRow(CellName.Parse("secretKeys"), CellKind.Int,
                 Cells: [new StateCell(CellName.Parse("one"), CellValue.Int(1))],
                 Visibility: new StateVisibility(Readers: ["seat1"]))]) with {
-            Rules = [definition.Rules[0] with { ForEach = "secretKeys" }],
+            Rules = [definition.Rules![0] with { ForEach = "secretKeys" }],
         };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
         Assert.Contains("SearchWidensAudience", reason);

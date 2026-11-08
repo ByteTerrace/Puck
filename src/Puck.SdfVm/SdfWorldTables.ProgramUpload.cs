@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     /// <summary>Re-uploads the scene program (the host's <c>ProgramChanged</c> path — e.g. a rebuilt overworld scene).
-    /// Program and instance buffers grow on demand once the device is idle. Persistent images,
+    /// The program region and instance capacity grow on demand without waiting for the device. Persistent images,
     /// screen bindings and pipelines remain in place. Palette-value edits keep geometry signatures; wrap and shadow
     /// density separately invalidate their consuming passes.
     /// Material reassignment or any other field/layout change invalidates them.</summary>
@@ -29,17 +29,13 @@ public sealed partial class SdfWorldTables {
         EnsureDynamicTransformCapacity(program.RequiredDynamicTransformCapacity);
 
         // The program words go through their region like every other table, so a frame in flight keeps reading the words
-        // its slot was sent; only growing a capacity waits for the device to go idle.
-        var region = m_programRegion;
+        // its slot was sent. The region keeps room for the default shade program the tables last packed after it.
+        EnsureProgramCapacity(program: program, shade: m_shadeDefault);
 
-        EnsureProgramCapacity(program: program);
-
-        // A region the capacity replaced holds none of the earlier program's words.
         if (
             (delta is { } known) &&
             ReferenceEquals(objA: known.To, objB: program) &&
-            ReferenceEquals(objA: known.From, objB: m_liveProgram) &&
-            ReferenceEquals(objA: region, objB: m_programRegion)
+            ReferenceEquals(objA: known.From, objB: m_liveProgram)
         ) {
             _ = m_programRegion.WriteRuns(
                 runs: known.Runs,

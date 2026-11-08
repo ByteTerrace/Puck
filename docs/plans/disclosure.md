@@ -212,6 +212,12 @@ must be enclosed by every dependency of candidate generation, judging and
 scoring, checked before execution and before landing against live policy.
 The compiler wall against new authority-reading callers remains step 5.
 
+Authority diagnostics (`world.budget.rules`, `world.inspect`, `world.cost`,
+`world.contacts`, `world.collision.status`, `world.rigid`, `world.debug-view`
+and diagnostic finding picks) are operator reads. Their counts, work and
+revisions cannot be reconstructed from a recipient's view. Standard seat
+controls no longer bind the operator inspector and debug-view commands.
+
 **Puck builds:** `WorldRecipientView`, the one object every per-recipient
 answer is derived from: reads, write admission and refusal, placements and
 their layout, projections, deltas and diagnostics. It replaces
@@ -891,6 +897,16 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
+- Argon's adversarial review of step 1 (findings unverified until a fix lane
+  reopens each quotation; the lead holds the report): [high] `deal` leaks preceding hidden cells through `DealSlot` and position,
+  which step 4 owns; [medium] `WorldDeliveryRows.Advance` may drop public
+  field-cell deltas at the presentation tier; [medium] the image key-skip check
+  in `WorldDisclosureImages.Image` may skip readable writes and poison the cached
+  image; [medium] `WorldDisclosureImages.Definition` and
+  `WorldProjectionFeed.Compose` may suppress state-clock anchors and strip
+  unrestricted storage metadata; [medium] `WorldDeliveryCursor.Seed` and
+  `WorldSessionSink.DeliverState` may make sequence numbers depend on the hidden
+  count. The medium four are step 1's own and get a fix pass after step 2 lands.
 - Whether blind writes return: rejected here (decision 3). The auction fixture
   (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
   needs nothing more: each bid lands in the bidder's own inbox, a rule moves
