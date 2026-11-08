@@ -795,7 +795,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 
 | Working on | Read |
 |---|---|
-| Document schema, serialization, validators, profiles, binding layers, capacity constants | [documents.md](references/documents.md) |
+| Document schema, serialization, validators, profiles, capacity constants | [documents.md](references/documents.md) |
+| Binding layers, pages, chords, wheels, the binding bar, input modes and patterns | the [`input`](../input/SKILL.md) skill and its [bindings.md](../input/references/bindings.md) |
 | Tick order, mutation kinds, journal and undo, rule sugar lowering | [mutations.md](references/mutations.md) |
 | Grants, principals, verdicts, budgets, refusals, `world.why` | [authority.md](references/authority.md) |
 | `SubmissionEnvelope`, the one queue, completions, echo routing | [ordered-domain.md](references/ordered-domain.md) |
@@ -870,21 +871,9 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.
-- Input has independent budgets of 32 numeric axes and 64 packed buttons. The
-  standard's `worlds/standard/inputs.puck` declares the shared vocabulary (the
-  debug world adds `suit` and `noclip` in `suit.puck` and `noclip.puck`); chess uses
-  shared `confirm` and `cancel`, independently of machine `select`. Resolve
-  names through `WorldChannelTable`: a declaration index is not a storage
-  address. Target-register reach has its own mask and budget. Relative input
-  shares the numeric bank as Q32.32 displacement: use the table's typed reader,
-  never a held-level reader. The host accumulates samples and drains once per
-  routed tick; rules read a Q48.16 projection with authoritative fractional
-  residue. Binding compilation must receive the routed channel shapes.
-  [Input channels](../../../docs/decisions/input-channels.md) owns this model
-  and its authoritative modes, release barrier and timed history.
-  Switching modes releases by default; declared same-meaning holds and toggles
-  may continue, while changed meanings and transition edges never cross the
-  epoch barrier.
+- Input (channel budgets, modes and their release barrier, timed history,
+  input patterns, bindings, devices) belongs to the [`input`](../input/SKILL.md)
+  skill.
 - A kit whose collider differs from the body's last one (a kit `select` by a
   body register: the suit, noclip) steps the body to the nearest pose up its
   axis or along world X or Z where the new volume is not embedded
@@ -922,6 +911,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | Skill | Route there for |
 |---|---|
 | `puck-dsl` | `.puck` grammar, modules, units, the compile/lint/format verbs, PUCKnnn diagnostics. |
+| `input` | Channels, input modes, timed ingress, input patterns (tap, hold, sequences), bindings and overlays, the always-active plane, devices. |
 | `sdf-authoring` | Creation shapes, materials and rigs. |
 | `rendering` | The renderer and SDF VM the frame source feeds. |
 | `gaming-bricks`, `rom-forge` | Emulators behind engaged screens; cartridges. |
