@@ -1581,6 +1581,11 @@ reported until it does.
   rose by 4 per edit on both backends where views and glass make 2 (the lead's
   second GPU window); likely a requested set overtaken while the active and
   declared sets move on different frames. Unconfirmed.
+- [low] `SdfWorldPipelines.Acquire` leases `ViewsPlain` and `GlassPlain` up front beside the interpreter
+  `Views` and `Glass`, so every boot builds both pairs while a world uses one (a world whose frames run
+  programs, the debug world, never records the plain pair; a world with none never records the interpreter
+  pair). Making the pair a demand (`SdfWorldPipelines.AcquiredOnDemand`, as the binned kernels are) needs the
+  frame that first lacks or gains an active program to wait on its pipeline without a stall.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
   with identical arithmetic (window-2's disassembly); cost only, needs a GPU
   timing of `place` to show whether the driver removes them.
@@ -3136,15 +3141,6 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
-- [medium] Failures met by the disc-verbs and arena-continuity lanes in code
-  they did not change (unconfirmed on their bases): two
-  `SdfPipelineBuildLivenessLawTests` laws expect 14 pipelines and see 22 (read
-  whether the shading tiers or binning added pipelines the law should count,
-  or whether pipelines are built that should not be);
-  `ArenaScopeSnapshotTests.AGrowingKeyedRowRestoresItsCapturedReservationAndContents`
-  writes cell visibility on a row with only row-level visibility, which the
-  cell-policy rule no longer stores; `WorldFieldLatticeLawTests.ValidatorRefusesHeightGeometryThatCannotFitOneRenderBrick`
-  expects an older validator message; `ContentAddressedUpdateStagerTests.CorruptCachedObjectIsDeletedSoTheNextAttemptCanDownloadIt`.
 - Failures the field-packing lane met in code it did not touch (unconfirmed
   on its base): `SdfPackedContractLawTests.TheConstructorAdmitsTheReinterpretedIntegerLanes`
   builds a SampledRegion with no binding, which `BindSampledFields` refuses;

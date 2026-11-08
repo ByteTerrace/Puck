@@ -392,7 +392,7 @@ public sealed class WorldFieldLatticeLawTests {
         );
     }
     [Fact]
-    public void ValidatorRefusesHeightGeometryThatCannotFitOneRenderBrick() {
+    public void ValidatorRefusesHeightGeometryWiderThanTheSampledLatticeButNotTallerThanIt() {
         var tooWide = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
             composite: Fields(
@@ -416,17 +416,16 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.Contains(
             actualString: wideReason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "render brick"
+            expectedSubstring: "sampled lattice"
         );
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: tooTall,
-            neighbours: null,
-            reason: out var tallReason
-        ));
-        Assert.Contains(
-            actualString: tallReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "across 2 layers"
+        // A sampled height field bounds only its horizontal extent; its height is a sampled value, not a brick's depth.
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: tooTall,
+                neighbours: null,
+                reason: out var tallReason
+            ),
+            userMessage: tallReason
         );
     }
     [Fact]
