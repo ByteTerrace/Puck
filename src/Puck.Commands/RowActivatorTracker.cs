@@ -62,8 +62,8 @@ public sealed class RowActivatorTracker {
         if (m_mode == BindingActivatorMode.Held) {
             m_heldTracker = new HeldOrderTracker(
                 modifierCount: m_sequence.Count,
-                pressThreshold: 0.5f,
-                releaseThreshold: 0.4f
+                pressThreshold: HeldOrderTracker.DefaultPressThreshold,
+                releaseThreshold: HeldOrderTracker.DefaultReleaseThreshold
             );
         } else {
             m_failure = ComputeFailureFunction(sequence: m_sequence);

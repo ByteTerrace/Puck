@@ -77,9 +77,9 @@ public sealed record CommandDefinition {
     /// <summary>Gets whether only compiled bindings may dispatch this internal destination. Text commands,
     /// help and author-facing vocabulary do not expose it.</summary>
     public bool BindingOnly { get; init; }
-    /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; an
-    /// <see cref="CommandAudience.Operator"/> command is refused by the registry for every principal but the
-    /// console, before its handler runs.</summary>
+    /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; the registry refuses
+    /// every principal the audience does not admit (<see cref="CommandAudienceExtensions.Admits"/>) before the handler
+    /// runs.</summary>
     public CommandAudience Audience { get; init; }
     /// <summary>Gets whether a binding document may name this command as a destination.</summary>
     public CommandBindability Bindability { get; init; }

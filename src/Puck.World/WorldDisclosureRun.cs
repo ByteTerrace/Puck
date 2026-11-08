@@ -69,7 +69,7 @@ internal sealed class WorldDisclosureRun : IDisposable {
             if (string.Equals(a: principal, b: leg.Observer, comparisonType: StringComparison.Ordinal)) { run.m_observed[line] = leg.Observer; }
         }
         var verbs = (leg.Fuzz.Verbs ?? [.. registry.Definitions
-            .Where(predicate: static command => (command.Audience == CommandAudience.Anyone))
+            .Where(predicate: command => command.Audience.Admits(principal: observer))
             .Select(selector: static command => command.Name)
             .Where(predicate: verb => !WorldDisclosureFixture.Excludes(exclude: leg.Fuzz.Exclude, verb: verb))
             .Order(comparer: StringComparer.Ordinal)])

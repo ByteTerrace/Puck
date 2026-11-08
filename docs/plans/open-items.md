@@ -3585,7 +3585,12 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name.
+- [medium] Nothing drives controller output: no `Puck.World*` code references
+  `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has no
+  consumer outside `Puck.Machines`. Under "unreached is not unwanted" this is a
+  gap to wire (a machine's motor to the engaged seat's pad, authored haptics),
+  not something to delete. Found by the input skill map lane.
+- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while the input skill's `bindings.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name.
 
 - Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser.
 
@@ -4292,6 +4297,13 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
+- [medium] Areas with no owning skill (AGENTS.md rule 7: a gap fixed when
+  found), from the input skill lane: audio and speech (`src/Puck.Audio`),
+  physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
+  document references), the dashboard (`src/Puck.Dashboard`), platform
+  windowing and transports (`src/Puck.Platform.*`), recording and capture
+  (`src/Puck.Recording`). The duplication audit's map gaps join this list; one
+  lane writes the skills by capability after the audit lands.
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build
   of a different target is far faster, so the two are observations, not a
