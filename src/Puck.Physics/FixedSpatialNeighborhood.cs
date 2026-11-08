@@ -88,14 +88,7 @@ public sealed class FixedSpatialNeighborhood {
         }
         return -1;
     }
-    private long Floor(long raw) {
-        var quotient = (raw / CellWidth.Value);
-
-        return (((raw % CellWidth.Value) < 0)
-            ? (quotient - 1)
-            : quotient
-        );
-    }
+    private long Floor(long raw) => raw.FloorDivide(divisor: CellWidth.Value);
     private static void Retain(FixedSpatialNeighbor candidate, Span<FixedSpatialNeighbor> heap, ref int count) {
         if (count == heap.Length) {
             if (Compare(
