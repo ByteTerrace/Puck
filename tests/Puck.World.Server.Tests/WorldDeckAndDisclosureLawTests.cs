@@ -140,7 +140,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
         }
     }
     // A hand of three dealt into a four-slot rack: the hidden `ace` holds slot 0 and the visible `king` and `queen`
-    // slots 1 and 3 (a card that left slot 2 freed it).
+    // slots 1 and 3 (a card that left slot 2 freed it). Each card shows its own key, a prototype the template preserves.
     private static WorldDefinition Rack(HiddenCells hidden, string? solidCard = null) {
         static StateCell Card(string key, bool hidden) => StateFixtures.Cell(key: key, kind: CellKind.Bool) with { Visibility = (hidden ? new(["seat1"]) : null) };
         var template = new WorldPlacement(
@@ -158,7 +158,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 ),
                 Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)
             ),
-            Deal: new WorldPlacementDeal(Row: "hand")
+            Deal: new WorldPlacementDeal(Row: "hand", Preserve: new WorldPlacementDealPreserve(Prototype: true))
         );
         WorldPlacement Child(string key, int slot) => WorldPlacementDeal.Child(
             id: WorldPlacementDeal.ChildId(template: "rack", key: key),
@@ -392,6 +392,14 @@ public sealed class WorldDeckAndDisclosureLawTests {
         var shown = Frame(definition: Lifted(hiddenAhead: 1), recipient: Principal.Seat(slot: 1));
 
         Assert.Equal(expected: shown, actual: Frame(definition: Lifted(hiddenAhead: 3), recipient: Principal.Seat(slot: 1)));
+        // A template that does not preserve transforms owns them: the next re-deal, whose timing hidden cells can decide,
+        // stands the card back on its slot, so the opponent is shown it there already.
+        var owned = template with { Deal = template.Deal! with { Preserve = null } };
+        var unpreserved = Lifted(hiddenAhead: 3) with { PlacementRowsRaw = [owned, .. Lifted(hiddenAhead: 3).Placements.Skip(count: 1).Select(selector: p => p with { Parent = owned.Id })] };
+        var settled = Frame(definition: unpreserved, recipient: Principal.Seat(slot: 1));
+
+        Assert.Equal(expected: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero) + offsets[0], actual: settled.FixedPosition);
+        Assert.Equal(expected: FixedQ4816.Zero, actual: settled.FixedYawRadians);
         Assert.Equal(expected: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero) + offsets[0] + FixedVector3.FromVector3(value: lift), actual: shown.FixedPosition);
         Assert.Equal(expected: FixedQ4816.FromDegrees(degrees: 15f), actual: shown.FixedYawRadians);
         Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5), actual: shown.FixedScale);

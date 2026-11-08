@@ -408,7 +408,7 @@ public sealed partial class WorldTick {
             }
 
             var child = m_dealChildren[childIndex];
-            var reconciled = ReconcileChild(
+            var reconciled = deal.Reconcile(
                 child: child,
                 template: template,
                 prototype: deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId),
@@ -468,7 +468,7 @@ public sealed partial class WorldTick {
 
             var prototype = deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId);
             var nextChild = ((existing >= 0)
-                ? ReconcileChild(
+                ? deal.Reconcile(
                     child: m_dealChildren[existing],
                     template: template,
                     prototype: prototype,
@@ -526,38 +526,5 @@ public sealed partial class WorldTick {
         }
 
         return -1;
-    }
-    // A child's position is its displacement from its slot, so a preserved transform rides along to whatever slot the
-    // child holds, and an unpreserved one is the stamp's: on its slot, at no yaw and the template's scale.
-    private static WorldPlacement ReconcileChild(WorldPlacement child, WorldPlacement template, string prototype, int slot) {
-        var seed = WorldPlacementDeal.Child(
-            template: template,
-            id: child.Id,
-            prototype: prototype,
-            slot: slot
-        );
-        var preserve = template.Deal?.Preserve;
-        var result = ((preserve?.Facets == true)
-            ? child
-            : seed
-        );
-
-        return result with {
-            Parent = template.Id,
-            DealSlot = slot,
-            Deal = null,
-            Position = ((preserve?.Transform == true)
-            ? child.Position
-            : seed.Position),
-            YawDegrees = ((preserve?.Transform == true)
-            ? child.YawDegrees
-            : seed.YawDegrees),
-            Scale = ((preserve?.Transform == true)
-            ? child.Scale
-            : seed.Scale),
-            PrototypeId = ((preserve?.Prototype == true)
-            ? child.PrototypeId
-            : prototype),
-        };
     }
 }

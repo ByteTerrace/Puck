@@ -134,6 +134,36 @@ public sealed record WorldPlacementDeal(
         Spatial: template.Spatial,
         Surface: template.Surface
     );
+    /// <summary>Returns <paramref name="child"/> as this deal holds it at <paramref name="slot"/>: the stamp
+    /// (<see cref="Child"/>) with <paramref name="prototype"/>, except for what <see cref="Preserve"/> names, which
+    /// keeps the child's own (its displacement, yaw and scale; its prototype; its other facets). The sweep reconciles
+    /// every kept child through it, and a recipient's reading of a template that can withhold shows each child through
+    /// it, so a member the template owns is shown as the sweep will hold it, never a value a mover wrote that the next
+    /// re-deal (whose timing hidden cells can decide) resets.</summary>
+    /// <param name="template">The template placement carrying this deal.</param>
+    /// <param name="child">The child as it stands.</param>
+    /// <param name="prototype">The prototype the deal resolves for the child's cell.</param>
+    /// <param name="slot">The slot the child holds.</param>
+    /// <returns>The reconciled child.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="template"/> or <paramref name="child"/> is
+    /// <see langword="null"/>.</exception>
+    public WorldPlacement Reconcile(WorldPlacement template, WorldPlacement child, string prototype, int slot) {
+        ArgumentNullException.ThrowIfNull(argument: template);
+        ArgumentNullException.ThrowIfNull(argument: child);
+
+        var seed = Child(template: template, id: child.Id, prototype: prototype, slot: slot);
+        var transform = (Preserve?.Transform == true);
+
+        return ((Preserve?.Facets == true) ? child : seed) with {
+            Parent = template.Id,
+            DealSlot = slot,
+            Deal = null,
+            Position = (transform ? child.Position : seed.Position),
+            YawDegrees = (transform ? child.YawDegrees : seed.YawDegrees),
+            Scale = (transform ? child.Scale : seed.Scale),
+            PrototypeId = ((Preserve?.Prototype == true) ? child.PrototypeId : prototype),
+        };
+    }
     // The placement members a template that can withhold, its dealt children and every placement authored under them
     // may carry, by JSON name: what the re-deal already discloses (the identity and parent, the prototype the disclosed
     // face selects, the child's own displacement, yaw and scale, which the re-deal carries to the re-dealt slot) and

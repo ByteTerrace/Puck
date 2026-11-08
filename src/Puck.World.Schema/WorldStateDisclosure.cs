@@ -608,9 +608,12 @@ public static class WorldStateDisclosure {
                     changed = true;
                     continue;
                 }
-                // Only the variant row withholds: the child keeps its slot and shows its face only when the recipient
+                // Only the variant row withholds: the child keeps its slot, is shown as the deal holds it (a hidden
+                // variant cell can decide when the sweep next re-deals it), and shows its face only when the recipient
                 // may read the variant cell that selects it.
-                var masked = (Withheld(name: template.Deal!.Variants!.Row, key: dealtKey) ? (placement with { PrototypeId = template.PrototypeId }) : placement);
+                var masked = (placement.DealSlot is { } own) ? Shown(arena: arena, child: placement, key: dealtKey, slot: own, template: template, withheld: Withheld) : placement;
+
+                masked = ((masked == placement) ? placement : masked);
 
                 changed |= !ReferenceEquals(objA: masked, objB: placement);
                 result.Add(item: masked);
@@ -655,7 +658,8 @@ public static class WorldStateDisclosure {
     // Every cell the recipient is shown takes the next slot whether or not the sweep has dealt its child yet, and a
     // back stands for a withheld cell whatever child the authority holds for it: an install between sweeps (an
     // operator's key rename, a cell not yet dealt) then moves nothing the recipient is shown that the row it reads did
-    // not move. A kept child changes only its slot: its position is its displacement from its slot, and its frame
+    // not move. A kept child is shown at its re-dealt slot as the deal holds it (Shown): its position is its displacement
+    // from its slot, and its frame
     // (WorldPlacementFrameCompilation.LocalFrame) is the re-dealt slot's fixed-point offset plus that displacement, so
     // nothing of the authority's slot, its offset or that offset's rounding reaches the recipient.
     private static void Redeal(WorldPlacement template, int rowOrdinal, Dictionary<string, WorldPlacement>? children, StateArena arena, ref Observer observer, Func<string, string?, bool> withheld, ulong worldSeed, List<WorldPlacement> result) {
@@ -665,7 +669,6 @@ public static class WorldStateDisclosure {
         // observation shows it; a reader the row's own policy excludes is shown nothing of it.
         var rowReadable = observer.Allows(policy: row.Visibility);
         var placeholder = rowReadable && (row.Visibility?.Hidden == HiddenCells.Placeholder);
-        var variants = template.Deal!.Variants;
         var slot = 0;
         var cursor = 0;
 
@@ -675,10 +678,7 @@ public static class WorldStateDisclosure {
                 var key = arena.Keys[key: cell].Value;
 
                 if ((children is not null) && children.TryGetValue(key: key, value: out var child)) {
-                    result.Add(item: child with {
-                        DealSlot = slot,
-                        PrototypeId = (((variants is not null) && withheld(arg1: variants.Row, arg2: key)) ? template.PrototypeId : child.PrototypeId),
-                    });
+                    result.Add(item: Shown(arena: arena, child: child, key: key, slot: slot, template: template, withheld: withheld));
                 }
             } else if (placeholder) {
                 result.Add(item: WorldPlacementDeal.Child(
@@ -694,6 +694,23 @@ public static class WorldStateDisclosure {
         }
     }
 
+    // A kept child of a restricted template as the recipient is shown it at slot: as the deal holds it
+    // (WorldPlacementDeal.Reconcile), so what the template owns is the stamp's and what it preserves is the child's own,
+    // and the authority's re-deal timing, which hidden cells can decide, shows nowhere; its face is the variant the
+    // recipient may read, else the template's own.
+    private static WorldPlacement Shown(WorldPlacement template, WorldPlacement child, string key, int slot, StateArena arena, Func<string, string?, bool> withheld) {
+        var deal = template.Deal!;
+        var hiddenFace = ((deal.Variants is { } variants) && withheld(arg1: variants.Row, arg2: key));
+        var variantOrdinal = ((deal.Variants is { } declared) && arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: declared.Row)) ? row.Ordinal : -1;
+        var shown = deal.Reconcile(
+            child: child,
+            prototype: (hiddenFace ? template.PrototypeId : deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId)),
+            slot: slot,
+            template: template
+        );
+
+        return (hiddenFace ? (shown with { PrototypeId = template.PrototypeId }) : shown);
+    }
     /// <summary>Refuses flattening a presentation binding that could disclose a restricted value.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>

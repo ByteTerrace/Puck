@@ -1854,13 +1854,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · duplicate, drifted] Two frame resolvers: `WorldPlacementSpatial.TryResolveFrame`
-  copies `WorldPlacementFrameCompilation.TryResolveFrame` but always applies the
-  parent's scale (the original skips it for dealt children) and computes yaw
-  without `% 360`, so with a template scale other than 1 the spatial index and
-  the frame table give a dealt child different frames. Also
-  `WorldTick.Deals.ResolveDealPrototype` repeats `WorldPlacementDeal.ResolvePrototype`.
-  One resolver and one lookup.
 - [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
   "no surface, as baked before", "contour refused" and the rest) is a string
   literal in the bake's code closure that only the done line's `empty=[...]`
