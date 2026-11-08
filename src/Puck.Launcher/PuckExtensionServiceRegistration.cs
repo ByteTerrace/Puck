@@ -86,6 +86,7 @@ internal sealed class PuckExtensionCommandModule(PuckExtensionSet extensions) : 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             description: "Lists this host's composed extensions and each contribution by kind and key. Configuration may select these keys; it cannot load executable paths.",
             handler: (_, args) => (CommandResult.RequireNoArguments(

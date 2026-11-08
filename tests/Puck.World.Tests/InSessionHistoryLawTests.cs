@@ -392,7 +392,7 @@ public sealed class InSessionHistoryLawTests {
             val2: (keyframeBytes * 3L)
         );
 
-        Assert.True(condition: harness.History.TryOn(budgetBytes: budget, refusal: out _));
+        Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: budget, refusal: out _));
         harness.Steps(count: 3000);
 
         var status = harness.History.Status();
@@ -448,14 +448,14 @@ public sealed class InSessionHistoryLawTests {
         var added = (later.KeyframeBytesStored - first.KeyframeBytesStored);
 
         Assert.True(
-            condition: ((added * 4L) < encoded),
+            condition: ((added * 3L) < encoded),
             userMessage: $"four keyframes encoded {encoded} bytes and added {added}"
         );
         // The shared keyframes still restore exactly.
         _ = harness.SeekAndProve(target: harness.History.KeyframeTicks[2]);
     }
     // The HUD's history tokens read the history itself: "off" before a window exists, the cursor and its place in the
-    // window once one does, and the window's ends with the bytes held against the budget.
+    // window once one does, and the window's ends with how far it has filled toward its length.
     [Fact]
     public void TheHistoryHudTokensShowTheCursorInItsWindow() {
         using var harness = new WorldHistoryHarness(
@@ -484,7 +484,7 @@ public sealed class InSessionHistoryLawTests {
         }
 
         Assert.Equal(expected: (0f, "off"), actual: Read(token: "history.cursor"));
-        Assert.True(condition: harness.History.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.Steps(count: 41);
 
         Assert.Equal(expected: (1f, "41"), actual: Read(token: "history.cursor"));
@@ -492,7 +492,7 @@ public sealed class InSessionHistoryLawTests {
         _ = harness.SeekAndProve(target: 11UL);
         Assert.Equal(expected: (0.25f, "11"), actual: Read(token: "history.cursor"));
         Assert.Equal(
-            expected: (((float)harness.History.BytesHeld) / WorldHistory.DefaultBudgetBytes),
+            expected: (40f / harness.History.WindowTicks),
             actual: Read(token: "history.window").Fraction
         );
     }

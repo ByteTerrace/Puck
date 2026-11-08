@@ -822,6 +822,7 @@ public sealed class InputRouterHardeningTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ActionCommand,
                 description: "Chord/page probe.",
                 valueKind: CommandValueKind.Digital,
@@ -829,6 +830,7 @@ public sealed class InputRouterHardeningTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: AlphaCommand,
                 description: "Ordering probe (lower id).",
                 valueKind: CommandValueKind.Digital,
@@ -836,6 +838,7 @@ public sealed class InputRouterHardeningTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: BetaCommand,
                 description: "Ordering probe (higher id).",
                 valueKind: CommandValueKind.Digital,
@@ -843,6 +846,7 @@ public sealed class InputRouterHardeningTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ChannelCommand,
                 description: "Channel probe.",
                 valueKind: CommandValueKind.Axis1D,
@@ -850,6 +854,7 @@ public sealed class InputRouterHardeningTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: DigitalCommand,
                 description: "Digital probe.",
                 valueKind: CommandValueKind.Digital,
@@ -857,6 +862,7 @@ public sealed class InputRouterHardeningTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: MappedCommand,
                 description: "Mapped probe.",
                 valueKind: CommandValueKind.Digital,

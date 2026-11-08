@@ -77,9 +77,9 @@ public sealed record CommandDefinition {
     /// <summary>Gets whether only compiled bindings may dispatch this internal destination. Text commands,
     /// help and author-facing vocabulary do not expose it.</summary>
     public bool BindingOnly { get; init; }
-    /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; the registry refuses
-    /// every principal the audience does not admit (<see cref="CommandAudienceExtensions.Admits"/>) before the handler
-    /// runs.</summary>
+    /// <summary>Gets who the command answers. Every factory requires it, and the registry refuses a registration whose
+    /// audience is <see cref="CommandAudience.Unspecified"/>; at dispatch it refuses every principal the audience does
+    /// not admit (<see cref="CommandAudienceExtensions.Admits"/>) before the handler runs.</summary>
     public CommandAudience Audience { get; init; }
     /// <summary>Gets whether a binding document may name this command as a destination.</summary>
     public CommandBindability Bindability { get; init; }
@@ -131,6 +131,7 @@ public sealed record CommandDefinition {
     /// <param name="handler">The delegate invoked on each activation.</param>
     /// <param name="bindability">Whether a binding document may name this command. Required — every registration
     /// declares it, and <see cref="CommandBindability.Unspecified"/> is refused by name at registry construction.</param>
+    /// <param name="audience">Who the command answers (see <see cref="Audience"/>). Required, as bindability is.</param>
     /// <param name="map">
     /// The command map that classifies source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.
     /// </param>
@@ -141,7 +142,6 @@ public sealed record CommandDefinition {
     /// </param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
-    /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
     /// <param name="forms">The verb's declared argument forms, which the description must contain (see <see cref="Forms"/>),
     /// or <see langword="null"/> for a verb that takes no argument.</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
@@ -151,12 +151,12 @@ public sealed record CommandDefinition {
         CommandValueKind valueKind,
         Func<CommandContext, CommandResult> handler,
         CommandBindability bindability,
+        CommandAudience audience,
         string map = CommandMaps.Global,
         IReadOnlyList<string>? aliases = null,
         CommandRouting routing = CommandRouting.Immediate,
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false,
-        CommandAudience audience = CommandAudience.Anyone,
         CommandForms? forms = null
     ) {
         // A composition-root mistake refuses HERE, naming the parameter that was wrong. A null handler used to
@@ -203,6 +203,7 @@ public sealed record CommandDefinition {
     /// safely drop only its successes) and should gate its success-echo construction on <see cref="WireArgs.Echo"/>.</param>
     /// <param name="bindability">Whether a binding document may name this command. Required — every registration
     /// declares it, and <see cref="CommandBindability.Unspecified"/> is refused by name at registry construction.</param>
+    /// <param name="audience">Who the command answers (see <see cref="Audience"/>). Required, as bindability is.</param>
     /// <param name="map">The command map that classifies source-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
     /// <param name="routing">The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>.</param>
     /// <param name="ackOnly">Whether the verb's success output is a bare acknowledgement <c>wire.ack quiet</c> may drop
@@ -222,7 +223,6 @@ public sealed record CommandDefinition {
     /// call carries the same kind a bound one would.</param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
-    /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
     /// <param name="forms">The verb's declared argument forms, which the description must contain (see <see cref="Forms"/>),
     /// or <see langword="null"/> for a verb that takes no argument.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
@@ -231,13 +231,13 @@ public sealed record CommandDefinition {
         string description,
         Func<CommandContext, WireArgs, CommandResult> handler,
         CommandBindability bindability,
+        CommandAudience audience,
         string map = CommandMaps.Global,
         CommandRouting routing = CommandRouting.Immediate,
         bool ackOnly = false,
         CommandValueKind valueKind = CommandValueKind.Digital,
         CommandInputScope inputScope = CommandInputScope.Focused,
         bool held = false,
-        CommandAudience audience = CommandAudience.Anyone,
         CommandForms? forms = null
     ) {
         // See Verb: the registration is refused where it is written rather than reported as a handler fault on the

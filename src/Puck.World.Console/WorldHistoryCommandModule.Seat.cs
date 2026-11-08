@@ -9,7 +9,7 @@ namespace Puck.World;
 public sealed partial class WorldHistoryCommandModule {
     // The forms a seat's binding may run. Each moves the shared timeline or starts its recording, so each is checked
     // against control over history under the pressing seat's principal; row only echoes the drawn row. `on` is a seat
-    // form only bare, at the default budget: choosing the MiB held is the operator's.
+    // form only bare, at the default window and ceiling: choosing either is the operator's.
     private static bool IsSeatForm(WireArgs args) => (
         ((args.Count == 1) && args.Is(index: 0, value: "on")) ||
         args.Is(index: 0, value: "step") ||

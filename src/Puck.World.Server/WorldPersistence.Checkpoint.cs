@@ -934,7 +934,7 @@ public sealed partial class WorldPersistence {
         // Restored catalogs mint new handles; retain cells but bind every reaction to that catalog.
         Host.Population.InstallFields(definition: restoredDefinition);
         Host.Population.RestoreFieldRegions(checkpoints: checkpoint.Fields);
-        Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
+        Host.AdoptPreparedArena(arena: restoredArena, continuity: WorldArenaContinuity.Load, definition: restoredDefinition);
         Host.Population.Restore(
             continuingFederatedBodies: server.FederatedInputs.Select(selector: static input => input.Index).ToHashSet(),
             checkpoint: checkpoint.Population,
@@ -1006,7 +1006,7 @@ public sealed partial class WorldPersistence {
                 slot: entry.Index
             );
         }
-        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation, arena: restoredArena);
+        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation, arena: restoredArena, continuity: WorldArenaContinuity.Load);
         // Recompilation installs the final live document and scope bindings. Restoring before it lets the
         // binding replacement discard a captured scope's starting image and derived tape.
         foreach (var scope in (server.ScopedReplays ?? [])) {

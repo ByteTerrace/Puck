@@ -20,6 +20,7 @@ public sealed class WorldShapeLawCommandModule(IWorldConsoleAuthority authority)
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: Verb,
             description: $"Reads back each shape's law in a creation the live document authors: {CreationShapeForms.Spelling}. A summary line counts the shapes whose lowered field is exact, a bound, or uncertified, and those the fixed-point evaluator or deterministic contact refuse; then one line a shape (all of them, or the named ones): index, name, authored type/profile/lift, scale, facets, lowered= the instructions the renderer emits for the shape alone (its domain folds aside), distance=exact | bound gain=<g> (the field is at least g times the distance, so |grad d| lies in [g, 1]: a gauge or a non-uniform Scale) | uncertified (a warp, field op, path or sweep certifies no gain), step=<1/L> when a warp or blend clamps the march, cpu=interprets | refuses (the fixed-point evaluator's reason), contact=admitted | omitted (detail, sweep) | refused (why) for a solid placement, and contact-omits= the render instructions contact drops. Refuses by name a prototype the document does not author and a shape name it does not hold, changing nothing. Needs no renderer. The offline twin is puck creation shape.",

@@ -99,7 +99,7 @@ public sealed class AuthoredBindingAuthorityLawTests {
 
     private sealed class SafeCommand : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
-            yield return CommandDefinition.WithWireArgs(name: AllowedCommand, description: "A harmless input gesture.",
+            yield return CommandDefinition.WithWireArgs(audience: CommandAudience.Anyone, name: AllowedCommand, description: "A harmless input gesture.",
                 bindability: CommandBindability.Bindable, handler: static (_, _) => CommandResult.None);
         }
     }

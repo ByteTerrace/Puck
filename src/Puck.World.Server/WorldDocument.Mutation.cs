@@ -136,15 +136,19 @@ public sealed partial class WorldDocument {
         }
 
         candidate = WorldContributionState.Declare(definition: candidate);
+        // Every row the mutation did not name returns to the installed declaration here, so each install below changes
+        // only the rows the mutation names: a value install loads them alone, and a full install keeps the live arena
+        // when it named none, or carries every other row's live values into its replacement.
+        var edit = NameStateEdit(candidate: candidate, current: current);
+
+        candidate = edit.Candidate;
         var kind = InstallKindOf(
             candidate: candidate,
             mutation: mutation,
             previous: current
         );
         var installsArena = (kind == WorldInstallKind.Full);
-        // A full install whose mutation left the state section alone installs the live arena itself: replacing it
-        // with one seeded from the candidate would move state the mutation was not asked to change.
-        var keepsArena = (installsArena && Host.KeepsArena(candidate: candidate, current: current));
+        var keepsArena = (installsArena && Host.KeepsArena(candidate: candidate));
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
         // door. Prepare their replacement arena before commit even when the mutation keeps every compiled product.
         // A presentation install writes no state at all, so it loads nothing.
@@ -181,7 +185,8 @@ public sealed partial class WorldDocument {
             definition: candidate,
             prepared: out arena,
             reason: out reason,
-            settled: out candidate
+            settled: out candidate,
+            edit: edit
         )) {
             return false;
         }
@@ -238,7 +243,7 @@ public sealed partial class WorldDocument {
             !replacesArena &&
             !keepsArena &&
             !Host.Arena.TryValidateLoad(
-            rows: Host.ReplacedRows(definition: candidate, previous: current),
+            rows: Host.ReplacedRows(definition: candidate, previous: m_definition),
             reason: out reason
         )) {
             return false;

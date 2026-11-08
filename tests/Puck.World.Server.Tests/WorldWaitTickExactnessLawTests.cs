@@ -56,6 +56,7 @@ public sealed class WorldWaitTickExactnessLawTests {
     private sealed class ProbeModule(Func<ulong> completed, List<string> log) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed tick count.",
                 handler: (_, _) => {
@@ -66,6 +67,7 @@ public sealed class WorldWaitTickExactnessLawTests {
                 name: "probe.read"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed tick count when its tick applies.",
                 handler: (_, _) => {

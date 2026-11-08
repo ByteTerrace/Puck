@@ -343,9 +343,11 @@ the acting principal: an `observe` submitted by anyone but the world's own rules
 is refused by name, and a phase guard admits against the arena's own
 phase-sequence column before advancing it.
 
-A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
-prepares its replacement arena before the mutation commits. The replacement
-carries the runtime key ledger plus the participant and identity lanes; a
+A re-declared row set (`WorldMutation.UpsertStateRow`, `RemoveStateRow`, an
+addon-installed row) prepares its replacement arena before the mutation
+commits. The replacement is born with the rows the mutation named and loads
+every other row's live values (see [what an install rebuilds](#what-an-install-rebuilds));
+it carries the runtime key ledger plus the participant and identity lanes; a
 capacity refusal therefore leaves both the installed document and arena alone.
 A whole-document rebuild (`world.load`, `world.reload`, `world.reset`, and the
 load door a history seek restores through) prepares its replacement the same
@@ -482,12 +484,25 @@ resolve (`WorldStateDocumentValues`). `tests/Puck.World.Server.Tests/WorldRowFie
 
 ### What an install rebuilds
 
+A mutation changes only the state rows it names. It composes over the installed
+document carrying the arena's values (`MaterializeArena`), and every row it did
+not write is the very instance that export holds. Before the install is
+classified, `WorldDocument.NameStateEdit` returns each such row to the installed
+document's own declaration, so the candidate's state section differs from the
+installed one in the named rows alone, and a mutation that named none holds the
+installed section itself. The installed document's rows are declarations and
+seeds; the arena holds the live values. An unnamed row therefore keeps the
+per-cell traits of cells a rule removed, which an export of the arena cannot
+carry. A section that declares pools, or a mutation that changes a part of the
+section other than its rows (spaces, enums, records, lanes), is the candidate's
+whole and seeds every row.
+
 `WorldDocument.InstallKindOf` classifies every prepared mutation once, against the
 document it was composed over, and the prepare step, the install and the
 population forecast all read that answer:
 
 - **Value**: a state-value mutation that keeps the state catalog and rebinds no
-  population look loads the rows it replaced into the live arena and keeps every
+  population look loads the rows it named into the live arena and keeps every
   compiled product. A plain cell or value-only row write never gets here: it is a
   state transaction on the arena (`WorldDocument.StateCommands.cs`).
 - **Presentation**: a creation upsert whose new row differs from the installed
@@ -498,11 +513,32 @@ population forecast all read that answer:
   the installed document, so it exports no state section either.
 - **Full**: everything else recompiles the rules and reconciles fields and
   screens, rebuilding the population when the mutation reaches it
-  (`RecompilesPopulation`). A mutation that leaves the state section alone (the
-  candidate holds the very section it was composed over, compiled to the catalog
-  the arena stores: `WorldServer.KeepsArena`) installs the live arena itself, so
-  its key ordinals, its scoped replays' recordings and every value stay; any
-  other installs a replacement arena prepared from the candidate.
+  (`RecompilesPopulation`). A mutation that named no state row (the candidate
+  holds the installed state section, compiled to the catalog the arena stores:
+  `WorldServer.KeepsArena`) installs the live arena itself, so its key ordinals
+  and every value stay, and the validator's seed view and the client mirror,
+  which are built once per state section, build nothing. Any other installs a
+  replacement (`WorldServer.TryPrepareArenaReplacement`) born with the named rows
+  from the candidate (`StateArena.TryCreateSeeding`) that loads every other row's
+  live values from the export, cursors, clocks and slot order included; only the
+  named rows settle.
+
+What survives an arena install is decided in one place,
+`WorldServer.ContinueScopes`, by the installing door's `WorldArenaContinuity`:
+
+- **Edit** (a mutation's install of any kind): each scoped replay keeps its
+  starting image and tape while every one of its rows keeps its declaration
+  (`WorldDocument.SameComposeDeclaration`). The scope binds its rows by name, its
+  image moves to the replacement by row and key name (`StateArena.CarryScope`),
+  and its recorded hashes still compare, since a row digest folds the row's
+  content and not its catalog ordinal (`StateArena.AddRowTo`). An edit that
+  re-declares a scope row drops the scope's image and tape, sets its control
+  row's `status` to -1 and names the refusal on stderr; the next capture request
+  records afresh.
+- **Load** (`world.load`, `world.reload`, `world.reset`, a history seek, a
+  checkpoint restore): the document's state replaces the arena's whether the
+  arena is replaced or reloaded in place, so every scope drops its image and
+  tape, and a checkpoint then restores its own.
 
 `world.boot.full-installs`, `value-installs` and `presentation-installs` count each
 kind, and `world.boot.arena-builds` counts every arena a world builds from a state
@@ -2571,11 +2607,15 @@ authoritative hash the tick reached. Keyframes live in a
 chunks (a gear rolling hash picks the boundaries, so an edit moves only the
 chunks around it) and each distinct chunk is held once, reference-counted, so a
 keyframe costs the regions that changed since the ones already held. The
-keyframe spacing is the bytes the last keyframe added over the mean recorded
-input per tick, never closer than one keyframe per `KeyframeWorkBytesPerTick`
-(64 KiB) of encoded checkpoint, and clamped between an eighth of a second and
-four seconds of simulation; the oldest span is evicted whenever the bytes held
-exceed the budget (64 MiB unless `world.history on <MiB>` names another). The
+window's shape is a function of ticks alone: a keyframe every simulated second
+at the document's rate, and the oldest span evicted once the next one alone
+reaches the window's length behind the head (60 seconds unless
+`world.history on <seconds>` names another). A seat reads the window, steps
+through it and is told which keyframe a seek restored, and a keyframe's bytes
+count every row, withheld ones included, so no keyframe tick, window bound or
+re-simulated count may follow them. The memory ceiling (64 MiB unless
+`world.history on <seconds> <MiB>` names another) evicts earlier only when the
+window does not fit it, a resource limit outside the disclosure guarantee. The
 checkpoint capture serializes the journal base only when the base object moved,
 and the codec writes a base byte-identical to the live document once. A span's per-tick arrays are sized for its interval on the keyframe
 tick, so a tick that captures no keyframe allocates nothing. A keyframe the

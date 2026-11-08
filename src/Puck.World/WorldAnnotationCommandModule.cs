@@ -109,6 +109,7 @@ public sealed class WorldAnnotationCommandModule(WorldAnnotations annotations) :
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: Verb,
             description: $"On-screen annotations for pointing something out: {ViewAnnotateForms.Spelling}. In annotate mode a left drag in the window draws the ellipse fitting the drag box (a click draws a small dot ring), a right click clears every outline, and no pointer button or drag reaches a binding or the camera. Leaving the mode keeps the outlines until clear. The outlines draw on the overlay, so world.screenshot captures them. list (and bare view.annotate) echoes the mode and each outline, numbered as drawn, as center x,y and radii x,y in fractions of the window's width and height (origin top-left); add keeps one at those fractions (ry defaults to rx), undo removes the newest. Bind it with a text payload (toggle). Presentation only: nothing reaches the simulation.",

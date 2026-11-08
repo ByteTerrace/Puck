@@ -385,6 +385,7 @@ public sealed class AuthoredCommandTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "Records what it was told.",
                 handler: (context, args) => {
@@ -399,6 +400,7 @@ public sealed class AuthoredCommandTests {
                 name: "probe.say"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "Records a simulation-routed word.",
                 handler: (context, args) => {
@@ -422,12 +424,14 @@ public sealed class AuthoredCommandTests {
                 name: "probe.secret"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "An unbindable verb.",
                 handler: (_, _) => CommandResult.None,
                 name: "probe.hidden"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "Always refuses.",
                 handler: (_, _) => CommandResult.Error(output: "[probe.fail: no]"),

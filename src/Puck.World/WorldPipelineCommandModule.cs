@@ -79,6 +79,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     }
     private static CommandDefinition Immediate(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
         CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: name,
             description: description,
             handler: handler,
@@ -87,6 +88,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
     private static CommandDefinition Immediate(CommandForms forms, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
         CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: forms.Verb,
             description: description,
             forms: forms,
@@ -152,6 +154,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "pipeline.load",
             description: $"{PipelineLoadForms.Spelling} — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
             forms: PipelineLoadForms,
@@ -425,6 +428,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "pipeline.commit",
             description: $"{PipelineCommitForms.Spelling} — commit the instance's previewed overrides, time scale and output into its views.graphs row. The commit names the row revision and the installed source it was previewed against, and is refused by name when either has moved; world.save then writes it.",
             forms: PipelineCommitForms,

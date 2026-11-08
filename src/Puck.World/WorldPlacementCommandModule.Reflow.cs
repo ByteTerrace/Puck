@@ -22,6 +22,7 @@ internal sealed partial class WorldPlacementCommandModule {
     }
     private IEnumerable<CommandDefinition> ReflowCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.reflow.preview",
             description: $"Starts bounded background planning: {WorldReflowPreviewForms.Spelling}. A request can include seed edits and an explicit placement group. Review status before committing; previews expire after five minutes.",
@@ -55,6 +56,7 @@ internal sealed partial class WorldPlacementCommandModule {
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.reflow.status",
             description: "Reviews proposed positions, growth, price, and constraints.",
@@ -65,6 +67,7 @@ internal sealed partial class WorldPlacementCommandModule {
                 ))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.reflow.cancel",
             description: "Discards the cached plan without changing the world or paying.",
@@ -75,6 +78,7 @@ internal sealed partial class WorldPlacementCommandModule {
                 ))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.reflow.commit",
             routing: CommandRouting.Simulation,

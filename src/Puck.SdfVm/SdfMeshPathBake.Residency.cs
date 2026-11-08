@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.SignedDistance;
+using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
 namespace Puck.SdfVm;
 
@@ -56,88 +57,30 @@ public sealed partial class SdfMeshPathBake {
     }
     private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
 
-    // The bake's CPU stages, whose summed thread time the done line reports (Account).
-    private enum BakeStage {
-        Answer,
-        Prepare,
-        Crossings,
-        Contour,
-        Split,
-        Cut,
-        Land,
-        Store,
-    }
-
-    // Stopwatch ticks each stage spent, summed over the threads that ran it.
-    private readonly long[] m_stageTicks = new long[8];
-    // The samples answered by the lattices of each kind: coarse and refining grids, final slabs, the final lattice's fine
-    // samples, crossing rounds and gradients, the field check's vertices, material points and skin points.
-    private readonly long[] m_kindSamples = new long[8];
-    private static readonly string[] KindNames = ["refine", "slab", "fine", "crossing", "gradient", "crease", "material", "skin"];
-
-    // The takes made while a group still owed a lattice, those that took none, and what ended each take's batch: its
-    // evaluations, the dispatch's samples, the batch's lattices, or no group owing a lattice. The groups waiting on a
-    // dispatch, in flight and on the workers, summed over those takes; and the batches taken.
-    private long m_takes;
-    private long m_idleTakes;
-    private long m_batches;
-    private long m_stopTaps;
-    private long m_stopSamples;
-    private long m_stopBatch;
-    private long m_stopDrained;
-    private long m_waitingGroups;
-    private long m_flyingGroups;
-    private long m_workingGroups;
-
-    // How long the frame thread waited to take the bake's gate (PrepareFrame and TryTake) since the bake
-    // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
-    // array-sized work shows here as frame time.
-    private long m_frameGateWaitMax;
-    private long m_frameGateWaitTotal;
-    private long m_frameGateWaitsSlow;
+    // What the bake counts for its done line, and what that line says (SdfMeshBakeReport, outside the bake's code identity):
+    // the stage ticks, the samples of each kind, the takes made while a group still owed a lattice and what ended each
+    // take's batch, the groups waiting on a dispatch, in flight and on the workers, and the frame thread's waits on the
+    // bake's gate, which show a worker holding it through array-sized work as frame time.
+    private readonly SdfMeshBakeReport.Accounts m_accounts = new();
 
     // Takes the gate on the frame thread, counting the wait.
     private Lock.Scope EnterFrameGate() {
         var started = Stopwatch.GetTimestamp();
         var scope = m_gate.EnterScope();
-        var waited = (Stopwatch.GetTimestamp() - started);
 
-        m_frameGateWaitTotal += waited;
-        m_frameGateWaitMax = Math.Max(val1: m_frameGateWaitMax, val2: waited);
-        m_frameGateWaitsSlow += ((waited > (Stopwatch.Frequency / 1000)) ? 1 : 0);
+        m_accounts.FrameGateWaited(waited: (Stopwatch.GetTimestamp() - started));
+
         return scope;
     }
 
-    // Adds the time since a timestamp to a stage's account.
-    private void Account(BakeStage stage, long since, Group? group = null, string? detail = null) {
-        var ticks = (Stopwatch.GetTimestamp() - since);
+    // Adds the time since a timestamp to a stage's account; the report names a stage that held one group's worker for
+    // seconds, so the bake's long poles can be found.
+    private void Account(BakeStage stage, long since, Group? group = null, SdfMeshBakeReport.Detail detail = default) {
+        var ticks = m_accounts.Add(stage: stage, since: since);
 
-        _ = Interlocked.Add(location1: ref m_stageTicks[((int)stage)], value: ticks);
-        // A stage that holds one group's worker for seconds names the group, so the bake's long poles can be found.
-        if ((group is not null) && (ticks > (SlowStageSeconds * Stopwatch.Frequency))) {
-            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={Residency} group={group.Selector} {(group.Dynamic ? "dynamic" : $"instances={group.Instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / ((double)Stopwatch.Frequency)):0.00} {detail}"));
+        if (group is not null) {
+            SdfMeshBakeReport.Slow(detail: detail, dynamic: group.Dynamic, instances: group.Instances, residency: Residency, selector: group.Selector, stage: stage, ticks: ticks);
         }
-    }
-
-    // The thread seconds past which one group's stage is reported (Account).
-    private const double SlowStageSeconds = 2.0;
-
-    // Clears the frame and stage accounts for a new bake.
-    private void ClearAccounts() {
-        Array.Clear(array: m_stageTicks);
-        Array.Clear(array: m_kindSamples);
-        m_takes = m_idleTakes = m_batches = m_stopTaps = m_stopSamples = m_stopBatch = m_stopDrained = 0;
-        m_waitingGroups = m_flyingGroups = m_workingGroups = 0;
-        m_frameGateWaitMax = m_frameGateWaitTotal = m_frameGateWaitsSlow = 0;
-    }
-    // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
-    private string DescribeAccounts() {
-        var stages = string.Join(separator: ",", values: Enum.GetValues<BakeStage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref m_stageTicks[((int)stage)]) / ((double)Stopwatch.Frequency)):0.0}")));
-        var takes = Math.Max(val1: 1L, val2: m_takes);
-
-        var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
-
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] batches={m_batches} takes={m_takes} idle={m_idleTakes} stop=[taps:{m_stopTaps},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-take=[waiting:{(m_waitingGroups / ((double)takes)):0.0},flying:{(m_flyingGroups / ((double)takes)):0.0},working:{(m_workingGroups / ((double)takes)):0.0}]{DispatchReport?.Invoke()} frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
     }
     // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
     // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
@@ -242,7 +185,7 @@ public sealed partial class SdfMeshPathBake {
     // Finishes a group whose stage threw: it keeps drawing the mesh it drew before, if any, and a later program plans it
     // again rather than keeping the failure (Keeps).
     private void Fail(Group group, Exception exception) {
-        Console.Error.WriteLine(value: $"[sdf.mesh-bake] residency={Residency} group={group.Selector} failed: {exception.GetType().Name}: {exception.Message}");
+        SdfMeshBakeReport.Failed(exception: exception, residency: Residency, selector: group.Selector);
         lock (m_gate) {
             group.Contouring = false;
             group.InFlight = false;
@@ -316,7 +259,7 @@ public sealed partial class SdfMeshPathBake {
                 try {
                     work();
                 } catch (Exception exception) {
-                    Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
+                    SdfMeshBakeReport.WorkFailed(exception: exception);
                 } finally {
                     lock (ProgressGate) {
                         ProgressCount++;

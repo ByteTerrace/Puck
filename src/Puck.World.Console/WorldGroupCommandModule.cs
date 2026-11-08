@@ -157,6 +157,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.group.form",
             description: $"Forms a new, empty RUNTIME group of a declared kind: {WorldGroupFormForms.Spelling}. Rejected loudly if <id> is already taken or <kindName> names no declared kind. Never written back to the server's base document, so a whole-document rebuild (world.reset/.load/.reload) discards it — the runtime half of the party-vs-roster split. Buffers and applies at the tick boundary under Mutate/section:groups.",
@@ -181,6 +182,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.group.join",
             description: $"Admits <principal> into the group named <group-id>: {WorldGroupJoinForms.Spelling}. Same principal token grammar as world.grant (seat1..seat4|console|addon:<name>|peer:<n>:<generation> — never group:<id>, FLAT ONLY refuses a group member that is itself a group, and never world/document, neither of which is a real actor). Rejected loudly if the group does not exist, the principal already belongs, or admitting it would exceed the kind's declared capacity. Buffers and applies at the tick boundary under Mutate/section:groups.",
@@ -198,6 +200,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.group.leave",
             description: $"Removes <principal> from the group named <group-id> — voluntary self-departure, never the kind's evictionPolicy (that governs world.group.kick alone): {WorldGroupLeaveForms.Spelling}. Dissolves the whole group afterward if that empties it and the kind's lifetime is ephemeral. Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary under Mutate/section:groups.",
@@ -215,6 +218,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.group.kick",
             description: $"Removes <principal> from the group named <group-id> under the kind's OWN evictionPolicy: {WorldGroupKickForms.Spelling}. 'remove' drops only the kicked member's row (then dissolves the group under the same ephemeral-lifetime rule world.group.leave applies); 'disband' drops the WHOLE group row immediately — the kind decides the consequence of a kick, never who may issue one (the same Mutate/section:groups hold every group mutation checks). Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary.",
@@ -232,6 +236,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.groups",
             description: $"Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): {WorldGroupsForms.Spelling}. With a group id, echoes only that group's row. Lists declared kinds (name, roles, lifetime, evictionPolicy, capacity), every live group row (id, kind, typed members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
@@ -262,6 +267,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.offer",
             description: $"Places a Principal-owned subject into ESCROW, naming the intended recipient and a tick deadline: {WorldOwnershipOfferForms.Spelling}. <subject> is group:<id> (the only declared subject kind today); <recipient> is a principal token (seat1..seat4|console|addon:<name>|peer:<n>:<generation>). Rejected loudly unless the acting principal IS the subject's current owner, <recipient> differs from the acting principal, and <deadlineTick> lies strictly after the tick this applies at. While escrowed, the subject is owned by NEITHER party — see world.groups' ownership line. Buffers and applies at the tick boundary under Mutate/section:groups.",
@@ -308,6 +314,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.accept",
             description: $"Accepts a subject currently held in ESCROW: {WorldOwnershipAcceptForms.Spelling}. Rejected loudly unless the subject is in escrow and the acting principal is that escrow's own named recipient. Buffers and applies at the tick boundary under Mutate/section:groups.",
@@ -321,6 +328,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.reclaim",
             description: $"Reclaims a subject currently held in ESCROW back to its offerer: {WorldOwnershipReclaimForms.Spelling}. Rejected loudly unless the subject is in escrow, the acting principal is that escrow's own named offerer, and the tick this applies at has reached the escrow's deadline. The engine ALSO fires this automatically (as the world's own program) the tick a deadline passes with no accept — this verb is the operator's own remedy, on the identical gate, never a way to jump the queue. Buffers and applies at the tick boundary under Mutate/section:groups.",

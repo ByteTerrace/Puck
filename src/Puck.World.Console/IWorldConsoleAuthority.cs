@@ -155,6 +155,7 @@ public static class WorldConsoleAuthorityExtensions {
         Func<WorldServer, WorldRecipientView, string> describe
     ) =>
         CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             description: description,
             handler: (context, args) => {
@@ -180,6 +181,7 @@ public static class WorldConsoleAuthorityExtensions {
         Func<string?, WorldServer, WorldRecipientView, string> describe
     ) =>
         CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             description: description,
             forms: forms,

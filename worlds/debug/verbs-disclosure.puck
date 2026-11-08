@@ -1,0 +1,35 @@
+// Which console verbs a seat may run tell it anything about rows it cannot read whole: the console-surface fixture
+// of the noninterference harness. `puck disclosure worlds/debug/verbs-disclosure.puck` boots one world per variant of
+// verbs-disclosure.disclosure.json beside it. Every variant's operator steps install `vault`, a row only seat1 reads,
+// at the same ticks: empty in one world, holding many large cells in another, so every byte count, keyframe and hash
+// that folds the authority's whole state differs while everything seat2 may read stays the same. seat2 then runs the
+// history, replay and read-back verbs in the same order in every world, and the harness draws every other verb anyone
+// may run; any answer that differs between two variants is a verb that reads what seat2 cannot.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "verbs-disclosure"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+state {
+  world {
+    row {
+      name: "pile"
+      kind: "Int"
+      capacity: 8
+      cells [{ key: "top", value: 0 }]
+    }
+  }
+}
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 400, principal: "seat2", command: "world.state pile" }
+  ]
+}

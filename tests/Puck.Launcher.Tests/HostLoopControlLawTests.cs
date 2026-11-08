@@ -29,6 +29,7 @@ public sealed class HostLoopControlLawTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "probe.control", description: "A presentation/control command that needs no tick.",
                 bindability: CommandBindability.Unbindable,
                 handler: (_, _) => { Calls++; return CommandResult.None; });

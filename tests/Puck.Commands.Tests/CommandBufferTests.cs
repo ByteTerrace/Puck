@@ -194,6 +194,7 @@ public sealed class CommandBufferTests {
     private sealed class SingleCommandModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "buffered",
                 description: "A bound verb whose entry populates a lane.",
                 valueKind: CommandValueKind.Digital,

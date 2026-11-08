@@ -363,6 +363,7 @@ public sealed class WorldPointerRayCaptureLawTests {
     private sealed class PointerModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "The pointer ray's origin.",
                 handler: static _ => CommandResult.None,
@@ -370,6 +371,7 @@ public sealed class WorldPointerRayCaptureLawTests {
                 valueKind: CommandValueKind.Axis3D
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "The pointer ray's direction.",
                 handler: static _ => CommandResult.None,

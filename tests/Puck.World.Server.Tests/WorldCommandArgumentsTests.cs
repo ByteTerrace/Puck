@@ -69,6 +69,7 @@ public sealed class WorldCommandArgumentsTests {
     private sealed class TailProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.json",
                 description: "Echoes a JSON tail without stripping quotes.",
                 handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.RawAfter(
@@ -80,6 +81,7 @@ public sealed class WorldCommandArgumentsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.probe",
                 description: "Echoes the raw tail after its verb.",
                 handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.Raw(
@@ -89,6 +91,7 @@ public sealed class WorldCommandArgumentsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.after",
                 description: "Echoes the raw tail after its verb and one address token.",
                 handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.RawAfter(
@@ -99,6 +102,7 @@ public sealed class WorldCommandArgumentsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.between",
                 description: "Echoes the raw tail after its verb, less an optional trailing positional token.",
                 handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.RawBetween(
@@ -112,6 +116,7 @@ public sealed class WorldCommandArgumentsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.deep",
                 description: "Echoes the raw tail after its verb and one address token, less an optional trailing `force` word, then whether that word was there.",
                 handler: static (context, args) => {
@@ -130,6 +135,7 @@ public sealed class WorldCommandArgumentsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "tail.keyword",
                 description: "Echoes the raw tail after its verb, less an optional trailing `force` word, then whether that word was there.",
                 handler: static (context, args) => {

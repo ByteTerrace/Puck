@@ -83,6 +83,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, W
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "creation.sculpts",
             description: "Lists the registered creation sculpts by name and description: creation.sculpts.",
@@ -111,6 +112,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, W
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "creation.sculpt",
             description: $"Applies a registered sculpt's patch to the LIVE world document: {CreationSculptForms.Spelling}. Echoes the patch's plan (every op's path and its inserted/replaced/set/removed/unset verdict against a working copy) and then one line per distinct row it composed and submitted — the same section table, Mutate grant check, whole-document revalidation and tick-boundary apply every world.row.set/.remove crosses, under the issuing principal; the apply verdict arrives deferred as [creation.sculpt: …] like any buffered mutation's. All-or-nothing: a row that fails to compose, or that already has an edit buffered this tick window, refuses the whole sculpt by name and submits nothing. No --write: writing to disk stays world.save.",

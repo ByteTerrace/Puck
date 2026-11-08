@@ -50,7 +50,7 @@ public sealed partial class WorldDocument {
         }
         return true;
     }
-    private static bool SameComposeDeclaration(WorldStateRow row, WorldStateRow previous) {
+    internal static bool SameComposeDeclaration(WorldStateRow row, WorldStateRow previous) {
         if (ArenaLayout.ColumnsOf(row) != ArenaLayout.ColumnsOf(previous)) { return false; }
         if ((row.Name != previous.Name) || (row.Kind != previous.Kind) || (row.Shape != previous.Shape) ||
             (row.Min != previous.Min) || (row.Max != previous.Max) || (row.Capacity != previous.Capacity) ||

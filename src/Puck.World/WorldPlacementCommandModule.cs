@@ -552,6 +552,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in ReflowCommands()) { yield return command; }
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.placements",
             forms: WorldPlacementsForms,
@@ -578,6 +579,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.inhabitants",
             forms: WorldInhabitantsForms,
@@ -599,6 +601,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.faces",
             description: "Reports the derived-face census (Immediate): one line per derived creation face — placementId, faceName, screenIndex, resolvedSource, and the bound content handle (0 = unbound glass). No instance-addressed form: screens, the derived-face index space, and session binding are the boot instance's own presentation state — a spawned instance carries an empty machine host and no client perceiving from it (see WorldInstance's remarks).",
@@ -618,6 +621,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.attachments",
             forms: WorldAttachmentsForms,
@@ -639,6 +643,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.portals",
             forms: WorldPortalsForms,
@@ -660,6 +665,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.destinations",
             forms: WorldDestinationsForms,
@@ -681,6 +687,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.adjacencies",
             forms: WorldAdjacenciesForms,

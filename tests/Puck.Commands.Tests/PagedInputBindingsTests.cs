@@ -1932,6 +1932,7 @@ public sealed class PagedInputBindingsTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             foreach (var (name, kind) in definitions) {
                 yield return CommandDefinition.Verb(
+                    audience: CommandAudience.Anyone,
                     name: name,
                     description: "Binding behavior probe.",
                     valueKind: kind,

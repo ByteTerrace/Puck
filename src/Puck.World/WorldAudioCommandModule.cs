@@ -192,18 +192,21 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.speakers",
             description: "Lists every declared speaker, one segment each — name, kind (fixed|anchored|bed), source token (none|machine:<slot>|tune:<id>|synth:<id>), channel, and gain. The document rows (the LIVE definition); audio.emitters lists the derived emitter table. A query — always echoes.",
             handler: SpeakersHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "audio.state",
             description: "Echoes the live speaker-device state (the device-state half; speaker.state joins it with per-row facts): device token (playing|silent|rebinding|unsupported|stopped), last fault, frames delivered across device generations, rebind attempts, fill faults, bound mixer sources, live synth voices, the running output peak (monotone — nonzero proves the mix has produced signal), dropped triggers, and derived emitters. A query — always echoes.",
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "speaker.state",
             description: "Echoes every speaker row's, every placement Emission facet's, AND every active music-layer bed's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor — an inactive Attach carrier included), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>, an embellishment included) and the monotone last-fired tail (lastCue:<token>=<patch>, never reset — the fact that proves a cue fired without racing the live pool's expiry). A query — always echoes.",
@@ -215,6 +218,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             : new CommandResult(Output: director.DescribeSpeakerState()))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.volume",
             description: $"The master-volume SESSION lever (the render-levers asymmetry): {WorldVolumeForms.Spelling} applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain when the world authors an audio section; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
@@ -222,6 +226,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: VolumeHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
@@ -233,6 +238,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             : new CommandResult(Output: director.DescribeEmitters()))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "voice.state",
             description: "Echoes the live voice-babble status (presentation-derived, beside audio.state's device facts and speaker.state's per-row facts): the delivered definition's identity id (or none), its authored voice selectors (none | patch:<id>/cadence:<ticks>), how many syllable triggers remain scheduled for the current utterance, how many voice.babble cue transients are currently live, and the cumulative fired count (monotone — never resets). A query — always echoes.",
@@ -244,6 +250,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             : new CommandResult(Output: director.DescribeVoiceState()))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "voice.babble",
             description: $"Count-based identity-babble debug/test trigger: {VoiceBabbleForms.Spelling} schedules one babbled utterance off the delivered identity's voice profile. HUD Text elements use their authored voice and the text-aware source instead. Echoes what it scheduled; read voice.state separately for live status. A lever — always echoes.",
@@ -251,6 +258,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: BabbleHandler
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "music.state",
             description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music), the currently active conditional-layer tune ids, the patch/tick of the most recent director embellishment, and $clock:phaseError's own live value (0 when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
@@ -259,6 +267,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "instrument.state",
             description: "Reads which diegetic instrument screen (if any) the routed seat holds a screen application to, authoritatively off seat 1's currently claimed authority — screen index, whether the booted machine there carries the instrument-clock capability, its authored tempo in engine ticks per beat, and whether it is driving the world's music clock (holding the application is the whole gate — see world.instrument-clock). Follows a transferred seat the same way music.state does. A query — always echoes.",

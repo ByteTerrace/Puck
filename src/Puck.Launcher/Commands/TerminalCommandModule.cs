@@ -16,6 +16,7 @@ internal sealed class TerminalCommandModule(
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             description: $"Shows or hides a terminal console: {ConsoleForms.Spelling}. A seat uses the first form; the administrative console uses the second, naming the player.",
             forms: ConsoleForms,
@@ -107,6 +108,7 @@ internal sealed class TerminalCommandModule(
             name: TerminalCommandNames.Console
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             // Unbindable: ending the host process belongs to whoever runs the host, never to a document, so neither a
             // binding row nor an authored command (which calls only what a binding may name) reaches it.
             bindability: CommandBindability.Unbindable,

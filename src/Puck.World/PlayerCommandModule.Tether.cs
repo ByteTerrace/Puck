@@ -230,6 +230,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private IEnumerable<CommandDefinition> TetherVerbs() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.attach",
             description: $"Attaches the tether: {BodyAttachForms.Spelling} presses the target's own kit tether facet's attachChannel for one host step — the body's facing tries an anchor within the facet's maxAnchorDistance/aimHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the target's kit authors no tether facet or no attachChannel. Echoes the body.tether read-back.",
@@ -238,6 +239,7 @@ internal sealed partial class PlayerCommandModule {
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.detach",
             description: $"Clears an active tether: {BodyDetachForms.Spelling} presses the target's own kit tether facet's detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by the facet's releaseVelocityScale. A friendly no-op when unattached. Echoes the body.tether read-back.",
@@ -246,6 +248,7 @@ internal sealed partial class PlayerCommandModule {
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.reel",
             description: $"Holds the tether's reel channel: {BodyReelForms.Spelling} — <rate> is bipolar [-1, 1] (negative reels in, positive reels out), scaling the target's own kit tether facet's lengthRate; [holdSeconds] how long it reads held (default one host step). Meaningless while unattached. Echoes the body.tether read-back.",
@@ -254,6 +257,7 @@ internal sealed partial class PlayerCommandModule {
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.tether",
             description: "Echoes a body's tether state: " + BodyTetherForms.Spelling + " — [body.tether: body:<n> attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
@@ -261,6 +265,7 @@ internal sealed partial class PlayerCommandModule {
             handler: TetherHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.hold",
             description: "Echoes which of a body's authored holds holds it: " + BodyHoldForms.Spelling + " — [body.hold: body:<n> hold=<name|none> normal=(x, y, z) spend=<left|n/a>]. hold names the row of the kit's motion.holds list the body currently holds; normal is the held surface's outward normal, n/a for a free hold or none at all; spend is what the row's spend.state slot has left, n/a for a row that spends nothing.",

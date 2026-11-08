@@ -201,27 +201,29 @@ public sealed partial class WorldServer {
     }
 
     // Builds the exact arena a prepared document install will adopt. The live arena remains untouched until the
-    // document's commit, so a capacity refusal cannot leave its catalog, rows, lanes, or retained keys half moved.
-    internal bool TryPrepareArenaReplacement(WorldDefinition definition, out StateArena prepared, out string reason, out WorldDefinition settled) {
+    // document's commit, so a capacity refusal cannot leave its catalog, rows, lanes, or retained keys half moved. An
+    // edit's replacement is born with the rows the edit named and loads every other row's live values; a document
+    // load's is born with the whole document.
+    internal bool TryPrepareArenaReplacement(WorldDefinition definition, out StateArena prepared, out string reason, out WorldDefinition settled,
+        WorldStateEdit? edit = null) {
         var time = m_ruleHost.Time;
+        var named = edit?.Named;
+        StateArena? built;
 
         WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
-        if (!StateArena.TryCreate(
-            arena: out var built,
-            catalog: definition.StateCatalog,
-            options: WorldSlotLanes.Options(definition: definition),
-            reason: out reason,
-            section: definition.StateRaw,
-            time: in time
-        )) {
+        if (!((named is null)
+            ? StateArena.TryCreate(arena: out built, catalog: definition.StateCatalog, options: WorldSlotLanes.Options(definition: definition),
+                reason: out reason, section: definition.StateRaw, time: in time)
+            : TryBuildEditArena(arena: out built, definition: definition, edit: edit!.Value, reason: out reason, time: in time))) {
             prepared = null!;
             settled = definition;
             return false;
         }
 
-        prepared = built;
+        prepared = built!;
 
         settled = WorldStateSettlement.SettleFrom(
+            bornRows: named,
             definition: definition,
             seeded: prepared
         );
@@ -237,8 +239,28 @@ public sealed partial class WorldServer {
         reason = string.Empty;
         return true;
     }
+
+    private static readonly HashSet<string> NoRows = new(comparer: StringComparer.Ordinal);
+
+    // An edit's replacement takes the live key ledger before any row, so every runtime name keeps the ordinal it holds
+    // in the live arena wherever the catalog's own keys kept theirs; then the rows the edit named, born from the
+    // candidate; then every other row's live values.
+    private bool TryBuildEditArena(WorldDefinition definition, WorldStateEdit edit, in ArenaTime time, [NotNullWhen(true)] out StateArena? arena, out string reason) {
+        if (!StateArena.TryCreateSeeding(arena: out var built, catalog: definition.StateCatalog, options: WorldSlotLanes.Options(definition: definition),
+                reason: out reason, section: definition.StateRaw, seeded: NoRows, time: in time) ||
+            !built.TryRestoreKeys(names: m_arena.Keys.Names, reason: out reason) ||
+            !built.TryLoadSeeding(reason: out reason, rows: definition.AuthoredState, seeded: edit.Named!, time: in time) ||
+            !built.TryLoad(reason: out reason, rows: edit.Carried, time: in time)) {
+            arena = null;
+            return false;
+        }
+
+        arena = built;
+        return true;
+    }
     [Replaces(root: typeof(StateArena))]
-    internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
+    internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition, WorldArenaContinuity continuity) {
+        ContinueScopes(arena: arena, continuity: continuity, previous: m_arena);
         AssignArena(arena: arena);
         AdoptSearch(arena: arena);
         AdoptLayout(definition: definition);
@@ -304,16 +326,15 @@ public sealed partial class WorldServer {
         (definition.StateCatalog.Pools.Count == 0)
     );
 
-    /// <summary>Returns whether a full install of <paramref name="candidate"/>, composed over
-    /// <paramref name="current"/>, installs the live arena as it stands: the candidate carries the very state section
-    /// of the document it was composed over, compiled to the catalog the arena stores, so the mutation moved no state
-    /// declaration or value and every compiled product binds to the arena's handles.</summary>
-    /// <param name="candidate">The composed document.</param>
-    /// <param name="current">The document it was composed over.</param>
+    /// <summary>Returns whether a full install of <paramref name="candidate"/> installs the live arena as it stands:
+    /// the candidate holds the installed document's own state section (a mutation that named no state row holds it,
+    /// <see cref="WorldDocument"/>'s state edit restores it), compiled to the catalog the arena stores, so every
+    /// compiled product binds to the arena's handles.</summary>
+    /// <param name="candidate">The composed document, its unnamed rows restored.</param>
     /// <returns><see langword="true"/> when the install keeps the live arena, its key ordinals and every runtime
     /// binding keyed by its identity.</returns>
-    internal bool KeepsArena(WorldDefinition candidate, WorldDefinition current) => (
-        ReferenceEquals(objA: candidate.StateRaw, objB: current.StateRaw) &&
+    internal bool KeepsArena(WorldDefinition candidate) => (
+        ReferenceEquals(objA: candidate.StateRaw, objB: Definition.StateRaw) &&
         ReferenceEquals(objA: candidate.StateCatalog, objB: m_arenaCatalog)
     );
 
@@ -324,18 +345,19 @@ public sealed partial class WorldServer {
     // declares it. Generated pool rows take the same path, since they cannot pass through ordinary row import. A
     // refusal here is a door that did not prepare its replacement first (ApplyRebuild does), or a validator hole.
     [Replaces(root: typeof(StateArena))]
-    public void SyncArena(WorldDefinition definition) {
+    internal void SyncArena(WorldDefinition definition, WorldArenaContinuity continuity) {
         if (!ReloadsArenaInPlace(definition: definition)) {
             if (!TryPrepareArenaReplacement(definition: definition, prepared: out var replacement,
                 reason: out var replacementReason, settled: out var settled)) {
                 throw new InvalidOperationException(message: $"the installed state section does not load into the arena: {replacementReason}");
             }
 
-            AdoptPreparedArena(arena: replacement, definition: settled);
+            AdoptPreparedArena(arena: replacement, continuity: continuity, definition: settled);
             return;
         }
 
         LoadInPlace(rows: definition.State);
+        ContinueScopes(arena: m_arena, continuity: continuity, previous: m_arena);
     }
 
     /// <summary>Re-seeds the arena from an installed document that replaced <paramref name="previous"/> in its state
@@ -667,7 +689,7 @@ public sealed partial class WorldServer {
     }
 
     [Replaces(root: typeof(StateArena))]
-    public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
+    public WorldDefinition RecompileRules(WorldDefinition definition, WorldArenaContinuity continuity, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         if (arena is null) {
             definition = SettleInstalledRows(definition: definition);
         }
@@ -680,9 +702,9 @@ public sealed partial class WorldServer {
         m_ruleHost.Install(compilation: compilation!);
         m_ruleCompilation = compilation;
         if (arena is null) {
-            SyncArena(definition: definition);
+            SyncArena(continuity: continuity, definition: definition);
         } else {
-            AdoptPreparedArena(arena: arena, definition: definition);
+            AdoptPreparedArena(arena: arena, continuity: continuity, definition: definition);
         }
         m_ruleHost.ConfigureUndo(plans: compilation!.Groups.Where(predicate: group => (group.Undo is not null)).Select(selector: group => group.Undo!).ToArray());
         m_ruleHost.PruneLatches();

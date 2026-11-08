@@ -316,6 +316,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
             description: $"Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: {WorldHudForms.Spelling}. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
@@ -324,6 +325,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.hud.template",
             description: $"Resolves an AD HOC template string against the live document ON DEMAND (Immediate) — never authored, never stored: {WorldHudTemplateForms.Spelling}. Speaks the SAME HudTemplate brace/escape grammar a document-authored WorldHudElement.Template does ('{{world.tick}}', '{{state.score}}', '{{state.inventory.coin}}', ...; '{{{{'/'}}}}' escape a literal brace) and the SAME closed HudBindingVocabulary, checked against the LIVE document's own state section. Every placeholder is validated BEFORE any resolution runs — a malformed template or a placeholder naming an unknown token/row/cell refuses the WHOLE template by name, never a partial or silently-empty result.",

@@ -112,6 +112,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "storage.status",
             description: "Reports the honest player-catalog storage state (Immediate): the wiring disposition, the identity resolver's decision, the configured store's description, the per-catalog revision / last-synced cursor / dirty flag / tracked-token count / last-write outcome (ok / precondition-failed / failed), and the last storage.credential verdict.",
@@ -123,6 +124,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             : new CommandResult(Output: Describe()))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "storage.push",
             description: $"Pushes one owned world, or with no world the whole catalog, to the per-user cloud container: {StoragePushForms.Spelling}. First contact is create-only; a tracked world pushes with its token, and a moved cloud copy refuses with the remedy. A world whose id cannot address a blob of its own refuses by name instead of pushing (Immediate, up to 15s per blob — a basis chain multiplies this).",
@@ -138,6 +140,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
                 ))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "storage.pull",
             forms: StoragePullForms,
@@ -153,6 +156,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
                 ))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "storage.credential",
             description: "Probes whether this machine could authenticate to the configured store right now, through its provider (a store that needs no credential answers available). A presence check, never a prompt: it records its verdict for storage.status to echo (Immediate, up to 10s).",

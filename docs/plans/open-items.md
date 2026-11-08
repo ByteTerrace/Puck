@@ -1618,19 +1618,35 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
-- [medium · determinism] A full install that changes the state section (a row
-  declared, removed or re-declared) installs a replacement arena seeded from
-  the exported rows, and that replacement still drops state the edit was not
-  asked to change: every scoped replay's captured start and tape
-  (`WorldServer.ScopedReplays` rebinds whenever the arena instance changes, so
-  the debug world's chess demo must capture again), and the per-cell trait
-  declarations of authored cells a rule removed before the install
-  (`StateArena.ToRows` carries a cell's traits only while the cell is present,
-  so the replacement catalog no longer declares them). Carrying a scope across
-  needs key ordinals that survive the replacement (`ArenaScopeSnapshot` holds
-  ordinals local to its arena, and `StateArena.TryRestoreKeys` keeps a row
-  key's new address); a full install that leaves the state section alone
-  already keeps the live arena (`WorldServer.KeepsArena`).
+- [medium · determinism] A rule latch (`RuleLatch`, keyed by `LatchKey`
+  intern ordinals) is not remapped when an install adopts a replacement arena
+  whose key ordinals differ. An edit's replacement takes the live key ledger
+  before any row (`WorldServer.TryBuildEditArena`), so every name keeps its
+  ordinal while the catalog's declared keys keep their order; an edit that adds
+  or reorders declared keys, and every load's replacement, can still move a
+  latched binding to another key. Remap latch keys by name at adoption, as
+  `StateArena.CarryScope` does for a scope image.
+- A world whose state section declares pools does not narrow a state edit to
+  its named rows (`WorldDocument.NameStateEdit`): its replacement is seeded from
+  the whole export, so the per-cell traits of cells a rule removed are lost there
+  as before. Carrying pool storage rows into a replacement (`TryRelayout` loads
+  them under the pool mutation depth) lifts it.
+- A row named by a value write (a console cell removal composed through
+  `ExportComposeArena`) exports without the per-cell traits of its absent cells,
+  so its document row stops declaring them; the next state-section install
+  compiles the trait away. The export needs a declaration-carrying form of an
+  absent traited cell, or the compose must keep the declaration row.
+- A cell written back under a per-cell `advance` trait after removal
+  (`world.state.cell.set` through `TryApplyCellUpsert`) gets no birth clock and
+  accumulates from the origin: a 1/s advance read 270 three seconds after
+  `world.state.cell.set traitProbe a 0` at tick 8026 (8116 ticks at 30 Hz). An
+  import settles such a cell to its install time; the live write does not.
+- A state-section edit builds five arenas on the debug world
+  (`world.boot.arena-builds` +5 per `world.row.set state` re-declaration): the
+  compose's own (`TryOpenComposeArena` seeds every row when the catalog
+  changes), the validator's seed view and the client mirror of the new section,
+  the replacement, and one not yet attributed. An undisturbed scratch run of the
+  debug world also grows the counter by 16 over 7000 ticks with no edit at all.
 - [medium] `DeliveryReviewLawTests` fails four cases on the tip
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
@@ -1642,17 +1658,12 @@ document values bind by copying only the paths to their references
   a quiet tick's; then narrow the validation as `TryValidateTouchedStateRows`
   narrows a state write, to the edited row and the checks that read a palette.
 - Every other mutation composes over `MaterializeArena`, which exports every
-  document row anew, so its candidate carries a new state section: the client
-  mirror (`WorldDocumentStateView.Shape`) builds a fresh arena, the validator's
-  seed view (`WorldStateReader.Seed`, built once per state section) builds one:
-  a neutral `world.row.set hud.defaults` edit on the debug world moves
-  `world.boot.arena-builds` by 3 though its install keeps the live arena. A
-  state-section edit still prepares a replacement arena even when the catalog
-  keeps its shape (`StateCatalog.HasSameShape` is still unused). Compose a
-  non-state edit over the installed seeds, export only the rows whose arena
-  version moved since the document last agreed with the arena (a version table
-  that publication does not overwrite), and reload a same-catalog arena in place
-  rather than replacing it.
+  document row anew, though `WorldDocument.NameStateEdit` then restores every row
+  it did not name to the installed declaration (a neutral `world.row.set
+  hud.defaults` edit builds no arena). Export only the rows whose arena version
+  moved since the document last agreed with the arena (a version table that
+  publication does not overwrite), and reload a same-catalog arena in place
+  rather than replacing it (`StateCatalog.HasSameShape` is still unused).
 - A bound document value read by the in-process client reads the server's arena
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.
@@ -1769,13 +1780,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · bake identity] Log text sits inside the mesh bake's code closure:
-  `SdfMeshPathBake.BeginAccounts` writes the `[sdf.mesh-bake] start` line and
-  is reached from `PrepareFrame`, inside `SdfMeshBakeClosure.BakeRoots`, so
-  changing a log line moves every backend's store identity and re-bakes the
-  world (the residency-stall lane's start-line change did). Move narration
-  out of the closure (the bake returns what it began; the caller logs it) so
-  the closure holds only code that changes what a bake produces.
+- [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
+  "no surface, as baked before", "contour refused" and the rest) is a string
+  literal in the bake's code closure that only the done line's `empty=[...]`
+  reads, so rewording one still moves the store identity. Make it an outcome
+  value the report words (`SdfMeshBakeReport`), as the lines themselves are.
+  The `m_restarts`, `m_loads*` and `m_planMilliseconds` counters that only
+  `world.residency`'s bake line reads belong in `SdfMeshBakeReport.Accounts`
+  too.
 - [medium · frame thread waits on release] A residency's final release still
   waits on the frame thread for two builds: `SdfWorldPipelineSource.Release`
   cancels and waits its lease acquisition, and releasing a last
@@ -2646,16 +2658,6 @@ Next: the per-tick authority hash is incremental
 ([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
 reproduce worker for what remains.
 
-- [high · determinism] A rule that removes an inhabited placement does not
-  reproduce. `puck test worlds/debug/rule-faults-tests.puck` passes, and with
-  `--reproduce` it diverges in `boot` at recorded tick 5. The same document
-  with the placement and no removal reproduces; with the removal and no other
-  effect it diverges identically. In the authored run the inhabitant's
-  `peer:7:1` rows are revoked on tick 6, with the removal; the replay admits
-  that inhabitant as `peer:7:2` and narrates `world.revoke: peer:7:1 control
-  all` before tick 6's rules run, so the checkpoint restore or the tape carries
-  the inhabitant's peer generation and its revocation differently from the
-  authored run. Not yet traced to the door that records or re-drives it.
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
 - [medium] Recording still costs about a third of the plain authored run. The
   per-tick authority hash folds the arena from `RowVersion`-cached row digests
@@ -4241,6 +4243,22 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] A `puck measure request` filed under the caller's own quiet lease
+  queues its frozen-tree build behind the build lease that same holder owns,
+  and waits until the outer lease ends (seen in a measurement window: the
+  filing build sat 10 minutes in the build queue behind its own holder). A
+  lease request from a process whose ancestor holds that lease either nests
+  into the held lease or refuses at once naming the holder; it never queues
+  behind itself.
+- [medium] A measurement window samples with the display off: the World's
+  display-required power request (`Win32NativeWindow.DisplayPower.cs`) keeps a
+  lit display lit but does not wake one already off, so a window that starts
+  after the machine idled samples the compositor's slow fallback (a Vulkan cold
+  bake's probe lighting ran about 3.5 times slower, with `[present-timing] 4
+  presents in a row did not display within 50 ms` and `nvidia-smi`
+  `display_active Disabled`). `puck measure run` checks that presents display
+  before its first sample, wakes the display through the platform layer if it
+  can, and otherwise refuses the slice with that cause instead of spending it.
 - [medium] A measurement's readiness probe gives up before a cold first frame:
   `world.wait ready 1` with a 10 s exec budget (`SweepWorld`, `src/Puck.Cli.Runs/Sweep/SweepWorld.cs`)
   failed both views-live-state requests, whose World stopped after

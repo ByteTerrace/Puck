@@ -12,6 +12,7 @@ public sealed class WorldCompareCommandModule(WorldFrameComparison comparison, W
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.compare",
             bindability: CommandBindability.Bindable,
             routing: CommandRouting.Immediate,

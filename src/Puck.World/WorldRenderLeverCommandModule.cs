@@ -317,6 +317,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return BloomCommand();
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.sky-layer",
             description: $"Auditions the sky rows printed by world.lighting: {WorldSkyLayerForms.Spelling}. Session-only; mute takes precedence over solo.",
@@ -336,6 +337,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
             });
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.shadows",
             forms: WorldShadowsForms,
@@ -369,6 +371,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.ao",
             forms: WorldAoForms,
@@ -400,6 +403,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.toon",
             description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
@@ -416,6 +420,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable, name: "world.shade", forms: WorldShadeForms,
             description: $"Selects authored shading programs or the material layers in one build for measurement: {WorldShadeForms.Spelling}.",
             handler: (context, args) => {
@@ -434,6 +439,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     a: args.Is(0, "programs") ? 1d : 0d, formatEcho: Echo);
             });
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.cadence",
             forms: WorldCadenceForms,
@@ -465,6 +471,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.cull",
             forms: WorldCullForms,
@@ -498,6 +505,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.detail",
             forms: WorldDetailForms,
@@ -531,6 +539,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.rates",
             forms: WorldRatesForms,
@@ -567,6 +576,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.indirect",
             description: $"Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: {WorldIndirectForms.Spelling}. No argument reads the selected tier.",
@@ -589,6 +599,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.exposure",
             description: $"Reads or pins the camera exposure: {WorldExposureForms.Spelling}. No argument echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation), the session's pin and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual). 'pin <ev100>' holds every view the session presents, nested worlds included, manual at that EV100 with no local adaptation, as render.exposure.hold does; 'pin' alone holds the first view's current EV100; 'pin off' releases it. Presentation only: the pin never reaches the document or simulation state.",
@@ -630,6 +641,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.residency",
             description: $"Reads every residency held by the presentation's world package, including routed and session views: {WorldResidencyForms.Spelling} (metres, default 8). Each report names its diagnostic residency-id, independent of its display name. Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
@@ -655,6 +667,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.probe",
             description: $"Reads the settled irradiance probes about a point: {WorldProbeForms.Spelling}. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
@@ -678,6 +691,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.render-scale",
             forms: WorldRenderScaleForms,
@@ -705,6 +719,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.upscale-sharpness",
             forms: WorldUpscaleSharpnessForms,
@@ -731,6 +746,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.temporal",
             forms: WorldTemporalForms,
@@ -754,6 +770,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.sky-quality",
             forms: WorldSkyQualityForms,
@@ -784,6 +801,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.sky-field-scale",
             description: $"Sets the sky field grid independently of the scene grid: {WorldSkyFieldScaleForms.Spelling}. One half evaluates a ceil-half grid and reconstructs it during composition; retained field allocation capacity stays unchanged. No argument echoes the current fraction; quality presets and save retain it.",
@@ -803,6 +821,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.quality",
             forms: WorldQualityForms,

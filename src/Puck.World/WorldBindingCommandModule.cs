@@ -1048,6 +1048,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.binding-bar",
             forms: PlayerBindingBarForms,
@@ -1056,6 +1057,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "player.bind",
             description: "Live-remaps one binding for a seat's SESSION layer (unsaved until identity.bindings.save): " + PlayerBindForms.Spelling + " — <seat> 1..4. <destination> is a command name (e.g. player.look.recenter) or channel:<name> (e.g. channel:jump). [scale:<value>] is only meaningful beside a channel destination (raw [-1, 1]; defaults to +1) and is refused on a BINARY channel. [value:<value>] is only meaningful beside a COMMAND destination whose declared value kind is Axis1D — the constant a digital source drives it with (the step-twin shape: a key bound with value:1 steps one way, value:-1 the other, exactly like world.affordances reports the destination taking); REQUIRED there (no default — there is no natural direction to assume), and refused by name on any other destination kind (Digital included — every other bindable verb keeps today's plain source→command behavior with no constant at all). scale: and value: are mutually exclusive; naming both is refused. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the destination in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
@@ -1064,6 +1066,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "player.bindings",
             description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) page=<id> where <step> is context <family>=<state>, requested, or default and page is the page the held chord selects (a page the active group leaves to the player's default group included) — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the active group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: " + PlayerBindingsForms.Spelling + " (optional seat 1..4, default 1).",
@@ -1071,6 +1074,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             handler: BindingsHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
             description: $"Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: {PlayerSignalForms.Spelling}. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input. Level destinations remain carried until a release/zero sample or focus loss; Relative destinations consume displacement once without a held value. Echoes [player.signal: p<seat> <source> <sample>].",
@@ -1079,12 +1083,14 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
             description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone), with \\\"authored\\\": true on a command the live document's `commands` section authors — as one compact JSON object with commands, channels and input: world.affordances. Commands are sorted by name; channels report current-mode eligibility and values, and input names its tuple, epoch and continuation, for the body the asking seat holds in the authority it is routed to, under the asker's Observe grant over that body. Compiled binding handles are internal and absent from this vocabulary. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
             handler: AffordancesHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.bindings.save",
             description: "Folds a seat's live session rebinds into its identity-owned world: " + IdentityBindingsSaveForms.Spelling + ".",

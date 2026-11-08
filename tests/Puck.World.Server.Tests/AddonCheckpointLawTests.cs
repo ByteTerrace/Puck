@@ -220,7 +220,7 @@ public sealed class AddonCheckpointLawTests {
         var tape = Tape(directory: directory, fixture: fixture);
         var history = new WorldHistory(fixture.Server, tape, [], Fixtures.MachineHostFactory, new WorldStateRoot(path: directory.RootPath));
 
-        Assert.True(condition: history.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out var reason), userMessage: reason);
+        Assert.True(condition: history.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out var reason), userMessage: reason);
         for (var tick = 0; (tick < 5); tick++) { fixture.Step(); tape.NoteTick(); }
         var saved = Assert.Single(collection: runtime.DescribeCost());
 

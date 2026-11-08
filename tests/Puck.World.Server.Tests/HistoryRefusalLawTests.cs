@@ -238,7 +238,7 @@ public sealed class HistoryRefusalLawTests {
         harness.Fixture.Server.ApplyServerEvent(serverEvent: new WorldServerEvent.SessionAdmitted(
             MintedGrants: [], Session: session, Templates: []
         ));
-        Assert.True(condition: harness.History.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.Steps(count: 8);
 
         Assert.Null(@object: harness.History.OldestTick);

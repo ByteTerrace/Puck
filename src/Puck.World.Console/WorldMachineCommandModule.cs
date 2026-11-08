@@ -87,6 +87,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.state",
             description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, and fault. Author declarations through world.row.set machines <json>.",
@@ -175,6 +176,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.operation",
             description: $"Submits one generic provider operation through the ordered domain: {MachineOperationForms.Spelling}. The detached payload completes as Applied, Unsupported, Refused, or Faulted.",
@@ -182,6 +184,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             handler: Operation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.content",
             description: $"Lists the content a named machine can swap to: {MachineContentForms.Spelling}. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why. A query (always echoes).",
@@ -189,6 +192,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             handler: Content
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.swap",
             description: $"Mounts a file from a named machine's contentFolders: {MachineSwapForms.Spelling}, where <name> is a file name machine.content lists, its folder and file name (<folder>/<file>) when two folders hold the name, or the part of a mountable file's name before its first '.' when only one has it. A name no file answers, one several answer, or one naming a file the engine cannot mount is refused by name. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",

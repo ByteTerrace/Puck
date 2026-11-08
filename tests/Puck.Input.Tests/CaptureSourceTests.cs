@@ -285,6 +285,7 @@ public sealed class CaptureSourceTests {
     private sealed class AxisModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "Touch axis probe.",
                 handler: static _ => CommandResult.None,

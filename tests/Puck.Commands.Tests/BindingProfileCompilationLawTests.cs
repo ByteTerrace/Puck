@@ -777,6 +777,7 @@ public sealed class BindingProfileCompilationLawTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             // Wire-native, because a text-bearing binding row may only target a command that accepts wire arguments.
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: TextCommand,
                 description: "Wheel sector text probe.",
                 handler: static (_, _) => CommandResult.None,

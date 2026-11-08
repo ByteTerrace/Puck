@@ -517,6 +517,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
             description: "Prints the immediate compose-time cost sheet, one line per section (and per field region, live instance and infinity root, so the answer narrows by line): rendering (the live program's words, instances, step scale, the indirect volume's probes per level, bytes a probe, budget and lighting age, volumes, scoped clamps and segments), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
@@ -529,6 +530,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.gravity",
             description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
@@ -562,6 +564,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.population",
             description: $"Sets the simulated peer count and its between-tape source: {WorldPopulationForms.Spelling} (tokens are order-independent; no argument reads both).",
@@ -675,6 +678,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.players",
             description: "Lists the roster's four slots — joined/empty, each joined slot's profile, state (active/PENDING), owned devices (or origin), and pose (p<N> name state(devices) pos=(x, z) yaw=d°) — plus the population line (local seats + simulated stand-ins). Every player is a networked player; a local pad or the keyboard is just one at zero latency.",
@@ -682,6 +686,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             handler: _ => new CommandResult(Output: DescribePlayers())
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.input-holds",
             description: "Reports every active participant's authored, measured, and applied input hold plus the participant setting the equalized maximum.",
@@ -705,6 +710,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             }
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.devices",
             description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). A gamepad's entry ends with its power then its accessories when it reports them: 'battery N%' (unplugged), 'charging N%', 'not charging N%', 'charged', 'wired' (cable only, no battery), then 'headset' | 'headphones' | 'microphone'; power says nothing while unknown, and a keyboard, mouse or camera has no suffix. The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
@@ -712,6 +718,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             handler: _ => new CommandResult(Output: DescribeDevices())
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.device-profiles",
             description: "Lists the preferred-profile decision recorded when each connected input device was first seen, including why a preference did not apply.",
@@ -719,6 +726,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             handler: _ => new CommandResult(Output: roster.DescribeDeviceProfiles())
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.parked",
             description: "Reports every PARKED body — a disconnected seat or peer still retained in the sim/collider set (pose, durable state, occupancy) under population.reconnectGraceTicks' grace window: body:<n> remaining=<ticks> deadline=<tick> [profile=<name>] pos=(x, z) yaw=d°. Empty when nothing is parked. A parked body is the SAME thing the '$parked:<bodyRef>' reserved rule channel reads live; this is its read-back.",

@@ -128,6 +128,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // body index reaching the whole population: 0..3 are the local seats, 4..4095 the simulated entries.
     private IEnumerable<CommandDefinition> AuthoredVerbs() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.reconcile",
             description: "Applies a smoothed SERVER CORRECTION to a body: " + BodyReconcileForms.Spelling + ". The SIM pose snaps to the target INSTANTLY (identical end-state to a body.pose ground-plane + heading update), while the on-screen avatar EASES from where it was to the authoritative pose over [seconds] (default 0.25, clamped 0.05..2) — the AAA error-smoothing shape a real server uses. A correction larger than the snap-error ceiling pops instead of gliding. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The eased offset is presentation-only: body.where still reports the snapped SIM pose.",
@@ -136,6 +137,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.where",
             description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: vel= is the authoritative velocity in m/s (planar x, vertical, planar z); facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scale names a state.body register carrying this body's size) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. " + BodyWhereForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
@@ -143,6 +145,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: WhereHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.rig",
             description: "Echoes a body's current input mode, named action types/values and continuation alongside its live creation-look rig state: [body.rig: body:<n> creation=<id> speed=s.ss drivers=<count> effectors=<count> driver:<name> phase=p.pp weight=w.ww … effector:<name> weight=w.ww planted=yes|no|stepping target=(x.xx, y.yy, z.zz)|none …]. speed= is the eased rendered speed the moving/still gate tokens test; a driver's phase= is radians in [0, 2pi) and weight= its eased gate value; an effector's target= is the WORLD point its tip is being asked for this frame, so a scripted run can fence twice and assert a planted foot's target is unchanged while body.where moved; planted=stepping is a resting plant mid-step to a new point. An effector whose chain resolved to too few bones prints bones=<count> and is inert. " + BodyRigForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; a shape name after the index appends shape:<name> parent=<name>|root delta=(x.xx, y.yy, z.zz) turn=r.rr, the parent its motion chains under and the rigid delta the last frame composed for it in creation units and radians, so a live parent or swings edit can be read back, or shape:<name> none when the creation has no such shape). Without a creation rig, including headlessly, input still reads back and creation-rig=none names the absent animation data. A trailing instance:<name> reads that instance with the same zero-based body index.",
@@ -150,6 +153,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: RigHandler
         ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.channels",
             description: "Echoes the channel decision read-back for a body — per DECLARED channel, the fold's value and owning-seat base, the held overlay admitted later and its composed result, every fold contributor tagged by principal (trusted/untrusted), the pool ceiling in force, and whether the pool actually clamped this write: " + BodyChannelsForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A held source reaches a role channel (one declaring a role, such as MoveUp) through the fold, so it shows in folded and h with held 0, and a composition channel through the held overlay, so it shows in held with folded 0; composed is the value the body reads either way. The fold only ever exists over a human-occupied body (a local seat or an admitted peer); any other target reports that plainly rather than fabricating a base/pool.",
@@ -157,6 +161,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: ChannelsHandler
         ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.state",
             description: "Echoes every named action-state slot, including kind, lifetime, exact stored value, body identity, and writes emitted by the most recently completed tick: " + BodyStateForms.Spelling + ".",
@@ -164,6 +169,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.designate",
             description: $"Proposes a target for one authored target register: {BodyDesignateForms.Spelling}. 'nearest' resolves client-side from the latest snapshot inside the body's clamped forward cone; 'at:x,y,z' proposes a world-space point (the seek target a Designated-source producer steers to). The server re-resolves activity, authority, range, cone, targetability, and line of sight (a point checks the same envelope, minus body activity) before writing. Returns target read-back under the body.designate prefix, including the latest refusal.",
@@ -171,6 +177,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: DesignateHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.targets",
             description: "Echoes every authored target register, its current body subject, applied/authored cone, line-of-sight requirement, and the latest designation refusal: " + BodyTargetsForms.Spelling + ".",
@@ -178,6 +185,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: TargetsHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "body.state-load",
             description: $"Stages one durable action-state input for the next simulation tick: {BodyStateLoadForms.Spelling}. The command is tick-stamped and recorded on the replay authority tape.",
@@ -186,6 +194,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.stop",
             description: "Stops a body's avatar dead: clears its whole tape, releases every held movement key, cancels every in-flight timed press (body.press hold — materialized or still pending), AND clears any BindingEntryMode.Toggle latch the seat carries (a toggled-on channel does not survive a stop) — the panic verb: " + BodyStopForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; stopping a population entry drops its tape so its producer resumes). Echoes the true released/cleared/toggle counts, or, if the Drive gate refused the command (e.g. CC/death), a refusal naming the denial — never an affirmative quoting a stale count. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.stop <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — echoing a bare \"tape cleared\", since no client mirrors that seat's held-key/toggle state.",
@@ -194,6 +203,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.motion",
             description: $"Sets or echoes a body's declared motion program: {BodyMotionForms.Spelling}. With no program it echoes the current selection, followed by planarTarget strafe=<s> backward=<b> when that program authors ComputePlanarTargetVelocity's planarTarget parameters, and stepHeight=<h>, the tallest riser the body walks up onto (its kit's motion.stepHeight times its scale; 0 never steps). A switch is authoritative and may re-constrain the pose. The optional trailing body index is 0..4095 (default 0).",
@@ -202,6 +212,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.fly",
             description: "Enqueues a six-role timed segment on a body's tape: " + BodyFlyForms.Spelling + " — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyHold consumes up through a hold row's own thrust alongside its gravity arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — body.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries.",
@@ -210,6 +221,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.pose",
             description: "Teleports a body to a full 6DOF pose: " + BodyPoseForms.Spelling + " (yaw about world up, pitch about the body right, roll about the body forward; 0/0/0 = level facing -Z). ANY of the six positional values may be - to HOLD that axis at its current value instead of setting it — body.pose - - - 90 - - 0 turns body:0 to face 90° with its position and pitch/roll untouched; body.pose 3 - 5 - - - 0 moves body:0 on the ground plane only. The held axes are read from the SAME live pose this call resolves and folded into ONE atomic SnapPose submission — never a read-then-write pair, so nothing can move the body between the read and the write. A hard teleport (sim snap + previous-pose reset + render-error clear). A grounded entity re-pins Y and levels on its next step. It turns the body alone: a seat camera whose look is world-referenced (views.seatControl.yawReference World, as the moth basis authors) keeps its heading, so after a yaw change a chase camera frames the body from another side, or from in front, where a crossing turns the seat's view with its traveler. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The SPAWN form — body.pose spawn:<id> [body] — poses the body at a declared spawnPoints row (its position and yawDegrees, pitch and roll zero), the console mirror of a rule's pose effect naming a spawnPoint; an undeclared id refuses by name. A seat standing in another instance (a painting's destination) poses at that instance's own spawn point, and at an id only the home world declares it is carried home and set down standing there. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.pose <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg> <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — the SAME hold-current axes apply, read from that instance's own live pose.",
@@ -218,6 +230,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.impulse",
             description: $"Applies an instantaneous world-space impulse to a rigid-kit body's linear velocity: {BodyImpulseForms.Spelling} (Δv = impulse / mass). Refused by name for a body whose kit carries no 'rigid' facet — see world.rigid. The optional trailing body index is 0..4095 (default 0); local population only, no instance:<name> routing.",
@@ -226,6 +239,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.carry",
             description: $"Begins one body carrying another: {BodyCarryForms.Spelling} (both body indices REQUIRED and explicit — no optional-trailing default). The carrier's kit must author a carry facet and the target a rigid one; refused by name when either body is already a party to another carry relationship, the target sits outside the carrier's own live-scaled reach, or the target's own live-scaled mass exceeds the carrier's live-scaled carry ceiling. On success the target's pose and rigid velocity are derived from the carrier's frame every tick — see body.where's carrying=/carriedBy= read-back — and its own rigid integration is suspended until body.release.",
@@ -234,6 +248,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.release",
             description: $"Ends a body's active carry, if any: {BodyReleaseForms.Spelling} (optional trailing body index, default 0). The released body re-enters the rigid solver carrying the carrier's own current velocity. A friendly no-op refusal when the body is not carrying anything.",
@@ -242,6 +257,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.press",
             description: "Presses ANY declared channel — movement roles included — for a timed auto-release: " + BodyPressForms.Spelling + ". <channel> is a name from world.affordances' channels section; [value] defaults to the shape's max (1) and is validated against the channel's shape (binary: 0 or 1; unipolar: [0,1]; bipolar: [-1,1]); [holdSeconds] how long it reads held (default a short host-step-derived tap, bounded authoritatively by the deciding Drive grant's hold:<seconds> policy — WorldGrant.DefaultHoldSeconds=2 absent an explicit row — and the 60-second engine backstop). The echo names the TRUE outcome, never an assumed one: a non-positive [holdSeconds] is ignored outright (echoed plainly, no cap blamed); a request either cap truncates echoes the EFFECTIVE hold and names whichever cap structurally bound it (the grant's hold budget, or the engine's hold ceiling when the grant permits the full backstop and the request still exceeds it); a refused command (e.g. a CC/death Drive gate) echoes the refusal, never an affirmative; under no cap and no refusal the echo is unchanged. A press carrying a DIFFERENT value than an action's in-flight hold (materialized or still pending) replaces it outright (its own duration), so an opposing press is never silently swallowed by a longer hold's remaining ticks; a re-press carrying the SAME value only ever extends. [body] the trailing index 0..4095 (default 0 — 0..3 seats, 4..4095 population). The press is INDEPENDENT of the movement tape, so body.fly … then body.press jump fires a runner mid-segment. On a composition channel, what the press DOES is the target's kit binding (the default world's grounded kits bind the vertical impulse via \"jump\" — a short hold = short hop, a long hold = full arc via variable height; an unbound channel leaves it inert). There is no sugar verb for a bound button — the bound control rides its own channel-generic command (see world.affordances); this is the scripted/wire twin reaching every channel.",
@@ -250,6 +266,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.control",
             description: $"Sets or echoes a body's INTENT SOURCE — what fills its intent gaps between tape segments: {BodyControlForms.Spelling}. 'live' admits the submitted device stream; 'idle' masks it so a tape gap holds still; 'producer:<name>' runs that producer program from the target kit before motion. Tapes and body.press still drive under every source. Any switch releases held keys/lanes so nothing bursts. With no mode it echoes the current source. A pending seat's source cannot be set. The optional body index is 0..4095 (default 0). world.population sweeps all peers' sources.",
@@ -258,6 +275,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.engage",
             description: "ROUTES a body's intent onto a TARGET — a diegetic screen (the classic UX) or another body (possession): " + BodyEngageForms.Spelling + " — [body] is the driving body, an optional 0-based body index like every body.* verb's (default 0, seat 1's body; body 1 is seat 2's); [capture:on|off], always the last token, defaults to on (today's behavior: the source avatar idles); capture:off MIRRORS instead — the target still receives the routed channels every tick while the source avatar keeps moving under its own input. On a SCREEN target the resolved per-frame intent (tape/press/held keys alike) is translated to joypad buttons and delivered to the screen's booted machine; the screen must be declared engageable, carry a booted machine (screen.insert first), and — when its route sets an engage radius — the body's avatar must be within it (body.pose up first); multiple bodies engaged on one screen OR-merge their buttons (the multiplayer cabinet). On a BODY target the routed channels reach the target through the ordinary co-drive contribution path — the actor must ALSO hold Drive over the target body (world.grant seatN drive body:<n>) for anything to actually move; a route alone confers no Drive authority. Route only — orthogonal to body.control.",
@@ -266,6 +284,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.disengage",
             description: "DISENGAGES a body from its screen so its intent drives its avatar again: " + BodyDisengageForms.Spelling + " (optional index 0..4095, default 0). Drops any live held keys/lanes so nothing leaks across the boundary (the avatar does not burst into motion). A friendly no-op echo when the body was not engaged.",
@@ -274,6 +293,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.join",
             forms: PlayerJoinForms,
@@ -281,6 +301,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: JoinHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.leave",
             description: "Removes a scripted or pad player: " + PlayerLeaveForms.Spelling + " (n in 2..4), unmapping its devices and freeing its profile. Player 1 never leaves. Echoes the resulting roster. A trailing instance:<name> token addresses a NAMED running instance instead — player.leave <slot> instance:<name> (slot 1..WorldBodiesLimits.LocalSeatCount, seat 1 included — the boot form's \"player 1 never leaves\" rule is a roster policy that does not apply to an instance's own seat table), which REAPS the instance on empty.",
@@ -288,6 +309,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             handler: LeaveHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.identity",
             description: "Sets a specific owned-world identity on a player and confirms it: " + PlayerIdentityForms.Spelling + ".",

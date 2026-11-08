@@ -727,12 +727,23 @@ public sealed partial record WorldDefinition(
     /// <param name="pools">Captured pool declarations and continuation, or <see langword="null"/> to retain them.</param>
     /// <returns>The updated definition.</returns>
     /// <param name="pairPools">Captured pair-pool continuation, or null to retain it.</param>
-    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<StatePool>? pools = null, IReadOnlyList<StatePairPool>? pairPools = null) {
-        var updated = this with {
-            StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows, Pools = (pools ?? StateRaw?.Pools), PairPools = (pairPools ?? StateRaw?.PairPools) }),
-        };
+    public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<StatePool>? pools = null, IReadOnlyList<StatePairPool>? pairPools = null) =>
+        WithStateSection(state: ((StateRaw ?? new WorldStateSection()) with { World = rows, Pools = (pools ?? StateRaw?.Pools), PairPools = (pairPools ?? StateRaw?.PairPools) }));
+    /// <summary>Returns a copy holding <paramref name="state"/> as its state section, every other section shared, and
+    /// the compiled products that read state carried across where the new section keeps their shape.</summary>
+    /// <param name="state">The state section; a section that already carries compiled products (an installed
+    /// document's own) keeps them.</param>
+    /// <returns>The updated definition, or this one when it already holds <paramref name="state"/>.</returns>
+    public WorldDefinition WithStateSection(WorldStateSection? state) {
+        if (ReferenceEquals(objA: state, objB: StateRaw)) {
+            return this;
+        }
 
-        PreserveCompatibleCompilation(target: updated);
+        var updated = this with { StateRaw = state };
+
+        if (!TryGetCompilationCache(state: state, cache: out _)) {
+            PreserveCompatibleCompilation(target: updated);
+        }
         WorldStateDocumentValues.CarryReferencedRows(source: this, target: updated);
         WorldFaceCatalog.CarryAcrossState(source: this, target: updated);
 

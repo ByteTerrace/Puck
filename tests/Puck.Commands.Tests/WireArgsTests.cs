@@ -141,18 +141,21 @@ public sealed class WireArgsTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.tail",
                 description: "Joins every trailing token.",
                 handler: static (_, args) => new CommandResult(Output: args.Tail(start: 0)),
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.tail.from5",
                 description: "Joins the trailing tokens from index five onward.",
                 handler: static (_, args) => new CommandResult(Output: args.Tail(start: 5)),
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.optional",
                 description: "Reports how the view answers for present and absent tokens.",
                 handler: static (_, args) => new CommandResult(Output: string.Join(
@@ -179,6 +182,7 @@ public sealed class WireArgsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.optional.wide",
                 description: "Reports how the widening parses answer for a present and an absent token at index nine.",
                 handler: static (_, args) => new CommandResult(Output: string.Join(
@@ -202,6 +206,7 @@ public sealed class WireArgsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.floats",
                 description: "Parses three consecutive floats, reporting the verdict and the array length it handed back.",
                 handler: static (_, args) => new CommandResult(Output: string.Join(
@@ -216,6 +221,7 @@ public sealed class WireArgsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.numbers",
                 description: "Parses an integer then a float, reporting each token's verdict on its own.",
                 handler: static (_, args) => new CommandResult(Output: string.Join(
@@ -236,6 +242,7 @@ public sealed class WireArgsTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "wire.shape",
                 description: "Reports the token count and the joined tail, whichever mode carried it.",
                 handler: static (_, args) => new CommandResult(Output: string.Join(

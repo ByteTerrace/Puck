@@ -16,6 +16,7 @@ public sealed class WorldReseedCommandModule(WorldCreationInstances stamps, Worl
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "view.reseed",
             description: $"Restarts a body's presentation-only animation as for a new occupant: {ViewReseedForms.Spelling} (the 0-based entity index, default 0) seeds its gait drivers' phases, weights and eased speed, its foot plants and steps, and its root and part followers again from the next frame's pose. A teleport (body.pose) of the same occupant keeps its gait phases so it never pops, which makes a scripted motion repeated from one reset pose show a different stride; pin view.reseed beside the body.pose (world.at) and the repeat looks the same. Echoes [view.reseed: body <n> restarted <k> registration(s)]. Session presentation only: nothing the simulation reads or a replay hashes changes.",

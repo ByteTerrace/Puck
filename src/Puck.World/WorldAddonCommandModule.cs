@@ -83,6 +83,7 @@ internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldSe
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.addons",
             description: "Reports the joined configuration/runtime read-back (Immediate; the stdin barrier makes it read the settled state after a pending world.row.set addons/world.row.remove addons applies): world.addons. One segment per DOCUMENT addon row, in document order — a disabled row reads DISABLED with no cost figures; an enabled row reads its lifecycle state (with the fault detail, if faulted), the per-tick fuel budget, fuel consumed by the most recent tick it actually ran (zero on a tick it was skipped), the running fuel total consumed since it was FIRST mounted, answer groups dropped with no verdict cell, event cells dropped to a per-row event budget or the input-ring ceiling, and collision events delivered. Lifetime counters survive an unrelated reprepare pass reusing this guest untouched. Diagnostic only — never simulation state, never on a hashed path.",

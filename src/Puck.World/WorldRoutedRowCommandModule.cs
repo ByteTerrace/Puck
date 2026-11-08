@@ -68,6 +68,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "player.row.set",
             description: $"Upserts a document row AT THE AUTHORITY THE PLAYER'S BODY CURRENTLY LIVES AT — the seat-routed twin of world.row.set, same dotted path + inline JSON grammar with the player index LEADING (the JSON tail is greedy): {PlayerRowSetForms.Spelling}. For a seat still at the boot authority this submits the identical local mutation world.row.set would; for a seat that crossed a federation seam the mutation rides the forwarded-submission path and the DESTINATION stamps the traveler's own transfer principal before its admission door (row-scoped grants included) decides it — so a contribution-slot holder fills its slot from the console it is sitting at, and the accept/reject narration lands on the destination's transcript (this console echoes only where it routed). Paths that compose against the addressed world's own live document (inputHold, views.seatRig, views.seatControl, playerDefaults.seatLook) and the bare-name properties.names exception are refused by name.",
@@ -111,6 +112,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "player.state.cell.set",
             description: $"Upserts ONE state cell AT THE AUTHORITY THE PLAYER'S BODY CURRENTLY LIVES AT — the seat-routed twin of world.state.cell.set, player index LEADING: {PlayerStateCellSetForms.Spelling}. The raw <value> token travels unresolved and the DESTINATION's compose arm resolves it against ITS OWN row's declared kind (int/fixed/bool token grammar; a text-kind row is not reachable through this routed form, since its raw-tail dispatch needs the destination's row table, which this console cannot read). Routing, principal stamping, and where the verdict lands are exactly player.row.set's.",
@@ -157,6 +159,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.state.cell.toggle",
             description: $"Cycles ONE state cell through authored values for the ACTING seat, resolved AT THE DESTINATION: {PlayerStateCellToggleForms.Spelling} — the cell becomes the value after the one it currently reads (wrapping), else <a>; numeric rows compare parsed values, text rows compare text. The tokens travel unresolved (UpsertStateCell.CycleTokens) and the authority that owns the row decides, so a crossed seat flips the world it is in, never a stale local copy. BINDABLE with a text payload (a chord row, page entry, or wheel sector's \"text\": \"look behind 0 3.14159\"), which is how an authored press flips a cell the camera program, the binding bar, a HUD, or an action reads — look behind is a seat rig whose orbit yaw binds state.look.behind; a bar layout switch is a bar whose layoutCell binds state.bar.layout. Routes and stamps exactly as player.state.cell.set.",

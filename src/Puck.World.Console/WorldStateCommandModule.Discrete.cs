@@ -14,6 +14,7 @@ public sealed partial class WorldStateCommandModule {
     private static readonly CommandForms WorldStateActForms = CommandForms.Of(verb: "world.state.act", "<phase-row> <sequence> <transform-json>");
     private IEnumerable<CommandDefinition> DiscreteCommands() {
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             name: "world.state.observe",
             bindability: CommandBindability.Unbindable,
             description: "Reads the literal state observations admitted for the authenticated caller. Hidden cells and identities are omitted.",
@@ -42,6 +43,7 @@ public sealed partial class WorldStateCommandModule {
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.state.transform",
             bindability: CommandBindability.Unbindable,
             description: $"Applies one atomic state transform: {WorldStateTransformForms.Spelling}. Checks edit authority over every touched row.",
@@ -54,6 +56,7 @@ public sealed partial class WorldStateCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.state.act",
             bindability: CommandBindability.Unbindable,
             description: $"Submits a phase-guarded state operation: {WorldStateActForms.Spelling}. Refuses stale, ineligible, ready or expired actions.",
@@ -66,6 +69,7 @@ public sealed partial class WorldStateCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.topologies",
             bindability: CommandBindability.Unbindable,
             description: "Prints named physical and discrete topology declarations and compiled addressing costs.",
@@ -181,6 +185,7 @@ public sealed partial class WorldStateCommandModule {
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.observe",
             bindability: CommandBindability.Unbindable,
             description: $"Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: {WorldObserveForms.Spelling}. Same token grammar as world.grant (PrincipalTokens.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
@@ -222,6 +227,7 @@ public sealed partial class WorldStateCommandModule {
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.match",
             bindability: CommandBindability.Unbindable,
             description: $"Walks one word through a pattern and narrates it: {WorldMatchForms.Spelling} (the first form for a keyed row or zone, the second for a board).",

@@ -156,6 +156,7 @@ internal sealed partial class PlayerCommandModule {
     // stdin they act on the keyboard (the default device id).
     private IEnumerable<CommandDefinition> GestureVerbs() {
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: ConfirmCommand,
             description: "Confirms the pending player owning the pressing device, promoting it to active on its candidate profile (South / Enter). A first press from an unmapped device joins it; a second confirms. Over stdin it acts on the keyboard.",
@@ -163,6 +164,7 @@ internal sealed partial class PlayerCommandModule {
             handler: ConfirmHandler
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: CycleCommand,
             description: "Rotates the pressing device to the next player slot, wrapping 1→2→3→4→1. Onto an empty slot it creates a pending player; onto an occupied one it joins that team. Over stdin it cycles the keyboard.",
@@ -170,6 +172,7 @@ internal sealed partial class PlayerCommandModule {
             handler: CycleHandler
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: ClaimCommand,
             description: "Moves the keyboard onto the player slot carried as the binding's value (F1..F4). Onto an empty slot it creates a pending player; onto an occupied one it joins that team; onto its own slot a no-op.",

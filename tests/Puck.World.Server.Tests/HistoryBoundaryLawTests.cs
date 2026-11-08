@@ -61,7 +61,7 @@ public sealed class HistoryBoundaryLawTests {
         harness.Submit(mutation: new WorldMutation.RemoveStateCell(Principal: Principal.Console, Row: "score", Key: "orphan"));
         harness.Steps(count: 3);
         harness.History.Off();
-        Assert.True(condition: harness.History.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.Step();
         var before = harness.Tick;
 
@@ -316,7 +316,7 @@ public sealed class HistoryBoundaryLawTests {
             stateRoot: new WorldStateRoot(path: original.RootPath)
         );
 
-        Assert.True(condition: history.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        Assert.True(condition: history.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.Steps(count: 3);
         var first = history.OldestTick!.Value;
         var other = replacement.WriteBytes(name: "world.json", bytes: WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()));
@@ -345,7 +345,7 @@ public sealed class HistoryBoundaryLawTests {
         Assert.Empty(collection: (harness.Fixture.Server.Definition.Music ?? []));
         Assert.Contains(expectedSubstring: "calm", actualString: harness.Fixture.Server.DescribeMusicState());
         harness.History.Off();
-        Assert.True(condition: harness.History.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.StepWithoutInput();
         Assert.Null(@object: harness.History.OldestTick);
         Assert.Contains(expectedSubstring: "music", actualString: harness.History.Status().Waiting);

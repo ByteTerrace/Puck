@@ -256,12 +256,19 @@ public sealed partial class CommandRegistry {
                 throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no bindability. Every registration must pass CommandBindability.Bindable or CommandBindability.Unbindable.");
             }
 
+            // The same gate for the audience axis: a verb readable by every principal is a choice its author makes,
+            // never what an unset value falls to.
+            if (definition.Audience == CommandAudience.Unspecified) {
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no audience. Every registration must pass CommandAudience.Anyone, CommandAudience.Local or CommandAudience.Operator.");
+            }
+
             if (
+                !Enum.IsDefined(value: definition.Audience) ||
                 !Enum.IsDefined(value: definition.Bindability) ||
                 !Enum.IsDefined(value: definition.Routing) ||
                 !Enum.IsDefined(value: definition.ValueKind)
             ) {
-                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares an invalid bindability, routing, or value kind.");
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares an invalid audience, bindability, routing, or value kind.");
             }
 
             if (string.IsNullOrWhiteSpace(value: definition.Map)) {
@@ -687,6 +694,7 @@ public sealed partial class CommandRegistry {
     // every other unbindable verb, with a message about bindability rather than "unknown command".
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             forms: HelpForms,
             name: HelpCommandName,
             description: "Lists the available commands: " + HelpForms.Spelling + " — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
@@ -694,6 +702,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             forms: WireAckForms,
             name: WireAckCommandName,
             description: "Sets or reports the acknowledgement mode for accepted commands: " + WireAckForms.Spelling + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
@@ -701,6 +710,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             forms: WireErrorsForms,
             name: WireErrorsCommandName,
             description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: " + WireErrorsForms.Spelling + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
@@ -708,6 +718,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             forms: RunForms,
             name: RunCommandName,
             description: "Runs a console command the world document authors (its `commands` section): " + RunForms.Spelling + ", the same as typing <command> [args…]. An authored command submits its lines in order, the arguments substituted, under the caller's own principal and session policy, on the simulation tick its line applies on; the first refused line stops it and is reported. help lists the world's authored commands beside the engine's verbs.",

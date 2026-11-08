@@ -44,14 +44,14 @@ choice, and nothing else is.
 channels: how long a tick, a delivery or a composition takes, garbage
 collection, CPU and memory, and the arena's shared 64 MiB byte ceiling
 (`src/Puck.State/Arena/ArenaCapacity.cs:17`), which a growth refusal reads
-truthfully whether hidden rows or public ones filled it. The engine does not
+truthfully whether hidden rows or public ones filled it, and the in-session
+history's memory ceiling, which evicts early only when the window does not fit
+it. The engine does not
 promise these carry nothing; it keeps the diagnostics that read them for the
 operator (`host.frames`, `host.memory`, `world.counters`, `world.gpu-timing`,
-`world.collision.probe`, registered today for anyone,
-`src/Puck.Launcher/Commands/HostFrameCommandModule.cs:17-46`,
-`src/Puck.World/WorldCollisionCommandModule.cs:251-255`), since they carry
-nothing a player needs, and it keeps hidden-dependent work proportional to
-change so the channel stays narrow ([decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)).
+`world.collision.probe`, `world.rate`, all `CommandAudience.Operator`), since
+they carry nothing a player needs, and it keeps hidden-dependent work
+proportional to change so the channel stays narrow ([decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)).
 
 **Who is trusted.** The engine's own C# is trusted code: the authority's
 program, its sinks and codecs, the composition roots. The structural guards
@@ -202,6 +202,53 @@ that erase key faults) are not disclosure and stay in the
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
+| [high] `replay.inspect`, `replay.stop` and `replay.verify` answer any principal with the authoritative tail hash, unprojected authority entries and every body pose | Closed: every `replay.*` verb is `CommandAudience.Operator` | console audit, landed |
+| [medium] `world.history` keyframe ticks, window start and a seek's restored keyframe and re-simulated count follow checkpoint byte counts, which fold withheld rows | Closed: the window's shape is a function of ticks alone (`WorldHistory.Interval`, `WorldHistory.WindowTicks`) | console audit, landed |
+| [medium] Removing an absent key from a public row answers one text when the key is interned by any row, withheld ones included, and another when it is not (`WorldDocument.Compose.Cells.cs`, `StateArena.TryRemove`) | Open: the write door's refusal text reads the arena's shared key ledger | the write-boundary lane |
+
+## The console surface
+
+Every registered console verb declares who it answers (`CommandAudience`, no
+default: the factories require it and `CommandRegistry` refuses
+`CommandAudience.Unspecified` by name at construction), and the registry's one
+predicate (`CommandAudienceExtensions.Admits`) refuses the rest before a handler
+runs. The audit below covers every verb whose audience admits a seat or anyone
+(`Anyone`, or `Local` for a verb that touches the host machine) and asks one
+question of each: can any part of its answer (text, value, count, tick or byte
+length) derive from a row the caller cannot read whole? The evidence is
+`worlds/debug/verbs-disclosure.puck`, a harness fixture whose variants differ
+only in `vault`, a row only seat1 reads (empty, one small cell, or forty large
+ones rewritten every twenty ticks): seat2 runs the history and replay verbs and
+the read-backs in order, and the fuzzer draws 1600 lines over every verb anyone
+may run. The five game fixtures draw over the same verbs against placements,
+rules, search and sessions.
+Verbs a headless World does not register (the renderer, audio and capture
+levers) are judged from their source.
+
+| Verbs | Audience | Verdict | Fix |
+|---|---|---|---|
+| `replay.record`, `replay.stop`, `replay.cancel`, `replay.drive`, `replay.fork`, `replay.verify`, `replay.inspect`, `replay.list`, `replay.status` | Operator | A tape is the whole authority: its tail hash, authority entries and poses differ with withheld rows (baseline: `replay.stop`, `replay.inspect` and `replay.verify` differed between every pair), and `drive` and `fork` replace the live document through the load door | Operator verbs |
+| `world.history`, `world.history.drag` | Anyone (seat forms checked against `control history`) | The keyframe cadence and window eviction read checkpoint and input byte counts (baseline: `row`'s keyframe ticks and a step's restored keyframe and re-simulated count differed between `empty` and `full`); whether a restore went through the load door follows the journal, which an operator's edit of a withheld row moves | Keyframes every simulated second and eviction by the window's length in ticks; the memory ceiling evicts earlier only when the window does not fit it (a resource limit outside the guarantee); a seat's seek omits the restore route; the `history.window` HUD gauge reads the window's fill, not bytes |
+| `wire.errors`, `wire.ack` | Operator | The registry's one refusal counter counts every principal's refused lines, the operator's included, and the acknowledgement mode is the operator pipe's | Operator verbs |
+| `world.rate` | Operator | `shed` reads a host-lifetime wall-time counter beside `host.frames`, and pause and resume schedule every seat's world | Operator verb |
+| `world.instance.start`, `world.instance.stop`, `world.instance.status` | Operator | `status` prints an instance's journal length (`dirty`), which an operator's edit of a withheld row moves, beside host paths; start and stop run documents from host paths | Operator verbs |
+| `world.view` | Anyone | A seat's claim is public; the `<seat>` form's clock line reads wall-time snapshot arrivals (the fixed fixture's control pair differed there) | The clock line answers the operator alone |
+| `world.state`, `world.state.observe`, `world.observe`, `world.row`, `world.match`, `world.symmetry`, `world.symmetry.word`, `world.tabletop`, `world.topologies`, `world.timeline`, `world.projection`, `world.identify`, `world.hud.template`, `world.state.similar`, `world.status`, `world.budget`, `world.text`, `world.metadata`, `world.references`, `world.imports`, `world.admission`, `world.lighting`, `world.looks`, `world.curves`, `world.dynamics`, `world.contributions`, `world.kits`, `world.properties`, `world.addons` | Anyone | Read through the caller's `WorldStateReadView` (step 2); equal across every pair | None |
+| `world.placements`, `world.placement.get`, `world.inhabitants`, `world.attachments`, `world.faces`, `world.portals`, `world.destinations`, `world.adjacencies`, `world.reflow.preview`, `world.reflow.status`, `world.reflow.commit`, `world.reflow.cancel` | Anyone | Read the view's placements; the dealt layout is step 4's | Step 4 |
+| `world.state.cell.set`, `world.state.cell.remove`, `world.state.transform`, `world.state.act`, `world.generate`, `world.row.set`, `world.row.add`, `world.row.remove`, `world.row.step`, `world.assign`, `world.kit.default`, `world.population.defaults`, `world.population.spawn`, `world.place`, `world.snap`, `world.nudge`, `world.turn`, `world.grid`, `player.row.set`, `player.state.cell.set`, `player.state.cell.toggle`, `creation.sculpt`, `creation.shape`, `pipeline.load`, `pipeline.commit` | Anyone | Answer the write door's verdict (step 3). The fixture's fuzz found one write-door oracle: removing an absent key from public `pile` answers `state row 'pile' has no cell keyed 'k0'` when no row interns `k0` and `row 'pile' holds no cell 'k0'` when the withheld `vault` does | The write-boundary lane: one refusal text whatever the key ledger holds |
+| `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.peers`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
+| `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them | Body disclosure step |
+| `identity.*`, `chat.*` | Anyone | The caller's own identity documents, authorized per seat (`TryAuthorizedIdentity`); a whisper's inbox rows are what the deduction fixture exercises | None |
+| `help`, `console`, `run`, `world.affordances`, `world.refusals`, `world.extensions`, `world.extensions.catalog`, `world.devices`, `world.device-profiles`, `world.input-holds`, `world.watch`, `world.flag`, `forge.*`, `machine.default`, `update.*`, `storage.*`, `probe.*`, `backend` | Anyone or Local | Registry, catalogue, host configuration or the caller's own session; no state rows. `run` submits an authored command's lines under the caller's principal, so each line meets its own verb's audience | None |
+| `world.fps`, `world.target`, `world.cadence`, `world.residency`, `world.host`, `world.shaders.status`, `world.shaders.reload` | Anyone | Wall time or machine resources, outside the guarantee | None |
+| Render, view and audio levers and read-backs (`world.ao` … `world.upscale-sharpness`, `view.*`, `world.view.*`, `world.compare`, `world.screenshot`, `world.debug-view`, `world.screens`, `world.machines`, `world.nesting`, `world.view-refresh`, `screen.*`, `machine.state`, `machine.content`, `machine.operation`, `machine.swap`, `world.cameras`, `world.sdf.*`, `world.slice`, `world.slice.save`, `world.speakers`, `audio.*`, `speaker.state`, `voice.*`, `music.state`, `instrument.state`, `world.volume`, `world.theme`, `world.hud`, `world.binding-bar`, `world.captures`, `world.control`, `world.wait`) | Anyone | The shared screen and speakers are the operator's presentation, which shows the room what the author binds there (decision 2); a non-local ingress reaching them is the same open question as the local mirror | None in this audit |
+
+`CommandAudience.Anyone` carries the obligation in its documentation:
+an answer to a recipient derives only from that recipient's view. What enforces
+it for a new verb is the audit's fixture and the fuzzer drawing every verb the
+registry lets anyone run, not the compiler; step 5's `OperatorContext` and
+DISC001 are the structural check that makes the authority unreachable from a
+non-operator handler, and required audiences are its first piece.
 
 ## The decisions
 
@@ -1152,13 +1199,15 @@ commit, as machine readings are not a repository baseline.
 - The resource channels named as best effort are measured, not assumed: step
   1's spectator check records the per-tick disclosure work a hidden write
   costs, so the width of the timing channel is a number in `world.budget`.
-- [low] `world.history row` answers anyone, and its window's oldest tick moves when
-  `WorldHistory.EnforceBudget` evicts a segment because the held keyframe bytes
-  pass the budget. A keyframe encodes the whole authority, withheld rows included,
-  so where the window starts is a byte-count channel on hidden state. A seat's
-  seek no longer prints the authoritative hash; the window bound needs either
-  eviction keyed to ticks alone or a row answer that names only ticks a seat's
-  own recording decides. Owner: the history lane, beside step 6's read verbs.
+- The write door's absent-key refusal reads the arena's shared key ledger
+  ([the findings](#the-findings-this-plan-answers)): one refusal text for an
+  absent key whatever any row interns. Owner: the write-boundary lane.
+- A keyframe a boundary defers (`WorldPersistence.TryCaptureCheckpointCore`: a
+  buffered edit, an open scope, a non-empty ordered domain) lands a tick later,
+  so an operator edit pending at a keyframe tick would shift the keyframe ticks
+  a seat reads. The fixtures' operator steps run between ticks and never meet
+  it; a schedule that keeps the planned keyframe tick (the next capture fills
+  the slot it was due in) closes it.
 
 ---
 

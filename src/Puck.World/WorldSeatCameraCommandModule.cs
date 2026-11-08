@@ -171,6 +171,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.camera.boom",
             description: "Moves the seat's orbit distance from an Axis2D source's vertical input, within views.seatControl.boom. Which pages bind it, and which bind their own scroll act over it, is authored. The existing boom dynamics ease the eye.",
@@ -188,6 +189,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.camera.reset",
             description: "Resets this seat's live orbit angles and distance to its authored rig defaults, the camera behind the body it frames.",
@@ -202,6 +204,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "view.recenter",
             description: $"Resets a seat's live camera orbit and boom to its authored frame, the camera behind the body it frames: {ViewRecenterForms.Spelling}, player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
@@ -221,6 +224,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.camera.view",
             description: $"Eases this seat into its authored eye or back out: {PlayerCameraViewForms.Spelling}. No argument toggles. Auto restores the camera program's state-driven view and optional automatic pull-in.",
@@ -248,6 +252,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.camera.automatic",
             description: $"Chooses automatic first-person pull-in: {PlayerCameraAutomaticForms.Spelling}. Auto restores the portable preference or author's default. Explicit first/third view choices take priority; player.camera.view auto restores state-driven behavior.",
@@ -277,6 +282,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
             description: $"Echoes a seat's camera: {WorldViewCameraForms.Spelling}, player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, fade, clearance and cutaway. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given; a value holding a space is quoted. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, fade= zero (solid) to one (hidden), clearance= none (the camera program authors no clearance op), open, shortened, risen or crowded, then the clearance op's parameters as the frame resolved them, full-size: cutaway= true or false, eyeRadius=, surfaceSkin=, maxRise= degrees, minimumBoom=, fadeStart=, fadeEnd=, closeTarget=, closeTargetStart=, closeTargetFull=, nearMargin=, retractionSkin= and obstructedTargetSkin=. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",

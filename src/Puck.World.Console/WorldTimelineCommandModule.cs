@@ -116,6 +116,7 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.timeline",
             routing: CommandRouting.Immediate,
             bindability: CommandBindability.Bindable,

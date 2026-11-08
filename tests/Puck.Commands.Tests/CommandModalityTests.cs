@@ -681,6 +681,7 @@ public sealed class CommandModalityTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             foreach (var spec in specs) {
                 yield return CommandDefinition.Verb(
+                    audience: CommandAudience.Anyone,
                     name: spec.Name,
                     description: "Modality probe.",
                     valueKind: CommandValueKind.Digital,
@@ -698,6 +699,7 @@ public sealed class CommandModalityTests {
     private sealed class HoldModule(List<(int Slot, CommandPhase Phase)> phases) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "tank.drive",
                 description: "Held tank input.",
                 valueKind: CommandValueKind.Axis1D,
@@ -710,6 +712,7 @@ public sealed class CommandModalityTests {
                 map: Tank
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "plan.noop",
                 description: "Plan-map declaration.",
                 valueKind: CommandValueKind.Digital,
@@ -722,6 +725,7 @@ public sealed class CommandModalityTests {
     private sealed class SimulationTextModule(List<(string Name, int Slot)> activations) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "plan.text",
                 description: "Mapped simulation text probe.",
                 handler: (context, _) => {
