@@ -214,6 +214,11 @@ public sealed class DeliveryReviewLawTests {
         Assert.Equal(WorldProjectionDeliveryKind.None, feed.Compose(view, cursor).Kind);
         Assert.Equal(1L, cursor.Sequence);
         Assert.Equal(before, WorldProjection.SerializeCompact(feed.Held!));
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 5, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.Equal(WorldProjectionDeliveryKind.Delta, feed.Compose(view, cursor).Kind);
+        Assert.Equal(2L, cursor.Sequence);
+        Assert.Equal(5L, Assert.Single(Assert.Single(feed.Held!.Observations!).Cells).Value);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
