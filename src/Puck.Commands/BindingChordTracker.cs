@@ -49,10 +49,7 @@ public sealed class BindingChordTracker {
         }
 
         var modifier = m_profile.Modifiers[modifierIndex];
-        var value = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled)
-            ? 0f
-            : signal.Value.AsAxis1D
-        );
+        var value = HeldOrderTracker.LevelOf(signal: in signal);
         var down = m_downSources[modifierIndex];
 
         if (

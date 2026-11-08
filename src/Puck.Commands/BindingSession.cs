@@ -70,11 +70,10 @@ public sealed class BindingSession {
             );
         }
 
-        if (
-            !float.IsFinite(f: plan.PressThreshold) ||
-            !float.IsFinite(f: plan.ReleaseThreshold) ||
-            (plan.ReleaseThreshold > plan.PressThreshold)
-        ) {
+        if (!HeldOrderTracker.IsValidThresholdPair(
+            pressThreshold: plan.PressThreshold,
+            releaseThreshold: plan.ReleaseThreshold
+        )) {
             throw new ArgumentException(
                 message: "the thresholds must be finite and release must not exceed press",
                 paramName: nameof(plan)

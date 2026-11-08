@@ -5,7 +5,7 @@ namespace Puck.Input.Devices;
 
 /// <summary>Owns the signed little-endian stick decoding and radial deadzone shared by the Steam-family reports.</summary>
 internal static class SteamControllerInput {
-    private const float StickDeadzone = 0.12f;
+    private const float StickDeadzone = GamepadNormalization.DefaultStickDeadzone;
     private const float StickRange = 32768f;
 
     /// <summary>Applies the family radial deadzone to a stick already normalized to -1..1 per axis.</summary>

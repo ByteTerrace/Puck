@@ -3172,6 +3172,14 @@ Klondike table stands north of the Go table in the board game room
 (`worlds/debug/shapes.md`); the look is the owner's review.
 
 - The Klondike table had three defects in a window (court figures standing through the cards laid over them, unreadable pips on the dark ground, a layout crammed at the far edge); the standard deck's two variants, the flattened court figures and the centred 10.6 cm layout answer them headless. Next: a windowed look, close and wide, with the script in `worlds/debug/cardtable.md`.
+- [medium] The standard's deck departs from the true-size ruling: `cards.puck`
+  authors a card 1.76 wide and 2.48 tall and the table's look scales it
+  (`cardScale`, `worlds/debug/cardtable.puck`). The bake samples a group in
+  its slot's own units, so the card is baked at the resolution of a 1.76 m
+  object and drawn at 10.6 cm (`docs/plans/creation-library/puck-creations.md`,
+  section 5). Author the deck at its real millimetres with the look at scale
+  one; `puck mesh audit --prototype card-h-k --cpu` before and after shows the
+  triangle count fall to what the drawn size needs. Owner: debug-world content.
 - Prior art still quarantined for the next steps (the
   [port packet](#port-the-experimental-worlds-missing-features) inventories it): `experimental/src/Puck.World/Assets/worlds/games/`
   holds Spider (one, two or four suits), FreeCell and poker with a hand-strength
@@ -3444,6 +3452,29 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [high] Refining one shape of an imported creation by id is broken: an
+  unauthored shape `id` is its position in the list
+  (`WorldDocumentRowDefaults`, `src/Puck.World.Transpiler/Lowering/WorldDocumentRowDefaults.cs`)
+  and lowering fills every defaulted shape key into the refining row
+  (`WorldDocumentEmitter.Rows`), so `shape Box "visor" { scale [...] }` over
+  `standard/walker` took id 0 and replaced the walker's body, and with `id: 1`
+  it refined the visor but moved it to the origin (a scratch world in the
+  creation-library research, `docs/plans/creation-library/puck-creations.md`).
+  Override by id is the standard's customisation mechanism (AGENTS.md), so a
+  refinement must name its target by a stable id and carry only the fields it
+  writes. Owner: language.
+- [medium] The authoring-time creation store `WorldPrototype`'s remarks name
+  ("the CAS is an authoring-time import/export cache") has no implementation:
+  no code puts or gets a creation document outside a projection
+  (`docs/plans/creation-library/puck-creations.md`, section 3). Build it when
+  a creation-library step needs it ([the memo](creation-library.md), option 2),
+  or delete the remark. Owner: authoring.
+- [medium] No log of author walls exists, though the "Ergonomic is optimal"
+  ruling (AGENTS.md) asks for "a log of where authors (the games, the debug
+  world, agents authoring from prompts) hit walls or reach for clumsy forms".
+  The walls sit in the language plan's S11 audit, this section and the
+  sdf-authoring skill's evals. Start the one page under `docs/plans/` those
+  three link to, and move the walls recorded here into it. Owner: lead.
 - [medium] A rule `local` costs more than the expression it names: with
   computed keys lowered into the program (rule-faults step 2),
   `local k = a + 1` then `cards[k]` prices the gate at 6 plus the local's 3 tokens
@@ -3596,7 +3627,12 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name.
+- [medium] Nothing drives controller output: no `Puck.World*` code references
+  `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has no
+  consumer outside `Puck.Machines`. Under "unreached is not unwanted" this is a
+  gap to wire (a machine's motor to the engaged seat's pad, authored haptics),
+  not something to delete. Found by the input skill map lane.
+- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while the input skill's `bindings.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name.
 
 - Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser.
 
@@ -4303,6 +4339,13 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
+- [medium] Areas with no owning skill (AGENTS.md rule 7: a gap fixed when
+  found), from the input skill lane: audio and speech (`src/Puck.Audio`),
+  physics and contact (`src/Puck.Physics`, mentioned only inside puck-world's
+  document references), the dashboard (`src/Puck.Dashboard`), platform
+  windowing and transports (`src/Puck.Platform.*`), recording and capture
+  (`src/Puck.Recording`). The duplication audit's map gaps join this list; one
+  lane writes the skills by capability after the audit lands.
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build
   of a different target is far faster, so the two are observations, not a
@@ -4618,6 +4661,12 @@ read one. The plans that keep open items:
 - [Play](play.md#open-items): the seat's standard chase camera, the finder, MCP's
   surfaces and housekeeping; the population waits for the job-system memo, and
   the One World, content and federation waves are dormant.
+- [The creation library](creation-library.md#5-engineering-versus-the-owners-product-calls):
+  the engineering steps that pay inside one author's packages (declared
+  controls and presets, field extents in `creation stats`, the recorded
+  expansion, named attachment frames, a shared role table, creations in the
+  cost report), and the owner's calls that wait for creations to cross between
+  parties.
 - [Rendering](rendering.md): the status table names each package's open
   remainder: the frame-rate bars on the RTX 2060 and the Steam Deck, the mesh
   bake and its defects, glass, GPU capture findings and the remaining parts of

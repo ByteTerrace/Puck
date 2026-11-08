@@ -450,11 +450,11 @@ public sealed class AuthoredCommandSet {
     public ImmutableArray<AuthoredCommand> Commands { get; }
 
     /// <summary>Returns why an authored line may not call a verb with these facts, or <see langword="null"/> when it
-    /// may: an authored line calls only what a binding document may name, a bindable verb answering anyone.</summary>
+    /// may: an authored line calls only what a binding document may name, a bindable verb a seat may run.</summary>
     /// <param name="metadata">The called verb's facts.</param>
     /// <returns>The refusal clause, or <see langword="null"/>.</returns>
     public static string? RefusesCall(CommandMetadata metadata) {
-        if (metadata.Audience != CommandAudience.Anyone) {
+        if (metadata.Audience == CommandAudience.Operator) {
             return "which answers the operator alone; an authored command calls only what a binding may name";
         }
 
