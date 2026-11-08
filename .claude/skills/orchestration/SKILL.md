@@ -156,8 +156,9 @@ direction:
     diff, fixes what is local and clear in its own worktree, and proves each fix
     by running or measuring it. The lead schedules them by risk and churn: the
     areas a milestone changed most and those a silent invariant guards.
-    Determinism, maths and renderer areas get Astra or an Opus `specialist`,
-    ordinary engine code Sol or `specialist`, docs and world content none.
+    Determinism, maths and renderer areas get Sol or an Opus `specialist`
+    (Astra or Fable only where the brief says why), ordinary engine code Sol or
+    `specialist`, docs and world content none.
   - Adversarial review is required only for the review-only classes in
     [hazards](../../../docs/development/hazards.md#silent-invariants). The
     reviewer gets the diff and the author's claim, not the author's reasoning,
@@ -871,10 +872,12 @@ rejects the flag ([`verification`](../verification/SKILL.md#build-before-you-tes
 ## Select models and route findings
 
 All three families implement. Choose the model and effort per lane by fit: put the strongest available
-model on subtle or correctness-heavy work. Codex's two models, Astra
-(`gpt-6-astra`, the frontier model) and Sol (`gpt-6.1-sol`, the workhorse), are
-both free to use and encouraged, for implementation and for review-and-fix
-passes; pass `--model` and `--effort` on every launch
+model on subtle or correctness-heavy work. Codex's two models are Astra
+(`gpt-6-astra`, the frontier model, Fable's counterpart) and Sol
+(`gpt-6.1-sol`, OpenAI's intended counterpart of Opus 5.5, even where
+benchmarks score it lower). Sol is the default Codex model for
+implementation and review-and-fix passes; Astra is conserved as Fable is (the
+owner's ruling); pass `--model` and `--effort` on every launch
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Use Codex
 slots both to implement and to review Claude authors' changes
 ([spend verification](#spend-verification-not-writing)).
@@ -910,9 +913,10 @@ most capable model) takes the work where its judgement changes the outcome:
 designs, architectures and design reviews; breaking a spiral
 ([no bad loops](#no-bad-loops)); and a hard diagnosis or an invariant-heavy
 implementation whose brief says why Fable fits. Codex is part of the same
-lineup: Sol is a peer of `implementer` and takes the same briefs, and Astra,
-the frontier model, takes demanding implementation, diagnosis and review, the
-work of `specialist`. Spread implementer briefs across
+lineup: Sol is the peer of `specialist` and `implementer` and takes the same
+briefs (demanding implementation, diagnosis, invariant-heavy work and review
+included), and Astra is the peer of `principal`: it takes the work where the
+strongest judgement changes the outcome, and its brief says why Astra fits. Spread implementer briefs across
 `implementer` and Sol, so both families' slots stay busy. The owner's
 direction: Codex gets specialist work whenever a Codex slot is free (a
 fresh-eyes area fix pass over another family's recent work, a diagnosis, an
@@ -959,15 +963,15 @@ worktree of it can call `puck_worlds` and the rest.
 
 | Codex model | Id | Role | Effort |
 |---|---|---|---|
-| Astra | `gpt-6-astra` | The frontier model, for the most demanding work | `low` to `max`; refuses `none` |
-| Sol | `gpt-6.1-sol` | The workhorse, near Astra for complex coding | `low` to `max`, default `medium`; refuses `none` and `minimal` |
+| Astra | `gpt-6-astra` | The frontier model, conserved like Fable: designs, spirals, the hardest diagnosis | `low` to `max`; refuses `none` |
+| Sol | `gpt-6.1-sol` | The default Codex model, Opus 5.5's counterpart: implementation, diagnosis, review | `low` to `max`, default `medium`; refuses `none` and `minimal` |
 
 The companion's `--effort` stops at `xhigh`; `max` needs `codex exec -c
 model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
 the effort). Codex draws on the plan's allowance. Effort is not capability
 across models: OpenAI's Codex guidance says Astra at `low` can outperform Sol at
-`high`, so a lane that needs Sol at `high` or above tries Astra at `low` or
-`medium` first. Raising effort never supplies a missing file, tool or
+`high`, but Astra is conserved, so a demanding Codex lane runs Sol at `high` or
+`xhigh` and moves to Astra only as `principal` work moves to Fable. Raising effort never supplies a missing file, tool or
 permission; fix the brief first. Astra asks more questions when input
 could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
