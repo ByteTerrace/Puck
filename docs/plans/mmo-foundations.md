@@ -39,6 +39,43 @@ the register cites.
   the owner's, the round found twelve settled by rulings already in
   `AGENTS.md` and the world model; the owner deferred the other three.
 
+## What the round asked
+
+The records answer these questions and test these hypotheses, so they stay
+here as the premises the records cite.
+
+1. The engine's purpose, as the owner wants it recorded, and how every design
+   round weighs it.
+2. Player state across author edits: what survives an edit to an identity
+   template, a zone or a shared world, where tuning lives, and how an author
+   deliberately breaks continuity.
+3. Custody of owned things: what generalizes from companions to characters,
+   items, table stakes and machine saves; who is custodian when a title
+   authority is unreachable; how a crashed place or an inexact image resolves
+   custody; how epochs stay monotonic across restarts.
+4. Value across trust boundaries: which classes of value an authoritative world
+   keeps records of, which travel as claims, and where escrow and attestation
+   must hold.
+5. Seams: which boundaries are visible portals and which are hidden, how a
+   portal runs without a frame, and how interest management maps onto
+   disclosure tiers.
+6. The tables: escrow for stakes, provable fairness, hidden information, atomic
+   wagers, and the regulatory line if stakes ever touch real money (the owner's
+   call when the economy is designed).
+7. The order of work around the answers.
+
+The hypotheses raised in conversation, as the lanes tested them:
+
+- Player state carries across an edit by default; content templates hold tuning
+  and state holds references; an authored reset epoch is the deliberate break;
+  dropped player data is set aside where it can be recovered; per-row restore is
+  the common path, since every engine build invalidates an exact continuation.
+- Custody: title at home, a lease or escrow wherever the thing is, monotonic
+  epochs as fencing, a crossing as the custody transaction, a place never
+  asserting custody from an image, and recovery by presumed abort and recall.
+- Seams: hidden for shards and layers, visible where the fiction is travel.
+- Tables: stakes as escrowed custody; fairness by replay.
+
 ## Where the decisions live
 
 - [Worlds and federation: decisions](../decisions/worlds-and-federation.md):

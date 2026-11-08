@@ -107,7 +107,7 @@ the memo:
    the mechanism is unbuilt, and the memo decides what to build, not what to
    patch ([decision 4](#decision-4-value-across-trust-boundaries)). The
    architecture page already says so **[opened]**
-   (`docs/architecture/worlds.md:804-806`): "Remote round trips do not adopt
+   (`docs/architecture/worlds.md:819-821`): "Remote round trips do not adopt
    ... Remote home adoption remains deferred."
 2. **`WorldRecipientView` was a plan when the records were written.** Lane
    C's options I1 and C1 lean on it; lane E and lane C's own citation check
@@ -520,7 +520,7 @@ document, `Mutate` and the slot, with a required write mask **[opened]**
             (candidate.Subject == subject)));
 ```
 
-The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:86-88`):
+The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:88-90`):
 "Where something must stay unique or tradeable, such as currency or a stake at
 a card table, the world that issued it keeps the record itself and escrow and
 custody move it, so a copy gains nothing."
@@ -688,7 +688,7 @@ is a two-scan filter at the hub with three modes and a flat cadence
 |---|---|---|---|---|
 | S1. Fiction-aligned split: visible portals for travel and scope changes; `WorldAdjacency` for continuous shards; population layers moved only under an unobservability predicate (no combat, no channel in progress, in a transition volume or by a prompt) with an increasing hop cooldown | Blizzard's own layering deferred transfers during combat and before loot, added a longer delay after PvP, and hotfixed an increasing hop cooldown **[record]** | Authoring transition corridors or the predicate; a last-hop stamp kept by the layer authority; layer ordinals and a deferral queue the engine lacks | Cannot hide a layer change in an open field while the player watches a node | Closes layer-hop farming beside A7; A10 goes to C3 |
 | S2. Framed transitions everywhere; no silent layers | FFXIV's numbered instances (summary only) | Gives up re-layering an entered field | A flash mob in an entered field | Removes mid-cast vanishes by construction |
-| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1413-1414`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
+| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1431-1432`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
 | F1. A frameless portal is a creation with an aperture face and no frame rings, placed with a `WorldPlacementFace` portal; a standard `threshold` template | The glass fills the aperture edge to edge with no bezel; the door and the screen are independent facts about one face **[record]** | A template in `worlds/standard/`; no C# | Nothing it claims | None |
 | F2. An adjacency that falls back to a frameless `window` across scopes it cannot project directly | Adjacency requires a global persisted destination **[opened]** (`src/Puck.World.Schema/WorldAdjacencies.cs:149`) | Teaching adjacency to host a window | Mixed lighting and sky | None |
 | I1. Fold spatial grid, hysteresis, an explicit unembodied-observer policy and distance-tiered cadence into the disclosure view and cursor | The disclosure plan watches this seam as the view's natural second occupant **[record]**; Unreal's actor priority gives each actor a fair share under saturation **[record]** | Replaces `Redact`; builds on disclosure step 1, which has landed | Nothing it claims | Closes A16; narrows A12 |
@@ -993,7 +993,7 @@ The remote identity stays a claim until attested. So A10 is narrowed, not closed
 Taped neighbour records then close the replay boundary. C1 as the rule for any contested
 place, which is the architecture page's existing rule, and the owner's "do not
 run an authority boundary through a place designed to be contested"
-**[opened]** (`docs/architecture/worlds.md:1413-1414`); the referee world is a
+**[opened]** (`docs/architecture/worlds.md:1431-1432`); the referee world is a
 vouched role ([decision 3, neutrality](#decision-3-custody-of-owned-things)).
 C2 as the Puck-native prototype for duels between friends, which no float-based
 MMO can run, stated with what it removes: the host's simulation advantage, and

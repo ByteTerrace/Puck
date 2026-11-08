@@ -138,7 +138,7 @@ named doors (`docs/plans/disclosure.md:797-811`) **[checked]**.
   equal their own key's hash" (`:125-126`) **[checked]**. The fingerprint rule
   is for roots; an authority namespace is a subject under a root.
 - **Epochs "stay monotonic across restarts"** is the question the round asks
-  (`docs/plans/mmo-foundations.md:56-59`). The destination's consumed epochs
+  (`docs/plans/mmo-foundations.md:52-55`). The destination's consumed epochs
   (`m_mobilityAdmissions`) and leases are checkpointed in the escrow section
   (`src/Puck.World.Server/WorldAuthorityCheckpointCodec.Escrow.cs:308-314`)
   **[checked]**, but a desktop host writes no durable image:
@@ -181,7 +181,7 @@ named doors (`docs/plans/disclosure.md:797-811`) **[checked]**.
   but the authority chooses what it tapes and holds the tape. A tape proves
   something to a third party only when the third party holds the inputs
   independently **[general]**. "Fairness by replay" (the round's hypothesis,
-  `docs/plans/mmo-foundations.md:118`) is a convention until the inputs are
+  `docs/plans/mmo-foundations.md:77`) is a convention until the inputs are
   held by someone other than the authority.
 
 ## 2. Attacks, ranked by severity at MMO scale
@@ -316,7 +316,7 @@ are grouped; the first in each group carries the citations.
   answer **[general]**; the attestation library's sequence and audience
   machinery could carry it, and nothing does today.
 - **Severity:** high for tables and loot; critical if stakes ever touch real
-  money (the owner's regulatory line, `docs/plans/mmo-foundations.md:72-75`).
+  money (the owner's regulatory line, `docs/plans/mmo-foundations.md:62-64`).
 
 ### High
 
@@ -609,7 +609,7 @@ so the round need not re-litigate them. Each names where the guarantee stops.
 ## 4. Questions for the research lanes
 
 Each question names the attack that raises it and the lane the round assigned
-(`docs/plans/mmo-foundations.md:79-88`).
+(`docs/plans/mmo-foundations.md:111-115`).
 
 1. **Which classes of value become issuer-kept records moved by escrow, which
    travel as signed claims with provenance, and which stay unsigned facts?**
