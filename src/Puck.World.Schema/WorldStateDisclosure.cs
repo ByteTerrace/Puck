@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Maths;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -57,9 +56,10 @@ public sealed record WorldWithheldRow(int Count, HiddenCells Policy, bool WholeR
 /// re-dealt from what remains; the live document itself when nothing is withheld.</param>
 /// <param name="Withheld">What was withheld, keyed by row name; a row absent here is disclosed whole.</param>
 public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld) {
-    // The rows whose disclosed cells the disclosed placements were dealt or answered from; any other row's cells leave
-    // them as they stand.
-    internal IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
+    /// <summary>Gets the names of the rows whose disclosure shaped the disclosed placements: every dealt and variant row
+    /// of a template the recipient is shown re-dealt or masked, and every row a response entry reads. Any other row's
+    /// cells leave the placements as they stand, so a cached composition follows only these rows' images.</summary>
+    public IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
 }
 /// <summary>Composes state observations for one authenticated recipient.</summary>
 /// <remarks>Every value, audience, zone membership and observation stamp is read from the live store, never from a
@@ -208,8 +208,7 @@ public static class WorldStateDisclosure {
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
     /// <param name="presented">The rows a presentation reads, which cross as observations of the cells the recipient
     /// may read whether or not they declare a policy, or <see langword="null"/> for none.</param>
-    /// <param name="onlyRow">An optional single row to compose for the shared image table.</param>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null, int? onlyRow = null) {
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null) {
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
@@ -226,116 +225,9 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
-
-            if ((onlyRow is { } selected) && (rowOrdinal != selected)) { continue; }
-
-            // Which rows cross is decided by declaration, never by whether a member is restricted now.
-            if (
-                (row.Visibility is null) &&
-                !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
-                (presented?.Contains(item: row.Name.Value) != true)
-            ) {
-                continue;
+            if (ComposeRow(arena: arena, observer: ref observer, presented: (presented?.Contains(item: row.Name.Value) == true), row: row, rowOrdinal: rowOrdinal) is { } observed) {
+                result.Add(item: observed);
             }
-            if (
-                (row.Visibility is { } policy) &&
-                !observer.Allows(policy: policy)
-            ) {
-                continue;
-            }
-
-            var cells = new List<WorldObservedCell>();
-            var hidden = 0;
-            var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
-            var cursor = 0;
-
-            while (arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: rowOrdinal
-            )) {
-                if (!arena.TryRead(
-                    key: key,
-                    rowOrdinal: rowOrdinal,
-                    value: out var value
-                )) {
-                    continue;
-                }
-                if (observer.CanRead(
-                    key: key,
-                    row: row,
-                    rowOrdinal: rowOrdinal
-                )) {
-                    var behavior = arena.LiveBehavior(
-                        key: key,
-                        rowOrdinal: rowOrdinal
-                    );
-
-                    cells.Add(item: new(
-                        arena.Keys[key: key].Value,
-                        (value.Kind switch {
-                            CellKind.Bool => (value.AsBool
-                                ? 1L
-                                : 0L),
-                            CellKind.Fixed => value.AsFixed,
-                            CellKind.Int => value.AsInt,
-                            _ => 0L,
-                        }),
-                        ((value.Kind == CellKind.Text)
-                            ? value.AsText
-                            : null),
-                        arena.Observation(
-                            key: key,
-                            rowOrdinal: rowOrdinal
-                        ),
-                        Hidden: false,
-                        Vector: Vector(
-                            arena: arena,
-                            key: key,
-                            rowOrdinal: rowOrdinal,
-                            value: value
-                        ),
-                        Advance: behavior.Advance,
-                        Cycle: behavior.Cycle,
-                        Dynamics: behavior.Dynamics,
-                        Clock: (behavior.IsNone
-                            ? null
-                            : TraitClock(
-                                arena: arena,
-                                key: key,
-                                rowOrdinal: rowOrdinal
-                            ))
-                    ));
-
-                    continue;
-                }
-                if (hiddenPolicy == HiddenCells.Omit) {
-                    continue;
-                }
-
-                hidden++;
-                if (hiddenPolicy == HiddenCells.Placeholder) {
-                    cells.Add(item: new(
-                        string.Empty,
-                        0L,
-                        Hidden: true
-                    ));
-                }
-            }
-            result.Add(item: new(
-                row.Name.Value,
-                row.Kind,
-                cells,
-                // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
-                row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
-                hidden,
-                ((row.Kind == CellKind.Vector)
-                    ? row.Space
-                    : null),
-                row.Min,
-                row.Max,
-                row.Capacity
-            ));
         }
 
         return ((result.Count == 0)
@@ -343,15 +235,126 @@ public static class WorldStateDisclosure {
             : result
         );
     }
+    // One document row's observation as Compose composes it, or null when the row does not cross: it declares no policy
+    // and is not presented, or its own policy excludes the recipient. The shared image table composes one row through it.
+    internal static WorldObservedRow? ComposeRow(StateArena arena, ref Observer observer, StateRow row, int rowOrdinal, bool presented) {
+        // Which rows cross is decided by declaration, never by whether a member is restricted now.
+        if (
+            (row.Visibility is null) &&
+            !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
+            !presented
+        ) {
+            return null;
+        }
+        if (
+            (row.Visibility is { } policy) &&
+            !observer.Allows(policy: policy)
+        ) {
+            return null;
+        }
+        var cells = new List<WorldObservedCell>();
+        var hidden = 0;
+        var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
+        var cursor = 0;
+
+        while (arena.TryNextCell(
+            cursor: ref cursor,
+            key: out var key,
+            rowOrdinal: rowOrdinal
+        )) {
+            if (!arena.TryRead(
+                key: key,
+                rowOrdinal: rowOrdinal,
+                value: out var value
+            )) {
+                continue;
+            }
+            if (observer.CanRead(
+                key: key,
+                row: row,
+                rowOrdinal: rowOrdinal
+            )) {
+                var behavior = arena.LiveBehavior(
+                    key: key,
+                    rowOrdinal: rowOrdinal
+                );
+
+                cells.Add(item: new(
+                    arena.Keys[key: key].Value,
+                    (value.Kind switch {
+                        CellKind.Bool => (value.AsBool
+                            ? 1L
+                            : 0L),
+                        CellKind.Fixed => value.AsFixed,
+                        CellKind.Int => value.AsInt,
+                        _ => 0L,
+                    }),
+                    ((value.Kind == CellKind.Text)
+                        ? value.AsText
+                        : null),
+                    arena.Observation(
+                        key: key,
+                        rowOrdinal: rowOrdinal
+                    ),
+                    Hidden: false,
+                    Vector: Vector(
+                        arena: arena,
+                        key: key,
+                        rowOrdinal: rowOrdinal,
+                        value: value
+                    ),
+                    Advance: behavior.Advance,
+                    Cycle: behavior.Cycle,
+                    Dynamics: behavior.Dynamics,
+                    Clock: (behavior.IsNone
+                        ? null
+                        : TraitClock(
+                            arena: arena,
+                            key: key,
+                            rowOrdinal: rowOrdinal
+                        ))
+                ));
+
+                continue;
+            }
+            if (hiddenPolicy == HiddenCells.Omit) {
+                continue;
+            }
+
+            hidden++;
+            if (hiddenPolicy == HiddenCells.Placeholder) {
+                cells.Add(item: new(
+                    string.Empty,
+                    0L,
+                    Hidden: true
+                ));
+            }
+        }
+        return new(
+            row.Name.Value,
+            row.Kind,
+            cells,
+            // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
+            row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
+            hidden,
+            ((row.Kind == CellKind.Vector)
+                ? row.Space
+                : null),
+            row.Min,
+            row.Max,
+            row.Capacity
+        );
+    }
     /// <summary>Returns the live document as one recipient may read it: every authored state row keeps its
     /// declaration, and each keeps only the cells the recipient may read, with what was withheld recorded by row
     /// name. Pool storage carries no visibility and is left as it stands.
     /// <para>A dealt placement (<see cref="WorldPlacementDeal"/>) is a reading of the cells it was dealt from, so a
     /// template whose dealt row can withhold from the recipient is re-dealt from the row as the recipient reads it: its
-    /// readable cells take slots in the row's order, each keeping only its displacement from the authority's slot, and
-    /// under <see cref="HiddenCells.Placeholder"/> each withheld cell takes its place in that order as an anonymous back
-    /// (<see cref="WorldPlacementDeal.PlaceholderId"/>). A child whose variant cell is withheld shows the template's own
-    /// prototype, the deal's documented choice for a key with no variant cell. A responsive placement
+    /// readable cells take slots in the row's order, each child standing where the deal stamps that slot, and under
+    /// <see cref="HiddenCells.Placeholder"/> each withheld cell takes its place in that order as an anonymous back
+    /// (<see cref="WorldPlacementDeal.PlaceholderId"/>); a placement authored under a child the recipient is not shown
+    /// goes with it. A child whose variant cell is withheld shows the template's own prototype, the deal's documented
+    /// choice for a key with no variant cell, whether or not the dealt row withholds. A responsive placement
     /// (<see cref="WorldPlacement.Respond"/>) whose facet reads a row with a withheld cell is a reading of those cells
     /// too, so it loses the holding bit of every entry that reads a withheld cell and shows the first entry left, or its
     /// authored prototype (<see cref="WorldPlacementResponse.Disclosed"/>). Every other placement is left as it
@@ -519,20 +522,31 @@ public static class WorldStateDisclosure {
     // every view door share. A responsive row loses the holding bit of each entry over a cell the recipient may not
     // read. A template whose dealt row can withhold from the recipient is re-dealt from the row as the recipient reads
     // it: its readable cells, in the row's order, take slots 0..n-1, and under Placeholder each withheld cell of a row
-    // the recipient may read takes its place in that order as an anonymous back. A kept child stands at its re-dealt
-    // slot's offset plus its own displacement from the authority's slot, so nothing of the authority's slot history,
-    // which hidden arrivals shape, survives into a slot, a position or the order of the rows, and zero, one or many
-    // hidden cells give one layout. Every row whose disclosure shaped the result is added to reads, by declaration, so a
-    // cached composition knows which rows' images to follow.
+    // the recipient may read takes its place in that order as an anonymous back. A kept child moves to its re-dealt slot
+    // with its own displacement, so nothing of the authority's slot history, which hidden arrivals shape, survives
+    // into a slot, a position or the order of the rows, and zero, one or many hidden cells give
+    // one layout; a placement authored under a child the recipient is not shown is absent too. A template whose variant
+    // row alone withholds keeps its children's slots and masks each face the recipient may not read. Every row whose
+    // disclosure shaped the result is added to reads, by declaration, so a cached composition knows which rows' images
+    // to follow.
     internal static IReadOnlyList<WorldPlacement> DisclosedPlacements(WorldDefinition definition, StateArena arena, Observer observer, HashSet<string>? reads) {
         var placements = definition.Placements;
+        // A template enters by declaration when the recipient does not read its dealt row or its variant row whole:
+        // the value is the dealt row's ordinal when that row withholds, so the template is re-dealt, and -1 when only
+        // the variant row does, so its children keep their slots, which a row the recipient reads whole shaped, and
+        // lose a face the recipient may not read.
         Dictionary<string, int>? restricted = null;
         var responsive = false;
 
         foreach (var placement in placements) {
-            if ((placement.Deal is { } deal) && arena.Catalog.TryResolve(handle: out var dealt, lane: StateLane.Document, name: deal.Row) &&
-                !observer.ReadsWhole(rowOrdinal: dealt.Ordinal)) {
-                (restricted ??= new(comparer: StringComparer.Ordinal))[placement.Id] = dealt.Ordinal;
+            if ((placement.Deal is { } deal) && arena.Catalog.TryResolve(handle: out var dealt, lane: StateLane.Document, name: deal.Row)) {
+                var redealt = !observer.ReadsWhole(rowOrdinal: dealt.Ordinal);
+
+                if (redealt || ((deal.Variants is { } variants) && !observer.ReadsRow(name: variants.Row))) {
+                    (restricted ??= new(comparer: StringComparer.Ordinal))[placement.Id] = (redealt ? dealt.Ordinal : -1);
+                    reads?.Add(item: deal.Row);
+                    if (deal.Variants is { } read) { reads?.Add(item: read.Row); }
+                }
             }
             responsive |= placement.Respond is { Count: > 0 };
         }
@@ -546,26 +560,68 @@ public static class WorldStateDisclosure {
             return !observer.Discloses(rowOrdinal: row.Ordinal, key: key);
         }
         Dictionary<string, Dictionary<string, WorldPlacement>>? children = null;
+        Dictionary<string, WorldPlacement>? byId = null;
 
         if (restricted is not null) {
             children = new(comparer: StringComparer.Ordinal);
+            byId = new(capacity: placements.Count, comparer: StringComparer.Ordinal);
             foreach (var placement in placements) {
-                if ((placement.Parent is { } parent) && restricted.ContainsKey(key: parent) &&
-                    WorldPlacementDeal.TrySplitChildId(id: placement.Id, template: out var template, key: out var key) &&
-                    string.Equals(a: template, b: parent, comparisonType: StringComparison.Ordinal)) {
-                    if (!children.TryGetValue(key: parent, value: out var keyed)) { children[parent] = keyed = new(comparer: StringComparer.Ordinal); }
+                byId.TryAdd(key: placement.Id, value: placement);
+                if (DealtKey(placement: placement, restricted: restricted, key: out var key)) {
+                    if (!children.TryGetValue(key: placement.Parent!, value: out var keyed)) { children[placement.Parent!] = keyed = new(comparer: StringComparer.Ordinal); }
                     keyed.TryAdd(key: key, value: placement);
                 }
             }
         }
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
+        // Each re-dealt template's children as the recipient is shown them, dealt before any row is emitted, and the ids
+        // among them: a placement authored under any other child of a re-dealt template stands at a frame only the
+        // authority holds, so it goes with that child wherever it sits in the rows.
+        Dictionary<string, List<WorldPlacement>>? redeals = null;
+        HashSet<string>? shown = null;
+
+        if (restricted is not null) {
+            foreach (var (templateId, rowOrdinal) in restricted) {
+                if (rowOrdinal < 0) { continue; }
+                var dealt = new List<WorldPlacement>();
+
+                Redeal(
+                    arena: arena,
+                    children: children!.GetValueOrDefault(key: templateId),
+                    observer: ref observer,
+                    result: dealt,
+                    rowOrdinal: rowOrdinal,
+                    template: byId![templateId],
+                    withheld: Withheld,
+                    worldSeed: worldSeed
+                );
+                (redeals ??= new(comparer: StringComparer.Ordinal))[templateId] = dealt;
+                foreach (var child in dealt) { (shown ??= new(comparer: StringComparer.Ordinal)).Add(item: child.Id); }
+            }
+        }
         var result = new List<WorldPlacement>(capacity: placements.Count);
         var changed = false;
 
         foreach (var placement in placements) {
-            if ((restricted is not null) && (placement.Parent is { } parent) && restricted.ContainsKey(key: parent) &&
-                WorldPlacementDeal.TrySplitChildId(id: placement.Id, template: out var template, key: out _) &&
-                string.Equals(a: template, b: parent, comparisonType: StringComparison.Ordinal)) {
+            if ((restricted is not null) && DealtKey(placement: placement, restricted: restricted, key: out var dealtKey)) {
+                var template = byId![placement.Parent!];
+
+                if (restricted[template.Id] >= 0) {
+                    changed = true;
+                    continue;
+                }
+                // Only the variant row withholds: the child keeps its slot, is shown as the deal holds it (a hidden
+                // variant cell can decide when the sweep next re-deals it), and shows its face only when the recipient
+                // may read the variant cell that selects it.
+                var masked = (placement.DealSlot is { } own) ? Shown(arena: arena, child: placement, key: dealtKey, slot: own, template: template, withheld: Withheld) : placement;
+
+                masked = ((masked == placement) ? placement : masked);
+
+                changed |= !ReferenceEquals(objA: masked, objB: placement);
+                result.Add(item: masked);
+                continue;
+            }
+            if ((restricted is not null) && Unshown(placement: placement, byId: byId!, restricted: restricted, shown: shown)) {
                 changed = true;
                 continue;
             }
@@ -573,58 +629,62 @@ public static class WorldStateDisclosure {
 
             changed |= !ReferenceEquals(objA: reading, objB: placement);
             result.Add(item: reading);
-            if ((restricted is null) || !restricted.TryGetValue(key: placement.Id, value: out var rowOrdinal)) { continue; }
-            reads?.Add(item: placement.Deal!.Row);
-            changed = true;
-            Redeal(
-                arena: arena,
-                children: children!.GetValueOrDefault(key: placement.Id),
-                observer: ref observer,
-                result: result,
-                rowOrdinal: rowOrdinal,
-                template: placement,
-                withheld: Withheld,
-                worldSeed: worldSeed
-            );
+            if ((redeals is not null) && redeals.TryGetValue(key: placement.Id, value: out var redealt)) {
+                changed = true;
+                result.AddRange(collection: redealt);
+            }
         }
         return (changed ? result : placements);
+    }
+    // Whether placement is a dealt child of a restricted template, and the cell key it was dealt for.
+    private static bool DealtKey(WorldPlacement placement, Dictionary<string, int> restricted, out string key) {
+        key = string.Empty;
+        return ((placement.Parent is { } parent) && restricted.ContainsKey(key: parent) &&
+            WorldPlacementDeal.TrySplitChildId(id: placement.Id, template: out var template, key: out key) &&
+            string.Equals(a: template, b: parent, comparisonType: StringComparison.Ordinal));
+    }
+    // Whether a placement authored under a dealt child stands under one the recipient is not shown: the first dealt child
+    // on its parent chain belongs to a re-dealt template and is absent from the re-deal. The walk is bounded by the row
+    // count against a parent cycle, which frame validation refuses.
+    private static bool Unshown(WorldPlacement placement, Dictionary<string, WorldPlacement> byId, Dictionary<string, int> restricted, HashSet<string>? shown) {
+        var current = placement;
+
+        for (var steps = 0; (steps <= byId.Count) && (current.Parent is { } parentId) && byId.TryGetValue(key: parentId, value: out var parent); steps++) {
+            if (DealtKey(placement: current, restricted: restricted, key: out _)) {
+                return ((restricted[parentId] >= 0) && ((shown is null) || !shown.Contains(item: current.Id)));
+            }
+            current = parent;
+        }
+        return false;
     }
     // Every cell the recipient is shown takes the next slot whether or not the sweep has dealt its child yet, and a
     // back stands for a withheld cell whatever child the authority holds for it: an install between sweeps (an
     // operator's key rename, a cell not yet dealt) then moves nothing the recipient is shown that the row it reads did
-    // not move.
+    // not move. A kept child is shown at its re-dealt slot as the deal holds it (Shown): its position is its displacement
+    // from its slot, and its frame
+    // (WorldPlacementFrameCompilation.LocalFrame) is the re-dealt slot's fixed-point offset plus that displacement, so
+    // nothing of the authority's slot, its offset or that offset's rounding reaches the recipient.
     private static void Redeal(WorldPlacement template, int rowOrdinal, Dictionary<string, WorldPlacement>? children, StateArena arena, ref Observer observer, Func<string, string?, bool> withheld, ulong worldSeed, List<WorldPlacement> result) {
-        var offsets = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed);
+        var slots = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed).Length;
         var row = arena.Rows[rowOrdinal];
         // Under Placeholder a reader the row admits is shown a back for each withheld cell, in order, as the row's
         // observation shows it; a reader the row's own policy excludes is shown nothing of it.
         var rowReadable = observer.Allows(policy: row.Visibility);
         var placeholder = rowReadable && (row.Visibility?.Hidden == HiddenCells.Placeholder);
-        var variants = template.Deal!.Variants;
         var slot = 0;
         var cursor = 0;
 
-        while ((slot < offsets.Length) && arena.TryNextCell(cursor: ref cursor, key: out var cell, rowOrdinal: rowOrdinal)) {
+        while ((slot < slots) && arena.TryNextCell(cursor: ref cursor, key: out var cell, rowOrdinal: rowOrdinal)) {
             if (!arena.TryRead(key: cell, rowOrdinal: rowOrdinal, value: out _)) { continue; }
             if (rowReadable && observer.CanRead(key: cell, row: row, rowOrdinal: rowOrdinal)) {
                 var key = arena.Keys[key: cell].Value;
 
                 if ((children is not null) && children.TryGetValue(key: key, value: out var child)) {
-                    var displacement = ((child.DealSlot is { } dealt) && (((uint)dealt) < ((uint)offsets.Length)))
-                        ? (FixedVector3.FromVector3(value: child.Position) - offsets[dealt])
-                        : FixedVector3.Zero;
-                    var reading = WorldPlacementResponse.Disclosed(placement: child, withheld: withheld);
-
-                    result.Add(item: reading with {
-                        DealSlot = slot,
-                        Position = (offsets[slot] + displacement).ToVector3(),
-                        PrototypeId = (((variants is not null) && withheld(arg1: variants.Row, arg2: key)) ? template.PrototypeId : child.PrototypeId),
-                    });
+                    result.Add(item: Shown(arena: arena, child: child, key: key, slot: slot, template: template, withheld: withheld));
                 }
             } else if (placeholder) {
                 result.Add(item: WorldPlacementDeal.Child(
                     id: WorldPlacementDeal.PlaceholderId(template: template.Id, slot: slot),
-                    offset: offsets[slot].ToVector3(),
                     prototype: template.PrototypeId,
                     slot: slot,
                     template: template
@@ -636,6 +696,23 @@ public static class WorldStateDisclosure {
         }
     }
 
+    // A kept child of a restricted template as the recipient is shown it at slot: as the deal holds it
+    // (WorldPlacementDeal.Reconcile), so what the template owns is the stamp's and what it preserves is the child's own,
+    // and the authority's re-deal timing, which hidden cells can decide, shows nowhere; its face is the variant the
+    // recipient may read, else the template's own.
+    private static WorldPlacement Shown(WorldPlacement template, WorldPlacement child, string key, int slot, StateArena arena, Func<string, string?, bool> withheld) {
+        var deal = template.Deal!;
+        var hiddenFace = ((deal.Variants is { } variants) && withheld(arg1: variants.Row, arg2: key));
+        var variantOrdinal = ((deal.Variants is { } declared) && arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: declared.Row)) ? row.Ordinal : -1;
+        var shown = deal.Reconcile(
+            child: child,
+            prototype: (hiddenFace ? template.PrototypeId : deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId)),
+            slot: slot,
+            template: template
+        );
+
+        return (hiddenFace ? (shown with { PrototypeId = template.PrototypeId }) : shown);
+    }
     /// <summary>Refuses flattening a presentation binding that could disclose a restricted value.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>

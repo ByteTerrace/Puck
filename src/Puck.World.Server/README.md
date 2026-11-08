@@ -776,8 +776,8 @@ children follow its keyed row, one `UpsertPlacement`/`RemovePlacement` per
 arriving, leaving, or re-variant cell, every template's folded into one `Batch` a
 tick under `Principal.World`, so however many templates re-deal the tick
 composes and validates the document once, and, being the World's own, it raises
-no edit echo; a child keeps the region offset it was dealt and a new
-cell takes the lowest free one; the sweep returns at once when the installed
+no edit echo; a child keeps the slot it was dealt, its `position` holding only
+its displacement from that slot, and a new cell takes the lowest free one; the sweep returns at once when the installed
 document is the one it last left, and skips a template whose row, variant
 row, and own row are unchanged before reading its children, so a quiet tick
 allocates nothing; read back with `world.placements`). Escrow
@@ -1989,7 +1989,9 @@ rows) beside each row's image and cell-free skeleton, so a tick that writes cell
 refreshes only the rows it changed. The whole definition is composed again only for
 a new source, a changed policy index, or a withheld row its disclosed placements
 were dealt or answered from; it is assembled as a document only for a delivery or a
-read. `world.budget` reports shared image storage and per-tick work to the operator,
+read. Whether a value-only delivery owes the document (`WorldDeliveryCursor.FrameMoved`)
+reads only the images of those placement-read rows, and a write that leaves a row's
+disclosed content as it was keeps the image it had. `world.budget` reports shared image storage and per-tick work to the operator,
 and `world.counters world.disclosure` its monotonic totals.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`

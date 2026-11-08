@@ -181,7 +181,8 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
-        IReadOnlyList<bool> support
+        IReadOnlyList<bool> support,
+        bool reportsAddresses
     ) {
         var extensions = new List<string> { SwapchainExtension };
         var featureStructureTypes = new List<uint>();
@@ -226,6 +227,18 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             extensions.Add(item: VulkanDeviceCheckpoints.ExtensionName);
         }
         Console.Error.WriteLine(value: $"[device-fault] {VulkanDeviceCheckpoints.ExtensionName} {(checkpoints ? "ENABLED" : "unavailable")}");
+
+        // A fault's addresses name the objects they fall in only through the instance's address record.
+        var addressBindings = (reportsAddresses && m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: VulkanDeviceAddressBindings.ExtensionName, instance: instance, physicalDeviceHandle: physicalDeviceHandle) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+                instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: VulkanDeviceAddressBindings.FeatureStructureType));
+
+        if (addressBindings) {
+            extensions.Add(item: VulkanDeviceAddressBindings.ExtensionName);
+            featureStructureTypes.Add(item: VulkanDeviceAddressBindings.FeatureStructureType);
+        }
+        Console.Error.WriteLine(value: $"[device-fault] {VulkanDeviceAddressBindings.ExtensionName} {(addressBindings ? "ENABLED" : "unavailable")}");
         if (SupportsPipelineExecutableProperties(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
@@ -436,9 +449,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
+            reportsAddresses: (instance.AddressBindings is not null),
             support: support
         );
         var request = new VulkanLogicalDeviceCreateRequest(
+            AddressBindings: instance.AddressBindings,
             EnabledFeatureIndices: featureIndices,
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,

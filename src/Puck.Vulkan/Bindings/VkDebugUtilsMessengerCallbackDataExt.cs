@@ -3,17 +3,17 @@ using System.Runtime.InteropServices;
 namespace Puck.Vulkan.Bindings;
 
 /// <summary>
-/// The data the validation layer passes to a debug-utils messenger callback for one message. Only the leading
-/// fields up to <see cref="Message"/> are mirrored — the callback reads the human-readable message and ignores
-/// the trailing object/label arrays — so the prefix layout matches the native structure exactly.
+/// The data a layer or the driver passes to a debug-utils messenger callback for one message: the message text, the
+/// labels open when it was raised and the objects it concerns. A device-address binding report
+/// (<see cref="Interop.VulkanDeviceAddressBindings"/>) reads its object and the binding its <see cref="Next"/> chain
+/// carries.
 /// </summary>
 /// <remarks>
-/// ABI-prefix mirror of VkDebugUtilsMessengerCallbackDataEXT (vulkan_core.h, SDK 1.4): the fields through
-/// <c>pMessage</c> are byte-identical to the native layout (the struct is only ever read through a pointer the
-/// loader supplies, never allocated managed-side).
+/// 1:1 ABI mirror of VkDebugUtilsMessengerCallbackDataEXT (vulkan_core.h, SDK 1.4): byte-identical layout, only ever
+/// read through a pointer the loader supplies, never allocated managed-side.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
-public struct VkDebugUtilsMessengerCallbackDataExt {
+public unsafe struct VkDebugUtilsMessengerCallbackDataExt {
     /// <summary>The type of this structure, as a <c>VkStructureType</c> value.</summary>
     public uint StructureType;
     /// <summary>A pointer to a structure extending this one, or <see langword="null"/>.</summary>
@@ -26,4 +26,16 @@ public struct VkDebugUtilsMessengerCallbackDataExt {
     public int MessageIdNumber;
     /// <summary>A null-terminated UTF-8 string with the human-readable message.</summary>
     public nint Message;
+    /// <summary>The count of queue labels open when the message was raised.</summary>
+    public uint QueueLabelCount;
+    /// <summary>The open queue labels, or <see langword="null"/>.</summary>
+    public nint QueueLabels;
+    /// <summary>The count of command-buffer labels open when the message was raised.</summary>
+    public uint CommandBufferLabelCount;
+    /// <summary>The open command-buffer labels, or <see langword="null"/>.</summary>
+    public nint CommandBufferLabels;
+    /// <summary>The count of objects the message concerns.</summary>
+    public uint ObjectCount;
+    /// <summary>The objects the message concerns, or <see langword="null"/>.</summary>
+    public VkDebugUtilsObjectNameInfoExt* Objects;
 }

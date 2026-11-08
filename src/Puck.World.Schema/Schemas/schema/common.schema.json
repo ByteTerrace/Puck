@@ -8507,7 +8507,7 @@
       ],
       "properties": {
         "transform": {
-          "description": "Preserve an existing child\u0027s local position, yaw, and scale.",
+          "description": "Preserve an existing child\u0027s displacement from its slot, yaw, and scale.",
           "type": "boolean",
           "default": false
         },
@@ -8563,7 +8563,7 @@
       "title": "WorldPlacementReflow"
     },
     "WorldPlacementDeal": {
-      "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region\u0027s offsets are metres in the template\u0027s frame, never scaled by it. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and the region\u0027s dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick\u0027s one mutation.",
+      "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region\u0027s offsets are metres in the template\u0027s frame, never scaled by it. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot\u0027s fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick\u0027s one mutation.",
       "type": [
         "object",
         "null"
@@ -8761,7 +8761,7 @@
         },
         "position": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+          "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
         },
         "yawDegrees": {
           "description": "The stamp yaw about \u002BY, degrees \u2014 world-space when Parent is null, added to the parent\u0027s own composed yaw otherwise. Same attach caveat as Position.",

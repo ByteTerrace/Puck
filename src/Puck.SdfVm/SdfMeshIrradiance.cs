@@ -1317,7 +1317,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_localVersion++;
         }
 
-        var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1), scratch: m_captureScratch);
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(EnvironmentProjections); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
         m_skyPeak = captured.SkyPeak;
@@ -2628,6 +2628,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public ReadOnlySpan<Vector3> Local => Shading!.Local(index: LightIndex);
         public ReadOnlySpan<uint> Lights => Shading!.Lights(index: LightIndex);
     }
+    // A block's words, zeroed, on the pinned heap. The probe cache's table, a large object that only a gen2 collects,
+    // names the blocks for as long as their probes stand, so words allocated young would be marked through its cards and
+    // copied into gen2 by the young collections the frame thread's allocation sets off; on the pinned heap a young
+    // collection neither copies nor promotes them, and a gen2 reclaims a block no entry names.
+    private static float[] BlockWords(int length) => GC.AllocateArray<float>(length: length, pinned: true);
     // The geometry words of one trace batch's probes, each probe's at its index: six sky shares, the packed octahedral
     // surface map and curvature, then the hit buffer, held as the floats' bits so a batch is one allocation.
     // `hits`, when given, is an array of at least count * HitWords words the block borrows until ReleaseHits; its words
@@ -2635,7 +2640,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class ProbeBlock(int count, uint[]? hits = null) {
         public const int FloatsPerProbe = 6 + SdfMeshIrradianceProbe.DepthWords;
 
-        private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
+        private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
         private uint[]? m_hits = (hits ?? new uint[count * SdfMeshProbeDepth.HitWords]);
 
         public long Bytes => (((long)m_floats.Length) * sizeof(float)) + (m_hits?.LongLength ?? 0) * sizeof(uint);
@@ -2650,7 +2655,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class LightBlock(int count) {
         public const int FloatsPerProbe = (36 + SdfMeshIrradianceProbe.LightWords);
 
-        private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
+        private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
 
         public long Bytes => (((long)m_floats.Length) * sizeof(float));
 
@@ -2904,6 +2909,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The lighting the probes are relit under: its version and when it was captured, the directional lights, the static
     // point and spot lights, the program's materials, the gains and sources, and the sky's irradiance projected on the CPU
     // (SdfSkyEnvironment), which the bounced light reads.
+    // Lighting.Capture's workspace: the frame thread's lists, sky map and sky layer table, which every capture refills.
+    private sealed class CaptureScratch {
+        public List<SdfLight> Lights { get; } = [];
+        public List<int> Indices { get; } = [];
+        public List<TracedLight> Points { get; } = [];
+        public Vector3[] Map { get; } = new Vector3[SdfSkyEnvironment.Texels];
+        public SdfSkyLayer[] Layers { get; } = new SdfSkyLayer[SdfSky.MaxLayers];
+        public SdfSkyDetails Details { get; } = new();
+    }
+    private readonly CaptureScratch m_captureScratch = new();
     private sealed class Lighting {
         public required int Version { get; init; }
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
@@ -2951,10 +2966,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The sky's cosine-weighted mean radiance about a normal: its irradiance over pi, the views pass's unit.
         public Vector3 SkyIrradiance(Vector3 normal) => (SdfSkyEnvironment.Irradiance(coefficients: SkyCoefficients, normal: normal) / MathF.PI);
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
-        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion) {
-            var lights = new List<SdfLight>();
-            var indices = new List<int>();
-            var points = new List<TracedLight>();
+        // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
+        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch) {
+            var lights = scratch.Lights;
+            var indices = scratch.Indices;
+            var points = scratch.Points;
+            lights.Clear();
+            indices.Clear();
+            points.Clear();
             var records = captureLights.Records;
 
             for (var index = 0; (index < frame.Lights.Count); index++) {
@@ -2973,10 +2992,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var skyPeak = 0f;
 
             if ((sources & SdfIndirectSources.Sky) != 0) {
-                var map = new Vector3[SdfSkyEnvironment.Texels];
-                var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+                var map = scratch.Map;
+                var layers = scratch.Layers;
 
-                frame.Sky.Pack(captureLights, frame.FarDistance, new SdfSkyDetails(), out var block, layers);
+                frame.Sky.Pack(captureLights, frame.FarDistance, scratch.Details, out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
                 SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
                 foreach (var texel in map) {

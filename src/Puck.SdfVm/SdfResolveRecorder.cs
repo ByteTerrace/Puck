@@ -74,7 +74,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var temporal = m_owner.TemporalOf(instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: render.Width, renderHeight: render.Height);
 
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
-            width: render.Width, height: render.Height, temporal: temporal, temporalEnabled: m_temporal);
+            width: render.Width, height: render.Height, temporal: temporal, temporalEnabled: m_temporal, residency: residency);
         BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[((int)SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: SdfWorldPackage.UpscaleSharpness))..], value: frame.Views[index].UpscaleSharpness);
         var set = m_sets.PassSet(slot: recording.Slot);
 

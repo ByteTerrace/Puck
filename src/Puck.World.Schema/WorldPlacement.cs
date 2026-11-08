@@ -508,7 +508,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// creation rejects loudly).</param>
 /// <param name="Position">The stamp position — world space when <paramref name="Parent"/> is null (today's behavior,
 /// unchanged), or this row's own local frame relative to <paramref name="Parent"/>'s COMPOSED world frame otherwise
-/// (see <paramref name="Parent"/>). Inert (still validated and stored, but read by nothing — neither the resolve nor
+/// (see <paramref name="Parent"/>). A dealt child's is its displacement from its <paramref name="DealSlot"/>'s offset
+/// in its template's region (<see cref="WorldPlacementFrameCompilation.LocalFrame"/>). Inert (still validated and stored, but read by nothing — neither the resolve nor
 /// the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved attachment, never
 /// this authored one.</param>
 /// <param name="YawDegrees">The stamp yaw about +Y, degrees — world-space when <paramref name="Parent"/> is null,

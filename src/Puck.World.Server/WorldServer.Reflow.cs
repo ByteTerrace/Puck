@@ -269,9 +269,10 @@ public sealed partial class WorldServer {
             ((children.Sum(selector: child => ((long)(child.Spatial?.Count ?? 0))) + edits.Sum(selector: edit => ((long)(edit.Spatial?.Count ?? 0)))) * (offsetCount + 1L)));
 
         if (setupWork >= policy.CandidateBudget) { reason = "reflow exhausted its candidate budget preparing the search; no changes were made"; return false; }
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var offsets = WorldPlacementDeal.Offsets(
             template: template,
-            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+            worldSeed: worldSeed
         );
         var placementsById = definition.Placements.ToDictionary(
             p => p.Id,
@@ -308,20 +309,24 @@ public sealed partial class WorldServer {
                 reason = $"spatial member '{child.Id}' must retain occupation or clearance volumes after edits";
                 return false;
             }
-            var origin = FixedVector3.FromVector3(value: child.Position);
+            // Candidates are compared and placed in the template's frame; a dealt member stores each as its
+            // displacement from its own slot, which reflow never changes.
+            var origin = WorldPlacementFrameCompilation.LocalFrame(parent: template, row: child, worldSeed: worldSeed, inheritScale: out _).FixedPosition;
+            var member = child;
 
             options[index] = ((editById.ContainsKey(key: children[index].Id) || IsPinned(placement: child))
                 ? [child]
                 : [child, .. offsets
                 .Where(predicate: offset => (offset != origin))
                 .OrderBy(keySelector: offset => (offset - origin).LengthSquared)
-                .Select(selector: offset => child with { Position = offset.ToVector3() })]
+                .Select(selector: offset => member with { Position = WorldPlacementFrameCompilation.StoredPosition(parent: template, row: member, localPosition: offset, worldSeed: worldSeed).ToVector3() })]
             );
         }
         var optionVolumes = options
             .Select(selector: optionSet => optionSet.Select(selector: option => WorldSpatialQueryCompilation.CompilePlacement(
             byId: placementsById,
-            candidate: option
+            candidate: option,
+            worldSeed: worldSeed
         )).ToArray())
             .ToArray();
 
@@ -337,7 +342,8 @@ public sealed partial class WorldServer {
         foreach (var volumes in optionVolumes.SelectMany(selector: optionsForChild => optionsForChild)
             .Concat(second: children.Select(selector: child => WorldSpatialQueryCompilation.CompilePlacement(
             byId: placementsById,
-            candidate: child
+            candidate: child,
+            worldSeed: worldSeed
         )))) {
             foreach (var volume in volumes) {
                 spatialRegion = spatialRegion.Enclose(box: volume.Bounds);
@@ -351,7 +357,7 @@ public sealed partial class WorldServer {
 
         setupWork += IndexWork(count: localVolumeCount);
         if (setupWork >= policy.CandidateBudget) { reason = "reflow exhausted its candidate budget preparing local spatial reads; no changes were made"; return false; }
-        var before = WorldSpatialQueryCompilation.Compile(placements: localRows);
+        var before = WorldSpatialQueryCompilation.Compile(placements: localRows, worldSeed: worldSeed);
 
         if (before.Unsupported.Count > 0) {
             var unsupported = before.Unsupported[0];

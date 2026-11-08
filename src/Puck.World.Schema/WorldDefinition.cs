@@ -427,7 +427,7 @@ public sealed partial record WorldDefinition(
     /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
     /// explicitly instead of silently dropping their possible blockers.</summary>
     [JsonIgnore]
-    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw);
+    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw, worldSeed: (Generation?.WorldSeed ?? 0UL));
     /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
     /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
     /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is
