@@ -1,4 +1,3 @@
-using Puck.Maths;
 using RuleNeeds = Puck.State.RuleNeeds;
 
 namespace Puck.World.Server;
@@ -212,10 +211,11 @@ public sealed partial class WorldRuleHost {
                 key: Host.Arena.Keys[key]
             ) ||
                 (Host.Body(index: index) is null) ||
-                (Host.ReadArenaCell(
+                !Host.ReadArenaCell(
                 key: key,
                 rowOrdinal: rowOrdinal
-            ) == FixedQ4816.Zero)
+            ).TryFinite(raw: out var value) ||
+                (value == 0L)
             ) {
                 continue;
             }
