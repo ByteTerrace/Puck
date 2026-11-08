@@ -62,6 +62,12 @@ is corrected in the same change.
   authority state, and it is never kept across a switch, toggled, or used by an
   activator. Binding compilation must receive the routed channel shapes.
 
+- **A seat in one token is `seat<n>`** (1-based, case-insensitive, `seat1`..`seat4`), parsed once by
+  `PrincipalTokens.TryParseSeat`: principals and grantees, `world.hud seat<n>`, `audio.listener` and a scenario's
+  `seat1:` labels. A grant subject `seat:<n>` is a different grammar (a `kind:value` subject, zero-based); a
+  keyword argument (`screen.source ... seat <n>`) and a HUD binding path (`seat.<n>.position.x`) keep their own
+  shapes.
+
 ## Modes and what survives a switch
 
 - A family's selector reads authoritative state only: `ActiveKit`,

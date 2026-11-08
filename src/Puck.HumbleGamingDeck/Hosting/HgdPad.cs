@@ -12,15 +12,19 @@ public static class HgdPad {
     public static HgdButtons ToButtons(in MachinePadState pad) {
         var buttons = HgdButtons.None;
 
-        if ((pad.LeftStick.Y >= MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadUp)) {
+        var directions = MachineDirections.From(pad: in pad);
+
+        if (directions.Up) {
             buttons |= HgdButtons.Up;
-        } else if ((pad.LeftStick.Y <= -MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadDown)) {
+        }
+        if (directions.Down) {
             buttons |= HgdButtons.Down;
         }
-        if ((pad.LeftStick.X >= MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadRight)) {
-            buttons |= HgdButtons.Right;
-        } else if ((pad.LeftStick.X <= -MachineInputThresholds.StickDirection) || pad.Buttons.HasFlag(flag: MachineButtons.DpadLeft)) {
+        if (directions.Left) {
             buttons |= HgdButtons.Left;
+        }
+        if (directions.Right) {
+            buttons |= HgdButtons.Right;
         }
         if (pad.Buttons.HasFlag(flag: MachineButtons.South)) {
             buttons |= HgdButtons.A;

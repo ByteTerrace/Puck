@@ -335,75 +335,36 @@ public sealed partial class NavigationRuntime {
                 ) { return false; }
             }
             for (var current = 0; (current < CellCount); current++) {
-                Coordinates(
-                    node: current,
-                    x: out var x,
-                    y: out var y,
-                    z: out var z
-                );
-                var minY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : -1
-                );
-                var maxY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : 1
-                );
+                foreach (var step in Neighbors(node: current)) {
+                    var next = step.Node;
 
-                for (var dy = minY; (dy <= maxY); dy++) {
-                    for (var dz = -1; (dz <= 1); dz++) {
-                        for (var dx = -1; (dx <= 1); dx++) {
-                            var axes = ((((dx == 0)
-                                ? 0
-                                : 1) + ((dy == 0)
-                                ? 0
-                                : 1)) + ((dz == 0)
-                                ? 0
-                                : 1));
-                            var nx = (x + dx); var ny = (y + dy); var nz = (z + dz);
+                    if (next <= current) { continue; }
+                    var candidate = (m_walkable[current] && CanTraverseStatic(
+                        current: current,
+                        dx: step.Dx,
+                        dy: step.Dy,
+                        dz: step.Dz,
+                        next: next,
+                        query: query,
+                        x: step.X,
+                        y: step.Y,
+                        z: step.Z
+                    ));
+                    var currentBit = ((m_edges[current] & NeighborBit(
+                        dx: step.Dx,
+                        dy: step.Dy,
+                        dz: step.Dz
+                    )) != 0U);
+                    var reverseBit = ((m_edges[next] & NeighborBit(
+                        dx: -step.Dx,
+                        dy: -step.Dy,
+                        dz: -step.Dz
+                    )) != 0U);
 
-                            if (
-                                (axes == 0) ||
-                                !AdmitsAxes(axes: axes) ||
-                                (((uint)nx) >= ((uint)Tuning.Width)) ||
-                                (((uint)ny) >= ((uint)Tuning.Layers)) ||
-                                (((uint)nz) >= ((uint)Tuning.Depth))
-                            ) { continue; }
-                            var next = Index(
-                                x: nx,
-                                y: ny,
-                                z: nz
-                            );
-
-                            if (next <= current) { continue; }
-                            var candidate = (m_walkable[current] && CanTraverseStatic(
-                                current: current,
-                                dx: dx,
-                                dy: dy,
-                                dz: dz,
-                                next: next,
-                                query: query,
-                                x: x,
-                                y: y,
-                                z: z
-                            ));
-                            var currentBit = ((m_edges[current] & NeighborBit(
-                                dx: dx,
-                                dy: dy,
-                                dz: dz
-                            )) != 0U);
-                            var reverseBit = ((m_edges[next] & NeighborBit(
-                                dx: -dx,
-                                dy: -dy,
-                                dz: -dz
-                            )) != 0U);
-
-                            if (
-                                (candidate != currentBit) ||
-                                (candidate != reverseBit)
-                            ) { return false; }
-                        }
-                    }
+                    if (
+                        (candidate != currentBit) ||
+                        (candidate != reverseBit)
+                    ) { return false; }
                 }
             }
             return true;
@@ -585,90 +546,36 @@ public sealed partial class NavigationRuntime {
                     return NavigationStatus.SearchLimit;
                 }
 
-                Coordinates(
-                    node: current,
-                    x: out var cx,
-                    y: out var cy,
-                    z: out var cz
-                );
-                var minY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : -1
-                );
-                var maxY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : 1
-                );
+                foreach (var step in Neighbors(node: current)) {
+                    var next = step.Node;
 
-                for (var dy = minY; (dy <= maxY); dy++) {
-                    for (var dz = -1; (dz <= 1); dz++) {
-                        for (var dx = -1; (dx <= 1); dx++) {
-                            var axes = ((((dx == 0)
-                                ? 0
-                                : 1) + ((dy == 0)
-                                ? 0
-                                : 1)) + ((dz == 0)
-                                ? 0
-                                : 1));
+                    if (
+                        !CanTraverse(
+                        current: current,
+                        dx: step.Dx,
+                        dy: step.Dy,
+                        dz: step.Dz,
+                        next: next,
+                        x: step.X,
+                        y: step.Y,
+                        z: step.Z
+                    ) ||
+                        (m_closedStamp[next] == m_searchStamp)
+                    ) {
+                        continue;
+                    }
+                    var nextCost = checked((m_cost[current] + step.Cost));
 
-                            if (
-                                (axes == 0) ||
-                                !AdmitsAxes(axes: axes)
-                            ) {
-                                continue;
-                            }
-                            var nx = (cx + dx);
-                            var ny = (cy + dy);
-                            var nz = (cz + dz);
-
-                            if (
-                                (((uint)nx) >= ((uint)Tuning.Width)) ||
-                                (((uint)ny) >= ((uint)Tuning.Layers)) ||
-                                (((uint)nz) >= ((uint)Tuning.Depth))
-                            ) {
-                                continue;
-                            }
-                            var next = Index(
-                                x: nx,
-                                y: ny,
-                                z: nz
-                            );
-
-                            if (
-                                !CanTraverse(
-                                current: current,
-                                dx: dx,
-                                dy: dy,
-                                dz: dz,
-                                next: next,
-                                x: cx,
-                                y: cy,
-                                z: cz
-                            ) ||
-                                (m_closedStamp[next] == m_searchStamp)
-                            ) {
-                                continue;
-                            }
-                            var stepCost = ((axes == 1)
-                                ? StraightCost
-                                : ((axes == 2)
-                                    ? DiagonalCost
-                                    : SpaceDiagonalCost
-                            ));
-                            var nextCost = checked((m_cost[current] + stepCost));
-
-                            if (
-                                (m_openStamp[next] != m_searchStamp) ||
-                                (nextCost < m_cost[next])
-                            ) {
-                                Open(
-                                    cost: nextCost,
-                                    goal: goal,
-                                    node: next,
-                                    parent: current
-                                );
-                            }
-                        }
+                    if (
+                        (m_openStamp[next] != m_searchStamp) ||
+                        (nextCost < m_cost[next])
+                    ) {
+                        Open(
+                            cost: nextCost,
+                            goal: goal,
+                            node: next,
+                            parent: current
+                        );
                     }
                 }
             }
@@ -700,13 +607,11 @@ public sealed partial class NavigationRuntime {
             ) {
                 return false;
             }
-            var axes = ((((dx == 0)
-                ? 0
-                : 1) + ((dy == 0)
-                ? 0
-                : 1)) + ((dz == 0)
-                ? 0
-                : 1));
+            var axes = StepAxes(
+                dx: dx,
+                dy: dy,
+                dz: dz
+            );
 
             if (
                 (Tuning.Kind == NavigationKind.Medium) &&
@@ -807,82 +712,35 @@ public sealed partial class NavigationRuntime {
                 if (!m_walkable[current]) {
                     continue;
                 }
-                Coordinates(
-                    node: current,
-                    x: out var x,
-                    y: out var y,
-                    z: out var z
-                );
-                var minY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : -1
-                );
-                var maxY = ((Tuning.Kind == NavigationKind.Surface)
-                    ? 0
-                    : 1
-                );
+                foreach (var step in Neighbors(node: current)) {
+                    var next = step.Node;
 
-                for (var dy = minY; (dy <= maxY); dy++) {
-                    for (var dz = -1; (dz <= 1); dz++) {
-                        for (var dx = -1; (dx <= 1); dx++) {
-                            var axes = ((((dx == 0)
-                                ? 0
-                                : 1) + ((dy == 0)
-                                ? 0
-                                : 1)) + ((dz == 0)
-                                ? 0
-                                : 1));
-
-                            if (
-                                (axes == 0) ||
-                                !AdmitsAxes(axes: axes)
-                            ) {
-                                continue;
-                            }
-                            var nx = (x + dx);
-                            var ny = (y + dy);
-                            var nz = (z + dz);
-
-                            if (
-                                (((uint)nx) >= ((uint)Tuning.Width)) ||
-                                (((uint)ny) >= ((uint)Tuning.Layers)) ||
-                                (((uint)nz) >= ((uint)Tuning.Depth))
-                            ) {
-                                continue;
-                            }
-                            var next = Index(
-                                x: nx,
-                                y: ny,
-                                z: nz
-                            );
-                            // Each static edge is symmetric. Prove it once, then record each endpoint's local bit.
-                            if (
-                                (next <= current) ||
-                                !CanTraverseStatic(
-                                current: current,
-                                dx: dx,
-                                dy: dy,
-                                dz: dz,
-                                next: next,
-                                x: x,
-                                y: y,
-                                z: z
-                            )
-                            ) {
-                                continue;
-                            }
-                            m_edges[current] |= NeighborBit(
-                                dx: dx,
-                                dy: dy,
-                                dz: dz
-                            );
-                            m_edges[next] |= NeighborBit(
-                                dx: -dx,
-                                dy: -dy,
-                                dz: -dz
-                            );
-                        }
+                    // Each static edge is symmetric. Prove it once, then record each endpoint's local bit.
+                    if (
+                        (next <= current) ||
+                        !CanTraverseStatic(
+                        current: current,
+                        dx: step.Dx,
+                        dy: step.Dy,
+                        dz: step.Dz,
+                        next: next,
+                        x: step.X,
+                        y: step.Y,
+                        z: step.Z
+                    )
+                    ) {
+                        continue;
                     }
+                    m_edges[current] |= NeighborBit(
+                        dx: step.Dx,
+                        dy: step.Dy,
+                        dz: step.Dz
+                    );
+                    m_edges[next] |= NeighborBit(
+                        dx: -step.Dx,
+                        dy: -step.Dy,
+                        dz: -step.Dz
+                    );
                 }
             }
         }

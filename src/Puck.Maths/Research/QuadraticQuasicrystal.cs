@@ -185,32 +185,22 @@ public static class QuadraticQuasicrystal {
     /// <param name="tiles">Receives the tiling in physical order: <see langword="false"/> is the short tile, <see langword="true"/> the long. Every element is written.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
     public static void Word(long p, long q, long d, long r, Span<bool> tiles) {
-        Span<long> terms = stackalloc long[128];
-        int periodStart;
-        int periodLength;
+        Span<long> scratch = stackalloc long[128];
 
-        while (true) {
-            try {
-                _ = ContinuedFraction.Expand(
-                    d: d,
-                    p: p,
-                    periodLength: out periodLength,
-                    periodStart: out periodStart,
-                    q: q,
-                    r: r,
-                    terms: terms
-                );
-
-                break;
-            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2))
-                    ? (terms.Length * 2)
-                    : int.MaxValue
-                );
-
-                terms = new long[nextLength];
-            }
-        }
+        _ = ContinuedFraction.ExpandGrowing(
+            d: d,
+            heap: out var heap,
+            p: p,
+            periodLength: out var periodLength,
+            periodStart: out var periodStart,
+            q: q,
+            r: r,
+            scratch: scratch
+        );
+        ReadOnlySpan<long> terms = ((heap is null)
+            ? scratch
+            : heap
+        );
 
         if (tiles.IsEmpty) { return; }
 

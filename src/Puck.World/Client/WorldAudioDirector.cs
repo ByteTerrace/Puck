@@ -1031,7 +1031,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         );
     }
     // The listener policy: focus = the first joined seat's resolved view camera (the editor rig when that
-    // seat edits — the frame source resolves the SAME rig the seat renders through); seat:<n> pins that seat (falling
+    // seat edits — the frame source resolves the SAME rig the seat renders through); seat<n> pins that seat (falling
     // back to focus while it is unjoined); a camera name resolves the declared camera row. No candidate at all
     // (headless, no seats) listens from the origin facing -Z.
     //
@@ -1039,13 +1039,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         var listener = (m_definition?.Audio.Listener ?? WorldAudioDefaults.ListenerFocus);
 
         if (
-            listener.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldAudioDefaults.ListenerSeatPrefix
-        ) &&
-            int.TryParse(
-            s: listener.AsSpan(start: WorldAudioDefaults.ListenerSeatPrefix.Length),
-            result: out var seat
+            PrincipalTokens.TryParseSeat(
+            number: out var seat,
+            token: listener
         ) &&
             ((seat - 1) is var slot) &&
             (((uint)slot) < ((uint)seats.Length)) &&
@@ -1060,9 +1056,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             b: WorldAudioDefaults.ListenerFocus,
             comparisonType: StringComparison.Ordinal
         ) &&
-            !listener.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldAudioDefaults.ListenerSeatPrefix
+            !PrincipalTokens.TryParseSeat(
+            number: out _,
+            token: listener
         ) &&
             (ResolveCameraListener(
             name: listener,
