@@ -40,6 +40,7 @@ A few rules apply to every limit on this page:
 | Rows per section, after pools expand | 1,024 | `StateCapacity.MaxRows` | [Rows, cells, and values](data-model.md) |
 | Cells per row | 4,096 | `StateCapacity.MaxCellsPerRow` | [Rows, cells, and values](data-model.md#cell-ceilings) |
 | Initial room for a keyed row with no declared capacity | Its seed count, including zero | `StateRow.InitialCellCapacity` | [The state arena](arena.md#from-declarations-to-storage) |
+| Priced room for a keyed row with no declared capacity | The cells-per-row ceiling, or its token domain's room when smaller | `RuleCompileContext.RowCapacity` | [Rule analysis](analysis.md#prices-read-declarations) |
 | Text value length | 1,024 UTF-16 code units | `StateCapacity.MaxTextValueLength` | [Rows, cells, and values](data-model.md) |
 | Enums per section | 256 | `StateCapacity.MaxEnums` | [Rows, cells, and values](data-model.md#enums) |
 | Members per enum | 1,024 | `StateCapacity.MaxEnumMembers` | [Rows, cells, and values](data-model.md#enums) |

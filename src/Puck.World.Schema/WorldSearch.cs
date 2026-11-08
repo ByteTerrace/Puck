@@ -1630,6 +1630,14 @@ public static class WorldSearchCompilation {
 
             if (!TryPrice(definition, rows[index], plan.Work.Judge, allowance, positions[index], context,
                 plan.Shapes, plan.CellCount, (plan.Chance?.CellCount ?? 0), scores[index], out var work, out reason)) {
+                var priced = resolvedPlans[index].Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]))
+                    .Append(resolvedPlans[index].TokensOrdinal).Append(resolvedPlans[index].ScoresOrdinal);
+                var uncapped = judges[index].Aggregate(
+                    seed: WorldRuleWorkBudget.RowsAtCeiling(context: context, ordinals: priced),
+                    func: (names, judge) => [.. names.Union(second: WorldRuleWorkBudget.RowsAtCeiling(context: context, rule: judge), comparer: StringComparer.Ordinal)]);
+                if (uncapped.Count > 0) {
+                    reason += $"; {string.Join(separator: ", ", values: uncapped.Select(selector: static name => $"'{name}'"))} declare no capacity and are priced at the {StateCapacity.MaxCellsPerRow}-cell ceiling they may grow to: author each one's capacity, or key it over a capped token domain";
+                }
                 return false;
             }
             plans[index] = plan with { Work = work };

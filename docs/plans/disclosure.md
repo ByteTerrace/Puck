@@ -205,7 +205,7 @@ that erase key faults) are not disclosure and stay in the
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
 | [high] A seat's rule or interaction with a literal read of a hidden key compiles or refuses `StateCellUndeclared` by the hidden row's membership | Closed: a recipient's mutation of a program section is refused by kind (`WorldSectionFacts.IsProgram`) | 3, landed |
-| [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed for rule edits by the same refusal; pricing still reads members (open items) | 3, landed |
+| [high] A seat's rule edit that eats work allowance makes search re-pricing print a minimum counting a hidden score row's cells (`WorldSearchCompilation.TryPrice`) | Closed: rule edits by the same refusal, and pricing reads declarations only (`RuleCompileContext.RowCapacity`; `RecipientOracleLawTests`); growth and memory admission still read reservations (open items) | 3, landed |
 | [high] Replacing a dealt template without its deal keeps its children, so the distributed-parent refusal answers whether the hidden deal has any | Closed: an upsert or removal admits the installed placement's footprint too (`WorldRecipientView.AdmitsPlacement`) | 3, landed |
 | [high] Removing an absent key from a public row answers one text when no row ever minted the name and another when a hidden row did (the arena's key table is shared) | Closed: the compose door answers `StateArena.MissingCellReason`, the arena's own text, when the name does not resolve | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
@@ -478,6 +478,8 @@ keeps that invariant in one of two ways, and every check is one or the other:
   judges row policies alone; the arena judges cell and containing-zone
   policies at the firing (`StateArena.ReadAudienceEncloses`, through
   `TryEncloseAudience` for transforms and `ArenaSearch` before landing). The
+  work sheet and every search price read a row's declared room
+  (`RuleCompileContext.RowCapacity`), never its cells or reservation. The
   property that makes this sufficient is that the installed document
   validates: every write that changes members is checked at its own door (the
   relation check at commit, binding revalidation when a bound row is written),
@@ -540,9 +542,13 @@ jobs have no mutation kind: they change only through a whole-document rebuild,
 an operator verb. A section whose content touches state through rows it names
 (machine bindings, a kit's redraws) stays open to recipients and admits those
 rows as its footprint. The rule refusal closes the re-pricing instance found
-through a rule edit; the pricing itself still reads current members (a score
-row's cell count, an uncapped row's size), which a recipient door that moves
-the work sheet another way would expose ([open items](#open-items)).
+through a rule edit, and pricing itself reads declarations only: every price
+reads a row's room through `RuleCompileContext.RowCapacity`, which answers an
+uncapped row's ceiling (its token domain's, or the engine's), never its cells,
+so no door that moves a hidden row's members moves the work sheet or a search's
+allowance ([the costing decision](../decisions/state-and-language.md#costing)).
+An arena growth's work and memory admission still read reservations
+([open items](#open-items)).
 
 **The options weighed.** (a) Admission computes the full read closure of every
 later stage: this is the footprint above, and it holds only because the closure
@@ -1200,16 +1206,24 @@ commit, as machine readings are not a repository baseline.
   any device; `pipeline.commit` changes the shared view. All take
   `CommandAudience.Anyone`. Decide them as `player.claim`, `player.cycle` and
   `pipeline.load` were decided.
-- Work pricing reads members. `RuleCompileContext.RowCapacity` prices a row
-  without an explicit `capacity` by `StateRow.InitialCellCapacity`, which is its
-  current cell count, and `WorldSearchCompilation.TryPrice` counts the score row's current
-  cells as `seats`. Whole-document validation re-prices rules and searches on
-  every install, so a recipient edit that moves the work sheet (an
-  `UpsertStateRow` raising a public row's capacity that a rule folds over is
-  the candidate; unconfirmed) would make the rules' ceiling check or a
-  search's minimum depend on a hidden row's size. Decide whether pricing reads
-  declarations only (an uncapped row priced at its ceiling, or every priced row
-  required to declare a capacity), then add the two-variant law.
+- Growth and memory admission read reservations. Work prices read declarations
+  only ([the costing decision](../decisions/state-and-language.md#costing)), but
+  an arena growth is still charged `StateArena.ReservationWork` over the whole
+  proposed layout (every row's reserved room, hidden rows included) plus the
+  growth already spent this tick (`WorldRuleHost.Growth`), and judged against
+  the arena byte and retained-journal ceilings, so a recipient's mint into a
+  public uncapped row can be refused or admitted by a hidden row's reservation.
+  The validator's vector-byte and undo-byte checks
+  (`WorldDefinitionValidator.State`, `RuleGroup`) read seed reservations, which
+  are live members at an install. Candidates: admit memory against declared
+  ceilings once at load, and make a growth's copy proportional to the row that
+  grows.
+- Search plan validation reads members. `WorldSearchCompilation` requires a
+  relocate's or promote's `codes` row to hold as many cells as the tokens row,
+  and resolves a tandem's companion by its position among the tokens' current
+  cells, both on every install. A rule that removes a token, or reorders the
+  row, changes what an unrelated recipient edit's validation answers. Declare
+  the relation (codes keyed over the tokens, a companion named by key) instead.
 - Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
   cells through `DealSlot` and position, which step 4 owns. Its remaining
   delivery findings are closed by the view/cursor work in decision 5.
