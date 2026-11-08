@@ -787,19 +787,9 @@ Compared with this tree **[opened]**:
   `CompanionTrustLawTests`, `CompanionRoleLawTests` and
   `worlds/debug/companion-body.puck` do not exist in this tree.
 
-The repository already records this verdict **[opened]**
-(`docs/plans/open-items.md:1003-1010`):
-
-```text
-- [low] Branch `lane/companion-v1` on `origin` (companions v1) is superseded
-  for custody and trust by the protocol build, but holds step 9 and 10 prior art
-  no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
-  drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
-  and budget fields, `CompanionTrustLawTests`' driver laws, and the debug world's
-  faerie split (`companion-body.puck`, role rows in `night` and `garden`). Step 9
-  ports them onto the custody bindings (`WorldCompanionCustody.TryBinding`); keep
-  the branch until then.
-```
+The [companion build packet](../open-items.md#transfers-federation-and-server)
+records the branch's remaining prior art and keeps it until step 9 ports that
+work onto the custody bindings.
 
 ## 7. Disclosure
 
