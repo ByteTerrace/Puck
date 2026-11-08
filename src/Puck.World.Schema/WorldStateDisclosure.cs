@@ -379,80 +379,30 @@ public static class WorldStateDisclosure {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: arena);
 
+        return DiscloseDocument(
+            arena: arena,
+            definition: definition,
+            fields: DisclosedFields.For(arena: arena, definition: definition, recipient: recipient, unrestricted: unrestricted),
+            recipient: recipient,
+            unrestricted: unrestricted
+        );
+    }
+    internal static WorldStateDisclosed DiscloseDocument(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, DisclosedFields? fields) {
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
             unrestricted: unrestricted
         );
-        var authored = definition.AuthoredState;
-        var rows = new WorldStateRow[authored.Count];
+        var rows = new WorldStateRow[definition.AuthoredState.Count];
         var withheld = new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < authored.Count); index++) {
-            var exported = arena.ToRow(rowOrdinal: index);
-            var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
-
-            rows[index] = row;
-            if (!observer.TryRow(
-                ordinal: out var ordinal,
-                row: row
-            )) {
-                continue;
-            }
-
-            if (observer.ReadsWhole(rowOrdinal: ordinal)) {
-                continue;
-            }
-
-            var rowReadable = observer.Allows(policy: row.Visibility);
-            var cells = (row.Cells ?? []);
-            var kept = new List<StateCell>(capacity: cells.Count);
-
-            foreach (var cell in cells) {
-                if (
-                    rowReadable &&
-                    observer.CanRead(
-                    key: (arena.Keys.TryResolve(
-                        key: out var interned,
-                        name: cell.Key
-                    )
-                        ? interned
-                        : default),
-                    row: row,
-                    rowOrdinal: ordinal
-                )
-                ) {
-                    kept.Add(item: cell);
-                }
-            }
-
-            withheld[row.Name.Value] = new WorldWithheldRow(
-                Count: (cells.Count - kept.Count),
-                Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit),
-                WholeRow: !rowReadable
-            );
-            // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
-            // bookkeeping is a reading of the cells withheld from it, so it goes too.
-            rows[index] = WithoutStorageMetadata(row: row) with { Cells = kept };
+        for (var index = 0; (index < rows.Length); index++) {
+            rows[index] = DiscloseRow(arena: arena, fields: fields, index: index, observer: ref observer, withheld: out var record);
+            if (record is not null) { withheld[rows[index].Name.Value] = record; }
         }
 
-        // Fields are authored in state rows and physical topologies. Rebuild that part from the SAME projection
-        // presentation uses; copying the original field traits would disclose their seeds and reaction inputs.
-        if (!unrestricted && definition.FieldRegions.Count > 0 && definition.StateRaw is { } state) {
-            var fields = WorldFieldsSection.ToStateSection(FieldProjection(definition, arena, recipient));
-            var fieldRows = (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal);
-            var authoredFields = authored.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal);
-            var physicalRows = rows.Select(row => !authoredFields.Contains(row.Name.Value) ? row :
-                fieldRows.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
-                // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name
-                // and policy, with no physical topology, trait, seed or paint that could reconstruct the field.
-                new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Keys.Instance,
-                    HostOwned: true, Visibility: row.Visibility)).ToArray();
-            definition = definition with { StateRaw = state with {
-                World = physicalRows,
-                Lattices = [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
-            } };
-            rows = physicalRows;
+        if (fields is not null) {
+            definition = definition with { StateRaw = definition.StateRaw! with { World = rows, Lattices = fields.Lattices } };
         }
 
         if (withheld.Count == 0) {
@@ -476,6 +426,101 @@ public static class WorldStateDisclosure {
             Definition: disclosed,
             Withheld: withheld
         );
+    }
+    // One authored row as the recipient's document carries it: the live export, and for a declaration that can
+    // withhold, only the readable cells. Disclose and the shared image table's row refresh both derive a row here, so a
+    // refreshed row and a whole composition agree.
+    internal static WorldStateRow DiscloseRow(StateArena arena, int index, ref Observer observer, DisclosedFields? fields, out WorldWithheldRow? withheld) {
+        var exported = arena.ToRow(rowOrdinal: index);
+        var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
+
+        withheld = null;
+        if (observer.TryRow(ordinal: out var ordinal, row: row) && !observer.ReadsWhole(rowOrdinal: ordinal)) {
+            var rowReadable = observer.Allows(policy: row.Visibility);
+            var cells = (row.Cells ?? []);
+            var kept = new List<StateCell>(capacity: cells.Count);
+
+            foreach (var cell in cells) {
+                if (
+                    rowReadable &&
+                    observer.CanRead(
+                    key: (arena.Keys.TryResolve(
+                        key: out var interned,
+                        name: cell.Key
+                    )
+                        ? interned
+                        : default),
+                    row: row,
+                    rowOrdinal: ordinal
+                )
+                ) {
+                    kept.Add(item: cell);
+                }
+            }
+
+            withheld = new WorldWithheldRow(
+                Count: (cells.Count - kept.Count),
+                Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit),
+                WholeRow: !rowReadable
+            );
+            // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
+            // bookkeeping is a reading of the cells withheld from it, so it goes too.
+            row = WithoutStorageMetadata(row: row) with { Cells = kept };
+        }
+
+        return (fields?.Project(row: row) ?? row);
+    }
+    // The withheld rows whose disclosed cells DisclosePlacements reads: a dealt template's row and variant row, and every
+    // row a responsive placement's entries read. Any other row's cells leave the disclosed placements as they stand.
+    internal static IReadOnlySet<string> PlacementReads(WorldDefinition definition, IReadOnlyDictionary<string, WorldWithheldRow> withheld) {
+        var reads = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (withheld.Count == 0) { return reads; }
+        foreach (var placement in definition.Placements) {
+            if (placement.Deal is { } deal) {
+                if (withheld.ContainsKey(key: deal.Row)) { reads.Add(item: deal.Row); }
+                if ((deal.Variants is { } variants) && withheld.ContainsKey(key: variants.Row)) { reads.Add(item: variants.Row); }
+            }
+            if (placement.Respond is { Count: > 0 }) {
+                _ = WorldPlacementResponse.Reads(placement: placement, rows: row => {
+                    if (withheld.ContainsKey(key: row)) { reads.Add(item: row); }
+
+                    return false;
+                });
+            }
+        }
+        return reads;
+    }
+    // The physical-field half of a replica document. Fields are authored in state rows and physical topologies; this
+    // rebuilds that part from the same projection presentation uses, since copying the authored field traits would
+    // disclose their seeds and reaction inputs.
+    internal sealed class DisclosedFields {
+        private readonly HashSet<string> m_authored;
+        private readonly Dictionary<string, WorldStateRow> m_disclosed;
+
+        private DisclosedFields(HashSet<string> authored, Dictionary<string, WorldStateRow> disclosed, IReadOnlyList<LatticeTopology> lattices) {
+            m_authored = authored; m_disclosed = disclosed; Lattices = lattices;
+        }
+
+        // The document's topologies with its field topologies replaced by the disclosed ones.
+        public IReadOnlyList<LatticeTopology> Lattices { get; }
+
+        // Null when the document has no field to project or the reader is unrestricted.
+        public static DisclosedFields? For(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted) {
+            if (unrestricted || (definition.FieldRegions.Count == 0) || (definition.StateRaw is not { } state)) { return null; }
+            var fields = WorldFieldsSection.ToStateSection(FieldProjection(definition, arena, recipient));
+
+            return new DisclosedFields(
+                authored: definition.AuthoredState.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal),
+                disclosed: (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal),
+                lattices: [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
+            );
+        }
+        public WorldStateRow Project(WorldStateRow row) => !m_authored.Contains(row.Name.Value) ? row :
+            m_disclosed.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :
+            // Replica snapshot row ordinals must stay aligned. An undisclosed field keeps only its row name and policy,
+            // with no physical topology, trait, seed or paint that could reconstruct the field.
+            new WorldStateRow(Name: row.Name, Kind: row.Kind, Domain: StateDomain.Keys.Instance, HostOwned: true, Visibility: row.Visibility);
     }
     /// <summary>Removes reservation, physical slot and cursor metadata that can reveal omitted membership, preserving
     /// the declared or inferred domain; the kept cells then load into contiguous slots. A readback applies this even

@@ -11,7 +11,6 @@ public sealed class WorldDeliveryCursor {
     private readonly Dictionary<string, ContentPin> m_rows = [];
     private readonly HashSet<int> m_metadataPrimers = [];
     private ContentPin? m_definition;
-    private WorldDefinition? m_lastSource;
 
     /// <summary>The sequence this stream has delivered.</summary>
     public long Sequence { get; private set; }
@@ -19,23 +18,18 @@ public sealed class WorldDeliveryCursor {
     public int RetainedRows => m_rows.Count;
     /// <summary>Whether the replica's current disclosed document equals the one this stream delivered, including
     /// subsequent row snapshots. Used at a traveller's install boundary, never against the authority identity.</summary>
-    public bool Holds(WorldRecipientView view) => m_definition is null || m_definition == view.Images.DefinitionImage(view).Identity;
+    public bool Holds(WorldRecipientView view) => m_definition is null || m_definition == view.Images.DefinitionIdentity(view);
     /// <summary>Delivers a definition only when its observable content differs, and seeds all its row images.</summary>
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
         if (!view.Observes) { return null; }
-        var (definition, identity) = view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica
-            ? view.Images.DefinitionImage(view) : Presentation(view);
-        if (ReferenceEquals(definition, m_lastSource)) { return null; }
-        m_lastSource = definition;
+        var replica = (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica);
+        var presented = replica ? null : view.Definition;
+        var identity = replica ? view.Images.DefinitionIdentity(view) : ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(presented!));
         if (identity == m_definition) { return null; }
         m_definition = identity;
         Seed(view);
         Delivered();
-        return definition;
-    }
-    private static (WorldDefinition Definition, ContentPin Identity) Presentation(WorldRecipientView view) {
-        var definition = view.Definition;
-        return (definition, ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(definition)));
+        return presented ?? view.Images.Definition(view);
     }
     /// <summary>Records the images a presentation delivery actually carried.</summary>
     public void Delivered(WorldRecipientView view) { Seed(view); Delivered(); }
@@ -72,13 +66,10 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Records a snapshot's delivered rows in the document identity too, so a later hidden-only install
     /// cannot resend public values already received through snapshots.</summary>
     public void DeliveredRows(WorldRecipientView view) {
-        if (m_definition is not null) {
-            var image = view.Images.DefinitionImage(view);
-            m_definition = image.Identity; m_lastSource = image.Definition;
-        }
+        if (m_definition is not null) { m_definition = view.Images.DefinitionIdentity(view); }
         Delivered();
     }
     /// <summary>Releases content after withholding or detachment. A resumed delivery seeds it again, while the
     /// stream's sequence continues.</summary>
-    public void Release() { m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_lastSource = null; }
+    public void Release() { m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; }
 }
