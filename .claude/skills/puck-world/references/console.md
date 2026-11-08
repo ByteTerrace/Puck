@@ -758,6 +758,8 @@ document accounting, sleeping count, machine faults, `session-drift` and `dirty`
 A recipient's status omits those; its gravity summary reads only authored view
 parameters. `world.properties` carries the stamped principal through the query
 door and evaluates property cells through `WorldStateReadView`.
+Raw rule and interaction queries require `Principal.IsAuthority` at
+`WorldRuleHost.AnswerSubmittedQuery`, before reaching their compiled diagnostics.
 Placements come from the view; restricted dealt slots are still step 4's work.
 `world.state`,
 `world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`

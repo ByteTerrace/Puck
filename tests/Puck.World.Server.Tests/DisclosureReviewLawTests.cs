@@ -9,6 +9,16 @@ public sealed class DisclosureReviewLawTests {
         new(() => server.Definition, () => server.Arena, recipient, tier, () => true, new WorldDisclosureImages(),
             server.AuthorityIdentity, () => server.DeliveryTime);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RawCompiledDiagnosticQueriesRequireAuthority(bool interaction) {
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument());
+        WorldQuery query = interaction ? new WorldQuery.Interactions() : new WorldQuery.Rules();
+        Assert.True(fixture.Server.AnswerSubmittedQuery(query, Principal.Seat(0)).Refused);
+        Assert.False(fixture.Server.AnswerSubmittedQuery(query, Principal.Console).Refused);
+    }
+
     [Fact]
     public void PropertyQueriesReadTheCallersLiveView() {
         var definition = Fixtures.BuildDocument() with {
