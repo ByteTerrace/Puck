@@ -353,28 +353,29 @@ public static class SdfMeshCollapse {
                 if (m_touched[place] == m_pass) { continue; }
                 if ((m_changed[place] == m_pass) && ((m_kind[place] = Kind(penalize: false, place: place)) == Locked)) { continue; }
 
+                // No revision changes before this place's first commit, so an edge refused at its current revisions is
+                // left out before pricing and laying out the fan: the others keep their order.
                 m_targets.Clear();
                 Targets(place: place);
                 foreach (var target in m_targetPlaces) {
-                    if (m_touched[target] != m_pass) { m_targets.Add(item: (Cost(from: place, to: target), target)); }
+                    if ((m_touched[target] != m_pass) && !Refused(from: place, to: target)) { m_targets.Add(item: (Cost(from: place, to: target), target)); }
                 }
-                m_targets.Sort();
                 if (m_targets.Count == 0) { continue; }
+                m_targets.Sort();
                 PrepareFrom(place: place);
                 foreach (var (_, target) in m_targets) {
-                    var edge = (place, target);
-                    var revision = (m_revisions[place], m_revisions[target]);
-                    if (m_rejected.TryGetValue(key: edge, value: out var rejected) && (rejected == revision)) { continue; }
                     if (TryCollapse(cosine: cosine, error: error, from: place, to: target)) {
                         taken++;
                         break;
                     }
-                    m_rejected[edge] = revision;
+                    m_rejected[(place, target)] = (m_revisions[place], m_revisions[target]);
                 }
             }
 
             return taken;
         }
+        private bool Refused(int from, int to) =>
+            (m_rejected.TryGetValue(key: (from, to), value: out var rejected) && (rejected == (m_revisions[from], m_revisions[to])));
         // Lists a place's alive triangles: the pass's list less those a collapse this pass removed.
         private List<int> Alive(int place, List<int> fan) {
             fan.Clear();
