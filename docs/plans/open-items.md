@@ -1067,7 +1067,7 @@ retirement.
 
 - [medium] A solution build intermittently fails in `Puck.Azure.Functions`:
   the Functions worker's generated `obj/azure_functions/azure_functions.g.csproj`
-  cannot resolve `Azure.Functions.Sdk` ("no version specified in the project or
+  cannot resolve Azure.Functions.Sdk ("no version specified in the project or
   global.json"), and an identical retry builds clean. It appears when several
   restores run at once; find whether it is a restore race on the generated
   project, pin the SDK where it resolves, and name the hazard in contributing's

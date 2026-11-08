@@ -5,30 +5,31 @@ namespace Puck.Cli;
 
 /// <summary>The CLI process's installed extensions, shared by its verbs and nested invocations.</summary>
 public static class CliExtensions {
-    private static readonly AsyncLocal<PuckExtensionSet?> Current = new();
-    private static readonly Lazy<PuckExtensionSet> Extensions = new(valueFactory: () => {
-        var extensions = PuckExtensionDiscovery.Compose(
-            builtIns: [],
-            directories: PuckExtensionDiscovery.DefaultDirectories()
-        );
+    private static readonly Lock Gate = new();
+    private static PuckExtensionSet? Extensions;
 
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => extensions.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        return extensions;
-    });
+    static CliExtensions() => AppDomain.CurrentDomain.ProcessExit += (_, _) => Extensions?.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     /// <summary>Gets the immutable installation for this process; registration performs no provider I/O.</summary>
-    public static PuckExtensionSet Installed => (Current.Value ?? Extensions.Value);
-
-    /// <summary>Uses a caller-owned extension set for this invocation and its nested verbs. Disposing the scope
-    /// restores the previous selection; the caller retains ownership of the set.</summary>
-    public static IDisposable Use(PuckExtensionSet extensions) {
-        ArgumentNullException.ThrowIfNull(argument: extensions);
-        var previous = Current.Value;
-        Current.Value = extensions;
-        return new Selection(previous: previous);
+    public static PuckExtensionSet Installed {
+        get {
+            lock (Gate) {
+                return Extensions ??= PuckExtensionDiscovery.Compose(
+                    builtIns: [],
+                    directories: PuckExtensionDiscovery.DefaultDirectories()
+                );
+            }
+        }
     }
 
-    private sealed class Selection(PuckExtensionSet? previous) : IDisposable {
-        public void Dispose() => Current.Value = previous;
+    /// <summary>Installs an explicitly composed set before the process's first verb, for an embedding host or a test.
+    /// The CLI owns the supplied set after success and disposes it at process exit.</summary>
+    public static void Install(PuckExtensionSet extensions) {
+        ArgumentNullException.ThrowIfNull(argument: extensions);
+
+        lock (Gate) {
+            if (Extensions is not null) { throw new InvalidOperationException(message: "The CLI's extensions are already installed."); }
+            Extensions = extensions;
+        }
     }
 }
