@@ -416,12 +416,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     m_owner.Begin(residency: m_view.Residency);
                     return ((m_view.Residency.Staged(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
                 }
-            // The glass pass skips a frame with no glass draw once its target holds a clear; the clear and the shading
-            // pass never skip, since the shading pass writes the lit image every pass after it reads.
+            // The glass clear and the glass raster skip a frame in which no glass draw meets the view's frustum
+            // (SdfWorldPasses.GlassSeen); the shading pass, which reads their sums and target, then draws nothing.
+            case SdfWorldPackage.Parts.GlassClear:
             case SdfWorldPackage.Parts.Glass: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return ((m_view.Residency.Staged(context: in context).GlassDrawCount == 0) && TargetsWritten);
+                    return !m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: in context);
                 }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
@@ -484,6 +485,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
             var sums = recording.Outputs[0].Buffer!;
 
+            m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
             recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, sums.SizeBytes);
 
             return RenderGraphPackageOutcome.Drew;
@@ -496,6 +498,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var width = recording.Width;
         var height = recording.Height;
 
+        if (IsGlass) {
+            m_owner.NoteGlassExtent(instance: m_context.Instance, width: width, height: height);
+        }
         residency.RequestExtent(height: recording.FrameHeight, width: recording.FrameWidth);
         SdfFrameBlock.Write(
             block: recording.PassBlock,
