@@ -379,7 +379,7 @@ creation: `creation:<id>` is a grant subject **[opened]**
 also author a contribution slot that a federation partner fills
 (`slotCreationId`): filling it re-points the placement's `prototypeId`, and the
 server stamps the contributor **[opened]**
-(`src/Puck.World.Server/WorldDocument.Compose.cs:2051-2083`). Whether a
+(`WorldDocument.TryComposeUpsertPlacement` in `src/Puck.World.Server/WorldDocument.Compose.cs`). Whether a
 contributor can bring a creation the host's document does not already declare
 is **[unverified]**.
 
