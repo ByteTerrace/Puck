@@ -97,7 +97,11 @@ public static partial class SdfWorldPackage {
     private static ShaderPipelineResource AtRenderExtent(ShaderPipelineResource resource) => resource with {
         Dimensions = ((resource.Dimensions is not { Mode: ShaderPipelineDimensionMode.Relative }) ? resource.Dimensions : ShaderPipelineDimensions.Render()),
         Count = ((resource.Count is null) ? null : [.. resource.Count.Select(selector: static term => term with {
-            Per = [.. term.Per.Select(selector: static basis => ((basis == ShaderPipelineCountBasis.Extent) ? ShaderPipelineCountBasis.RenderExtent : basis))],
+            Per = [.. term.Per.Select(selector: static basis => basis switch {
+                ShaderPipelineCountBasis.Extent => ShaderPipelineCountBasis.RenderExtent,
+                ShaderPipelineCountBasis.ExtentTiles => ShaderPipelineCountBasis.RenderExtentTiles,
+                _ => basis,
+            })],
         })]),
     };
 

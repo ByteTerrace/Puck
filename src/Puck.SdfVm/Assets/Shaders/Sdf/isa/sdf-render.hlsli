@@ -99,13 +99,16 @@
 #define SDF_VISIBILITY_KIND_MESH       2u
 
 // The visibility record's identity fields and the record passes' workgroup edge (SdfVisibility).
-#define SDF_VISIBILITY_KIND_SHIFT  30u
-#define SDF_VISIBILITY_SOURCE_MASK 0x3FFFFFFFu
-#define SDF_VISIBILITY_GROUP_EDGE  8u
-#define SDF_SHADOW_BITS            8u
-#define SDF_SHADOW_MASK            0x000000FFu
-#define SDF_SHADOW_SLOTS           4u
-#define SDF_SHADOW_FADE_CAPACITY   2u
+#define SDF_VISIBILITY_KIND_SHIFT   30u
+#define SDF_VISIBILITY_SOURCE_MASK  0x3FFFFFFFu
+#define SDF_VISIBILITY_GROUP_EDGE   8u
+#define SDF_SHADE_BINS              2u
+#define SDF_SHADE_TILE_HEADER_WORDS 6u
+#define SDF_VIEWS_FILTER_WORDS      2u
+#define SDF_SHADOW_BITS             8u
+#define SDF_SHADOW_MASK             0x000000FFu
+#define SDF_SHADOW_SLOTS            4u
+#define SDF_SHADOW_FADE_CAPACITY    2u
 
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
 #define SDF_VISIBILITY_NORMAL_SCALE 32767.0

@@ -107,4 +107,9 @@ public enum ShaderPipelineCountBasis : byte {
     InstanceMaskWords = 7,
     /// <summary>Per pixel of the package's allocated render extent.</summary>
     RenderExtent = 10,
+    /// <summary>Per tile of the frame extent: <see cref="ShaderPipelineStorageCounts.TileEdge"/> pixels a side, each axis
+    /// rounded up.</summary>
+    ExtentTiles = 11,
+    /// <summary>Per tile of the package's allocated render extent, as <see cref="ExtentTiles"/> counts them.</summary>
+    RenderExtentTiles = 12,
 }

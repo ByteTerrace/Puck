@@ -23,19 +23,32 @@ public sealed partial class SdfWorldResidency {
     private SdfShadeProgram[] m_shadeActive = [];
     private HashSet<string> m_shadeActiveIdentities = new(comparer: StringComparer.Ordinal);
     private SdfShadeStatus[] m_shadeStatus = [];
-    private bool m_interpretShade;
+    private volatile bool m_interpretShade;
+    private volatile bool m_binShade = true;
+    // The frame's selection and whether its views shade in bins, both taken once a frame by PrepareShade, with the levers
+    // they were taken under.
+    private SdfShadePipelines? m_shadeSelection;
+    private bool m_shadesInBins;
+    private (bool Interpret, bool Bins) m_shadeLevers = (false, true);
 
     /// <summary>Gets or sets whether the residency's active programs run through the interpreter even when published
-    /// specialized kernels hold them, for comparing the tiers. Changing it re-renders the shading passes; compilation
-    /// and publication continue either way.</summary>
+    /// specialized kernels hold them, for comparing the tiers. The next produced frame takes it and re-renders the shading
+    /// passes; compilation and publication continue either way.</summary>
     public bool InterpretShade {
         get => m_interpretShade;
-        set {
-            if (m_interpretShade == value) { return; }
-            m_interpretShade = value;
-            m_tables?.InvalidateShadeSelection();
-        }
+        set => m_interpretShade = value;
     }
+    /// <summary>Gets or sets whether a frame that runs authored programs shades its views in bins
+    /// (<c>SdfWorldPackage.WithBins</c>: tiles with no program on the plain kernel, every other tile on the shading
+    /// selection) rather than in one unsplit dispatch, for comparing the two. The next produced frame takes it, re-renders
+    /// the shading passes and rebuilds the views' graphs; a graph records unsplit while it is not binned.</summary>
+    public bool BinShade {
+        get => m_binShade;
+        set => m_binShade = value;
+    }
+    // Whether this frame's views shade in bins: the lever is on and the frame the passes record runs a program. A view
+    // whose graph shades in bins records unsplit on any other frame.
+    internal bool ShadesInBins => m_shadesInBins;
 
     /// <summary>Gets a snapshot of every active or requested program's execution state, safe to read from the console
     /// while rendering continues.</summary>
@@ -111,6 +124,16 @@ public sealed partial class SdfWorldResidency {
             }
         }
         if (changed) { PublishShadeStatus(); }
+        // The levers move the selection only here, so a frame's passes all record one, and only a lever, never a
+        // publication, invalidates the shading passes.
+        var levers = (Interpret: m_interpretShade, Bins: m_binShade);
+
+        if (levers != m_shadeLevers) {
+            m_shadeLevers = levers;
+            m_tables?.InvalidateShadeSelection();
+        }
+        m_shadeSelection = ((levers.Interpret || (m_shadeActive.Length == 0)) ? null : m_shadeCurrent);
+        m_shadesInBins = (levers.Bins && (m_shadeActive.Length != 0));
     }
 
     // An overtaken or released compile is canceled without waiting and retired to the catalog, which disposes a result
@@ -138,11 +161,18 @@ public sealed partial class SdfWorldResidency {
     }
 
     // Read only by SdfShadeSlots, which pins the set before a native handle reaches a recorder. Null selects the fixed
-    // kernels (ShadeFallback): the plain ones for a frame with no active program, the interpreter otherwise.
-    internal SdfShadePipelines? ShadeSelection => ((m_interpretShade || (m_shadeActive.Length == 0)) ? null : m_shadeCurrent);
-    internal IGpuComputePipeline ShadeFallback(SdfKernel kernel) => m_tables!.Pipeline(kernel: ((m_shadeActive.Length != 0)
-        ? kernel
-        : ((kernel == SdfKernel.Views) ? SdfKernel.ViewsPlain : SdfKernel.GlassPlain)));
+    // kernels (ShadeFallback): the plain ones for a frame with no active program, the interpreter otherwise. PrepareShade
+    // takes it once a frame, so every pass of a frame records one selection whatever the levers do meanwhile.
+    internal SdfShadePipelines? ShadeSelection => m_shadeSelection;
+    internal IGpuComputePipeline ShadeFallback(SdfKernel kernel) => m_tables!.Pipeline(kernel: ((m_shadeActive.Length != 0) ? kernel : PlainOf(kernel: kernel)));
+    // The fixed kernel that shades no program in a specialized kernel's place, whatever the frame runs.
+    internal IGpuComputePipeline ShadePlain(SdfKernel kernel) => m_tables!.Pipeline(kernel: PlainOf(kernel: kernel));
+    private static SdfKernel PlainOf(SdfKernel kernel) => kernel switch {
+        SdfKernel.Views => SdfKernel.ViewsPlain,
+        SdfKernel.Glass => SdfKernel.GlassPlain,
+        SdfKernel.ViewsShade => SdfKernel.ViewsShadePlain,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not a shading kernel."),
+    };
 
     // Device teardown and a residency's final idle drain are the only places that free sets regardless of their pins. The
     // final release waits for no compile or driver: a build still running is retired, and the sets disposed here are
@@ -159,5 +189,7 @@ public sealed partial class SdfWorldResidency {
         m_shadeKey = null;
         m_shadeActive = [];
         m_shadeActiveIdentities = new HashSet<string>(comparer: StringComparer.Ordinal);
+        m_shadeSelection = null;
+        m_shadesInBins = false;
     }
 }

@@ -1,101 +1,12 @@
 // The views pass's stage over the pixel's visibility record, which the surface pass wrote (sdf-surface-stage.hlsli):
-// views shades the record (sdfViewsStage below).
+// views shades the record (sdfViewsStage below). A binned kernel (SDF_VIEWS_BINNED) reads the filtered occlusion and
+// shadows from the filter record its filter pass wrote; every other kernel filters in its own group.
 #ifndef PASSES_SDF_VIEWS_STAGE_HLSLI
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
 #include "sdf-light-stage.hlsli"
+#include "sdf-views-filter.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
-
-// The pattern filter's tile: the group's pixels with two pixels of apron before them and one after on each axis, each as
-// its surface point and the surface pass's occlusion, a negative occlusion where it holds no hit, beside its K word and
-// its packed normal.
-#define SDF_VIEWS_FILTER_TILE_EDGE (SDF_VISIBILITY_GROUP_EDGE + 3u)
-groupshared float4 sdfViewsFilterTile[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
-groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
-groupshared uint sdfViewsFilterNormals[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
-
-// The cosines between a neighbour's normal and the pixel's over which the neighbour's shadow visibility fades into the
-// pixel's average: a neighbour turned more than 60 degrees away takes no part, one within 25 degrees a full one.
-static const float SdfViewsShadowNormalLow = 0.5;
-static const float SdfViewsShadowNormalHigh = 0.9;
-
-// Loads the group's filter tile from the visibility records, the K words only when `shadows` asks for them. Every lane of
-// the group calls it, a lane past the render extent included, since it ends at the group's barrier.
-void sdfViewsGatherFilter(SdfPixel p, bool shadows) {
-    uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
-    int2 origin = (int2(p.pixel - lane) - 2);
-    int2 dims = int2(worldViewDims(p.view));
-
-    for (uint index = ((lane.y * SDF_VISIBILITY_GROUP_EDGE) + lane.x); (index < (SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE));
-        index += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
-        int2 pixel = (origin + int2((index % SDF_VIEWS_FILTER_TILE_EDGE), (index / SDF_VIEWS_FILTER_TILE_EDGE)));
-        float4 entry = float4(0.0, 0.0, 0.0, -1.0);
-        uint word = 0u;
-        uint normal = SDF_VISIBILITY_ZERO_NORMAL;
-
-        if (all(pixel >= 0) && all(pixel < dims)) {
-            uint record = worldVisibilityRecord(uint2(pixel), p.viewIndex);
-            float t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
-
-            // A miss records the far distance.
-            if (t < p.farDistance) {
-                float3 direction = cameraRayDirection(p.view, ((float2(pixel) + 0.5) / float2(dims)));
-                entry = float4((p.rayOrigin + (direction * t)), f16tof32(sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] >> 16u));
-                word = (shadows ? sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord] : 0u);
-                normal = (shadows ? sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord] : SDF_VISIBILITY_ZERO_NORMAL);
-            }
-        }
-
-        sdfViewsFilterTile[index] = entry;
-        sdfViewsFilterShadows[index] = word;
-        sdfViewsFilterNormals[index] = normal;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-}
-// The pixel's occlusion and shadow visibilities averaged over the 4x4 window at offsets -2 to 1 around it, which holds
-// each of the surface pass's sixteen tap patterns once (sdfMeshPattern in sdf-surface-stage.hlsli). A pixel joins the
-// average only while its surface point lies within two pixel footprints of this pixel's tangent plane, so neither
-// crosses a depth edge or a silhouette; the pixel itself always joins. A slot's shadow average takes only the pixels
-// whose slot the surface pass queried: a side turned from a light holds no measurement, and its decoded full visibility
-// would light the band beside it on the side that faces the light (on a curved surface, along the whole terminator),
-// with the light's whole illuminance under a cosine just above zero wherever the cascades shadow it. A pixel joins the
-// shadows' average only while its normal also turns little from this pixel's, so a crease's two lit faces keep their
-// own shadows. A slot no pixel of the window queried reads fully visible.
-void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out float ambient, out float4 shadows) {
-    uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
-    float tolerance = (2.0 * (p.pixelFootprint * t));
-    float ambientSum = 0.0;
-    float4 shadowSum = float4(0.0, 0.0, 0.0, 0.0);
-    float weight = 0.0;
-    float4 shadowWeight = float4(0.0, 0.0, 0.0, 0.0);
-
-    [unroll]
-    for (uint y = 0u; (y < 4u); y++) {
-        [unroll]
-        for (uint x = 0u; (x < 4u); x++) {
-            uint index = ((((lane.y + y) * SDF_VIEWS_FILTER_TILE_EDGE) + lane.x) + x);
-            float4 entry = sdfViewsFilterTile[index];
-            float w = ((entry.w < 0.0) ? 0.0 : saturate(1.0 - (abs(dot((entry.xyz - surfacePoint), normal)) / tolerance)));
-
-            float turn = dot(sdfVisibilityUnpackNormal(sdfViewsFilterNormals[index]), normal);
-            uint word = sdfViewsFilterShadows[index];
-            float4 ws = ((w * saturate((turn - SdfViewsShadowNormalLow) / (SdfViewsShadowNormalHigh - SdfViewsShadowNormalLow))) * sdfShadowQueried(word));
-
-            ambientSum += (w * entry.w);
-            shadowSum += (ws * sdfUnpackShadowVisibility(word));
-            weight += w;
-            shadowWeight += ws;
-        }
-    }
-
-    ambient = (ambientSum / max(weight, 1.0e-4));
-    shadows = float4(
-        ((shadowWeight.x > 0.0) ? (shadowSum.x / shadowWeight.x) : 1.0),
-        ((shadowWeight.y > 0.0) ? (shadowSum.y / shadowWeight.y) : 1.0),
-        ((shadowWeight.z > 0.0) ? (shadowSum.z / shadowWeight.z) : 1.0),
-        ((shadowWeight.w > 0.0) ? (shadowSum.w / shadowWeight.w) : 1.0));
-}
 
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
 // reactivity (sdfLightStage). A hit's color leaves through the atmosphere's transmittance over its own ray
@@ -110,13 +21,14 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
 
     // The pass block's levers and the view's mode are uniform across the group, so every lane reaches the gather's
     // barrier or none does.
-    bool ambientFilter = (!worldAoDisabled() && (worldFinalShadingMode(p.viewMode) || (p.viewMode == SDF_DEBUG_VIEW_AO)));
-    bool shadowFilter = ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()
-        && (worldFinalShadingMode(p.viewMode) || (p.viewMode == SDF_DEBUG_VIEW_SHADOW)));
+    bool ambientFilter = sdfViewsFiltersAmbient(p.viewMode);
+    bool shadowFilter = sdfViewsFiltersShadows(p.viewMode);
 
+#ifndef SDF_VIEWS_BINNED
     if (ambientFilter || shadowFilter) {
         sdfViewsGatherFilter(p, shadowFilter);
     }
+#endif
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);
     }
@@ -132,7 +44,13 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         float ambient;
         float4 shadows;
 
+#ifdef SDF_VIEWS_BINNED
+        uint record = sdfViewsFilterRecord(p.pixel, p.viewIndex);
+
+        sdfViewsFilterUnpack(uint2(sdfViewsFilterRecords[record], sdfViewsFilterRecords[record + 1u]), ambient, shadows);
+#else
         sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows);
+#endif
         s.ambient = (ambientFilter ? ambient : s.ambient);
         s.shadows = (shadowFilter ? shadows : s.shadows);
     }

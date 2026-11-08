@@ -41,7 +41,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // prepared with before the instance decides whether its passes follow it in place.
     private FrameContext m_context;
     // The cache and device a resolve pass was built from, which a residency a view follows into leases the resolve from.
-    private ResolveSource? m_resolveSource;
+    private OnDemandSource? m_onDemandSource;
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
@@ -143,9 +143,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         try {
             await view.Residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-            if (context.Part == SdfWorldPackage.Resolve) {
-                Volatile.Write(location: ref m_resolveSource, value: new ResolveSource(Cache: context.Pipelines, Device: context.Device));
-                await view.Residency.Tables!.Pipelines.BuildResolveAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            if (OnDemandKernelsOf(context: context) is { Length: > 0 } kernels) {
+                Volatile.Write(location: ref m_onDemandSource, value: new OnDemandSource(Cache: context.Pipelines, Device: context.Device));
+                await view.Residency.Tables!.Pipelines.BuildOnDemandAsync(cache: context.Pipelines, device: context.Device, kernels: kernels, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch {
             view.Residency.Release();
@@ -153,6 +153,19 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         return new Built(view: view);
     }
+    // Whether a views pass shades in bins: its fragment gave it the filter record to read (SdfWorldPackage.WithBins).
+    internal static bool ShadesInBins(RenderGraphPackageRecorderContext context) =>
+        ((context.Part == SdfWorldPackage.Parts.Views) &&
+            context.Inputs.Any(predicate: static input => input.Name.EndsWith(value: FilterSuffix, comparisonType: StringComparison.Ordinal)));
+    private static readonly string FilterSuffix = RenderGraphPackageFragment.Spliced(name: SdfWorldPackage.Parts.Filter, pass: string.Empty);
+    // The on-demand pipelines a pass records with (SdfWorldPipelines.AcquiredOnDemand), which its build waits for.
+    private static SdfKernel[] OnDemandKernelsOf(RenderGraphPackageRecorderContext context) => context.Part switch {
+        SdfWorldPackage.Resolve => [SdfKernel.Resolve],
+        SdfWorldPackage.Parts.ViewsFilter => [SdfKernel.ViewsFilter],
+        SdfWorldPackage.Parts.ViewsBins => [SdfKernel.ViewsBins],
+        SdfWorldPackage.Parts.Views when ShadesInBins(context: context) => [SdfKernel.ViewsShade, SdfKernel.ViewsShadePlain],
+        _ => [],
+    };
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -475,6 +488,17 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             residency.BeginFrame();
         }
     }
+    // The plan a binned view's filter, bins and views passes record a frame with: one plan an instance, made from the frame
+    // and the passes' common extent, so the jobs views records are the jobs whose arguments the bins pass wrote. It bins
+    // only while the view's residency shades in bins (SdfWorldResidency.ShadesInBins), and is unsplit otherwise.
+    internal SdfShadeDispatch ShadePlanOf(string instance, SdfFrame frame, uint width, uint height, uint screens) {
+        var entry = Refresh(instance: instance);
+        var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, glass: false, height: height, screens: screens, width: width,
+            binned: (entry.View?.Residency.ShadesInBins ?? false));
+
+        entry.ShadePlan = plan;
+        return plan;
+    }
     /// <summary>Gets the shading submissions of the package's released recorders, which its next frame completes unless
     /// a device loss comes first.</summary>
     public SdfShadeReleases ShadeReleases { get; } = new();
@@ -538,17 +562,17 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 )
             )
         );
-    // Leases the resolve pipeline into the residency a view moves to when the residency it leaves has one, so passes
-    // with a resolve follow in place (CanFollow) rather than rebuilding and holding the departed image: the destination
-    // takes the cache entry the departure built, ready at once.
-    private void RequestResolve(SdfWorldView from, SdfWorldView to) {
+    // Leases the on-demand pipelines (a resolve, the binned views kernels) into the residency a view moves to when the
+    // residency it leaves has them, so passes that record with them follow in place (CanFollow) rather than rebuilding and
+    // holding the departed image: the destination takes the cache entries the departure built, ready at once.
+    private void RequestOnDemand(SdfWorldView from, SdfWorldView to) {
         if (
             !ReferenceEquals(objA: from.Residency, objB: to.Residency) &&
-            (from.Residency.Tables?.Pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not null) &&
+            (from.Residency.Tables?.Pipelines.OnDemandBuilt() is { Count: > 0 } kernels) &&
             (to.Residency.Tables is { } tables) &&
-            (Volatile.Read(location: ref m_resolveSource) is { } source)
+            (Volatile.Read(location: ref m_onDemandSource) is { } source)
         ) {
-            tables.Pipelines.RequestResolve(cache: source.Cache, device: source.Device);
+            tables.Pipelines.RequestOnDemand(cache: source.Cache, device: source.Device, kernels: kernels);
         }
     }
     // Resolves the view an instance renders this frame, on the frame thread, once a frame. A residency the instance meets
@@ -612,7 +636,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
         }
         if ((entry.Followed is { } departed) && (view is { } arrived)) {
-            RequestResolve(from: departed, to: arrived);
+            RequestOnDemand(from: departed, to: arrived);
         }
         if (entry.Followed != view) {
             if (
@@ -637,8 +661,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         return entry;
     }
 
-    // Where a resolve pass's pipeline came from.
-    private sealed record ResolveSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
+    // Where an on-demand pass's pipelines came from.
+    private sealed record OnDemandSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
     private sealed class Built(SdfWorldView view) : IDisposable {
         public SdfWorldView View => view;

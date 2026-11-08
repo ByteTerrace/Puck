@@ -23,4 +23,17 @@ public static partial class SdfFrameBlock {
         WriteSingle(block, demand + 4, program.Demand.MaxTiltRadians);
         WriteSingle(block, demand + 8, program.Demand.EverySide ? 1f : 0f);
     }
+    /// <summary>Writes a plan's bins into a pass block: each bin's job width in tiles, and zero for every bin the plan does
+    /// not record, which the bins pass writes no job of (<c>sdf-world-views-bins.comp.hlsl</c>).</summary>
+    /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
+    /// <param name="plan">The frame's plan; an unsplit plan writes every width zero.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
+    public static void WriteShadeBins(Span<byte> block, SdfShadeDispatch plan) {
+        ArgumentNullException.ThrowIfNull(plan);
+        var widths = Offset(SdfWorldPackage.ShadeBinWidths);
+
+        for (var bin = 0; (bin < SdfWorldPackage.ShadeBins); bin++) {
+            WriteUInt32(block, widths + (bin * sizeof(uint)), ((bin < plan.Bins.Count) ? plan.Bins[bin].Width : 0U));
+        }
+    }
 }

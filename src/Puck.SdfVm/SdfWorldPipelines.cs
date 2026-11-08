@@ -270,7 +270,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel is not SdfKernel.Resolve)) {
+                if ((slot is null) && !AcquiredOnDemand(kernel: kernel)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];
@@ -288,7 +288,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                     (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
                 }
 
-                if ((slot is not null) || (kernel is SdfKernel.Resolve)) {
+                if ((slot is not null) || AcquiredOnDemand(kernel: kernel)) {
                     changed.Add(item: (index, slot, bytecode));
                 }
             }
