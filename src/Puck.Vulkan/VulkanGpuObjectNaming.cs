@@ -6,17 +6,19 @@ namespace Puck.Vulkan;
 
 /// <summary>
 /// Names a Vulkan device's objects with <c>vkSetDebugUtilsObjectNameEXT</c>, so the validation layer's messages
-/// (<c>[vulkan-debug]</c> lines) print each object's name beside its handle. It is on only when the device is created
-/// with validation; it names nothing when the device was created without <c>VK_EXT_debug_utils</c>.
+/// (<c>[vulkan-debug]</c> lines) print each object's name beside its handle, and in the device's address record
+/// (<see cref="Interop.VulkanDeviceAddressBindings"/>), so a loss report names the objects its fault addresses fall in.
+/// It is on when the device is created with validation or a capture tool, and whenever the device reports its address
+/// bindings, as Direct3D 12 names objects for its removal record.
 /// </summary>
 /// <param name="deviceContext">The device context whose logical device the objects belong to; read when an object is
 /// named, after its creation brought the device up.</param>
-/// <param name="isEnabled">Whether the device is created with validation.</param>
+/// <param name="isEnabled">Whether the device is created with validation or a capture tool.</param>
 public sealed unsafe class VulkanGpuObjectNaming(IVulkanDeviceContext deviceContext, bool isEnabled) : GpuObjectNaming {
     private const uint StructureTypeDebugUtilsObjectNameInfo = 1000128000;
 
     /// <inheritdoc/>
-    public override bool IsEnabled => isEnabled;
+    public override bool IsEnabled => (isEnabled || (deviceContext.LogicalDevice.Commands.AddressBindings is not null));
 
     /// <summary>Returns the <c>VkObjectType</c> of a neutral object kind.</summary>
     /// <param name="kind">The kind.</param>
@@ -46,6 +48,7 @@ public sealed unsafe class VulkanGpuObjectNaming(IVulkanDeviceContext deviceCont
         var device = deviceContext.LogicalDevice.Commands;
         var setName = device.SetDebugUtilsObjectNameExt;
 
+        device.AddressBindings?.Name(handle: unchecked((ulong)handle), name: name);
         if (setName is null) {
             return;
         }

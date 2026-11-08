@@ -194,6 +194,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             ) {
                 try {
                     device = new VulkanDeviceCommands(
+                        addressBindings: (request.ExtensionNames.Contains(value: VulkanDeviceAddressBindings.ExtensionName) ? request.AddressBindings : null),
                         deviceHandle: deviceHandle,
                         checkpointsEnabled: request.ExtensionNames.Contains(value: VulkanDeviceCheckpoints.ExtensionName),
                         deviceFaultEnabled: (request.ExtensionNames.Contains(value: VulkanDeviceFault.ExtensionName) && request.EnabledFeatureStructureTypes.Contains(value: VulkanDeviceFault.FeatureStructureType)),

@@ -12,11 +12,14 @@ namespace Puck.Vulkan.Messages;
 /// <param name="ExtensionNames">The names of the device extensions to enable.</param>
 /// <param name="EnabledFeatureIndices">The indices, within the base <c>VkPhysicalDeviceFeatures</c> block, of the features to enable.</param>
 /// <param name="EnabledFeatureStructureTypes">The <c>VkStructureType</c> values of the chained feature structures to enable.</param>
+/// <param name="AddressBindings">The instance's address record, which a device created with
+/// <see cref="VulkanDeviceAddressBindings.ExtensionName"/> reports its bindings to, or <see langword="null"/>.</param>
 public readonly record struct VulkanLogicalDeviceCreateRequest(
     VulkanInstanceCommands Instance,
     VkPhysicalDevice PhysicalDevice,
     IReadOnlyList<VulkanDeviceQueueCreateRequest> Queues,
     IReadOnlyList<string> ExtensionNames,
     IReadOnlyList<uint> EnabledFeatureIndices,
-    IReadOnlyList<uint> EnabledFeatureStructureTypes
+    IReadOnlyList<uint> EnabledFeatureStructureTypes,
+    VulkanDeviceAddressBindings? AddressBindings = null
 );
