@@ -260,6 +260,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(StateDomain.Ring), TypeInfoPropertyName = "WorldStateDomainRing")]
 [JsonSerializable(typeof(StateTransform))]
 [JsonSerializable(typeof(WorldObservedRow[]))]
+[JsonSerializable(typeof(WorldRecipientImageContent))]
 [JsonSerializable(typeof(StatePhase))]
 [JsonSerializable(typeof(StateVisibility))]
 [JsonSerializable(typeof(StateKnowledge))]

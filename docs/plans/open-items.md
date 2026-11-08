@@ -3523,18 +3523,8 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 1, deltas and versions first ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)):
-    [high] forgetting the delta cache reopens a timing oracle after
-    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
-    [medium] the last-sent image aliases live vector memory (`:90`); [high]
-    versions, revisions, delivery counts and stream invalidation signal hidden
-    installs (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`,
-    `WorldFederationProjectionSink.cs:52-55`); `host.frames`, `host.memory`,
-    `world.counters`, `world.gpu-timing` and `world.collision.probe` become
-    Operator.
   - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
-    [high] replica resume delivers `server.Definition` raw
-    (`src/Puck.World.Server/WorldSessionSink.cs:188`); [high] `world.budget`
+    [high] `world.budget`
     publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:226`,
     no audience at `:461`); [high] `world.reflow.preview` runs over the
     authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);

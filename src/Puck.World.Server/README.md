@@ -1883,22 +1883,24 @@ applies body-relative snapshot disclosure. A route seed precedes the definition
 and snapshots. The stream's documents, and every `Route` answer, are composed
 for the traveler's own peer principal through `WorldStateDisclosure.Disclose`
 (`WorldFederationCodec.EncodeRoute` derives it from the route's entity), so a
-traveler reads its own hidden rows and none of another's. Ownership, definition, or final Observe-grant changes invalidate
+traveler reads its own hidden rows and none of another's. Ownership, disclosed projection identity, or final Observe-grant changes invalidate
 the stream, and the client reopens through its original authenticated entry rather
 than dialing a private world name. Projection queues are bounded; a slow consumer
 disconnects instead of blocking the simulation. Disposing the client lease cancels
 observation, and consumer disconnect detaches the server subscription even when
 the world is paused.
 
-Each session or federation sink owns a `WorldStateChangeDisclosure` workspace.
-Its filtered cell memory is borrowed until the next delivery; consumers copy what
-they retain. Row, cell, zone and live reader-list policies are checked again for
-every delivery. A row whose declared policy can withhold from the recipient
-(`WorldStateDisclosure.ReadsWholeRow`) is replaced only when the cells the
-recipient reads differ from the replacement it was last sent, so a change to
-hidden cells alone sends nothing; a definition delivery that reseeds the
-recipient's rows forgets those replacements. Public reads do not format a
-principal token.
+Each session or federation sink owns a `WorldDeliveryCursor` over a live
+`WorldRecipientView`. The world's `WorldDisclosureImages` shares immutable row
+images by content and audience, copying vector bytes before hashing. A cursor
+holds delivered hashes and a recipient sequence; reads cannot advance it.
+Definitions seed the cursor, snapshots replace only changed observable images,
+and resuming Observe uses the same path. Snapshot row headers carry hidden-count
+and placeholder metadata. Key bits skip hidden value writes; structural changes
+and the reverse index of zone and reader-list dependencies invalidate the rows
+they affect. Traveller validity compares the projection last delivered, including
+snapshot updates, rather than an authority install counter or object identity.
+`world.budget` reports shared image storage and per-tick work to the operator.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never

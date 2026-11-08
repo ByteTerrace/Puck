@@ -149,7 +149,8 @@ public readonly record struct WorldSnapshot(
 /// <param name="Image">The stored cell. A cell index of -1 starts a replacement row with Raw cells.</param>
 /// <param name="Region">The physical region's topology identity; empty for a document-cell write.</param>
 /// <param name="FieldName">The field's globally unique row identity; empty for a document-cell write.</param>
-public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, ArenaCellImage Image = default, string Region = "", string FieldName = "");
+/// <param name="Observation">A restricted row header's observable count, backs and cell traits.</param>
+public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, ArenaCellImage Image = default, string Region = "", string FieldName = "", WorldObservedRow? Observation = null);
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
 /// tape and server-side producer in <c>NextIntent</c> precedence. Timed admission derives the held overlay from the

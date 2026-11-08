@@ -1892,7 +1892,6 @@ public sealed class WorldPeerHost : IDisposable {
         var sink = new WorldFederationProjectionSink(
             isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.Definition.Admission) && credential.IsValid()),
             authority: m_server.AuthorityIdentity,
-            revision: () => m_server.Population.Revision,
             server: m_server,
             tier: tier,
             disclosure: () => new WorldSinkDisclosure(

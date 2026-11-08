@@ -13,14 +13,13 @@ namespace Puck.World.Server;
 /// the stream ends.</summary>
 /// <param name="tier">The tier the admission door decided for the peer.</param>
 /// <param name="authority">The composing authority's addressable namespace.</param>
-/// <param name="revision">Reads the document revision a composition names.</param>
 /// <param name="disclosure">Reads the live snapshot disclosure.</param>
 /// <param name="isCurrent">Reads whether the projection's authority route still holds, or <see langword="null"/> for
 /// one that always does.</param>
 /// <param name="recipient">The authenticated recipient, or <see langword="null"/> for the public observer.</param>
 /// <param name="server">The authority whose store, clock and document a presentation-tier feed reads; required at
 /// <see cref="WorldDisclosureTier.Presentation"/>.</param>
-public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
+public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null) : IWorldDetachableSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 8;
@@ -40,12 +39,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         )
         : null);
     private EntitySnapshot[] m_redacted = [];
-    private readonly WorldStateChangeDisclosure m_stateDisclosure = new();
+    private readonly WorldDeliveryCursor m_cursor = new();
+    private readonly WorldDeliveryRows m_rows = new();
+    private readonly WorldRecipientView? m_view = server?.DeliveryView(recipient, tier);
+    private WorldDocumentVersion Version => (server?.DocumentVersion ?? default) with { Sequence = m_cursor.Sequence };
 
     private bool m_invalidated;
 
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
+    internal bool HoldsProjection => m_view is null || (m_feed?.Holds(m_view) ?? m_cursor.Holds(m_view));
     /// <inheritdoc/>
     public string? DetachReason { get; private set; }
 
@@ -127,6 +130,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (!Current()) {
             return;
         }
+        if (m_view is null) { throw new InvalidOperationException("A document delivery requires its authority view."); }
+        server!.AttachCursor(recipient, m_cursor);
 
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
@@ -135,16 +140,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // hub detaches the sink for.
             try {
                 Present(
-                    delivery: m_feed.Compose(
-                        arena: server.Arena,
-                        authority: authority,
-                        definition: definition,
-                        revision: revision(),
-                        time: in time
-                    ),
+                    delivery: m_feed.Compose(m_view, m_cursor),
                     engineTick: time.EngineTick,
                     tick: time.Tick,
-                    version: version
+                    version: Version
                 );
             } catch (WorldDisclosureException) {
                 End(reason: DisclosureDetachReason);
@@ -153,20 +152,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             return;
         }
 
-        m_stateDisclosure.Forget();
-        Write(
-            WorldFederationResponse.Definition,
-            WorldFederationCodec.EncodeDocument(
-                arena: server?.Arena,
-                authority: authority,
-                definition: definition,
-                recipient: recipient,
-                revision: revision(),
-                tier: tier,
-                time: (server?.DeliveryTime ?? ArenaTime.At(engineTick: 0UL, tick: 0UL)),
-                version: version
-            )
-        );
+        if (m_cursor.DeliverDefinition(m_view) is { } delivered) {
+            Write(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
+                WorldDefinitionSerialization.SerializeCompact(delivered), tier, Version));
+        }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
@@ -179,15 +168,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now.
         if (m_feed is not null) {
             Present(
-                delivery: m_feed.Step(
-                    arena: server!.Arena,
-                    definition: server!.Definition,
-                    engineTick: snapshot.EngineTick,
-                    tick: snapshot.Tick
-                ),
+                delivery: m_feed.Step(m_view!, m_cursor, snapshot.Tick, snapshot.EngineTick),
                 engineTick: snapshot.EngineTick,
                 tick: snapshot.Tick,
-                version: server.DocumentVersion
+                version: Version
             );
 
             if (m_invalidated) {
@@ -210,7 +194,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 snapshot: in projected
             );
         }
-        if (server is not null) { projected = projected with { FieldCells = m_stateDisclosure.Filter(server, recipient, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (projected.FieldCells.Span.ContainsAnyExcept(value: default(FieldCellDelta))) { throw new InvalidOperationException(message: "A state change delivery requires its authority arena."); }
+        if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
+        projected = projected with { Revision = checked((int)m_cursor.Sequence) };
         projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
         Write(
             WorldFederationResponse.Snapshot,
@@ -226,7 +211,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         WorldFederationResponse.Route,
         WorldFederationCodec.EncodeRoute(
             authority: authority,
-            revision: revision(),
+            revision: checked((int)m_cursor.Sequence),
             route: in route,
             tier: tier,
             time: (server?.DeliveryTime ?? ArenaTime.At(engineTick: 0UL, tick: 0UL))
@@ -234,7 +219,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     );
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
     /// authority gate once the sink is detached, so no delivery follows it.</summary>
-    public void Release() => m_feed?.Release();
+    public void Release() {
+        m_feed?.Release(); m_cursor.Release(); server?.DetachCursor(recipient, m_cursor);
+    }
     public Task StreamAsync(Stream output, CancellationToken ct) =>
         WorldProjectionStream.RunAsync(
             output,

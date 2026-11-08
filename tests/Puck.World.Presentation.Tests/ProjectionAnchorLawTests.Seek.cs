@@ -37,7 +37,6 @@ public sealed partial class ProjectionAnchorLawTests {
     private static WorldFederationProjectionSink PresentationViewer(WorldServer server) => new(
         authority: "boot",
         disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 1f)),
-        revision: static () => 1,
         server: server,
         tier: WorldDisclosureTier.Presentation
     );
