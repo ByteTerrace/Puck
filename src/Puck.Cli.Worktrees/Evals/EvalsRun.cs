@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Puck.Confinement;
 
 namespace Puck.Cli.Evals;
 
@@ -239,7 +240,7 @@ public static partial class EvalsRun {
             var caseDirectories = SelectCases(caseDirectories: found, globs: settings.Cases, tags: settings.Tags);
 
             if (caseDirectories.Count == 0) { return CliExit.Empty(verb: Verb, selection: ((SelectionText(settings: settings) is { Length: > 0 } named) ? named : $"the frozen tree's {evalsPath}/"), why: "selects no case"); }
-            foreach (var unselected in found.Except(second: caseDirectories, comparer: StringComparer.Ordinal)) { Directory.Delete(path: unselected, recursive: true); }
+            foreach (var unselected in found.Except(second: caseDirectories, comparer: StringComparer.Ordinal)) { ConfinedDirectory.RemoveTree(path: unselected); }
 
             if (settings.Fixture) {
                 var agents = await CliGit.CaptureAsync(arguments: ["show", $"{head}:AGENTS.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false);
@@ -364,7 +365,7 @@ public static partial class EvalsRun {
                     File.Copy(destFileName: destination, overwrite: true, sourceFileName: trace);
                     copied++;
                     if (!keepSandboxes && (Directory.GetParent(path: trace)?.Parent is { } sandbox) && sandbox.Name.StartsWith(value: "claude-eval-", comparisonType: StringComparison.Ordinal)) {
-                        try { sandbox.Delete(recursive: true); } catch (IOException exception) { Console.Error.WriteLine(value: $"puck {Verb}: kept {sandbox.FullName}: {exception.Message}"); } catch (UnauthorizedAccessException exception) { Console.Error.WriteLine(value: $"puck {Verb}: kept {sandbox.FullName}: {exception.Message}"); }
+                        try { ConfinedDirectory.RemoveTree(path: sandbox.FullName); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { Console.Error.WriteLine(value: $"puck {Verb}: kept {sandbox.FullName}: {exception.Message}"); }
                     }
                 }
             }

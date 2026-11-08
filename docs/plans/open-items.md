@@ -2036,7 +2036,19 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    counts Windows lock violation 33). It sits in a BCL-only leaf below
    `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
    cannot replace it; whether the two contention tests should share one
-   definition is open.
+   definition is open. Two `AtomicFile.PendingWrite.Commit` hazards from the
+   confined-deletion review stay open `[low]`. The overwrite fallback
+   (`File.Replace` with a backup, `Puck.Confinement/AtomicFile.cs`, the `catch`
+   in `Commit`) is reached by Migrate, Compile, `EmbeddingLock`, Measure and the
+   `CliLease` stamp; the reviewer read it as two renames that leave no
+   destination after a crash between them (never a torn file), unverified per
+   platform, and the fix is to confirm which platforms replace non-atomically
+   and either use an atomic replace there or recover the backup on the next
+   open. `Commit(overwrite: false)` preserves a concurrent winner only where
+   `File.Move` without overwrite is itself create-only, and the reviewer
+   suspected the create-only `CliLease` stamp (`CliLease.cs`, the
+   `pending.Commit(overwrite: false)` call) depends on Unix `link()` for that
+   (unverified); a law that races two stamps on each platform settles it.
 2. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`

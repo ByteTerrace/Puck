@@ -188,7 +188,7 @@ public sealed class PuckMigrateAtomicityLawTests {
 
         Assert.Empty(collection: Directory.GetFiles(
             path: directory,
-            searchPattern: "*.migrate-tmp"
+            searchPattern: "*.tmp"
         ));
     }
 }

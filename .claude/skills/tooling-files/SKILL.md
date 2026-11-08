@@ -13,7 +13,8 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Capability | Home |
 |---|---|
 | Lexical path containment and host path comparison | `PuckPaths.IsWithin`, `PuckPaths.Comparison` in `src/Puck.Abstractions/PuckPaths.cs` |
-| Inspect path components for links, with an optional root | `CliTreeFiles.LinkedAncestor` in `src/Puck.Cli.Core/CliTreeFiles.cs` |
+| Inspect path components for links, below an optional root (the root itself is the caller's choice and never inspected) | `CliTreeFiles.LinkedAncestor` in `src/Puck.Cli.Core/CliTreeFiles.cs` |
+| Decide whether a directory contains a path by file identity (a "must not contain" refusal) | `ConfinedDirectory.Contains` in `src/Puck.Confinement/ConfinedDirectory.cs`; `PuckPaths.IsWithin` fails open for aliases |
 | Remove an owned directory tree without following descendant links | `ConfinedDirectory.RemoveTree` in `src/Puck.Confinement/ConfinedDirectory.cs` |
 | Stage, flush, publish or discard complete replacement files | `AtomicFile`, including `PendingWrite`, in `src/Puck.Confinement/AtomicFile.cs` |
 | Compare files or a file and bytes with bounded memory | `FileContent` in `src/Puck.Confinement/FileContent.cs` |
