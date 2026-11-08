@@ -68,18 +68,20 @@ public static class MeasureCommand {
         var wait = CliOptions.Count(name: "--wait", description: "Total seconds to acquire the priority quiet window (default 600).", minimum: 0, defaultValue: 600);
         var settle = CliOptions.Count(name: "--settle", description: "Idle seconds before measurement (default 30); zero explicitly skips settling.", minimum: 0, defaultValue: 30);
         var timeout = CliOptions.Count(defaultValue: 600, description: "Bound per command sample, including shutdown (1..7200, default 600).", maximum: 7200, minimum: 1, name: "--timeout-seconds");
+        var window = CliOptions.Count(defaultValue: 600, description: "Window deadline in seconds, including acquisition and settling (1..7200, default 600). Stops the active sample and leaves incomplete requests pending.", maximum: 7200, minimum: 1, name: "--window-seconds");
         var holder = new Option<string>("--holder") { DefaultValueFactory = _ => "measure", Description = "Quiet lease holder/lane (default measure)." };
         var ids = new Argument<string[]>(name: "requests") { Arity = ArgumentArity.ZeroOrMore, Description = "Pending request IDs; omitted drains the pending snapshot in arrival order." };
-        var run = new Command(description: "Drain queued questions in one quiet window; report medians, IQR and paired after-minus-before differences.", name: "run") { repeats, wait, settle, timeout, holder, ids };
+        var run = new Command(description: "Drain queued questions in one bounded quiet window; report medians, IQR and paired after-minus-before differences.", name: "run") { repeats, wait, settle, timeout, window, holder, ids };
 
         run.SetAction(action: async (parse, token) => {
             var rounds = parse.GetValue(option: repeats);
             var waiting = parse.GetValue(option: wait);
             var settling = parse.GetValue(option: settle);
             var bound = parse.GetValue(option: timeout);
+            var budget = parse.GetValue(option: window);
 
-            if ((rounds is < 1 or > 100) || (waiting < 0) || (settling < 0) || (bound is < 1 or > 7200)) {
-                return CliExit.Refuse(verb: "measure run", what: "limits", why: "repeats must be 1..100, wait/settle nonnegative, timeout 1..7200 seconds.");
+            if ((rounds is < 1 or > 100) || (waiting < 0) || (settling < 0) || (bound is < 1 or > 7200) || (budget is < 1 or > 7200)) {
+                return CliExit.Refuse(verb: "measure run", what: "limits", why: "repeats must be 1..100, wait/settle nonnegative, timeout/window 1..7200 seconds.");
             }
             var checkout = RepositoryPaths.RequireRoot();
             var queue = await QueueAsync(checkout: checkout, token: token).ConfigureAwait(continueOnCapturedContext: false);
@@ -96,23 +98,36 @@ public static class MeasureCommand {
             if (selected.Any(predicate: id => !pending.Any(predicate: row => (row.Item.Id == id)))) { return CliExit.Refuse(verb: "measure run", what: "requests", why: "an ID is missing or already answered."); }
             if (pending.Length == 0) { Console.WriteLine(value: "measure: no pending questions."); return 0; }
             var leases = await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false);
-            using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(option: holder)!, TimeSpan.FromSeconds(seconds: waiting), clock, checkout, token, ProcessInspection.IsAncestor).ConfigureAwait(continueOnCapturedContext: false);
+            using var deadline = new OperationDeadline(TimeSpan.FromSeconds(seconds: budget), clock, token);
 
-            if ((settling > 0) && (await settleWait(TimeSpan.FromSeconds(seconds: settling), TimeSpan.FromSeconds(value: (waiting + ((double)settling))), Console.Error, token).ConfigureAwait(continueOnCapturedContext: false) is { } reason)) {
-                return CliExit.Refuse(verb: "measure run", what: "settle", why: reason);
+            try {
+                using var quiet = await CliLease.AcquireQuietAsync(leases, parse.GetValue(option: holder)!, TimeSpan.FromSeconds(seconds: waiting), clock, checkout, deadline.Token, ProcessInspection.IsAncestor).ConfigureAwait(continueOnCapturedContext: false);
+
+                if ((settling > 0) && (await settleWait(TimeSpan.FromSeconds(seconds: settling), TimeSpan.FromSeconds(value: (waiting + ((double)settling))), Console.Error, deadline.Token).ConfigureAwait(continueOnCapturedContext: false) is { } reason)) {
+                    return CliExit.Refuse(verb: "measure run", what: "settle", why: reason);
+                }
+                return await DrainAsync(pending: pending, rounds: rounds, sampleAsync: (item, side, round, directory, cancellation) => SampleAsync(directory: directory, item: item, round: round, side: side, timeout: bound, token: cancellation), token: token, windowDeadline: deadline).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (OperationCanceledException) when (deadline.IsExpired && !token.IsCancellationRequested) {
+                return CliExit.Success;
+            } finally {
+                // The quiet hold is disposed before announcing what the next window can pick up.
+                if (deadline.IsExpired) { Console.WriteLine(value: "measure: window deadline reached; quiet priority released."); }
+                var left = ReadQueue(queue: queue).Where(row => pending.Any(p => p.Item.Id == row.Item.Id) && row.Item.Report is null && row.Item.Failure is null).ToArray();
+                Console.WriteLine(value: $"measure: {left.Length} request(s) left pending.");
+                foreach (var (_, item) in left) { Console.WriteLine(value: $"measure: pending {item.Id} {item.Name}"); }
             }
-            return await DrainAsync(pending: pending, rounds: rounds, sampleAsync: (item, side, round, directory, cancellation) => SampleAsync(directory: directory, item: item, round: round, side: side, timeout: bound, token: cancellation), token: token).ConfigureAwait(continueOnCapturedContext: false);
         });
-        run.Detail(detail: "Use: puck measure run [request-ids...] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Explicitly name failed IDs to retry unchanged frozen inputs into a new answer directory; an unselected drain skips failures. Re-file to correct inputs. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
+        run.Detail(detail: "Use: puck measure run [request-ids...] [--window-seconds 600] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. The window deadline includes acquisition and settling; expiry stops the active sample through process cleanup, releases quiet priority and lists pending requests. Incomplete requests stay pending with partial evidence retained for inspection; the next window retries them from the first pair. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Explicitly name failed IDs to retry unchanged frozen inputs into a new answer directory; an unselected drain skips failures. Re-file to correct inputs. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
         return new Command(description: "Queue frozen before/after timing questions and answer them in a priority quiet window.", name: "measure") { request, list, run };
     }
     // One request owns its failure boundary: only a complete set of paired samples can publish an answer.
     public static async Task<int> DrainAsync(IEnumerable<(string Path, MeasurementRequest Item)> pending, int rounds,
-        Func<MeasurementRequest, string, int, string, CancellationToken, Task<MeasurementSample>> sampleAsync, CancellationToken token) {
+        Func<MeasurementRequest, string, int, string, CancellationToken, Task<MeasurementSample>> sampleAsync, CancellationToken token, OperationDeadline windowDeadline) {
         var failed = false;
 
         foreach (var (path, item) in pending) {
             token.ThrowIfCancellationRequested();
+            if (windowDeadline.IsExpired) { break; }
             var directory = Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: "answers", path3: Guid.NewGuid().ToString(format: "N"));
 
             Directory.CreateDirectory(path: directory);
@@ -122,12 +137,14 @@ public static class MeasureCommand {
             try {
                 for (var round = 0; (round < rounds); round++) {
                     foreach (var side in new[] { "before", "after" }) {
-                        var sample = await sampleAsync(item, side, round, directory, token).ConfigureAwait(continueOnCapturedContext: false);
+                        windowDeadline.Token.ThrowIfCancellationRequested();
+                        var sample = await sampleAsync(item, side, round, directory, windowDeadline.Token).ConfigureAwait(continueOnCapturedContext: false);
 
                         samples.Add(item: sample);
                         Write(report, new MeasurementReport(item, rounds, samples.ToArray(), []), MeasureJsonContext.Default.MeasurementReport);
                     }
                 }
+                windowDeadline.Token.ThrowIfCancellationRequested();
                 var summaries = item.Metrics.Select(selector: metric => Summarize(metric,
                     samples.Where(predicate: sample => (sample.Side == "before")).Select(selector: sample => sample.Metrics[metric]).ToArray(),
                     samples.Where(predicate: sample => (sample.Side == "after")).Select(selector: sample => sample.Metrics[metric]).ToArray())).ToArray();
@@ -138,6 +155,10 @@ public static class MeasureCommand {
                 }
                 Write(path, item with { Report = PuckPaths.Normalize(path: report) }, MeasureJsonContext.Default.MeasurementRequest);
                 Console.WriteLine(value: $"measure: answered {item.Id}; {item.Decides}; report {PuckPaths.Normalize(path: report)}");
+            } catch (OperationCanceledException) when (windowDeadline.IsExpired && !token.IsCancellationRequested) {
+                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], "Window deadline reached; request remains pending."), MeasureJsonContext.Default.MeasurementReport);
+                Write(path, item, MeasureJsonContext.Default.MeasurementRequest);
+                break;
             } catch (Exception error) when ((error is InvalidDataException or InvalidOperationException or ArgumentException or IOException)) {
                 failed = true;
                 var reason = $"measure {item.Name} ({item.Id}): {error.Message}";

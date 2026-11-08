@@ -78,12 +78,18 @@ bottleneck).**
 |---|---|---|---|
 | Iterate | every lane, in parallel | load-independent only: counters, state hashes, bytes, executes, law results, captures; laws filtered to the step; a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; a second heavy job queued behind one's own |
 | Integrate | the lead, once per landing batch | full reproduce suites, the sweep against the tip report, windowed boots on both backends, over the merged batch | per-lane repetition of the same suites |
-| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run`: one priority quiet lease, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; a window that waits for the machine to go quiet by itself |
+| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run --window-seconds 600`: one priority quiet lease for at most ten minutes plus process cleanup, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; an unbounded drain; a window that waits for the machine to go quiet by itself |
 
 A window has a stated end: the lead's open message names the time it closes,
 and a lane resumes on that time if no close message arrived first (a window
 whose close was never sent left four lanes idle past it). The lead sends the
-close the moment its legs finish.
+close the moment its legs finish. `measure run --window-seconds` enforces the
+budget (default 600 seconds), including acquisition and settling. At expiry it
+starts no further request or sample, stops and reaps the active sample, releases
+quiet priority and lists the snapshot's pending requests. Incomplete requests
+keep their partial evidence and are retried from the first pair next window;
+they are never published as measured answers. Keep the command's budget within
+the announced close and allow for process cleanup.
 
 A lane with a timing question uses `puck measure request` (the frozen builds
 or commits, the bench startup or sweep command, JSON-pointer metrics and what

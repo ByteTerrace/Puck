@@ -12,16 +12,20 @@ public sealed class CliLeaseTests : IDisposable {
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    [Fact]
-    public async Task InspectPrunesAnUnlockedQuietHolderButNeverAnActiveReservation() {
+    [Theory]
+    [InlineData("quiet")]
+    [InlineData("build")]
+    [InlineData("gpu")]
+    [InlineData("heavy")]
+    public async Task InspectPrunesAnUnlockedHolderButNeverAnActiveLease(string name) {
         using (var quiet = await CliLease.AcquireQuietAsync(m_root, "scheduler quiet", TimeSpan.Zero, TimeProvider.System, m_root, Token)) {
-            Assert.True(CliLease.Inspect(m_root, "quiet", DateTimeOffset.UtcNow).HolderAlive);
-            Assert.True(Directory.Exists(Path.Combine(m_root, "quiet")));
+            Assert.True(CliLease.Inspect(m_root, name, DateTimeOffset.UtcNow).HolderAlive);
+            Assert.True(Directory.Exists(Path.Combine(m_root, name)));
         }
-        var directory = Path.Combine(m_root, "quiet");
+        var directory = Path.Combine(m_root, name);
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "holder"), $"dead quiet\n{DateTimeOffset.UtcNow:O}\n2147483647\n1\n");
-        Assert.Null(CliLease.Inspect(m_root, "quiet", DateTimeOffset.UtcNow).Holder);
+        Assert.Null(CliLease.Inspect(m_root, name, DateTimeOffset.UtcNow).Holder);
         Assert.False(Directory.Exists(directory));
         Assert.True(File.Exists(directory + ".guard"));
     }
