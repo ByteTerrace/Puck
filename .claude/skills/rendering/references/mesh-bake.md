@@ -25,7 +25,16 @@ Lighting convergence can delay the readiness barrier after the bakes finish;
 allow for it in `--timeout-seconds`. Its per-sample `timeline.log` keeps
 the observed timestamp and stream of every stage/job line. Read those spans beside
 a sampled thread-time trace; the `cpu` stage totals are summed worker elapsed time,
-including waits and suspension, not processor time.
+including waits and suspension, not processor time. With a worker per logical
+processor sharing cores they overstate what a stage costs alone, and they swing with
+whatever else runs. Attach `dotnet-trace collect -p <World pid> --profile
+dotnet-sampled-thread-time` during the bake and count only `CPU_TIME` leaves: it
+splits the World's processor time across stages and the work beside the bake (the
+desktop capture's readback scaling, the frame). A CPU change to `Land` is measured
+load-independently by replaying the group meshes `Land` receives through
+`SdfMeshChunks` on one thread and counting that thread's cycles
+(`QueryThreadCycleTime`); hash every level's indices and errors to show an
+equal-output change changed nothing.
 
 Compare the key sets before comparing each key's decompressed payload. A
 different pose can legitimately produce a different key. The store codec maps
@@ -90,11 +99,20 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   refuses the collapse. A nearest point already beyond the current distance
   limit needs no interpolated-normal calculation.
 - **Retry refused edges only after their inputs change.** `Collapser.Pass` keys
-  each rejection by its directed edge and both endpoint fan revisions. `Commit`
-  is the one mutation door for topology, surface and line samples, and inherited
-  bounds; it stamps every endpoint of the old fan, including deleted triangles.
-  `Run` clears rejections when the distance and normal budgets change. The cache
-  only skips failed attempts; every accepted collapse still passes all checks.
+  each rejection by its directed edge and the revisions of what the refusal read
+  (`Collapser.Outcome`): the collapsing place's fan always, the neighbour's fan
+  only for a link refusal, and the level's budget only for a measured one, so a
+  shape or link refusal stands into the next level. Every other check reads the
+  place's own fan, its tracked and line samples and the neighbour's fixed
+  position; a new check that reads the neighbour's fan returns `RefusedLinks`.
+  `Commit` is the one mutation door for topology, surface and line samples, and
+  inherited bounds; it stamps every endpoint of the old fan, including deleted
+  triangles. The cache only skips failed attempts; every accepted collapse still
+  passes all checks. `PrepareFrom` lays out each source fan's corners, link
+  stamps and geometry once for every neighbour tried; its tracked samples and
+  lines are listed by the first neighbour that needs them. A `Dictionary<long, …>`
+  keyed by two packed places takes `MixedKey`: long's own hash folds the halves,
+  and neighbouring places collided until the refusal lookups dominated a mesh.
   A faster query or a different witness assignment still needs the field audit:
   tiny arithmetic and ownership changes can alter later collapse choices and
   uncover surface that the sample-to-mesh bounds alone do not detect.

@@ -1053,6 +1053,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     private ID3D11Device* m_device;
     private ID3D11Device1* m_device1;
     private ulong[]? m_downscaleAccumulators;
+    private int[]? m_downscaleColumns;
     private double[]? m_downscaleSums;
     private IDirect3DDevice? m_runtimeDevice;
     private long m_sequence;
@@ -1316,9 +1317,11 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             operation: "ID3D11DeviceContext::Map"
         );
         try {
+            if ((m_downscaleColumns is null) || (m_downscaleColumns.Length != targetWidth)) { m_downscaleColumns = new int[targetWidth]; }
             if (m_format == GpuPixelFormat.R16G16B16A16Float) {
                 m_downscaleSums ??= new double[(targetWidth * 4)];
                 ScaleMappedHalf(
+                    columns: m_downscaleColumns,
                     destination: destination,
                     source: ((byte*)mapped.pData),
                     sourceHeight: m_sourceHeight,
@@ -1332,6 +1335,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
                 m_downscaleAccumulators ??= new ulong[(targetWidth * 4)];
                 ScaleMapped(
                     accumulators: m_downscaleAccumulators,
+                    columns: m_downscaleColumns,
                     destination: destination,
                     source: ((byte*)mapped.pData),
                     sourceHeight: m_sourceHeight,
@@ -1350,7 +1354,15 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
         return true;
     }
-    private static void ScaleMapped(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, ulong[] accumulators) {
+    // Each target column's end in source columns, exclusive, for a box downscale: floor division puts source column sx in
+    // target column (sx * targetWidth) / sourceWidth, so column x holds the source columns below
+    // ceil((x + 1) * sourceWidth / targetWidth). A row then walks each bucket's run with no division per pixel.
+    private static void ColumnEnds(Span<int> ends, int sourceWidth, int targetWidth) {
+        for (var x = 0; (x < ends.Length); x++) {
+            ends[x] = ((int)(((((long)(x + 1)) * sourceWidth) + (targetWidth - 1)) / targetWidth));
+        }
+    }
+    private static void ScaleMapped(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, ulong[] accumulators, int[] columns) {
         var target = MemoryMarshal.Cast<byte, uint>(span: destination.AsSpan());
 
         if (
@@ -1394,7 +1406,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         // upscaled, so the divisor is always non-zero. Accumulators are 64-bit: one bucket can absorb the entire source
         // extent budget (MaximumSourcePixels * 255 overflows a 32-bit sum).
         var accumulatorSpan = accumulators.AsSpan();
+        var ends = columns.AsSpan(start: 0, length: targetWidth);
 
+        ColumnEnds(ends: ends, sourceWidth: sourceWidth, targetWidth: targetWidth);
         for (var y = 0; (y < targetHeight); y++) {
             accumulatorSpan.Clear();
             var sourceY0 = ((((long)y) * sourceHeight) / targetHeight);
@@ -1402,15 +1416,25 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
             for (var sy = sourceY0; (sy < sourceY1); sy++) {
                 var sourceRow = (source + (sy * sourceRowPitch));
+                var sx = 0;
 
-                for (var sx = 0; (sx < sourceWidth); sx++) {
-                    var pixel = Unsafe.ReadUnaligned<uint>(source: (sourceRow + (((long)sx) * 4)));
-                    var bucket = (((sx * targetWidth) / sourceWidth) * 4);
+                for (var column = 0; (column < targetWidth); column++) {
+                    var bucket = (column * 4);
+                    var (b, g, r) = (0UL, 0UL, 0UL);
+                    var end = ends[column];
+                    var start = sx;
 
-                    accumulatorSpan[bucket] += pixel & 0xFFu;
-                    accumulatorSpan[(bucket + 1)] += (pixel >> 8) & 0xFFu;
-                    accumulatorSpan[(bucket + 2)] += (pixel >> 16) & 0xFFu;
-                    accumulatorSpan[(bucket + 3)]++;
+                    for (; (sx < end); sx++) {
+                        var pixel = Unsafe.ReadUnaligned<uint>(source: (sourceRow + (((long)sx) * 4)));
+
+                        b += pixel & 0xFFu;
+                        g += (pixel >> 8) & 0xFFu;
+                        r += (pixel >> 16) & 0xFFu;
+                    }
+                    accumulatorSpan[bucket] += b;
+                    accumulatorSpan[(bucket + 1)] += g;
+                    accumulatorSpan[(bucket + 2)] += r;
+                    accumulatorSpan[(bucket + 3)] += (ulong)(end - start);
                 }
             }
 
@@ -1430,7 +1454,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     // ScaleMapped for half-float RGBA scRGB: the same nearest-pixel upscale and box-filter downscale, which at an equal
     // extent copies each pixel, alpha forced opaque, the box averaging linear light in double precision so an HDR
     // highlight keeps its luminance.
-    private static void ScaleMappedHalf(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, double[] sums) {
+    private static void ScaleMappedHalf(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, double[] sums, int[] columns) {
         const ulong ColorMask = 0x0000_FFFF_FFFF_FFFFUL;
         // Half.One in the alpha channel's 16 bits.
         const ulong OpaqueAlpha = (0x3C00UL << 48);
@@ -1457,7 +1481,9 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         }
 
         var sumSpan = sums.AsSpan();
+        var ends = columns.AsSpan(start: 0, length: targetWidth);
 
+        ColumnEnds(ends: ends, sourceWidth: sourceWidth, targetWidth: targetWidth);
         for (var y = 0; (y < targetHeight); y++) {
             sumSpan.Clear();
             var sourceY0 = ((((long)y) * sourceHeight) / targetHeight);
@@ -1465,15 +1491,21 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
 
             for (var sy = sourceY0; (sy < sourceY1); sy++) {
                 var sourceRow = (source + (sy * sourceRowPitch));
+                var sx = 0;
 
-                for (var sx = 0; (sx < sourceWidth); sx++) {
-                    var pixel = (sourceRow + (((long)sx) * 8));
-                    var bucket = (((sx * targetWidth) / sourceWidth) * 4);
+                // Each bucket's sums take its pixels one at a time in source order, as the light's rounding expects.
+                for (var column = 0; (column < targetWidth); column++) {
+                    var bucket = (column * 4);
+                    var end = ends[column];
 
-                    sumSpan[bucket] += ((double)Unsafe.ReadUnaligned<Half>(source: pixel));
-                    sumSpan[(bucket + 1)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 2)));
-                    sumSpan[(bucket + 2)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 4)));
-                    sumSpan[(bucket + 3)]++;
+                    for (; (sx < end); sx++) {
+                        var pixel = (sourceRow + (((long)sx) * 8));
+
+                        sumSpan[bucket] += ((double)Unsafe.ReadUnaligned<Half>(source: pixel));
+                        sumSpan[(bucket + 1)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 2)));
+                        sumSpan[(bucket + 2)] += ((double)Unsafe.ReadUnaligned<Half>(source: (pixel + 4)));
+                        sumSpan[(bucket + 3)]++;
+                    }
                 }
             }
 

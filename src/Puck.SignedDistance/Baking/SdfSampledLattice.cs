@@ -288,6 +288,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<Vector3> m_gradients;
 
     private int m_factor = 1;
+    // Division by the fine lattice's row length, its rows per slab and m_factor (FineCoordinates, FineCell), set with
+    // m_factor: the fine-sample scans divide every key they read.
+    private FineDivisor m_byFineRow;
+    private FineDivisor m_byFineColumn;
+    private FineDivisor m_byFactor;
 
     private readonly OwnedBuffer<bool> m_measured;
     // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
@@ -372,6 +377,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_samplesY = samplesY;
         m_samplesZ = samplesZ;
         m_count = count;
+        Divide(factor: 1);
         m_valueHandle = values.Pin();
         m_materialHandle = materials.Pin();
         m_values = ((float*)m_valueHandle.Pointer);
@@ -990,6 +996,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         m_factor = factor;
+        Divide(factor: factor);
         m_measured.CopyFrom(source: measured);
         m_thin.CopyFrom(source: thin);
         m_refined.CopyFrom(source: refined);
@@ -1624,7 +1631,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         foreach (var key in m_fineKeys) {
             var (x, y, z) = FineCoordinates(key: key);
-            var (cx, cy, cz, _, _, _) = Interpolant(x: x, y: y, z: z);
+            var (cx, cy, cz, _, _, _) = FineCell(x: x, y: y, z: z);
 
             // Only where the coarse samples saw a sheet or gap thinner than a cell: elsewhere a line grazing a solid's
             // edge falls toward its samples as a sheet's does.
@@ -2245,10 +2252,30 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     }
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {
-        var fineX = (((m_samplesX - 1) * m_factor) + 1);
-        var fineY = (((m_samplesY - 1) * m_factor) + 1);
+        var row = m_byFineRow.Divide(value: key);
+        var z = m_byFineColumn.Divide(value: row);
 
-        return ((key % fineX), ((key / fineX) % fineY), (key / (fineX * fineY)));
+        return ((key - (row * m_byFineRow.Divisor)), (row - (z * m_byFineColumn.Divisor)), z);
+    }
+    private void Divide(int factor) {
+        m_byFineRow = new FineDivisor(divisor: (((m_samplesX - 1) * factor) + 1));
+        m_byFineColumn = new FineDivisor(divisor: (((m_samplesY - 1) * factor) + 1));
+        m_byFactor = new FineDivisor(divisor: factor);
+    }
+    // Division of a non-negative int by a fixed positive one as a multiply (Lemire, Kaser and Kurz, "Faster Remainder by
+    // Direct Computation", 2019: with c = floor((2^64 - 1) / d) + 1, n / d = floor(c * n / 2^64) for every 32-bit n and
+    // d > 1), exact, so FineCoordinates and FineCell read the same coordinates the operator gives.
+    private readonly struct FineDivisor {
+        private readonly ulong m_multiplier;
+
+        public FineDivisor(int divisor) {
+            Divisor = divisor;
+            m_multiplier = ((divisor > 1) ? ((ulong.MaxValue / ((ulong)divisor)) + 1UL) : 0UL);
+        }
+
+        public int Divisor { get; }
+
+        public int Divide(int value) => ((Divisor == 1) ? value : ((int)Math.BigMul(a: m_multiplier, b: ((ulong)(uint)value), low: out _)));
     }
     // The coarse cell a fine sample interpolates in and its position there, each in [0, 1].
     private (int X, int Y, int Z, float U, float V, float W) Interpolant(int x, int y, int z) {
@@ -2267,9 +2294,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // and the sample's place in it, 0 through m_factor along each axis.
     private (int X, int Y, int Z, int LX, int LY, int LZ) FineCell(int x, int y, int z) {
         var factor = m_factor;
-        var cx = Math.Min(val1: (x / factor), val2: (m_samplesX - 2));
-        var cy = Math.Min(val1: (y / factor), val2: (m_samplesY - 2));
-        var cz = Math.Min(val1: (z / factor), val2: (m_samplesZ - 2));
+        var cx = Math.Min(val1: m_byFactor.Divide(value: x), val2: (m_samplesX - 2));
+        var cy = Math.Min(val1: m_byFactor.Divide(value: y), val2: (m_samplesY - 2));
+        var cz = Math.Min(val1: m_byFactor.Divide(value: z), val2: (m_samplesZ - 2));
 
         return (cx, cy, cz, (x - (cx * factor)), (y - (cy * factor)), (z - (cz * factor)));
     }
