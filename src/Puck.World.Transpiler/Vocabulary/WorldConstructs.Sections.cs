@@ -19,6 +19,8 @@ public static partial class WorldConstructs {
         Required: true,
         Summary: summary
     );
+    // The model owns what a shape row's omission means, so the sugar's canonical spelling cannot drift from it.
+    private static string OmittedShapeMember(string key) => Puck.World.Authoring.ShapeDocument.OmittedMembers.Single(predicate: member => (member.Key == key)).Json;
     private static IReadOnlyList<WorldConstruct> Sections() => [
         new(
             DocumentMember: "replays",
@@ -237,7 +239,7 @@ public static partial class WorldConstructs {
                     Summary: "The palette slot the shape is painted from."
                 ),
                 new(
-                    Default: "[0, 0, 0]",
+                    Default: OmittedShapeMember(key: "position"),
                     DocumentKeys: ["position"],
                     Kind: WorldMemberKind.Value,
                     Name: "position",
@@ -245,7 +247,7 @@ public static partial class WorldConstructs {
                     Summary: "The shape's position in its creation's frame, in metres; a binding reference in its place never elides."
                 ),
                 new(
-                    Default: "[0, 0, 0, 1]",
+                    Default: OmittedShapeMember(key: "rotation"),
                     DocumentKeys: ["rotation"],
                     Kind: WorldMemberKind.Value,
                     Name: "rotation",
@@ -253,7 +255,7 @@ public static partial class WorldConstructs {
                     Summary: "The shape's orientation quaternion; a binding reference in its place never elides."
                 ),
                 new(
-                    Default: "[1, 1, 1]",
+                    Default: OmittedShapeMember(key: "scale"),
                     DocumentKeys: ["scale"],
                     Kind: WorldMemberKind.Value,
                     Name: "scale",
