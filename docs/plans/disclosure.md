@@ -210,7 +210,8 @@ length) derive from a row the caller cannot read whole? The evidence is
 only in `vault`, a row only seat1 reads (empty, one small cell, or forty large
 ones rewritten every twenty ticks): seat2 runs the history and replay verbs and
 the read-backs in order, and the fuzzer draws 1600 lines over every verb anyone
-may run. The five game fixtures cover placements, rules, search and sessions.
+may run. The five game fixtures draw over the same verbs against placements,
+rules, search and sessions.
 Verbs a headless World does not register (the renderer, audio and capture
 levers) are judged from their source.
 
@@ -227,12 +228,12 @@ levers) are judged from their source.
 | `world.state.cell.set`, `world.state.cell.remove`, `world.state.transform`, `world.state.act`, `world.generate`, `world.row.set`, `world.row.add`, `world.row.remove`, `world.row.step`, `world.assign`, `world.kit.default`, `world.population.defaults`, `world.population.spawn`, `world.place`, `world.snap`, `world.nudge`, `world.turn`, `world.grid`, `player.row.set`, `player.state.cell.set`, `player.state.cell.toggle`, `creation.sculpt`, `creation.shape`, `pipeline.load`, `pipeline.commit` | Anyone | Answer the write door's verdict (step 3). The fixture's fuzz found one write-door oracle: removing an absent key from public `pile` answers `state row 'pile' has no cell keyed 'k0'` when no row interns `k0` and `row 'pile' holds no cell 'k0'` when the withheld `vault` does | The write-boundary lane: one refusal text whatever the key ledger holds |
 | `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.peers`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
 | `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them | Body disclosure step |
-| `identity.*`, `chat.*` | Anyone | The caller's own identity documents, authorized per seat (`TryAuthorizedIdentity`); a whisper's inbox rows are the deduction fixture's, green | None |
+| `identity.*`, `chat.*` | Anyone | The caller's own identity documents, authorized per seat (`TryAuthorizedIdentity`); a whisper's inbox rows are what the deduction fixture exercises | None |
 | `help`, `console`, `run`, `world.affordances`, `world.refusals`, `world.extensions`, `world.extensions.catalog`, `world.devices`, `world.device-profiles`, `world.input-holds`, `world.watch`, `world.flag`, `forge.*`, `machine.default`, `update.*`, `storage.*`, `probe.*`, `backend` | Anyone or Local | Registry, catalogue, host configuration or the caller's own session; no state rows. `run` submits an authored command's lines under the caller's principal, so each line meets its own verb's audience | None |
 | `world.fps`, `world.target`, `world.cadence`, `world.residency`, `world.host`, `world.shaders.status`, `world.shaders.reload` | Anyone | Wall time or machine resources, outside the guarantee | None |
 | Render, view and audio levers and read-backs (`world.ao` … `world.upscale-sharpness`, `view.*`, `world.view.*`, `world.compare`, `world.screenshot`, `world.debug-view`, `world.screens`, `world.machines`, `world.nesting`, `world.view-refresh`, `screen.*`, `machine.state`, `machine.content`, `machine.operation`, `machine.swap`, `world.cameras`, `world.sdf.*`, `world.slice`, `world.slice.save`, `world.speakers`, `audio.*`, `speaker.state`, `voice.*`, `music.state`, `instrument.state`, `world.volume`, `world.theme`, `world.hud`, `world.binding-bar`, `world.captures`, `world.control`, `world.wait`) | Anyone | The shared screen and speakers are the operator's presentation, which shows the room what the author binds there (decision 2); a non-local ingress reaching them is the same open question as the local mirror | None in this audit |
 
-`CommandAudience.Anyone` now also carries the obligation in its documentation:
+`CommandAudience.Anyone` carries the obligation in its documentation:
 an answer to a recipient derives only from that recipient's view. What enforces
 it for a new verb is the audit's fixture and the fuzzer drawing every verb the
 registry lets anyone run, not the compiler; step 5's `OperatorContext` and
