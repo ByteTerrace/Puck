@@ -18,9 +18,6 @@ public sealed partial class ShaderPipelineRenderNode {
         planned.Parameters.Layout.PipelineLayout(
             stages: planned.Declaration!.Kind.Stages()
         );
-    // The bytes of a uniform region holding a block: whole constant-buffer views.
-    private static int UniformBytes(uint blockBytes) =>
-        checked(((int)(((blockBytes + (IGpuBindings.ConstantBufferAlignment - 1UL)) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)));
     // Where each port of a grouped pass binds in its pass group, in document order: its inputs, then a compute pass's
     // outputs. An image input's sampler binds at Sampler; any other port has none.
     private static PortBinding[] PortBindingsOf(ShaderPipelinePlannedPass planned) {
@@ -90,7 +87,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private static GpuRegion PassRegionOf(IGpuDeviceContext device, GpuDeviceServices gpu, uint inFlight, string owner, string planned, ShaderPipelineParameterLayout parameters) => new(
         bindings: gpu.Bindings,
         buffers: gpu.BufferFactory,
-        byteCount: UniformBytes(blockBytes: parameters.SizeBytes),
+        byteCount: IGpuBindings.ConstantBufferBytes(blockBytes: parameters.SizeBytes),
         copyPipeline: null,
         memory: GpuResidency.RingMemory(profile: device.MemoryProfile),
         name: new GpuObjectName(

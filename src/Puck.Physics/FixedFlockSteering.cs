@@ -148,10 +148,7 @@ public static class FixedFlockSteering {
             normal: normal
         ) * inertiaWeight));
 
-        return ((desired.LengthSquared > FixedQ4816.One)
-            ? desired.Normalize()
-            : desired
-        );
+        return desired.ClampLength(maximum: FixedQ4816.One);
     }
     /// <summary>Builds a bounded movement preference without changing any supplied observation.</summary>
     /// <param name="selfIndex">Observer slot, used for coincident-pair antisymmetry and self exclusion.</param>

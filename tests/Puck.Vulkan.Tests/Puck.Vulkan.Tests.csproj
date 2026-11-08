@@ -18,4 +18,7 @@
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
         <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/HeapAllocator.cs" Link="HeapAllocator.cs" />
+    </ItemGroup>
 </Project>

@@ -401,7 +401,7 @@ here".
 - **State-backed identifiers** use `DocumentIdentifier`: an ordinary string
   remains literal, while a `state.<row>[.<key>]` string reads its identifier
   from a Text state cell. This includes binding-group identifiers on chord,
-  context, and wheel rows (see [documents-binding.md](documents-binding.md)); creation row/document/shape names; look names and
+  context, and wheel rows (see [bindings.md](../../input/references/bindings.md)); creation row/document/shape names; look names and
   creation sources; and kit/look assignment row entries. Put linked names
   behind one cell when they must rename atomically. Resolution precedes
   validation and binding composition, and a live cell write rehydrates,

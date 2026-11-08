@@ -73,7 +73,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
 
         m_pool = scope.Own(handle: m_gpu.Bindings.CreatePool(name: Name(part: "descriptors"), sizes: PoolSizes), release: m_gpu.Bindings.DestroyPool);
         m_frameBlock = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "frame block"),
-            sizeBytes: ((ulong)SdfWorldTables.UniformBytes(blockBytes: parameters.FrameBlockSizeBytes)), usage: GpuBufferUsage.Uniform));
+            sizeBytes: ((ulong)IGpuBindings.ConstantBufferBytes(blockBytes: parameters.FrameBlockSizeBytes)), usage: GpuBufferUsage.Uniform));
 
         var frameBytes = new byte[parameters.FrameBlockSizeBytes];
 
@@ -85,7 +85,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         for (var slot = 0; (slot < m_slots.Length); slot++) {
             m_slots[slot] = new SlotResources(
                 Block: scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "pass block", index: slot),
-                    sizeBytes: ((ulong)SdfWorldTables.UniformBytes(blockBytes: (uint)SdfMeshBakeBlock.SizeBytes)), usage: GpuBufferUsage.Uniform)),
+                    sizeBytes: ((ulong)IGpuBindings.ConstantBufferBytes(blockBytes: (uint)SdfMeshBakeBlock.SizeBytes)), usage: GpuBufferUsage.Uniform)),
                 MaskSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.Pass)], name: Name(part: "mask group", index: slot), poolHandle: m_pool),
                 BakeSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.Pass)], name: Name(part: "bake group", index: slot), poolHandle: m_pool),
                 WorldSet: m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: layouts[((int)ShaderInterfaceGroup.World)], name: Name(part: "world group", index: slot), poolHandle: m_pool)

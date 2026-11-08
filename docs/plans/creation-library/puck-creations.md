@@ -534,7 +534,7 @@ and "author walls" finds only that ruling and the skills' diagnostics line
   ```
 
 - **The open items' language section**, for example **[opened]**
-  (`docs/plans/open-items.md:3415-3420`):
+  ([open items, language and authoring](../open-items.md#language-and-authoring)):
 
   ```text
   - [medium] Two walls the water channel lane hit: template `let`s inside a

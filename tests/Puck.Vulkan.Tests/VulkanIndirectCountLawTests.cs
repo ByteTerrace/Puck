@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Memory;
+using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -151,20 +151,6 @@ public sealed unsafe class VulkanIndirectCountLawTests {
         public VulkanLogicalDevice LogicalDevice => device;
         public VkPhysicalDevice PhysicalDevice => throw new NotSupportedException();
         public VulkanSurface Surface => throw new NotSupportedException();
-    }
-    private sealed class HeapAllocator : IAllocator {
-        public void* Allocate(nuint size, nuint alignment = 0) => NativeMemory.Alloc(byteCount: Math.Max(
-            val1: size,
-            val2: 1
-        ));
-        public void Free(void* ptr) => NativeMemory.Free(ptr: ptr);
-        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => NativeMemory.Realloc(
-            byteCount: Math.Max(
-                val1: newSize,
-                val2: 1
-            ),
-            ptr: ptr
-        );
     }
     private sealed class NoLogicalDeviceApi : IVulkanLogicalDeviceApi {
         public VkResult CreateLogicalDevice(VulkanLogicalDeviceCreateRequest request, out VulkanDeviceCommands? device) => throw new NotSupportedException();
