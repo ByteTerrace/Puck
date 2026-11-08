@@ -39,6 +39,14 @@ experimental worlds have that it lacks is ported into it
 milestone. The owner requested its baseline and implementation plan, which
 [the plan](dense-landscapes.md) holds.
 
+0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
+   seven-lane audit's drifted copies and boundary duplicates are fixed first
+   (tooling's architecture, identity, release, lease, path, lock and deletion
+   copies; physics and world contact responses and the remote-response gate;
+   rendering's readback state machines), then its live copies as a batch, and
+   small helpers ride along. Each audit lane's remaining findings are filed in
+   the refactoring packet as its fix lane lands. Duplicates are fixed when found
+   (AGENTS.md); this item is the backlog the audit surfaced.
 1. The frame bar [high]: 60 FPS steady state on the lead machine is not met.
    The worst sweep stops (the teal room, flight B of the second storey, the
    studio) are GPU-bound on the root view, not settling: a stop measured again
