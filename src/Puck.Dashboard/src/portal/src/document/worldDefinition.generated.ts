@@ -9564,7 +9564,7 @@ export type WorldPlacement = {
    */
   prototypeId: string;
   /**
-   * The stamp position — world space when Parent is null (today's behavior, unchanged), or this row's own local frame relative to Parent's COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing — neither the resolve nor the renderer) when Attach is set: the row's live position is the resolved attachment, never this authored one.
+   * The stamp position — world space when Parent is null (today's behavior, unchanged), or this row's own local frame relative to Parent's COMPOSED world frame otherwise (see Parent). A dealt child's is its displacement from its DealSlot's offset in its template's region (LocalFrame). Inert (still validated and stored, but read by nothing — neither the resolve nor the renderer) when Attach is set: the row's live position is the resolved attachment, never this authored one.
    */
   position: DocumentVector3;
   /**
@@ -9740,7 +9740,7 @@ export type WorldPlacementContribution = {
 };
 
 /**
- * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region's offsets are metres in the template's frame, never scaled by it. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and the region's dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick's one mutation.
+ * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region's offsets are metres in the template's frame, never scaled by it. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot's fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick's one mutation.
  */
 export type WorldPlacementDeal = {
   /**
@@ -9766,7 +9766,7 @@ export type WorldPlacementDeal = {
  */
 export type WorldPlacementDealPreserve = {
   /**
-   * Preserve an existing child's local position, yaw, and scale.
+   * Preserve an existing child's displacement from its slot, yaw, and scale.
    */
   transform?: boolean;
   /**
@@ -13485,7 +13485,7 @@ export type WorldStateRow = {
    */
   cellSlots?: number[];
   /**
-   * Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory and work reservation. Authored rows normally omit it.
+   * Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory reservation. Authored rows normally omit it.
    */
   reservedCapacity?: number;
   /**

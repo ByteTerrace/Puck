@@ -1,13 +1,12 @@
 using System.Globalization;
-using System.Numerics;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // What the last deal read: its template, derived offsets, arena identity, and input row versions. A tick on which none of it moved skips the template without reading its children.
+    // What the last deal read: its template, its region's slot count, arena identity, and input row versions. A tick on which none of it moved skips the template without reading its children.
     private sealed class DealMemo {
         public WorldDistribution? Distribution;
-        public Vector3[] Offsets = [];
+        public int Slots;
         public ulong RowVersion;
         public ulong VariantVersion;
         public StateArena? Arena;
@@ -325,31 +324,24 @@ public sealed partial class WorldTick {
             objB: template.Distribution
         )
         ) {
-            var fixedOffsets = WorldPlacementDeal.Offsets(
+            memo.Slots = WorldPlacementDeal.Offsets(
                 template: template,
                 worldSeed: worldSeed
-            );
-
-            memo.Offsets = new Vector3[fixedOffsets.Length];
-
-            for (var index = 0; (index < fixedOffsets.Length); index++) {
-                memo.Offsets[index] = fixedOffsets[index].ToVector3();
-            }
-
+            ).Length;
             memo.Distribution = template.Distribution;
             memo.WorldSeed = worldSeed;
         }
 
-        var offsets = memo.Offsets;
+        var slots = memo.Slots;
 
-        if (m_dealSlotTaken.Length < offsets.Length) {
-            m_dealSlotTaken = new bool[offsets.Length];
+        if (m_dealSlotTaken.Length < slots) {
+            m_dealSlotTaken = new bool[slots];
         }
 
         Array.Clear(
             array: m_dealSlotTaken,
             index: 0,
-            length: offsets.Length
+            length: slots
         );
         m_dealChildren.Clear();
         m_dealChildSlots.Clear();
@@ -368,7 +360,7 @@ public sealed partial class WorldTick {
 
             var slot = (candidate.DealSlot ?? -1);
 
-            if (((uint)slot) >= ((uint)offsets.Length)) { slot = -1; }
+            if (((uint)slot) >= ((uint)slots)) { slot = -1; }
 
             if (
                 (slot >= 0) &&
@@ -416,16 +408,10 @@ public sealed partial class WorldTick {
             }
 
             var child = m_dealChildren[childIndex];
-            var prototype = ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
-                key: key,
-                templatePrototype: template.PrototypeId
-            );
-
-            var reconciled = ReconcileChild(
+            var reconciled = deal.Reconcile(
                 child: child,
                 template: template,
-                prototype: prototype,
-                offset: offsets[slot],
+                prototype: deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId),
                 slot: slot
             );
 
@@ -459,7 +445,7 @@ public sealed partial class WorldTick {
 
         for (var pending = 0; (pending < m_dealPendingCells.Count); pending++) {
             var key = cells[m_dealPendingCells[pending]].Value;
-            var slot = FirstFreeSlot(count: offsets.Length);
+            var slot = FirstFreeSlot(count: slots);
 
             if (slot < 0) {
                 overflow++;
@@ -480,32 +466,23 @@ public sealed partial class WorldTick {
                 added++;
             }
 
+            var prototype = deal.ResolvePrototype(arena: arena, variantOrdinal: variantOrdinal, key: key, templatePrototype: template.PrototypeId);
             var nextChild = ((existing >= 0)
-                ? ReconcileChild(
-                        m_dealChildren[existing],
-                        template,
-                        ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
-                            key: key,
-                            templatePrototype: template.PrototypeId
-            ),
-                        offsets[slot],
-                        slot
-                    )
+                ? deal.Reconcile(
+                    child: m_dealChildren[existing],
+                    template: template,
+                    prototype: prototype,
+                    slot: slot
+                )
                 : WorldPlacementDeal.Child(
-                        id: ((existing >= 0)
-                    ? m_dealChildren[existing].Id
-                    : WorldPlacementDeal.ChildId(
-                                template: template.Id,
-                                key: key
-                            )),
-                        offset: offsets[slot],
-                        slot: slot,
-                        prototype: ResolveDealPrototype(arena: arena, deal: deal, variantOrdinal: variantOrdinal,
-                            key: key,
-                            templatePrototype: template.PrototypeId
-            ),
-                        template: template
-                    ));
+                    id: WorldPlacementDeal.ChildId(
+                        template: template.Id,
+                        key: key
+                    ),
+                    slot: slot,
+                    prototype: prototype,
+                    template: template
+                ));
             m_dealChanges.Add((nextChild.Id, nextChild));
         }
 
@@ -517,7 +494,7 @@ public sealed partial class WorldTick {
                 Template: template.Id,
                 Row: deal.Row,
                 Cells: cells.Count,
-                Offsets: offsets.Length,
+                Offsets: slots,
                 Added: added,
                 Removed: removed,
                 Replaced: replaced,
@@ -527,15 +504,6 @@ public sealed partial class WorldTick {
 
         memo.Template = template;
         memo.Swept = true;
-    }
-    private static string ResolveDealPrototype(StateArena arena, WorldPlacementDeal deal, int variantOrdinal, string key, string templatePrototype) {
-        if (variantOrdinal < 0 || deal.Variants?.Map is not { } map || !CellName.TryParse(key, out var name, out _) ||
-            !arena.Keys.TryResolve(name, out var cell) || !arena.TryRead(variantOrdinal, cell, out var value)) { return templatePrototype; }
-        if (value.Kind == CellKind.Text) { return map.TryGetValue(value.AsText, out var selected) ? selected : templatePrototype; }
-        foreach (var (spelling, prototype) in map) {
-            if (long.TryParse(spelling, NumberStyles.Integer, CultureInfo.InvariantCulture, out var raw) && raw == value.Raw) { return prototype; }
-        }
-        return templatePrototype;
     }
     private int FindChild(string template, string key) {
         for (var index = 0; (index < m_dealChildren.Count); index++) {
@@ -558,37 +526,5 @@ public sealed partial class WorldTick {
         }
 
         return -1;
-    }
-    private static WorldPlacement ReconcileChild(WorldPlacement child, WorldPlacement template, string prototype, Vector3 offset, int slot) {
-        var seed = WorldPlacementDeal.Child(
-            template: template,
-            id: child.Id,
-            prototype: prototype,
-            offset: offset,
-            slot: slot
-        );
-        var preserve = template.Deal?.Preserve;
-        var result = ((preserve?.Facets == true)
-            ? child
-            : seed
-        );
-
-        return result with {
-            Parent = template.Id,
-            DealSlot = slot,
-            Deal = null,
-            Position = ((preserve?.Transform == true)
-            ? child.Position
-            : seed.Position),
-            YawDegrees = ((preserve?.Transform == true)
-            ? child.YawDegrees
-            : seed.YawDegrees),
-            Scale = ((preserve?.Transform == true)
-            ? child.Scale
-            : seed.Scale),
-            PrototypeId = ((preserve?.Prototype == true)
-            ? child.PrototypeId
-            : prototype),
-        };
     }
 }

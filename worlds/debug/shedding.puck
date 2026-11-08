@@ -163,11 +163,16 @@ placements {
           countB: 12
         )
       }
+      // A card lifted out of the rack (its displacement from its slot) stays lifted while the hand changes around it,
+      // and a reader the hand hides from is shown it lifted from the slot that reader is dealt.
       deal {
         row: $"sheddingHand{rack.seat}"
         variants {
           row: "sheddingCards"
           map: sheddingFaces
+        }
+        preserve {
+          transform: true
         }
       }
     }

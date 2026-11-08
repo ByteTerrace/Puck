@@ -776,8 +776,8 @@ children follow its keyed row, one `UpsertPlacement`/`RemovePlacement` per
 arriving, leaving, or re-variant cell, every template's folded into one `Batch` a
 tick under `Principal.World`, so however many templates re-deal the tick
 composes and validates the document once, and, being the World's own, it raises
-no edit echo; a child keeps the region offset it was dealt and a new
-cell takes the lowest free one; the sweep returns at once when the installed
+no edit echo; a child keeps the slot it was dealt, its `position` holding only
+its displacement from that slot, and a new cell takes the lowest free one; the sweep returns at once when the installed
 document is the one it last left, and skips a template whose row, variant
 row, and own row are unchanged before reading its children, so a quiet tick
 allocates nothing; read back with `world.placements`). Escrow

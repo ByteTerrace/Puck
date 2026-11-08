@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.Maths;
 using Puck.Abstractions;
 
@@ -38,34 +37,77 @@ public readonly record struct CompiledPlacementFrame(FixedVector3 FixedPosition,
         new(placement.Position, placement.YawDegrees, placement.Scale);
 }
 
-/// <summary>Compiles placement parent chains through one deterministic transform composition. Canonical surface
-/// frames reuse <see cref="Compose"/> after resolving their selected ground and parent dependencies.</summary>
+/// <summary>Compiles placement parent chains through one deterministic transform composition: the frame table, the
+/// spatial query index and the canonical surface frames all resolve a parent chain through <see cref="Compose"/>
+/// and its <see cref="LocalFrame"/>, the one place a dealt child's slot offset meets its displacement.</summary>
 public static class WorldPlacementFrameCompilation {
     private static readonly IReadOnlyDictionary<string, CompiledPlacementFrame> Empty = new Dictionary<string, CompiledPlacementFrame>(StringComparer.Ordinal);
-    private static readonly CodeDerivedTable<WorldPlacementsSection, StrongBox<IReadOnlyDictionary<string, CompiledPlacementFrame>>> Cache = new();
+    private sealed record FrameTable(ulong WorldSeed, IReadOnlyDictionary<string, CompiledPlacementFrame> Frames);
+    private static readonly CodeDerivedTable<WorldPlacementsSection, FrameTable> Cache = new();
 
-    /// <summary>Composes a child's authored transform over its parent's canonical fixed frame.</summary>
-    /// <param name="parentFrame">The already resolved parent.</param><param name="childRow">The child's local transform.</param>
-    /// <param name="inheritParentScale">False for dealt children that already carry their template's scale and metre offsets.</param>
+    /// <summary>Returns a row's local frame in its parent's frame and whether its offset takes the parent's scale. A
+    /// dealt child (<see cref="WorldPlacementDeal.IsChild"/>) stands at its slot's fixed-point offset
+    /// (<see cref="WorldPlacementDeal.SlotOffset"/>) plus its <see cref="WorldPlacement.Position"/>, which is its
+    /// displacement from that slot; it carries its template's scale already and its offsets are metres in the template's
+    /// frame, so it inherits no scale. Every other row's local frame is its authored transform, scaled by its parent.
+    /// The slot offset never passes through a float, so a child moved to another slot (a recipient's re-deal) stands at
+    /// that slot's exact offset plus the same displacement.</summary>
+    /// <param name="parent">The row's resolved parent row, or <see langword="null"/> for a root.</param>
+    /// <param name="row">The row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>), which a noise or scatter region's
+    /// offsets read.</param>
+    /// <param name="inheritScale">Whether the parent's scale multiplies the local offset and scale.</param>
+    /// <returns>The local frame.</returns>
+    public static CompiledPlacementFrame LocalFrame(WorldPlacement? parent, WorldPlacement row, ulong worldSeed, out bool inheritScale) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        var local = CompiledPlacementFrame.FromAuthored(placement: row);
+
+        inheritScale = !WorldPlacementDeal.IsChild(placement: row, parent: parent);
+        return inheritScale ? local : local.WithFixedPosition(position: checked(WorldPlacementDeal.SlotOffset(template: parent!, slot: row.DealSlot, worldSeed: worldSeed) + local.FixedPosition));
+    }
+    /// <summary>Returns the value a row's <see cref="WorldPlacement.Position"/> holds for it to stand at
+    /// <paramref name="localPosition"/> in its parent's frame: the inverse of <see cref="LocalFrame"/>'s position, so a
+    /// dealt child's is its displacement from its slot's offset, taken in fixed point.</summary>
+    /// <param name="parent">The row's parent row, or <see langword="null"/> for a root.</param>
+    /// <param name="row">The row.</param>
+    /// <param name="localPosition">The position in the parent's frame, before the parent's scale.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    /// <returns>The stored position, in fixed point.</returns>
+    public static FixedVector3 StoredPosition(WorldPlacement? parent, WorldPlacement row, FixedVector3 localPosition, ulong worldSeed) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return WorldPlacementDeal.IsChild(placement: row, parent: parent)
+            ? checked(localPosition - WorldPlacementDeal.SlotOffset(template: parent!, slot: row.DealSlot, worldSeed: worldSeed))
+            : localPosition;
+    }
+    /// <summary>Composes a child's local transform (<see cref="LocalFrame"/>) over its parent's canonical fixed frame.</summary>
+    /// <param name="parentFrame">The already resolved parent frame.</param>
+    /// <param name="parent">The parent row.</param>
+    /// <param name="child">The child row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     /// <returns>The exact world frame.</returns>
-    public static CompiledPlacementFrame Compose(CompiledPlacementFrame parentFrame, WorldPlacement childRow, bool inheritParentScale = true) =>
-        ComposeCore(parentFrame, CompiledPlacementFrame.FromAuthored(childRow), inheritParentScale, null);
+    /// <exception cref="OverflowException">The composition exceeds the fixed-point range.</exception>
+    public static CompiledPlacementFrame Compose(CompiledPlacementFrame parentFrame, WorldPlacement parent, WorldPlacement child, ulong worldSeed) =>
+        ComposeCore(parentFrame, LocalFrame(parent: parent, row: child, worldSeed: worldSeed, inheritScale: out var inherit), inherit, null);
 
     private static CompiledPlacementFrame ComposeCore(CompiledPlacementFrame parent, CompiledPlacementFrame local,
-        bool inheritScale, Func<FixedVector3, bool>? rotationRange) {
+        bool inheritScale, Func<FixedQ4816, bool>? within) {
         var inherited = inheritScale ? parent.FixedScale : FixedQ4816.One;
         var offset = checked(local.FixedPosition * inherited);
-        if (rotationRange is not null && !rotationRange(offset)) { throw new OverflowException("Placement rotation input exceeds the query range."); }
+        if (within is not null && !Within(within, offset)) { throw new OverflowException("Placement rotation input exceeds the query range."); }
         return new CompiledPlacementFrame(
             checked(parent.FixedPosition + parent.FixedRotation.Rotate(offset)),
             checked(parent.FixedYawRadians + local.FixedYawRadians), checked(local.FixedScale * inherited));
     }
+    private static bool Within(Func<FixedQ4816, bool> within, FixedVector3 value) => within(value.X) && within(value.Y) && within(value.Z);
 
-    // Shared strict resolver. Spatial compilation supplies its representability envelope; the general document
-    // read retains best-effort authored roots for malformed chains until validation reports their named error.
+    // The one parent-chain resolver. A caller with a representability envelope (spatial compilation) passes it as
+    // within, which every rotation input, resolved position and scale on the chain must satisfy; the general document
+    // read keeps best-effort authored roots for malformed chains until validation reports their named error.
     internal static bool TryResolveFrame(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> byId,
-        Dictionary<string, CompiledPlacementFrame> frames, HashSet<string> visiting,
-        out CompiledPlacementFrame frame, out string reason, Func<FixedVector3, bool>? rotationRange = null) {
+        Dictionary<string, CompiledPlacementFrame> frames, HashSet<string> visiting, ulong worldSeed,
+        out CompiledPlacementFrame frame, out string reason, Func<FixedQ4816, bool>? within = null) {
         if (frames.TryGetValue(placement.Id, out frame)) { reason = string.Empty; return true; }
         if (!visiting.Add(placement.Id)) { frame = default; reason = $"placement '{placement.Id}' participates in a parent cycle"; return false; }
         try {
@@ -76,10 +118,14 @@ public static class WorldPlacementFrameCompilation {
                     parent.Attach is not null || parent.Inhabit is not null) {
                     frame = default; reason = $"placement '{placement.Id}' requires a declared static single parent frame '{parentId}'"; return false;
                 }
-                if (!TryResolveFrame(parent, byId, frames, visiting, out var parentFrame, out reason, rotationRange)) {
+                if (!TryResolveFrame(parent, byId, frames, visiting, worldSeed, out var parentFrame, out reason, within)) {
                     frame = default; return false;
                 }
-                frame = ComposeCore(parentFrame, frame, !WorldPlacementDeal.IsChild(parent, placement), rotationRange);
+                var local = LocalFrame(parent: parent, row: placement, worldSeed: worldSeed, inheritScale: out var inherit);
+                frame = ComposeCore(parentFrame, local, inherit, within);
+            }
+            if (within is not null && (!Within(within, frame.FixedPosition) || !within(frame.FixedScale))) {
+                frame = default; reason = $"placement '{placement.Id}' transform exceeds the fixed-point query range"; return false;
             }
             frames[placement.Id] = frame;
             reason = string.Empty;
@@ -90,22 +136,32 @@ public static class WorldPlacementFrameCompilation {
     }
     /// <summary>Compiles rows without retaining a section cache. Invalid parent chains keep their own authored root;
     /// <see cref="TryValidate"/> remains the named refusal door.</summary>
-    /// <param name="placements">The authored rows.</param><returns>The world frames.</returns>
-    public static IReadOnlyDictionary<string, CompiledPlacementFrame> Compile(IReadOnlyList<WorldPlacement>? placements) {
+    /// <param name="placements">The authored rows.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>), which a dealt child's slot offset
+    /// reads under a noise or scatter region.</param>
+    /// <returns>The world frames.</returns>
+    public static IReadOnlyDictionary<string, CompiledPlacementFrame> Compile(IReadOnlyList<WorldPlacement>? placements, ulong worldSeed) {
         if (placements is not { Count: > 0 }) { return Empty; }
         var byId = new Dictionary<string, WorldPlacement>(placements.Count, StringComparer.Ordinal);
         foreach (var row in placements) { byId[row.Id] = row; }
         var frames = new Dictionary<string, CompiledPlacementFrame>(placements.Count, StringComparer.Ordinal);
         var visiting = new HashSet<string>(StringComparer.Ordinal);
         foreach (var row in placements) {
-            if (!TryResolveFrame(row, byId, frames, visiting, out _, out _)) { frames[row.Id] = CompiledPlacementFrame.FromAuthored(row); }
+            if (!TryResolveFrame(row, byId, frames, visiting, worldSeed, out _, out _)) { frames[row.Id] = CompiledPlacementFrame.FromAuthored(row); }
         }
         return frames;
     }
-    /// <summary>Gets a code-aware parent-frame derivation for one immutable placement section.</summary>
-    /// <param name="section">The section, or null.</param><returns>The shared frame table.</returns>
-    public static IReadOnlyDictionary<string, CompiledPlacementFrame> Resolve(WorldPlacementsSection? section) => section is null ? Empty :
-        Cache.GetValue(section, static s => new StrongBox<IReadOnlyDictionary<string, CompiledPlacementFrame>>(Compile(s.Rows))).Value!;
+    /// <summary>Gets a code-aware parent-frame derivation for one immutable placement section under one seed.</summary>
+    /// <param name="section">The section, or null.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    /// <returns>The shared frame table.</returns>
+    public static IReadOnlyDictionary<string, CompiledPlacementFrame> Resolve(WorldPlacementsSection? section, ulong worldSeed) {
+        if (section is null) { return Empty; }
+        if (Cache.TryGetValue(section, out var held) && (held.WorldSeed == worldSeed)) { return held.Frames; }
+        var table = new FrameTable(worldSeed, Compile(section.Rows, worldSeed));
+        Cache.AddOrUpdate(section, table);
+        return table.Frames;
+    }
     // A holding-only replacement has the same authored transforms.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
         if (Cache.TryGetValue(source, out var table)) { Cache.AddOrUpdate(target, table); }
