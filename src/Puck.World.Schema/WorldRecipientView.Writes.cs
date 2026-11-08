@@ -7,6 +7,7 @@ namespace Puck.World;
 public sealed partial class WorldRecipientView {
     private sealed class WriteScratch {
         public HashSet<string> Rows { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> Placements { get; } = new(StringComparer.Ordinal);
         public List<int> Sets { get; } = [];
     }
     // Read-only capabilities are minted during delivery. Writing scratch belongs only to capabilities that write;
@@ -71,12 +72,17 @@ public sealed partial class WorldRecipientView {
         return true;
     }
 
-    /// <summary>Checks the declared state dependencies of a spatial census, including deal sources and parents.</summary>
-    public bool AdmitsSpatial(in WorldSpatialReadRegion region, out string row) {
+    /// <summary>Checks the declared state dependencies, deal sources and parents included, of every placement any
+    /// bounded spatial read could observe (<see cref="WorldDefinitionFingerprint.EntersSpatialCensus"/>). Which
+    /// placements one region holds can itself depend on state (a bound centre or extent, a parent's bound frame), so
+    /// the answer takes no region: a refusal never tells the recipient where withheld geometry lies.</summary>
+    /// <param name="row">The first withheld row, or empty when every dependency is admitted.</param>
+    /// <returns><see langword="true"/> when every census-eligible placement's dependencies are admitted.</returns>
+    public bool AdmitsSpatial(out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
-        foreach (var placement in WorldDefinitionFingerprint.SpatialRows(Source, region)) {
-            if (!AdmitsPlacement(placement, out row)) { return false; }
+        foreach (var placement in Source.Placements) {
+            if (WorldDefinitionFingerprint.EntersSpatialCensus(placement) && !AdmitsPlacement(placement, out row)) { return false; }
         }
         return true;
     }
@@ -86,14 +92,23 @@ public sealed partial class WorldRecipientView {
         row = string.Empty;
         return WorldDefinitionRows.FindPlacement(Source.Placements, id) is not { } placement || AdmitsPlacement(placement, out row);
     }
-    /// <summary>Checks an incoming placement's complete state dependency declaration.</summary>
+    /// <summary>Checks an incoming placement's complete state dependency declaration and its parent chain's. A batch
+    /// composes members without validating between them, so the chain may close on itself; each placement is checked
+    /// once and the walk ends there.</summary>
     public bool AdmitsPlacement(WorldPlacement placement, out string row) {
         row = string.Empty;
-        var reads = Writes.GetValue(this, static _ => new()).Rows;
-        reads.Clear();
-        WorldDefinitionFingerprint.CollectPlacementStateInputs(placement, reads);
-        foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
-        if (placement.Parent is { } parent) { return AdmitsPlacement(parent, out row); }
+        if (Unrestricted) { return true; }
+        var scratch = Writes.GetValue(this, static _ => new());
+        var reads = scratch.Rows;
+        var visited = scratch.Placements;
+        visited.Clear();
+        var next = placement;
+        while (next is not null && visited.Add(next.Id)) {
+            reads.Clear();
+            WorldDefinitionFingerprint.CollectPlacementStateInputs(next, reads);
+            foreach (var name in reads) { if (!Admits(name)) { row = name; return false; } }
+            next = next.Parent is { } parent ? WorldDefinitionRows.FindPlacement(Source.Placements, parent) : null;
+        }
         return true;
     }
 

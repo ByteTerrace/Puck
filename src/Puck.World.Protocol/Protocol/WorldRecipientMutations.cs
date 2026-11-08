@@ -37,9 +37,7 @@ public static class WorldRecipientMutations {
                     if (!view.AdmitsDefinition(inputs.StateRows, out row)) { return false; }
                     foreach (var id in inputs.PlacementIds) { if (!view.AdmitsPlacement(id, out row)) { return false; } }
                 }
-                foreach (var spatial in batch.ExpectedSpatialReads ?? []) {
-                    if (!view.AdmitsSpatial(spatial.Region, out row)) { return false; }
-                }
+                if (batch.ExpectedSpatialReads is { Count: > 0 } && !view.AdmitsSpatial(out row)) { return false; }
                 foreach (var member in batch.Mutations) { if (!view.Admits(member, out row)) { return false; } }
                 return true;
         }

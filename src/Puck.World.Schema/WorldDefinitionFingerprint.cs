@@ -153,6 +153,13 @@ public static class WorldDefinitionFingerprint {
         rows.Add(deal.Row);
         if (deal.Variants is { } variants) { rows.Add(variants.Row); }
     }
+    /// <summary>Returns whether a placement can enter some spatial census on its own account: it declares a spatial
+    /// volume, or it is a deal template whose children may carry facets. <see cref="SpatialRows"/> returns no other
+    /// placement except as the parent frame of one that does.</summary>
+    /// <param name="placement">The authored placement.</param>
+    /// <returns><see langword="true"/> when some region's census can hold the placement.</returns>
+    public static bool EntersSpatialCensus(WorldPlacement placement) =>
+        (placement.Spatial is { Count: > 0 }) || (placement.Deal is { Preserve: { Facets: true } });
     /// <summary>Returns the authored rows observed by a bounded spatial read in document order.</summary>
     public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in WorldSpatialReadRegion region) {
         if (definition.PlacementsRaw is not { } section) { return []; }
@@ -183,7 +190,7 @@ public static class WorldDefinitionFingerprint {
         // and preserved child facets/transforms have no static exclusion bound. Include the declaration even
         // when no child exists, just as an unsupported dynamic volume is included above.
         foreach (var placement in definition.Placements) {
-            if (placement.Deal is { } deal && (placement.Spatial is { Count: > 0 } || deal.Preserve is { Facets: true })) {
+            if (placement.Deal is not null && EntersSpatialCensus(placement)) {
                 Include(placement.Id);
             }
         }
