@@ -67,9 +67,8 @@ public static partial class WorldStateHashComposition {
                 cycle: row.Cycle,
                 hash: ref hash
             );
-            // Folded only when authored, unlike the presence-byte traits above: an unconditional byte would move
-            // every recorded state baseline for a document that declares no verdict anywhere, which is information
-            // no reader gains. A verdict row still changes this hash the moment it exists.
+            // Folded only when authored, unlike the presence-byte traits above: a byte for an absent verdict carries
+            // nothing a reader could tell apart. A verdict row still changes this hash the moment it exists.
             if (row.Verdict is { } verdict) {
                 AppendString(
                     hash: ref hash,
