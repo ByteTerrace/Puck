@@ -329,7 +329,10 @@ public static class BindingWheelGeometry {
     /// wall clock the host cannot substitute.</summary>
     /// <param name="seconds">The authored window; zero, negative, and non-finite all disable it.</param>
     /// <param name="ticksPerSecond">The engine's tick rate.</param>
-    /// <returns>The window's whole tick count, truncated toward zero; <c>0</c> when the window is disabled.</returns>
+    /// <returns>The window's whole tick count, rounded up from the authored decimal the float spells by
+    /// <see cref="FixedTickConversion.DurationTicks(decimal, ulong)"/>, as every authored duration converts;
+    /// <c>0</c> when the window is disabled, and <see cref="ulong.MaxValue"/> (never expires) for a window past the
+    /// 64-bit tick carrier.</returns>
     public static ulong SelectionGraceTicks(float seconds, ulong ticksPerSecond) {
         if (
             !float.IsFinite(f: seconds) ||
@@ -338,13 +341,14 @@ public static class BindingWheelGeometry {
             return 0UL;
         }
 
-        var ticks = (((double)seconds) * ticksPerSecond);
-
-        // An absurd authored window is clamped rather than wrapped: an unchecked conversion of an out-of-range
-        // double to ulong is undefined, and "never expires" is the honest reading of a window that long.
-        return ((ticks >= 18_446_744_073_709_551_615d)
+        // The double product only screens out a window past the carrier (and past decimal's range); the count itself
+        // comes from the exact decimal.
+        return (((((double)seconds) * ticksPerSecond) >= 18_446_744_073_709_551_615d)
             ? ulong.MaxValue
-            : ((ulong)ticks)
+            : FixedTickConversion.DurationTicks(
+                ratePerSecond: ticksPerSecond,
+                seconds: ((decimal)seconds)
+            )
         );
     }
 }

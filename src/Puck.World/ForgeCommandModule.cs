@@ -19,6 +19,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
             : CommandForms.Of(verb: verb, grammar));
 
         return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Local,
             bindability: CommandBindability.Unbindable,
             name: verb,
             description: $"{(forms?.Spelling ?? verb)} — {detail} Drafts belong to the acting local console or seat; file paths are explicit and relative to the host working directory.",
@@ -34,9 +35,6 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
     private CommandResult Execute(string name, CommandForms? forms, CommandContext context, WireArgs args) {
         var principal = context.Principal;
 
-        if (principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
-            return CommandResult.Error(output: "[forge: local authoring requires a console or local seat]");
-        }
         try {
             var count = name switch { "new" or "set" or "play" => 2, "open" or "save" or "export" or "remove" => 1, _ => 0 };
 

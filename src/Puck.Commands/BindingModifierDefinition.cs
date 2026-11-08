@@ -23,8 +23,8 @@ namespace Puck.Commands;
 public sealed record BindingModifierDefinition(
     string Id,
     IReadOnlyList<string> Sources,
-    float PressThreshold = 0.5f,
-    float ReleaseThreshold = 0.4f,
+    float PressThreshold = HeldOrderTracker.DefaultPressThreshold,
+    float ReleaseThreshold = HeldOrderTracker.DefaultReleaseThreshold,
     string? Label = null,
     string? Icon = null
 );

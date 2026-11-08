@@ -6,7 +6,7 @@ namespace Puck.Launcher;
 /// <summary>
 /// Owns the <see cref="GamepadManager"/> lifecycle: it enumerates and starts controllers when the host starts
 /// and tears them down on shutdown. The manager's input is consumed through the host's registered
-/// <see cref="IInputArbiter"/> lanes and snapshot capture, so this service only governs device lifetime.
+/// <see cref="IInputArbiter"/> and snapshot capture, so this service only governs device lifetime.
 /// </summary>
 public sealed class GamepadHostedService : IHostedService {
     private readonly GamepadManager m_manager;
