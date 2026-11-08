@@ -22,17 +22,17 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the map and coefficient payload bytes, one pair however many views read it.</summary>
     public static int SkyEnvironmentBytes => SdfSkyEnvironment.PayloadBytes;
     /// <summary>Gets how many environment projections have actually been submitted.</summary>
-    public long SkyEnvironmentRenders => m_skyEnvironment.Renders;
+    public long SkyEnvironmentRenders => m_skyEnvironment.Publication.Renders;
     /// <summary>Gets the shared two-plane environment map. Its graph producer owns access ordering.</summary>
     public IGpuBuffer SkyEnvironmentMap => m_skyEnvironment.Map;
     /// <summary>Gets the shared nine-coefficient irradiance table. Its graph producer owns access ordering.</summary>
     public IGpuBuffer SkyEnvironmentCoefficients => m_skyEnvironment.Coefficients;
     /// <summary>Gets the latest submitted projection, or null before any projection. A pending newer submission means
     /// the buffers no longer describe an older completed publication.</summary>
-    public SdfEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Submitted;
+    public SdfEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Publication.Submitted;
     /// <summary>Gets the latest projection whose submission its render node proved complete while it was still the latest
     /// submitted; it is not inferred from a displayed view.</summary>
-    public GpuImagePublication CompletedSkyEnvironment => m_skyEnvironment.Completed;
+    public GpuImagePublication CompletedSkyEnvironment => m_skyEnvironment.Publication.Completed;
 
     internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
@@ -57,18 +57,18 @@ public sealed partial class SdfWorldTables {
     internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
         var known = m_skyEnvironment.ObserveSources(reads: reads, residency: residency, view: view);
 
-        return (known ? unchecked((ulong)(m_skyEnvironment.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null);
+        return (known ? unchecked((ulong)(m_skyEnvironment.Publication.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null);
     }
     internal long SubmitSkyEnvironment() => m_skyEnvironment.Publish();
-    internal void CompleteSkyEnvironment(long sequence) => m_skyEnvironment.Complete(sequence: sequence);
+    internal void CompleteSkyEnvironment(long sequence) => m_skyEnvironment.Publication.Complete(sequence: sequence);
     /// <summary>Makes each lighting source whose submission holds unfilled external content (the sky environment's
     /// projection, the screen emission's reduction) derive itself again on its next recording, from whatever its sources
     /// are then, the capture gate's fills while a capture is armed. The tainted submission stands, and stays reported as
     /// tainted, until a new one replaces it.</summary>
     /// <returns>Whether either source was tainted.</returns>
     public bool ProjectTaintedSourcesAgain() {
-        var sky = (m_skyEnvironment.Submitted is { Tainted: true });
-        var screens = (m_screenEmission.Submitted is { Tainted: true });
+        var sky = (m_skyEnvironment.Publication.Submitted is { Tainted: true });
+        var screens = (m_screenEmission.Publication.Submitted is { Tainted: true });
 
         m_skyEnvironment.Forced |= sky;
         m_screenEmission.Forced |= screens;
@@ -119,6 +119,7 @@ public sealed partial class SdfWorldTables {
 
         public SkyEnvironmentPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             m_tables = tables;
+            Publication = new EnvironmentPublication(owner: tables);
             Map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "map"),
                 sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage));
             Coefficients = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "coefficients"),
@@ -130,13 +131,11 @@ public sealed partial class SdfWorldTables {
 
         public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
 
-        public GpuImagePublication Completed { get; private set; }
+        public EnvironmentPublication Publication { get; }
         public bool Demand { get; private set; }
         public bool Owes { get; private set; }
         public bool Projected { get; set; }
-        public long Renders { get; private set; }
         public bool Skipped { get; private set; }
-        public SdfEnvironmentSubmission? Submitted { get; private set; }
 
         public bool CanRecord { get; private set; } = true;
         // Whether the next observation projects again whatever its sources' publications say: a tainted projection a
@@ -199,26 +198,40 @@ public sealed partial class SdfWorldTables {
             m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(destination: m_renderedMappings);
             Owes = false;
             Forced = false;
-            Submitted = new SdfEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Tainted: m_tainted);
-            return Renders;
+            return Publication.Publish(tainted: m_tainted);
         }
-        // Latches a proven submission only while it is still the latest: a newer one owns the buffers.
-        public void Complete(long sequence) {
-            if (Submitted is { } submitted && (submitted.Sequence == sequence)) { Completed = submitted.Publication; }
-        }
+        // An unproven submission must be projected again by the next recorder.
         public void Withdraw(long sequence) {
-            // Recorder retirement can follow device loss without a proof. A latched complete source remains valid; an
-            // unproven submission must be projected again by the next recorder.
-            if ((Submitted is { } submitted) && (submitted.Sequence == sequence) && (submitted.Publication != Completed)) {
-                Forget();
-            }
+            if (Publication.Unproven(sequence: sequence)) { Forget(); }
         }
         public void Forget() {
             m_refresh.Forget();
             Owes = true;
+            Publication.Forget();
+        }
+        public void Dispose() { Forget(); Coefficients.Dispose(); Map.Dispose(); }
+    }
+
+    // One lighting source's submissions: the latest submitted, and the latest its render node proved complete while it was
+    // still the latest submitted, since a newer submission owns the source's buffers.
+    private sealed class EnvironmentPublication(object owner) {
+        public SdfEnvironmentSubmission? Submitted { get; private set; }
+        public GpuImagePublication Completed { get; private set; }
+        public long Renders { get; private set; }
+
+        public long Publish(bool tainted) {
+            Submitted = new SdfEnvironmentSubmission(Owner: owner, Sequence: ++Renders, Tainted: tainted);
+            return Renders;
+        }
+        public void Complete(long sequence) {
+            if (Submitted is { } submitted && (submitted.Sequence == sequence)) { Completed = submitted.Publication; }
+        }
+        // Whether the sequence is the latest submission and no proof completed it: a recorder released after a device loss
+        // leaves it so. A latched complete source remains valid.
+        public bool Unproven(long sequence) => ((Submitted is { } submitted) && (submitted.Sequence == sequence) && (submitted.Publication != Completed));
+        public void Forget() {
             Submitted = null;
             Completed = default;
         }
-        public void Dispose() { Forget(); Coefficients.Dispose(); Map.Dispose(); }
     }
 }

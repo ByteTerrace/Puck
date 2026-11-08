@@ -87,8 +87,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             return;
         }
         m_disposed = true;
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
@@ -202,16 +201,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
     }
-    // Notes the screens a residency declares, which alone may bind a source.
-    private void DeclareScreens(SdfWorldResidency residency) {
-        Array.Clear(array: m_declaredScreens);
-
-        if (residency.ScreenSources is { } sources) {
-            foreach (var screen in sources.Screens) {
-                m_declaredScreens[screen] = true;
-            }
-        }
-    }
+    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Writes each screen the frame's sky samples into the slot's pass set every frame, since a host's image handle is
     // unique only among live objects, and the filler once at every other screen. The image is the one the views pass
     // binds (SdfWorldResidency.ScreenImage), under the lease it already holds.

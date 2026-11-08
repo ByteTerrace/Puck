@@ -38,8 +38,7 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         if (m_disposed) { return; }
         m_disposed = true;
         m_context.Services.Bindings.DestroySampler(samplerHandle: m_sampler);
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);

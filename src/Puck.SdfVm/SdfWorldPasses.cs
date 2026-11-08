@@ -183,8 +183,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 view: view
             );
         } catch {
-            Unhold(residency: view.Residency);
-            view.Residency.Release();
+            Leave(view: view);
 
             throw;
         }
@@ -498,6 +497,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         view = current;
         return moved;
+    }
+    // Gives back the hold and the retain a recorder keeps on the view it records, as it is released.
+    internal void Leave(SdfWorldView view) {
+        Unhold(residency: view.Residency);
+        view.Residency.Release();
     }
     // Gives back a hold; the package forgets a residency no one holds.
     internal void Unhold(SdfWorldResidency residency) {

@@ -390,8 +390,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_shade.Release(releases: m_owner.ShadeReleases);
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mesh part
     // a frame that draws no mesh, and a shadow cascade a frame with no draw or no cascade of its own. A frame that draws no
@@ -646,16 +645,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             Array.Clear(array: screens);
         }
     }
-    // Which screen indices a residency binds.
-    private void DeclareScreens(SdfWorldResidency residency) {
-        Array.Clear(array: m_declaredScreens);
-
-        if (residency.ScreenSources is { } sources) {
-            foreach (var screen in sources.Screens) {
-                m_declaredScreens[screen] = true;
-            }
-        }
-    }
+    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Binds the pass set and dispatches the part's kernel: the pyramid one invocation a texel of its first level, and the
     // surface and views passes one invocation a pixel of the render extent.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {

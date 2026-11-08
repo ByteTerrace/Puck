@@ -10,10 +10,10 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the one GPU image reduction every direct screen light reads.</summary>
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
-    public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Submitted;
+    public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Publication.Submitted;
     /// <summary>Gets the latest screen reduction whose submission its render node proved complete while it was still the
     /// latest submitted.</summary>
-    public GpuImagePublication CompletedScreenEmission => m_screenEmission.Completed;
+    public GpuImagePublication CompletedScreenEmission => m_screenEmission.Publication.Completed;
 
     internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
@@ -22,7 +22,7 @@ public sealed partial class SdfWorldTables {
     internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) =>
         m_screenEmission.Observe(reads: reads, residency: residency, view: view);
     internal long SubmitScreenEmission() => m_screenEmission.Publish();
-    internal void CompleteScreenEmission(long sequence) => m_screenEmission.Complete(sequence: sequence);
+    internal void CompleteScreenEmission(long sequence) => m_screenEmission.Publication.Complete(sequence: sequence);
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
 
     private sealed class ScreenEmissionPass : IDisposable {
@@ -36,6 +36,7 @@ public sealed partial class SdfWorldTables {
 
         public ScreenEmissionPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             m_tables = tables;
+            Publication = new EnvironmentPublication(owner: this);
             Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "screen-emission"),
                 sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage));
         }
@@ -47,9 +48,7 @@ public sealed partial class SdfWorldTables {
         // Whether the next observation reduces again whatever its sources say (SdfWorldTables.ProjectTaintedSourcesAgain).
         public bool Forced { get; set; }
 
-        public GpuImagePublication Completed { get; private set; }
-        public long Renders { get; private set; }
-        public SdfEnvironmentSubmission? Submitted { get; private set; }
+        public EnvironmentPublication Publication { get; }
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
             Array.Clear(array: m_sources);
@@ -81,8 +80,8 @@ public sealed partial class SdfWorldTables {
 
                 changed |= different;
             }
-            Owes = ((Submitted is null) || changed || Forced);
-            return unchecked((ulong)(Renders + (Owes ? 1 : 0)));
+            Owes = ((Publication.Submitted is null) || changed || Forced);
+            return unchecked((ulong)(Publication.Renders + (Owes ? 1 : 0)));
         }
         public long Publish() {
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
@@ -94,17 +93,12 @@ public sealed partial class SdfWorldTables {
             }
             Owes = false;
             Forced = false;
-            Submitted = new(Owner: this, Sequence: ++Renders, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
-            return Renders;
-        }
-        // Latches a proven submission only while it is still the latest: a newer one owns the buffer.
-        public void Complete(long sequence) {
-            if (Submitted is { } submitted && (submitted.Sequence == sequence)) { Completed = submitted.Publication; }
+            return Publication.Publish(tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
         }
         public void Withdraw(long sequence) {
-            if ((Submitted is { } submitted) && (submitted.Sequence == sequence) && (submitted.Publication != Completed)) { Forget(); }
+            if (Publication.Unproven(sequence: sequence)) { Forget(); }
         }
-        public void Forget() { Submitted = null; Completed = default; Owes = true; }
+        public void Forget() { Publication.Forget(); Owes = true; }
         public void Dispose() { Forget(); Buffer.Dispose(); }
     }
 }
