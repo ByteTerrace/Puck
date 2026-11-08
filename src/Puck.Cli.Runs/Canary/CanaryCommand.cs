@@ -1051,7 +1051,7 @@ public static partial class CanaryCommand {
 
                     return CanaryLegRun.InfrastructureFailure(
                         leg: leg,
-                        reason: ((ListenerRefusal(stderr: SplitLines(text: authority.Stderr)) is { } refused)
+                        reason: ((ListenerRefusal(stderr: CliText.Lines(text: authority.Stderr)) is { } refused)
                             ? $"companion authority could not bind {federationEndpoint}: {refused}"
                             : $"companion authority did not report a bound listener within {AuthorityCompanion.ListenSeconds} seconds"),
                         runDirectory: runDirectory
@@ -1124,8 +1124,8 @@ public static partial class CanaryCommand {
 
         var transcript = new CanaryTranscript(
             RunDirectory: runDirectory,
-            Stderr: SplitLines(text: process.Stderr),
-            Stdout: SplitLines(text: process.Stdout)
+            Stderr: CliText.Lines(text: process.Stderr),
+            Stdout: CliText.Lines(text: process.Stdout)
         );
         var invariants = EvaluateRunnerInvariants(
             backend: backend,
@@ -1237,8 +1237,8 @@ public static partial class CanaryCommand {
 
             var secondTranscript = new CanaryTranscript(
                 RunDirectory: runDirectory,
-                Stderr: SplitLines(text: second.Stderr),
-                Stdout: SplitLines(text: second.Stdout)
+                Stderr: CliText.Lines(text: second.Stderr),
+                Stdout: CliText.Lines(text: second.Stdout)
             );
 
             invariants = [
@@ -1364,8 +1364,8 @@ public static partial class CanaryCommand {
                 json.Write(record: new System.Text.Json.Nodes.JsonObject {
                     ["id"] = manifest.Id,
                     ["shape"] = manifest.BootShape.ToString().ToLowerInvariant(),
-                    ["backends"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Backends.Select(selector: static backend => (System.Text.Json.Nodes.JsonNode?)backend)]),
-                    ["requirements"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Requirements.Select(selector: static requirement => (System.Text.Json.Nodes.JsonNode?)requirement)]),
+                    ["backends"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Backends.Select(selector: static backend => ((System.Text.Json.Nodes.JsonNode?)backend))]),
+                    ["requirements"] = new System.Text.Json.Nodes.JsonArray([.. manifest.Requirements.Select(selector: static requirement => ((System.Text.Json.Nodes.JsonNode?)requirement))]),
                     ["automatic"] = manifest.IsAutomatic,
                     ["world"] = CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: manifest.Positive.WorldPath),
                     ["binding"] = manifest.Binding,
@@ -1527,11 +1527,6 @@ public static partial class CanaryCommand {
             }
         }
     }
-    private static IReadOnlyList<string> SplitLines(string text) =>
-        text.ReplaceLineEndings(replacementText: "\n").Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: '\n'
-        );
     private static string Verdict(bool value) => (value
         ? "PASS"
         : "FAIL"

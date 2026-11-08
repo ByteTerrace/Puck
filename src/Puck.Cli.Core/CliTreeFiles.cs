@@ -3,11 +3,27 @@ namespace Puck.Cli;
 /// <summary>File operations over a tree a verb owns that never follow links: the law prover's proof tree and the
 /// reference-assembly recovery's build tree. Removing a tree is <c>ConfinedDirectory.RemoveTree</c>.</summary>
 public static class CliTreeFiles {
+    /// <summary>Generated, vendored and artifact directory names omitted by repository disk walks.</summary>
+    public static IReadOnlySet<string> SkippedDirectories { get; } = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
+        ".git", ".tmp", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
+    };
+
+    /// <summary>Finds a linked component from a path through its ancestors, including an optional containment root.
+    /// An outside path is refused before inspection. This is input validation, not a race-proof deletion guard.</summary>
+    public static string? LinkedAncestor(string path, string? root = null) {
+        path = Path.GetFullPath(path: path);
+        if ((root is not null) && !Puck.Abstractions.PuckPaths.IsWithin(path: path, root: root)) {
+            throw new ArgumentException(message: $"{CliPaths.ToDisplay(fullPath: path)} is outside {CliPaths.ToDisplay(fullPath: root)}.");
+        }
+        for (var current = path; (current is not null); current = Path.GetDirectoryName(path: current)) {
+            if (Path.Exists(path: current) && ((File.GetAttributes(path: current) & FileAttributes.ReparsePoint) != 0)) { return current; }
+            if ((root is not null) && CliPaths.Same(left: root, right: current)) { break; }
+        }
+        return null;
+    }
     public static void RequireUnlinkedPath(string path) {
-        for (var current = Path.GetFullPath(path: path); (current is not null); current = Path.GetDirectoryName(path: current)) {
-            if (Path.Exists(path: current) && ((File.GetAttributes(path: current) & FileAttributes.ReparsePoint) != 0)) {
-                throw new IOException(message: $"{CliPaths.ToDisplay(fullPath: current)} is a link in the proven tree or its input path.");
-            }
+        if (LinkedAncestor(path: path) is { } linked) {
+            throw new IOException(message: $"{CliPaths.ToDisplay(fullPath: linked)} is a link in the proven tree or its input path.");
         }
     }
     public static string? LinkedPath(string tree) {

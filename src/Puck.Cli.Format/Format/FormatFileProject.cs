@@ -24,6 +24,7 @@ public static class FormatFileProject {
             value: "using Microsoft.Build.Utilities;"
         );
 
+    public static bool IsDirective(string line) => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "#!") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "#:"));
     public static int Run(string file, HashSet<string> selected, bool check) {
         var repository = RepositoryPaths.RequireRoot();
         var scratch = Path.Combine(
@@ -32,13 +33,7 @@ public static class FormatFileProject {
             path3: $"format-{Guid.NewGuid():N}"
         );
         var original = File.ReadAllText(path: file);
-        var directives = original.Split('\n').Where(predicate: static line => (line.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "#!"
-        ) || line.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "#:"
-        ))).ToArray();
+        var directives = CliText.AllLines(text: original).Where(predicate: IsDirective).ToArray();
 
         try {
             string source;

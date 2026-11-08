@@ -674,9 +674,10 @@ missing shader tool, or a source edited while it was read is a refusal: exit 2,
 reported as `puck shaders <verb>: <path>: <why>`.
 
 `compare` holds every compiled SPIR-V module (`.spv`) in one tree to the same
-file in another, byte for byte. Both trees are walked for SPIR-V, skipping
-`artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and matched by
-relative path; a module only one tree holds, or one whose bytes differ (named
+file in another, byte for byte. Both trees are walked for SPIR-V, omitting
+generated, vendored and published output directories; `puck shaders compare --help`
+lists the shared pruning set. Files are matched by relative path; a module only
+one tree holds, or one whose bytes differ (named
 with its first differing byte), fails with exit 1, and a tree holding no SPIR-V
 is refused with exit 2. DXIL is no part of the comparison, and a `.dxil` file in
 either tree is ignored: Direct3D 12 is its one reader, so the shader build
@@ -3893,8 +3894,8 @@ unknown name lists the registered migrations; the registry is empty between
 reshapes, because a migration lands with the reshape it serves and is deleted
 once it has run.
 
-Each source is written by staging its rewrite in a sibling `.migrate-tmp` file
-and moving that over the destination, so an interrupted run leaves every source
+Each source is written by staging its rewrite in a uniquely named sibling temporary,
+flushing it to disk and publishing it through `AtomicFile`, so an interrupted run leaves every source
 either as it was or fully migrated—never truncated, which matters because a
 source that does not parse would refuse every later run. The one thing that is
 not atomic is the *set* of files: if a move fails after earlier moves have

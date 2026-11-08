@@ -394,7 +394,7 @@ public static class OfficialVerifyCommand {
 
         if (!File.Exists(path: buildsManifestPath)) {
             problems.Add(item: $"builds/{manifest.Build.Commit}/manifest.json is MISSING.");
-        } else if (!File.ReadAllBytes(path: buildsManifestPath).AsSpan().SequenceEqual(other: manifestBytes)) {
+        } else if (!Puck.Confinement.FileContent.Equals(expected: manifestBytes, path: buildsManifestPath)) {
             problems.Add(item: $"builds/{manifest.Build.Commit}/manifest.json is not byte-identical to {channel}/manifest.json.");
         }
 

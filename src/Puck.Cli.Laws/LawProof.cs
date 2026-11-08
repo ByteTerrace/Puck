@@ -124,21 +124,6 @@ public static partial class LawProof {
             path: full
         );
     }
-    // The nearest directory at or above the file's own, up to the tree, that holds a project file.
-    private static string? OwningProject(string tree, string file) {
-        for (var directory = Path.GetDirectoryName(path: file); ((directory is not null) && (directory.Length >= tree.Length)); directory = Path.GetDirectoryName(path: directory)) {
-            var projects = Directory.GetFiles(
-                path: directory,
-                searchPattern: "*.csproj"
-            );
-
-            if (projects.Length == 1) {
-                return projects[0];
-            }
-        }
-
-        return null;
-    }
     private static string Relative(string root, string path) => Path.GetRelativePath(
         path: path,
         relativeTo: root
@@ -158,7 +143,7 @@ public static partial class LawProof {
                 path2: named
             ));
 
-            if (Path.IsPathRooted(path: named) || !full.StartsWith(value: (tree + Path.DirectorySeparatorChar), comparisonType: Puck.Abstractions.PuckPaths.Comparison)) {
+            if (Path.IsPathRooted(path: named) || !Puck.Abstractions.PuckPaths.IsWithin(path: full, root: tree)) {
                 error = $"--project {named} is outside the proven tree.";
                 return false;
             }
@@ -183,16 +168,15 @@ public static partial class LawProof {
             path1: tree,
             path2: "tests"
         );
-        var sources = (Directory.Exists(path: tests)
-            ? Directory.EnumerateFiles(path: tests, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs").Order(comparer: StringComparer.Ordinal).Select(selector: path => (Path: path, Text: File.ReadAllText(path: path))).ToArray()
+        var files = (Directory.Exists(path: tests)
+            ? Directory.EnumerateFiles(path: tests, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs").Order(comparer: StringComparer.Ordinal).ToArray()
             : []);
+        var declarations = Puck.Cli.Analysis.DeclarationsCommand.ReadTypes(files: files, relativeTo: tree);
         var segments = law.Split(separator: '.');
 
         for (var index = (segments.Length - 1); (index >= 0); index--) {
-            var declaration = new Regex(pattern: $@"\b(class|record|struct)\s+{Regex.Escape(str: segments[index])}\b");
-            var owners = sources.Where(predicate: source => declaration.IsMatch(input: source.Text))
-                .Select(selector: source => OwningProject(file: source.Path, tree: tree))
-                .OfType<string>()
+            var owners = declarations.Where(predicate: declaration => (declaration.Name == segments[index]))
+                .Select(selector: declaration => CliProjects.FindOwningProject(start: Path.GetDirectoryName(path: Path.Combine(path1: tree, path2: declaration.Path))!, root: tree)).OfType<string>()
                 .Distinct(comparer: StringComparer.Ordinal)
                 .Select(selector: path => Relative(path: path, root: tree))
                 .Order(comparer: StringComparer.Ordinal)

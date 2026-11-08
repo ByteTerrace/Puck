@@ -10,9 +10,7 @@ public static class FileWalk {
     // The disk walk's prune set: generated, vendored and artifact directories, pruned at every depth below a root
     // that is outside a git work tree or that git ignores. A root inside a work tree uses git's ignore rules
     // instead. Naming one as a root still walks it, and so does naming a file inside it.
-    public static readonly HashSet<string> SkipDirectories = new(comparer: StringComparer.OrdinalIgnoreCase) {
-        ".git", ".tmp", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
-    };
+    public static IReadOnlySet<string> SkipDirectories => CliTreeFiles.SkippedDirectories;
 
     // The walk as a verb's help describes it, so no help text keeps a copy of the rules or the prune list.
     internal static string WalkSummary => $"""
@@ -187,19 +185,8 @@ public static class FileWalk {
                 return false;
             }
 
-            var listing = CliGit.Run(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard");
-
-            if (listing.ExitCode != 0) {
-                return false;
-            }
-
-            relative = listing.Stdout.Split(
-                options: StringSplitOptions.RemoveEmptyEntries,
-                separator: '\0'
-            );
-
-            return true;
-        } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException) {
+            return CliGit.TryListFiles(paths: out relative, reason: out _, repository: dir);
+        } catch (Exception ex) when ((ex is InvalidOperationException or System.ComponentModel.Win32Exception or TimeoutException)) {
             return false;
         }
     }
@@ -223,7 +210,7 @@ public static class FileWalk {
             var prunedByName = false;
 
             // A '/'-less --not glob prunes a directory by its basename, as the disk walk does.
-            for (var i = 0; (i < (segments.Length - 1)) && !prunedByName; i++) {
+            for (var i = 0; ((i < (segments.Length - 1)) && !prunedByName); i++) {
                 prunedByName = MatchesAnyName(
                     globs: exclude,
                     name: segments[i]

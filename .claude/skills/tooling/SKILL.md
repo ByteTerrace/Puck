@@ -9,6 +9,8 @@ Load [verification](../verification/SKILL.md) for builds, private CLI copies and
 leases, and [symbol-analysis](../symbol-analysis/SKILL.md) for finding callers.
 [CI and releases](../../../docs/development/ci.md) owns repository automation;
 the [CLI reference](../../../docs/reference/cli.md) owns verb behavior.
+File publication, paths, Git inventories, project ownership and Markdown parsing route to
+[tooling-files](../tooling-files/SKILL.md).
 
 | Capability | Shared home | Callers and boundary |
 |---|---|---|

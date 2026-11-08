@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.Cli.Format;
@@ -214,7 +215,6 @@ public static class PuckMigrateCommand {
             .Where(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error))
             .Select(selector: static diagnostic => $"({diagnostic.Span.Line},{diagnostic.Span.Column}) {diagnostic.Code}: {diagnostic.Message}")
     );
-    private static string TempPath(string path) => (path + ".migrate-tmp");
     /// <summary>Returns why <paramref name="path"/> could not be opened for writing, or <see langword="null"/>.</summary>
     private static string? Unwritable(string path) {
         try {
@@ -235,18 +235,14 @@ public static class PuckMigrateCommand {
     // truncated. What no ordering can make atomic is the set: a move that fails after earlier moves succeeded
     // leaves those destinations replaced, which is why the refusal names them.
     private static int Write(IReadOnlyList<Plan> changed, PuckMigration migration, int planned) {
-        var staged = new List<Plan>(capacity: changed.Count);
+        var staged = new List<(Plan Plan, AtomicFile.PendingWrite Write)>(capacity: changed.Count);
 
         foreach (var plan in changed) {
             try {
-                File.WriteAllText(
-                    contents: plan.Rewritten!,
-                    path: TempPath(path: plan.Path)
-                );
-                staged.Add(item: plan);
+                staged.Add(item: (plan, AtomicFile.StageAllText(path: plan.Path, contents: plan.Rewritten!)));
             } catch (Exception ex) {
                 Console.Error.WriteLine(value: $"error: {plan.Path}: could not be staged for writing: {ex.Message}");
-                Discard(plans: staged);
+                Discard(writes: staged);
                 Console.Error.WriteLine(value: $"migrate: '{migration.Name}' could not stage every rewrite; nothing was written.");
 
                 return 2;
@@ -255,16 +251,12 @@ public static class PuckMigrateCommand {
 
         var replaced = new List<string>(capacity: staged.Count);
 
-        foreach (var plan in staged) {
+        foreach (var (plan, pending) in staged) {
             try {
-                File.Move(
-                    destFileName: plan.Path,
-                    overwrite: true,
-                    sourceFileName: TempPath(path: plan.Path)
-                );
+                pending.Commit();
             } catch (Exception ex) {
                 Console.Error.WriteLine(value: $"error: {plan.Path}: could not be replaced: {ex.Message}");
-                Discard(plans: staged.Skip(count: replaced.Count));
+                Discard(writes: staged.Skip(count: replaced.Count));
 
                 if (replaced.Count == 0) {
                     Console.Error.WriteLine(value: $"migrate: '{migration.Name}' replaced nothing; nothing was written.");
@@ -287,14 +279,8 @@ public static class PuckMigrateCommand {
 
         return 0;
     }
-    private static void Discard(IEnumerable<Plan> plans) {
-        foreach (var plan in plans) {
-            try {
-                File.Delete(path: TempPath(path: plan.Path));
-            } catch (Exception ex) {
-                Console.Error.WriteLine(value: $"warning: {TempPath(path: plan.Path)}: could not be removed: {ex.Message}");
-            }
-        }
+    private static void Discard(IEnumerable<(Plan Plan, AtomicFile.PendingWrite Write)> writes) {
+        foreach (var (_, pending) in writes) { pending.Dispose(); }
     }
 
     public static Command Create() {

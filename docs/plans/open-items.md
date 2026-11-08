@@ -41,8 +41,8 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (tooling's architecture, identity, release, lease, path, lock and deletion
-   copies), then its live copies as a batch, and
+   (done for tooling, physics and world contact, and rendering; the state and
+   rules audit is still open), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -1981,7 +1981,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `docs/reference/cli.md`'s `puck gate` section with it.
 - Recursive `Directory.Delete` remains in the assemblies the browser payload
   links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
-  (`Puck.Hosting`) and `WorldStaging` (`Puck.World.Transpiler`, twice). Route them
+  (`Puck.Hosting`). Route them
   through `ConfinedDirectory.RemoveTree` by referencing `Puck.Confinement` from
   `Puck.Abstractions`, after one `browser.yml` AOT publish shows the payload still
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`

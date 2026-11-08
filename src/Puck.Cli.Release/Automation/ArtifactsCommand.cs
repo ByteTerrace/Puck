@@ -27,10 +27,9 @@ public static class ArtifactsCommand {
         .. CliTestRun.CpuSelection,
         .. CliTestRun.WithoutBuildTree,
         .. CliTestRun.Report(directory: results, fileName: report),
-        .. CliTestRun.Coverage(output: Path.Combine(path1: results, path2: Path.ChangeExtension(path: report, extension: ".cobertura.xml")), settings: settings),
+        .. CliTestRun.Coverage(output: Path.Combine(path1: results, path2: Path.ChangeExtension(extension: ".cobertura.xml", path: report)), settings: settings),
         .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15)),
     ];
-
     /// <summary>Splits the test assemblies into <paramref name="count"/> shards round-robin: in ordinal order, the
     /// assembly at index <c>i</c> goes to shard <c>i</c> modulo <paramref name="count"/>. The shards together hold every
     /// assembly exactly once, each in ordinal order, and the split depends only on the set of assemblies, so every
@@ -51,6 +50,7 @@ public static class ArtifactsCommand {
         }
         return shards;
     }
+
     private const string Archive = "artifacts/compiled-windows.zip";
     private const string Identity = "source.json";
 
@@ -65,7 +65,7 @@ public static class ArtifactsCommand {
         )).Trim();
 
         if (changes.Length != 0) { throw new InvalidDataException(message: $"Tracked source changed while producing release artifacts:\n{changes}"); }
-        var commit = await CommitAsync(root: root);
+        var commit = await CliGit.CommitAsync(repository: root);
         var source = new JsonObject { ["commit"] = commit, ["configuration"] = "Release", ["platform"] = "windows", ["architecture"] = RuntimeInformation.ProcessArchitecture.ToString() };
 
         CliFiles.WriteJson(
@@ -180,12 +180,6 @@ public static class ArtifactsCommand {
         Console.WriteLine(value: $"Captured compiled Release outputs for {commit}.");
         return 0;
     }
-    private static async Task<string> CommitAsync(string root) => (await CliProcess.RunCheckedAsync(
-        arguments: ["rev-parse", "HEAD"],
-        capture: true,
-        fileName: "git",
-        workingDirectory: root
-    )).Trim();
     // Every destination is validated before any entry is extracted.
     private static async Task<(ZipArchive Archive, JsonNode Source, JsonObject Copies, HashSet<string> Paths)> OpenArchiveAsync(bool occupiedIsError, string root) {
         var archive = ZipFile.OpenRead(archiveFileName: Archive);
@@ -195,7 +189,7 @@ public static class ArtifactsCommand {
         var source = JsonNode.Parse(json: await reader.ReadToEndAsync())!;
 
         if (
-            (((string?)source["commit"]) != await CommitAsync(root: root)) ||
+            (((string?)source["commit"]) != await CliGit.CommitAsync(repository: root)) ||
             (((string?)source["configuration"]) != "Release") ||
             (((string?)source["platform"]) != "windows") ||
             !OperatingSystem.IsWindows() ||
@@ -227,7 +221,7 @@ public static class ArtifactsCommand {
                 name.Contains(value: '\\') ||
                 name.Contains(value: ':') ||
                 name.Split('/').Any(predicate: part => (part is ".." or "." or "")) ||
-                !WithinRoot(
+                !Puck.Abstractions.PuckPaths.IsWithin(
                 path: destination,
                 root: root
             ) ||
@@ -391,7 +385,7 @@ public static class ArtifactsCommand {
         var hardwareOnly = CoverageReport.ParseHardwareOnly(text: File.ReadAllText(path: Path.Combine(path1: root, path2: CoverageReport.HardwareOnlyList)));
         var projects = System.Xml.Linq.XDocument.Load(uri: Path.Combine(path1: root, path2: "Puck.slnx"))
             .Descendants(name: "Project")
-            .Select(selector: static project => ((string?)project.Attribute(name: "Path") ?? ""))
+            .Select(selector: static project => (((string?)project.Attribute(name: "Path")) ?? ""))
             .Where(predicate: static path => path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/"))
             .Select(selector: static path => path[..(path.LastIndexOf(value: '/') + 1)]);
         var files = CoverageReport.Merge(reports: reports);
@@ -427,10 +421,6 @@ public static class ArtifactsCommand {
         }
         return 0;
     }
-    private static bool WithinRoot(string root, string path) => path.StartsWith(
-        comparisonType: StringComparison.OrdinalIgnoreCase,
-        value: (root + Path.DirectorySeparatorChar)
-    );
 
     public static Command Create() {
         var capture = new Command(

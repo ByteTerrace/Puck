@@ -365,7 +365,6 @@ public sealed class WorktreeReportProtectionLawTests : WorktreeReportLaws {
         });
     }
 }
-
 /// <summary>The report reads remote counterparts through the fetch mapping and refuses a partial clone only where Git cannot forbid a lazy fetch.</summary>
 public sealed class WorktreeReportRemoteLawTests : WorktreeReportLaws {
     // A report never lazily fetches: git that can forbid it is told to, and git that cannot reads only a repository
@@ -376,7 +375,7 @@ public sealed class WorktreeReportRemoteLawTests : WorktreeReportLaws {
     [InlineData(false, true, true)]
     [Theory]
     public void OnlyAPartialCloneUnderAGitThatCannotForbidLazyFetchIsRefused(bool gitAcceptsNoLazyFetch, bool partialClone, bool refused) =>
-        Assert.Equal(expected: refused, actual: (WorktreeReportCommand.LazyFetchRefusal(gitAcceptsNoLazyFetch: gitAcceptsNoLazyFetch, partialClone: partialClone) is not null));
+        Assert.Equal(expected: refused, actual: (CliGit.LazyFetchRefusal(gitAcceptsNoLazyFetch: gitAcceptsNoLazyFetch, partialClone: partialClone) is not null));
     [InlineData("extensions.partialClone", "origin")]
     [InlineData("remote.origin.promisor", "true")]
     [Theory]
@@ -386,7 +385,7 @@ public sealed class WorktreeReportRemoteLawTests : WorktreeReportLaws {
         _ = checkout.Git("config", key, value);
         var result = ConsoleCapture.RunSplit(run: () => WorktreeReportCommand.Execute(repositoryRoot: checkout.Root, into: "main", clock: Clock));
 
-        if (WorktreeReportCommand.GitAcceptsNoLazyFetch) {
+        if (CliGit.GitAcceptsNoLazyFetch) {
             Assert.True(condition: (result.ExitCode == 0), userMessage: result.Error);
         } else {
             Assert.Equal(actual: result.ExitCode, expected: 2);

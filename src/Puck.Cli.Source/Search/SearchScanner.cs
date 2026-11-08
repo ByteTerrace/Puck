@@ -42,51 +42,15 @@ internal static class SearchScanner {
             return false;
         }
     }
-    // Walks the same lines SplitLines produces without materializing any of them.
+    // Count-only searches use the same line reader as locations without allocating per-line strings.
     private static int CountMatchingLines(string text, Regex regex, bool stopAtFirstMatch) {
         var count = 0;
-        var remaining = text.AsSpan();
-        var isFirst = true;
 
-        while (true) {
-            var newline = remaining.IndexOf(value: '\n');
-            var line = ((newline < 0)
-                ? remaining
-                : remaining[..newline]
-            );
-
-            if (
-                (line.Length > 0) &&
-                (line[^1] == '\r')
-            ) {
-                line = line[..^1];
-            }
-
-            // A trailing newline yields a spurious empty final element; drop it. A 0-byte file is still one empty line.
-            if (
-                (newline < 0) &&
-                (line.Length == 0) &&
-                !isFirst
-            ) {
-                break;
-            }
-
-            if (regex.IsMatch(input: line)) {
-                count++;
-
-                if (stopAtFirstMatch) {
-                    break;
-                }
-            }
-
-            if (newline < 0) {
-                break;
-            }
-
-            isFirst = false;
-            remaining = remaining[(newline + 1)..];
+        foreach (var line in CliText.EnumerateLines(text: text.AsSpan(), emptyIsLine: true)) {
+            if (!regex.IsMatch(input: line)) { continue; }
+            count++;
+            if (stopAtFirstMatch) { break; }
         }
-
         return count;
     }
     private static int LineOf(int[] starts, int offset) {
@@ -106,15 +70,12 @@ internal static class SearchScanner {
         return lo;
     }
     private static int[] LineStartOffsets(string text) {
-        var starts = new List<int> { 0 };
+        var starts = new List<int>();
+        var lines = CliText.EnumerateLines(text: text.AsSpan(), emptyIsLine: true);
 
-        for (var i = 0; (i < text.Length); i++) {
-            if (text[i] == '\n') {
-                starts.Add(item: (i + 1));
-            }
-        }
-
-        return starts.ToArray();
+        while (lines.MoveNext()) { starts.Add(item: lines.Start); }
+        if ((text.Length > 0) && (text[^1] is '\r' or '\n')) { starts.Add(item: text.Length); }
+        return [.. starts];
     }
     // The file as UTF-8 text with a leading byte-order mark removed, so '^' anchors line 1 and span mode's raw text
     // starts at the first real character. Null means unreadable, already warned.
@@ -137,31 +98,6 @@ internal static class SearchScanner {
         return Utf8.GetString(bytes: (span.StartsWith(value: Utf8Bom)
             ? span[Utf8Bom.Length..]
             : span));
-    }
-    private static string[] SplitLines(string text) {
-        var parts = text.Split(separator: '\n');
-
-        for (var i = 0; (i < parts.Length); i++) {
-            if (
-                (parts[i].Length > 0) &&
-                (parts[i][^1] == '\r')
-            ) {
-                parts[i] = parts[i][..^1];
-            }
-        }
-
-        // A trailing newline yields a spurious empty final element; drop it.
-        if (
-            (parts.Length > 1) &&
-            (parts[^1].Length == 0)
-        ) {
-            Array.Resize(
-                array: ref parts,
-                newSize: (parts.Length - 1)
-            );
-        }
-
-        return parts;
     }
     private static void WarnUnreadable(string path, Exception ex) =>
         FileWalk.WarnUnreadable(
@@ -217,7 +153,7 @@ internal static class SearchScanner {
             );
         }
 
-        var lines = SplitLines(text: text);
+        var lines = CliText.AllLines(emptyIsLine: true, text: text);
         var hits = new List<int>();
 
         for (var i = 0; (i < lines.Length); i++) {

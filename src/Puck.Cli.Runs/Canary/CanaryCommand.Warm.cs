@@ -116,7 +116,7 @@ public static partial class CanaryCommand {
                 return $"{refusal}; see {runDirectory}";
             }
 
-            var stdout = SplitLines(text: process.Stdout);
+            var stdout = CliText.Lines(text: process.Stdout);
 
             Console.WriteLine(value: $"canary: warmed the pipeline cache on {backend} from {warm.Manifest.Id}'s positive world: {CountOf(kind: "gpu.created.pipelines", lines: stdout)} pipeline(s) created, {CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout)} built outside the cache.");
         }
@@ -140,7 +140,7 @@ public static partial class CanaryCommand {
     /// <returns>The refusal, naming the backend, or <see langword="null"/>.</returns>
     public static string? WarmRefusal(string backend, CliProcessResult process, string source) {
         var warm = $"the pipeline-cache warm on {backend} from {source}'s positive world";
-        var stdout = SplitLines(text: process.Stdout);
+        var stdout = CliText.Lines(text: process.Stdout);
 
         if (process.TimedOut) {
             return $"{warm} did not exit within its {WarmSeconds.ToString(provider: CultureInfo.InvariantCulture)}-second timeout";
@@ -148,10 +148,10 @@ public static partial class CanaryCommand {
         if (process.ExitCode != 0) {
             return $"{warm} exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}";
         }
-        if (!SplitLines(text: process.Stderr).Any(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[engine: ready at tick "))) {
+        if (!CliText.Lines(text: process.Stderr).Any(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[engine: ready at tick "))) {
             return $"{warm} never reported the engine ready";
         }
-        if (!SplitLines(text: process.Stderr).Any(predicate: line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") && line.Contains(comparisonType: StringComparison.Ordinal, value: " -> ") && line.EndsWith(comparisonType: StringComparison.Ordinal, value: WarmCaptureName(backend: backend))))) {
+        if (!CliText.Lines(text: process.Stderr).Any(predicate: line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") && line.Contains(comparisonType: StringComparison.Ordinal, value: " -> ") && line.EndsWith(comparisonType: StringComparison.Ordinal, value: WarmCaptureName(backend: backend))))) {
             return $"{warm} never landed its capture, so the display encode's pipeline was not built";
         }
         if ((CountOf(kind: "gpu.created.pipelines", lines: stdout) is null) || (CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout) is null)) {

@@ -57,11 +57,6 @@ public static class DocsLinksCommand {
         options: RegexOptions.Compiled,
         pattern: @"^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$"
     );
-    // CommonMark's code fence: three or more backticks or tildes, indented at most three spaces.
-    private static readonly Regex CodeFence = new(
-        options: RegexOptions.Compiled,
-        pattern: @"^ {0,3}(`{3,}|~{3,})"
-    );
     private static readonly Regex InlineImage = new(
         options: RegexOptions.Compiled,
         pattern: @"!\[[^\]]*\]\([^)]*\)"
@@ -164,32 +159,6 @@ public static class DocsLinksCommand {
             }
         }
     }
-    // Steps a page's fence state over one line and returns whether that line is code: a fence's opening or closing
-    // line, or any line between them. CommonMark closes a fence with a line of the same character at least as long.
-    private static bool InCode(string line, ref string? fence) {
-        var fenceMatch = CodeFence.Match(input: line);
-
-        if (fence is null) {
-            if (!fenceMatch.Success) {
-                return false;
-            }
-
-            fence = fenceMatch.Groups[1].Value;
-
-            return true;
-        }
-
-        if (
-            fenceMatch.Success &&
-            (fenceMatch.Groups[1].Value[0] == fence[0]) &&
-            (fenceMatch.Groups[1].Value.Length >= fence.Length) &&
-            (line.Trim().Trim(trimChar: fence[0]).Length == 0)
-        ) {
-            fence = null;
-        }
-
-        return true;
-    }
     private static string? Resolve(string target, string documentDirectory, string repositoryRoot) =>
         (ResolveUnder(
             directory: documentDirectory,
@@ -277,13 +246,10 @@ public static class DocsLinksCommand {
     internal static HashSet<string> HeadingAnchors(IEnumerable<string> lines) {
         var anchors = new HashSet<string>(comparer: StringComparer.Ordinal);
         var occurrences = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        string? fence = null;
+        var fence = new MarkdownFence();
 
         foreach (var line in lines) {
-            if (InCode(
-                fence: ref fence,
-                line: line
-            )) {
+            if (fence.InCode(line: line)) {
                 continue;
             }
 
@@ -378,7 +344,7 @@ public static class DocsLinksCommand {
         var failures = new List<(string Category, string Message)>();
         var advisories = new List<string>();
         var checkedCount = 0;
-        var codeCitations = new DocsCodeCitations(repositoryRoot);
+        var codeCitations = new DocsCodeCitations(repositoryRoot: repositoryRoot);
 
         foreach (var document in documents) {
             var documentPath = Path.Combine(
@@ -393,7 +359,7 @@ public static class DocsLinksCommand {
             }
 
             var documentDirectory = (Path.GetDirectoryName(path: documentPath) ?? repositoryRoot);
-            var relative = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(documentPath)).Replace('\\', '/');
+            var relative = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: documentPath)).Replace(newChar: '/', oldChar: '\\');
             var enforceBareFileNames = (relative.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "src/"
@@ -404,62 +370,60 @@ public static class DocsLinksCommand {
             var durable = DocsCorpus.IsDurable(relativePath: relative);
             var corpus = DocsCorpus.IsDocument(relativePath: relative);
             var lines = File.ReadAllLines(path: documentPath);
-            string? fence = null;
+            var fence = new MarkdownFence();
 
-            var locations = codeCitations.Check(document, lines);
+            var locations = codeCitations.Check(document: document, lines: lines);
+
             foreach (var location in locations) {
                 checkedCount++;
                 var message = $"{document}:{location.DocumentLine}: {location.Status}: {location.Citation} ({location.Detail})";
-                Console.WriteLine(message);
+
+                Console.WriteLine(value: message);
                 if (corpus && durable) {
-                    advisories.Add($"{document}:{location.DocumentLine}: '{location.Citation}' cites a line, which drifts; cite the symbol by name");
+                    advisories.Add(item: $"{document}:{location.DocumentLine}: '{location.Citation}' cites a line, which drifts; cite the symbol by name");
                 }
                 if (location.Status != "verified") {
-                    failures.Add(("code-citation", message));
+                    failures.Add(item: ("code-citation", message));
                 }
             }
-            Console.WriteLine($"citations: {document}: verified {locations.Count(location => location.Status == "verified")}; drifted {locations.Count(location => location.Status == "drifted")}; not found {locations.Count(location => location.Status == "not found")}");
+            Console.WriteLine(value: $"citations: {document}: verified {locations.Count(predicate: location => (location.Status == "verified"))}; drifted {locations.Count(predicate: location => (location.Status == "drifted"))}; not found {locations.Count(predicate: location => (location.Status == "not found"))}");
 
             for (var lineNumber = 1; (lineNumber <= lines.Length); lineNumber++) {
                 var line = lines[(lineNumber - 1)];
 
-                var code = InCode(
-                    fence: ref fence,
-                    line: line
-                );
+                var code = fence.InCode(line: line);
 
-                foreach (var (category, message) in corpus ? rot.Line(
+                foreach (var (category, message) in (corpus ? rot.Line(
                     code: code,
                     line: line
-                ) : []) {
+                ) : [])) {
                     failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
                 }
 
-                // A fenced block is an example or a transcript, not a citation: its spans are not names.
-                if (!code) {
-                    foreach (Match span in Backticked.Matches(input: line)) {
-                        var content = span.Groups[1].Value;
+                // A fenced block is an example or a transcript; neither its spans nor its links are citations.
+                if (code) { continue; }
+                foreach (Match span in Backticked.Matches(input: line)) {
+                    var content = span.Groups[1].Value;
 
-                        if (DocsSymbols.CitedName(span: content) is { } name) {
-                            checkedCount++;
+                    if (DocsSymbols.CitedName(span: content) is { } name) {
+                        checkedCount++;
 
-                            switch (symbols.Resolve(name: name)) {
-                                case DocsSymbolVerdict.Missing:
-                                    failures.Add(item: ("symbol", $"{document}:{lineNumber}: symbol '{name}' names no declaration under src/ or tests/"));
+                        switch (symbols.Resolve(name: name)) {
+                            case DocsSymbolVerdict.Missing:
+                                failures.Add(item: ("symbol", $"{document}:{lineNumber}: symbol '{name}' names no declaration under src/ or tests/"));
 
-                                    break;
-                                case DocsSymbolVerdict.Unknown:
-                                    advisories.Add(item: $"{document}:{lineNumber}: symbol '{name}' is neither Puck's nor the runtime's, so its currency is not checked");
+                                break;
+                            case DocsSymbolVerdict.Unknown:
+                                advisories.Add(item: $"{document}:{lineNumber}: symbol '{name}' is neither Puck's nor the runtime's, so its currency is not checked");
 
-                                    break;
-                                default:
-                                    break;
-                            }
+                                break;
+                            default:
+                                break;
                         }
+                    }
 
-                        if (corpus && rot.Branch(span: content) is { } branchMessage) {
-                            failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
-                        }
+                    if (corpus && (rot.Branch(span: content) is { } branchMessage)) {
+                        failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
                     }
                 }
 

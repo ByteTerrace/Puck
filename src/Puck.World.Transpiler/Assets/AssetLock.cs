@@ -279,21 +279,8 @@ public sealed class AssetLock {
     /// <summary>Writes the derived lock beside <paramref name="sourcePath"/> only when its bytes changed.</summary>
     /// <param name="sourcePath">The source or lock path.</param>
     /// <returns><see langword="true"/> when bytes were written.</returns>
-    public bool Write(string sourcePath) {
-        var lockPath = DeriveLockPath(sourcePath: sourcePath);
-        var bytes = Utf8WithoutBom.GetBytes(s: Serialize());
-
-        if (File.Exists(path: lockPath) && FileEquals(expected: bytes, path: lockPath)) {
-            return false;
-        }
-
-        AtomicFile.WriteAllBytes(
-            bytes: bytes,
-            path: lockPath
-        );
-
-        return true;
-    }
+    public bool Write(string sourcePath) => AtomicFile.WriteAllBytesIfChanged(
+        path: DeriveLockPath(sourcePath: sourcePath), bytes: Utf8WithoutBom.GetBytes(s: Serialize()));
 
     private static string ReadHash(string path, JsonElement value) {
         if (value.ValueKind != JsonValueKind.String) {
@@ -387,42 +374,6 @@ public sealed class AssetLock {
             throw;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             throw new AssetLockException(message: $"Asset '{logicalPath}' could not be read: {exception.Message}");
-        }
-    }
-    // Reads at most the expected byte count plus one trailing-byte probe. A malformed existing lock may be
-    // arbitrarily large, and an explicit refresh must replace it without first allocating its size.
-    private static bool FileEquals(string path, ReadOnlySpan<byte> expected) {
-        try {
-            using var stream = new FileStream(
-                access: FileAccess.Read,
-                bufferSize: 4096,
-                mode: FileMode.Open,
-                options: FileOptions.SequentialScan,
-                path: path,
-                share: FileShare.Read
-            );
-
-            if (stream.Length != expected.Length) {
-                return false;
-            }
-
-            Span<byte> buffer = stackalloc byte[4096];
-            var offset = 0;
-
-            while (offset < expected.Length) {
-                var count = Math.Min(val1: buffer.Length, val2: (expected.Length - offset));
-                var read = stream.Read(buffer: buffer[..count]);
-
-                if ((read == 0) || !buffer[..read].SequenceEqual(other: expected.Slice(length: read, start: offset))) {
-                    return false;
-                }
-
-                offset += read;
-            }
-
-            return (stream.ReadByte() == -1);
-        } catch (FileNotFoundException) {
-            return false;
         }
     }
 

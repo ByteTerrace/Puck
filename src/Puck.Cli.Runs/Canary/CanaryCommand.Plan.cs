@@ -177,7 +177,7 @@ public static partial class CanaryCommand {
         // A stub launch counts as a World boot too when the World it started announced its --world origin.
         public void StubLaunched(CliProcessResult result) {
             Interlocked.Increment(location: ref m_stubLaunches);
-            if (SplitLines(text: result.Stderr).Any(predicate: static line => line.StartsWith(
+            if (CliText.Lines(text: result.Stderr).Any(predicate: static line => line.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "[world] definition: "
             ))) {
