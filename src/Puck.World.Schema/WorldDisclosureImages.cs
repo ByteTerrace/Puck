@@ -185,17 +185,18 @@ public sealed class WorldDisclosureImages {
         foreach (var dependency in m_dependencies[row]) { dependencies = checked(dependencies + arena.RowVersion(dependency)); }
         return dependencies;
     }
-    internal int[] Affected(WorldRecipientView view, ReadOnlySpan<int> rows) {
+    // Adds the authored rows whose image the changed rows can move (each row and the rows whose policies read it) to
+    // affected, unordered.
+    internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, HashSet<int> affected) {
         Prepare(view);
-        var affected = new HashSet<int>();
+        var authored = view.Source.AuthoredState.Count;
         foreach (var row in rows) {
-            if ((uint)row >= (uint)view.Source.AuthoredState.Count) { continue; }
+            if ((uint)row >= (uint)authored) { continue; }
             affected.Add(row);
             foreach (var dependent in m_dependents[row]) {
-                if (dependent < view.Source.AuthoredState.Count) { affected.Add(dependent); }
+                if (dependent < authored) { affected.Add(dependent); }
             }
         }
-        return affected.Order().ToArray();
     }
     internal string Audience(WorldRecipientView view) {
         Prepare(view);

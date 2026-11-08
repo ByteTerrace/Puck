@@ -479,10 +479,11 @@ public sealed class WorldCompanionCustody {
     /// no departure is an abandoned key, which landed nothing). A key still in flight or in doubt owes nothing yet.</summary>
     /// <returns>Each owed settlement: the hop's key, the companion, and whether it arrived.</returns>
     public IReadOnlyList<(WorldTransferKey Key, WorldEntityAddress Incarnation, bool Arrived)> OwedOwnHopSettlements() {
-        var owed = new List<(WorldTransferKey, WorldEntityAddress, bool)>();
+        List<(WorldTransferKey Key, WorldEntityAddress Incarnation, bool Arrived)>? owed = null;
         var home = m_authority();
 
-        foreach (var ((key, incarnation), hop) in m_hops.OrderBy(keySelector: static pair => pair.Key.Key.TransferId).ThenBy(keySelector: static pair => pair.Key.Incarnation.Index)) {
+        // Filtered first and ordered after, so a home that owes nothing (every steady tick) sorts and allocates nothing.
+        foreach (var ((key, incarnation), hop) in m_hops) {
             if (
                 !string.Equals(a: hop.From, b: home, comparisonType: StringComparison.Ordinal) ||
                 !string.Equals(a: key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) ||
@@ -496,9 +497,11 @@ public sealed class WorldCompanionCustody {
                 ? departed.Carried.Where(predicate: carried => (carried.Incarnation == incarnation)).Select(selector: static carried => (int?)carried.MemberId).FirstOrDefault()
                 : null);
 
-            owed.Add(item: (key, incarnation, ((memberId is { } member) && landed.Contains(value: member))));
+            (owed ??= []).Add(item: (key, incarnation, ((memberId is { } member) && landed.Contains(value: member))));
         }
-        return owed;
+        return (owed is null)
+            ? []
+            : [.. owed.OrderBy(keySelector: static entry => entry.Key.TransferId).ThenBy(keySelector: static entry => entry.Incarnation.Index)];
     }
     /// <summary>Returns the transfer ids of this authority's own keys that a crossing with companions was minted under,
     /// or that it granted a hop of its own under, and that neither departed with a companion nor settled: once no
@@ -507,14 +510,20 @@ public sealed class WorldCompanionCustody {
     /// <returns>The transfer ids, lowest first.</returns>
     public IReadOnlyList<ulong> UnsettledOwnKeys() {
         var home = m_authority();
+        SortedSet<ulong>? unsettled = null;
 
-        return [.. m_hops.Keys
-            .Where(predicate: pair => string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) && !m_hopsDone.Contains(item: pair))
-            .Select(selector: static pair => pair.Key.TransferId)
-            .Concat(second: m_mints.Keys)
-            .Where(predicate: transferId => !m_ownDepartures.ContainsKey(key: transferId) && !m_ownSettlements.ContainsKey(key: transferId))
-            .Distinct()
-            .Order()];
+        // Gathered without a query, so a home with nothing unsettled (every steady tick) allocates nothing.
+        foreach (var pair in m_hops.Keys) {
+            if (string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) && !m_hopsDone.Contains(item: pair) && Unsettled(transferId: pair.Key.TransferId)) {
+                (unsettled ??= []).Add(item: pair.Key.TransferId);
+            }
+        }
+        foreach (var transferId in m_mints.Keys) {
+            if (Unsettled(transferId: transferId)) { (unsettled ??= []).Add(item: transferId); }
+        }
+        return (unsettled is null) ? [] : [.. unsettled];
+
+        bool Unsettled(ulong transferId) => !m_ownDepartures.ContainsKey(key: transferId) && !m_ownSettlements.ContainsKey(key: transferId);
     }
     /// <summary>Returns whether this authority recorded the mint of a crossing with companions under
     /// <paramref name="transferId"/>.</summary>

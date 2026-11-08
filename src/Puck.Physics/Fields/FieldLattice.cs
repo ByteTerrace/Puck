@@ -876,10 +876,16 @@ public sealed class FieldLattice {
             length: values.Length
         );
 
+        // Indexed, not enumerated: the fields a flow rides over are an interface list, whose enumerator would box per cell.
+        var overs = reaction.Over;
+        var overCount = overs.Count;
+
         for (var cell = 0; (cell < CellCount); cell++) {
             var height = (m_scratch[cell] * m_heightScale[field]);
 
-            foreach (var over in reaction.Over) {
+            for (var index = 0; (index < overCount); index++) {
+                var over = overs[index];
+
                 height += (m_values[over][cell] * m_heightScale[over]);
             }
 
