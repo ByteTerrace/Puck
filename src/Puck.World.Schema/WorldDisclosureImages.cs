@@ -18,8 +18,8 @@ public sealed class WorldRecipientImage {
 }
 internal sealed record WorldRecipientImageContent(StateCell[] Cells, WorldObservedRow? Observation);
 
-/// <summary>World-owned, content-interned row images. Compositions are shared by the set of policies admitting the
-/// reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
+/// <summary>World-owned, content-interned row images. Compositions are shared by ceiling, authority bypass and the
+/// policies admitting the reader. Current audience images keep their content alive; replaced content is weakly retained.</summary>
 public sealed class WorldDisclosureImages {
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     private StateArena? m_arena;
@@ -111,9 +111,12 @@ public sealed class WorldDisclosureImages {
     internal string Audience(WorldRecipientView view) {
         Prepare(view);
         var observer = view.Observer;
-        return string.Create(m_policies.Length + 1, (m_policies, observer, view.Observes, view.Ceiling), static (span, state) => {
+        return string.Create(m_policies.Length + 2, (m_policies, observer, view.Observes, view.Ceiling, view.Unrestricted), static (span, state) => {
             span[0] = state.Observes ? (char)('1' + (int)state.Ceiling) : '0';
-            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 1] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
+            // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
+            // admitted by every current policy still does not, so their definition caches cannot share a class.
+            span[1] = state.Unrestricted ? '1' : '0';
+            for (var index = 0; index < state.m_policies.Length; index++) { span[index + 2] = state.observer.Allows(state.m_policies[index]) ? '1' : '0'; }
         });
     }
     internal WorldRecipientImage Image(WorldRecipientView view, int row) => Image(view, row, Audience(view));

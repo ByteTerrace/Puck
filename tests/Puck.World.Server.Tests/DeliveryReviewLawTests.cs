@@ -127,6 +127,25 @@ public sealed class DeliveryReviewLawTests {
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AuthorityAndAdmittedRecipientsCannotSeedEachOthersStorageMetadata(bool authorityFirst) {
+        var row = Row() with { Domain = new StateDomain.Ring(Capacity: 8), HistoryCursor = 12,
+            Cells = [new StateCell(CellName.Parse("0"), CellValue.Int(3), Visibility: new StateVisibility(Readers: ["seat2"]))] };
+        using var fixture = Fixtures.FreshServer(Document(row));
+        var images = new WorldDisclosureImages();
+        var recipient = View(fixture, images);
+        var authority = new WorldRecipientView(() => fixture.Server.Definition, () => fixture.Server.Arena,
+            Principal.Console, WorldDisclosureTier.Replica, () => true, images, fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime);
+        var authorityCursor = new WorldDeliveryCursor();
+        var recipientCursor = new WorldDeliveryCursor();
+        var first = (authorityFirst ? authorityCursor.DeliverDefinition(authority) : recipientCursor.DeliverDefinition(recipient))!;
+        var second = (authorityFirst ? recipientCursor.DeliverDefinition(recipient) : authorityCursor.DeliverDefinition(authority))!;
+        Assert.Equal(12, (authorityFirst ? first : second).AuthoredState[0].HistoryCursor);
+        Assert.Equal(0, (authorityFirst ? second : first).AuthoredState[0].HistoryCursor);
+    }
+
+    [Theory]
     [InlineData(HiddenCells.Omit)]
     [InlineData(HiddenCells.Count)]
     [InlineData(HiddenCells.Placeholder)]

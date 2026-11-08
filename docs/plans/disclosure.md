@@ -445,7 +445,10 @@ operator's `world.budget` answer.
 
 Implementation choices for step 1:
 
-- Audience classes are the current policy-admission bit vector plus the tier;
+- Audience classes are the current policy-admission bit vector, tier and
+  authority bypass. An authority reads storage metadata that a recipient with
+  the same current admission bits cannot read on a declaration that can
+  withhold cells, so their definition caches must remain separate;
   policy dependencies include containing ordered zones and their `readersFrom`
   rows. Structural and audience writes rebuild that index. The world owns it;
   a cursor holds only hashes, sequence and any pending observation headers.
