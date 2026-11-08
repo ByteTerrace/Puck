@@ -27,7 +27,7 @@ public sealed partial class SdfShadeProgram {
 
     private static readonly CodeDerivedTable<SdfShadeDefinition, Admission> AdmittedSources = new();
     private static readonly Lock HeldGate = new();
-    private static readonly ContentAddressedLruCache<ContentPin, Admission> HeldContent = new(capacity: HeldSources);
+    private static readonly ContentAddressedLruCache<ContentPin, Lazy<Admission>> HeldContent = new(capacity: HeldSources);
     private static int HeldRevision = CodeRevision.Current;
 
     /// <summary>Compiles expressions to canonical typed SSA, eliminates dead expressions, folds exact constants,
@@ -45,25 +45,24 @@ public sealed partial class SdfShadeProgram {
 
         return admission.Program ?? throw new SdfShadeException(code: admission.Code!, message: admission.Message!);
     }
-    // The content door: equal source bytes under one code revision are one compile. The key encodes every field the
-    // compiler reads (SourceKey), so a held admission is exactly what compiling the request would produce.
+    // The content door: equal source bytes under one code revision are one compile; concurrent requests (the
+    // validator on the simulation thread, presentation on the frame thread) wait on the one compile in flight. The key
+    // encodes every field the compiler reads (SourceKey), so a held admission is exactly what compiling the request
+    // would produce.
     private static Admission Held(SdfShadeDefinition definition) {
         if (SourceKey.Of(definition: definition) is not { } key) { return Admit(definition: definition); }
-        var revision = CodeRevision.Current;
+        Lazy<Admission>? held;
 
         lock (HeldGate) {
-            if (HeldRevision != revision) { HeldContent.Clear(); HeldRevision = revision; }
-            if (HeldContent.TryGet(hash: key, value: out var held)) {
+            if (HeldRevision != CodeRevision.Current) { HeldContent.Clear(); HeldRevision = CodeRevision.Current; }
+            if (HeldContent.TryGet(hash: key, value: out held)) {
                 CompileWork.Count(kind: CompileReuses);
-                return held;
+            } else {
+                held = new(valueFactory: () => Admit(definition: definition), mode: LazyThreadSafetyMode.ExecutionAndPublication);
+                HeldContent.Set(hash: key, value: held);
             }
         }
-        var admission = Admit(definition: definition);
-
-        lock (HeldGate) {
-            if (HeldRevision == revision) { HeldContent.Set(hash: key, value: admission); }
-        }
-        return admission;
+        return held.Value;
     }
     private static Admission Admit(SdfShadeDefinition definition) {
         CompileWork.Count(kind: CompileRuns);
