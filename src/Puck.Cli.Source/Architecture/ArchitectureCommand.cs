@@ -14,11 +14,9 @@ namespace Puck.Cli.Architecture;
 // Exit 0 when everything checks, 1 when a check fails, 2 on a usage error or a missing repository root.
 public static class ArchitectureCommand {
     private const string BackendsLayer = "Backends";
-    private const string CompositionRootsLayer = "Composition roots";
     private const string LayeringFenceClose = "```";
     private const string LayeringFenceOpen = "```text";
     private const string LayeringHeading = "## Layering";
-    private const string PresentationLayer = "Presentation";
     private const string ProjectMapRelativePath = "docs/project-map.md";
 
     /// <summary>Emits one layering row, wrapping its members under a hanging indent past 79 columns.</summary>
@@ -63,69 +61,15 @@ public static class ArchitectureCommand {
             return 1;
         }
 
-        var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
-        var heading = Array.IndexOf(
-            array: lines,
-            value: LayeringHeading
-        );
-        var open = ((heading < 0)
-            ? -1
-            : Array.IndexOf(
-                array: lines,
-                startIndex: heading,
-                value: LayeringFenceOpen
-            )
-        );
-        var close = ((open < 0)
-            ? -1
-            : Array.IndexOf(
-                array: lines,
-                startIndex: (open + 1),
-                value: LayeringFenceClose
-            )
-        );
-
-        if (close < 0) {
-            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} has no `{LayeringFenceOpen}` block under `{LayeringHeading}`; paste the output of `puck architecture --map` there.");
-
-            return 1;
+        var text = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n");
+        var heading = text.IndexOf(value: LayeringHeading, comparisonType: StringComparison.Ordinal);
+        if (heading < 0 || !CliGeneratedSection.TryReplace(text: text, begin: LayeringFenceOpen + "\n", end: "\n" + LayeringFenceClose,
+            render: _ => generated.ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n'), generated: out var expected, startIndex: heading)) {
+            return CliExit.Refuse(verb: "architecture", what: ProjectMapRelativePath, why: $"has no text block under {LayeringHeading}.");
         }
-
-        var onDisk = lines[(open + 1)..close];
-        var expected = generated.ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n').Split(separator: '\n');
-        var count = Math.Max(
-            val1: onDisk.Length,
-            val2: expected.Length
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var onDiskLine = ((index < onDisk.Length)
-                ? onDisk[index]
-                : "(end of block)"
-            );
-            var expectedLine = ((index < expected.Length)
-                ? expected[index]
-                : "(end of block)"
-            );
-
-            if (string.Equals(
-                a: onDiskLine,
-                b: expectedLine,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block disagrees with the project declarations at line {((open + index) + 2)}; paste the output of `puck architecture --map` over it.");
-            Console.Error.WriteLine(value: $"  on disk:   {onDiskLine}");
-            Console.Error.WriteLine(value: $"  generated: {expectedLine}");
-
-            return 1;
-        }
-
-        Console.Out.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block matches the project declarations.");
-
-        return 0;
+        return CliGeneratedFile.WriteOrCheck(check: true, detail: string.Empty, relativePath: ProjectMapRelativePath, repositoryRoot: repositoryRoot,
+            source: "the project declarations", text: expected, verb: "architecture",
+            rewriteHint: "paste `puck architecture --map` over the Layering block") ? CliExit.Success : CliExit.Failed;
     }
     private static bool ConditionalReferenceIn(string file) {
         foreach (var line in File.ReadLines(path: file)) {
@@ -154,20 +98,6 @@ public static class ArchitectureCommand {
     /// it had done — it was missing three projects and still carried a row for one that had been quarantined
     /// out of the repository.
     /// </remarks>
-    // A backend's own test project: a Test-kind project named for exactly the one backend it holds (Puck.X.Tests holds
-    // Puck.X and no other backend). The build gate states the same rule.
-    private static bool IsBackendOwnTests(string[] held, ArchitectureProject project) => (
-        string.Equals(
-            a: project.Kind,
-            b: "Test",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ) &&
-        held.All(predicate: backend => string.Equals(
-            a: project.Name,
-            b: $"{backend}.Tests",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        ))
-    );
     private static string RenderLayeringBlock(ArchitectureModel model) {
         var output = new StringBuilder();
         var width = (model.Layers.Max(selector: l => l.Length) + 2);
@@ -251,33 +181,7 @@ public static class ArchitectureCommand {
 
             ++holders;
 
-            var terminal = (model.Kinds.TryGetValue(
-                key: project.Kind,
-                value: out var ranked
-            ) && !ranked);
-            var introduced = held.Where(predicate: h => project.Edges.Contains(
-                value: h,
-                comparer: StringComparer.OrdinalIgnoreCase
-            )).ToArray();
-            var permission =
-                (((project.Layer == PresentationLayer) || (project.Layer == CompositionRootsLayer))
-                ? $"permitted: {project.Layer}"
-                : (IsBackendOwnTests(
-                    held: held,
-                    project: project
-                )
-                    ? "permitted: the backend's own test project"
-                    : ((terminal && (introduced.Length == 0))
-                        ? $"permitted: terminal kind ({project.Kind}), inherits and introduces nothing"
-                        : "NOT PERMITTED"
-            )));
-
-            if (permission == "NOT PERMITTED") {
-                failures.Add(item: $"{project.Name} holds {string.Join(
-                    separator: ", ",
-                    values: held
-                )} and is not permitted to.");
-            }
+            var permission = model.BackendPermission(project: project, closure: held.Select(name => model.Projects[name]).ToArray(), direct: project.Edges);
 
             _ = output.AppendLine(value: $"  {project.Name,-30} {string.Join(
                 separator: ", ",
@@ -336,26 +240,6 @@ public static class ArchitectureCommand {
             keySelector: p => p.Name,
             comparer: StringComparer.Ordinal
         )) {
-            if (!model.Kinds.TryGetValue(
-                key: project.Kind,
-                value: out var ranked
-            )) {
-                failures.Add(item: $"{project.Name} declares no valid <PuckKind> (found '{project.Kind}').");
-            } else if (
-                ranked &&
-                !model.Layers.Contains(
-                value: project.Layer,
-                comparer: StringComparer.OrdinalIgnoreCase
-            )
-            ) {
-                failures.Add(item: $"{project.Name} is a ranked kind and declares no valid <PuckLayer> (found '{project.Layer}').");
-            } else if (
-                !ranked &&
-                (project.Layer.Length != 0)
-            ) {
-                failures.Add(item: $"{project.Name} is a terminal kind and must not declare a <PuckLayer>.");
-            }
-
             _ = output.AppendLine(value: $"  {project.Name,-30} {project.Kind,-11} {project.Layer}");
         }
 
@@ -364,31 +248,7 @@ public static class ArchitectureCommand {
     private static void ReportLayerGraph(List<string> failures, ArchitectureModel model, StringBuilder output) {
         _ = output.AppendLine(value: "## Layer graph").AppendLine();
 
-        var upward = 0;
-
-        foreach (var project in model.Projects.Values.OrderBy(
-            keySelector: p => p.Name,
-            comparer: StringComparer.Ordinal
-        )) {
-            var ownRank = model.RankOf(project: project);
-
-            foreach (var edge in model.Closure(name: project.Name)) {
-                if (!model.Projects.TryGetValue(
-                    key: edge,
-                    value: out var target
-                )) {
-                    continue;
-                }
-
-                if (model.RankOf(project: target) >= ownRank) {
-                    continue;
-                }
-
-                ++upward;
-
-                failures.Add(item: $"{project.Name} ({project.Layer}) holds {target.Name} ({target.Layer}) — upward edge.");
-            }
-        }
+        var upward = model.Projects.Values.Sum(project => model.Check(project, model.Closure(project.Name).Select(name => model.Project(name: name)).ToArray(), project.Edges, project.Assemblies).Count(failure => failure.Code == "PUCKARCH001"));
 
         _ = output.AppendLine(value: $"  Upward edges across the transitive closure: {upward}.").AppendLine();
     }
@@ -408,10 +268,6 @@ public static class ArchitectureCommand {
             }
 
             var excluded = profile.Excluded(closure: model.Closure(name: name), layerOf: member => (model.Projects.TryGetValue(key: member, value: out var project) ? project.Layer : string.Empty));
-
-            if (excluded.Count > 0) {
-                failures.Add(item: $"{name} closure holds what its profile excludes: {string.Join(separator: ", ", values: excluded)}.");
-            }
 
             _ = output.AppendLine(value: $"  {name,-30} {((excluded.Count == 0) ? "holds" : "BROKEN")}: {((profile.Allow.Count > 0) ? $"only {string.Join(separator: ", ", values: profile.Allow)}" : $"no {string.Join(separator: ", ", values: profile.Forbid)}")}");
         }
@@ -437,7 +293,10 @@ public static class ArchitectureCommand {
             );
         }
 
-        var failures = new List<string>();
+        var failures = model.Projects.Values.SelectMany(project => {
+            var closure = model.Closure(project.Name).Select(name => model.Project(name: name)).ToArray();
+            return model.Check(project, closure, project.Edges, project.Assemblies.Concat(closure.SelectMany(target => target.Assemblies))).Select(failure => $"{failure.Code}: {failure.Message}");
+        }).ToList();
         var output = new StringBuilder();
 
         ReportDeclarations(

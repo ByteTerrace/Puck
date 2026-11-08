@@ -514,7 +514,11 @@ container build, which would otherwise wait on the Windows producer.
 **Verify package installation** (`pack.yml`) installs the exact candidate package on clean Windows and Linux
 runners and exercises command dispatch, native-backed search, declarations,
 and a Roslyn workspace query through `puck nuget smoke`. Publishing waits for
-both installation gates. After a batch containing the CLI is uploaded,
+both installation gates. `setup-puck` runs `CandidateCliInstall` from
+`build/CandidateCliInstall.cs` as a file-based bootstrap before a CLI exists;
+the release assembly compiles that same source for `puck nuget smoke` and the
+published-install check. Candidate installs share one exclusive feed, private
+package cache, fresh tool path and version check. After a batch containing the CLI is uploaded,
 `publish.yml` runs `puck nuget verify-published`, which waits for NuGet.org to
 serve the version, installs it in an empty tool path and runs it.
 
@@ -1128,7 +1132,8 @@ builds. `.claude/hooks/` holds shared harness policies, registered in
 configurations start (`puck-mcp.ps1`); they run inside the agent's harness
 rather than as repository automation, so the script rule does not cover them.
 [C# file apps](../../docs/development/contributing.md#c-file-apps) owns the
-conventions for `src/Puck.Azure.Resources/bootstrap.cs`, the one file-based app.
+conventions for `src/Puck.Azure.Resources/bootstrap.cs` and the candidate
+installer's file-based bootstrap.
 
 The [agent command hooks](../../.claude/hooks/README.md) guard physical-device
 isolation, MSBuild node cleanup, commit attribution and shared Git state in

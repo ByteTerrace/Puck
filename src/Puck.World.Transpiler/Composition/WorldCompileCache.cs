@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Text;
 using Puck.Assets;
 using Puck.World.Transpiler.Lowering;
@@ -185,33 +184,11 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
     )]
     private static (string Built, IReadOnlySet<string> Modules) ComputeCompilerIdentity() {
         var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
-        var pending = new Stack<Assembly>();
-
-        pending.Push(item: typeof(WorldCompiler).Assembly);
-        while (pending.TryPop(result: out var assembly)) {
-            var name = (assembly.GetName().Name ?? string.Empty);
-
-            if (!modules.TryAdd(
-                key: name,
-                value: assembly.ManifestModule.ModuleVersionId
-            )) {
-                continue;
-            }
-
-            foreach (var reference in assembly.GetReferencedAssemblies()) {
-                if (IsFramework(name: reference.Name) || modules.ContainsKey(key: (reference.Name ?? string.Empty))) {
-                    continue;
-                }
-
-                try {
-                    pending.Push(item: Assembly.Load(assemblyRef: reference));
-                } catch (Exception exception) when ((exception is FileNotFoundException or FileLoadException or BadImageFormatException)) {
-                    _ = modules.TryAdd(
-                        key: (reference.Name ?? string.Empty),
-                        value: Guid.Empty
-                    );
-                }
-            }
+        foreach (var (name, assembly) in AssemblyReach.Of(
+            root: typeof(WorldCompiler).Assembly,
+            include: static reference => !IsFramework(name: reference.Name),
+            unavailable: reference => modules.TryAdd(key: (reference.Name ?? string.Empty), value: Guid.Empty))) {
+            modules[name] = assembly.ManifestModule.ModuleVersionId;
         }
 
         var text = new StringBuilder();

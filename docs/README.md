@@ -44,4 +44,4 @@ change that moves a document.
 
 ## Area skills
 
-Load the skill owning the work under `.claude/skills/`: `puck-world`, `puck-dsl`, `input`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`, `gaming-bricks`, `rom-forge`, `dotnet-performance`, `symbol-analysis`, `content-search`, `boy-scout`, `verification`, `review-passes`, or `orchestration`. Each maps its code, contracts and execution, and routes adjacent work.
+Load the skill owning the work under `.claude/skills/`: `puck-world`, `puck-dsl`, `input`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`, `gaming-bricks`, `rom-forge`, `dotnet-performance`, `symbol-analysis`, `content-search`, `boy-scout`, `tooling`, `verification`, `review-passes`, or `orchestration`. Each maps its code, contracts and execution, and routes adjacent work.

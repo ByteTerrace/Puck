@@ -21,10 +21,7 @@ public static class LocksCommand {
             workingDirectory: repositoryRoot
         );
 
-        return new GateStepResult(
-            ExitCode: (run.TimedOut ? CliExit.Refused : run.ExitCode),
-            Output: (string.Join(separator: '\n', values: run.OutputLines.Select(selector: static line => line.Line)) + (run.TimedOut ? $"\n(timed out after {RestoreTimeout})" : string.Empty))
-        );
+        return GateStepResult.Captured(run: run, timeout: RestoreTimeout);
     }
     private static int Run(bool check, bool update, CancellationToken cancellationToken) {
         if (check && update) {

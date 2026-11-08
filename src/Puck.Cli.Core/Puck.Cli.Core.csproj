@@ -14,6 +14,7 @@
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../../build/ProjectArchitecture.cs" Link="Architecture/ProjectArchitecture.cs" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Networking/Puck.Networking.csproj" />
     </ItemGroup>
