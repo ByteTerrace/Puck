@@ -589,8 +589,11 @@ public static class WorldStateDisclosure {
         }
         return (changed ? result : placements);
     }
+    // Every cell the recipient is shown takes the next slot whether or not the sweep has dealt its child yet, and a
+    // back stands for a withheld cell whatever child the authority holds for it: an install between sweeps (an
+    // operator's key rename, a cell not yet dealt) then moves nothing the recipient is shown that the row it reads did
+    // not move.
     private static void Redeal(WorldPlacement template, int rowOrdinal, Dictionary<string, WorldPlacement>? children, StateArena arena, ref Observer observer, Func<string, string?, bool> withheld, ulong worldSeed, List<WorldPlacement> result) {
-        if (children is null) { return; }
         var offsets = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed);
         var row = arena.Rows[rowOrdinal];
         // Under Placeholder a reader the row admits is shown a back for each withheld cell, in order, as the row's
@@ -603,20 +606,21 @@ public static class WorldStateDisclosure {
 
         while ((slot < offsets.Length) && arena.TryNextCell(cursor: ref cursor, key: out var cell, rowOrdinal: rowOrdinal)) {
             if (!arena.TryRead(key: cell, rowOrdinal: rowOrdinal, value: out _)) { continue; }
-            var key = arena.Keys[key: cell].Value;
-
-            if (!children.TryGetValue(key: key, value: out var child)) { continue; }
             if (rowReadable && observer.CanRead(key: cell, row: row, rowOrdinal: rowOrdinal)) {
-                var displacement = ((child.DealSlot is { } dealt) && (((uint)dealt) < ((uint)offsets.Length)))
-                    ? (FixedVector3.FromVector3(value: child.Position) - offsets[dealt])
-                    : FixedVector3.Zero;
-                var reading = WorldPlacementResponse.Disclosed(placement: child, withheld: withheld);
+                var key = arena.Keys[key: cell].Value;
 
-                result.Add(item: reading with {
-                    DealSlot = slot,
-                    Position = (offsets[slot] + displacement).ToVector3(),
-                    PrototypeId = (((variants is not null) && withheld(arg1: variants.Row, arg2: key)) ? template.PrototypeId : child.PrototypeId),
-                });
+                if ((children is not null) && children.TryGetValue(key: key, value: out var child)) {
+                    var displacement = ((child.DealSlot is { } dealt) && (((uint)dealt) < ((uint)offsets.Length)))
+                        ? (FixedVector3.FromVector3(value: child.Position) - offsets[dealt])
+                        : FixedVector3.Zero;
+                    var reading = WorldPlacementResponse.Disclosed(placement: child, withheld: withheld);
+
+                    result.Add(item: reading with {
+                        DealSlot = slot,
+                        Position = (offsets[slot] + displacement).ToVector3(),
+                        PrototypeId = (((variants is not null) && withheld(arg1: variants.Row, arg2: key)) ? template.PrototypeId : child.PrototypeId),
+                    });
+                }
             } else if (placeholder) {
                 result.Add(item: WorldPlacementDeal.Child(
                     id: WorldPlacementDeal.PlaceholderId(template: template.Id, slot: slot),
