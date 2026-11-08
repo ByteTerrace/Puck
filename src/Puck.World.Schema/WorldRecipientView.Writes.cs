@@ -27,6 +27,10 @@ public sealed partial class WorldRecipientView {
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
         if (Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return ReadsWhole(handle.Ordinal); }
+        return AdmitsSet(row);
+    }
+    // Keep the set-name predicate's capture off successful direct-row admission, including bound guest writes.
+    private bool AdmitsSet(string row) {
         if (Source.Sets.FirstOrDefault(set => set.Name.Value == row) is not { } set) { return true; }
         var reads = Writes.GetValue(this, static _ => new()).Sets;
         reads.Clear();

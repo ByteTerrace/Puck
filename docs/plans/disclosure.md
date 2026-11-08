@@ -184,10 +184,10 @@ that erase key faults) are not disclosure and stay in the
 
 | Finding | Cause today | Step |
 |---|---|---|
-| [high] Batch `ExpectedCells` is a read oracle over undisclosed cells, implemented twice (`StateCommands.cs:135`, `Compose.Batch.cs:82`); admission checks the Observe grant only (`StateTransformAdmission.cs:127`); `ExpectedSpatialReads` is never checked | A guard is a read that never passed the policy; two implementations | 3 |
-| [high] Transform and Generate admission test current hidden membership (`StateCommands.cs:97-116`) | A second whole-row predicate beside `ReadsWhole` | 3 |
-| [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions (`Compose.Cells.cs:292,576,636`; `WorldServer.Arena.cs:98`) | `CanReadCell` reads current visibility; an absent key passes a public row policy | 3 |
-| [medium] A seat writes under its grants alone and learns which hidden keys exist (`Compose.Cells.cs:574`) | Seats are not recipients at the write door | 3 |
+| [high] Batch guards read undisclosed cells or spatial dependencies | Closed by `WorldRecipientMutations.CheckGuards` over the view, after whole-row policy admission | 3, landed |
+| [high] Transform and Generate admission tests current hidden membership | Closed by declaration-only `WorldRecipientView.Admits` | 3, landed |
+| [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions | Closed by the same policy refusal on every key; typed and addon completions carry that actual verdict | 3, landed |
+| [medium] A seat writes under its grants alone and learns which hidden keys exist | Seats use the same recipient admission as peers, sessions and addons | 3, landed |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
 
 ## The decisions
@@ -947,7 +947,7 @@ read adapter and disclosure implementation stay until step 6 replaces their call
 | 0. The harness and the games | The noninterference harness (above): paired boots differing only in hidden state, one principal of each kind driven identically in both, byte-for-byte comparison of everything it receives, leaks named by door; the input fuzzer over the principal's grants; `DisclosureHarnessLawTests` and `puck disclosure <world>`. The four fixtures as authored Puck games in `worlds/debug/`, each at a table in the tables room and each with its pair script and its hidden difference: **the auction** (sealed bids into an authority-only row, the reveal, the winner; its pair differs by one bid present or absent), **the card game** (a draw pile, a discard pile and dealt hands under `Count` and `Placeholder`, a displaced visible card; its pair differs by one hidden card), **social deduction** (roles in a restricted row, private chat channels through `chat.whisper` inboxes with `readersFrom` audiences, a vote; its pair differs by one role and one whisper), **the skirmish** (units with hidden positions under fog, a `search` job over what a side can see, physics on a small board; its pair differs by one unit in the fog). The existing probe is the fifth, smallest fixture | The harness runs over the five fixtures and the fuzzer and is red on today's code at exactly the findings' doors, naming each. The games settle what the plan left open: the auction shows whether an authored private inbox gives a sealed bid everything it needs (if it does, blind writes stay rejected; if it cannot, decision 3 is revisited with the auction's requirement in hand); the skirmish shows whether a `search` with public outputs over hidden rows leaks and so decides the lint; the card game decides the `$back` contract and the layout; social deduction decides whether `readersFrom` audiences and inbox eviction (`chat.whisper`'s bounded inbox) need a door of their own |
 | 1. The view and the cursor, deltas first — landed | `WorldRecipientView`, `WorldDeliveryCursor`, `WorldDisclosureImages` and the carrier's key bitsets; both sinks use `Advance` and seed on definition/Resume; recipient sequences on deliveries, outcomes and provenance; traveller validity by delivered projection identity; the old change-disclosure cache and its forget path removed. `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` are Operator; the operator's budget reports image work/storage. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream) records the choices | `DisclosureHarnessLawTests` compares hidden-only installs with intervening reads; `StateChangeDisclosureLawTests` covers independent cursors, in-place vectors, count primers, seat receipts and shared spectator composition; `WorldProjectionBackpressureLawTests` compares both peer tiers' wire bytes using the harness nonce normalization. Session Resume, authenticated traveller lifetime and observation/anchor restore laws cover boundaries step 0b has not yet added to every fixture. The five fixtures still expose the read/write/layout causes below; equality is required while the actual disclosed image remains equal |
 | 2. Reads through the view — landed | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; search audience widening refused at compile time and live execution; the skirmish's fair search uses blue's memory throughout | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
-| 3. The write door refuses by policy — landed | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Harness: every write the fuzzer makes (set, add, remove, transform, generate, guarded batches, addon binds and writes) compares equal in reply, typed outcome and later deliveries; the auction plays to its reveal with each bidder's receipts on its own row; `TransformDisclosureLawTests` updated to the one text |
+| 3. The write door refuses by policy — landed | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Every write door compares equal across all 46 fixture variant pairs, including full typed outcomes; actual guest bind/write and forwarded-traveller laws pass; the auction plays through reveal and reproduces; `TransformDisclosureLawTests` uses the one refusal text. Remaining read/layout delivery differences are recorded below |
 | 4. The layout | The view re-deals restricted templates with base and displacement split; `$back` children under `Placeholder` with their pick and submission contract; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template; `world.placements`, the projection and reflow from the re-deal | Harness: the card game's and the skirmish's `world.placements`, `world.reflow.preview`, picks and projections compare equal across their pairs, the displaced card included; `puck compile --validate` refuses the card game's template with `solid` by name; `PlacementResponseDisclosureLawTests` and `WorldDeckAndDisclosureLawTests` updated to the renumbered slots |
 | 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; an operator factory on `CommandDefinition` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
 | 6. Nothing else decides | `WorldStateDisclosure` the class and `WorldStateReadView` deleted; `view.Withheld` where `ReadsWhole` serves and the timeline's lambda gone; the documents updated: [console](../../.claude/skills/puck-world/references/console.md) "Disclosure chokepoint", [traits](../reference/state/traits.md#control-what-observers-learn), [documents-state](../../.claude/skills/puck-world/references/documents-state.md), the Schema and Server READMEs, [worlds](../reference/state/worlds.md) | `puck references WorldStateDisclosure` answers nothing; the harness green over the five fixtures and the fuzzer: done |
@@ -959,6 +959,21 @@ later change to a door. Where a step and the
 [records and pools](records-and-pools.md) work meet (pool storage carries no
 visibility today), the view treats a pool row as read whole, and the policy a
 pool later declares enters through `ReadsWhole` alone.
+
+Step 3's completed run compares every pair of variants, not only each with its base:
+all 46 pairs over the five fixtures have identical write-door transcripts, including echoes
+and complete typed outcomes. The probe's baseline differed at `echo`, `world.state.act`,
+`world.state.transform` and typed act, add, generate, guarded, remove, set, spatial and
+transform outcomes; the card baseline differed at typed add, generate, guarded, remove,
+set and spatial outcomes. The other three fixtures already agreed. Card fixture corrections
+preserve both the disclosed count at every tick and the placeholder order around its shown
+card; hidden swaps rename members in place, and the storage-slot variant restores logical
+order before delivery. All controls agree. Actual guest bind and previously bound write
+laws cover `NotDisclosed`, and the committed-traveller law covers forwarded completion.
+The auction's highest bid, over-purse bid and tie/replacement scenarios play through reveal
+and reproduce their authoritative hashes. The full solution builds in Release and the
+debug world boots headlessly. Allocation readings and their revisions are in the completion
+commit, as machine readings are not a repository baseline.
 
 ## Open items
 
@@ -989,13 +1004,13 @@ pool later declares enters through `ReadsWhole` alone.
   `editor` session, the last with Mutate of the state section and Edit of the
   game's restricted rows, so its drawn writes reach the mutation path). Every
   variant's setup steps apply, and every control agrees. The skirmish is green after its output-audience refusal and memory-only fair job.
-  The card game remains red at dealt layout and its projection size (step 4),
-  after step 3's policy refusal. The fixture's swaps now remove and replace their
-  cards in one tick, preserving the disclosed count at every delivery; they previously
-  exposed a two-tick count change under `Count` and `Placeholder`. This fixture
-  refinement keeps those legitimate disclosures while isolating the hidden change.
-  Likewise, the probe's late whole-row install overwrites public changes
-  caused by its earlier blind writes and fuzz. The focused step-1 laws hold
+  The card game still differs for its Presentation session's definition/snapshot timing
+  at the hidden swap (tick 40); its row queries and write outcomes now agree. Attribute
+  that remaining presentation invalidation while doing step 4 rather than assuming it is
+  a policy-write failure. The probe still differs at dealt positions and the projection
+  and definition bytes carrying them, which step 4 owns. Its baseline late whole-row install
+  also overwrote public changes caused by blind writes; step 3 refuses those writes.
+  The focused step-1 laws hold
   the public image fixed to isolate the delivery invariant. The auction's
   pairs, including the mid-run sealed bid, are green. Social deduction is green over another pair
   of moles, a whisper between two other seats, a line in the den and two

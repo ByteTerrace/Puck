@@ -48,7 +48,7 @@ corrected in the same change.
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Read and write sets, order-sensitive pairs, price a tick's worst case, skip rules whose inputs did not move | `RuleDataflow`, `RuleHazards`, `RuleWorkBudget`, `RuleSchedule` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
-| Decide what a recipient may read | `WorldRecipientView` over `WorldStateDisclosure`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
+| Decide what a recipient may read or write | `WorldRecipientView` over `WorldStateDisclosure`; mutation/guard admission in `WorldRecipientMutations`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
 | Every ceiling (cells, journal bytes, body slots, work units) | `StateCapacity`, `ArenaCapacity`, `RuleCapacity` | [limits](../../../docs/reference/state/limits.md) |
 
 The world document's rule sugar (`rule`, `decision`, `forEach`, `schedule`,
@@ -150,7 +150,9 @@ and the source-read timing choice; these are not guarantees the current implemen
   ([the rule](../../../docs/reference/state/analysis.md#when-merged-content-collides-with-a-capacity)).
 - **Disclosure is checked at every read.** Every untrusted read and delivery
   asks the recipient view again; caching a bound address never caches
-  permission.
+  permission. Recipient mutations and guards require whole-row admission before
+  grants or cell lookup. `cellVisibility` reserves cell-policy storage on empty rows;
+  row-level visibility alone does not, so an owner's private inbox reads whole.
 
 ## Where each contract is enforced
 

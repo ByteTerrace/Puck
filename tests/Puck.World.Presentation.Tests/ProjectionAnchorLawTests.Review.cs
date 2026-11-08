@@ -264,7 +264,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))],
             Kind: CellKind.Int,
             Name: CellName.Parse(candidate: "score"),
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         )]);
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -300,7 +300,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 3L))],
             Kind: CellKind.Int,
             Name: CellName.Parse(candidate: "first"),
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         );
         var definition = Document(row: Row(raw: 1000L)) with {
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),

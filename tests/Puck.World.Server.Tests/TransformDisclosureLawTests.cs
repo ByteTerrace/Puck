@@ -66,8 +66,10 @@ public sealed class TransformDisclosureLawTests {
         Assert.Equal(WorldCellWriteVerdict.Applied, fixture.Server.WriteStateCell(owner, row, key, 12));
     }
 
-    [Fact]
-    public void ASpatialGuardChecksAnEmptyTemplatesDeclaredSourceAndABatchRechecksNewPolicies() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ASpatialGuardChecksAnEmptyTemplatesDeclaredSourceAndABatchRechecksNewPolicies(bool reserveColumn) {
         var row = new WorldStateRow(CellName.Parse("hidden"), CellKind.Int, Capacity: 4, CellVisibility: true, Cells: []);
         var placement = new WorldPlacement("pieces", "piece", new DocumentVector3(0, 0, 0), 0, 1, Deal: new WorldPlacementDeal("hidden"),
             Spatial: [new WorldPlacementSpatialVolume("space", WorldPlacementSpatialRole.Occupation,
@@ -81,12 +83,15 @@ public sealed class TransformDisclosureLawTests {
         Assert.Equal("hidden", withheld);
 
         var publicRow = row with { CellVisibility = false, Cells = [Cell("secret", 7)] };
+        var restrictedRow = reserveColumn ? publicRow with { CellVisibility = true } : publicRow with {
+            Cells = [new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat2"]))]
+        };
         using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([publicRow]));
         var results = new List<WorldSubmissionResult>();
         fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
             SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: actor, OperationId: Guid.NewGuid(),
             Payload: new WorldSubmissionPayload.Mutation(new WorldMutation.Batch(actor, [
-                new WorldMutation.UpsertStateRow(actor, publicRow with { CellVisibility = true }),
+                new WorldMutation.UpsertStateRow(actor, restrictedRow),
                 new WorldMutation.RemoveStateCell(actor, "hidden", "secret")]))), results.Add);
         fixture.Step();
         var outcome = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;

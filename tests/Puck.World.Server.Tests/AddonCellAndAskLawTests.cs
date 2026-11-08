@@ -26,7 +26,7 @@ public sealed class AddonCellAndAskLawTests {
         var wat = $$"""
             (module
               (memory (export "memory") 1)
-              (data (i32.const 256) "\02\00\0f\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+              (data (i32.const 256) "\02\00\10\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
               (data (i32.const 12400) "hidden")
               (data (i32.const 12432) "{{key}}")
               (global $stage (mut i32) (i32.const 0))

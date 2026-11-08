@@ -469,7 +469,7 @@ public sealed class VectorStateLawTests {
             Kind: CellKind.Vector,
             Name: CellName.Parse(candidate: "largeTable"),
             Space: "lore",
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         );
 
         var definition = BuildDocumentWithState(spaces: [space], rows: [largeRow]);
@@ -579,8 +579,8 @@ public sealed class VectorStateLawTests {
             Kind: CellKind.Vector,
             Name: CellName.Parse(candidate: "events"),
             Space: "lore",
-            // A cell that declares its own readers needs the row's policy; an empty one keeps the row itself public.
-            Visibility: new StateVisibility()
+            // Reserve per-cell policies independently of the row's public audience.
+            CellVisibility: true, Visibility: new StateVisibility()
         );
 
         var definition = BuildDocumentWithState(spaces: [space], rows: [situationRow, eventsRow]);

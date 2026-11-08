@@ -133,7 +133,7 @@ public sealed class PlacementResponseDisclosureLawTests {
             ],
             Kind: CellKind.Int,
             Name: CellName.Parse(candidate: "ledger"),
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         );
         var gate = Gate(id: "ledgerGate", new WorldPlacementResponse(
             When: new WorldPlacementResponseCondition.StateCondition(

@@ -51,6 +51,7 @@ public sealed partial class WorldDocument {
         return true;
     }
     private static bool SameComposeDeclaration(WorldStateRow row, WorldStateRow previous) {
+        if (ArenaLayout.ColumnsOf(row) != ArenaLayout.ColumnsOf(previous)) { return false; }
         if ((row.Name != previous.Name) || (row.Kind != previous.Kind) || (row.Shape != previous.Shape) ||
             (row.Min != previous.Min) || (row.Max != previous.Max) || (row.Capacity != previous.Capacity) ||
             (row.Overflow != previous.Overflow) || (row.Evicts != previous.Evicts) || (row.GatesDrive != previous.GatesDrive) ||
