@@ -753,6 +753,48 @@ public sealed partial class PlacementDealLawTests {
             needle: "refused alongside inhabit/attach/respond/mirror/faceSources"
         );
     }
+    /// <summary>A placement authored under a dealt child of a template whose row can withhold stands at a frame that
+    /// follows the authority's hidden slot, so it carries only what the re-deal discloses: a solid one is refused by
+    /// name, and the same placement without the collider validates.</summary>
+    [Fact]
+    public void AnAuthoredDescendantOfAWithholdingDealCarriesNoCollider() {
+        WorldDefinition Marked(WorldSolid? solid) {
+            var template = (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Solid = null });
+            var document = Document(
+                row: (AccountsRow("a") with { Visibility = new StateVisibility(Readers: []) }),
+                template: template
+            );
+
+            return (document with {
+                PlacementRowsRaw = [
+                    template,
+                    WorldPlacementDeal.Child(
+                        id: WorldPlacementDeal.ChildId(key: "a", template: TemplateId),
+                        offset: Offset(slot: 0),
+                        prototype: StoreCreation,
+                        slot: 0,
+                        template: template
+                    ),
+                    new WorldPlacement(
+                        Id: "marker",
+                        PrototypeId: AnchorCreation,
+                        Position: new DocumentVector3(value: new Vector3(x: 0f, y: 1f, z: 0f)),
+                        YawDegrees: 0f,
+                        Scale: 1f,
+                        Solid: solid,
+                        Parent: WorldPlacementDeal.ChildId(key: "a", template: TemplateId)
+                    ),
+                ],
+            });
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "placement-deal.withheld-descendant-facets",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(definition: Marked(solid: new WorldSolid(Margin: 0f)), reason: out _),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(definition: Marked(solid: null), reason: out _)
+        );
+        AssertRefusedNaming(definition: Marked(solid: new WorldSolid(Margin: 0f)), needle: "placements[2] carries solid");
+    }
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
