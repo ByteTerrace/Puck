@@ -53,6 +53,11 @@ public sealed partial class WorldDocument {
 
             if (before.TryGetValue(key: name, value: out var exported) && ReferenceEquals(objA: row, objB: exported) &&
                 declared.TryGetValue(key: name, value: out var declaration)) {
+                // Composed over a document that is not the arena's export (the installed one itself), an unnamed row
+                // holds seeds rather than the arena's values, so nothing can be carried.
+                if (!declaration.HostOwned && ReferenceEquals(objA: exported, objB: declaration)) {
+                    return new WorldStateEdit(Candidate: candidate, Carried: null, Named: null);
+                }
                 rows[index] = declaration;
                 if (!declaration.HostOwned) { carried.Add(item: row); }
             } else {
@@ -60,10 +65,6 @@ public sealed partial class WorldDocument {
                 named.Add(item: name);
             }
             sameRows = (sameRows && ReferenceEquals(objA: rows[index], objB: installed.World![index]));
-        }
-        // Composed over the installed document itself, an unnamed row holds seeds rather than the arena's values.
-        if (ReferenceEquals(objA: source, objB: installed) && (named.Count != 0)) {
-            return new WorldStateEdit(Candidate: candidate, Carried: null, Named: null);
         }
 
         var state = (sameRows ? installed : (installed with { World = rows }));
