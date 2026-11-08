@@ -253,8 +253,8 @@ public class RuleCompileContext : IRuleCostContext {
     /// <returns>The typed read operand.</returns>
     public virtual IRuleOperand CreateCellRead(StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
         new StateCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind);
-    /// <summary>Returns a row's admitted cell room for pricing: its explicit capacity, topology, initial reservation, or the
-    /// section-wide ceiling for an undeclared row.</summary>
+    /// <summary>Returns the most cells a row can hold, read from declarations only: see <see cref="RowCapacity(int)"/>.
+    /// An undeclared name answers the section-wide ceiling.</summary>
     /// <param name="name">The row name.</param>
     /// <returns>The capacity.</returns>
     public long RowCapacity(string name) {
@@ -264,23 +264,35 @@ public class RuleCompileContext : IRuleCostContext {
             ? RowCapacity(rowOrdinal: handle.Ordinal) : StateCapacity.MaxCellsPerRow);
     }
     /// <inheritdoc/>
+    /// <remarks>Every price reads a row's room here, and the answer is a function of declarations alone: a slot is one
+    /// cell, a lattice its topology's cells, a ring its declared length, and a keyed or ordered row its declared
+    /// <see cref="StateRow.CellCeiling"/>, bounded for a row keyed over a token domain by the domain row's own room,
+    /// since its keys are the domain's. A keyed row without a capacity is priced at the ceiling it may grow to, never
+    /// at the cells it holds or the room the arena has reserved for it, so neither a growth nor a write to any row
+    /// moves a price (the work sheet and a search's allowance are text a recipient can be told).</remarks>
     public long RowCapacity(int rowOrdinal) {
-        if ((AdmittedLayout is { } layout) && (((uint)rowOrdinal) < ((uint)layout.RowCount)) && layout[rowOrdinal].IsStored) {
-            return layout[rowOrdinal].CellCapacity;
+        var ceiling = (long)StateCapacity.MaxCellsPerRow;
+
+        // A token domain is itself a row and may be keyed over another; the walk ends at a row with no domain, and
+        // the step count bounds a cycle the validator refuses anyway.
+        for (var step = 0; (step < StateCapacity.MaxRows); step++) {
+            var row = FindRowAt(rowOrdinal: rowOrdinal);
+
+            if (row is null) { return ceiling; }
+            switch (row.Shape) {
+                case RowShape.Slot: return 1L;
+                case RowShape.Lattice: return Math.Min(val1: ceiling, val2: (FindTopology(name: ((StateDomain.CellsOf)row.EffectiveDomain).Topology)?.CellCount ?? row.CellCeiling));
+                case RowShape.Ring: return Math.Min(val1: ceiling, val2: row.CellCeiling);
+            }
+            ceiling = Math.Min(val1: ceiling, val2: row.CellCeiling);
+            if ((row.EffectiveDomain is not StateDomain.KeysOf keysOf) ||
+                !Catalog.TryResolve(lane: StateLane.Document, name: keysOf.Row, handle: out var domain)) {
+                return ceiling;
+            }
+            rowOrdinal = domain.Ordinal;
         }
-        var row = FindRowAt(rowOrdinal: rowOrdinal);
-
-        if (row is null) { return StateCapacity.MaxCellsPerRow; }
-        return row.Shape switch {
-            RowShape.Slot => 1,
-            RowShape.Lattice => (FindTopology(name: ((StateDomain.CellsOf)row.EffectiveDomain).Topology)?.CellCount ?? row.CellCeiling),
-            RowShape.Ring => row.CellCeiling,
-            _ => row.InitialCellCapacity,
-        };
+        return ceiling;
     }
-
-    /// <summary>Gets or sets the runtime reservation used for row and retained-undo pricing.</summary>
-    public ArenaLayout? AdmittedLayout { get; set; }
     /// <inheritdoc/>
     /// <remarks>The state-neutral context declares no bodies; a document project whose host holds bodies answers its
     /// own capacity.</remarks>

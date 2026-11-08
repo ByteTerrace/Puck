@@ -1369,9 +1369,9 @@ public static class WorldSearchCompilation {
                 rows: definition.State,
                 name: scoresName
             ) is not { IsKeyed: true, Kind: CellKind.Int } scoresRow) ||
-                ((scoresRow.Cells?.Count ?? 0) < 2)
+                (scoresRow.CellCeiling < 2)
             ) {
-                reason = $"search '{row.Name}' scores '{scoresName}' must be a keyed integer row with at least two cells, one per seat";
+                reason = $"search '{row.Name}' scores '{scoresName}' must be a keyed integer row with room for at least two cells, one per seat";
 
                 return false;
             }
@@ -1482,10 +1482,10 @@ public static class WorldSearchCompilation {
             position: position,
             score: scoreCost.Units,
             seats: ((row.Scores is { } seatRow)
-                ? (WorldDefinitionRows.FindStateRow(
-                    name: seatRow,
-                    rows: definition.State
-                )?.Cells?.Count ?? 0)
+                ? ((int)Math.Min(
+                    val1: int.MaxValue,
+                    val2: context.RowCapacity(name: seatRow)
+                ))
                 : 0),
             shapes: shapes,
             tokens: ((int)Math.Min(

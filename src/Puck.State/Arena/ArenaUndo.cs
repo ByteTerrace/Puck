@@ -491,13 +491,15 @@ public sealed partial class StateArena {
     /// <param name="layout">The arena layout the plans' rows are laid out in.</param>
     /// <param name="plans">Every undo plan the arena is configured with; a restored position is tested against each.</param>
     /// <param name="plan">The plan whose newest turn is rewound.</param>
+    /// <param name="room">The declared room a price reads for every growable row (a keyed or ordered row the arena
+    /// may grow), or <see langword="null"/> to read the room <paramref name="layout"/> has reserved.</param>
     /// <returns>The work units.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="room"/> is <see langword="null"/>.</exception>
     /// <exception cref="OverflowException">The work does not fit a 64-bit count.</exception>
     /// <remarks>A turn retains each position at most once, so a segment holds at most one entry per position the
     /// plan's rows can store, less the clock lanes of a row no trait rebases. The rewind's own <see cref="ArenaWork.Visits"/>
     /// count one per entry, its components, and each rebuilt row's members.</remarks>
-    public static long EstimateRewindWork(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<ArenaUndoPlan> plans, ArenaUndoPlan plan) {
+    public static long EstimateRewindWork(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<ArenaUndoPlan> plans, ArenaUndoPlan plan, IRuleCostContext? room = null) {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(plans);
@@ -505,8 +507,16 @@ public sealed partial class StateArena {
 
         var rows = plan.Rows.Distinct().Order().ToArray();
         var entries = 0L;
-        var components = ((long)UndoComponentCapacity(layout: layout, rows: rows));
+        var components = 0L;
+        ArenaRowLayout At(int row) => (((room is not null) && layout.HasColumn(row: row, column: ArenaColumn.CellCapacity))
+            ? (layout[row] with { CellCapacity = (int)Math.Min(val1: StateCapacity.MaxCellsPerRow, val2: room.RowCapacity(rowOrdinal: row)) })
+            : layout[row]);
 
+        foreach (var row in rows) {
+            var rowLayout = At(row: row);
+
+            components = checked((components + ((long)rowLayout.CellCapacity * rowLayout.Dimensions)));
+        }
         foreach (var row in rows) {
             // The reservation keeps every document row's clock lanes, but only a traited row's live write rebases
             // them, so an untraited row's turn never retains one.
@@ -517,7 +527,7 @@ public sealed partial class StateArena {
 
             foreach (var column in ArenaColumns.All) {
                 if (clocks || (column is not (ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet))) {
-                    entries = checked((entries + UndoPositionCount(catalog: catalog, column: column, layout: layout[row], row: row)));
+                    entries = checked((entries + UndoPositionCount(catalog: catalog, column: column, layout: At(row: row), row: row)));
                 }
             }
         }
@@ -529,7 +539,7 @@ public sealed partial class StateArena {
             containment = checked((containment + (2L + System.Numerics.BitOperations.Log2(value: (((uint)other.Rows.Length) + 1U)))));
         }
         foreach (var row in rows) {
-            ref readonly var rowLayout = ref layout[row];
+            var rowLayout = At(row: row);
 
             if ((rowLayout.Shape is (RowShape.Keyed or RowShape.Ordered)) && !catalog.IsPoolRow(rowOrdinal: row)) {
                 reindex = checked((reindex + (2L * rowLayout.CellCapacity)));
