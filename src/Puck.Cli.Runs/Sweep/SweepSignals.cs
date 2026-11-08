@@ -211,7 +211,7 @@ public static partial class SweepSignals {
     private static partial Regex PairPattern();
     [GeneratedRegex(pattern: @"(?<iterations>\d+) iterations \| avg=(?<avg>[\d.]+) p50=(?<p50>[\d.]+) p99=(?<p99>[\d.]+) max=(?<max>[\d.]+) ms \| over [\d.]+ ms: (?<over>\d+)", options: RegexOptions.CultureInvariant)]
     private static partial Regex FramesHeaderPattern();
-    [GeneratedRegex(pattern: @"^\s+(?<phase>[a-z+]+): avg=(?<avg>[\d.]+) p50=(?<p50>[\d.]+) p99=(?<p99>[\d.]+) max=(?<max>[\d.]+) ms", options: RegexOptions.CultureInvariant)]
+    [GeneratedRegex(pattern: @"^\s+(?<phase>[a-z+-]+): avg=(?<avg>[\d.]+) p50=(?<p50>[\d.]+) p99=(?<p99>[\d.]+) max=(?<max>[\d.]+) ms", options: RegexOptions.CultureInvariant)]
     private static partial Regex FramesPhasePattern();
 }
 /// <summary>One colouring rule, <c>&lt;metric&gt; &lt;op&gt; &lt;value&gt;</c>: the value is a number, another metric's

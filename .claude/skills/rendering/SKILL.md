@@ -1028,6 +1028,10 @@ backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
 iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
 pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
+Produce is split into `produce-work`, the frame thread's own work, and
+`produce-fence`, its time blocked on submission fences (`GpuFenceBlocking`,
+counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
+by its fence share is GPU back-pressure, not CPU work.
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
