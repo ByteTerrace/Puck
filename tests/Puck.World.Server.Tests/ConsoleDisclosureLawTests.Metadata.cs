@@ -43,7 +43,7 @@ public sealed partial class ConsoleDisclosureLawTests {
                         new StateCell(Key: CellName.Parse("b"), Value: CellValue.Bool(true))]),
                 new WorldStateRow(Name: CellName.Parse("rank"), Kind: CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse("cards")),
-                    Visibility: new StateVisibility(Readers: ["seat1", "seat2"], Hidden: HiddenCells.Omit),
+                    CellVisibility: true, Visibility: new StateVisibility(Readers: ["seat1", "seat2"], Hidden: HiddenCells.Omit),
                     Cells: [Cell("a", 1), .. (hidden ? new[] { Cell("b", Sealed, new StateVisibility(Readers: ["seat1"])) } : Array.Empty<StateCell>())])
             ])
         };
@@ -117,7 +117,7 @@ public sealed partial class ConsoleDisclosureLawTests {
                 Spaces: [new StateSpace(name: CellName.Parse("space"), dimensions: 8, model: "test", revision: "1")],
                 World: [new WorldStateRow(
                     Name: CellName.Parse("vectors"), Kind: CellKind.Vector, Space: "space", Domain: StateDomain.Keys.Instance,
-                    Visibility: new StateVisibility(Readers: ["seat1", "seat2"], Hidden: HiddenCells.Omit),
+                    CellVisibility: true, Visibility: new StateVisibility(Readers: ["seat1", "seat2"], Hidden: HiddenCells.Omit),
                     Cells: [new StateCell(Key: CellName.Parse("open"), Value: CellValue.Vector(vector)),
                         .. Enumerable.Range(0, hiddenCells).Select(index => new StateCell(
                             Key: CellName.Parse($"secret{index}"), Value: CellValue.Vector(vector),

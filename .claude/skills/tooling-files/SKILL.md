@@ -24,6 +24,7 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Find an owning project within an optional boundary | `CliProjects.FindOwningProject` in `src/Puck.Cli.Core/CliProjects.cs` |
 | Read C# type declarations for project selection | `DeclarationsCommand.ReadTypes` in `src/Puck.Cli.Source/Analysis/DeclarationsCommand.cs` |
 | Track Markdown code fences in link and quotation scans | `MarkdownFence` in `src/Puck.Cli.Source/Docs/MarkdownFence.cs` |
+| Collect non-XML C# comments and emit line sites | `InlineComments.CollectComments` and `ScanSites` in `src/Puck.Cli.Source/Scan/` |
 | Match compiler paths against analyzer allowlist identities | `AnalyzerAllowlistPath` in `src/Puck.Analyzers/AnalyzerAllowlistPath.cs` |
 
 Lexical containment and ancestor inspection do not establish confinement against concurrent path replacement.

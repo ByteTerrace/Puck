@@ -1,6 +1,7 @@
 import "../standard/seat"
 import "../standard/inputs"
 import "shapes"
+import "gametable"
 
 // The granary board: the deployment's storage accounts as pieces on a tabletop board, at the board game room's
 // south-east table on level 2 (hall.puck). The debug world imports this file whole (before alchemy, so its cursor takes
@@ -256,23 +257,7 @@ prototypes {
         { color: "#D6A13E", metal: 0.85, roughness: 0.3, specular: 0.4 }
       ]
       schema: "puck.creation.v1"
-      shape Box "top" {
-        material: 0
-        position [0, 1.25, 0]
-        scale [1.75, 0.05, 0.85]
-      }
-      for x in [-1.1, 1.1] {
-        shape Cylinder $"leg-{x}" {
-          material: 0
-          position [x, 0.855, 0]
-          scale [0.08, 0.355, 0.08]
-        }
-        shape Cylinder $"foot-{x}" {
-          material: 0
-          position [x, 0.52, 0]
-          scale [0.35, 0.02, 0.35]
-        }
-      }
+      twoPedestalTable(0)
       // The board: a dark base the tiles' seams show, inside a dark rim flush with the tiles' faces.
       shape Box "base" {
         material: 1
@@ -762,35 +747,35 @@ state {
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryResources"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryRegions"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryKinds"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granarySkus"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     // The feed's state, kept by the host: 0 pending (no feed, or no read yet), 1 live, 2 offline.
@@ -801,7 +786,7 @@ state {
       min: 0
       max: 2
       cells [{ key: "status", value: 0 }]
-      visibility {}
+      cellVisibility: true
     }
 
     // The play board: 1 where a piece stands, over the same grid the pieces are dealt on; and each account's cell.
@@ -821,7 +806,7 @@ state {
       min: 1
       max: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     // How many providers cover each account's piece.
@@ -832,7 +817,7 @@ state {
       min: 0
       max: 99
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerCoverage"
@@ -841,7 +826,7 @@ state {
       min: 0
       max: 99
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     row {
@@ -849,52 +834,52 @@ state {
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationPatches"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationSelected"
       kind: "Text"
       value: granaryReachVolume[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationPatch"
       kind: "Text"
       value: granaryReachPatch[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerVolumes"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerPatches"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerSelected"
       kind: "Text"
       value: granaryReachVolume[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerPatch"
       kind: "Text"
       value: granaryReachPatch[0]
-      visibility {}
+      cellVisibility: true
     }
     slot granaryPhase = 0 bounds(0..11)
     slot granaryIrrigationRequest = 0 bounds(0..2)

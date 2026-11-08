@@ -5722,7 +5722,7 @@ export type WorldAudioDefaults = {
    */
   defaultBedFadeSeconds: number;
   /**
-   * The listener policy: ListenerFocus (the active view camera's pose listens), seat:<n> (that seat's view camera), or a declared camera name — so a stage or museum world can pin its listener without touching the runtime.
+   * The listener policy: ListenerFocus (the active view camera's pose listens), seat<n> (that seat's view camera), or a declared camera name — so a stage or museum world can pin its listener without touching the runtime.
    */
   listener: string;
   /**
@@ -13535,6 +13535,10 @@ export type WorldStateRow = {
    */
   historyCursor?: number;
   visibility?: StateVisibility;
+  /**
+   * Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.
+   */
+  cellVisibility?: boolean;
   /**
    * A persisted token-keyed knowledge layer refreshed explicitly by the authority.
    */

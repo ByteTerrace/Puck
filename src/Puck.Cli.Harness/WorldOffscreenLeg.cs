@@ -114,10 +114,8 @@ public static class WorldOffscreenLeg {
     /// <returns>How the leg ended, with one line of detail for every status but
     /// <see cref="WorldOffscreenLegStatus.Completed"/>, and the finished process when it ran.</returns>
     public static WorldOffscreenLegResult Launch(string verb, string artifact, string world, string backend, string script, IReadOnlyList<string> arguments, string runDirectory, int exitAfterSeconds, TimeSpan budget, Stopwatch suiteClock, int expectedRejections = 0, IReadOnlyDictionary<string, string?>? environment = null) {
-        var remaining = CliProcess.RemainingBudget(
-            budget: budget,
-            clock: suiteClock
-        );
+        using var suiteBudget = new SuiteBudget(total: budget, clock: suiteClock);
+        var remaining = suiteBudget.Remaining;
 
         if (remaining <= TimeSpan.FromSeconds(value: 1)) {
             return new WorldOffscreenLegResult(
@@ -134,7 +132,7 @@ public static class WorldOffscreenLeg {
         try {
             // The GPU lease and the host's headroom are other runs' time, so the suite's clock stands still for them.
             using var launch = WorldLaunch.Admit(
-                queue: () => Pause(clock: suiteClock),
+                queue: suiteBudget.Pause,
                 request: new WorldLaunchRequest(Artifact: artifact, Step: verb) {
                     Arguments = arguments,
                     Backend = WorldLaunch.ParseBackend(token: backend),
@@ -225,19 +223,6 @@ public static class WorldOffscreenLeg {
         );
     }
 
-    // Stops a running clock until the scope ends; a clock already stopped stays stopped.
-    private static IDisposable Pause(Stopwatch clock) {
-        var running = clock.IsRunning;
-
-        clock.Stop();
-
-        return new Resume(clock: clock, running: running);
-    }
-    private sealed class Resume(Stopwatch clock, bool running) : IDisposable {
-        public void Dispose() {
-            if (running) { clock.Start(); }
-        }
-    }
     private static void WriteLog(string runDirectory, string name, string text) =>
         File.WriteAllText(
             contents: text,

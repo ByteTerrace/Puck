@@ -409,7 +409,7 @@ internal sealed class NullAddonHost : IWorldAddonHost {
     /// <inheritdoc/>
     public void Commit(IWorldAddonPreparedPlan plan) { }
     /// <inheritdoc/>
-    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) { }
+    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied, string? refusalCode = null) { }
     /// <inheritdoc/>
     public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
     /// <inheritdoc/>

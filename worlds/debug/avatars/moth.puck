@@ -1305,58 +1305,7 @@ prototypes {
           specular: 0.04
           emissive: 0
           coat: 0
-          // Where each eye's upper lid and lash meet its white, in the eye's frame: their own curves, half a millimetre
-          // wider than the tubes, so the white under a tube's edge reads as the tube rather than two meshes trading pixels.
-          paints [
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a: map([-0.047, 0, 0.027], v => v * headScale)
-                b: map([0, 0.066, 0.052], v => v * headScale)
-                c: map([0.047, 0.004, 0.027], v => v * headScale)
-                radiusStart: 0.0045 * headScale
-                radiusEnd: 0.0045 * headScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-left"
-              type: "Sweep"
-              curve {
-                a: map([0.04, 0.017, 0.03], v => v * headScale)
-                b: map([0.05, 0.023, 0.023], v => v * headScale)
-                c: map([0.059, 0.023, 0.016], v => v * headScale)
-                radiusStart: 0.0035 * headScale
-                radiusEnd: 0.0035 * headScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a: map([0.047, 0, 0.027], v => v * headScale)
-                b: map([0, 0.066, 0.052], v => v * headScale)
-                c: map([-0.047, 0.004, 0.027], v => v * headScale)
-                radiusStart: 0.0045 * headScale
-                radiusEnd: 0.0045 * headScale
-              }
-              color: "#171210"
-            }
-            {
-              parent: "eye-right"
-              type: "Sweep"
-              curve {
-                a: map([-0.04, 0.017, 0.03], v => v * headScale)
-                b: map([-0.05, 0.023, 0.023], v => v * headScale)
-                c: map([-0.059, 0.023, 0.016], v => v * headScale)
-                radiusStart: 0.0035 * headScale
-                radiusEnd: 0.0035 * headScale
-              }
-              color: "#171210"
-            }
-          ]
+          paints: mothLidPaints(headScale)
         }
         {
           color: "#2ED6EC"

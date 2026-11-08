@@ -293,7 +293,7 @@ public sealed partial class ArenaLayout {
     public static ulong ColumnsOf(StateRow row) {
         var clock = ((row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null));
         var behavior = clock;
-        var visibility = (row.Visibility is not null);
+        var visibility = row.CellVisibility;
         var observation = (row.Knowledge is not null);
         var cells = row.Cells;
         // Each cell's declaration contributes to the row's storage once. Interface enumeration here used to

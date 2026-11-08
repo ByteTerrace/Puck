@@ -485,7 +485,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         JsonElement? inverse = null;
         string? phaseOf = null;
         string? valuesFrom = null;
-        JsonElement? phase = null, visibility = null, knowledge = null;
+        JsonElement? phase = null, visibility = null, knowledge = null, cellPolicies = null;
         JsonElement? advance = null;
         JsonElement? dynamics = null;
         JsonElement? cycle = null;
@@ -561,6 +561,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     historyCursor = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "visibility": visibility = JsonElement.ParseValue(reader: ref reader); break;
+                case "cellVisibility": cellPolicies = JsonElement.ParseValue(reader: ref reader); break;
                 case "knowledge": knowledge = JsonElement.ParseValue(reader: ref reader); break;
                 case "phase":
                     phase = JsonElement.ParseValue(reader: ref reader);
@@ -786,6 +787,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     element: drawCursorElement
                 )
             : 0L),
+            CellVisibility: cellPolicies is { } policies && RequireBool(context: $"state row '{name}'.cellVisibility", element: policies),
             Visibility: ((visibility is { } visibilityElement)
             ? ReadNested<StateVisibility>(
                     context: "visibility",
@@ -1082,6 +1084,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             );
         }
 
+        if (value.CellVisibility) { writer.WriteBoolean("cellVisibility", true); }
         if (value.Visibility is { } visibility) {
             WriteNested(
             options: options,
@@ -1151,7 +1154,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"cellVisibility\":true,\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

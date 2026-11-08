@@ -1,6 +1,6 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-// The literal-pool resolution shared by MicroRoms and OracleProbes' independent private Asm assemblers: each
+// The literal-pool resolution used by ArmProbeAssembler: each
 // LdrConst/LdrLabel left a placeholder PC-relative LDR and a (instr, rd, value-or-label) entry; this dedups the
 // resolved 32-bit constants into a pool appended after the code and rewrites each placeholder's PC-relative offset.
 internal static class AsmLiteralPool {

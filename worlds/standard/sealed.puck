@@ -11,7 +11,7 @@
 // A seat writes its own row (`world.state.cell.set auctionIn2 bid 45`) and reads its own receipt there. A rule of the
 // game collects it: it reads the field, moves the value where the game keeps it (a row only the authority reads, or one
 // the game's audience widens later), puts the field back to `empty` and adds one to `taken`, in one firing
-// (../games/auction.puck's `auction-collect-<s>` rules). What the move learns (whether there was a value, when it
+// (`collectSealed`, used by ../games/auction.puck's `auction-collect-<s>` rules). What the move learns (whether there was a value, when it
 // arrived, what it was) stays in the rows the rules write, under the policy those rows declare. A writer never writes a
 // row it cannot read whole, so its write has no outcome that depends on a cell it may not read.
 
@@ -39,4 +39,16 @@ template sealedInbox(name, seats, fields, empty = 0, texts = []) {
       }
     }
   }
+}
+
+// The game's rule chooses when an offer is valid and where it goes. Collection and the receipt share one firing;
+// the destination's policy decides who learns the offer. Refused offers can acknowledge with receiveSealed alone.
+rule template receiveSealed(inbox, field = "bid", empty = 0) {
+  $"{inbox}"[$"{field}"] = empty
+  $"{inbox}".taken += 1
+}
+
+rule template collectSealed(inbox, destination, key, field = "bid", empty = 0) {
+  $"{destination}"[$"{key}"] = $"{inbox}"[$"{field}"]
+  receiveSealed(inbox: inbox, field: field, empty: empty)
 }

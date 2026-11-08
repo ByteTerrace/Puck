@@ -7,7 +7,7 @@
 //
 // The variants replace `hand` (dropping the public `a`) with their hidden cells first and add the public `pub` after,
 // so `pub` lands behind them in the row's storage and in `probe-hand`'s deal, a shape no reader's answer may reflect.
-// The row's own `visibility {}` declares that its cells may carry their own readers, so it is a restricted row for
+// The row's `cellVisibility: true` declares that its cells may carry their own readers, so it is a restricted row for
 // every seat whether or not a hidden member is present now. `probe-hand` deals one card per cell of `hand`: what a
 // reader is shown of the dealt cards (their count, slots and positions) is a door too.
 
@@ -63,7 +63,7 @@ state {
       name: "hand"
       kind: "Int"
       capacity: 4
-      visibility {}
+      cellVisibility: true
       cells [{ key: "a", value: 1 }]
     }
     row {

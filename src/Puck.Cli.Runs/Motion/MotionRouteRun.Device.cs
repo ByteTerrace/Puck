@@ -85,7 +85,7 @@ public static class MotionRouteRun {
             started = launch.Start(logDirectory: directory);
         }
         using var process = started;
-        using var controlBudget = new SweepBudget(TimeSpan.FromTicks(Math.Max(1, (deadline - timer.Elapsed).Ticks)), CancellationToken.None);
+        using var controlBudget = new SuiteBudget(TimeSpan.FromTicks(Math.Max(1, (deadline - timer.Elapsed).Ticks)), CancellationToken.None);
         MotionScriptResult Run(params string[] lines) {
             var remaining = deadline - timer.Elapsed;
             if (remaining <= TimeSpan.Zero) { throw new TimeoutException("The route deadline elapsed."); }

@@ -6,37 +6,37 @@
     {
       "name": "zero",
       "steps": [
-        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[]}" },
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[]}" },
         { "at": 4, "run": "world.state.cell.set hand pub 3" }
       ]
     },
     {
       "name": "one",
       "steps": [
-        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
         { "at": 4, "run": "world.state.cell.set hand pub 3" }
       ]
     },
     {
       "name": "two",
       "steps": [
-        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}},{\"key\":\"secret1\",\"value\":8,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}},{\"key\":\"secret1\",\"value\":8,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
         { "at": 4, "run": "world.state.cell.set hand pub 3" }
       ]
     },
     {
       "name": "other-value",
       "steps": [
-        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[{\"key\":\"secret0\",\"value\":9,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[{\"key\":\"secret0\",\"value\":9,\"visibility\":{\"readers\":[\"seat1\"]}}]}" },
         { "at": 4, "run": "world.state.cell.set hand pub 3" }
       ]
     },
     {
       "name": "late",
       "steps": [
-        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[]}" },
+        { "at": 2, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[]}" },
         { "at": 4, "run": "world.state.cell.set hand pub 3" },
-        { "at": 40, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"visibility\":{},\"cells\":[{\"key\":\"pub\",\"value\":3},{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}}]}" }
+        { "at": 40, "run": "world.row.set state {\"name\":\"hand\",\"kind\":\"Int\",\"capacity\":4,\"cellVisibility\":true,\"cells\":[{\"key\":\"pub\",\"value\":3},{\"key\":\"secret0\",\"value\":7,\"visibility\":{\"readers\":[\"seat1\"]}}]}" }
       ]
     }
   ],

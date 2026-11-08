@@ -195,6 +195,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Operator,
             name: "world.reset",
             description: "Resets the running world to its BASE — the last world.save, or the boot document if never saved (the same base world.undo replays from; world.save compacts the base): world.reset. An ordered-domain submission like any other write: buffers, applies at the tick boundary, journal clears, admitted peer CONNECTIONS survive with their admission grant re-minted, screens/bodies/population re-derive from the base document. Profiles/player documents are UNTOUCHED — player data is not world state. The accept echo names what the base actually is. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the base's own canonical bytes at apply time — a re-drive refuses BY NAME rather than silently reproducing a base that has moved since the recording was made.",
             handler: (context, _) => {
@@ -212,6 +213,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Operator,
             name: "world.load",
             description: $"Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): {WorldLoadForms.Spelling}. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
             forms: WorldLoadForms,
@@ -274,12 +276,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 );
             }
         );
-        // BINDABLE, unlike the rest of this module: it is a gesture, not a verb naming a document target (no path, no
-        // row, no principal) — the artist's "re-read what is on disk" press. Binding it changes nothing about who may
-        // do it: the Mutate hold is checked at dispatch under the pressing seat's principal, exactly as from stdin.
+        // Re-reading the authority document is operator work, just as loading or undoing it is.
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
+            bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
+            audience: CommandAudience.Operator,
             name: "world.reload",
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
@@ -332,6 +333,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Operator,
             name: "world.undo",
             description: $"Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: {WorldUndoForms.Spelling}. The journal IS the edit history; replay IS the undo engine. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
             forms: WorldUndoForms,

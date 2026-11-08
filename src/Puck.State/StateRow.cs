@@ -194,6 +194,7 @@ public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Adva
 /// directly — see <see cref="StateInverse"/>. Legitimate only alongside a <see cref="StateDomain.CellsOf"/> domain
 /// over <see cref="CellKind.Int"/> or <see cref="CellKind.Bool"/> cells (<see cref="TryProveDerivedDomain"/>).</param>
 /// <param name="Phase">A finite participant phase protocol and its persisted progression.</param>
+/// <param name="CellVisibility">Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.</param>
 /// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
 /// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
 /// <param name="PhaseOf">The phase row required on external gameplay transforms that write this row.</param>
@@ -230,7 +231,8 @@ public record StateRow(
     long HistoryCursor = 0,
     string? Space = null,
     CellName? Enum = null,
-    bool HostOwned = false
+    bool HostOwned = false,
+    bool CellVisibility = false
 ) {
     // Both lists are owned (StateLists.Freeze): a caller that keeps the collection it passed in cannot change the row,
     // so every cache keyed by a row stays true while the row lives.

@@ -795,7 +795,8 @@ public sealed partial class WorldRuleHost {
             instanceIdentity: Host.InstanceIdentity,
             mutation: DocumentUnit(rows: m_documentArms),
             reason: out var composeReason,
-            tick: firing.Tick
+            tick: firing.Tick,
+            refusalCode: out _
         ) || Refuse(
             code: RuleEffectRefusal.MutationRejected,
             reason: composeReason,

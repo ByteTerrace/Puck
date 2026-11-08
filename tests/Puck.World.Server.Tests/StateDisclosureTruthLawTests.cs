@@ -25,7 +25,7 @@ public sealed class StateDisclosureTruthLawTests {
                 Value: CellValue.Int(value: 0L),
                 Dynamics: new StateDynamics(Row: "slow")
             )],
-            Visibility: new StateVisibility()
+            CellVisibility: true, Visibility: new StateVisibility()
         );
         var document = Fixtures.BuildDocument().WithWorldState(rows: [stateRow]) with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, slow],

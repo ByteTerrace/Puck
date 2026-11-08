@@ -28,6 +28,7 @@ internal static class AdvancedPad {
     public static ushort ToKeyInput(in MachinePadState pad) {
         var keys = 0x03FF;
         var buttons = pad.Buttons;
+        var directions = MachineDirections.From(pad: in pad);
 
         keys = Press(
             keys: keys,
@@ -51,22 +52,22 @@ internal static class AdvancedPad {
         );
         keys = Press(
             keys: keys,
-            pressed: (buttons.HasFlag(flag: MachineButtons.DpadRight) || (pad.LeftStick.X >= MachineInputThresholds.StickDirection)),
+            pressed: directions.Right,
             bit: 4
         );
         keys = Press(
             keys: keys,
-            pressed: (buttons.HasFlag(flag: MachineButtons.DpadLeft) || (pad.LeftStick.X <= -MachineInputThresholds.StickDirection)),
+            pressed: directions.Left,
             bit: 5
         );
         keys = Press(
             keys: keys,
-            pressed: (buttons.HasFlag(flag: MachineButtons.DpadUp) || (pad.LeftStick.Y >= MachineInputThresholds.StickDirection)),
+            pressed: directions.Up,
             bit: 6
         );
         keys = Press(
             keys: keys,
-            pressed: (buttons.HasFlag(flag: MachineButtons.DpadDown) || (pad.LeftStick.Y <= -MachineInputThresholds.StickDirection)),
+            pressed: directions.Down,
             bit: 7
         );
         keys = Press(

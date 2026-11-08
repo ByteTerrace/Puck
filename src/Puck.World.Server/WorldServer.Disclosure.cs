@@ -7,6 +7,8 @@ public sealed partial class WorldServer {
     private readonly WorldDisclosureImages m_disclosureImages = new();
     private readonly ArenaChangedKeys m_snapshotKeys = new();
     private readonly Dictionary<Principal, List<WorldDeliveryCursor>> m_deliveryCursors = [];
+    private readonly Dictionary<Principal, WorldRecipientView> m_readViews = [];
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldAddonRow, WorldRecipientView> m_addonReadViews = new();
 
     /// <summary>The operator's disclosure work and shared storage measurement.</summary>
     public string DescribeDisclosureBudget() => m_disclosureImages.Describe();
@@ -20,13 +22,30 @@ public sealed partial class WorldServer {
     /// <summary>Mints the live capability for this ingress-stamped console invocation.</summary>
     public WorldRecipientView ReadView(CommandContext context) => ReadView(context.Principal);
 
+    /// <summary>Mints the live capability for a mounted addon's host-side identity.</summary>
+    public WorldRecipientView ReadAddonView(string name) => ReadView(Principal.Addon(name));
+
     internal WorldRecipientView ReadView(Principal? recipient) {
         if (recipient is { Kind: PrincipalKind.Session } session) {
             return m_sessionSinks.TryGetValue(session, out var attached)
                 ? attached.Observation.View
                 : DeliveryView(session, WorldDisclosureTier.Frames, () => false);
         }
-        return DeliveryView(recipient, WorldDisclosureTier.Replica);
+        if (recipient is { Kind: PrincipalKind.Addon } addon &&
+            WorldDefinitionRows.FindAddon(Definition.Addons, addon.Name!) is { } declaration) {
+            if (!m_addonReadViews.TryGetValue(declaration, out var addonView)) {
+                addonView = DeliveryView(addon, WorldDisclosureTier.Replica);
+                m_addonReadViews.AddOrUpdate(declaration, addonView);
+            }
+            return addonView;
+        }
+        if (recipient is not { } actor || actor.Kind is not (PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.World)) {
+            return DeliveryView(recipient, WorldDisclosureTier.Replica);
+        }
+        if (!m_readViews.TryGetValue(actor, out var view)) {
+            m_readViews[actor] = view = DeliveryView(actor, WorldDisclosureTier.Replica);
+        }
+        return view;
     }
 
     internal void AttachCursor(Principal? recipient, WorldDeliveryCursor cursor) {

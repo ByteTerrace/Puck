@@ -1,7 +1,5 @@
 using System.CommandLine;
 using System.Text.Json;
-using Puck.Commands;
-using Puck.Confinement;
 using Puck.World;
 
 namespace Puck.Cli.Vocabulary;
@@ -13,110 +11,51 @@ namespace Puck.Cli.Vocabulary;
 // catalogued verb it does not register, so a host without a free GPU can refresh the headless verbs.
 // Exit 0 wrote or matched, 1 check found drift or a boot failed, 2 usage error or missing repository root.
 public static class VerbsCommand {
-    private const string AffordancesPrefix = "[world.affordances: ";
     private const string RelativePath = "src/Puck.World.Vocabulary/Assets/puck.console.verbs.json";
     private const string Verb = "verbs";
 
-    // The affordance echo's command array, the engine's own verbs alone.
-    private static List<CommandMetadata>? ReadAffordances(string stdout) {
-        var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(comparisonType: StringComparison.Ordinal, value: AffordancesPrefix));
-        if ((line is null) || !line.EndsWith(value: ']')) {
-            return null;
-        }
-
-        using var json = JsonDocument.Parse(json: line[AffordancesPrefix.Length..^1]);
-
-        return [.. json.RootElement.GetProperty(propertyName: "commands").EnumerateArray()
-            .Where(predicate: static verb => !(verb.TryGetProperty(propertyName: "authored", value: out var authored) && authored.GetBoolean()))
-            .Select(selector: WorldConsoleVerbCatalog.ReadVerb)];
-    }
-    // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.
-    private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless, string? cacheDirectory) {
-        var shape = (headless ? "headless" : "windowed");
-        using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: artifact, Step: Verb) {
-            Arguments = ((cacheDirectory is null) ? [] : ["--cache-dir", cacheDirectory]),
-            ExitAfterSeconds = 60,
-            Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
-            StateDirectory = Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
-            WorkingDirectory = runDirectory,
-            World = Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
-        });
-
-        var process = launch.Run(input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}", timeout: TimeSpan.FromSeconds(value: 120));
-
-        if (process.TimedOut || (process.ExitCode != 0) || (ReadAffordances(stdout: process.Stdout) is not { Count: > 0 } verbs)) {
-            Console.Error.WriteLine(value: $"{Verb}: the {shape} Puck.World boot {(process.TimedOut ? "timed out" : $"exited {process.ExitCode}")} without a world.affordances manifest; its stderr ends: {string.Join(separator: " | ", values: process.Stderr.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').Where(predicate: static line => (line.Trim().Length != 0)).TakeLast(count: 4))}");
-
-            return null;
-        }
-
-        return verbs;
-    }
     private static int Run(bool check, bool headlessOnly, string? worldArtifact, string? cacheDirectory) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: "puck-verbs-").FullName;
-
-        try {
-            if (!WorldLaunch.TryResolve(
-                named: worldArtifact,
-                build: out var world,
-                error: out var error,
-                logDirectory: runDirectory,
-                repositoryRoot: repositoryRoot,
-                spirv: (!headlessOnly && WorldLaunch.NeedsSpirv(backend: null, shape: WorldShape.Windowed)),
-                verb: Verb
-            )) {
-                Console.Error.WriteLine(value: $"{Verb}: {error}");
-
-                return 1;
-            }
-
-            var verbs = new Dictionary<string, CommandMetadata>(comparer: StringComparer.Ordinal);
-
-            using (world) {
-                foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
-                    if (Boot(artifact: world.Path, cacheDirectory: cacheDirectory, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
-                        return 1;
-                    }
-
-                    foreach (var verb in shape) {
-                        verbs[verb.Name] = verb;
-                    }
-                }
-            }
-
-            // A headless refresh keeps the verbs only a rendered World registers, read from the catalog it replaces.
-            if (headlessOnly) {
-                var path = Path.Combine(path1: repositoryRoot, path2: RelativePath);
-
-                if (File.Exists(path: path)) {
-                    using var existing = JsonDocument.Parse(json: File.ReadAllText(path: path));
-
-                    foreach (var (name, verb) in WorldConsoleVerbCatalog.Parse(json: existing)) {
-                        // Compiled binding handles are internal destinations, never authored console vocabulary.
-                        if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "channel.logical.")) { continue; }
-                        _ = verbs.TryAdd(key: name, value: verb);
-                    }
-                }
-            }
-
-            return (CliGeneratedFile.WriteOrCheck(
-                check: check,
-                detail: $" ({verbs.Count} verbs)",
-                relativePath: RelativePath,
-                repositoryRoot: repositoryRoot,
-                source: (headlessOnly ? "the headless World's world.affordances and the catalog's other verbs" : "the headless and windowed Worlds' world.affordances"),
-                text: WorldConsoleVerbCatalog.Render(verbs: verbs.Values),
-                verb: Verb
-            )
-                ? 0
-                : 1);
-        } finally {
-            ConfinedDirectory.RemoveTree(path: runDirectory);
+        using var run = RunDirectory.Create(prefix: "puck-verbs-");
+        var runDirectory = run.Path;
+        if (!WorldConsoleVerbs.TryEnumerate(repositoryRoot: repositoryRoot, runDirectory: runDirectory,
+            verb: Verb, verbs: out var rows, error: out var error, headlessOnly: headlessOnly,
+            worldArtifact: worldArtifact, cacheDirectory: cacheDirectory)) {
+            Console.Error.WriteLine(value: $"{Verb}: {error}");
+            return 1;
         }
+        var verbs = rows.Values.Select(selector: WorldConsoleVerbCatalog.ReadVerb)
+            .ToDictionary(keySelector: static metadata => metadata.Name, comparer: StringComparer.Ordinal);
+
+        // A headless refresh keeps the verbs only a rendered World registers, read from the catalog it replaces.
+        if (headlessOnly) {
+            var path = Path.Combine(path1: repositoryRoot, path2: RelativePath);
+
+            if (File.Exists(path: path)) {
+                using var existing = JsonDocument.Parse(json: File.ReadAllText(path: path));
+
+                foreach (var (name, verb) in WorldConsoleVerbCatalog.Parse(json: existing)) {
+                    // Compiled binding handles are internal destinations, never authored console vocabulary.
+                    if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "channel.logical.")) { continue; }
+                    _ = verbs.TryAdd(key: name, value: verb);
+                }
+            }
+        }
+
+        return run.Conclude(exitCode: (CliGeneratedFile.WriteOrCheck(
+            check: check,
+            detail: $" ({verbs.Count} verbs)",
+            relativePath: RelativePath,
+            repositoryRoot: repositoryRoot,
+            source: (headlessOnly ? "the headless World's world.affordances and the catalog's other verbs" : "the headless and windowed Worlds' world.affordances"),
+            text: WorldConsoleVerbCatalog.Render(verbs: verbs.Values),
+            verb: Verb
+        )
+            ? 0
+            : 1));
     }
 
     public static Command Create() {

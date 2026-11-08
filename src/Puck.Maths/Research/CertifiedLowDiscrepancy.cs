@@ -100,32 +100,21 @@ public readonly record struct CertifiedLowDiscrepancy {
     /// <returns>The certified sequence, carrying the exact certificate and the precomputed fractional-part multiplier.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
     public static CertifiedLowDiscrepancy FromQuadraticIrrational(long p, long q, long d, long r) {
-        Span<long> terms = stackalloc long[128];
-        int written;
-        int periodStart;
-
-        while (true) {
-            try {
-                written = ContinuedFraction.Expand(
-                    d: d,
-                    p: p,
-                    periodLength: out _,
-                    periodStart: out periodStart,
-                    q: q,
-                    r: r,
-                    terms: terms
-                );
-
-                break;
-            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2))
-                    ? (terms.Length * 2)
-                    : int.MaxValue
-                );
-
-                terms = new long[nextLength];
-            }
-        }
+        Span<long> scratch = stackalloc long[128];
+        var written = ContinuedFraction.ExpandGrowing(
+            d: d,
+            heap: out var heap,
+            p: p,
+            periodLength: out _,
+            periodStart: out var periodStart,
+            q: q,
+            r: r,
+            scratch: scratch
+        );
+        ReadOnlySpan<long> terms = ((heap is null)
+            ? scratch
+            : heap
+        );
 
         // The star discrepancy of {n·α} sees only frac(α), whose partial quotients are a₁, a₂, … — the expansion with its
         // integer part a₀ = terms[0] dropped (a large integer part does not clump the fractional points). The certificate is

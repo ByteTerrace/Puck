@@ -62,6 +62,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
             },
             ["historyCursor"] = new JsonObject { ["type"] = "integer" },
             ["visibility"] = exportType(typeof(StateVisibility)),
+            ["cellVisibility"] = new JsonObject { ["type"] = "boolean", ["description"] = "Declares per-cell audience policies even on an empty row. Row-level visibility alone does not reserve them." },
             ["knowledge"] = exportType(typeof(StateKnowledge)),
             ["phase"] = exportType(typeof(StatePhase)),
             ["phaseOf"] = new JsonObject { ["type"] = "string" },

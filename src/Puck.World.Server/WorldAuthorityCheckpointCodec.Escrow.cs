@@ -27,7 +27,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             projection: member.Identity,
             writer: writer
         );
-        WriteIntentSource(
+        WorldWireLeaves.WriteIntentSource(
             writer: writer,
             source: member.Source
         );

@@ -451,7 +451,15 @@ public sealed partial class WorldDocument {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey) {
+    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode) {
+        refusalCode = null;
+        if (!mutation.Principal.IsAuthority) {
+            var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, tick: tick, engineTick: engineTick));
+            if (!view.Admits(mutation, out var withheld)) {
+                candidate = current; evictedKey = null; reason = view.Refusal("mutation", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
+            }
+        }
+
         if (!TryComposeCore(
             candidate: out candidate,
             current: current,
@@ -460,7 +468,8 @@ public sealed partial class WorldDocument {
             instanceIdentity: instanceIdentity,
             mutation: mutation,
             reason: out reason,
-            tick: tick
+            tick: tick,
+            refusalCode: out refusalCode
         )) {
             return false;
         }
@@ -554,7 +563,8 @@ public sealed partial class WorldDocument {
     // Scratch for the rows the look graph binds; the step is single-threaded, so one set serves every door.
     private readonly HashSet<string> m_lookReferencedRows = new(comparer: StringComparer.Ordinal);
 
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey) {
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode) {
+        refusalCode = null;
         reason = string.Empty;
         evictedKey = null;
 
@@ -690,7 +700,8 @@ public sealed partial class WorldDocument {
                     evictedKey: out evictedKey,
                     instanceIdentity: instanceIdentity,
                             reason: out reason,
-                    tick: tick
+                    tick: tick,
+                    refusalCode: out refusalCode
                 );
             // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
             // candidate — so two console verbs queued in one tick each keep the other's field.
@@ -1290,11 +1301,6 @@ public sealed partial class WorldDocument {
                         reason = $"state row '{m.Row.Name}' is generated storage; mutate its owning declaration or use a typed instance effect";
                         return false;
                     }
-                    if (IsRowWithheldFromWriter(definition: current, principal: m.Principal, row: m.Row.Name.Value)) {
-                        candidate = current;
-                        reason = $"state row '{m.Row.Name}' is not writable by {m.Principal.Describe()}";
-                        return false;
-                    }
                     if (previousRow is { Inverse: { } existingInverse }) {
                         candidate = current;
                         reason = $"state row '{m.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{m.Row.Name}' on install";
@@ -1357,7 +1363,7 @@ public sealed partial class WorldDocument {
                     }
                 }
             case WorldMutation.RemoveStateRow m:
-                if (IsRowWithheldFromWriter(definition: current, principal: m.Principal, row: m.Name) || !Remove(
+                if (!Remove(
                     list: current.AuthoredState,
                     key: m.Name,
                     keyOf: static row => row.Name,

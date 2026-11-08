@@ -13,6 +13,8 @@ public enum WorldCellWriteVerdict {
     Applied,
     /// <summary>The address no longer belongs to this arena.</summary>
     StaleAddress,
+    /// <summary>The recipient cannot read the row whole under its declared policy.</summary>
+    NotDisclosed,
     /// <summary>The live grant refused the write.</summary>
     Denied,
     /// <summary>The grant's Set/Add mask refused the operation.</summary>
@@ -77,6 +79,7 @@ public sealed partial class WorldServer {
         if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
             return WorldCellWriteVerdict.StaleAddress;
         }
+        if (!ReadView(principal).Admits(descriptor.Name)) { return WorldCellWriteVerdict.NotDisclosed; }
         var subject = GrantSubject.State(name: descriptor.Name);
 
         if (!m_grants.Allows(capability: WorldCapability.Edit, principal: principal, subject: subject).IsAllowed) {
@@ -99,8 +102,6 @@ public sealed partial class WorldServer {
             (m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true })) {
             return WorldCellWriteVerdict.Rejected;
         }
-        if (!WorldGrants.IsTrusted(principal: principal) && !WorldStateDisclosure.CanReadCell(definition: m_document.Definition,
-            arena: m_arena, rowName: descriptor.Name, key: m_arena.Keys[key], recipient: principal)) { return WorldCellWriteVerdict.Rejected; }
         var mark = BeginStateTransaction();
         var applied = ((text is not null)
             ? m_arena.TryWriteText(row.Ordinal, key, text, out _)
@@ -552,13 +553,13 @@ public sealed partial class WorldServer {
             : -1
         );
     }
-    /// <summary>Returns one cell's value as a fixed-point number, or zero when the cell is absent.</summary>
+    /// <summary>Returns one cell's fixed-point reading, preserving an absent cell as an absent outcome.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The interned cell key.</param>
-    /// <returns>The value, lifted from the row's own kind.</returns>
-    internal FixedQ4816 ReadArenaCell(int rowOrdinal, CellKey key) {
+    /// <returns>The value in Q48.16 raw bits, lifted from the row's own kind, or an absence.</returns>
+    internal Outcome ReadArenaCell(int rowOrdinal, CellKey key) {
         if (((uint)rowOrdinal) >= ((uint)m_arena.Layout.RowCount)) {
-            return FixedQ4816.Zero;
+            return Outcome.Absent;
         }
 
         ref readonly var layout = ref m_arena.Layout[rowOrdinal];
@@ -570,13 +571,13 @@ public sealed partial class WorldServer {
             time: in time,
             value: out var raw
         )) {
-            return FixedQ4816.Zero;
+            return Outcome.Absent;
         }
 
-        return ((layout.Kind == CellKind.Fixed)
-            ? FixedQ4816.FromRawBits(value: raw)
-            : StateReader.LiftSaturating(raw: raw)
-        );
+        return Outcome.Finite(raw: ((layout.Kind == CellKind.Fixed)
+            ? raw
+            : StateReader.LiftSaturating(raw: raw).Value
+        ));
     }
     // The $argmax:/$argmin: extremum over a keyed row whose keys are body indices, filtered to the indices the live
     // population holds. Ties resolve to the lowest eligible index; -1 means no cell was eligible.
@@ -611,18 +612,21 @@ public sealed partial class WorldServer {
             }
             if (
                 (filterRowOrdinal >= 0) &&
-                (ReadArenaCell(
+                (!ReadArenaCell(
                 key: key,
                 rowOrdinal: filterRowOrdinal
-            ) == FixedQ4816.Zero)
+            ).TryFinite(raw: out var filter) || (filter == 0L))
             ) {
                 continue;
             }
 
-            var value = ReadArenaCell(
+            if (!ReadArenaCell(
                 key: key,
                 rowOrdinal: rowOrdinal
-            );
+            ).TryFinite(raw: out var raw)) {
+                continue;
+            }
+            var value = FixedQ4816.FromRawBits(value: raw);
 
             if (
                 (best < 0) ||

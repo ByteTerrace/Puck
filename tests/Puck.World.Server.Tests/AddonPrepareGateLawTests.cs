@@ -474,7 +474,7 @@ internal sealed class RecordingAddonHost : IWorldAddonHost {
         ((RecordingAddonPlan)plan).Committed = true;
     }
     /// <inheritdoc/>
-    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) =>
+    public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied, string? refusalCode = null) =>
         CompletedMutations.Add(item: (addonInstanceId, actOrdinal, applied));
     /// <inheritdoc/>
     public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;

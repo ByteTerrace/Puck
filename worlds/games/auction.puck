@@ -102,11 +102,11 @@ template auctionRules(seats, lots) {
       local covered = offer <= auctionPurse[$"{s}"]
       when auction.open == 1 and auction.closeAt > 0 and offer > 0
       if covered {
-        auctionBids[$"{s}"] = offer
+        collectSealed(inbox: $"auctionIn{s}", destination: "auctionBids", key: $"{s}")
+      } else {
+        receiveSealed(inbox: $"auctionIn{s}")
       }
-      $"auctionIn{s}".bid = 0
       $"auctionIn{s}".result = covered ? 1 : -1
-      $"auctionIn{s}".taken += 1
     }
   }
 

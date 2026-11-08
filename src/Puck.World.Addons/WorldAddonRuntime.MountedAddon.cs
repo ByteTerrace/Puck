@@ -9,6 +9,7 @@ public sealed partial class WorldAddonRuntime {
     // One mounted guest's whole host-side state. Every per-tick buffer is allocated once here, at mount, and reused with
     // a count — a tick allocates nothing on this path.
     private sealed class MountedAddon {
+        public WorldRecipientView? View;
         public MountedAddon(long instanceId, AddonInstance instance, WorldAddonRow sourceRow, IReadOnlyList<WorldCapabilityRequest>? requests, int populationCapacity, IReadOnlyList<WorldAddonMemoryWatch>? memoryWatches = null) {
             ActBody = new int[AddonAbi.MaxOutCells];
             // A pose answer is the widest response shipping, so the worst case is every output cell being a query.

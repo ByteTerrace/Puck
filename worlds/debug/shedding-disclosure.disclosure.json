@@ -16,35 +16,19 @@
       "steps": [
         {
           "at": 40,
-          "run": "world.state.cell.remove sheddingHeld1 2"
+          "run": "world.row.set state sheddingHeld1 cells[key=2].key \"18\""
         },
         {
           "at": 40,
-          "run": "world.state.cell.remove sheddingHand1 2"
+          "run": "world.row.set state sheddingHand1 cells[key=2].key \"18\""
         },
         {
           "at": 40,
-          "run": "world.state.cell.remove sheddingSealed 18"
+          "run": "world.row.set state sheddingSealed cells[key=18].key \"2\""
         },
         {
           "at": 40,
-          "run": "world.state.cell.remove sheddingDeck 18"
-        },
-        {
-          "at": 42,
-          "run": "world.state.cell.set sheddingHeld1 18 true"
-        },
-        {
-          "at": 42,
-          "run": "world.state.cell.set sheddingHand1 18 true"
-        },
-        {
-          "at": 42,
-          "run": "world.state.cell.set sheddingSealed 2 true"
-        },
-        {
-          "at": 42,
-          "run": "world.state.cell.set sheddingDeck 2 true"
+          "run": "world.row.set state sheddingDeck cells[key=18].key \"2\""
         }
       ]
     },
@@ -68,20 +52,28 @@
           "run": "world.state.cell.remove sheddingHand1 4"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHeld1 4 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHand1 4 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHeld1 2 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHand1 2 true"
+        },
+        {
+          "at": 40,
+          "run": "world.row.set state sheddingHeld1 cells [{\"key\":\"2\",\"value\":true},{\"key\":\"11\",\"value\":true},{\"key\":\"20\",\"value\":true},{\"key\":\"4\",\"value\":true},{\"key\":\"5\",\"value\":true}]"
+        },
+        {
+          "at": 40,
+          "run": "world.row.set state sheddingHand1 cells [{\"key\":\"2\",\"value\":true},{\"key\":\"11\",\"value\":true},{\"key\":\"20\",\"value\":true},{\"key\":\"4\",\"value\":true},{\"key\":\"5\",\"value\":true}]"
         }
       ]
     },
@@ -90,35 +82,19 @@
       "steps": [
         {
           "at": 70,
-          "run": "world.state.cell.remove sheddingHeld3 19"
+          "run": "world.row.set state sheddingHeld3 cells[key=19].key \"15\""
         },
         {
           "at": 70,
-          "run": "world.state.cell.remove sheddingHand3 19"
+          "run": "world.row.set state sheddingHand3 cells[key=19].key \"15\""
         },
         {
           "at": 70,
-          "run": "world.state.cell.remove sheddingSealed 15"
+          "run": "world.row.set state sheddingSealed cells[key=15].key \"19\""
         },
         {
           "at": 70,
-          "run": "world.state.cell.remove sheddingDeck 15"
-        },
-        {
-          "at": 72,
-          "run": "world.state.cell.set sheddingHeld3 15 true"
-        },
-        {
-          "at": 72,
-          "run": "world.state.cell.set sheddingHand3 15 true"
-        },
-        {
-          "at": 72,
-          "run": "world.state.cell.set sheddingSealed 19 true"
-        },
-        {
-          "at": 72,
-          "run": "world.state.cell.set sheddingDeck 19 true"
+          "run": "world.row.set state sheddingDeck cells[key=15].key \"19\""
         }
       ]
     }
