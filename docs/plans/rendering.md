@@ -203,8 +203,6 @@ compaction and these instance buckets after R2.
 - Measure front-to-back order or a depth prepass against mesh overdraw,
   retained descriptor writes for Vulkan pane sources, batching graph command
   lists into fewer submissions and queue idle time.
-- Grow the program region without a device-idle wait, retiring its old storage
-  after the upload and updating copy sets as their slots record.
 - Keep graph targets across a crossing where extents and ownership allow it,
   then re-measure Vulkan's first submissions after reconfiguration. The shared
   GPU memory arenas already exist.
