@@ -136,6 +136,10 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
     /// keeping the arena, every compiled product and the population.</summary>
     public static WorkKind PresentationInstalls { get; } = new(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the state-bound document values a rewrite replaced with a resolved, bound or
+    /// flattened copy (<see cref="WorldStateDocumentValues"/>), each on a copied path; a value a server already bound
+    /// is kept and counts nothing.</summary>
+    public static WorkKind DocumentValueCopies { get; } = new(name: "world.boot.document-value-copies", unit: "count", workClass: WorkClass.Deterministic);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
@@ -268,6 +272,7 @@ public sealed class WorldBootWork : IWorkCounterSource {
             FullInstalls,
             ValueInstalls,
             PresentationInstalls,
+            DocumentValueCopies,
         ];
     }
 }

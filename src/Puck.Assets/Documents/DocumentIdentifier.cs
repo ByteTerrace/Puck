@@ -7,17 +7,18 @@ namespace Puck.Assets.Documents;
 /// <summary>A literal document identifier or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference to one.</summary>
 /// <remarks>
 /// JSON strings beginning with <c>state.</c> are references; every other string is a literal identifier. A containing
-/// world resolves references from Text state cells after the complete document is available. The reference remains
-/// attached after resolution so canonical serialization preserves the authored single source of truth.
+/// world resolves references from Text state cells after the complete document is available, by building a resolved
+/// or bound copy (<see cref="IDocumentStateValue"/>). The reference remains attached after resolution so canonical
+/// serialization preserves the authored single source of truth.
 /// </remarks>
 [JsonConverter(typeof(DocumentIdentifierJsonConverter))]
 public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<DocumentIdentifier> {
     /// <summary>The JSON string prefix that marks a value as a state reference rather than a literal identifier.</summary>
     public const string ReferencePrefix = "state.";
 
-    private bool m_isResolved;
-    private string? m_value;
-    private Func<string?>? m_read;
+    private readonly bool m_isResolved;
+    private readonly string? m_value;
+    private readonly Func<string?>? m_read;
 
     /// <summary>Creates a literal identifier.</summary>
     public DocumentIdentifier(string value) {
@@ -25,36 +26,43 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
         m_isResolved = true;
     }
 
-    private DocumentIdentifier(string reference, bool _) => Reference = reference;
+    private DocumentIdentifier(string? reference, bool resolved, string? value, object? binder, Func<string?>? read) {
+        Reference = reference;
+        m_isResolved = resolved;
+        m_value = value;
+        Binder = binder;
+        m_read = read;
+    }
 
     /// <inheritdoc/>
-    public string? Reference { get; private set; }
+    public string? Reference { get; }
     /// <inheritdoc/>
     public string ExpectedValue => "a non-empty identifier";
-    /// <summary>The resolved identifier.</summary>
+    /// <inheritdoc/>
+    public object? Binder { get; }
+    /// <summary>Gets the resolved identifier, or the live one a bound copy reads.</summary>
+    /// <exception cref="InvalidOperationException">The identifier is a reference its containing document has not
+    /// resolved, or a bound copy whose cell holds no value.</exception>
     public string Value => m_read is { } read ? (read() ?? throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has no live value.")) : (m_isResolved
         ? m_value!
         : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document.")
     );
     /// <inheritdoc/>
-    public void Bind(Func<string?> read) => m_read = read;
+    public IDocumentStateValue Bound(object binder, Func<string?> read) {
+        ArgumentNullException.ThrowIfNull(argument: binder);
+        ArgumentNullException.ThrowIfNull(argument: read);
 
-    /// <inheritdoc/>
-    public void Detach() {
-        m_value = Value;
-        m_read = null;
-        m_isResolved = true;
-        Reference = null;
+        return new DocumentIdentifier(binder: binder, read: read, reference: Reference, resolved: false, value: null);
     }
     /// <inheritdoc/>
-    public bool TryResolve(string text, out string reason) {
+    public bool TryResolved(string text, bool detach, out IDocumentStateValue resolved, out string reason) {
         if (string.IsNullOrEmpty(value: text)) {
+            resolved = this;
             reason = "the identifier must be non-empty.";
             return false;
         }
 
-        m_value = text;
-        m_isResolved = true;
+        resolved = new DocumentIdentifier(binder: null, read: null, reference: (detach ? null : Reference), resolved: true, value: text);
         reason = string.Empty;
         return true;
     }
@@ -84,8 +92,11 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     public override string ToString() => Value;
 
     internal static DocumentIdentifier FromReference(string reference) => new(
-        _: true,
-        reference: reference
+        binder: null,
+        read: null,
+        reference: reference,
+        resolved: false,
+        value: null
     );
 }
 /// <summary>Reads literal identifiers and state references while preserving both as JSON strings.</summary>

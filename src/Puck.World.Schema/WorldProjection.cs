@@ -197,29 +197,14 @@ public static class WorldProjection {
 
     // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
     // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
-    // is therefore flat: every reference is answered from this authority's own state and dropped.
-    //
-    // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
-    // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
+    // is therefore flat: every reference is answered from this authority's own state and dropped. The rows above are
+    // the live document's own objects; the flattening copies only the paths to its references and leaves them as they
+    // are.
     private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition, StateArena arena, in ArenaTime time) {
-        if (!WorldStateDocumentValues.HasReference(graph: projection)) {
-            return projection;
-        }
-
-        if (
-            !TryDeserialize(
-            utf8Json: Serialize(projection: projection),
-            projection: out var copy,
-            reason: out var reason
-        ) ||
-            (copy is null)
-        ) {
-            throw new InvalidOperationException(message: $"the composed projection did not round-trip: {reason}");
-        }
-
         if (!WorldStateDocumentValues.TryFlatten(
             arena: arena,
-            graph: copy,
+            flattened: out var flattened,
+            graph: projection,
             reason: out var flattenReason,
             source: definition,
             time: time
@@ -227,7 +212,7 @@ public static class WorldProjection {
             throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
         }
 
-        return copy;
+        return flattened;
     }
 
     /// <summary>Composes what <paramref name="tier"/> authorizes a peer to receive of <paramref name="definition"/>.</summary>
@@ -619,15 +604,8 @@ public static class WorldProjection {
         foreach (var prototype in definition.Creations) {
             WorldStateDisclosure.ValidateBindings(arena: arena, definition: definition, graph: prototype,
                 recipient: recipient, unrestricted: unrestricted);
-            var flattened = prototype;
-
-            if (WorldStateDocumentValues.HasReference(graph: prototype)) {
-                flattened = JsonSerializer.Deserialize(
-                    utf8Json: JsonSerializer.SerializeToUtf8Bytes(value: prototype, jsonTypeInfo: WorldJsonContext.Default.WorldPrototype),
-                    jsonTypeInfo: WorldJsonContext.Default.WorldPrototype)!;
-                if (!WorldStateDocumentValues.TryFlatten(graph: flattened, reason: out var reason, source: definition)) {
-                    throw new InvalidOperationException(message: $"the projected prototype could not be flattened: {reason}");
-                }
+            if (!WorldStateDocumentValues.TryFlatten(flattened: out var flattened, graph: prototype, reason: out var reason, source: definition)) {
+                throw new InvalidOperationException(message: $"the projected prototype could not be flattened: {reason}");
             }
             references.Add(item: WorldProjectionContent.Put(prototype: flattened, store: store));
         }
@@ -858,12 +836,13 @@ public static class WorldProjection {
 
         if (!WorldStateDocumentValues.TryResolve(
             definition: hydrated,
-            reason: out reason
+            reason: out reason,
+            resolved: out var resolved
         )) {
             return false;
         }
 
-        definition = hydrated;
+        definition = resolved;
 
         return true;
     }

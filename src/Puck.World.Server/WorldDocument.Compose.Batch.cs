@@ -348,11 +348,11 @@ public sealed partial class WorldDocument {
         );
         arenaDirty = false;
     }
-    // Rehydrates the running candidate when a document value is bound to the written row, collecting the
-    // referenced-row set on the first state member that asks and reusing it until a member that can change it
-    // drops it. Collecting the set is a structural read (which rows a document value names, never their live
-    // content), so it never needs an export; only an actual hit — the rehydration below — does, since that reads
-    // the written row's current value back out of `working`.
+    // Resolves the running candidate's values bound to the written row, collecting the referenced-row set on the
+    // first state member that asks and reusing it until a member that can change it drops it. Collecting the set is
+    // a structural read (which rows a document value names, never their live content), so it never needs an export;
+    // only an actual hit — the resolution below — does, since that reads the written row's current value back out of
+    // `working`.
     private static bool TryRefreshReferenced(ref WorldDefinition working, ref IReadOnlySet<string>? referencedRows, string rowName, StateArena? arena, ref bool arenaDirty, out string reason) {
         reason = string.Empty;
 
@@ -370,12 +370,13 @@ public sealed partial class WorldDocument {
             working: ref working
         );
 
-        // A rehydration re-resolves document values bound to state rows; it never rewrites the state section
-        // itself, so the arena still holds the rows `working` does and stays open.
-        return WorldStateDocumentValues.TryRehydrate(
+        // A refresh re-resolves document values bound to the row; it rewrites the state section only to resolve a
+        // value inside it (a lattice origin), so the arena still holds the rows `working` does and stays open.
+        return WorldStateDocumentValues.TryRefresh(
             definition: working,
             reason: out reason,
-            refreshed: out working
+            refreshed: out working,
+            rowName: rowName
         );
     }
     // The members that change cell values, cursors, or masks and nothing else: none can introduce or remove a

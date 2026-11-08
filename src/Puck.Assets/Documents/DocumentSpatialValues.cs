@@ -11,37 +11,99 @@ public interface IDocumentSpatialValue : IDocumentStateValue;
 /// <summary>A state-resolvable document value wrapping a <typeparamref name="TValue"/> literal.</summary>
 public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
     where TValue : struct, IEquatable<TValue> {
-    private bool m_isResolved;
-    private TValue m_value;
-    private Func<string?>? m_read;
-    private string? m_readText;
+    private readonly bool m_isResolved;
+    private readonly TValue m_value;
+    private readonly LiveRead? m_live;
 
     private protected DocumentSpatialValue(TValue value) {
         m_isResolved = true;
         m_value = value;
     }
     private protected DocumentSpatialValue(string reference) => Reference = reference;
+    private protected DocumentSpatialValue(string? reference, bool resolved, TValue value, LiveRead? live) {
+        Reference = reference;
+        m_isResolved = resolved;
+        m_value = value;
+        m_live = live;
+    }
 
     /// <inheritdoc/>
     public abstract string ExpectedValue { get; }
     /// <inheritdoc/>
-    public string? Reference { get; private set; }
-    /// <summary>The resolved value.</summary>
-    public TValue Value {
-        get {
-            if (m_read is { } read) {
-                var text = read();
-                if (!string.Equals(text, m_readText, StringComparison.Ordinal) || !m_isResolved) {
-                    if ((text is null) || !TryResolve(text: text, reason: out _)) { throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has no admissible live value."); }
-                    m_readText = text;
-                }
-            }
-            return m_isResolved ? m_value : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document.");
+    public string? Reference { get; }
+    /// <inheritdoc/>
+    public object? Binder => m_live?.Binder;
+    /// <summary>Gets the resolved value, or the live one a <see cref="Bound"/> copy reads.</summary>
+    /// <exception cref="InvalidOperationException">The value is a reference its containing document has not resolved,
+    /// or a bound copy whose cell holds no admissible value.</exception>
+    public TValue Value => ((m_live is { } live)
+        ? live.Read(reference: Reference)
+        : (m_isResolved
+            ? m_value
+            : throw new InvalidOperationException(message: $"document spatial reference '{Reference}' has not been resolved by its containing document.")));
+
+    // Builds this concrete type over the given state; the one constructor every copy goes through.
+    private protected abstract DocumentSpatialValue<TValue> Copy(string? reference, bool resolved, TValue value, LiveRead? live);
+    /// <inheritdoc/>
+    public IDocumentStateValue Bound(object binder, Func<string?> read) {
+        ArgumentNullException.ThrowIfNull(argument: binder);
+        ArgumentNullException.ThrowIfNull(argument: read);
+
+        return Copy(live: new LiveRead(binder: binder, read: read), reference: Reference, resolved: false, value: default);
+    }
+    /// <inheritdoc/>
+    public bool TryResolved(string text, bool detach, out IDocumentStateValue resolved, out string reason) {
+        if (!TryParse(reason: out reason, text: text, value: out var value)) {
+            resolved = this;
+
+            return false;
+        }
+
+        resolved = Copy(live: null, reference: (detach ? null : Reference), resolved: true, value: value);
+
+        return true;
+    }
+    private static bool TryParse(string text, out TValue value, out string reason) {
+        try {
+            value = JsonSerializer.Deserialize<TValue>(
+                json: text,
+                options: DocumentJsonOptions.Shared
+            );
+            reason = string.Empty;
+            return true;
+        } catch (Exception exception) when ((exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException)) {
+            value = default;
+            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+            return false;
         }
     }
 
-    /// <inheritdoc/>
-    public void Bind(Func<string?> read) { m_read = read; m_readText = null; m_isResolved = false; }
+    /// <summary>The live read a bound copy holds: the store's owner, the read, and the last text it parsed, so a read
+    /// whose text has not moved parses nothing. The memo is one reference swapped whole, so a reader on another
+    /// thread sees a text and its value together.</summary>
+    private protected sealed class LiveRead(object binder, Func<string?> read) {
+        private Memo? m_memo;
+
+        public object Binder => binder;
+
+        public TValue Read(string? reference) {
+            var text = read();
+            var memo = Volatile.Read(location: ref m_memo);
+
+            if ((memo is not null) && string.Equals(a: memo.Text, b: text, comparisonType: StringComparison.Ordinal)) {
+                return memo.Value;
+            }
+            if ((text is null) || !TryParse(reason: out _, text: text, value: out var value)) {
+                throw new InvalidOperationException(message: $"document spatial reference '{reference}' has no admissible live value.");
+            }
+
+            Volatile.Write(location: ref m_memo, value: new Memo(Text: text, Value: value));
+
+            return value;
+        }
+
+        private sealed record Memo(string Text, TValue Value);
+    }
 
     private protected bool EqualsCore(DocumentSpatialValue<TValue>? other) => ((other is not null) && ((Reference is { } reference)
         ? string.Equals(
@@ -54,28 +116,6 @@ public abstract class DocumentSpatialValue<TValue> : IDocumentSpatialValue
         ? StringComparer.Ordinal.GetHashCode(obj: reference)
         : m_value.GetHashCode()
     );
-
-    /// <inheritdoc/>
-    public void Detach() {
-        m_value = Value;
-        m_read = null;
-        Reference = null;
-    }
-    /// <inheritdoc/>
-    public bool TryResolve(string text, out string reason) {
-        try {
-            m_value = JsonSerializer.Deserialize<TValue>(
-                json: text,
-                options: DocumentJsonOptions.Shared
-            );
-            m_isResolved = true;
-            reason = string.Empty;
-            return true;
-        } catch (Exception exception) when ((exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
-            return false;
-        }
-    }
 }
 /// <summary>A <see cref="Vector2"/> authored as <c>[x, y]</c> or as a symbolic reference string.</summary>
 [JsonConverter(typeof(DocumentVector2JsonConverter))]
@@ -87,8 +127,13 @@ public sealed class DocumentVector2 : DocumentSpatialValue<Vector2>, IEquatable<
     internal DocumentVector2(string reference) : base(reference: reference) {
     }
 
+    private DocumentVector2(string? reference, bool resolved, Vector2 value, LiveRead? live) : base(live: live, reference: reference, resolved: resolved, value: value) {
+    }
+
     /// <inheritdoc/>
     public override string ExpectedValue => "a Vector2 array [x, y]";
+
+    private protected override DocumentSpatialValue<Vector2> Copy(string? reference, bool resolved, Vector2 value, LiveRead? live) => new DocumentVector2(live: live, reference: reference, resolved: resolved, value: value);
     /// <summary>The resolved X component.</summary>
     public float X => Value.X;
     /// <summary>The resolved Y component.</summary>
@@ -123,8 +168,13 @@ public sealed class DocumentVector3 : DocumentSpatialValue<Vector3>, IEquatable<
     internal DocumentVector3(string reference) : base(reference: reference) {
     }
 
+    private DocumentVector3(string? reference, bool resolved, Vector3 value, LiveRead? live) : base(live: live, reference: reference, resolved: resolved, value: value) {
+    }
+
     /// <inheritdoc/>
     public override string ExpectedValue => "a Vector3 array [x, y, z]";
+
+    private protected override DocumentSpatialValue<Vector3> Copy(string? reference, bool resolved, Vector3 value, LiveRead? live) => new DocumentVector3(live: live, reference: reference, resolved: resolved, value: value);
     /// <summary>The resolved X component.</summary>
     public float X => Value.X;
     /// <summary>The resolved Y component.</summary>
@@ -169,8 +219,13 @@ public sealed class DocumentQuaternion : DocumentSpatialValue<Quaternion>, IEqua
     internal DocumentQuaternion(string reference) : base(reference: reference) {
     }
 
+    private DocumentQuaternion(string? reference, bool resolved, Quaternion value, LiveRead? live) : base(live: live, reference: reference, resolved: resolved, value: value) {
+    }
+
     /// <inheritdoc/>
     public override string ExpectedValue => "a Quaternion array [x, y, z, w]";
+
+    private protected override DocumentSpatialValue<Quaternion> Copy(string? reference, bool resolved, Quaternion value, LiveRead? live) => new DocumentQuaternion(live: live, reference: reference, resolved: resolved, value: value);
     /// <summary>The resolved X component.</summary>
     public float X => Value.X;
     /// <summary>The resolved Y component.</summary>
@@ -336,8 +391,13 @@ public sealed class DocumentScalar : DocumentSpatialValue<float>, IEquatable<Doc
     internal DocumentScalar(string reference) : base(reference: reference) {
     }
 
+    private DocumentScalar(string? reference, bool resolved, float value, LiveRead? live) : base(live: live, reference: reference, resolved: resolved, value: value) {
+    }
+
     /// <inheritdoc/>
     public override string ExpectedValue => "a number";
+
+    private protected override DocumentSpatialValue<float> Copy(string? reference, bool resolved, float value, LiveRead? live) => new DocumentScalar(live: live, reference: reference, resolved: resolved, value: value);
 
     /// <summary>Wraps a literal without allocation at call sites.</summary>
     public static implicit operator DocumentScalar(float value) => new(value: value);

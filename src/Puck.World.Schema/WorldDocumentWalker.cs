@@ -27,6 +27,29 @@ public interface IWorldDocumentVisitor {
     void Leave(object value) {
     }
 }
+/// <summary>What a <see cref="WorldDocumentWalker.Rewrite{T}"/> does at each value it reaches.</summary>
+public interface IWorldDocumentRewriter {
+    /// <summary>Gets whether the rewriter has refused: the walk reads this after each value it rewrites and unwinds
+    /// once it is <see langword="true"/>, and the rewrite answers its root unchanged.</summary>
+    bool Stopped => false;
+
+    /// <summary>Returns whether the walk enters the members of a value that is not a surface.</summary>
+    /// <param name="value">The value: never <see langword="null"/>, a string or a surface.</param>
+    /// <param name="site">Where the value sits.</param>
+    /// <returns><see langword="true"/> to rewrite what the value holds; <see langword="false"/> keeps it whole.</returns>
+    bool Enters(object value, WorldDocumentSite site) => true;
+    /// <summary>Ends a value <see cref="Enters"/> admitted, after the walk has rewritten its members.</summary>
+    /// <param name="value">The value the walk entered.</param>
+    /// <param name="rewritten">What the site holds afterwards: <paramref name="value"/> itself when nothing under it
+    /// was replaced.</param>
+    void Left(object value, object rewritten) {
+    }
+    /// <summary>Returns what the site holds in place of a surface value the walk reached.</summary>
+    /// <param name="value">The surface value.</param>
+    /// <param name="site">Where the value sits.</param>
+    /// <returns>The value itself to keep it, or its replacement, which the member holding it must admit.</returns>
+    object Replace(object value, WorldDocumentSite site);
+}
 /// <summary>Where a <see cref="WorldDocumentWalker"/> reached a value: its document path, formatted only when asked, and
 /// the scalar field the member holding it declares.</summary>
 public readonly struct WorldDocumentSite {
@@ -118,6 +141,45 @@ public sealed class WorldDocumentWalker {
             value: root
         );
     }
+    /// <summary>Returns a document, or any model value or object graph, with each surface value the rewriter replaces
+    /// put in its place: the values on the path from the root to a replacement are copied as a record's
+    /// <c>with</c> copies them (a value type's box is copied, a list or dictionary rebuilt), and every value off those
+    /// paths is the root's own, so a reference-keyed product derived from one stays valid for the other.</summary>
+    /// <typeparam name="T">The root's type.</typeparam>
+    /// <param name="root">The value the rewrite starts at; it and everything it holds are left as they are.</param>
+    /// <param name="rewriter">What the rewrite does at each value it reaches.</param>
+    /// <returns>The rewritten root, or <paramref name="root"/> itself when nothing was replaced or the rewriter
+    /// stopped.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> or <paramref name="rewriter"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A value on a path to a replacement cannot be copied: a class that is
+    /// not a record, a member with no setter, or a collection a member's declared type cannot hold rebuilt. The
+    /// message names its document path.</exception>
+    public T Rewrite<T>(T root, IWorldDocumentRewriter rewriter) where T : class {
+        ArgumentNullException.ThrowIfNull(argument: root);
+        ArgumentNullException.ThrowIfNull(argument: rewriter);
+
+        var tables = m_tables;
+
+        if (tables.Revision != CodeRevision.Current) {
+            tables = new Tables(
+                revision: CodeRevision.Current,
+                walker: this
+            );
+            m_tables = tables;
+        }
+
+        var rewritten = new Cursor(
+            rewriter: rewriter,
+            tables: tables
+        ).Rewrite(
+            declared: null,
+            field: null,
+            value: root
+        );
+
+        return (rewriter.Stopped ? root : (T)rewritten!);
+    }
 
     private static Func<Type, bool> Contains(IEnumerable<Type> surfaces) {
         ArgumentNullException.ThrowIfNull(argument: surfaces);
@@ -158,8 +220,9 @@ public sealed class WorldDocumentWalker {
     );
     private static Type Underlying(Type type) => (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
-    // One member a walk reads: its reader, the shape its declared type has, the field it declares, its JSON name.
-    internal sealed record Member(Func<object, object?> Read, WorldModelType? Declared, WorldValueField? Field, string Name);
+    // One member a walk reads: its reader, the shape its declared type has, the field it declares, its JSON name, and the
+    // property a rewrite sets on a copy of its owner.
+    internal sealed record Member(Func<object, object?> Read, WorldModelType? Declared, WorldValueField? Field, string Name, PropertyInfo Property);
     // One step of the path to the value under visit: a member's JSON name, a list's index, or a dictionary's key.
     internal readonly record struct Segment(string? Name, int Index, object? Key);
 
@@ -205,8 +268,42 @@ public sealed class WorldDocumentWalker {
                         owner: pair.Property.DeclaringType!
                     ),
                     Name: pair.Model.Name,
+                    Property: pair.Property,
                     Read: (pair.Model.Get ?? pair.Property.GetValue)
                 ))]
+        );
+        public bool IsSurface(Type type) => walker.m_isSurface(arg: type);
+        // A copy of a value a rewrite changes a member of: a record's own clone (its copy constructor, as `with`
+        // runs it), or a value type's box copied; null for any other class, whose copy would be a guess.
+        public Func<object, object>? CopierOf(Type type) => m_copiers.GetOrAdd(key: type, valueFactory: static type => {
+            if (type.IsValueType) {
+                return BoxCopy;
+            }
+            if (type.GetMethod(name: "<Clone>$", bindingAttr: (BindingFlags.Instance | BindingFlags.Public), types: Type.EmptyTypes) is not { } clone) {
+                return null;
+            }
+
+            var value = Expression.Parameter(
+                name: "value",
+                type: typeof(object)
+            );
+
+            return Expression.Lambda<Func<object, object>>(
+                Expression.Convert(
+                    expression: Expression.Call(
+                        instance: Expression.Convert(expression: value, type: type),
+                        method: clone
+                    ),
+                    type: typeof(object)
+                ),
+                value
+            ).Compile();
+        });
+
+        private readonly ConcurrentDictionary<Type, Func<object, object>?> m_copiers = new();
+        private static readonly Func<object, object> BoxCopy = (Func<object, object>)Delegate.CreateDelegate(
+            method: typeof(object).GetMethod(name: "MemberwiseClone", bindingAttr: (BindingFlags.Instance | BindingFlags.NonPublic))!,
+            type: typeof(Func<object, object>)
         );
 
         // Every model type from which a surface type is reachable through a readable member, an element type, or a
@@ -397,10 +494,16 @@ public sealed class WorldDocumentWalker {
         }
     }
 
-    internal sealed class Cursor(Tables tables, IWorldDocumentVisitor visitor) {
+    // One walk in progress: a visit (Visit) or a rewrite (Rewrite), whichever its constructor was handed.
+    internal sealed class Cursor(Tables tables, IWorldDocumentVisitor visitor, IWorldDocumentRewriter rewriter) {
         // The reference values being walked above the one under visit: a value reached again below itself is a cycle.
         private readonly HashSet<object> m_active = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly List<Segment> m_path = [];
+
+        public Cursor(Tables tables, IWorldDocumentVisitor visitor) : this(rewriter: null!, tables: tables, visitor: visitor) {
+        }
+        public Cursor(Tables tables, IWorldDocumentRewriter rewriter) : this(rewriter: rewriter, tables: tables, visitor: null!) {
+        }
 
         public string FormatPath() {
             if (m_path.Count == 0) {
@@ -524,5 +627,282 @@ public sealed class WorldDocumentWalker {
                     break;
             }
         }
+
+        // The rewrite twin of Visit: answers the value the site holds afterwards, the same instance when nothing under
+        // it was replaced, so a caller copies its own owner only when an answer differs from what it read.
+        public object? Rewrite(object? value, WorldModelType? declared, WorldValueField? field) {
+            if (
+                (value is null) ||
+                (value is string) ||
+                rewriter.Stopped
+            ) {
+                return value;
+            }
+
+            var type = value.GetType();
+            var site = new WorldDocumentSite(
+                field: field,
+                walk: this
+            );
+
+            if (tables.IsSurface(type: type)) {
+                return rewriter.Replace(
+                    site: site,
+                    value: value
+                );
+            }
+            if (!rewriter.Enters(site: site, value: value)) {
+                return value;
+            }
+            if (
+                !type.IsValueType &&
+                !m_active.Add(item: value)
+            ) {
+                return value;
+            }
+
+            try {
+                var rewritten = (((tables.ShapeOf(type: type) ?? declared) is { } shape)
+                    ? RewriteMembers(
+                        shape: shape,
+                        value: value
+                    )
+                    : value);
+
+                if (!rewriter.Stopped) {
+                    rewriter.Left(rewritten: rewritten, value: value);
+                }
+
+                return rewritten;
+            } finally {
+                if (!type.IsValueType) {
+                    _ = m_active.Remove(item: value);
+                }
+            }
+        }
+
+        private object RewriteMembers(object value, WorldModelType shape) {
+            switch (shape.Kind) {
+                case JsonTypeInfoKind.Enumerable:
+                case JsonTypeInfoKind.Dictionary:
+                    return ((
+                        (shape.ElementType is { } element) &&
+                        tables.IsReaching(type: element) &&
+                        (value is IEnumerable items)
+                    )
+                        ? RewriteItems(
+                            dictionary: (shape.Kind == JsonTypeInfoKind.Dictionary),
+                            elementShape: tables.ShapeOf(type: element),
+                            items: items,
+                            value: value
+                        )
+                        : value);
+                case JsonTypeInfoKind.Object:
+                case JsonTypeInfoKind.None:
+                    if (PairOf(type: value.GetType()) is ({ } keyOf, { } valueOf)) {
+                        return RewritePair(
+                            key: keyOf.GetValue(obj: value),
+                            pair: value,
+                            shape: shape,
+                            value: valueOf.GetValue(obj: value)
+                        );
+                    }
+
+                    object? copy = null;
+
+                    foreach (var member in tables.MembersOf(shape: shape)) {
+                        var held = member.Read(arg: value);
+
+                        m_path.Add(item: new Segment(Index: 0, Key: null, Name: member.Name));
+                        var next = Rewrite(
+                            declared: member.Declared,
+                            field: member.Field,
+                            value: held
+                        );
+
+                        if (rewriter.Stopped) {
+                            m_path.RemoveAt(index: (m_path.Count - 1));
+
+                            return value;
+                        }
+                        if (!ReferenceEquals(objA: held, objB: next)) {
+                            copy ??= Copy(value: value);
+                            Set(copy: copy, member: member, value: next);
+                        }
+                        m_path.RemoveAt(index: (m_path.Count - 1));
+                    }
+
+                    return (copy ?? value);
+                default:
+                    return value;
+            }
+        }
+        // A key/value pair an enumerated dictionary yields, which has no setter: a changed one is built anew.
+        private object RewritePair(object pair, object? key, object? value, WorldModelType shape) {
+            var nextKey = key;
+            var nextValue = value;
+
+            foreach (var member in tables.MembersOf(shape: shape)) {
+                var isKey = string.Equals(a: member.Property.Name, b: "Key", comparisonType: StringComparison.Ordinal);
+                var held = (isKey ? key : value);
+
+                m_path.Add(item: new Segment(Index: 0, Key: null, Name: member.Name));
+                var next = Rewrite(
+                    declared: member.Declared,
+                    field: member.Field,
+                    value: held
+                );
+
+                m_path.RemoveAt(index: (m_path.Count - 1));
+
+                if (rewriter.Stopped) {
+                    return pair;
+                }
+                if (isKey) {
+                    nextKey = next;
+                } else {
+                    nextValue = next;
+                }
+            }
+
+            return ((ReferenceEquals(objA: nextKey, objB: key) && ReferenceEquals(objA: nextValue, objB: value))
+                ? pair
+                : Activator.CreateInstance(type: pair.GetType(), args: [nextKey, nextValue])!);
+        }
+        // A list's or a dictionary's items rewritten: the same collection when no item changed, else a new one of the
+        // kind the original was (an array as an array, a dictionary over its own comparer, any other list as a list).
+        private object RewriteItems(object value, IEnumerable items, WorldModelType? elementShape, bool dictionary) {
+            List<object?>? keys = null;
+            List<object?>? rebuilt = null;
+            var index = 0;
+
+            foreach (var item in items) {
+                var (keyProperty, valueProperty) = ((dictionary && (item is not null))
+                    ? PairOf(type: item.GetType())
+                    : (null, null));
+                var key = keyProperty?.GetValue(obj: item);
+                var held = ((valueProperty is null)
+                    ? item
+                    : valueProperty.GetValue(obj: item));
+
+                m_path.Add(item: ((valueProperty is null)
+                    ? new Segment(Index: index, Key: null, Name: null)
+                    : new Segment(Index: index, Key: (key ?? string.Empty), Name: null)));
+                var next = Rewrite(
+                    declared: elementShape,
+                    field: null,
+                    value: held
+                );
+
+                m_path.RemoveAt(index: (m_path.Count - 1));
+
+                if (rewriter.Stopped) {
+                    return value;
+                }
+                if ((rebuilt is null) && !ReferenceEquals(objA: held, objB: next)) {
+                    rebuilt = [];
+                    keys = [];
+
+                    var replay = 0;
+
+                    foreach (var earlier in items) {
+                        if (replay++ == index) {
+                            break;
+                        }
+
+                        var (earlierKey, earlierValue) = ((dictionary && (earlier is not null))
+                            ? PairOf(type: earlier.GetType())
+                            : (null, null));
+
+                        keys.Add(item: earlierKey?.GetValue(obj: earlier));
+                        rebuilt.Add(item: ((earlierValue is null) ? earlier : earlierValue.GetValue(obj: earlier)));
+                    }
+                }
+
+                keys?.Add(item: key);
+                rebuilt?.Add(item: next);
+                index++;
+            }
+
+            return ((rebuilt is null)
+                ? value
+                : Rebuild(
+                    dictionary: dictionary,
+                    keys: keys!,
+                    original: value,
+                    values: rebuilt
+                ));
+        }
+        private object Rebuild(object original, List<object?> keys, List<object?> values, bool dictionary) {
+            var type = original.GetType();
+
+            if (type.IsArray) {
+                var array = Array.CreateInstance(elementType: type.GetElementType()!, length: values.Count);
+
+                for (var index = 0; (index < values.Count); index++) {
+                    array.SetValue(index: index, value: values[index]);
+                }
+
+                return array;
+            }
+            // A dictionary is rebuilt as one whether the walk read it as pairs (a model dictionary) or as an enumeration
+            // of key/value pair values (a dictionary the model does not describe).
+            if ((Enumerated(type: type, definition: typeof(IReadOnlyDictionary<,>)) ?? Enumerated(type: type, definition: typeof(IDictionary<,>))) is { } pair) {
+                var target = typeof(Dictionary<,>).MakeGenericType(typeArguments: pair.GenericTypeArguments);
+                var comparer = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                    ? type.GetProperty(name: "Comparer")!.GetValue(obj: original)
+                    : null);
+                var rebuilt = (IDictionary)Activator.CreateInstance(type: target, args: [comparer])!;
+
+                for (var index = 0; (index < values.Count); index++) {
+                    if (dictionary) {
+                        rebuilt.Add(key: keys[index]!, value: values[index]);
+                    } else if ((values[index] is { } entry) && (PairOf(type: entry.GetType()) is ({ } keyOf, { } valueOf))) {
+                        rebuilt.Add(key: keyOf.GetValue(obj: entry)!, value: valueOf.GetValue(obj: entry));
+                    } else {
+                        throw Unsupported(what: $"dictionary type {type}, whose item {index} is no key/value pair");
+                    }
+                }
+
+                return rebuilt;
+            }
+
+            var element = (Enumerated(type: type, definition: typeof(IEnumerable<>)) ?? throw Unsupported(what: $"collection type {type}")).GenericTypeArguments[0];
+            var list = (IList)Activator.CreateInstance(type: typeof(List<>).MakeGenericType(typeArguments: element), args: [values.Count])!;
+
+            foreach (var item in values) {
+                _ = list.Add(value: item);
+            }
+
+            return list;
+        }
+        private static Type? Enumerated(Type type, Type definition) {
+            if (type.IsGenericType && (type.GetGenericTypeDefinition() == definition)) {
+                return type;
+            }
+
+            foreach (var candidate in type.GetInterfaces()) {
+                if (candidate.IsGenericType && (candidate.GetGenericTypeDefinition() == definition)) {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+        private object Copy(object value) => ((tables.CopierOf(type: value.GetType()) is { } copier)
+            ? copier(arg: value)
+            : throw Unsupported(what: $"{value.GetType()}, which is neither a record nor a value type"));
+        private void Set(object copy, WorldDocumentWalker.Member member, object? value) {
+            if (member.Property.GetSetMethod(nonPublic: true) is null) {
+                throw Unsupported(what: $"member {member.Property.DeclaringType}.{member.Property.Name}, which has no setter");
+            }
+
+            try {
+                member.Property.SetValue(obj: copy, value: value);
+            } catch (ArgumentException exception) {
+                throw new NotSupportedException(message: $"the document walk cannot copy the path to {FormatPath()}: member {member.Property.DeclaringType}.{member.Property.Name} cannot hold its rewritten {value?.GetType()}.", innerException: exception);
+            }
+        }
+        private NotSupportedException Unsupported(string what) => new(message: $"the document walk cannot copy the path to {FormatPath()}: {what}.");
     }
 }

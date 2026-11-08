@@ -20,6 +20,7 @@ internal struct WorldPreparedMutation(
     Principal[]? tickWrittenPrincipal,
     bool[]? tickCollided,
     CellName? evictedKey,
+    WorldInstallKind kind,
     ulong tick,
     ulong engineTick
 ) : IDisposable {
@@ -32,6 +33,8 @@ internal struct WorldPreparedMutation(
     public WorldRuleCompilation? Compilation { get; } = compilation;
     public ulong EngineTick { get; } = engineTick;
     public CellName? EvictedKey { get; } = evictedKey;
+    /// <summary>Gets what the install rebuilds, decided against the document the candidate was composed over.</summary>
+    public WorldInstallKind Kind { get; } = kind;
     public IWorldMachinePreparedPlan? MachinePlan { get; } = machinePlan;
     public WorldMutation Mutation { get; } = mutation;
     public bool SolidAffecting { get; } = solidAffecting;

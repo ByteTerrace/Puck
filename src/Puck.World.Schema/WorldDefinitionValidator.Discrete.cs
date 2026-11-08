@@ -208,8 +208,9 @@ public static partial class WorldDefinitionValidator {
 
     // The arena's own recompute, read back as the derivation an authored board must match: loading a section is
     // what recomputes every derived board from its tokens and codes rows, so the walk checks against the store
-    // rather than against a second reading of the same rule. One arena serves a whole validation pass, and is built
-    // on the first board that actually carries authored cells.
+    // rather than against a second reading of the same rule. It reads the document's seed view, the one arena built
+    // per state section (WorldStateReader.Seed), on the first board that actually carries authored cells: a derived
+    // board is a document row, which the participant and identity lanes a server adds beside it never move.
     private sealed class BoardDerivation(WorldDefinition definition) {
         private StateArena? m_arena;
         private bool m_loaded;
@@ -224,22 +225,8 @@ public static partial class WorldDefinitionValidator {
                 m_loaded = true;
 
                 try {
-                    WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
-                    // The participant and identity lanes come from the same function the server's own arena is laid
-                    // out by, so the derivation is read off the store the server would have built.
-                    if (StateArena.TryCreate(
-                        arena: out var arena,
-                        catalog: definition.StateCatalog,
-                        options: WorldSlotLanes.Options(definition: definition),
-                        reason: out var reason,
-                        section: definition.StateRaw,
-                        time: ArenaTime.Origin
-                    )) {
-                        m_arena = arena;
-                    } else {
-                        m_reason = reason;
-                    }
-                } catch (InvalidOperationException exception) {
+                    m_arena = WorldStateReader.Seed(definition: definition);
+                } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
                     m_reason = exception.Message;
                 }
             }

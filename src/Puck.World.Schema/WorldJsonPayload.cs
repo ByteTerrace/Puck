@@ -126,15 +126,17 @@ public static class WorldJsonPayload {
                 return false;
             }
 
-            if (
-                (parsed is WorldDefinition definition) &&
-                !WorldStateDocumentValues.TryResolve(
-                deferDrawSites: deferDrawSites,
-                definition: definition,
-                reason: out var spatialReason
-            )
-            ) {
-                throw new InvalidOperationException(message: spatialReason);
+            if (parsed is WorldDefinition definition) {
+                if (!WorldStateDocumentValues.TryResolve(
+                    deferDrawSites: deferDrawSites,
+                    definition: definition,
+                    reason: out var spatialReason,
+                    resolved: out var resolved
+                )) {
+                    throw new InvalidOperationException(message: spatialReason);
+                }
+
+                parsed = (T)(object)resolved;
             }
 
             value = parsed;

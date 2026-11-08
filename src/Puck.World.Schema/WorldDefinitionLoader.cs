@@ -115,14 +115,15 @@ public static partial class WorldDefinitionLoader {
         // is the first one that can answer it.
         if (!WorldStateDocumentValues.TryResolve(
             definition: resolved,
-            reason: out var referenceReason
+            reason: out var referenceReason,
+            resolved: out var referenced
         )) {
             reason = $"{sourceName} could not resolve a state reference after its draws resolved: {referenceReason}";
 
             return false;
         }
 
-        drawn = resolved;
+        drawn = referenced;
         reason = string.Empty;
 
         return true;

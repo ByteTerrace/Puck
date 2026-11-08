@@ -129,6 +129,9 @@ public sealed partial class WorldServer {
         name: SearchWorkKinds.SourceName
     );
     private StateArena m_arena = null!;
+    // The store every document value this server binds reads: retargeted wherever m_arena is assigned, so a bound value
+    // follows an arena replacement without a new binding (WorldStateDocumentValues.BindLive).
+    private WorldLiveValues? m_liveValues;
 
     private StateCatalog? m_arenaCatalog;
 
@@ -175,9 +178,15 @@ public sealed partial class WorldServer {
         // Construction normally has no earlier arena. Keeping the copy here makes an explicitly rebuilt host carry
         // its session lanes through the same routine as a prepared replacement.
         m_arena?.CopyLanesTo(target: built);
-        m_arena = built;
-        m_arenaWork.Retarget(target: built);
+        AssignArena(arena: built);
         AdoptLayout(definition: definition);
+    }
+    // The one assignment of the live arena: the work counters and the store bound document values read follow it.
+    [Replaces(root: typeof(StateArena))]
+    private void AssignArena(StateArena arena) {
+        m_arena = arena;
+        m_arenaWork.Retarget(target: arena);
+        (m_liveValues ??= new WorldLiveValues(clock: () => m_ruleHost.Time)).Arena = arena;
     }
     // Settles against a seed taken at this host's current tick pair. Construction-time and load-time callers settle
     // before their one admission instead, so the document the receipt names is the document that installs.
@@ -229,8 +238,7 @@ public sealed partial class WorldServer {
     }
     [Replaces(root: typeof(StateArena))]
     internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
-        m_arena = arena;
-        m_arenaWork.Retarget(target: arena);
+        AssignArena(arena: arena);
         AdoptSearch(arena: arena);
         AdoptLayout(definition: definition);
         m_ruleHost.InvalidateArenaScheduling();
@@ -455,11 +463,12 @@ public sealed partial class WorldServer {
         m_consumersOwed = false; m_driveGateOwed = false; m_fieldsOwed = false;
         m_document.ReconcileStateConsumers(definition: m_document.Definition, driveGate: driveGate, fields: fields);
     }
-    private void BindArenaDocument() {
-        var projected = WorldStateDocumentValues.BindLive(definition: m_document.Definition, arena: m_arena, clock: () => m_ruleHost.Time);
-
-        m_document.AdoptDefinition(definition: projected);
-    }
+    private void BindArenaDocument() => AdoptBound(definition: m_document.Definition);
+    /// <summary>Adopts this server's own projection of a definition whose state the arena already holds: every
+    /// document value it binds reads the live arena (<see cref="WorldStateDocumentValues.BindLive"/>).</summary>
+    /// <param name="definition">The definition to adopt.</param>
+    internal void AdoptBound(WorldDefinition definition) =>
+        m_document.AdoptDefinition(definition: WorldStateDocumentValues.BindLive(definition: definition, live: m_liveValues!));
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
     // judge whose rules the host cannot serve refuses the plan by name rather than at a tick.
     private void RebuildSearch(WorldDefinition definition) {

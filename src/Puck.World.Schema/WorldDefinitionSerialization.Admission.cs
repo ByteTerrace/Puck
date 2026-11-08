@@ -35,10 +35,10 @@ public static partial class WorldDefinitionSerialization {
         var definition = ((JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
             ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null.")) with { DocumentDirectory = documentDirectory });
 
-        if (!WorldStateDocumentValues.TryResolve(definition: definition, reason: out var reason)) {
+        if (!WorldStateDocumentValues.TryResolve(definition: definition, reason: out var reason, resolved: out var resolved)) {
             throw new InvalidOperationException(message: reason);
         }
-        return definition;
+        return resolved;
     }
     private static InvalidDataException InvalidEmbedded(Exception exception) => new(
         message: $"the embedded world definition is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}",

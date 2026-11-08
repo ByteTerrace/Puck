@@ -6,7 +6,9 @@ namespace Puck.World;
 
 /// <summary>The World boundary of the arena reader. Live callers supply their arena; declaration validation reads seeds.</summary>
 public static class WorldStateReader {
-    private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Seeds = new();
+    private static readonly ConditionalWeakTable<WorldStateSection, StateArena> Seeds = new();
+    // The key every definition that authors no state section shares: they all compile the one empty catalog.
+    private static readonly WorldStateSection AbsentSection = new();
     private static readonly ConditionalWeakTable<WorldDefinition, StateArena> Live = new();
     private static readonly ConditionalWeakTable<StateRow, WorldStateRow> RowMetadata = new();
 
@@ -30,12 +32,27 @@ public static class WorldStateReader {
 
     private static StateArena ReadArena(WorldDefinition definition) => Live.TryGetValue(definition, out var arena) ? arena : Seed(definition);
 
-    /// <summary>Builds a read-only view of declaration seeds at an admission or edit boundary.</summary>
-    public static StateArena Seed(WorldDefinition definition) => Seeds.GetValue(key: definition, createValueCallback: static source => {
-        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+    /// <summary>Gets the read-only view of a document's declaration seeds an admission or edit boundary reads.</summary>
+    /// <remarks>The view is a function of the state section alone (its rows and the catalog compiled from them), so
+    /// it is built once per section and every definition holding that section reads the same one: a candidate that
+    /// changed no state builds none.</remarks>
+    /// <param name="definition">The document whose seeds are read.</param>
+    /// <returns>The seed view; the caller only reads it.</returns>
+    /// <exception cref="ArgumentException">The state section does not load into an arena.</exception>
+    public static StateArena Seed(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return new StateArena(catalog: source.StateCatalog, section: source.StateRaw, time: ArenaTime.Origin);
-    });
+        var section = (definition.StateRaw ?? AbsentSection);
+
+        if (Seeds.TryGetValue(key: section, value: out var seed)) {
+            return seed;
+        }
+
+        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+        seed = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+
+        return Seeds.GetValue(key: section, createValueCallback: _ => seed);
+    }
 
     private static ArenaTime Time(WorldDefinition definition, ulong tick, ulong engineTick) =>
         new(Tick: tick, EngineTick: engineTick, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);

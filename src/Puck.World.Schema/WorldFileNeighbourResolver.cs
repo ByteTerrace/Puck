@@ -188,7 +188,8 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
 
         if (!WorldStateDocumentValues.TryResolve(
             definition: drawn,
-            reason: out var referenceReason
+            reason: out var referenceReason,
+            resolved: out var referenced
         )) {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' holds a state reference nothing fills — {referenceReason}");
         }
@@ -197,11 +198,11 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             catalogFingerprint: m_catalogFingerprint,
             resolvedPath: path
         ) is { } image) {
-            ResolvedByImage.GetOrCreateValue(key: image)[directory] = drawn;
+            ResolvedByImage.GetOrCreateValue(key: image)[directory] = referenced;
         }
 
         return WorldNeighbourResolution.Resolved(
-            definition: drawn,
+            definition: referenced,
             shared: shared
         );
     }
