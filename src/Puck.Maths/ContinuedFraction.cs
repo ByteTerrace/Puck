@@ -42,33 +42,21 @@ public static class ContinuedFraction {
             );
         }
 
-        Span<long> terms = stackalloc long[128];
-        int count;
-        int periodStart;
-        int periodLength;
-
-        while (true) {
-            try {
-                count = Expand(
-                    d: d,
-                    p: p,
-                    periodLength: out periodLength,
-                    periodStart: out periodStart,
-                    q: q,
-                    r: r,
-                    terms: terms
-                );
-
-                break;
-            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2))
-                    ? (terms.Length * 2)
-                    : int.MaxValue
-                );
-
-                terms = new long[nextLength];
-            }
-        }
+        Span<long> scratch = stackalloc long[128];
+        var count = ExpandGrowing(
+            d: d,
+            heap: out var heap,
+            p: p,
+            periodLength: out var periodLength,
+            periodStart: out var periodStart,
+            q: q,
+            r: r,
+            scratch: scratch
+        );
+        ReadOnlySpan<long> terms = ((heap is null)
+            ? scratch
+            : heap
+        );
 
         var previousNumerator = BigInteger.One;
         var previousDenominator = BigInteger.Zero;
@@ -154,5 +142,46 @@ public static class ContinuedFraction {
         periodLength = expansion.PeriodLength;
 
         return expansion.Count;
+    }
+    /// <summary>Expands the quadratic irrational <c>(p + q·√d) / r</c> like <see cref="Expand"/>, growing its storage when
+    /// the caller's scratch is too short: the expansion is retried into a heap array of doubled length until it fits.</summary>
+    /// <param name="p">The rational part of the numerator.</param>
+    /// <param name="q">The coefficient of the surd; it must be positive.</param>
+    /// <param name="d">The radicand; it must be at least two and not a perfect square.</param>
+    /// <param name="r">The denominator; it must be non-zero.</param>
+    /// <param name="scratch">The caller's first-try storage, typically a small <c>stackalloc</c>.</param>
+    /// <param name="heap">Receives the heap array that holds the terms when <paramref name="scratch"/> was too short, otherwise <see langword="null"/>; the terms are in <c>heap ?? scratch</c>.</param>
+    /// <param name="periodStart">Receives the index where the repeating block begins.</param>
+    /// <param name="periodLength">Receives the length of the repeating block.</param>
+    /// <returns>The number of partial quotients written: <paramref name="periodStart"/> plus <paramref name="periodLength"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="q"/> is not positive, <paramref name="d"/> is below two or a perfect square, or <paramref name="r"/> is zero.</exception>
+    /// <exception cref="OverflowException">A partial quotient is outside the signed 64-bit range.</exception>
+    public static int ExpandGrowing(long p, long q, long d, long r, Span<long> scratch, out long[]? heap, out int periodStart, out int periodLength) {
+        var terms = scratch;
+
+        heap = null;
+
+        while (true) {
+            try {
+                return Expand(
+                    d: d,
+                    p: p,
+                    periodLength: out periodLength,
+                    periodStart: out periodStart,
+                    q: q,
+                    r: r,
+                    terms: terms
+                );
+            } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
+                heap = new long[((terms.Length <= (int.MaxValue / 2))
+                    ? Math.Max(
+                        val1: 16,
+                        val2: (terms.Length * 2)
+                    )
+                    : int.MaxValue
+                )];
+                terms = heap;
+            }
+        }
     }
 }

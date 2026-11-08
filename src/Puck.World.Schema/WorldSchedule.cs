@@ -296,14 +296,6 @@ public static class WorldScheduleCapacity {
     public const int MaxInstances = 16;
     /// <summary>The largest admitted scheduled-command row count.</summary>
     public const int MaxRows = 256;
-    /// <summary>The <c>addon:</c> principal label's prefix, refused by this section.</summary>
-    public const string PrincipalAddonPrefix = "addon:";
-    /// <summary>The console principal's label, refused by this section.</summary>
-    public const string PrincipalConsole = "console";
-    /// <summary>The <c>peer:</c> principal label's prefix, refused by this section.</summary>
-    public const string PrincipalPeerPrefix = "peer:";
-    /// <summary>The seat principal label's prefix; the suffix is a 1-based seat number.</summary>
-    public const string PrincipalSeatPrefix = "seat";
 
     /// <summary>Determines whether a principal label is one this section admits.</summary>
     /// <param name="principal">The authored label.</param>

@@ -384,7 +384,7 @@ can open a fourth. All four charge the one Hud reservation.
   empty panel set. Seat-scope panels (`WorldIdentity.Hud`, ONE
   optional panel per identity, `WorldHudCapacity.MaxElementsPerSeatPanel`
   elements, edited through `identity.hud <panel-json> [player]` and read back
-  with `world.hud seat:<n>` or `identity.show`) recompose EVERY produced frame
+  with `world.hud seat<n>` or `identity.show`) recompose EVERY produced frame
   from `PlayerRoster` + each joined seat's live identity handle instead — no
   cheap revision to key off, and no extra propagation seam for a write to
   reach the render path — into a preallocated array, then both halves publish
@@ -432,8 +432,8 @@ toast the store holds (`#<seq> ok|error '<text>'`, or `none`), headless too.
   `WorldMutation.UpsertHudElement` and `RemoveHudElement` (a read-modify-write of
   one element in an already-declared panel) are carried by addon guests
   (`WorldAddonMutationDecoder`) and the wire.
-- `world.hud [seat:<n>]` — the `Immediate` read-back. No argument: `[world.hud:
-  enabled <b> panels N/4]` plus per-panel and per-element lines. `seat:<n>`
+- `world.hud [seat<n>]` — the `Immediate` read-back. No argument: `[world.hud:
+  enabled <b> panels N/4]` plus per-panel and per-element lines. `seat<n>`
   (1..4): that LOCAL seat's PRIVATE player-scope panel instead (or a refusal
   naming why there is none — unjoined vs. no panel authored). Either form
   resolves bound values through the SAME resolver singleton the renderer
@@ -512,11 +512,11 @@ at `world.hud.template`), a malformed brace/escape sequence
 (`hud.TemplateBindingConflict`) — each control confirmed against the SAME
 element succeeding once the conflict is removed.
 Ad hoc, seat scope: `identity.hud <panel-json> [player]` a panel with a
-bound gauge, `world.wait`, read `world.hud seat:<n>` (or `identity.show
+bound gauge, `world.wait`, read `world.hud seat<n>` (or `identity.show
 [player]` for the one-line summary), screenshot for the pixel assertion
 (confined to that seat's split — an adjacent seat's half must stay clean),
 restart the process against the SAME `--state-dir` and re-read
-`world.hud seat:<n>` for the persistence round-trip. There is no grant to
+`world.hud seat<n>` for the persistence round-trip. There is no grant to
 narrow (the door is ungated, like `identity.motion`) — the refusal control
 instead is a malformed or over-cap panel: an element count over
 `WorldHudCapacity.MaxElementsPerSeatPanel`, more than

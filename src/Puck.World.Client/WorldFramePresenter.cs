@@ -1314,57 +1314,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         entry.PointerWasDown = sample.Pressed;
     }
-    // The no-local-seats fallback's own camera (see Dress's tail) — a fixed overview anchored to the plaza's own
-    // bounds: the centroid of the world's authored local-seat spawn positions, which every world declares
-    // (population.seatSpawns names exactly LocalSeatCount rows in SpawnPoints), so no per-world authoring is owed
-    // to make this safe. A pure function of the boot-frozen document, recomputed on each engaged frame rather than
-    // cached — the spawn table never changes size and the loop is four iterations.
-    private CameraSnapshot ResolveSpectatorCamera(uint width, uint height) {
-        var definition = m_client.Definition;
-        var centroid = Vector3.Zero;
-        var resolved = 0;
-
-        foreach (var name in definition.Population.SeatSpawns) {
-            if (WorldDefinitionRows.FindSpawnPoint(
-                spawnPoints: definition.SpawnPoints,
-                id: name
-            ) is { } spawn) {
-                centroid += spawn.Position;
-                resolved++;
-            }
-        }
-
-        if (resolved > 0) {
-            centroid /= resolved;
-        }
-
-        // A plain elevated pull-back — an establishing shot over the plaza, not a chase rig; the exact offset is
-        // an arbitrary but fixed presentation choice, not a value anything downstream depends on.
-        var target = (centroid + new Vector3(
-            x: 0f,
-            y: 1f,
-            z: 0f
-        ));
-        var eye = (centroid + new Vector3(
-            x: 0f,
-            y: 14f,
-            z: 18f
-        ));
-
-        return CameraSnapshot.LookAt(
-            position: eye,
-            target: target,
-            fieldOfViewRadians: (MathF.PI / 3f),
-            viewportWidth: Math.Max(
-                val1: 1u,
-                val2: width
-            ),
-            viewportHeight: Math.Max(
-                val1: 1u,
-                val2: height
-            )
-        );
-    }
     // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
     // frame. False behind the near plane or generously outside the view (the clip rect would discard the pixels
     // anyway — this just skips the record). pixelsPerUnit is the on-screen scale at the point's DEPTH (a ring's
@@ -2086,7 +2035,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             m_views.Add(item: new SdfViewSnapshot(
-                Camera: ResolveSpectatorCamera(
+                Camera: WorldOverviewCamera.Resolve(
+                    definition: m_client.Definition,
                     height: height,
                     width: width
                 ),

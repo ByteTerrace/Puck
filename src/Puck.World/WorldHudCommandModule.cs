@@ -2,6 +2,7 @@ using System.Text.Json;
 using Puck.Commands;
 using Puck.Overlays;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// The <c>hud</c> section's read-back surface. <c>world.hud</c> is an <see cref="CommandRouting.Immediate"/> read of
 /// the live definition plus every bound element's live-resolved value (through the same
 /// <see cref="IHudBindingResolver"/> the renderer uses) and the schema-cap reservation usage — plus, with a
-/// <c>seat:&lt;n&gt;</c> filter, the same read-back for that local seat's private player-scope panel (edited through
+/// <c>seat&lt;n&gt;</c> filter, the same read-back for that local seat's private player-scope panel (edited through
 /// <c>identity.hud &lt;panel-json&gt; [player]</c> (<see cref="IdentityCommandModule"/>), an ungated owner-side door
 /// — this module writes no player-scope mutation itself, it only reads the live handle that door already wrote). The
 /// world-scope section is authored through the general <see cref="WorldRowCommandModule"/> —
@@ -23,9 +24,8 @@ namespace Puck.World;
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>
 internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts, OverlayToastStore toasts) : ICommandModule {
-    private const string SeatFilterPrefix = "seat:";
     private const string ToastFilter = "toast";
-    private static readonly CommandForms WorldHudForms = CommandForms.Of(verb: "world.hud", "[toast|seat:<n>]");
+    private static readonly CommandForms WorldHudForms = CommandForms.Of(verb: "world.hud", "[toast|seat<n>]");
     private static readonly CommandForms WorldHudTemplateForms = CommandForms.Of(verb: "world.hud.template", "<template text...>");
 
     // The latest toast the overlay holds, whether or not a window draws it: the state a toast policy decision leaves.
@@ -159,9 +159,9 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
 
         if (
             (args.Count == 1) &&
-            TryParseSeatFilter(
+            PrincipalTokens.TryParseSeat(
             token: args[0].ToString(),
-            seat: out var seat
+            number: out var seat
         )
         ) {
             return DescribeSeatHud(seat: seat, view: WorldStateReadView.Of(server, context.Principal));
@@ -173,15 +173,15 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
 
         if (roster.ProfileAt(slot: slot) is not { } profile) {
-            return CommandResult.Error(output: $"[world.hud seat:{seat}: not joined — see world.players]");
+            return CommandResult.Error(output: $"[world.hud seat{seat}: not joined — see world.players]");
         }
 
         if (profile.Hud is not { } panel) {
-            return new CommandResult(Output: $"[world.hud seat:{seat}: profile '{profile.Name}' authored no player-scope panel — see identity.hud <panel-json> [player]]");
+            return new CommandResult(Output: $"[world.hud seat{seat}: profile '{profile.Name}' authored no player-scope panel — see identity.hud <panel-json> [player]]");
         }
 
         var lines = new List<string>(capacity: (1 + panel.Elements.Count)) {
-            $"[world.hud seat:{seat}: profile '{profile.Name}' panel '{panel.Id}' layer={panel.Layer.ToString().ToLowerInvariant()} style={panel.Style.ToString().ToLowerInvariant()} rect=({panel.Rect.X:F2},{panel.Rect.Y:F2},{panel.Rect.Width:F2},{panel.Rect.Height:F2}) elements={panel.Elements.Count}/{WorldHudCapacity.MaxElementsPerSeatPanel}]",
+            $"[world.hud seat{seat}: profile '{profile.Name}' panel '{panel.Id}' layer={panel.Layer.ToString().ToLowerInvariant()} style={panel.Style.ToString().ToLowerInvariant()} rect=({panel.Rect.X:F2},{panel.Rect.Y:F2},{panel.Rect.Width:F2},{panel.Rect.Height:F2}) elements={panel.Elements.Count}/{WorldHudCapacity.MaxElementsPerSeatPanel}]",
         };
 
         foreach (var element in panel.Elements) {
@@ -303,25 +303,6 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             : template
         );
     }
-    private static bool TryParseSeatFilter(string token, out int seat) {
-        seat = 0;
-
-        if (!token.StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: SeatFilterPrefix
-        )) {
-            return false;
-        }
-
-        return (
-            CommandArgs.TryParseInt(
-            text: token.AsSpan(start: SeatFilterPrefix.Length),
-            value: out seat
-        ) &&
-            (seat >= 1) &&
-            (seat <= PlayerRoster.MaxSlots)
-        );
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -337,7 +318,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: $"Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: {WorldHudForms.Spelling}. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: $"Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: {WorldHudForms.Spelling}. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             forms: WorldHudForms,
             handler: (context, args) => DescribeHudHandler(context, args: args),
             routing: CommandRouting.Immediate

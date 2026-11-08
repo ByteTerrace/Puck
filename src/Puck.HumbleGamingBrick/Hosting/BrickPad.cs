@@ -32,28 +32,22 @@ internal static class BrickPad {
         var buttons = JoypadButtons.None;
 
         // Directions: the left stick quantized to the d-pad, plus any explicit d-pad bits already on the image.
-        if (
-            (pad.LeftStick.Y >= MachineInputThresholds.StickDirection) ||
-            pad.Buttons.HasFlag(flag: MachineButtons.DpadUp)
-        ) {
+        var directions = MachineDirections.From(pad: in pad);
+
+        if (directions.Up) {
             buttons |= JoypadButtons.Up;
-        } else if (
-            (pad.LeftStick.Y <= -MachineInputThresholds.StickDirection) ||
-            pad.Buttons.HasFlag(flag: MachineButtons.DpadDown)
-        ) {
+        }
+
+        if (directions.Down) {
             buttons |= JoypadButtons.Down;
         }
 
-        if (
-            (pad.LeftStick.X >= MachineInputThresholds.StickDirection) ||
-            pad.Buttons.HasFlag(flag: MachineButtons.DpadRight)
-        ) {
-            buttons |= JoypadButtons.Right;
-        } else if (
-            (pad.LeftStick.X <= -MachineInputThresholds.StickDirection) ||
-            pad.Buttons.HasFlag(flag: MachineButtons.DpadLeft)
-        ) {
+        if (directions.Left) {
             buttons |= JoypadButtons.Left;
+        }
+
+        if (directions.Right) {
+            buttons |= JoypadButtons.Right;
         }
 
         // Actions and system buttons by position.
