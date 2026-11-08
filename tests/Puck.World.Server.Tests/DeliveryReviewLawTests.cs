@@ -194,6 +194,37 @@ public sealed class DeliveryReviewLawTests {
         Assert.Equal(sequence, sink.Versions[^1]);
     }
 
+    [Fact]
+    public void ReclaimingAnObsoleteImageCannotTurnAHiddenOnlyInstallIntoAPresentationDelivery() {
+        using var fixture = Fixtures.FreshServer(Document(tier: WorldDisclosureTier.Presentation));
+        var images = new WorldDisclosureImages();
+        var view = View(fixture, images, WorldDisclosureTier.Presentation);
+        var feed = new WorldProjectionFeed(Principal.Seat(1));
+        var cursor = new WorldDeliveryCursor();
+        Assert.Equal(WorldProjectionDeliveryKind.Document, feed.Compose(view, cursor).Kind);
+        var before = WorldProjection.SerializeCompact(feed.Held!);
+        var row = Row();
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(Principal.Console, row with {
+            Cells = row.Cells!.Append(new StateCell(CellName.Parse("secret2"), CellValue.Int(19),
+                Visibility: new StateVisibility(Readers: ["seat1"]))).ToArray()
+        }));
+        fixture.Step();
+        ReclaimObsoleteImages(view);
+        Assert.Contains("disclosure images 0,", images.Describe(), StringComparison.Ordinal);
+        Assert.Equal(WorldProjectionDeliveryKind.None, feed.Compose(view, cursor).Kind);
+        Assert.Equal(1L, cursor.Sequence);
+        Assert.Equal(before, WorldProjection.SerializeCompact(feed.Held!));
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void ReclaimObsoleteImages(WorldRecipientView view) {
+        // Preparing another empty stream invalidates structural cache entries without composing any replacement.
+        Assert.Empty(view.Advance(new WorldDeliveryCursor(), []));
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+    }
+
     private sealed class Replica : IClientSink {
         private WorldDefinition m_definition = WorldProjection.Undisclosed;
         public WorldDocumentStateView State { get; }

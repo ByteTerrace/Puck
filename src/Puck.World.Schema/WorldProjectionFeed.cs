@@ -80,7 +80,25 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         tree.Remove("observations", out var nextObservations);
         var observationsChanged = !(projection.Observations ?? []).SequenceEqual(m_held?.Observations ?? []);
         var delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
-        if (delta is { Count: 0 } && !observationsChanged) { return WorldProjectionDelivery.Nothing; }
+        // Retain state only as shared typed row images, never as a JSON tree per spectator. The common document
+        // merge keys arrays by name/key, so a new observation array is not a replacement: diff the transient state
+        // trees too, including removal markers for clocks, traits and cells that disappeared.
+        var previousObservations = observationsChanged && m_held?.Observations is { } previous
+            ? JsonSerializer.SerializeToNode(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null;
+        JsonObject? stateDelta = null;
+        if (m_tree is not null && observationsChanged) {
+            var before = new JsonObject();
+            var after = new JsonObject();
+            if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
+            if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
+            stateDelta = WorldProjectionDelta.Diff(before, after);
+        }
+        // Reclaimed images can have new typed references with identical content. Only a semantic difference can
+        // advance this stream; adopt the current shared rows even when their payload owes no delivery.
+        if (delta is { Count: 0 } && (!observationsChanged || stateDelta is { Count: 0 })) {
+            m_held = projection;
+            return WorldProjectionDelivery.Nothing;
+        }
         cursor.Delivered(view);
         projection = projection with { Provenance = projection.Provenance with { Revision = checked((int)cursor.Sequence) } };
         payload = WorldProjection.SerializeCompact(projection);
@@ -88,19 +106,8 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         tree.Remove("observations", out nextObservations);
         delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
         m_anchors.Retain(projection.Timeline?.Clocks ?? []);
-        if (delta is null) { return Whole(projection, tree, payload); }
-        // Retain state only as shared typed row images, never as a JSON tree per spectator. The common document
-        // merge keys arrays by name/key, so a new observation array is not a replacement: diff the transient state
-        // trees too, including removal markers for clocks, traits and cells that disappeared.
-        var previousObservations = observationsChanged && m_held?.Observations is { } previous
-            ? JsonSerializer.SerializeToNode(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null;
-        if (observationsChanged) {
-            var before = new JsonObject();
-            var after = new JsonObject();
-            if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
-            if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
-            var stateDelta = WorldProjectionDelta.Diff(before, after);
-            if (stateDelta is null) { return Whole(projection, tree, payload); }
+        if (delta is null || (observationsChanged && stateDelta is null)) { return Whole(projection, tree, payload); }
+        if (stateDelta is not null) {
             foreach (var (name, value) in stateDelta) { delta[name] = value?.DeepClone(); }
         }
         var valuesOnly = WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations);

@@ -476,7 +476,10 @@ Implementation choices for step 1:
   admission tier and Observe grant checks still apply on every delivery.
 - Presentation feeds retain shared typed observation rows, removing state from
   their retained JSON diff tree. A read may warm the shared image cache but
-  changes neither a cursor nor a feed. The earlier composer overloads remain
+  changes neither a cursor nor a feed. A changed typed reference is only an
+  invalidation hint: the transient state diff must contain a semantic change
+  before the cursor advances, even after an obsolete image is reclaimed.
+  The earlier composer overloads remain
   for existing callers until the read and retirement steps migrate them.
 - The shared table's work/byte counters are visible only in the operator's
   budget; a recipient receives a fixed message in their place. Snapshot cadence
