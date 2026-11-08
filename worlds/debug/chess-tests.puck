@@ -50,6 +50,26 @@ test "the idle demo records all 19 moves then replays with matching scope hashes
   }
 }
 
+// An edit that re-declares a scope row drops the scope's start (status -2); the demo captures a fresh one and loops again.
+test "a scope row re-declared during idle is captured again and the demo loops" {
+  given {
+    aiSide = -1
+    chessDemo.idleTicks = 30
+    chessDemo.holdTicks = 30
+  }
+  when {
+    ticks 150
+    seat1: world.row.set state illegalCount max 60000
+    ticks 7000
+  }
+  expect {
+    chessDemo.loops >= 2
+    chessDemo.matches >= 1
+    chessTape.completed >= 2
+    chessDemo.playing == 1
+  }
+}
+
 test "engaging the demo cancels it and restores a fresh playable table" {
   given {
     aiSide = -1

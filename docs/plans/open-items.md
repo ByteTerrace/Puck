@@ -72,9 +72,11 @@ milestone. The owner requested its baseline and implementation plan, which
    the rest on the set's binned specialization, both at 128 registers (16
    warps) with the filter's gather moved into a 40-register pass of its own,
    against the unsplit set's 168 (12); the plain bin spills 16 bytes a thread
-   where the unsplit plain kernel spills 176. Its timing against the unsplit
-   path is the queued `shade-4-bins` measurement, which decides whether bins
-   stay the default. Under the provisional `MaxWork` the debug world's `cel`
+   where the unsplit plain kernel spills 176. Binning pays on both backends and
+   stays the default: the binned views, filter and bins passes together cost
+   less than unsplit views at the teal roof, flight B, the studio and the
+   meadow (Vulkan by 0.14 to 0.37 ms, Direct3D 12's views alone by 0.36 to
+   0.46 ms), with binned frame p99 within the unsplit spread. Under the provisional `MaxWork` the debug world's `cel`
    program prices a job at about 20 tiles, so a programmed frame records about
    900 views dispatches on either path until step 5 calibrates the bound; a
    frame with no program records one. The gather's
@@ -1581,6 +1583,11 @@ reported until it does.
   rose by 4 per edit on both backends where views and glass make 2 (the lead's
   second GPU window); likely a requested set overtaken while the active and
   declared sets move on different frames. Unconfirmed.
+- [low] `SdfWorldPipelines.Acquire` leases `ViewsPlain` and `GlassPlain` up front beside the interpreter
+  `Views` and `Glass`, so every boot builds both pairs while a world uses one (a world whose frames run
+  programs, the debug world, never records the plain pair; a world with none never records the interpreter
+  pair). Making the pair a demand (`SdfWorldPipelines.AcquiredOnDemand`, as the binned kernels are) needs the
+  frame that first lacks or gains an active program to wait on its pipeline without a stall.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
   with identical arithmetic (window-2's disassembly); cost only, needs a GPU
   timing of `place` to show whether the driver removes them.
@@ -1618,14 +1625,6 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
-- [medium · determinism] A rule latch (`RuleLatch`, keyed by `LatchKey`
-  intern ordinals) is not remapped when an install adopts a replacement arena
-  whose key ordinals differ. An edit's replacement takes the live key ledger
-  before any row (`WorldServer.TryBuildEditArena`), so every name keeps its
-  ordinal while the catalog's declared keys keep their order; an edit that adds
-  or reorders declared keys, and every load's replacement, can still move a
-  latched binding to another key. Remap latch keys by name at adoption, as
-  `StateArena.CarryScope` does for a scope image.
 - A world whose state section declares pools does not narrow a state edit to
   its named rows (`WorldDocument.NameStateEdit`): its replacement is seeded from
   the whole export, so the per-cell traits of cells a rule removed are lost there
@@ -1651,6 +1650,23 @@ document values bind by copying only the paths to their references
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
   lane with and without its change; the disclosure area owns it.
+- [medium · determinism · unconfirmed] Latches over pools may fire again
+  after an edit: a rule's `forEach` over a pool binds `LatchKey.LeftGeneration`
+  to the pool handle's generation (`RuleEvaluator`), and interaction pairs bind
+  pool slot indices and generations (`WorldRuleHost.PoolCarriers`); an edit in a
+  pool-declaring world seeds its replacement from the whole export, and if that
+  restarts generations or slot order, `RuleLatch.RemapKeys` (key names only)
+  leaves those entries pointing at different carriers. Reproduce with a latched
+  Edge rule over a pool across a state-section edit.
+- [low] Rule-group progress (`RuleGroupState`, by group name) and decision
+  state survive a load, while latches and scoped replays clear on one
+  (`WorldServer.ContinueArena`). Clearing them too needs a reorder first: a
+  checkpoint restore sets group state before `RecompileRules(Load)` runs.
+- [medium · unattributed] A headless debug World allocates about 620 KB a
+  tick by `host.memory` (about 74 MB per 120 ticks, three instances), against
+  `puck bench world`'s 1,832 B server quiet tick: the rest is client,
+  presentation or machine work no one has attributed. A `dotnet-trace`
+  allocation capture of a quiet headless tick names it.
 - A shading edit still runs the whole validator over its candidate (rule
   compilation for validation, the work-budget analysis, every section), and
   canonicalizes and digests the edited creation twice. A `dotnet-trace`
@@ -3131,15 +3147,6 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
-- [medium] Failures met by the disc-verbs and arena-continuity lanes in code
-  they did not change (unconfirmed on their bases): two
-  `SdfPipelineBuildLivenessLawTests` laws expect 14 pipelines and see 22 (read
-  whether the shading tiers or binning added pipelines the law should count,
-  or whether pipelines are built that should not be);
-  `ArenaScopeSnapshotTests.AGrowingKeyedRowRestoresItsCapturedReservationAndContents`
-  writes cell visibility on a row with only row-level visibility, which the
-  cell-policy rule no longer stores; `WorldFieldLatticeLawTests.ValidatorRefusesHeightGeometryThatCannotFitOneRenderBrick`
-  expects an older validator message; `ContentAddressedUpdateStagerTests.CorruptCachedObjectIsDeletedSoTheNextAttemptCanDownloadIt`.
 - Failures the field-packing lane met in code it did not touch (unconfirmed
   on its base): `SdfPackedContractLawTests.TheConstructorAdmitsTheReinterpretedIntegerLanes`
   builds a SampledRegion with no binding, which `BindSampledFields` refuses;
@@ -4042,13 +4049,6 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] The chess demo stops for good after an edit re-declares one of its
-  scope rows: the scope correctly drops its tape and reports
-  `chessTape.status == -1`, but `chess.puck` captures a start only while
-  `chessDemo.ready == 0`, so every idle start is refused ("Capture the scope's
-  fresh starting state first") until a load. The demo recaptures by itself:
-  `chess-demo-diverged` (or a sibling rule) clears `ready` when the scope has
-  no start, so `chess-demo-fresh-start` captures at the next fresh board.
 - [medium] `world.decisions` reports 0 policies in the debug world's boot
   instance, so the pond's decisions may not be running there (seen by the
   rule-faults step 7 lane on a headless boot; unchecked). Read why before
@@ -4252,6 +4252,10 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [medium] `puck_world_start` discards a build and asks for a restart when
+  any file under the checkout changes mid-build, documentation included (a
+  lane lost two builds to its own doc edits). Key the source state on what the
+  World's build reads, not the whole tree.
 - [medium] A `puck measure request` filed under the caller's own quiet lease
   queues its frozen-tree build behind the build lease that same holder owns,
   and waits until the outer lease ends (seen in a measurement window: the

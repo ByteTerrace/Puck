@@ -18,8 +18,9 @@ public sealed partial class WorldDocument {
         var view = Host.ReadView(mutation.Principal);
         if (!view.Admits(mutation, out var withheld)) {
             m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
+            var refusedSection = WorldMutationKindCatalog.SectionOf(mutation: mutation);
             admission = new WorldMutationAdmission(WorldMutationAdmissionRule.NotDisclosed, default,
-                GrantSubject.State(withheld), default, default, 0, view.Refusal("mutation", withheld));
+                refusedSection.IsProgram() ? GrantSubject.Section(refusedSection) : GrantSubject.State(withheld), default, default, 0, view.Refusal("mutation", withheld));
             return false;
         }
         // A batch is admitted member by member, each on its own subject; the first member meters the dispatch budget.
@@ -85,7 +86,7 @@ public sealed partial class WorldDocument {
             return true;
         }
         var ordinal = WorldMutationKindCatalog.OrdinalOf(mutation: mutation);
-        var section = SectionOf(mutation: mutation);
+        var section = WorldMutationKindCatalog.SectionOf(mutation: mutation);
 
         // A bound document value reads the live state before composition canonicalizes its submitted row.
         m_mutationReferencedRows.Clear();

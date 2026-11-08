@@ -36,10 +36,20 @@ public static class WorldRecipientMutations {
     /// <param name="id">The placeholder id.</param>
     public static string PlaceholderRefusal(string id) => $"'{id}' is a placeholder, the back a reader is shown for a withheld cell; no placement stands for it";
     /// <summary>Refuses every write or guard touching a row the recipient cannot read whole, before grants,
-    /// membership, capacity, fingerprints or composition can disclose anything about that row.</summary>
+    /// membership, capacity, fingerprints or composition can disclose anything about that row, and every mutation of
+    /// a program section (<see cref="WorldSectionFacts.IsProgram"/>) by its kind alone, before it is compiled: a rule
+    /// or interaction reads any row and fires as the world, so authoring one is authoring the world.</summary>
+    /// <param name="view">The recipient's capability.</param>
+    /// <param name="mutation">The submitted mutation.</param>
+    /// <param name="row">The first withheld row, or the program section's document name; empty when admitted.</param>
+    /// <returns><see langword="true"/> when the recipient may submit the mutation to grants and composition.</returns>
     public static bool Admits(this WorldRecipientView view, WorldMutation mutation, out string row) {
         row = string.Empty;
         if (view.IsAuthority) { return true; }
+        if (WorldMutationKindCatalog.SectionOf(mutation) is var section && section.IsProgram()) {
+            row = section.ToString().ToLowerInvariant();
+            return false;
+        }
         switch (mutation) {
             case WorldMutation.UpsertStateCell write: row = write.Row; break;
             case WorldMutation.RemoveStateCell remove: row = remove.Row; break;
@@ -53,6 +63,18 @@ public static class WorldRecipientMutations {
                 break;
             case WorldMutation.RemovePlacement placement:
                 if (!view.AdmitsPlacement(placement.Id, out row)) { return false; }
+                break;
+            case WorldMutation.UpsertMachine machine:
+                if (!view.AdmitsMachine(machine.Machine, machine.Machine.Name, out row)) { return false; }
+                break;
+            case WorldMutation.RemoveMachine machine:
+                if (!view.AdmitsMachine(null, machine.Name, out row)) { return false; }
+                break;
+            case WorldMutation.UpsertKit kit:
+                if (!view.AdmitsKit(kit.Kit, kit.Kit.Name, out row)) { return false; }
+                break;
+            case WorldMutation.RemoveKit kit:
+                if (!view.AdmitsKit(null, kit.Name, out row)) { return false; }
                 break;
             case WorldMutation.TransformState transform:
                 foreach (var subject in transform.Transform.Subjects()) {

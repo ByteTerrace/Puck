@@ -68,6 +68,8 @@ public sealed class WorldBootCompositionLawTests {
     [InlineData("world.flock")]
     [InlineData("world.navigation")]
     [InlineData("world.explain")]
+    [InlineData("pipeline.load")]
+    [InlineData("world.transfer")]
     public void CompiledDiagnosticsAndPixelMaterialsRequireOperator(string verb) => WithHeadlessRegistry(registry => {
         // Compiled diagnostics and GPU material inspection cannot be reconstructed from a recipient's document.
         Assert.Equal(CommandAudience.Operator, Assert.Single(registry.Definitions, command => command.Name == verb).Audience);
@@ -75,12 +77,35 @@ public sealed class WorldBootCompositionLawTests {
         var source = new TextCommandSource(registry);
         using var router = new InputRouter(bindings: new NoBindings(), registry: registry, principalResolver: new SeatPrincipals());
         var answer = CommandResult.None;
-        var seat = source.CreateSeatSession(router: router, slot: 1, onResult: (_, result) => answer = result);
+        var seat = source.CreateSeatSession(router: router, slot: 1, onResult: (_, result) => answer = result, onSettled: (_, result) => answer = result);
         seat.Enqueue(verb);
         source.Collect();
-        Assert.True(answer.IsError);
+        var tick = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in tick);
+        source.Collect();
+        Assert.True(answer.IsError, answer.Output);
         Assert.Contains("an operator verb", answer.Output);
         Assert.DoesNotContain("an operator verb", registry.Submit(verb).Output, StringComparison.Ordinal);
+    });
+
+    [Theory]
+    [InlineData("player.cycle")]
+    [InlineData("player.claim")]
+    public void DeviceGesturesNameTheHostKeyboardOnlyForTheConsole(string verb) => WithHeadlessRegistry(registry => {
+        Assert.Equal(CommandAudience.Local, Assert.Single(registry.Definitions, command => command.Name == verb).Audience);
+
+        var source = new TextCommandSource(registry);
+        using var router = new InputRouter(bindings: new NoBindings(), registry: registry, principalResolver: new SeatPrincipals());
+        var answer = CommandResult.None;
+        var seat = source.CreateSeatSession(router: router, slot: 1, onResult: (_, result) => answer = result, onSettled: (_, result) => answer = result);
+        seat.Enqueue(verb);
+        source.Collect();
+        var tick = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in tick);
+        source.Collect();
+        Assert.True(answer.IsError, answer.Output);
+        Assert.Contains("moves its own device by pressing it", answer.Output);
+        Assert.DoesNotContain("moves its own device by pressing it", registry.Submit(verb).Output, StringComparison.Ordinal);
     });
 
     [Theory]

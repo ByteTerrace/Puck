@@ -285,6 +285,15 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static kit => kit.Name
     );
+    /// <summary>Finds a <c>machines</c> row by stable name.</summary>
+    /// <param name="machines">The section's machines.</param>
+    /// <param name="name">The machine name to find.</param>
+    /// <returns>The machine, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldMachine? FindMachine(IReadOnlyList<WorldMachine>? machines, string name) => Find(
+        rows: machines,
+        name: name,
+        selector: static machine => machine.Name
+    );
     /// <summary>Finds a <c>views.graphs</c> row by stable name.</summary>
     /// <param name="graphs">The section's graph rows.</param>
     /// <param name="name">The graph row name to find.</param>

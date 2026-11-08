@@ -377,7 +377,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             routing: CommandRouting.Immediate
         );
         yield return Simulation(
-            audience: CommandAudience.Anyone,
+            audience: CommandAudience.Operator,
             name: "world.transfer",
             description: "Queues a same-process transfer: " + WorldTransferForms.Spelling + ". body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts forcejoinrefusal:<ordinal> as a verification-only modifier; every transfer id is minted by its source and never reused. Transfer handshakes are checkpointed host state, not boot-only replay input.",
             forms: WorldTransferForms,

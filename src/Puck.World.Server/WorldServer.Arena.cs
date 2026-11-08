@@ -260,7 +260,7 @@ public sealed partial class WorldServer {
     }
     [Replaces(root: typeof(StateArena))]
     internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition, WorldArenaContinuity continuity) {
-        ContinueScopes(arena: arena, continuity: continuity, previous: m_arena);
+        ContinueArena(arena: arena, continuity: continuity, previous: m_arena);
         AssignArena(arena: arena);
         AdoptSearch(arena: arena);
         AdoptLayout(definition: definition);
@@ -357,7 +357,7 @@ public sealed partial class WorldServer {
         }
 
         LoadInPlace(rows: definition.State);
-        ContinueScopes(arena: m_arena, continuity: continuity, previous: m_arena);
+        ContinueArena(arena: m_arena, continuity: continuity, previous: m_arena);
     }
 
     /// <summary>Re-seeds the arena from an installed document that replaced <paramref name="previous"/> in its state

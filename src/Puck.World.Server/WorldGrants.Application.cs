@@ -250,7 +250,7 @@ public sealed partial class WorldGrants {
     /// close.</para>
     /// </remarks>
     /// <param name="principal">The acting principal, as its ingress stamped it.</param>
-    /// <param name="section">The document section the mutation targets (<c>SectionOf</c>).</param>
+    /// <param name="section">The document section the mutation targets (<see cref="WorldMutationKindCatalog.SectionOf"/>).</param>
     /// <param name="kindOrdinal">The mutation's declared kind ordinal (<see cref="WorldMutationKindCatalog"/>).</param>
     /// <param name="rowScopedEditSubject">The concrete <c>state:&lt;name&gt;</c> subject a state write names, or
     /// <see langword="null"/> when the mutation is not row-scoped — or when the caller cannot yet know it (the addon

@@ -421,8 +421,12 @@ A caller that judges many independent positions, such as a search judge, resets
 before each one so every crossing is a first one and no position allocates. A
 reset latch still lists each rule it has seen, so a latch that is hashed or
 checkpointed uses `Clear`, which forgets the storage too. When the arena behind
-the latch is replaced, `InvalidateScheduler` keeps every held bit and drops the
-scheduling caches described in the next section.
+the latch is replaced by an equivalent layout, `InvalidateScheduler` keeps every
+held bit and drops the scheduling caches described in the next section. When
+the replacement can intern the same key names at other ordinals, `RemapKeys`
+moves each key-bound entry to its name's ordinal in the new key table and drops
+the caches with it; a World host decides between that and `Clear` by how the
+install continues ([what an install rebuilds](../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
 
 ### Two kinds of remembered state
 

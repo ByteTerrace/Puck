@@ -154,7 +154,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Anyone,
+            audience: CommandAudience.Operator,
             name: "pipeline.load",
             description: $"{PipelineLoadForms.Spelling} — author a views.graphs row naming a graph document, a one-off shader source, or a shader package directory, relative to the world document. Accepted rows compile in the background; pipeline.status reports the result.",
             forms: PipelineLoadForms,

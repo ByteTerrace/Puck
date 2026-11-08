@@ -92,24 +92,30 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         }
 
         foreach (var file in payload.Files) {
-            if (
-                !ContentPin.TryParse(
+            if (!ContentPin.TryParse(
                 pin: out var pin,
                 text: file.Hash
-            ) ||
-                !m_cache.TryGet(
+            )) {
+                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' names '{file.Hash}', which is not a well-formed content pin");
+            }
+
+            // The store verifies an object as it reads it, so an object that is present yet unreadable is corrupt: it is
+            // deleted, so the next attempt finds the pin missing and downloads it again rather than refusing forever.
+            if (!m_cache.TryGet(
                 content: out var bytes,
                 pin: pin
-            )
-            ) {
+            )) {
+                if (m_cache.Contains(pin: pin)) {
+                    File.Delete(path: ContentAddressedStore.ObjectPath(root: m_cache.Root, pin: pin));
+
+                    return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) was corrupt in the cache and has been deleted — refused, and the next attempt downloads it again");
+                }
+
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) is missing from the cache after staging — refused rather than writing a partial install");
             }
 
-            var actualHash = ContentPin.Compute(content: bytes);
-
-            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
-                File.Delete(path: ContentAddressedStore.ObjectPath(root: m_cache.Root, pin: pin));
-                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
+            if (bytes.LongLength != file.Size) {
+                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' holds {bytes.LongLength} bytes at staging time, but the manifest declares {file.Size} — refused");
             }
 
             var destinationPath = Path.Combine(

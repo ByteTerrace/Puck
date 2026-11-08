@@ -180,7 +180,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_host = host;
         m_population = population;
         m_routeTransition = routeTransition;
+        SeedLocalPlayDefaults(seatCount: seatCount);
+    }
 
+    // The permissive local-play defaults the constructor and a rebuild's Reset both seed, silently through TryGrant:
+    // each seat's body and domain, the console's domain and Drive over everything, and the authored program's Edit.
+    private void SeedLocalPlayDefaults(int seatCount) {
         for (var slot = 0; (slot < seatCount); slot++) {
             var seat = Principal.Seat(slot: slot);
 
@@ -354,14 +359,14 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // door reads an absent mask as full reach (required for Console's maskless boot rows), so an untrusted row
         // must say which kinds it reaches or be refused before it exists.
         //
-        // An untrusted principal (Addon/Peer) is refused Mutate over section:rules or section:interactions outright:
-        // both desugar into effects that fire as Principal.World, admitted structurally with no budget or mask
-        // enforcement — one gated act would otherwise launder unbounded, unmetered writes.
+        // An untrusted principal (Addon/Peer) is refused Mutate over a program section outright: its rows desugar into
+        // effects that fire as Principal.World, admitted structurally with no budget or mask enforcement — one gated
+        // act would otherwise launder unbounded, unmetered writes.
         if (
             untrustedPrincipal &&
             (grant.Capability == WorldCapability.Mutate) &&
             (grant.Subject.Kind == GrantSubjectKind.Section) &&
-            ((((WorldSection)grant.Subject.Value) == WorldSection.Rules) || (((WorldSection)grant.Subject.Value) == WorldSection.Interactions))
+            ((WorldSection)grant.Subject.Value).IsProgram()
         ) {
             var subjectNoun = ((((WorldSection)grant.Subject.Value) == WorldSection.Rules)
                 ? "rule"
@@ -842,8 +847,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return true;
     }
     // Non-Drive permissive defaults shared by seats and the console: Observe over every subject, Control over every
-    // screen, Mutate over every section except Grants (the console alone is seeded over it, see below), and Edit
-    // over the `all` wildcard (Edit's domain is state:<name>).
+    // screen, Mutate over every section except Grants and the program sections (the console alone is seeded over
+    // them, see below), and Edit over the `all` wildcard (Edit's domain is state:<name>).
     private void SeedDomain(Principal principal) {
         _ = TryGrant(
             grant: new WorldGrant(
@@ -887,9 +892,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         foreach (var section in Enum.GetValues<WorldSection>()) {
             // Grants is META-authority: mutating it authors who may do what. Only the console is seeded over it; a
-            // seat that needs it is granted it deliberately, and AllowsAllSections cannot pass for a seat either.
+            // seat that needs it is granted it deliberately, and AllowsAllSections cannot pass for a seat either. A
+            // program section is the authority's alone: the recipient door refuses a seat's mutation of it by kind,
+            // so a seeded row would name a door that never opens.
             if (
-                (section == WorldSection.Grants) &&
+                ((section == WorldSection.Grants) || section.IsProgram()) &&
                 (principal.Kind != PrincipalKind.Console)
             ) {
                 continue;
@@ -1629,31 +1636,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             );
         }
 
-        for (var slot = 0; (slot < seatCount); slot++) {
-            var seat = Principal.Seat(slot: slot);
-
-            _ = TryGrant(
-                grant: new WorldGrant(
-                    Grantee: seat,
-                    Capability: WorldCapability.Drive,
-                    Subject: GrantSubject.Body(index: slot),
-                    Exclusive: false
-                ),
-                reason: out _
-            );
-            SeedDomain(principal: seat);
-        }
-
-        SeedDomain(principal: Principal.Console);
-        _ = TryGrant(
-            grant: new WorldGrant(
-                Grantee: Principal.Console,
-                Capability: WorldCapability.Drive,
-                Subject: GrantSubject.All,
-                Exclusive: false
-            ),
-            reason: out _
-        );
+        SeedLocalPlayDefaults(seatCount: seatCount);
     }
 
     /// <summary>Removes a grant (capability+subject) from a principal, and clears any matching exclusive reservation.

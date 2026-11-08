@@ -1,12 +1,15 @@
 namespace Puck.World.Server;
 
-/// <summary>What an arena install keeps of the scoped replays bound to the arena it replaces or reloads.</summary>
+/// <summary>What an arena install keeps of the rule latches and scoped replays bound to the arena it replaces or
+/// reloads.</summary>
 public enum WorldArenaContinuity {
-    /// <summary>A mutation's install: each scope keeps its starting image and tape while every one of its rows keeps
-    /// its declaration, and drops them, refusing its drive by name, when the install re-declared one.</summary>
+    /// <summary>A mutation's install: the rule latch keeps every entry, a key-bound one moved to its key name's ordinal
+    /// in a replacement arena, and each scope keeps its starting image and tape while every one of its rows keeps its
+    /// declaration, dropping them, refusing its drive by name, when the install re-declared one.</summary>
     Edit,
-    /// <summary>A whole-document load, rebuild or checkpoint restore: the document's state replaces the arena's, so
-    /// every scope drops its starting image and tape (a checkpoint then restores its own).</summary>
+    /// <summary>A whole-document load, rebuild or checkpoint restore: the document's state replaces the arena's, so the
+    /// rule and interaction latches start empty and every scope drops its starting image and tape (a checkpoint then
+    /// restores its own of each).</summary>
     Load,
 }
 
@@ -31,10 +34,13 @@ public sealed partial class WorldServer {
         }
     }
 
-    // The one place an arena install decides what the scopes keep, called with the arena about to be live. Scopes
-    // bound to a replays section the installed document no longer holds are left alone: the next read binds fresh ones.
-    private void ContinueScopes(StateArena? previous, StateArena arena, WorldArenaContinuity continuity) {
-        if ((previous is null) || !ReferenceEquals(objA: m_scopedSources, objB: Definition.ReplaysRaw)) { return; }
+    // The one place an arena install decides what survives it, called with the arena about to be live: the rule latches
+    // and the scopes. Scopes bound to a replays section the installed document no longer holds are left alone: the next
+    // read binds fresh ones.
+    private void ContinueArena(StateArena? previous, StateArena arena, WorldArenaContinuity continuity) {
+        if (previous is null) { return; }
+        m_ruleHost.ContinueLatches(arena: arena, continuity: continuity, previous: previous);
+        if (!ReferenceEquals(objA: m_scopedSources, objB: Definition.ReplaysRaw)) { return; }
         foreach (var scope in m_scopedReplays) { scope.Continue(arena: arena, continuity: continuity, previous: previous); }
     }
 }
