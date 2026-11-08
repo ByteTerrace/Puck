@@ -34,6 +34,7 @@ public static class WorldStateSettlement {
         if (definition.State.Count == 0) {
             return definition;
         }
+        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
         if (!StateArena.TryCreate(
             arena: out var seeded,
             catalog: definition.StateCatalog,

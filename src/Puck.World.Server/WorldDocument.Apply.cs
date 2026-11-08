@@ -1116,6 +1116,7 @@ public sealed partial class WorldDocument {
         WorldRebuildKind? rebuildKind = null) {
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
 
+        WorldBootWork.Count(kind: WorldBootWork.FullInstalls);
         MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
@@ -1209,6 +1210,7 @@ public sealed partial class WorldDocument {
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation, StateArena? arena = null) {
         var previous = m_definition;
 
+        WorldBootWork.Count(kind: WorldBootWork.ValueInstalls);
         AdoptDefinition(definition: definition);
         // Ordinary rows the write replaced enter through the import door, while a pool candidate arrives as the
         // already-validated typed replacement prepared before commit.

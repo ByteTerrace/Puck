@@ -463,6 +463,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             !ReferenceEquals(objA: document.StateRaw, objB: m_shaped.StateRaw) ||
             !ReferenceEquals(objA: document.StateCatalog, objB: m_shaped.StateCatalog)
         ) {
+            WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
             m_observations.Clear();
         }

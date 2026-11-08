@@ -22,8 +22,8 @@ public enum HostFramePhase {
 }
 /// <summary>
 /// The windowed or headless host's per-iteration timeline: a ring of the latest iterations, each the interval from its start to
-/// the next one's, split into the loop's phases, with its fixed steps and the garbage collections and pause time that
-/// fell inside it, beside an independent per-step cost ring. The <c>host.frames</c> verb reads both. Phase 1 runs
+/// the next one's, split into the loop's phases, with its fixed steps, the garbage collections and pause time that fell
+/// inside it and the bytes every thread allocated in it, beside an independent per-step cost ring. The <c>host.frames</c> verb reads both. Phase 1 runs
 /// both on the host pump thread; counters use atomic operations for the future thread split.
 /// </summary>
 /// <remarks>Recording allocates nothing; only a reading formats text.</remarks>
@@ -39,6 +39,7 @@ public sealed class HostFrameTimeline {
     private readonly int[] m_steps = new int[Capacity];
     private readonly long[] m_late = new long[Capacity];
     private readonly int[] m_collections = new int[(Capacity * 3)];
+    private readonly long[] m_allocated = new long[Capacity];
     private readonly long[] m_open = new long[PhaseCount];
     private readonly long[] m_tickCosts = new long[Capacity];
 
@@ -54,6 +55,7 @@ public sealed class HostFrameTimeline {
     private int m_gen0;
     private int m_gen1;
     private int m_gen2;
+    private long m_allocatedStart;
     private int m_openSteps;
     private long m_openLate;
 
@@ -76,12 +78,14 @@ public sealed class HostFrameTimeline {
         var gen0 = GC.CollectionCount(generation: 0);
         var gen1 = GC.CollectionCount(generation: 1);
         var gen2 = GC.CollectionCount(generation: 2);
+        var allocated = GC.GetTotalAllocatedBytes(precise: false);
 
         if (m_iterationStart != 0L) {
             var slot = ((int)(m_count % Capacity));
 
             m_intervals[slot] = (now - m_iterationStart);
             m_pauses[slot] = (pause - m_pauseStart);
+            m_allocated[slot] = (allocated - m_allocatedStart);
             m_steps[slot] = m_openSteps;
             m_late[slot] = m_openLate;
             m_collections[(slot * 3)] = (gen0 - m_gen0);
@@ -106,6 +110,7 @@ public sealed class HostFrameTimeline {
         m_gen0 = gen0;
         m_gen1 = gen1;
         m_gen2 = gen2;
+        m_allocatedStart = allocated;
     }
     /// <summary>Charges the time since the previous mark to <paramref name="phase"/>.</summary>
     /// <param name="phase">The phase that just ran.</param>
@@ -289,7 +294,7 @@ public sealed class HostFrameTimeline {
             builder.Append(value: '\n');
             builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"  #{indices[i]} {intervals[i]:0.00} ms{((i == busiestAt) ? " (busiest)" : "")}: input={Milliseconds(ticks: m_phases[phases]):0.00} commands={Milliseconds(ticks: m_phases[(phases + 1)]):0.00} simulate={Milliseconds(ticks: m_phases[(phases + 2)]):0.00} ({m_steps[slot]} steps) begin={Milliseconds(ticks: m_phases[(phases + 3)]):0.00} produce={Milliseconds(ticks: m_phases[(phases + 4)]):0.00} present={Milliseconds(ticks: m_phases[(phases + 5)]):0.00} wait={Milliseconds(ticks: m_phases[(phases + 6)]):0.00} (late {Milliseconds(ticks: m_late[slot]):0.00}) gc={m_collections[(slot * 3)]}/{m_collections[((slot * 3) + 1)]}/{m_collections[((slot * 3) + 2)]} pause={TimeSpan.FromTicks(value: m_pauses[slot]).TotalMilliseconds:0.00}"
+                handler: $"  #{indices[i]} {intervals[i]:0.00} ms{((i == busiestAt) ? " (busiest)" : "")}: input={Milliseconds(ticks: m_phases[phases]):0.00} commands={Milliseconds(ticks: m_phases[(phases + 1)]):0.00} simulate={Milliseconds(ticks: m_phases[(phases + 2)]):0.00} ({m_steps[slot]} steps) begin={Milliseconds(ticks: m_phases[(phases + 3)]):0.00} produce={Milliseconds(ticks: m_phases[(phases + 4)]):0.00} present={Milliseconds(ticks: m_phases[(phases + 5)]):0.00} wait={Milliseconds(ticks: m_phases[(phases + 6)]):0.00} (late {Milliseconds(ticks: m_late[slot]):0.00}) gc={m_collections[(slot * 3)]}/{m_collections[((slot * 3) + 1)]}/{m_collections[((slot * 3) + 2)]} pause={TimeSpan.FromTicks(value: m_pauses[slot]).TotalMilliseconds:0.00} allocated={m_allocated[slot]}"
             );
         }
 

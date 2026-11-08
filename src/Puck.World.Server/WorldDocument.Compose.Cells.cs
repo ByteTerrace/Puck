@@ -109,6 +109,7 @@ public sealed partial class WorldDocument {
                 var entry = Interlocked.Exchange(location1: ref pool.Available, value: null);
 
                 if ((entry is null) || !CanReuseComposeArena(definition: definition, entry: entry)) {
+                    WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
                     if (!StateArena.TryCreateSeeding(
                         catalog: definition.StateCatalog, section: definition.StateRaw,
                         options: WorldSlotLanes.Options(definition: definition), time: in time,
@@ -130,6 +131,7 @@ public sealed partial class WorldDocument {
                 return true;
             }
 
+            WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
             if (!StateArena.TryCreate(
                 arena: out arena,
                 catalog: definition.StateCatalog,

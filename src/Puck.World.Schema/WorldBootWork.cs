@@ -3,7 +3,8 @@ using Puck.Abstractions.Counting;
 namespace Puck.World;
 
 /// <summary>
-/// The work a world boot does before its first tick, counted in a <see cref="WorkCounterSet"/> and read
+/// The work a world boot does before its first tick, and the same work a live edit's install repeats, counted in a
+/// <see cref="WorkCounterSet"/> and read
 /// through <see cref="IWorkCounterSource"/> under the source name <see cref="SourceName"/>: the documents read, the
 /// <c>.puck</c> sources compiled and the ones the compile cache answered, the basis-and-imports merges, the strict
 /// parses and validations, and the builds and loads that follow. Each count is a monotonic total over the ledger's
@@ -122,6 +123,19 @@ public sealed class WorldBootWork : IWorkCounterSource {
     public static WorkKind SurfaceFields { get; } = new(name: "world.boot.surface.fields", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Canonical occurrence/identity array payload created; not live or process memory.</summary>
     public static WorkKind StampPayloadBytes { get; } = new(name: "world.boot.stamp.payload-created", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the state arenas a world builds from a document's state section: a server's
+    /// arena or its prepared replacement, a seed view declarations are read through, a derived board's recompute, a
+    /// settlement's seed, a compose or transform scratch store, and a client's state mirror.</summary>
+    public static WorkKind ArenaBuilds { get; } = new(name: "world.boot.arena-builds", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the full installs of a live document: the rules recompiled and the arena, the
+    /// fields and the screens reconciled against the candidate, with or without the population's rebuild.</summary>
+    public static WorkKind FullInstalls { get; } = new(name: "world.boot.full-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the installs of a live document that moved state values alone, keeping every
+    /// compiled product.</summary>
+    public static WorkKind ValueInstalls { get; } = new(name: "world.boot.value-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
+    /// keeping the arena, every compiled product and the population.</summary>
+    public static WorkKind PresentationInstalls { get; } = new(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
@@ -250,6 +264,10 @@ public sealed class WorldBootWork : IWorkCounterSource {
             SurfacePlans,
             SurfaceFields,
             StampPayloadBytes,
+            ArenaBuilds,
+            FullInstalls,
+            ValueInstalls,
+            PresentationInstalls,
         ];
     }
 }

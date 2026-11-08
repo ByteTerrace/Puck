@@ -68,6 +68,7 @@ public static class WorldArenaTransforms {
             return false;
         }
         var arena = live;
+        if (arena is null) { WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds); }
         if ((arena is null) && !StateArena.TryCreate(
             arena: out arena,
             catalog: definition.StateCatalog,

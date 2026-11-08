@@ -160,6 +160,7 @@ public sealed partial class WorldServer {
         var catalog = definition.StateCatalog;
         var time = m_ruleHost.Time;
 
+        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
         if (!StateArena.TryCreate(
             arena: out var built,
             catalog: catalog,
@@ -194,6 +195,7 @@ public sealed partial class WorldServer {
     internal bool TryPrepareArenaReplacement(WorldDefinition definition, out StateArena prepared, out string reason, out WorldDefinition settled) {
         var time = m_ruleHost.Time;
 
+        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
         if (!StateArena.TryCreate(
             arena: out var built,
             catalog: definition.StateCatalog,

@@ -31,8 +31,11 @@ public static class WorldStateReader {
     private static StateArena ReadArena(WorldDefinition definition) => Live.TryGetValue(definition, out var arena) ? arena : Seed(definition);
 
     /// <summary>Builds a read-only view of declaration seeds at an admission or edit boundary.</summary>
-    public static StateArena Seed(WorldDefinition definition) => Seeds.GetValue(key: definition, createValueCallback: static source =>
-        new StateArena(catalog: source.StateCatalog, section: source.StateRaw, time: ArenaTime.Origin));
+    public static StateArena Seed(WorldDefinition definition) => Seeds.GetValue(key: definition, createValueCallback: static source => {
+        WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+
+        return new StateArena(catalog: source.StateCatalog, section: source.StateRaw, time: ArenaTime.Origin);
+    });
 
     private static ArenaTime Time(WorldDefinition definition, ulong tick, ulong engineTick) =>
         new(Tick: tick, EngineTick: engineTick, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);

@@ -224,6 +224,7 @@ public static partial class WorldDefinitionValidator {
                 m_loaded = true;
 
                 try {
+                    WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
                     // The participant and identity lanes come from the same function the server's own arena is laid
                     // out by, so the derivation is read off the store the server would have built.
                     if (StateArena.TryCreate(
