@@ -770,24 +770,39 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   [GPU robustness](#vulkan-regressions-and-gpu-robustness);
   clean Vulkan bakes ran 59 to 66 s beside Direct3D 12's 59 to 63 s in the same
   quiet windows, with Vulkan presenting more frames while baking and its stage
-  totals a little higher. Its wall
-  time no longer follows the worker stages: a 38% cut in summed `land` worker
-  time moved wall time within noise. A sampled thread-time timeline finds
+  totals a little higher. A sampled thread-time timeline finds
   occupied bake workers across the interval, overlapping preparation,
   crossings, contouring and landing, with a short tail; it does not expose
-  a long serial planning, GPU or store-publication link. `StartupBenchmarks`
-  now retains timestamped output alongside the stage totals to separate
-  overlapping work from waits. Collapse fan adjacency is indexed once per
-  classification, and crossing discovery reuses the shared signs of adjacent
-  fine-cell faces. `SdfMeshCollapse` also reuses
-  reverse edge witnesses across an unchanged source fan, skips refused directed
-  edges until an endpoint fan changes, and tests the removed vertex's samples
-  first. Reverse searches resume only when their witness can raise the triangle's
-  maximum error; retained original vertices witness themselves, and rejected
-  distances skip normal interpolation. Planar merging precedes spatial splitting
-  so artificial seams do not keep flat contour rows through every level.
-  The paired cold-start measurement requests own the remaining timing question;
-  fewer queries and loaded-machine profiles alone do not establish either bar.
+  a long serial planning, GPU or store-publication link, so the bake's wall
+  time follows its total processor work, and summed stage seconds overstate
+  any one stage's share (a worker per logical processor shares cores). The
+  World's own processor samples over a Direct3D 12 cold bake
+  (`dotnet-trace --profile dotnet-sampled-thread-time`, `CPU_TIME` leaves only,
+  the procedure in [the bake reference](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake))
+  split it as `Land` about a third (the collapse 29%, the planar merge 4.5%),
+  `SdfSampledLattice.PrepareCrossings` 14% (`CloseSheets` 9%, `CrossingEdges`
+  4.6%), `Refine` 8%, `Contour` 7%, the frame and residency about 5%, and the
+  desktop capture feed 9% (its readback scaling half of that, now halved; below). The collapse's
+  cost is spread over its checks rather than one loop: doubling one part at a
+  time on the replayed `Land` inputs added 16% for `Measure`, 13% for the
+  reverse bound, 9% for the constructor and 4% each for pricing and
+  `PrepareFrom`, and ending the passes earlier buys little (stopping at an
+  eighth of today's tail saves 4.5% of the collapse for 1% more first-level
+  triangles). Equal-output cuts so far: collapse fan adjacency is indexed once
+  per classification, and crossing discovery reuses the shared signs of
+  adjacent fine-cell faces. `SdfMeshCollapse` reuses reverse edge witnesses
+  across an unchanged source fan, keys each refusal by what it read
+  (`Collapser.Outcome`; shape and link refusals span levels), lays each source
+  fan out once for every neighbour, indexes line twins, and mixes its packed
+  place keys; it tests the removed vertex's samples first. Reverse searches
+  resume only when their witness can raise the triangle's maximum error;
+  retained original vertices witness themselves, and rejected distances skip
+  normal interpolation. Planar merging precedes spatial splitting so artificial
+  seams do not keep flat contour rows through every level. The lattice divides
+  fine keys by multiplication (`SdfSampledLattice.FineDivisor`). A further
+  halving of the collapse needs fewer or cheaper acceptance checks per
+  collapse (about five attempts a collapse, half refused by `Measure` at the
+  removed vertex's own samples), not lower overhead.
   A cheaper collapse that produces different but
   equally good meshes (same or better geometric error against the field,
   coverage and triangle budget in `puck mesh audit`) is a valid cut; equality
@@ -836,17 +851,29 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   `--profile gc-verbose` in the same leg as the memory split above, then write
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
-- Next cuts: re-rank `SdfMeshCollapse` after the witness reuse, including
-  `Collapser.Pass`'s candidate traversal, `Kind`'s fan classification and the
-  constructor's per-mesh scratch allocations, beside the forward/reverse checks
-  (judge changed witnesses with the field audit at each rendered level: bounds
-  against the preceding mesh alone can miss uncovered field surface; the audit's
-  level-zero median-edge threshold also changes when planar merging changes, so
-  compare raw millimetre errors beside threshold counts); the
-  frame thread's `SdfWorldResidency.Capture` and the render
-  graph's per-view recording while hundreds of views stand. The crossed-cell
-  masks already flow from `CrossingEdges` to `ExtractRefined`; do not introduce
-  a second topology scan there.
+- Next cuts, by their share of the World's processor samples while baking: the
+  collapse's acceptance search (an attempt order that refuses on the removed
+  vertex before laying out the whole new fan, or a witness structure `Measure`
+  and `MeasureReverse` share; judge changed witnesses with the field audit at
+  each rendered level: bounds against the preceding mesh alone can miss
+  uncovered field surface; the audit's level-zero median-edge threshold also
+  changes when planar merging changes, so compare raw millimetre errors beside
+  threshold counts); `SdfSampledLattice.CloseSheets`, whose second slit pass
+  re-reads every measured fine sample's six neighbours though only samples
+  within reach of the first pass's closings can change (`FineInside` is a
+  third of the method, most of it on interpolated neighbours' first reads);
+  `CrossingEdges`' per-edge hash set; `Refine`'s `Thickens` and slot numbering;
+  the frame thread's `SdfWorldResidency.Capture` and the render graph's
+  per-view recording while hundreds of views stand. The crossed-cell masks
+  already flow from `CrossingEdges` to `ExtractRefined`; do not introduce a
+  second topology scan there.
+- [low] The desktop capture's CPU readback scaling (`Win32GraphicsCaptureFeed`'s
+  `ScaleMapped`) runs on the capture thread for every readback the GPU path's
+  divisor lets through: the capture feed took 9% of the World's processor
+  samples during a cold bake, the scaling half of that before its per-pixel
+  division went (`ColumnEnds`); a GPU downscale ahead of the
+  readback, or a lower readback rate while nothing reads the CPU pixels, removes
+  the rest.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
