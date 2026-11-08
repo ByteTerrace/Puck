@@ -136,12 +136,14 @@ public static class SdfMeshCollapse {
         private readonly int[] m_filled;
         private readonly int[] m_touched;
         private readonly int[] m_changed;
-        // Rejected directed edges stay rejected until an endpoint fan changes. Commit stamps every old fan endpoint;
-        // Run clears the cache for a new distance and normal budget. No cached result ever accepts a collapse.
+        // Rejected directed edges stay rejected until the fan the refusal read changes: the collapsing place's always, the
+        // neighbour's for a link refusal, and the level's budget for a measured one. Commit stamps every old fan endpoint.
+        // No cached result ever accepts a collapse.
         private readonly int[] m_revisions;
         // Keyed by the directed edge (from, to) and holding the two revisions it was refused at, each packed high then low.
         private readonly Dictionary<long, long> m_rejected = new(comparer: MixedKey.Instance);
         private int m_revision;
+        private int m_budget;
         // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
         private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
@@ -289,7 +291,9 @@ public static class SdfMeshCollapse {
 
         // Collapses until no pass takes enough within the bounds, then returns the level the alive triangles make.
         public SdfMeshLevel Run(double error, double cosine) {
-            m_rejected.Clear();
+            // A refusal of the shape or the link reads no budget and stands into the next level while its revisions do;
+            // a measured refusal is keyed by the level that measured it.
+            m_budget++;
             for (var pass = 0; (pass < MaxPasses); pass++) {
                 // The constructor's lists and kinds stand for the first pass; later, a place no collapse changed keeps its
                 // triangles and its kind.
@@ -383,17 +387,28 @@ public static class SdfMeshCollapse {
                     }
                     // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
                     // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
-                    m_rejected[Directed(from: place, to: target)] = Directed(from: m_revisions[place], to: ((outcome == Outcome.RefusedLinks) ? m_revisions[target] : AnyRevision));
+                    m_rejected[Directed(from: place, to: target)] = Directed(from: m_revisions[place], to: outcome switch {
+                        Outcome.RefusedLinks => m_revisions[target],
+                        Outcome.RefusedMeasure => MeasuredAt(budget: m_budget),
+                        _ => AnyRevision,
+                    });
                 }
             }
 
             return taken;
         }
-        private bool Refused(int from, int to) =>
-            (m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) && ((rejected == Directed(from: m_revisions[from], to: AnyRevision)) || (rejected == Directed(from: m_revisions[from], to: m_revisions[to]))));
+        private bool Refused(int from, int to) {
+            if (!m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) || ((int)(rejected >> 32) != m_revisions[from])) { return false; }
+
+            var low = (int)rejected;
+
+            return ((low == AnyRevision) || (low == m_revisions[to]) || (low == MeasuredAt(budget: m_budget)));
+        }
+        // The neighbour word of a refusal the level's distance and normal budgets decided: below every other word.
+        private static int MeasuredAt(int budget) => (AnyRevision - budget);
         // The neighbour revision a refusal that never read the neighbour's fan records; no revision is negative.
         private const int AnyRevision = -1;
-        private enum Outcome : byte { Taken, Refused, RefusedLinks }
+        private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure }
         private static long Directed(int from, int to) => ((((long)from) << 32) | ((uint)to));
         // Long's own hash folds its halves together, so neighbouring pairs of places collide; a Fibonacci multiply spreads them.
         private sealed class MixedKey : IEqualityComparer<long> {
@@ -657,9 +672,9 @@ public static class SdfMeshCollapse {
                 if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Outcome.Refused; }
             }
 
-            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.Refused; }
-            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.Refused; }
-            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.Refused; }
+            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.RefusedMeasure; }
+            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.RefusedMeasure; }
+            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.RefusedMeasure; }
 
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
@@ -1021,12 +1036,14 @@ public static class SdfMeshCollapse {
 
                 var (cx, cy, cz) = ((((m_point[pa].X + m_point[pb].X) + m_point[pc].X) / 3.0), (((m_point[pa].Y + m_point[pb].Y) + m_point[pc].Y) / 3.0), (((m_point[pa].Z + m_point[pb].Z) + m_point[pc].Z) / 3.0));
                 var radius = 0.0;
+                // The square root is monotonic and correctly rounded, so the root of the largest square is the largest root.
 
                 foreach (var p in ((ReadOnlySpan<int>)[pa, pb, pc])) {
                     var (dx, dy, dz) = ((m_point[p].X - cx), (m_point[p].Y - cy), (m_point[p].Z - cz));
 
-                    radius = Math.Max(val1: radius, val2: Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))));
+                    radius = Math.Max(val1: radius, val2: (((dx * dx) + (dy * dy)) + (dz * dz)));
                 }
+                radius = Math.Sqrt(d: radius);
 
                 m_measured[count++] = new Candidate {
                     Ax = m_point[pa].X,
