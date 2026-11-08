@@ -105,13 +105,13 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                 }
                 var names = ((args.Count == 1)
                     ? [args[0].ToString()]
-                    : server.Machines.InstanceNames
+                    : server.ReadView(context).Definition.Machines.Select(row => row.Name).ToArray()
                 );
                 var echo = CommandEcho.Open(verb: "machine.state");
                 var found = false;
 
                 foreach (var name in names) {
-                    if (server.Machines.InstanceState(name: name) is not { } state) {
+                    if (server.ReadView(context).Definition.Machines.FirstOrDefault(row => row.Name == name) is not { } declaration || server.Machines.InstanceState(name: name) is not { } state) {
                         return NoMachine(
                             instance: name,
                             verb: "machine.state"
@@ -143,7 +143,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                         key: "fault",
                         value: (state.Fault ?? "none")
                     );
-                    var declaration = server.Definition.Machines.First(predicate: row => (row.Name == name));
+
 
                     foreach (var binding in (declaration.Memory ?? [])) {
                         var observed = server.MachineBindingState(
@@ -218,7 +218,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         )) {
             return error;
         }
-        if (!TryListContent(
+        if (!TryListContent(context: context,
             entries: out var entries,
             failure: out var failure,
             folders: out var folders,
@@ -282,7 +282,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         )) {
             return error;
         }
-        if (!TryListContent(
+        if (!TryListContent(context: context,
             entries: out var entries,
             failure: out var failure,
             folders: out var folders,
@@ -397,7 +397,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         )) {
             return error;
         }
-        if (!TryListContent(
+        if (!TryListContent(context: context,
             entries: out var entries,
             failure: out var failure,
             folders: out _,
@@ -438,14 +438,14 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     // Lists a live machine's folders as they stand now: the host's current declaration, so a swap lists against the
     // content it runs, and the disk as it is, so a folder that appeared, emptied or vanished since the last listing
     // shows it.
-    private static bool TryListContent(WorldServer server, string instance, string verb, out WorldMachine machine,
+    private static bool TryListContent(WorldServer server, CommandContext context, string instance, string verb, out WorldMachine machine,
         out IReadOnlyList<WorldMachineContentFolder.Folder> folders, out IReadOnlyList<WorldMachineContentFolder.Entry> entries,
         out CommandResult failure) {
         folders = [];
         entries = [];
         failure = CommandResult.None;
 
-        if (server.Machines.CaptureInstances().FirstOrDefault(predicate: row => string.Equals(
+        if (server.ReadView(context).Definition.Machines.FirstOrDefault(predicate: row => string.Equals(
             a: row.Name,
             b: instance,
             comparisonType: StringComparison.Ordinal
@@ -460,7 +460,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         machine = live;
         if (!WorldMachineContentFolder.TryList(
             catalog: server.Machines.ValidationCatalog,
-            documentDirectory: server.Definition.DocumentDirectory,
+            documentDirectory: server.ReadView(context).Definition.DocumentDirectory,
             entries: out entries,
             folders: out folders,
             machine: live,

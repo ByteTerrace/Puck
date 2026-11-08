@@ -133,8 +133,8 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         );
     }
     // The declared screens row at the engine screen-surface index, or null when undeclared.
-    private WorldScreen? DeclaredScreen(int index) {
-        var screens = m_server.Definition.Screens;
+    private WorldScreen? DeclaredScreen(CommandContext context, int index) {
+        var screens = m_server.ReadView(context).Definition.Screens;
 
         for (var position = 0; (position < screens.Count); position++) {
             if (screens[position].Index == index) {
@@ -172,7 +172,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         }
 
         if (
-            (DeclaredScreen(index: index) is { } existing) &&
+            (DeclaredScreen(context, index: index) is { } existing) &&
             (existing.Source is WorldScreenSource.Machine)
         ) {
             return m_link.Submit(mutation: new WorldMutation.UpsertScreen(
@@ -215,7 +215,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
 
         // A screen owns no machine: content mounts only into the declared machine a screen shows, from a file in its
         // contentFolders.
-        return ((DeclaredScreen(index: index)?.Source is WorldScreenSource.Machine named)
+        return ((DeclaredScreen(context, index: index)?.Source is WorldScreenSource.Machine named)
             ? WorldMachineCommandModule.InsertContent(
                 m_link,
                 m_server.Machines,

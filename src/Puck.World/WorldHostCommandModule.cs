@@ -25,8 +25,8 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
     );
     // The three-way read-back: DOCUMENT (the coalesced authored row), RESOLVED (the boot values after CLI override), and
     // LIVE (the target-rate session lever). One line, pipe-separated, so it stays greppable over stdout.
-    private string DescribeHost() {
-        var document = server.Definition.Host;
+    private string DescribeHost(CommandContext context) {
+        var document = server.ReadView(context).Definition.Host;
         var targetRate = ((pacing.TargetHertz > 0.0)
             ? pacing.TargetHertz.ToString(provider: CultureInfo.InvariantCulture)
             : "display"
@@ -61,12 +61,12 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             bindability: CommandBindability.Unbindable,
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever value (world.target's present Hz) — so an author sees which fields the CLI overrode and how the target-rate lever has drifted.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.host"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeHost()))
+            : new CommandResult(Output: DescribeHost(context)))
         );
     }
 }

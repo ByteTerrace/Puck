@@ -787,7 +787,8 @@ public static class WorldSearchCompilation {
             // whole plan by name if one slipped through.
             if (
                 (rule is not CompiledWorldFactsRule { Decision: null, Interaction: null }) ||
-                (rule.Needs.Facets.Count != 0)
+                (rule.Needs.Facets.Count != 0) ||
+                !MayRunInSearch(rule.Gate)
             ) {
                 continue;
             }
@@ -796,6 +797,48 @@ public static class WorldSearchCompilation {
         }
 
         return judge.ToArray();
+    }
+    // A candidate's judge runs at a positive search ply. Live-only rules (including explicit reveals into a
+    // player's memory) never execute there and must not drag their authority inputs into the judge's closure.
+    // Unknown comparisons retain both possibilities; ignoring short-circuit hints preserves the Boolean tree.
+    private static bool MayRunInSearch(Puck.State.Rules.GateToken[] gate) {
+        if (gate.Length == 0) { return true; }
+        var stack = new bool?[gate.Length];
+        var count = 0;
+        foreach (var token in gate) {
+            switch (token.Op) {
+                case Puck.State.Rules.GateOp.ShortCircuit:
+                    continue;
+                case Puck.State.Rules.GateOp.Compare:
+                    bool? known = null;
+                    if (IsPly(token.LeftSource) && token.RightSource.IsLiteral && token.RightSource.RawValue == 0) {
+                        known = token.Comparison switch {
+                            ExpressionOp.Equal or ExpressionOp.Less or ExpressionOp.LessOrEqual => false,
+                            ExpressionOp.NotEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual => true,
+                            _ => null,
+                        };
+                    }
+                    stack[count++] = known;
+                    break;
+                case Puck.State.Rules.GateOp.Not:
+                    stack[count - 1] = !stack[count - 1];
+                    break;
+                default:
+                    var all = token.Op == Puck.State.Rules.GateOp.All;
+                    bool? combined = all;
+                    for (var index = 0; index < token.Arity; index++) {
+                        var value = stack[--count];
+                        combined = all ? combined & value : combined | value;
+                    }
+                    stack[count++] = combined;
+                    break;
+            }
+        }
+        return stack[0] != false;
+
+        static bool IsPly(Puck.State.Rules.CompiledValueSource source) =>
+            source.Operand is Puck.State.Rules.SearchPlyOperand ||
+            source.Expression is [{ Operation: ExpressionOp.Operand, Operand: Puck.State.Rules.SearchPlyOperand }];
     }
     /// <summary>Returns the rules one job's judge evaluates: of the rules a frame could evaluate, those that can
     /// reach a row the job reads, in their authored order.</summary>
@@ -1545,46 +1588,39 @@ public static class WorldSearchCompilation {
 
             plans[index] = plan!;
             scores[index] = compiledScore;
+            if (!ArenaSearchPlan.TryResolve(plan!, definition.StateCatalog, out var resolved, out reason)) { return false; }
+            try {
+                RuleCompiler.RequireEnclosedAudience(
+                    resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore)), resolved.Outputs(),
+                    rows[index].Name, context, RuleRefusal.SearchWidensAudience);
+            } catch (RuleException exception) {
+                reason = exception.Message;
+                return false;
+            }
         }
 
         var outputs = new HashSet<int>();
 
-        int Ordinal(string? name) => (((name is not null) && definition.StateCatalog.TryResolve(
-            handle: out var handle, lane: StateLane.Document, name: name)) ? handle.Ordinal : -1);
-        foreach (var plan in plans) {
-            foreach (var name in new[] { plan.Best, plan.Legal, plan.Reach, plan.Counts }) {
-                if (Ordinal(name: name) is >= 0 and var ordinal) {
-                    outputs.Add(item: ordinal);
-                }
-            }
+        var resolvedPlans = new ArenaSearchPlan[plans.Length];
+        for (var index = 0; index < plans.Length; index++) {
+            if (!ArenaSearchPlan.TryResolve(plans[index], definition.StateCatalog, out var resolved, out reason)) { return false; }
+            resolvedPlans[index] = resolved!;
+            outputs.UnionWith(resolvedPlans[index].Outputs());
         }
-
         var positions = new long[plans.Length];
         var upkeep = 0L;
-
-        for (var index = 0; (index < plans.Length); index++) {
-            var plan = plans[index];
-            var keyRows = new SortedSet<int>(collection: RuleDataflow.KeyRows(rules: judges[index], score: scores[index]));
-
-            foreach (var name in new[] { plan.Tokens, plan.Turn, plan.Verdict, plan.Scores, plan.Chance?.Row }
-                .Concat(second: plan.Zones).Concat(second: plan.Shapes.Select(selector: static shape => shape.Codes))) {
-                if (Ordinal(name: name) is >= 0 and var ordinal) {
-                    keyRows.Add(item: ordinal);
-                }
-            }
+        for (var index = 0; index < plans.Length; index++) {
+            var resolved = resolvedPlans[index];
+            var keyRows = resolved.Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]));
+            // Every tick checks every job, and a completed job checks again immediately before landing.
+            var disclosure = RuleCompiler.DisclosureCost(keyRows, resolved.Outputs(), context) * 2L;
+            if (!disclosure.IsKnown) { reason = $"search '{plans[index].Name}' has unbounded audience checks"; return false; }
+            upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, disclosure.Units);
             foreach (var ordinal in keyRows) {
-                positions[index] = Puck.Maths.BinaryIntegerFunctions.AddSaturating(left: positions[index], right: context.RowCapacity(rowOrdinal: ordinal));
-            }
-            foreach (var name in new[] { plan.Held, plan.Revision }) {
-                if (Ordinal(name: name) is >= 0 and var ordinal) {
-                    keyRows.Add(item: ordinal);
+                positions[index] = Puck.Maths.BinaryIntegerFunctions.AddSaturating(positions[index], context.RowCapacity(ordinal));
+                if (!outputs.Contains(ordinal)) {
+                    upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, context.RowCapacity(ordinal));
                 }
-            }
-            keyRows.ExceptWith(other: outputs);
-            // ArenaSearch checks every job's inputs before choosing one job to advance. Shared dependency rows
-            // therefore occur once per job here too, even though their unchanged content fold is cached at runtime.
-            foreach (var ordinal in keyRows) {
-                upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(left: upkeep, right: context.RowCapacity(rowOrdinal: ordinal));
             }
         }
         var allowance = Math.Max(val1: 0L, val2: (Math.Max(val1: 0L, val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet.Units)) - upkeep));

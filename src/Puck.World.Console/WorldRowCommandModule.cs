@@ -701,8 +701,8 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         return builder.Append(value: ')').ToString();
     }
     // world.kits: name, program, and the motion row's key scalars — the census this section never had.
-    private static string DescribeKits(WorldServer server) {
-        var kits = server.Definition.Kits;
+    private static string DescribeKits(WorldRecipientView view) {
+        var kits = view.Definition.Kits;
 
         if (kits.Count == 0) {
             return "[world.kits: none declared]";
@@ -2036,7 +2036,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     return error;
                 }
 
-                return new CommandResult(Output: DescribeKits(server: server));
+                return new CommandResult(Output: DescribeKits(view: server.ReadView(context)));
             }
         );
         yield return CommandDefinition.WithWireArgs(

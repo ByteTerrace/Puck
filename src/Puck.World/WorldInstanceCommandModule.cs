@@ -147,7 +147,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             name: "world.instance.start",
             description: $"Starts another world running in THIS process from a world document and admits it under a name: {WorldInstanceStartForms.Spelling}. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition, own population, own owned-world store — nothing shared) and mounts its declared addons. It has no seats, replay tape or machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name carrying '~' (the character joining the instance names the engine generates), a name that is not a single safe path segment (the name IS the directory its owned worlds live in), a name already running, a name whose owned-world directory would land outside the instances root, a path resolving to no file, a document the validator rejects, or an owned-world store that cannot be opened.",
             forms: WorldInstanceStartForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count < 2) {
                     return WorldInstanceStartForms.Refuse();
                 }
@@ -170,11 +170,11 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 // have moved), the document's own identity, where its owned worlds landed, and how many screens the
                 // document asked to boot a machine on — an instance's machine host is empty by design, so a document
                 // that declares them starts with them dark and that has to be READ BACK, not inferred from a silence.
-                var dark = started.Server.Definition.Screens.Count(predicate: screen => (screen.Source is WorldScreenSource.Machine));
+                var dark = started.Server.ReadView(context).Definition.Screens.Count(predicate: screen => (screen.Source is WorldScreenSource.Machine));
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.Definition.DocumentId} schema {started.Server.Definition.Schema} capacity {started.Server.Population.Capacity} addons {(started.Server.Addons?.MountedCount ?? 0)} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {Puck.Abstractions.PuckPaths.Normalize(path: m_instances.OwnedWorldsDirectory(name: name))}]"
+                    handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.ReadView(context).Definition.DocumentId} schema {started.Server.ReadView(context).Definition.Schema} capacity {started.Server.Population.Capacity} addons {(started.Server.Addons?.MountedCount ?? 0)} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {Puck.Abstractions.PuckPaths.Normalize(path: m_instances.OwnedWorldsDirectory(name: name))}]"
                 ));
             }
         );
@@ -182,7 +182,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             name: "world.instance.stop",
             description: $"Retires a running world instance and disposes what it owned, never the companion custody it holds: {WorldInstanceStopForms.Spelling}. An instance embodying visiting companions sends them home and retires after the drain that settles them ('stopping', then a narrated 'retired'); one holding a companion's title abroad is refused, since no durable image here carries the title until its custodian returns it. Refuses the reserved name 'boot' (the world this process booted with — every other verb, the client, the seats and the tape address it), an unknown name, or an instance currently presenting a local traveler (transfer that seat out first), naming which. world.instance.status <name> reads the custody an instance holds.",
             forms: WorldInstanceStopForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count < 1) {
                     return WorldInstanceStopForms.Refuse();
                 }
@@ -204,7 +204,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             name: "world.instance.status",
             forms: WorldInstanceStatusForms,
             description: $"Reports every running world instance, or one by name: {WorldInstanceStatusForms.Spelling}. Per instance: source path, document id, schema, completed ticks, population capacity, simulated count, journal dirty count and owned-worlds directory. The world this process booted with is listed like any other, under the name 'boot'. Immediate.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     var names = m_instances.Names;
 
@@ -230,7 +230,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: $"[world.instance.status: no instance named '{name}']");
                 }
 
-                var definition = instance.Server.Definition;
+                var definition = instance.Server.ReadView(context).Definition;
 
                 var custody = (m_instances.TryDescribeCustody(
                     custody: out var held,
@@ -250,7 +250,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             name: "world.view",
             description: $"Reads each local seat's immutable authority claim: {WorldViewForms.Spelling} echoes <authority>:<entity>@<epoch>. Boot begins at boot:<seat>@1; every committed handoff publishes a whole new claim by CAS. Immediate.",
             forms: WorldViewForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
                     var parts = new string[WorldSeatBindings.SeatCount];
 
@@ -336,7 +336,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             name: "world.instance.seats",
             forms: WorldInstanceSeatsForms,
             description: $"Reports every local seat's occupancy for one named instance or, with no name, EVERY running instance (the boot instance included, under 'boot'): {WorldInstanceSeatsForms.Spelling}. Per seat: 1..4=<identity-id> when active on an identity, 1..4=pending when active with none chosen yet, 1..4=- when unoccupied. Immediate.",
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count > 1) {
                     return WorldInstanceSeatsForms.Refuse(got: args[1].ToString());
                 }

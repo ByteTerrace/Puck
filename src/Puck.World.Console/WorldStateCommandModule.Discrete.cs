@@ -82,9 +82,10 @@ public sealed partial class WorldStateCommandModule {
                 }
                 var lines = new List<string>();
 
-                foreach (var topology in (server.Definition.StateRaw?.Lattices ?? [])) {
+                var definition = server.ReadView(context).Definition;
+                foreach (var topology in (definition.StateRaw?.Lattices ?? [])) {
                     var compiled = WorldTopologyCompilation.Find(
-                        definition: server.Definition,
+                        definition: definition,
                         name: topology.Name
                     );
                     var directionCount = (compiled?.DirectionCount ?? 0);
@@ -209,11 +210,7 @@ public sealed partial class WorldStateCommandModule {
                 ) {
                     return CommandResult.Error(output: $"[world.observe: refused — {acting.Describe()} may observe only itself, not {principal.Describe()}]");
                 }
-                var rows = (WorldStateDisclosure.Compose(
-                    arena: server.Arena,
-                    definition: server.Definition,
-                    recipient: principal
-                ) ?? []).ToArray();
+                var rows = (WorldStateReadView.Of(server, principal).Recipient.Observations() ?? []).ToArray();
 
                 return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(
                     rows,

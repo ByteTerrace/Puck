@@ -34,8 +34,7 @@ internal static class WorldTravelerProjection {
                 principal: principal,
                 server: server
             )) { return null; }
-            var definition = server.Definition;
-            var checkedDefinition = definition;
+            var checkedDefinition = server.Definition;
             bool SameProjection() {
                 if (ReferenceEquals(checkedDefinition, server.Definition)) { return true; }
                 checkedDefinition = server.Definition;
@@ -50,7 +49,7 @@ internal static class WorldTravelerProjection {
             ).IsAllowed) {
                 return "the traveler holds no Observe grant for its body";
             }
-            bool Current() => (SameProjection() &&
+            bool Authorized() => (
                 WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is null &&
                 liveAdmission!.Tier >= request.Ceiling &&
                 server.TryTransferredPrincipal(
@@ -67,8 +66,10 @@ internal static class WorldTravelerProjection {
                 principal: principal,
                 subject: subject
             ).IsAllowed);
+            bool Current() => SameProjection() && Authorized();
+            var view = server.DeliveryView(principal, request.Ceiling, Authorized);
             var disclosure = new WorldSinkDisclosure(
-                definition.Population.ObserverDisclosure,
+                view.Definition.Population.ObserverDisclosure,
                 principal.Index
             );
 
@@ -78,7 +79,8 @@ internal static class WorldTravelerProjection {
                 isCurrent: Current,
                 recipient: principal,
                 server: server,
-                tier: request.Ceiling
+                tier: request.Ceiling,
+                view: view
             );
             sink.PrimeRoute(route: WorldLocalForwardedAuthority.DescribeRoute(
                 endpoint: endpoint,

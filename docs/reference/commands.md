@@ -842,6 +842,9 @@ describes authoring, endpoint eligibility and the exposed-HDR cutoff option.
 
 ## Scene diagnostics
 
+Scene diagnostics are operator commands: their authority-wide counters,
+revisions and causal findings are not recipient observations.
+
 Run `world.debug-view report colliders --json` or
 `world.debug-view report contacts --json` to inspect a world without enabling
 an overlay. `report all` evaluates both categories. These commands also work

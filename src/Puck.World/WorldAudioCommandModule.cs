@@ -93,7 +93,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             return refusal;
         }
 
-        var speakers = server.Definition.Speakers;
+        var speakers = server.ReadView(context).Definition.Speakers;
 
         if (speakers.Count == 0) {
             return new CommandResult(Output: "[world.speakers: none declared]");
@@ -255,7 +255,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "music.state",
             description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music), the currently active conditional-layer tune ids, the patch/tick of the most recent director embellishment, and $clock:phaseError's own live value (0 when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => RoutedQuery(query: static index => new WorldQuery.MusicState(Index: index)),
+            handler: context => RoutedQuery(query: static index => new WorldQuery.MusicState(Index: index)),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.Verb(
@@ -263,7 +263,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             name: "instrument.state",
             description: "Reads which diegetic instrument screen (if any) the routed seat holds a screen application to, authoritatively off seat 1's currently claimed authority — screen index, whether the booted machine there carries the instrument-clock capability, its authored tempo in engine ticks per beat, and whether it is driving the world's music clock (holding the application is the whole gate — see world.instrument-clock). Follows a transferred seat the same way music.state does. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => RoutedQuery(query: static index => new WorldQuery.InstrumentState(Index: index)),
+            handler: context => RoutedQuery(query: static index => new WorldQuery.InstrumentState(Index: index)),
             routing: CommandRouting.Immediate
         );
     }

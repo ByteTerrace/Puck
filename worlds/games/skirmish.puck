@@ -29,12 +29,12 @@ import "../standard/sealed"
 //
 // Two computer players search blue's moves (`skirmishSearch`). `skirmishSharp` scores a move by how close blue's
 // first unit comes to red's first unit where it really stands; `skirmishFair` by how close it comes to where blue last
-// saw it. Their answers are the search's own writes into `skirmishSharpBest` (public) and `skirmishFairBest` (blue's).
+// saw it. Their answers are the search's own writes into `skirmishSharpBest` (authority only) and `skirmishFairBest` (blue's).
 //
 // The disclosure fixture (../debug/skirmish-disclosure.puck): the principals are `seat1` and `seat2`; the hidden cells
 // are the other side's `skirmishPos` cells, `skirmishLast`, the other side's `skirmishView`, `skirmishSeen<s>`,
-// `skirmishKnows<s>` and inbox, and `skirmishFairBest` for seat 1. `skirmishSharpBest` is public and judged over hidden
-// cells: it is the fixture's search door.
+// `skirmishKnows<s>` and inbox, and `skirmishFairBest` from seat 1. `skirmishSharpBest` is authority-only because it is judged over hidden
+// cells: widening its audience is refused by search compilation.
 
 let skirmishWidth = 6
 let skirmishCells = 36
@@ -169,13 +169,39 @@ template skirmishState(origin, cellSize) {
   slot skirmishFairOn = 0 bounds(0..1)
   slot skirmishFairRevision = 0 bounds(0..1000000)
 
-  table skirmishSharpBest {
-    token = -1
-    to = -1
-    score = 0
-    revision = -1
+  row {
+    name: "skirmishSharpBest"
+    kind: "Int"
+    cells [
+      { key: "token", value: -1 }
+      { key: "to", value: -1 }
+      { key: "score", value: 0 }
+      { key: "revision", value: -1 }
+    ]
+    visibility { readers [] }
   }
 
+  // Blue's search is entirely over its memory, including candidate generation and the judge.
+  for name in ["skirmishFairPos", "skirmishFairLast"] {
+    row {
+      name: name
+      kind: "Int"
+      domain: keysOf(row: skirmishUnits)
+      capacity: 6
+      min: -1
+      max: skirmishCells - 1
+      cells: map(range(1, 6), u => { key: $"{u}", value: -1 })
+      visibility { readers ["seat2"] }
+    }
+  }
+  for name in ["skirmishFairTurn", "skirmishFairVerdict"] {
+    row {
+      name: name
+      kind: "Int"
+      cells [{ key: "$value", value: 0 }]
+      visibility { readers ["seat2"] }
+    }
+  }
   row {
     name: "skirmishFairBest"
     kind: "Int"
@@ -192,6 +218,10 @@ template skirmishState(origin, cellSize) {
   }
 }
 
+function skirmishStepLegal(from, to, mate1, mate2, turn, side, winner) = (
+  turn == side and from >= 0 and maximum(absolute(to / 6 - from / 6), absolute(to % 6 - from % 6)) == 1 and
+  skirmishWall[to] == 0 and mate1 != to and mate2 != to and winner == 0
+)
 template skirmishRules() {
   // A seat's order puts its unit on the cell it names; the judge below accepts the step or puts the unit back.
   for s in range(1, 2) {
@@ -223,18 +253,8 @@ template skirmishRules() {
     rule $"skirmish-judge-{u}" {
       local from = skirmishLast[$"{u}"]
       local to = skirmishPos[$"{u}"]
-      local step = maximum(absolute(to / 6 - from / 6), absolute(to % 6 - from % 6))
-      local mate1 = skirmishPos[$"{skirmishMates[u][0]}"]
-      local mate2 = skirmishPos[$"{skirmishMates[u][1]}"]
-      local legal = (
-        skirmishTurn == (u <= 3 ? 1 : 2) and
-        from >= 0 and
-        step == 1 and
-        skirmishWall[to] == 0 and
-        mate1 != to and
-        mate2 != to and
-        skirmish.winner == 0
-      )
+      local legal = skirmishStepLegal(from, to, skirmishPos[$"{skirmishMates[u][0]}"],
+        skirmishPos[$"{skirmishMates[u][1]}"], skirmishTurn, u <= 3 ? 1 : 2, skirmish.winner)
       when to != from and to >= 0
       skirmishVerdict = legal
       if legal {
@@ -308,6 +328,30 @@ template skirmishRules() {
 // to red's first (1), the better. `skirmishSharp` reads red's real cell, which blue may not read; `skirmishFair` reads
 // the cell blue last saw it on (-1, read as a cell off the board's edge, when it never has).
 template skirmishSearch() {
+  rule "skirmish-fair-memory" {
+    when search(ply) == 0
+    for u in range(1, 6) {
+      skirmishFairPos[$"{u}"] = skirmishKnows2[$"{u}"]
+      skirmishFairLast[$"{u}"] = skirmishKnows2[$"{u}"]
+    }
+    skirmishFairTurn = 2
+  }
+  for u in range(4, 3) {
+    rule $"skirmish-fair-judge-{u}" {
+      local from = skirmishFairLast[$"{u}"]
+      local to = skirmishFairPos[$"{u}"]
+      local legal = skirmishStepLegal(from, to, skirmishFairPos[$"{skirmishMates[u][0]}"],
+        skirmishFairPos[$"{skirmishMates[u][1]}"], skirmishFairTurn, 2, 0)
+      when search(ply) > 0 and to != from and to >= 0
+      skirmishFairVerdict = legal
+      if legal {
+        skirmishFairLast[$"{u}"] = to
+        skirmishFairTurn = 1
+      } else {
+        skirmishFairPos[$"{u}"] = from
+      }
+    }
+  }
   search {
     jobs [
       {
@@ -329,10 +373,10 @@ template skirmishSearch() {
       }
       {
         name: "skirmishFair"
-        tokens: skirmishPos
+        tokens: skirmishFairPos
         board: skirmishBoard
-        turn: skirmishTurn
-        verdict: skirmishVerdict
+        turn: skirmishFairTurn
+        verdict: skirmishFairVerdict
         enabled: skirmishFairOn
         revision: skirmishFairRevision
         depth: 1
@@ -340,8 +384,8 @@ template skirmishSearch() {
         shapes [
           relocate(displace: true)
         ]
-        score: 0 - (absolute(skirmishPos["4"] / 6 - skirmishKnows2["1"] / 6) + absolute(
-          skirmishPos["4"] % 6 - skirmishKnows2["1"] % 6
+        score: 0 - (absolute(skirmishFairPos["4"] / 6 - skirmishKnows2["1"] / 6) + absolute(
+          skirmishFairPos["4"] % 6 - skirmishKnows2["1"] % 6
         ))
       }
     ]

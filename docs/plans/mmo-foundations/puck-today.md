@@ -802,28 +802,19 @@ Three filters exist **[opened]**:
 - The per-observer body policy `population.disclosure`, `All` (default),
   `Radius` or `SelfOnly`, applied at the output hub's sink boundary
   (`src/Puck.World.Schema/WorldObserverDisclosure.cs:8-22`).
-- State visibility: `WorldStateDisclosure` composes a recipient's rows, and
-  `WorldStateReadView` is the console's per-principal read
-  (`src/Puck.World.Schema/WorldStateDisclosure.cs:57-61`,
-  `src/Puck.World.Server/WorldStateReadView.cs:5-10`).
+- State visibility and admission tier meet in `WorldRecipientView`.
+  `WorldStateReadView` adapts it for console reads; `WorldSessionObservation`
+  supplies the same live capability to session reads and delivery.
 
-The disclosure plan's own inventory says the chokepoint is partial and every
-delivery sink discloses by hand (`docs/plans/disclosure.md:80-150`)
-**[opened]**. `WorldRecipientView` does not exist (a search over `src/` finds
-none) **[opened]**.
+Disclosure steps 1 and 2 have landed. `WorldDeliveryCursor` owns delivery history;
+a read never advances it. The remaining write, layout and compiler work is in
+the [disclosure plan](../disclosure.md).
 
 ### What the authority sees
 
-Everything. The operator reads the live document whole **[opened]**
-(`src/Puck.World.Server/WorldStateReadView.cs:5-9`):
-
-```csharp
-/// <summary>One principal's read of a live world's state: the document as <see cref="WorldStateDisclosure"/>
-/// discloses it to that principal, and the refusal a read of anything withheld answers with.
-/// <para>A console read-back verb reads state through this view rather than through <see cref="WorldServer.Definition"/>,
-/// so a seat, an addon or a peer is shown what its visibility admits and nothing else. The operator — the
-/// <see cref="PrincipalKind.Console"/> principal — reads the live document whole.</para></summary>
-```
+The operator reads the live document whole (`WorldStateReadView.IsOperator`,
+`WorldRecipientView.Definition`). Non-operator views retain their ceiling and
+current visibility.
 
 Local and colocated sinks take every body **[opened]**
 (`src/Puck.World.Server/WorldOutputHub.cs:11-15`):

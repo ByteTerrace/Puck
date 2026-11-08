@@ -130,7 +130,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         var server = instance.Server;
 
-        if (!TryEditor(definition: server.Definition, editor: out var editor, refusal: out refusal, verb: verb)) {
+        if (!TryEditor(definition: server.ReadView(context).Definition, editor: out var editor, refusal: out refusal, verb: verb)) {
             return false;
         }
 
@@ -138,9 +138,9 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         // delivered lifetime never advances.
         world = new EditWorld(
             Authority: server.AuthorityIdentity,
-            Definition: server.Definition,
+            Definition: server.ReadView(context).Definition,
             Editor: editor,
-            Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Lifetime: 0, Version: server.DocumentVersion),
+            Delivered: () => new WorldDeliveredDocument(Definition: server.ReadView(context).Definition, Lifetime: 0, Version: server.DocumentVersion),
             Guard: (stepGuard, () => WorldRowStepWindow.Of(server: server)),
             Lifetime: instance.Retired,
             Link: instance.SubmissionLink,

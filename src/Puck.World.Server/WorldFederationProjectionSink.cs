@@ -19,8 +19,10 @@ namespace Puck.World.Server;
 /// <param name="recipient">The authenticated recipient, or <see langword="null"/> for the public observer.</param>
 /// <param name="server">The authority whose store, clock and document a presentation-tier feed reads; required at
 /// <see cref="WorldDisclosureTier.Presentation"/>.</param>
+/// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
 public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority,
-    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null) : IWorldDetachableSink {
+    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
+    WorldRecipientView? view = null) : IWorldDetachableSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 8;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
@@ -41,7 +43,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
-    private readonly WorldRecipientView? m_view = server?.DeliveryView(recipient, tier);
+    private readonly WorldRecipientView? m_view = view ?? server?.DeliveryView(recipient, tier);
     private WorldDocumentVersion Version => (server?.DocumentVersion ?? default) with { Sequence = m_cursor.Sequence };
 
     private bool m_invalidated;

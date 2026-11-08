@@ -67,8 +67,8 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
     // can never disagree. 'lane=' is the transport's own wall-clock backoff view (PersistentRequestLane.IsAvailable),
     // marked presentation-only because it must never re-enter the sim: it bounds transport lifecycle, never
     // simulation state.
-    private static string DescribeLinks(WorldServer server, WorldInstanceHost? instances) {
-        var definition = server.Definition;
+    private static string DescribeLinks(WorldServer server, WorldInstanceHost? instances, WorldRecipientView view) {
+        var definition = view.Definition;
         var rows = (definition.Adjacencies ?? []);
         var adjacencies = server.Adjacencies;
         var lines = new List<string>();
@@ -151,7 +151,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
     }
     private static readonly CommandForms WorldProjectionForms = CommandForms.Of(verb: "world.projection", "[frames|presentation|replica]", "peer <authority-namespace>");
 
-    private static CommandResult DescribeProjection(WorldServer server, in WireArgs arguments) {
+    private static CommandResult DescribeProjection(WorldRecipientView view, in WireArgs arguments) {
         var first = ((arguments.Count > 0)
             ? arguments[0].ToString()
             : string.Empty
@@ -172,7 +172,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             }
 
             var refusal = WorldAdmissionDoor.TryAdmitArrival(
-                entries: server.Definition.Admission,
+                entries: view.Definition.Admission,
                 sourceAuthority: authority,
                 verdict: out var verdict
             );
@@ -180,7 +180,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             return new CommandResult(Output: ((refusal is { } named)
                 ? $"[world.projection: peer '{authority}' {named} — no admission row names it; the wire default {WorldDisclosureTier.Presentation} applies]"
                 : $"[world.projection: peer '{authority}' tier={verdict!.Tier} | {DescribeTier(
-                    server: server,
+                    view: view,
                     tier: verdict.Tier
                 )}]"
             ));
@@ -190,7 +190,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             return new CommandResult(Output: $"[world.projection: {string.Join(
                 separator: " | ",
                 values: Enum.GetValues<WorldDisclosureTier>().Select(selector: tier => DescribeTier(
-                    server: server,
+                    view: view,
                     tier: tier
                 ))
             )}]");
@@ -202,32 +202,25 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             value: first
         ) && Enum.IsDefined(value: requested))
             ? new CommandResult(Output: $"[world.projection: {DescribeTier(
-                server: server,
+                view: view,
                 tier: requested
             )}]")
             : WorldProjectionForms.Refuse(args: in arguments, got: first)
         );
     }
-    private static string DescribeTier(WorldServer server, WorldDisclosureTier tier) {
-        var definition = server.Definition;
+    private static string DescribeTier(WorldRecipientView view, WorldDisclosureTier tier) {
+        var definition = view.Definition;
 
         if (tier == WorldDisclosureTier.Frames) {
             return "frames: 0 bytes, no document";
         }
 
+        if (tier > view.Ceiling || !view.Observes) { return $"{tier.ToString().ToLowerInvariant()}: not disclosed"; }
         if (tier == WorldDisclosureTier.Replica) {
             return $"replica: {WorldDefinitionSerialization.SerializeCompact(definition: definition).Length} bytes, the whole {WorldDefinition.SchemaVersion} document";
         }
 
-        var time = server.Time;
-        var projection = WorldProjection.Compose(
-            arena: server.Arena,
-            definition: definition,
-            tier: tier,
-            authority: server.AuthorityIdentity,
-            revision: server.Population.Revision,
-            time: in time
-        )!;
+        var projection = view.Project()!;
         var bytes = WorldProjection.SerializeCompact(projection: projection);
 
         return $"presentation: {bytes.Length} bytes, {WorldProjectionDocument.SchemaVersion} carrying {string.Join(
@@ -284,7 +277,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
 
                 return new CommandResult(Output: DescribeLinks(
                     instances: instances,
-                    server: server
+                    server: server, view: server.ReadView(context)
                 ));
             }
         );
@@ -306,7 +299,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
 
                 return DescribeProjection(
                     arguments: in args,
-                    server: server
+                    view: server.ReadView(context)
                 );
             }
         );

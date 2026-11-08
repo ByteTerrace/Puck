@@ -3548,17 +3548,6 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
-    [high] `world.budget`
-    publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:226`,
-    no audience at `:461`); [high] `world.reflow.preview` runs over the
-    authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);
-    [low] `world.identify` hashes authored hidden seeds for a seat with Control
-    over a screen (`src/Puck.World/WorldIdentifyCommandModule.cs:72`); [low]
-    `world.timeline` withholds through a predicate of its own
-    (`src/Puck.World.Console/WorldTimelineCommandModule.cs:137-140`);
-    [unconfirmed] a `search` over an arena holding private keyed sites may
-    compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`).
   - Step 3, the write door refuses by policy ([decision 3](disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)):
     [high] batch `ExpectedCells` is a read oracle, implemented twice
     (`src/Puck.World.Server/WorldDocument.StateCommands.cs:135`,

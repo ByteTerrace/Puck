@@ -37,11 +37,11 @@ internal sealed partial class ScreenCommandModule {
 
         // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly, then
         // each creation face showing a source, as the presentation last derived it.
-        var declaredScreens = new List<WorldScreen>(collection: m_server.Definition.Screens);
+        var declaredScreens = new List<WorldScreen>(collection: m_server.ReadView(context).Definition.Screens);
 
         foreach (var face in m_binder.Mappings.Screens) {
             if (
-                (face.Index >= WorldPlacementPolicy.DerivedFaceBase(m_server.Definition)) &&
+                (face.Index >= WorldPlacementPolicy.DerivedFaceBase(m_server.ReadView(context).Definition)) &&
                 (face.Source is not WorldScreenSource.None)
             ) {
                 declaredScreens.Add(item: face);

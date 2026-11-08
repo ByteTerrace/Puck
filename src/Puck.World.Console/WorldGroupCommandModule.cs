@@ -256,7 +256,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
                 );
 
                 return new CommandResult(Output: Describe(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     filter: filter
                 ));
             }

@@ -134,12 +134,10 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
                     if ((args.Count == 2) && args.Is(index: 0, value: "hold")) { operation = WorldTimelineOperation.Hold; } else if ((args.Count == 2) && args.Is(index: 0, value: "run")) { operation = WorldTimelineOperation.Run; } else if ((args.Count == 3) && args.Is(index: 0, value: "at") && ulong.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out tick)) { operation = WorldTimelineOperation.At; } else if ((args.Count == 3) && args.Is(index: 0, value: "rate") && double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out rate) && double.IsFinite(d: rate) && (rate >= 0d)) { operation = WorldTimelineOperation.Rate; } else { return WorldTimelineForms.Refuse(args: in args); }
                     if (!mirror.ControlClock(args[1].ToString(), operation, tick, rate, out var refusal)) { return CommandResult.Error(output: $"[world.timeline: {refusal}]"); }
                 }
-                var principal = context.Principal;
-
-                return new CommandResult(Describe(definition: server.Definition, engineTick: server.CompletedEngineTicks, keyedResolutions: mirror?.KeyedResolutionCount, mirror: mirror,
-                    discloses: row => ((principal.Kind == PrincipalKind.Console) ||
-                        (server.Arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: row) &&
-                        WorldStateDisclosure.ReadsWholeRow(arena: server.Arena, recipient: principal, rowOrdinal: handle.Ordinal)))));
+                var view = server.ReadView(context);
+                return new CommandResult(Describe(definition: view.Definition, engineTick: server.CompletedEngineTicks,
+                    keyedResolutions: context.Principal.Kind == PrincipalKind.Console ? mirror?.KeyedResolutionCount : null,
+                    mirror: mirror, discloses: view.ReadsWhole));
             });
     }
 }

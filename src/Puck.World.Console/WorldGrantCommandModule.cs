@@ -318,7 +318,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                 }
 
                 return new CommandResult(Output: (server.Grants.Describe(filter: filter) + DescribeDocumentRows(
-                    definition: server.Definition,
+                    definition: server.ReadView(context).Definition,
                     filter: filter
                 )));
             }
