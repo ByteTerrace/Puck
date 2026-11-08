@@ -55,7 +55,11 @@ public sealed record WorldWithheldRow(int Count, HiddenCells Policy, bool WholeR
 /// <param name="Definition">The document with every withheld cell removed from its row and every dealt placement
 /// re-dealt from what remains; the live document itself when nothing is withheld.</param>
 /// <param name="Withheld">What was withheld, keyed by row name; a row absent here is disclosed whole.</param>
-public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld);
+public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDictionary<string, WorldWithheldRow> Withheld) {
+    // The rows whose disclosed cells the disclosed placements were dealt or answered from; any other row's cells leave
+    // them as they stand.
+    internal IReadOnlySet<string> PlacementReads { get; init; } = new HashSet<string>();
+}
 /// <summary>Composes state observations for one authenticated recipient.</summary>
 /// <remarks>Every value, audience, zone membership and observation stamp is read from the live store, never from a
 /// document snapshot taken per observer: which zone holds a token decides who may read it, so a disclosure composed
@@ -413,10 +417,16 @@ public static class WorldStateDisclosure {
         }
 
         var disclosed = (definition with { StateRaw = (definition.StateRaw! with { World = rows }) });
+        var reads = new HashSet<string>(comparer: StringComparer.Ordinal);
 
+        WorldStateRow? Read(string name) {
+            reads.Add(item: name);
+
+            return WorldDefinitionRows.FindStateRow(name: name, rows: rows);
+        }
         if (DisclosePlacements(
             definition: definition,
-            rows: rows,
+            disclosedRow: Read,
             withheld: withheld
         ) is { } placements) {
             disclosed = (disclosed with { PlacementRowsRaw = placements });
@@ -425,7 +435,7 @@ public static class WorldStateDisclosure {
         return new WorldStateDisclosed(
             Definition: disclosed,
             Withheld: withheld
-        );
+        ) { PlacementReads = reads };
     }
     // One authored row as the recipient's document carries it: the live export, and for a declaration that can
     // withhold, only the readable cells. Disclose and the shared image table's row refresh both derive a row here, so a
@@ -469,27 +479,6 @@ public static class WorldStateDisclosure {
         }
 
         return (fields?.Project(row: row) ?? row);
-    }
-    // The withheld rows whose disclosed cells DisclosePlacements reads: a dealt template's row and variant row, and every
-    // row a responsive placement's entries read. Any other row's cells leave the disclosed placements as they stand.
-    internal static IReadOnlySet<string> PlacementReads(WorldDefinition definition, IReadOnlyDictionary<string, WorldWithheldRow> withheld) {
-        var reads = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        if (withheld.Count == 0) { return reads; }
-        foreach (var placement in definition.Placements) {
-            if (placement.Deal is { } deal) {
-                if (withheld.ContainsKey(key: deal.Row)) { reads.Add(item: deal.Row); }
-                if ((deal.Variants is { } variants) && withheld.ContainsKey(key: variants.Row)) { reads.Add(item: variants.Row); }
-            }
-            if (placement.Respond is { Count: > 0 }) {
-                _ = WorldPlacementResponse.Reads(placement: placement, rows: row => {
-                    if (withheld.ContainsKey(key: row)) { reads.Add(item: row); }
-
-                    return false;
-                });
-            }
-        }
-        return reads;
     }
     // The physical-field half of a replica document. Fields are authored in state rows and physical topologies; this
     // rebuilds that part from the same projection presentation uses, since copying the authored field traits would
@@ -561,8 +550,9 @@ public static class WorldStateDisclosure {
         return (result ?? definition.Placements);
     }
 
-    // The placement half of an explicit document export.
-    private static WorldPlacement[]? DisclosePlacements(WorldDefinition definition, WorldStateRow[] rows, Dictionary<string, WorldWithheldRow> withheld) {
+    // The placement half of an explicit document export. Every disclosed row it reads goes through disclosedRow, so
+    // Disclose names exactly the rows whose disclosed cells shaped the placements.
+    private static WorldPlacement[]? DisclosePlacements(WorldDefinition definition, Func<string, WorldStateRow?> disclosedRow, Dictionary<string, WorldWithheldRow> withheld) {
         var placements = definition.Placements;
         Dictionary<string, WorldPlacement>? templates = null;
         var responsive = false;
@@ -600,9 +590,9 @@ public static class WorldStateDisclosure {
                 var reading = WorldPlacementResponse.Disclosed(
                     placement: placement,
                     withheld: (row, key) => CellWithheld(
+                        disclosedRow: disclosedRow,
                         key: key,
                         row: row,
-                        rows: rows,
                         withheld: withheld
                     )
                 );
@@ -639,10 +629,7 @@ public static class WorldStateDisclosure {
                 withheld.ContainsKey(key: deal.Row) &&
                 !HasCell(
                 key: key,
-                row: WorldDefinitionRows.FindStateRow(
-                    name: deal.Row,
-                    rows: rows
-                )
+                row: disclosedRow(arg: deal.Row)
             )
             ) {
                 changed = true;
@@ -654,10 +641,7 @@ public static class WorldStateDisclosure {
                 (deal.Variants is { } variants) &&
                 withheld.ContainsKey(key: variants.Row)
             ) {
-                var disclosedVariants = WorldDefinitionRows.FindStateRow(
-                    name: variants.Row,
-                    rows: rows
-                );
+                var disclosedVariants = disclosedRow(arg: variants.Row);
 
                 if (
                     !HasCell(
@@ -708,17 +692,14 @@ public static class WorldStateDisclosure {
     );
     // A cell the recipient's rows do not carry, of a row that withholds from it, is withheld: the disclosed row cannot
     // tell a withheld cell from an absent one, and neither may a reading of it.
-    private static bool CellWithheld(string row, string? key, WorldStateRow[] rows, Dictionary<string, WorldWithheldRow> withheld) => (
+    private static bool CellWithheld(string row, string? key, Func<string, WorldStateRow?> disclosedRow, Dictionary<string, WorldWithheldRow> withheld) => (
         withheld.TryGetValue(
         key: row,
         value: out var withheldRow
     ) &&
         (withheldRow.WholeRow || !HasCell(
         key: (key ?? StateRow.SlotKey.Value),
-        row: WorldDefinitionRows.FindStateRow(
-            name: row,
-            rows: rows
-        )
+        row: disclosedRow(arg: row)
     ))
     );
     private static bool HasCell(WorldStateRow? row, string key) => (

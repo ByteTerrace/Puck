@@ -68,13 +68,11 @@ public sealed class WorldDisclosureImages {
 
         public static int ImageSlot(int row) => (1 + (2 * row)) * SHA256.HashSizeInBytes;
         public static int SkeletonSlot(int row) => (2 + (2 * row)) * SHA256.HashSizeInBytes;
-        // Writes one digest slot, reporting whether it changed.
-        public bool Store(int slot, ReadOnlySpan<byte> digest) {
+        public void Store(int slot, ReadOnlySpan<byte> digest) {
             var target = Digests.AsSpan(slot, SHA256.HashSizeInBytes);
-            if (target.SequenceEqual(digest)) { return false; }
+            if (target.SequenceEqual(digest)) { return; }
             digest.CopyTo(target);
             Dirty = true;
-            return true;
         }
         public void Settle() {
             if (!Dirty) { return; }
@@ -310,8 +308,7 @@ public sealed class WorldDisclosureImages {
             images[row].Digest.CopyTo(digests.AsSpan(AudienceDefinition.ImageSlot(row), SHA256.HashSizeInBytes));
             DigestOf(rows[row]).CopyTo(digests.AsSpan(AudienceDefinition.SkeletonSlot(row), SHA256.HashSizeInBytes));
         }
-        var reads = WorldStateDisclosure.PlacementReads(composed, disclosed.Withheld);
-        var frameRows = rows.Select(row => reads.Contains(row.Name.Value)).ToArray();
+        var frameRows = rows.Select(row => disclosed.PlacementReads.Contains(row.Name.Value)).ToArray();
         DefinitionsComposed++;
         m_work.Count(DefinitionCompositions);
         return m_definitions[audience] = new AudienceDefinition(source, composed, fields, frameRows, rows, images, versions, dependencies,
