@@ -101,11 +101,17 @@ public sealed partial class WorldRuleHost {
         );
         } finally { m_boundLeft = left; m_boundRight = right; }
     }
-    // Whether an option's gate opened, noting a fault the decision must hold on.
+    // Whether a gate opened, noting a fault the decision must hold on: the one place a decision turns a verdict into a
+    // bool, so a faulted gate never reads as closed without the flag saying so.
     private static bool Opens(Verdict verdict, ref bool faulted) {
         faulted |= (verdict == Verdict.Faulted);
 
-        return (verdict == Verdict.Open);
+        return (verdict switch {
+            Verdict.Open => true,
+            Verdict.Closed => false,
+            Verdict.Faulted => false,
+            _ => throw new System.Diagnostics.UnreachableException(),
+        });
     }
 
     // What scoring one candidate answered. The zero value is a fault, so a result nothing set holds the decision.

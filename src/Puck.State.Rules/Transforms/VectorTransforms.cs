@@ -184,8 +184,8 @@ public static partial class ArenaTransforms {
         );
 
         faulted |= (resolved.Case == FaultCase.Faulted);
-        resolved.TryNamed(value: out var resolvedKey);
-
-        return resolvedKey;
+        return (resolved.TryNamed(value: out var resolvedKey)
+            ? resolvedKey
+            : default);
     }
 }

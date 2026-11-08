@@ -74,7 +74,9 @@ public readonly struct Fact {
     /// destination reads nonzero as 1.</summary>
     /// <param name="kind">The destination encoding.</param>
     public long ToRaw(CellKind kind) {
-        Outcome.TryFinite(raw: out var raw);
+        if (!Outcome.TryFinite(raw: out var raw)) {
+            return 0L;
+        }
 
         return (kind switch {
             CellKind.Bool => ((raw != 0L)
