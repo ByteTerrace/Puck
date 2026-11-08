@@ -11,6 +11,7 @@ public sealed class WorldDeliveryCursor {
     private readonly Dictionary<string, ContentPin> m_rows = [];
     private readonly HashSet<int> m_metadataPrimers = [];
     private ContentPin? m_definition;
+    private ContentPin? m_frame;
 
     /// <summary>The sequence this stream has delivered.</summary>
     public long Sequence { get; private set; }
@@ -19,12 +20,21 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Whether the replica's current disclosed document equals the one this stream delivered, including
     /// subsequent row snapshots. Used at a traveller's install boundary, never against the authority identity.</summary>
     public bool Holds(WorldRecipientView view) => m_definition is null || m_definition == view.Images.DefinitionIdentity(view);
+    /// <summary>Whether a replica's disclosed document less its state rows (its placements among them) moved since
+    /// this stream last delivered a document. A value-only change moves it when it changes what the recipient's
+    /// placements read, a dealt cell turning readable or a zone move among them; a hidden-only change never does, so
+    /// whether a value-only delivery carries the document is a function of the recipient's view alone.</summary>
+    /// <param name="view">The stream's view.</param>
+    /// <returns><see langword="true"/> when the stream owes a document for a value-only change.</returns>
+    public bool FrameMoved(WorldRecipientView view) => view.Observes && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) &&
+        (m_frame != view.Images.FrameIdentity(view));
     /// <summary>Delivers a definition only when its observable content differs, and seeds all its row images.</summary>
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
         if (!view.Observes) { return null; }
         var replica = (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica);
         var presented = replica ? null : view.Definition;
         var identity = replica ? view.Images.DefinitionIdentity(view) : ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(presented!));
+        if (replica) { m_frame = view.Images.FrameIdentity(view); }
         if (identity == m_definition) { return null; }
         m_definition = identity;
         Seed(view);

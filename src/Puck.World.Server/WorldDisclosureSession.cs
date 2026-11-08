@@ -176,7 +176,7 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     /// <inheritdoc/>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => m_transcript.RecordText(door: "deliver.state", principal: m_label,
         text: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"version={m_transcript.Spell(version: version)} tick={stamp.Tick} engineTick={stamp.EngineTick} moved=[{string.Join(separator: ",", values: stamp.MovedRows.ToArray())}] everything={stamp.Everything} arena={stamp.ArenaValues} placements={stamp.PlacementProjection}\n{Document(definition: definition)}"));
+            handler: $"version={m_transcript.Spell(version: version)} tick={stamp.Tick} engineTick={stamp.EngineTick} moved=[{string.Join(separator: ",", values: stamp.MovedRows.ToArray())}] everything={stamp.Everything} arena={stamp.ArenaValues}\n{Document(definition: definition)}"));
     /// <inheritdoc/>
     public void DeliverComposition(WorldComposition composition) {
         if (WorldSubmissionCodec.TryEncodeComposition(bytes: out var bytes, composition: composition, failure: out var failure)) {

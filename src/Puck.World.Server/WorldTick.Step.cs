@@ -628,6 +628,10 @@ public sealed partial class WorldTick {
         // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
         // tick; each dealt template's children follow its row (see WorldPlacementDeal).
         SweepPlacementDeals(tick: tick);
+        // A response or deal install is delivered on the tick that made it. Left pending, it would ride the next
+        // delivery some later change happens to trigger, a hidden-only one included, so its delivery tick would tell
+        // a recipient that something it cannot read moved.
+        Host.Document.DeliverPending();
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);

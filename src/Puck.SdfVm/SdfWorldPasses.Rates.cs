@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.Maths;
-using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -15,11 +14,12 @@ namespace Puck.SdfVm;
 // second, so it holds as a still light does. Receiver-conditioned occlusion additionally requires both retained layers'
 // receiver coverage identities to match: newly exposed receivers cannot use a mask from a previous view.
 //
-// A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames
-// when two frames fit in the rate's period: the depth (with its glass extinction) first, then the exit layer on a frame
-// that holds the depth (SdfFarLayers). A 60 Hz view then pays half a refresh every frame rather than a whole one every
-// other frame, and each layer still refreshes 30 times a second; a slower view redraws both layers whenever it refreshes.
-// The exit layer's camera trails the depth's for the one frame between, and the surface pass reads the exit layer through
+// A refresh the rate alone calls for (the fit still covers the view) draws the cascade's two layers on consecutive frames:
+// the depth (with its glass extinction) first, then the exit layer on a frame that holds the depth (SdfFarLayers). A frame
+// so never draws more than one far layer, whatever its pace: a 60 Hz view pays half a refresh every frame and each layer
+// still refreshes 30 times a second; a slower view also draws one layer a frame, each layer refreshing every two frames,
+// so the cascade never costs a slow frame a whole refresh and holds it slow. A refresh that ends a hold redraws both. The
+// exit layer's camera trails the depth's for the one frame between, and the surface pass reads the exit layer through
 // that camera (the cascades' fourth).
 //
 // Each layer is read through the camera it was drawn from. One door enforces it: the recorder asks RecordFar which layers
@@ -27,25 +27,26 @@ namespace Puck.SdfVm;
 // once the frame's submission succeeds. A pass that stands, skips or whose recording is abandoned commits nothing, and a
 // layer the recorder has not drawn in its current graph is always drawn (RecordFar answers both).
 public sealed partial class SdfWorldPasses {
-    // A layer's receiver coverage is valid for exactly the geometry, lens and sample grid it classified. The light
-    // is deliberately absent: readers use that layer's committed light camera. This conservative equality proof
-    // permits redundant mesh writes (for example screen shading or motion-history settles) without invalidating it.
-    // Changed geometry, camera, jitter or grid cannot borrow a prior coverage proof.
+    // A layer's receiver coverage names the sample grid it classified the casters against: the cull level, the detail
+    // choice, the render extent and scale, and the view's cut and bindings. The light is absent (readers use that layer's
+    // committed light camera), and so are the geometry, the camera and the jitter: the hold already bounds how far the
+    // camera turns and moves while a layer stands (SdfUpdateRateTiers.ShadowFarTurnRadians, ShadowFarMoveMetres), the
+    // receiver cells (16x16 cascade texels, queried with a neighbouring cell each way, sdf-caster-receivers.hlsli) cover
+    // that drift as they cover a sub-pixel jitter, and the receivers a moving caster uncovers lag by the same refresh its
+    // shadow does. The mesh pass's geometry signature holds the camera and every pose, so hashing it here would end the
+    // hold on every frame anything moves.
     internal ulong? ReceiverSignatureOf(string instance) => ReceiverSignatureOf(Refresh(instance));
     private static ulong? ReceiverSignatureOf(Entry entry) {
-        if (entry.View is not { } view || view.Residency.Frame is not { } frame || view.Residency.Tables is not { } tables) { return null; }
+        if (entry.View is not { } view || view.Residency.Frame is not { } frame) { return null; }
         if (frame.MeshCull != SdfMeshCullLevel.Occlusion) { return 0UL; }
         var index = Math.Min(view.View, frame.Views.Count - 1);
         var hash = Fnv1aHash.Create();
-        hash.Add(tables.PassSignature(frame, index, SdfWorldPackage.Parts.Mesh));
         hash.Add(unchecked((ulong)entry.Bindings));
         hash.Add(unchecked((ulong)frame.Views[index].CutRevision));
         hash.Add((uint)frame.MeshDetail);
         hash.Add(entry.Temporal.Epoch.Width);
         hash.Add(entry.Temporal.Epoch.Height);
         hash.Add(BitConverter.DoubleToUInt64Bits(entry.CurrentScale));
-        hash.Add(BitConverter.SingleToUInt32Bits(entry.Temporal.Jitter.X));
-        hash.Add(BitConverter.SingleToUInt32Bits(entry.Temporal.Jitter.Y));
         return hash.Value;
     }
     /// <summary>Returns the cascades a pass of an instance draws and reads this frame: the frame's own fit, its far
@@ -183,8 +184,7 @@ public sealed partial class SdfWorldPasses {
             (Vector3.DistanceSquared(value1: camera.Position, value2: entry.FarEye) <= (SdfUpdateRateTiers.ShadowFarMoveMetres * SdfUpdateRateTiers.ShadowFarMoveMetres)) &&
             (entry.Convergence is not { IsActive: true })
         );
-        // A split refresh's exit layer is drawn on the frame after its depth, which holds the depth: the split was taken
-        // only where two frames fit in the rate's period.
+        // A split refresh's exit layer is drawn on the frame after its depth, which holds the depth.
         var held = (covers && (entry.FarExitOwed || SdfUpdateRateTiers.Holds(elapsedSeconds: elapsed, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz, rate: rate)));
 
         entry.FarDecided = m_frame;
@@ -199,14 +199,10 @@ public sealed partial class SdfWorldPasses {
             frame.RateIntervals?.Record(hertz: SdfUpdateRateTiers.ShadowFarHertz, lever: SdfUpdateRates.ShadowFar, seconds: elapsed);
         }
 
-        // The rate alone calls for this refresh, the exit layer has a camera to be read through until the next frame
-        // redraws it, and two frames fit in the rate's period: draw the depth now and the exit layer then. Anything else
-        // redraws both.
-        entry.FarLayers = ((
-            covers &&
-            (entry.FarExitCamera.HalfHeight > 0f) &&
-            rate.Fits(frames: 2, frameSeconds: m_context.FrameDeltaSeconds, hertz: SdfUpdateRateTiers.ShadowFarHertz)
-        ) ? SdfFarLayers.Depth : SdfFarLayers.Both);
+        // The rate alone calls for this refresh and the exit layer has a camera to be read through until the next frame
+        // redraws it: draw the depth now and the exit layer then, whatever the frames' pace, so no frame draws both layers
+        // for the rate's sake. Anything else redraws both.
+        entry.FarLayers = ((covers && (entry.FarExitCamera.HalfHeight > 0f)) ? SdfFarLayers.Depth : SdfFarLayers.Both);
         entry.FarElapsedSeconds = 0d;
         entry.FarTexels = cascades.Texels;
         entry.FarEye = camera.Position;

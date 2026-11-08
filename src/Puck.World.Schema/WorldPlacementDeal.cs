@@ -32,8 +32,12 @@ namespace Puck.World;
 /// removes the children a sweep added stays undone until the row moves again.</para>
 /// <para>A child is a reading of the cells it was dealt from, so a reader is shown it as the deal would deal it from
 /// the rows that reader may read (<see cref="WorldStateDisclosure.Disclose"/>, the wire projection and a seat's console
-/// alike): absent where the dealt cell is withheld, showing the template's own prototype where the variant cell
-/// is.</para>
+/// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, so the slots, positions and
+/// order it is shown carry nothing of the authority's slot history; a withheld cell is absent, or an anonymous back
+/// under <see cref="HiddenCells.Placeholder"/>; a withheld variant cell shows the template's own prototype. Because
+/// a child's physical presence would tell every body in the room what the reader is not shown, a template whose
+/// dealt or variant row can withhold from any principal, and its children, carry none of
+/// <see cref="PhysicalFacets"/>.</para>
 /// <para>Refused alongside <see cref="WorldPlacement.Inhabit"/>, <see cref="WorldPlacement.Attach"/>,
 /// <see cref="WorldPlacement.Respond"/>, <see cref="WorldPlacement.Mirror"/>, and
 /// <see cref="WorldPlacement.FaceSources"/>; requires a <see cref="WorldPlacement.Distribution"/> whose region
@@ -58,6 +62,10 @@ public sealed record WorldPlacementDeal(
 ) {
     /// <summary>The character between a template's id and the cell key in a dealt child's id.</summary>
     public const char ChildSeparator = '/';
+    /// <summary>The generated head of a placeholder's key (<see cref="PlaceholderId"/>): a key no author door admits,
+    /// since an authored key carries no <see cref="GeneratedName.Joiner"/>, so a placeholder never names a dealt
+    /// cell.</summary>
+    public const string PlaceholderHead = "$back";
 
     /// <summary>Returns the id a child dealt for <paramref name="key"/> under <paramref name="template"/> carries.</summary>
     /// <param name="template">The template placement's id.</param>
@@ -67,6 +75,69 @@ public sealed record WorldPlacementDeal(
         str1: ChildSeparator.ToString(),
         str2: key
     );
+    /// <summary>Returns the id of the anonymous card back a recipient's view deals at <paramref name="slot"/> under
+    /// <paramref name="template"/> for a cell its <see cref="HiddenCells.Placeholder"/> policy withholds:
+    /// <c>&lt;template&gt;/$back$&lt;slot&gt;</c>. It names no key, so it says nothing of the cell but its place in
+    /// the disclosed order. Only a recipient's view holds such a row; the authority has none, so a pick answers the
+    /// template (<see cref="PickedId"/>) and a submission naming one is refused as a placeholder.</summary>
+    /// <param name="template">The template placement's id.</param>
+    /// <param name="slot">The slot the view dealt the back at.</param>
+    public static string PlaceholderId(string template, int slot) => ChildId(
+        template: template,
+        key: GeneratedName.Join(PlaceholderHead, slot.ToString(provider: CultureInfo.InvariantCulture))
+    );
+    /// <summary>Returns whether <paramref name="id"/> is a placeholder's id (<see cref="PlaceholderId"/>), and the
+    /// template it stands under.</summary>
+    /// <param name="id">The placement id.</param>
+    /// <param name="template">The template id, when it is one.</param>
+    public static bool IsPlaceholderId(string? id, out string template) {
+        template = string.Empty;
+        if ((id is null) || !TrySplitChildId(id: id, template: out var parent, key: out var key) ||
+            !GeneratedName.TryStripHead(name: key, head: PlaceholderHead, rest: out _)) {
+            return false;
+        }
+        template = parent;
+        return true;
+    }
+    /// <summary>Returns the placement id a pick on <paramref name="id"/> answers: the template's id for a placeholder,
+    /// which is a look and no target, and <paramref name="id"/> itself for every other row.</summary>
+    /// <param name="id">The picked row's id.</param>
+    public static string? PickedId(string? id) => (IsPlaceholderId(id: id, template: out var template) ? template : id);
+    /// <summary>Returns a fresh child as the deal stamps it at <paramref name="offset"/>: the template's prototype or a
+    /// variant, its scale and its copied facets, parented to the template at <paramref name="slot"/>. The sweep deals
+    /// every new child through it and a recipient's view every placeholder, so the two stamp one shape.</summary>
+    /// <param name="template">The template placement.</param>
+    /// <param name="id">The child's id.</param>
+    /// <param name="prototype">The prototype the child shows.</param>
+    /// <param name="offset">The slot's offset, in the template's frame.</param>
+    /// <param name="slot">The slot.</param>
+    public static WorldPlacement Child(WorldPlacement template, string id, string prototype, System.Numerics.Vector3 offset, int slot) => new(
+        Id: id,
+        PrototypeId: prototype,
+        Position: offset,
+        YawDegrees: 0f,
+        Scale: template.Scale,
+        Emission: template.Emission,
+        Solid: template.Solid,
+        Region: template.Region,
+        Grip: template.Grip,
+        Parent: template.Id,
+        DealSlot: slot,
+        Spatial: template.Spatial,
+        Surface: template.Surface
+    );
+    /// <summary>Returns <paramref name="placement"/>'s physical facets by name (<c>solid</c>, <c>grip</c>,
+    /// <c>spatial</c>, <c>region</c>, <c>emission</c>), the ones a child of a template over a row that can withhold
+    /// may not carry: a collider, a hold, a census volume, a region or a voice exists for every body in the room, so a
+    /// hidden child carrying one is an oracle no view can close.</summary>
+    /// <param name="placement">The template or child.</param>
+    public static IEnumerable<string> PhysicalFacets(WorldPlacement placement) {
+        if (placement.Solid is not null) { yield return "solid"; }
+        if (placement.Grip is not null) { yield return "grip"; }
+        if (placement.Spatial is { Count: > 0 }) { yield return "spatial"; }
+        if (placement.Region is not null) { yield return "region"; }
+        if (placement.Emission is not null) { yield return "emission"; }
+    }
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>

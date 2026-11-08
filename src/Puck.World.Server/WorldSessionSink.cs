@@ -381,10 +381,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 return;
             }
 
-            if (stamp.ArenaValues && !stamp.PlacementProjection) { return; }
-            // Placements moved and no value did that the snapshots' cell channel does not carry: the observer's state
-            // stands, so it is handed the same section again with the placements as it may read them, never a state
-            // exported and loaded whole.
+            // Values travel in the snapshots' cell channel. The document is owed again only when what this
+            // recipient's frame reads moved (its placements as it may read them, which a readable dealt cell or a
+            // zone move can change without a placement install), never because a hidden-only install happened; the
+            // observer's state stands, so it is handed the same section again, never a state exported and loaded
+            // whole.
+            if (stamp.ArenaValues && !m_cursor.FrameMoved(m_view)) { return; }
             if (DiscloseToReplica(definition) is { } delivered) {
                 inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false });
                 PrimeReplica();

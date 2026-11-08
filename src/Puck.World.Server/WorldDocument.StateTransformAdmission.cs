@@ -9,6 +9,12 @@ public sealed partial class WorldDocument {
 
     internal bool TryAdmitCompleteMutation(WorldMutation mutation, bool preMetered, out WorldMutationAdmission admission) {
         m_lastMutationFailureCode = "world.mutation.refused";
+        if (WorldRecipientMutations.NamesPlaceholder(mutation, out var placeholder)) {
+            m_lastMutationFailureCode = WorldRecipientMutations.PlaceholderCode;
+            admission = new WorldMutationAdmission(WorldMutationAdmissionRule.Placeholder, default, default, default, default, 0,
+                WorldRecipientMutations.PlaceholderRefusal(placeholder));
+            return false;
+        }
         var view = Host.ReadView(mutation.Principal);
         if (!view.Admits(mutation, out var withheld)) {
             m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
