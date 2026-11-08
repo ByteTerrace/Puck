@@ -58,6 +58,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever value (world.target's present Hz) — so an author sees which fields the CLI overrode and how the target-rate lever has drifted.",

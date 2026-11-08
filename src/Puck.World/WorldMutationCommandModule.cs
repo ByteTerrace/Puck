@@ -62,6 +62,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
+            audience: CommandAudience.Anyone,
             name: "world.kit.default",
             description: $"Sets the default seat kit (by name): {WorldKitDefaultForms.Spelling}. Rejected if the name matches no kit row.",
             forms: WorldKitDefaultForms,
@@ -77,6 +78,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Anyone,
             name: "world.population.defaults",
             description: $"Sets the census defaults (document-only; the live census stays the world.population verb): {WorldPopulationDefaultsForms.Spelling}, where <local> (1..4) is how many LEADING seats author 'eager' — seat 1 is always eager regardless, and every seat from <local> on authors 'onDemand'.",
             forms: WorldPopulationDefaultsForms,
@@ -121,6 +123,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.placement.get",
             description: $"Reads one live placement row as its exact WorldPlacement JSON shape: {WorldPlacementGetForms.Spelling}.",
@@ -146,6 +149,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Anyone,
             name: "world.grant.set",
             description: $"Upserts a document-authored grant row (see WorldDefinition.Grants) — the FULL world.grant token grammar, masks included: {WorldGrantSetForms.Spelling}. Each mask still obeys its own carriage rule (verbs: only on mutate section:<name> or edit state:<name>; writes: only on mutate state:<name>), refused by name at the same door a live grant hits. Additionally accepts a document:<id> grantee, which world.grant refuses: a document grantee is meaningless in the LIVE table (the cross-document durable-state write-back channel reads its grants off the owner's document), so this verb is the ONLY place that capability is authorable — in session, through the ordered domain and the journal, like every other document mutation. DOCUMENT-ONLY, like world.row.set addons: applies at the NEXT BOOT through the identical WorldServer.Grant path world.grant itself submits through, so an illegitimate or conflicting row (including a missing/refused budget or a missing verb mask on an untrusted mutate row) prints the same loud accept/reject line an operator would see typing it live — this verb never touches the LIVE grant table world.grant/world.revoke administer. Replaces the row matching the SAME (grantee, capability, subject); a bare re-set changes only the trailing tokens actually supplied.",
             forms: WorldGrantSetForms,
@@ -174,6 +178,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
+            audience: CommandAudience.Anyone,
             name: "world.grant.remove",
             description: $"Removes a document-authored grant row by (grantee, capability, subject) — exclusive is ignored, matching world.revoke's own shape: {WorldGrantRemoveForms.Spelling}. DOCUMENT-ONLY; the live grant table world.grant/world.revoke administer is untouched.",
             forms: WorldGrantRemoveForms,
@@ -458,6 +463,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.text",
             description: $"Reads the world text catalog: its default font and every named font's relative source, content pin, Unicode ranges, pixel size, distance range, padding, and preferred columns; {WorldTextForms.Spelling}.",
@@ -512,6 +518,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.status",
             description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), for the operator a cheap session-drift hint and dirty = journal length (the authority's edit history, which a recipient's status omits), and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
@@ -600,6 +607,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.imports",
             description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares and, for a module that authors one, its exports record as written. A flat file (no basis, no imports) reports just itself.",
@@ -635,6 +643,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.references",
             description: "Reads the references section back: each row's name -> document, or 'none' when the section is absent or declares zero rows. Authored data only — a row asserts nothing about the named document's existence or shape; resolving it is a future consumer's job, not this verb's.",
@@ -661,6 +670,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.metadata",
             description: "Reads the metadata section back: title, description, authors, tags, and the custom bag's key/byte counts, or 'none' when the section is absent. Authored data only, boot-authored, nothing here is read by the engine.",
@@ -708,6 +718,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.admission",
             description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can verify and no traveller can arrive). The document half of the admission decision — world.peers echoes the runtime half (which bodies were admitted under which identity).",

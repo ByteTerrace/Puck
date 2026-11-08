@@ -637,6 +637,7 @@ public sealed class EmbeddingConnectionLawTests {
     private sealed class ChatTestCommandModule(WorldServer server) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 name: "chat.say",
                 description: "Appends text to requests table.",

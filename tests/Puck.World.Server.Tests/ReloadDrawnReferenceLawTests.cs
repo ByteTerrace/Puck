@@ -194,6 +194,7 @@ public sealed class ReloadDrawnReferenceLawTests {
     private sealed class ReloadModule(Func<CommandResult> submit) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Submits the reload under test.",
                 handler: (_, _) => submit(),

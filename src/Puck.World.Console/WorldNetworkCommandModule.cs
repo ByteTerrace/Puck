@@ -240,6 +240,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.peers",
             description: "Lists every body the admission door admitted: whether the host is listening (and on what endpoint), one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint — then one line per arrived traveller, naming the body, its peer principal, and the authenticated source authority its verdict was decided against, then every federation refusal this door has written, counted by its stable name. Identity fields are only ever what the door verified, never what a payload asserted. Not listening (no host.listen/--listen) prints that plainly rather than an empty table.",
@@ -261,6 +262,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         );
 
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.links",
             description: "Lists every authored adjacency row's federation link: the row name, the destinations row it names, the neighbour authority identity (the delivered one when the seam currently resolves, else the reference's own neighbour key), the reference endpoint, the tick-derived staleness (stale=<n>t — simulation ticks since the last delivered neighbour refresh, the same number the '$link:<name>' rule channel reads), the compiled grace (grace=<n>t, 'off' for an unauthored livenessGraceSeconds, 'never' at simulation rate 0), and the derived live/dropped/unsensed state. The trailing 'lane=' column is the transport's own wall-clock backoff view and is PRESENTATION-ONLY — it never enters the simulation; 'none' means no remote lane has been opened for that destination (a same-process neighbour never has one). This is the read-back for the linkEstablished/linkDropped world event family. Unrelated to screen.links, which lists screen cable links.",
@@ -283,6 +285,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         );
 
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.projection",
             forms: WorldProjectionForms,

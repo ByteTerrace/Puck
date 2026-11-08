@@ -11,6 +11,7 @@ namespace Puck.World;
 public sealed partial class WorldRenderLeverCommandModule {
     private static readonly CommandForms WorldBloomForms = CommandForms.Of(verb: "world.bloom", "[on|off|auto|toggle]", "scale <0..1> [seat]", "quality off|low|high|auto [view]");
     private CommandDefinition BloomCommand() => CommandDefinition.WithWireArgs(
+        audience: CommandAudience.Anyone,
         bindability: CommandBindability.Bindable, name: "world.bloom",
         description: "Camera scatter: " + WorldBloomForms.Spelling + ". Status reports effective scatter, radius, quality and bypass reasons. world.debug-view bloom shows scatter alone.",
         forms: WorldBloomForms,

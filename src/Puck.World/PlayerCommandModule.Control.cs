@@ -31,6 +31,7 @@ internal sealed partial class PlayerCommandModule {
         var commandName = RoutedChannelCommandName(ordinal: logical);
 
         return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: commandName,
             description: $"Holds logical action {logical} in the currently routed world while its source is active. Bindings compile this handle from the authored name.",
@@ -597,6 +598,7 @@ internal sealed partial class PlayerCommandModule {
     // None (no stdout spam per frame).
     private IEnumerable<CommandDefinition> StickVerbs() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: MoveCommand,
             forms: PlayerMoveForms,
@@ -610,6 +612,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: MoveStrafeCommand,
             forms: PlayerMoveStrafeForms,
@@ -623,6 +626,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: LookCommand,
             forms: PlayerLookForms,
@@ -636,6 +640,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: LookSteerCommand,
             forms: PlayerLookSteerForms,
@@ -649,6 +654,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: FreeLookCommand,
             description: "Held modifier: a player.look.steer right stick continues orbiting the camera but stops writing body heading, while left-stick movement resolves against authoritative character heading instead of camera yaw. A world's binding profile binds it to a gamepad chord. Independent from player.orbit, which arms pointer motion.",
@@ -660,6 +666,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: OrbitCommand,
             description: "Held: while down, pointer motion orbits the seat camera (yaw/pitch at seatDefaults.seatCameraFeel's pointer sensitivities); the body is untouched. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
@@ -677,6 +684,7 @@ internal sealed partial class PlayerCommandModule {
             }
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: RecenterLookCommand,
             description: "Held: turns the seat camera round behind the body and KEEPS it there while down (the body turning under it drags the camera along); the seat rig's own smoothing eases each turn. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim. Look-behind is not a verb: author the seat rig's orbit yaw as a state binding (orbit.yaw: state.look.behind) and flip that cell — see player.state.cell.toggle.",
@@ -688,6 +696,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: MotionControlsCommand,
             description: "Toggles the seat's motion-input mode. A world's binding profile binds it; each press alternates on/off. While enabled, gamepad angular velocity controls camera look through seatDefaults.seatCameraFeel.gyro's full-axis projection and authored follow yields. Presentation-only today; the generic mode also admits a future orientation/tilt movement adapter.",
@@ -699,6 +708,7 @@ internal sealed partial class PlayerCommandModule {
             }
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: MotionAngularCommand,
             description: "The gamepad's provider-neutral angular velocity (Axis3D radians/second, +X right / +Y up / +Z back). An already-seated player consumes the full vector only while player.motion.controls is toggled on; it never joins a seat by sensor noise and never reaches deterministic simulation.",
@@ -712,6 +722,7 @@ internal sealed partial class PlayerCommandModule {
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Origin,
             forms: SourcePointerOriginForms,
@@ -725,6 +736,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Direction,
             forms: SourcePointerDirectionForms,
@@ -738,6 +750,7 @@ internal sealed partial class PlayerCommandModule {
             )
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Clear,
             description: "Ends the seat's sustained pointer ray, a typed aim or the one a windowed host casts from the OS pointer (the two share one sustained value per half: the later write is the one that rides, and a windowed host ending its ray ends that value whichever wrote it): from the tick it lands in, the seat carries no ray and neither source.pointer.origin nor source.pointer.direction is sustained on its lane, so every Simulation screen reads on 0 for it. A windowed host aims again on its next frame while the OS pointer is over the seat's view, and a device bound to either command keeps feeding it while it reports.",
@@ -747,6 +760,7 @@ internal sealed partial class PlayerCommandModule {
                 : "held no ray")}]")
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SteerCommand,
             description: "Held: while down, pointer motion orbits the seat camera AND the body faces where the camera looks — the seat composes the camera facing into the world's FaceX/FaceY/FaceZ channels each tick and the sim's facing snap turns the body (needs those channels and views.seatControl.yawReference World; the validator refuses a binding without them). Bind it once, like player.orbit.",
@@ -764,6 +778,7 @@ internal sealed partial class PlayerCommandModule {
             }
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "player.sticks",
             description: "Echoes every joined player's current analog — p<N> move=(x, y) look=(x, y). Values are cleared per frame, so a non-zero read only appears while a stick is actively deflected during this same command pump (the observability check for controller plumbing).",

@@ -131,11 +131,13 @@ public sealed class HistorySeekDeliveryLawTests {
         ));
         harness.Steps(count: 120);
 
-        var keyframe = harness.History.KeyframeTicks[0];
+        // A seek three ticks past the edit restores the latest keyframe at or before it; the law needs that keyframe
+        // before the edit, so the re-simulated span crosses it.
+        var keyframe = harness.History.KeyframeTicks.Last(predicate: tick => (tick <= (edit + 3UL)));
 
         Assert.True(
-            condition: (keyframe < 35UL),
-            userMessage: $"the first keyframe sits at {keyframe}; the law needs one before the structural edit"
+            condition: (keyframe < edit),
+            userMessage: $"the keyframe a seek to {(edit + 3UL)} restores sits at {keyframe}; the law needs one before the structural edit at {edit}"
         );
 
         var target = (resimulates

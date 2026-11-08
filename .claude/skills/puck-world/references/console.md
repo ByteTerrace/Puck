@@ -102,16 +102,18 @@ a windowed World or a silo composes (render levers, pointer and stick routers, t
 there, and it refuses a verb with no table whose description spells a form after its name. The
 description IS the help text — `help [--names] [<prefix>]` prints `name - description` for every
 registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
-when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take
-an `audience`: `CommandAudience.Operator` makes the registry refuse the verb for
-every principal but the console, before the handler runs, on every dispatch path. The evaluation diagnostics — `world.rule.trace`,
+when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories
+require an `audience`, with no default, and the registry refuses `CommandAudience.Unspecified` by name at construction:
+`CommandAudience.Operator` makes the registry refuse the verb for every principal but the console, before the handler
+runs, on every dispatch path, and `CommandAudience.Anyone` promises that a recipient's answer (text, count, tick or
+byte length) derives only from its view. The console surface audit in
+[the disclosure plan](../../../../docs/plans/disclosure.md#the-console-surface) records each verb's audience and why,
+and `worlds/debug/verbs-disclosure.puck` is its harness fixture: run it after giving a verb `Anyone`. The evaluation diagnostics — `world.rule.trace`,
 `world.rule.failures`, `world.search`, `world.decisions`, `world.responses`,
 `world.rules`, `world.verdicts` — are operator verbs, because each prints values
 the rules computed, which may derive from state a seat is not shown.
-`world.affordances` publishes each verb's `audience`, and
-`ScheduledStepVocabularyLawTests` pins the live host's operator set to exactly
-that list, so a diagnostic added in any module (the `Puck.World`-resident ones
-included) must declare its audience or fail the law.
+`world.affordances` publishes each verb's `audience`, and `puck verbs` records
+it in the catalog authored commands are validated against.
 
 ## Routing — the determinism class
 

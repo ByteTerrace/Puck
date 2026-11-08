@@ -120,6 +120,7 @@ public sealed class BindingChannelScaleLawTests {
     private sealed class ChannelModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: command,
                 description: "Channel release probe.",
                 valueKind: CommandValueKind.Axis1D,

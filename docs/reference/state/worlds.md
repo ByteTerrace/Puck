@@ -586,9 +586,9 @@ values the rules computed or administers the history.
 
 | Form | What it does |
 |---|---|
-| `world.history on [<MiB>]` | Starts recording, with a memory budget (64 MiB unless named). The next tick captures the first keyframe; a history already on takes the new budget. |
+| `world.history on [<seconds> [<MiB>]]` | Starts recording a window reaching `<seconds>` behind the newest tick (60 unless named), with a keyframe every simulated second, within a memory ceiling (64 MiB unless named) that evicts earlier only when the window does not fit it. The next tick captures the first keyframe; a history already on takes the new window and ceiling. |
 | `world.history off` | Stops recording and releases everything it held. |
-| `world.history` or `world.history status` | Echoes the window (oldest and newest tick), the cursor, the keyframe spacing, the bytes held against the budget split into keyframes, input and branches, and the counted cost: ticks recorded, hash folds, keyframes captured, deferred and evicted, seeks, ticks re-simulated, and restores. |
+| `world.history` or `world.history status` | Echoes the window (oldest and newest tick), the cursor, the keyframe spacing, the bytes held against the ceiling split into keyframes, input and branches, and the counted cost: ticks recorded, hash folds, keyframes captured, deferred and evicted, seeks, ticks re-simulated, and restores. |
 | `world.history row` | Echoes what the scrubber row draws: the window, the cursor, the keyframe ticks (at most 32, sampled evenly) and each kept branch as a fork, from its fork tick to its head. |
 | `world.history seek <tick>` | Moves the live world to any tick in the window, backward or forward, and proves the result against the authoritative hash recorded there. A seek behind the newest tick pauses the world. |
 | `world.history step <±n>` | Seeks relative to the cursor. |
@@ -632,7 +632,7 @@ adjacency is re-read as it stands now, so seam contact with a neighbour that has
 moved since shows up as a reported divergence. The history covers the boot world
 only. A world's HUD can show it: the `history.cursor` binding reads the cursor
 tick and gauges its place in the window, and `history.window` reads the
-window's ends and gauges the bytes held against the budget. The server guide's
+window's ends and gauges how far it has filled toward its length. The server guide's
 [in-session history](../../../src/Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs)
 section describes the mechanism.
 

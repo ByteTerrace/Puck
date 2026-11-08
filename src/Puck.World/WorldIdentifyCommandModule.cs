@@ -112,6 +112,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.identify",
             description: $"Draws the running world's own identity onto a declared screen as a scannable QR code: {WorldIdentifyForms.Spelling} — [ecLevel] one of L|M|Q|H (default M, the document default). The payload is puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>, deterministic in the definition alone (no clock, no counter, no session state): the same disclosed world mints the same payload. The hash is recomputed from the caller's LIVE recipient view's canonical bytes on every invocation, so a world mutated since boot reports its CURRENT identity rather than the identity of the file it was loaded from — the echo says which document it covers. Drives the same live-QR path screen.source <index> qr does (any existing producer on the slot is cleared; a booted machine ejects first through the ordered domain) and echoes what it drew: version, EC level, mask, quiet zone, rendered extent, and the payload in full. Errors on an undeclared screen, an unrecognized EC-level letter, a world carrying no documentId, or a payload too large for the encoder's supported version range.",

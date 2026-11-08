@@ -520,6 +520,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.inbox",
             description: $"Declares this player's OWN chat rows on their owned identity document — a bounded, evicting 'chat-log' row (appended to by chat.log) and a bounded, evicting 'chat-inbox' row (delivered into by a whisper from a sender this player later allows via chat.allow): {ChatInboxForms.Spelling}. The player defaults to 1. Idempotent — a row already declared is left untouched. Owner-only: context.Principal must hold Drive over the target player's body (the SAME check player.identity uses) — a non-owner is refused by name.",
@@ -528,6 +529,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.allow",
             description: $"Grants a sender document:<sender-id> Mutate+state:chat-inbox (Set-only) on this player's OWN owned identity document, so that sender's chat.whisper may land in this player's inbox: {ChatAllowForms.Spelling}. Requires chat-inbox already declared (chat.inbox first) — refused by name with the remedy otherwise. Idempotent — re-allowing the same sender refreshes the row. Owner-only, identically to chat.inbox.",
@@ -536,6 +538,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.block",
             description: $"Revokes a sender's chat-inbox grant on this player's OWN owned identity document — the sender's NEXT chat.whisper is refused by name: {ChatBlockForms.Spelling}. Idempotent (no error if the sender was never allowed; the echo names whether a row was actually removed). Owner-only, identically to chat.inbox.",
@@ -544,6 +547,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.log",
             description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: {ChatLogForms.Spelling}. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
@@ -552,6 +556,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.whisper",
             description: $"Delivers text from the acting player's OWN identity to a recipient's chat-inbox row, through the SAME cross-document text delivery door Server.WorldOwnedWorlds.Decide already gates (the real verb — never the identity.deliver dev harness, and the source id is the acting player's OWN identity, never a caller-supplied string): {ChatWhisperForms.Spelling}. Refuses by name when the recipient has not granted this sender (chat.allow), or has since revoked it (chat.block) — that refusal IS the offline/not-allowed boundary. Owner-only over the SENDING player, identically to chat.inbox.",
@@ -560,6 +565,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "chat.read",
             description: $"Reads back the acting player's OWN chat-log and chat-inbox rows, oldest entry first: {ChatReadForms.Spelling}. The player defaults to 1. Owner-only, identically to chat.inbox — chat content is private, so an operator needs the same Drive hold to READ a player's chat that every other chat.* verb requires to author it.",

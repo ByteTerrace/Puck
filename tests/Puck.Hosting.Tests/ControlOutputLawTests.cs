@@ -174,7 +174,8 @@ public sealed class ControlOutputLawTests {
                 "long",
                 "Answers with the given number of characters.",
                 (_, args) => new(new string(c: 'x', count: int.Parse(s: args[0].ToString(), provider: System.Globalization.CultureInfo.InvariantCulture))),
-                bindability: CommandBindability.Unbindable
+                bindability: CommandBindability.Unbindable,
+                audience: CommandAudience.Anyone
             );
         }
     }

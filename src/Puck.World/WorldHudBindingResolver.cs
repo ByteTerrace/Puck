@@ -163,7 +163,8 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         ));
     }
     // history.cursor: the tick the world sits at, and where it lies in the window; history.window: the window's ends,
-    // and the bytes held against the budget. Both read "off" with an empty gauge while no window is held.
+    // and how far it has filled toward its length. Both read "off" with an empty gauge while no window is held. Neither
+    // reads a byte count: the keyframes' bytes include rows a seat may not read.
     private void ResolveHistory(HudBindingKind kind, out float fraction, out ReadOnlySpan<char> text) {
         if (
             (m_history is not { } history) ||
@@ -190,7 +191,10 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         fraction = Math.Clamp(
             max: 1f,
             min: 0f,
-            value: (((float)history.BytesHeld) / history.BudgetBytes)
+            value: (((float)(head - oldest)) / Math.Max(
+                val1: 1UL,
+                val2: history.WindowTicks
+            ))
         );
         _ = oldest.TryFormat(destination: m_historyText, charsWritten: out var prefix, provider: CultureInfo.InvariantCulture);
         m_historyText[prefix] = '.';

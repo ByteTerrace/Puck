@@ -428,6 +428,7 @@ public sealed class DeferredVerbEchoLawTests {
     private sealed class LineModule(Func<Puck.Commands.CommandResult> handler) : Puck.Commands.ICommandModule {
         public IEnumerable<Puck.Commands.CommandDefinition> GetCommands() {
             yield return Puck.Commands.CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: Puck.Commands.CommandBindability.Unbindable,
                 description: "Submits the edit under test.",
                 handler: (_, _) => handler(),
@@ -507,6 +508,7 @@ public sealed class DeferredVerbEchoLawTests {
     private sealed class SettlingModule(Puck.Commands.CommandResult result) : Puck.Commands.ICommandModule {
         public IEnumerable<Puck.Commands.CommandDefinition> GetCommands() {
             yield return Puck.Commands.CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 description: "Returns the result under test.",
                 bindability: Puck.Commands.CommandBindability.Unbindable,
                 handler: (_, _) => result,

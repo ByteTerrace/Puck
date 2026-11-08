@@ -285,6 +285,7 @@ public sealed class BindingRowMemberLawTests {
     private sealed class Module : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ActionCommand,
                 description: "probe",
                 valueKind: CommandValueKind.Digital,
@@ -292,6 +293,7 @@ public sealed class BindingRowMemberLawTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ChannelCommand,
                 description: "probe",
                 valueKind: CommandValueKind.Axis1D,

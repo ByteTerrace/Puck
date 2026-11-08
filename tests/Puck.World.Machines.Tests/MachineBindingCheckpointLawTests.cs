@@ -130,7 +130,7 @@ public sealed partial class MachineBindingCheckpointLawTests {
             actual: ByteAt(server: server)
         );
         Assert.True(
-            condition: harness.History.TryOn(
+            condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds,
                 budgetBytes: WorldHistory.DefaultBudgetBytes,
                 refusal: out var refusal
             ),

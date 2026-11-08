@@ -360,12 +360,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
     private sealed class ProbeModule(WorldViewGraphHost runtime) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Answers at once.",
                 handler: static (_, _) => CommandResult.None,
                 name: "probe"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Holds the session behind a pipeline wait.",
                 handler: (context, _) => {

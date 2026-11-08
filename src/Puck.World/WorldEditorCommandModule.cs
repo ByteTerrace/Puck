@@ -271,6 +271,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: GridCommand,
             forms: WorldGridForms,
@@ -279,6 +280,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SnapCommand,
             forms: WorldSnapForms,

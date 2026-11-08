@@ -25,6 +25,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.properties",
             description: $"Reads the property registry back (Immediate): with no argument, the declared vocabulary; with a 0-based body index, which of those registered properties are currently ON for that carrier (a nonzero cell at key=<bodyIndex> in the property's own row): {WorldPropertiesForms.Spelling}.",

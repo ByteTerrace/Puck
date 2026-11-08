@@ -19,6 +19,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.tier",
             description: "Selects which tier shades authored programs, for comparing them: [automatic|interpreted]. automatic records with the published specialized kernels wherever they hold every active program; interpreted records with the interpreter. Changing it re-renders the shading passes; specialization continues in either mode, and world.shaders.status reports each program's state.",
@@ -31,6 +32,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                 return new CommandResult(Output: $"[world.shaders.tier: {(node.InterpretShade ? "interpreted" : "automatic")}]");
             });
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.bins",
             description: "Selects how a frame that runs authored programs shades its views, for comparing them: [on|off]. on shades in bins: a filter pass writes each pixel's filtered occlusion and shadows and sorts the 8x8 tiles by whether any pixel has a program, then views shades the tiles with no program on the plain kernel and the rest on the shading tier world.shaders.tier selects; off shades every pixel in one unsplit dispatch on that tier. Changing it rebuilds the views' graphs; a frame with no program always shades unsplit.",
@@ -43,6 +45,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                 return new CommandResult(Output: $"[world.shaders.bins: {(node.BinShade ? "on" : "off")}]");
             });
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.reload",
             description: $"Reloads SDF kernels on the next produced frame: {WorldShadersReloadForms.Spelling}. Reads the kernels the tree's passes directory carries and keeps the rest: a kernel's sdf-*.comp.hlsl source compiles to the running backend alone, through the per-user shader cache the build shares (an unchanged source is a cache hit), and a kernel carried only as bytecode loads as it stands. Defaults to the deployed Assets/Shaders/Sdf, which carries the build's bytecode and the sources it compiled (an unedited build's sources are cache hits); a source checkout names src/Puck.SdfVm/Assets/Shaders/Sdf, so editing a kernel and reloading is one step. Uses the current backend. Kernels install as they compile, quickest first, so a light kernel's change shows while a heavy kernel still compiles, and each installed batch prints '[shaders.reload: request=N installed pipelines=K]'. Replaces changed pipelines while retaining world state, GPU buffers and textures; a compile error (reported with its file and line), a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the kernels installed before it; DXIL kernels are checked through the dxcompiler beside dxc. The request completes off the frame thread and reports its outcome on stderr ('[shaders.reload: request=N applied|unchanged|failed ...]'); a text session's later lines wait for it, a session that settles its results (an operator attachment's call) answers with the outcome in world.shaders.status's form, and world.shaders.status reports it too. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
@@ -77,6 +80,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.status",
             description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome. Then one '[world.shaders.program: ...]' line for each authored program the residency shades or compiles: its identity, author name and state (specialized, compiling or interpreted, with the failure that left it interpreted), after a '[world.shaders.tier: ...]' line.",

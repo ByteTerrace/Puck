@@ -36,6 +36,7 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             name: "world.control",
             description: $"Local trusted Operator attachment: {WorldControlForms.Spelling}. start prints a private attachment file for puck mcp --profile operator --attach <file>, as the --control launch option does at boot. The endpoint exposes the full Console registry and composed screenshots to this OS user; stop closes attachments while World keeps running.",
             bindability: CommandBindability.Unbindable,

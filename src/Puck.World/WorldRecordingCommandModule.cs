@@ -151,6 +151,7 @@ internal sealed class WorldRecordingCommandModule(
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "capture.start",
             description: $"Starts a native recording (Immediate): {CaptureStartForms.Spelling}. It loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines.",
@@ -158,12 +159,14 @@ internal sealed class WorldRecordingCommandModule(
             handler: (_, args) => Start(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "capture.stop",
             description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "capture.status",
             description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",

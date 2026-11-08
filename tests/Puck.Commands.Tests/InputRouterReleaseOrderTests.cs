@@ -214,6 +214,7 @@ public sealed class InputRouterReleaseOrderTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: AlphaCommand,
                 description: "Ordering probe (lower id).",
                 valueKind: CommandValueKind.Digital,
@@ -222,6 +223,7 @@ public sealed class InputRouterReleaseOrderTests {
                 map: "play"
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: BetaCommand,
                 description: "Ordering probe (higher id).",
                 valueKind: CommandValueKind.Digital,
@@ -230,6 +232,7 @@ public sealed class InputRouterReleaseOrderTests {
                 map: "play"
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: AlphaChannelCommand,
                 description: "Channel ordering probe (lower id).",
                 valueKind: CommandValueKind.Axis1D,
@@ -237,6 +240,7 @@ public sealed class InputRouterReleaseOrderTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: BetaChannelCommand,
                 description: "Channel ordering probe (higher id).",
                 valueKind: CommandValueKind.Axis1D,

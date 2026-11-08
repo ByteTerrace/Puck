@@ -58,7 +58,7 @@ public sealed class CommandRegistryTests {
 
     private sealed class BindingOnlyModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
-            yield return CommandDefinition.Verb(name: "binding.probe", description: "Internal compiled destination.", valueKind: CommandValueKind.Digital,
+            yield return CommandDefinition.Verb(audience: CommandAudience.Anyone, name: "binding.probe", description: "Internal compiled destination.", valueKind: CommandValueKind.Digital,
                 bindability: CommandBindability.Bindable, handler: context => {
                     seen.Add(item: (context.Phase, context.Value));
                     return CommandResult.None;
@@ -436,6 +436,7 @@ public sealed class CommandRegistryTests {
 
         static CommandDefinition Register(Func<CommandResult>? handler, string? name, string? description, bool wireNative) => (wireNative
             ? CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: name!,
                 description: description!,
                 handler: ((handler is null)
@@ -444,6 +445,7 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Unbindable
             )
             : CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: name!,
                 description: description!,
                 valueKind: CommandValueKind.Digital,
@@ -1267,6 +1269,7 @@ public sealed class CommandRegistryTests {
     private sealed class CoreModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "alpha",
                 description: "First.",
                 valueKind: CommandValueKind.Digital,
@@ -1274,6 +1277,7 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "beta",
                 description: "Second.",
                 valueKind: CommandValueKind.Digital,
@@ -1282,6 +1286,7 @@ public sealed class CommandRegistryTests {
                 map: "combat"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sum",
                 description: "Adds two integers.",
                 handler: static (_, args) => ((args.TryInt(
@@ -1296,6 +1301,7 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "ping",
                 description: "Acknowledges.",
                 handler: static (_, args) => (args.Echo
@@ -1309,6 +1315,7 @@ public sealed class CommandRegistryTests {
     private sealed class UnspecifiedBindabilityModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "unspecified",
                 description: "Declares no bindability.",
                 valueKind: CommandValueKind.Digital,
@@ -1320,6 +1327,7 @@ public sealed class CommandRegistryTests {
     private sealed class SimulationModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim",
                 description: "Deferred simulation probe.",
                 handler: static (_, _) => CommandResult.None,
@@ -1334,6 +1342,7 @@ public sealed class CommandRegistryTests {
     private sealed class SimulationProbeModule(List<(bool ParseWasNull, string Argument)> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.probe",
                 description: "Deferred wire-path probe.",
                 handler: (context, args) => {
@@ -1364,6 +1373,7 @@ public sealed class CommandRegistryTests {
     private sealed class SeparatorProbeModule(Action<CommandContext> onBound, Action onSecond) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "bound",
                 description: "Bound text separator probe.",
                 handler: (context, _) => {
@@ -1374,6 +1384,7 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "privileged",
                 description: "Second command injection probe.",
                 valueKind: CommandValueKind.Digital,
@@ -1389,6 +1400,7 @@ public sealed class CommandRegistryTests {
     private sealed class SingleCommandModule(string name, Action? onInvoke = null) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: name,
                 description: "Snapshot provenance probe.",
                 valueKind: CommandValueKind.Digital,
@@ -1404,6 +1416,7 @@ public sealed class CommandRegistryTests {
     private sealed class KindProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "kind",
                 description: "Reports the context value kind.",
                 handler: static (context, _) => new CommandResult(Output: context.Value.Kind.ToString()),
@@ -1416,6 +1429,7 @@ public sealed class CommandRegistryTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             for (var index = 0; (index < count); index++) {
                 yield return CommandDefinition.Verb(
+                    audience: CommandAudience.Anyone,
                     name: $"command.{index}",
                     description: "Capacity probe.",
                     valueKind: CommandValueKind.Digital,
@@ -1434,6 +1448,7 @@ public sealed class CommandRegistryTests {
     private sealed class EchoModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "echo.first",
                 description: "Echoes its first trailing token verbatim.",
                 handler: static (_, args) => new CommandResult(Output: ((args.Count == 0)
@@ -1442,6 +1457,7 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "echo.tail",
                 description: "Echoes every trailing token, space-joined.",
                 handler: static (_, args) => new CommandResult(Output: args.Tail(start: 0)),
@@ -1452,6 +1468,7 @@ public sealed class CommandRegistryTests {
     private sealed class ThrowingModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "boom.bound",
                 description: "Throws from a bound dispatch.",
                 valueKind: CommandValueKind.Digital,
@@ -1459,12 +1476,14 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Bindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "boom.wire",
                 description: "Throws from the wire-native path.",
                 handler: static (_, _) => throw new InvalidTimeZoneException(message: "handler fault"),
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "boom.parsed",
                 description: "Throws from the System.CommandLine fallback path.",
                 handler: static (_, _) => throw new InvalidTimeZoneException(message: "handler fault"),
@@ -1475,6 +1494,7 @@ public sealed class CommandRegistryTests {
     private sealed class RecordingSimulationModule(List<string> applied) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.record",
                 description: "Records its argument when its tick applies.",
                 handler: (_, args) => {
@@ -1490,6 +1510,7 @@ public sealed class CommandRegistryTests {
     private sealed class PhaseProbeModule(List<CommandPhase> phases) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "phase.probe",
                 description: "Records the edge its dispatch carried.",
                 handler: (context, _) => {
@@ -1509,6 +1530,7 @@ public sealed class CommandRegistryTests {
     private sealed class EdgeProbeModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "edge.wire",
                 description: "Records the edge and value its dispatch carried.",
                 handler: (context, _) => {
@@ -1521,6 +1543,7 @@ public sealed class CommandRegistryTests {
                 valueKind: CommandValueKind.Axis1D
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "edge.parse",
                 description: "Records the edge and value its dispatch carried.",
                 valueKind: CommandValueKind.Axis1D,
@@ -1537,6 +1560,7 @@ public sealed class CommandRegistryTests {
     private sealed class TextProbeModule(List<string?> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "text.probe",
                 description: "Records the submitted line it was dispatched from.",
                 handler: (context, _) => {
@@ -1551,6 +1575,7 @@ public sealed class CommandRegistryTests {
     private sealed class BareSimulationModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "sim.bare",
                 description: "A deferred verb that accepts no arguments.",
                 valueKind: CommandValueKind.Digital,
@@ -1562,6 +1587,7 @@ public sealed class CommandRegistryTests {
     }
     private sealed class CachedDefinitionModule : ICommandModule {
         private readonly CommandDefinition m_definition = CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             name: "cached",
             description: "A definition instance the module hands out more than once.",
             valueKind: CommandValueKind.Digital,
@@ -1576,6 +1602,7 @@ public sealed class CommandRegistryTests {
     private sealed class BlankAliasModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "alias.probe",
                 description: "Declares a blank alias.",
                 valueKind: CommandValueKind.Digital,
@@ -1588,6 +1615,7 @@ public sealed class CommandRegistryTests {
     private sealed class MacroModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "macro.swallows",
                 description: "Submits a line that is refused, and answers success anyway.",
                 handler: static (context, args) => {
@@ -1600,18 +1628,21 @@ public sealed class CommandRegistryTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "macro.propagates",
                 description: "Submits a line that is refused, and returns its refusal.",
                 handler: static (context, _) => (context.Registry?.Submit(line: "does.not.exist") ?? CommandResult.None),
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "macro.deep",
                 description: "Submits a macro that submits a refused line, and returns the refusal through both frames.",
                 handler: static (context, _) => (context.Registry?.Submit(line: "macro.propagates") ?? CommandResult.None),
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "macro.deep.swallows",
                 description: "Submits a macro that submits a refused line, and answers success anyway.",
                 handler: static (context, _) => {
@@ -1628,6 +1659,7 @@ public sealed class CommandRegistryTests {
     private sealed class ReEntrantModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "recurse",
                 description: "Submits itself, forever, until the registry refuses.",
                 handler: static (context, _) => (context.Registry?.Submit(line: "recurse") ?? CommandResult.None),

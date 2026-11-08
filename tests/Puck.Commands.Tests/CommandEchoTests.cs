@@ -498,6 +498,7 @@ public sealed class CommandEchoTests {
     private sealed class TokenProbeModule(List<string> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "token.probe",
                 description: "Records every trailing token it was handed.",
                 handler: (_, args) => {

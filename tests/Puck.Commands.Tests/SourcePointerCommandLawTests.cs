@@ -280,6 +280,7 @@ public sealed class SourcePointerCommandLawTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "The pointer ray's origin.",
                 handler: Record,
@@ -287,6 +288,7 @@ public sealed class SourcePointerCommandLawTests {
                 valueKind: CommandValueKind.Axis3D
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: "The pointer ray's direction.",
                 handler: Record,

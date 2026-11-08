@@ -51,7 +51,7 @@ public sealed record WorldHistoryBranch(string Name, ulong ForkTick, IReadOnlyLi
     public ulong HeadTick => (ForkTick + ((ulong)Ticks.Count));
 }
 /// <summary>A read-back of an in-session history: its window, its keyframe spacing, what it holds against its
-/// budget, and its counted cost.</summary>
+/// memory ceiling, and its counted cost.</summary>
 /// <param name="On">Whether the history is recording.</param>
 /// <param name="Oldest">The oldest tick a seek can reach (the oldest keyframe), or <see langword="null"/> while no
 /// keyframe has been captured.</param>
@@ -59,8 +59,9 @@ public sealed record WorldHistoryBranch(string Name, ulong ForkTick, IReadOnlyLi
 /// captured.</param>
 /// <param name="Head">The newest recorded tick, or <see langword="null"/> while no keyframe has been captured.</param>
 /// <param name="Keyframes">The keyframes held.</param>
-/// <param name="Interval">The current keyframe spacing, in ticks.</param>
-/// <param name="BudgetBytes">The memory budget, in bytes.</param>
+/// <param name="Interval">The keyframe spacing, in ticks: one simulated second.</param>
+/// <param name="WindowTicks">The ticks behind the head the history keeps reachable.</param>
+/// <param name="BudgetBytes">The memory ceiling, in bytes.</param>
 /// <param name="KeyframeBytes">The keyframe bytes held: every distinct chunk's payload once, plus each keyframe's
 /// chunk references.</param>
 /// <param name="KeyframeEncodedBytes">The encoded size of the keyframes held, before chunks are shared — the ratio to
@@ -77,6 +78,7 @@ public readonly record struct WorldHistoryStatus(
     ulong? Head,
     int Keyframes,
     int Interval,
+    ulong WindowTicks,
     long BudgetBytes,
     long KeyframeBytes,
     long KeyframeEncodedBytes,
@@ -86,7 +88,7 @@ public readonly record struct WorldHistoryStatus(
     WorldHistoryCounters Counters,
     IReadOnlyList<WorldHistoryBranch> Branches
 ) {
-    /// <summary>Gets every byte the history holds against its budget.</summary>
+    /// <summary>Gets every byte the history holds against its memory ceiling.</summary>
     public long BytesHeld => ((KeyframeBytes + InputBytes) + BranchBytes);
 }
 /// <summary>
@@ -99,12 +101,13 @@ public readonly record struct WorldHistoryStatus(
 /// </summary>
 /// <remarks>
 /// <para>Keyframes are held in a <see cref="WorldHistoryChunkStore"/>, so a keyframe costs the regions that changed
-/// since the ones already held. The keyframe spacing balances that cost against input bytes — the bytes the last
-/// keyframe added over the mean recorded input per tick — and never captures more than
-/// <see cref="KeyframeWorkBytesPerTick"/> of encoded checkpoint per tick on average, clamped between an eighth of a
-/// second and four seconds of simulation; a small world keyframes often and a large one keeps its seek and capture
-/// costs bounded. The oldest span is evicted whenever the held bytes exceed the budget; kept branches whose fork the
-/// window no longer reaches go with it.</para>
+/// since the ones already held. The window's shape is a function of ticks alone: a keyframe every simulated second
+/// (the document's rate), and the oldest span evicted once the next one alone reaches the window's length behind the
+/// head; kept branches whose fork the window no longer reaches go with it. A seat reads the window, steps through it
+/// and is told which keyframe a seek restored, and the checkpoint bytes count every row, withheld ones included, so
+/// no keyframe tick, window bound or re-simulated tick count may follow them. The memory ceiling evicts earlier only
+/// when the window does not fit it: a resource limit outside the disclosure guarantee, like the arena's byte
+/// ceiling.</para>
 /// <para>Steady state is allocation-free on a tick that captures no keyframe: the capture's accumulators are reused
 /// and the span's per-tick arrays grow only until they fit the interval. A keyframe tick pays the checkpoint capture
 /// and its encoding.</para>
@@ -112,11 +115,12 @@ public readonly record struct WorldHistoryStatus(
 /// <see cref="WorldServerStepShell.Step"/>, and the console verbs run between steps.</para>
 /// </remarks>
 public sealed partial class WorldHistory {
-    /// <summary>The default memory budget, in bytes.</summary>
+    /// <summary>The default memory ceiling, in bytes.</summary>
     public const long DefaultBudgetBytes = ((64L * 1024L) * 1024L);
-    /// <summary>The most encoded checkpoint bytes a keyframe costs per recorded tick, averaged over its interval: the
-    /// floor the spacing keeps so capturing and encoding keyframes stays a bounded share of each tick.</summary>
-    public const long KeyframeWorkBytesPerTick = (64L * 1024L);
+    /// <summary>The default window, in simulated seconds behind the head.</summary>
+    public const int DefaultWindowSeconds = 60;
+    /// <summary>The longest window a history accepts, in simulated seconds.</summary>
+    public const int MaxWindowSeconds = 3600;
 
     // The smallest budget a history accepts.
     private const long MinimumBudgetBytes = (1024L * 1024L);
@@ -138,8 +142,8 @@ public sealed partial class WorldHistory {
 
     private WorldHistoryCounters m_counters;
     private ulong m_cursor;
-    private int m_interval;
     private bool m_on;
+    private int m_windowSeconds = DefaultWindowSeconds;
     // Set by branch, consumed by the first live tick behind the head: the name the discarded future is kept under.
     private string? m_pendingBranchName;
     private string? m_waiting;
@@ -247,6 +251,15 @@ public sealed partial class WorldHistory {
         }
     }
     private ulong Head => m_segments[^1].HeadTick;
+    // The keyframe spacing and the window, in ticks: functions of the declared rate alone, which every reader of the
+    // document is shown, so no reader learns anything from where keyframes fall or where the window starts.
+    private int Interval => Math.Max(
+        val1: 1,
+        val2: m_server.Definition.SimulationRateHz
+    );
+    /// <summary>Gets the ticks behind the head the history keeps reachable: its window's length in seconds at the
+    /// declared rate.</summary>
+    public ulong WindowTicks => (((ulong)m_windowSeconds) * ((ulong)Interval));
     private long HeldBytes {
         get {
             var total = (BranchBytes + m_chunks.PayloadBytes);
@@ -393,16 +406,24 @@ public sealed partial class WorldHistory {
         m_waiting = waiting;
         PublishRow();
     }
-    // Drops the oldest spans while the history holds more than its budget, always keeping the newest; a kept branch
-    // whose fork the window no longer reaches goes with it.
+    // Drops the oldest span once the next one alone reaches the window's length behind the head, and then while the
+    // history holds more than its memory ceiling, always keeping the newest; a kept branch whose fork the window no
+    // longer reaches goes with it. Only the ceiling reads a byte count.
     private void EnforceBudget() {
+        var window = WindowTicks;
+
+        while (
+            (m_segments.Count > 1) &&
+            ((Head - m_segments[1].KeyframeTick) >= window)
+        ) {
+            Evict();
+        }
+
         while (
             (m_segments.Count > 1) &&
             (HeldBytes > m_budgetBytes)
         ) {
-            Recycle(segment: m_segments[0]);
-            m_segments.RemoveAt(index: 0);
-            m_counters = (m_counters with { SegmentsEvicted = (m_counters.SegmentsEvicted + 1L) });
+            Evict();
         }
 
         // A loop, not RemoveAll over a capturing lambda: this runs every recorded tick, and the closure would
@@ -420,6 +441,11 @@ public sealed partial class WorldHistory {
             m_branches.RemoveAt(index: 0);
         }
     }
+    private void Evict() {
+        Recycle(segment: m_segments[0]);
+        m_segments.RemoveAt(index: 0);
+        m_counters = (m_counters with { SegmentsEvicted = (m_counters.SegmentsEvicted + 1L) });
+    }
     private static T[] Grow<T>(T[] array, int length) {
         var grown = new T[length];
 
@@ -430,48 +456,6 @@ public sealed partial class WorldHistory {
         );
 
         return grown;
-    }
-    // The keyframe spacing that balances the bytes a keyframe added against input bytes, kept wide enough that its
-    // encoding averages at most KeyframeWorkBytesPerTick, and clamped to the rate-derived bounds.
-    private int IntervalFor(long addedBytes, long encodedBytes) {
-        var rate = Math.Max(
-            val1: 1,
-            val2: m_server.Definition.SimulationRateHz
-        );
-        var minimum = Math.Max(
-            val1: 1,
-            val2: (rate / 8)
-        );
-        var maximum = Math.Max(
-            val1: minimum,
-            val2: (rate * 4)
-        );
-        var ticks = 0L;
-        var inputBytes = 0L;
-
-        foreach (var segment in m_segments) {
-            ticks += segment.Count;
-            inputBytes += (((segment.IntentCount * ((long)Unsafe.SizeOf<IntentSubmission>())) + segment.AuthorityBytes) + (((long)segment.Count) * TickBookkeepingBytes));
-        }
-
-        var perTick = Math.Max(
-            val1: TickBookkeepingBytes,
-            val2: ((ticks > 0L)
-                ? (inputBytes / ticks)
-                : TickBookkeepingBytes)
-        );
-
-        var balanced = ((addedBytes + (perTick - 1L)) / perTick);
-        var work = ((encodedBytes + (KeyframeWorkBytesPerTick - 1L)) / KeyframeWorkBytesPerTick);
-
-        return ((int)Math.Clamp(
-            max: maximum,
-            min: minimum,
-            value: Math.Max(
-                val1: balanced,
-                val2: work
-            )
-        ));
     }
     private static ArraySegment<IntentSubmission> IntentRange(Segment segment, int offset) {
         var start = ((offset == 0)
@@ -626,16 +610,12 @@ public sealed partial class WorldHistory {
             KeyframeBytesCaptured = (m_counters.KeyframeBytesCaptured + bytes.LongLength),
             KeyframeBytesStored = (m_counters.KeyframeBytesStored + addedBytes),
         });
-        m_interval = IntervalFor(
-            addedBytes: addedBytes,
-            encodedBytes: bytes.LongLength
-        );
         Reserve(
             intentsPerTick: (((previous is { Count: > 0 } last)
                 ? ((last.IntentCount + (last.Count - 1)) / last.Count)
                 : 1)),
             segment: segment,
-            ticks: (m_interval + 1)
+            ticks: (Interval + 1)
         );
         m_waiting = null;
 
@@ -734,7 +714,7 @@ public sealed partial class WorldHistory {
             TicksRecorded = (m_counters.TicksRecorded + 1L),
         });
 
-        if (m_segments[^1].Count >= m_interval) {
+        if (m_segments[^1].Count >= Interval) {
             _ = TryKeyframe(authoritativeHash: authoritativeHash, tick: tick);
         }
 
@@ -775,7 +755,8 @@ public sealed partial class WorldHistory {
             Cursor: (windowed ? m_cursor : null),
             Head: (windowed ? Head : null),
             InputBytes: inputBytes,
-            Interval: m_interval,
+            Interval: Interval,
+            WindowTicks: WindowTicks,
             KeyframeBytes: keyframeBytes,
             KeyframeEncodedBytes: encodedBytes,
             Keyframes: m_segments.Count,
@@ -784,13 +765,21 @@ public sealed partial class WorldHistory {
             Waiting: (windowed ? null : m_waiting)
         );
     }
-    /// <summary>Switches the history on with a memory budget, or changes the budget of a history already on (the
-    /// oldest spans are evicted at the next tick when it shrank). The window anchors at the first keyframe the next
-    /// closed tick captures.</summary>
-    /// <param name="budgetBytes">The memory budget, in bytes.</param>
+    /// <summary>Switches the history on with a window and a memory ceiling, or changes both on a history already on
+    /// (the oldest spans are evicted at the next tick when either shrank). The window anchors at the first keyframe the
+    /// next closed tick captures.</summary>
+    /// <param name="windowSeconds">The simulated seconds behind the head the history keeps reachable, 1 to
+    /// <see cref="MaxWindowSeconds"/>.</param>
+    /// <param name="budgetBytes">The memory ceiling, in bytes.</param>
     /// <param name="refusal">Why the history did not switch on, when it did not.</param>
     /// <returns><see langword="true"/> when the history is on.</returns>
-    public bool TryOn(long budgetBytes, out string refusal) {
+    public bool TryOn(int windowSeconds, long budgetBytes, out string refusal) {
+        if ((windowSeconds < 1) || (windowSeconds > MaxWindowSeconds)) {
+            refusal = $"a window of {windowSeconds} seconds is outside 1 to {MaxWindowSeconds}";
+
+            return false;
+        }
+
         if (budgetBytes < MinimumBudgetBytes) {
             refusal = $"a budget of {budgetBytes} bytes is below the {MinimumBudgetBytes}-byte floor one keyframe span needs";
 
@@ -798,6 +787,7 @@ public sealed partial class WorldHistory {
         }
 
         m_budgetBytes = budgetBytes;
+        m_windowSeconds = windowSeconds;
         refusal = string.Empty;
 
         if (m_on) {
@@ -806,10 +796,6 @@ public sealed partial class WorldHistory {
 
         m_on = true;
         m_counters = default;
-        m_interval = Math.Max(
-            val1: 1,
-            val2: (m_server.Definition.SimulationRateHz / 8)
-        );
         m_waiting = "waiting for the next tick to capture the first keyframe";
         m_tape.AttachHistory(history: this);
 

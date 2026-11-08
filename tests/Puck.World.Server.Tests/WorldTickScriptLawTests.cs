@@ -46,6 +46,7 @@ public sealed class WorldTickScriptLawTests {
     private sealed class ProbeModule(Func<ulong> completed, List<string> log) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Breaks without judging a test step.",
                 handler: (_, _) => throw new InvalidOperationException(message: "broken handler"),
@@ -53,6 +54,7 @@ public sealed class WorldTickScriptLawTests {
                 routing: CommandRouting.Simulation
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Answers under the submitting seat's own principal.",
                 handler: (context, _) => ((context.Principal == Principal.Seat(slot: 0))
@@ -62,6 +64,7 @@ public sealed class WorldTickScriptLawTests {
                 routing: CommandRouting.Simulation
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed tick.",
                 handler: (_, _) => {
@@ -72,6 +75,7 @@ public sealed class WorldTickScriptLawTests {
                 name: "probe.read"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed tick when its tick applies.",
                 handler: (_, _) => {

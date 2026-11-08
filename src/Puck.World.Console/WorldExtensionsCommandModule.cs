@@ -35,6 +35,7 @@ public sealed class WorldExtensionsCommandModule(IWorldConsoleAuthority authorit
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             description: "Reads the addressed world's configured service operations for the acting principal; the host console also sees connections, observation freshness and admission, embeddings, participants, and worker failures. Credentials and private configuration are never printed.",
             handler: (context, args) => {

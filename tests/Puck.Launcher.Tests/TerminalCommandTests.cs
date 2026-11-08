@@ -80,6 +80,7 @@ public sealed class TerminalCommandTests {
     private sealed class ProbeModule(Action onInvoke) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 name: "probe",
                 description: "Reports a probe result.",

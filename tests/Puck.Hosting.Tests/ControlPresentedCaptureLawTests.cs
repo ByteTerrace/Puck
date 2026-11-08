@@ -75,6 +75,7 @@ public sealed class ControlPresentedCaptureLawTests {
     private sealed class WaitUntil(Func<bool> released) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Holds until released.",
                 handler: (context, args) => {

@@ -2571,11 +2571,15 @@ authoritative hash the tick reached. Keyframes live in a
 chunks (a gear rolling hash picks the boundaries, so an edit moves only the
 chunks around it) and each distinct chunk is held once, reference-counted, so a
 keyframe costs the regions that changed since the ones already held. The
-keyframe spacing is the bytes the last keyframe added over the mean recorded
-input per tick, never closer than one keyframe per `KeyframeWorkBytesPerTick`
-(64 KiB) of encoded checkpoint, and clamped between an eighth of a second and
-four seconds of simulation; the oldest span is evicted whenever the bytes held
-exceed the budget (64 MiB unless `world.history on <MiB>` names another). The
+window's shape is a function of ticks alone: a keyframe every simulated second
+at the document's rate, and the oldest span evicted once the next one alone
+reaches the window's length behind the head (60 seconds unless
+`world.history on <seconds>` names another). A seat reads the window, steps
+through it and is told which keyframe a seek restored, and a keyframe's bytes
+count every row, withheld ones included, so no keyframe tick, window bound or
+re-simulated count may follow them. The memory ceiling (64 MiB unless
+`world.history on <seconds> <MiB>` names another) evicts earlier only when the
+window does not fit it, a resource limit outside the disclosure guarantee. The
 checkpoint capture serializes the journal base only when the base object moved,
 and the codec writes a base byte-identical to the live document once. A span's per-tick arrays are sized for its interval on the keyframe
 tick, so a tick that captures no keyframe allocates nothing. A keyframe the

@@ -377,6 +377,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private IEnumerable<CommandDefinition> ModeVerbs() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: WorldEditorBindings.ToggleCommand,
             description: $"Flips a seat between playing and building: {PlayerBuildForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1), the same flip player.mode editor build|play makes. While a seat builds, the world's authored context row for the editor family selects its build page (the standard's: the toggle, the grid and snapping, placing, and nudging and turning the seat's current placement) and its view draws its grid. A seat whose principal may not mutate placements still builds, and the echo marks it read-only.",
@@ -385,6 +386,7 @@ internal sealed partial class PlayerCommandModule {
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: FrameCommand,
             description: $"Switches a seat's view of the screen it is engaged on: {PlayerFrameForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
@@ -393,6 +395,7 @@ internal sealed partial class PlayerCommandModule {
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: CameraCommand,
             forms: PlayerCameraForms,
@@ -401,6 +404,7 @@ internal sealed partial class PlayerCommandModule {
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,
             forms: PlayerModeForms,

@@ -1148,6 +1148,7 @@ public sealed class BindingRadialTests {
 
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 name: Command,
                 description: "Test radial act.",

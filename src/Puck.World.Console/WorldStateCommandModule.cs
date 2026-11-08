@@ -885,6 +885,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.state.cell.set",
             description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): {WorldStateCellSetForms.Spelling}. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
@@ -909,6 +910,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.state.cell.remove",
             description: $"Removes ONE cell from an already-declared row, leaving the row itself in place: {WorldStateCellRemoveForms.Spelling}. Rejected if <row> names no state row, no cell inside it carries <key>, or the acting principal's Edit hold does not admit RemoveStateCell.",
@@ -931,6 +933,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.symmetry",
             description: $"Reads the symmetry lattice back for one node (Immediate): {WorldSymmetryForms.Spelling}. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it, whether the two rays are orthogonal, and their exact inner product (-2..2; 1 marks a sixty-degree neighbour).",
@@ -992,6 +995,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.symmetry.word",
             description: $"Reads a word of reflections back (Immediate): {WorldSymmetryWordForms.Spelling}. Bakes the word a cycle trait would author as its generator (one to eight mirror nodes, applied first to last) and prints its derived order — the period a cycle carrying it loops in — and, given a node, that node's orbit under the word in step order, so an author can see the dial a word makes before authoring it.",
@@ -1067,6 +1071,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.generate",
             description: $"Redraws a DRAW SITE — a state row declaring a \"draw\" facet: {WorldGenerateForms.Spelling}. The site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {{...}}), and the drawn value lands in the site's own slot cell — or, on a KEYED site (a dice tray), one numeric sample per cell in cell order; naming keys redraws those cells alone and holds the rest. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under an exhausting mode (withoutReplacement / restartOnExhaustion) each alternative is drawn at most once per context, and the drawn mask persists across draws in THIS SITE's own bookkeeping (two sites sharing one source draw independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
@@ -1099,6 +1104,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.state",
             description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: {WorldStateForms.Spelling}.",
@@ -1121,6 +1127,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.state.similar",
             description: $"Ranks cells of a target vector row against a query vector by cosine similarity and dot product (Immediate): {WorldStateSimilarForms.Spelling}. Reads through the caller's visibility; never writes.",

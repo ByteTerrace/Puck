@@ -312,6 +312,7 @@ public sealed class ConsoleSessionBankTests {
     private sealed class ProbeModule(List<CommandContext> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "probe",
                 description: "Reports its invoking seat.",
                 handler: (context, _) => {
@@ -325,6 +326,7 @@ public sealed class ConsoleSessionBankTests {
     private sealed class DeferredProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 name: "deferred-probe",
                 description: "Reports after deterministic dispatch.",

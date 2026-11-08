@@ -375,6 +375,7 @@ public sealed class CommandRegistryBoundaryTests {
         public IEnumerable<CommandDefinition> GetCommands() {
             for (var index = 0; (index < count); index++) {
                 yield return CommandDefinition.Verb(
+                    audience: CommandAudience.Anyone,
                     name: $"command.{index}",
                     description: "Widens the interned id space.",
                     valueKind: CommandValueKind.Digital,
@@ -384,6 +385,7 @@ public sealed class CommandRegistryBoundaryTests {
             }
 
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.wide",
                 description: "A deferred verb whose interned id is wider than the reading registry's table.",
                 handler: static (_, _) => CommandResult.None,
@@ -406,6 +408,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class CancellingModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "cancel.probe",
                 description: "Observes an already-cancelled host token.",
                 handler: static (_, _) => throw new OperationCanceledException(),
@@ -416,6 +419,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class CancellingSimulationModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.cancel",
                 description: "Observes an already-cancelled host token when its tick applies.",
                 handler: static (_, _) => throw new OperationCanceledException(),
@@ -433,6 +437,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class BoundProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "bound.probe",
                 description: "A bound verb whose dispatch notifies observers.",
                 valueKind: CommandValueKind.Digital,
@@ -444,6 +449,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class RecordingSimulationModule(List<string> applied) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.record",
                 description: "Records its argument when its tick applies.",
                 handler: (_, args) => {
@@ -461,6 +467,7 @@ public sealed class CommandRegistryBoundaryTests {
             // A bare verb: its text command takes no arguments at all, so a line carrying some is accepted at submit
             // (Simulation defers its parse) and refused when the tick decodes it.
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "sim.strict",
                 description: "A deferred verb whose text command accepts no arguments.",
                 valueKind: CommandValueKind.Digital,
@@ -473,6 +480,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class SumModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sum",
                 description: "An immediate verb the queued line behind a barrier names.",
                 handler: static (_, _) => CommandResult.None,
@@ -483,6 +491,7 @@ public sealed class CommandRegistryBoundaryTests {
     private sealed class UnrenderableFaultModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "boom.unrenderable",
                 description: "Throws an exception whose own Message getter throws.",
                 valueKind: CommandValueKind.Digital,

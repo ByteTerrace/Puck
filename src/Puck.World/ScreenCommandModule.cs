@@ -59,6 +59,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     }
     private IEnumerable<CommandDefinition> Commands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
             description: $"Inserts content into the named machine displayed by a screen: {ScreenInsertForms.Spelling}. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing and refuses the insert by name.",
@@ -66,6 +67,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
             forms: ScreenSourceForms,
@@ -74,6 +76,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.eject",
             description: "Ejects a screen's live source, live: " + ScreenEjectForms.Spelling + ". A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive, while a presentation source ejects directly through the binder.",
@@ -81,24 +84,28 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.machines",
             description: "Echoes the registered screen-machine engines and cartridge forge compilers: world.machines. A query (always echoes).",
             handler: MachinesHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.links",
             description: "Echoes every live cable link: screen.links — each link's name, member screens, and live (transfers=…) or dormant (with the reason) state. A query (always echoes, even under wire.ack quiet).",
             handler: LinksHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.camera",
             description: "Echoes every known camera device: screen.camera — one section per device, its roster token (camera<N>, world.devices' own vocabulary), name, sensors, live tier (gpu | cpu | opening | unopened), and the seat it is currently assigned to (or 'unassigned'); a device with a live sensor feed additionally reports that sensor's negotiated extent, native transport subtype/rate, each device-supported control's current value/mode and range (with auto capability), the currently-resolved seat's authored value, and the authored vendor-extension rows read back raw. Controls are per DEVICE: whichever seat resolves to a device supplies its desired control state (the first controls-bearing camera row for that seat wins; an UpsertScreen mutation moves it live). A query (always echoes, even under wire.ack quiet). Errors when no camera device has ever been enumerated.",
             handler: CameraHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.state",
             description: "Echoes a screen's live machine state: " + ScreenStateForms.Spelling + " — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
@@ -106,6 +113,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "screen.peek",
             description: "Reads one memory byte from a screen's machine: " + ScreenPeekForms.Spelling + " — <addr> a 0x-prefixed hex machine address (or variable symbol for compiled cartridges). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
@@ -113,18 +121,21 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             handler: PeekHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.screens",
             description: "Lists every declared diegetic screen, then every creation face showing a source, one segment each — index, source kind (none, a producer's id such as testPattern, qr, camera or capture, view, probe:<id>, machine:<instance>:<output>, session:<destination> or text:<n>-line), bound/unbound (a nonzero live provider handle this frame), its engage policy (engageable|fixed), material:<id> for a screen whose row names a screen material, for a camera on its GPU tier, a capture on its GPU route or a probe output, order:fence (the render device waits on the producer's shared fence) or order:cpu-wait (reason) (a device that cannot share the fence waits on the CPU), and last the mapping the screen publishes, in the line world.view.panes prints for a pane (mapping producer:source$<producer>$<digest> surface … or instance:<view> surface …, the source extent, crop, layout, fit, a warp and the destination), or mapping none (reason): no image source, a live presentation source no row names, an extent not known yet, or not published by a boot that presents nothing. No argument; the pipe-assertable state proving the test-pattern screen is bound and the unbound screen shades as dark glass. Every boot shape answers it, headless and offscreen included. A query — its listing always echoes, even under wire.ack quiet.",
             handler: ScreensHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.nesting",
             description: "Lists every level of nested worlds the presentation shows: world.nesting — the nesting depth (the boot world's views.nestingDepth), then each world a seat is presented in (routed$<digest> depth 0 world <authority>, the digest 16 hex characters of the authority identity's SHA-256) and each session view at every depth by name (session$<screen>, then one $<screen> more a level), with its depth, its destination, the residency it renders through (endpoint:<authority>, the one every seat and fully disclosed window presenting that world shares, or own), and what each of its world's screens shows: <index>:<instance> naming a session view one level deeper, a shared source instance (source$<producer>$<digest>), a fallback colour's source instance past the depth (source$color$<digest>), or none. No argument. A query — its listing always echoes, even under wire.ack quiet.",
             handler: NestingHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.view-refresh",
             description: "Sets the diegetic views' deterministic offscreen refresh cadence: " + WorldViewRefreshForms.Spelling + ". 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",

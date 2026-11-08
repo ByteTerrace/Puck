@@ -75,6 +75,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.status",
             description: "Reads back this silo's own identity: master cadence (Hz), declared world count, store target, and clustering.",
@@ -84,6 +85,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             ))
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.grains",
             description: "Reads back every currently admitted row: key, world id, rateHz, tick, elapsedEngineTicks, accumulator, behindTicks, held/awaiting-mirrors, door endpoint, paused, last checkpoint ordinal/tick/outcome, checkpointDeferred, pending/last journal append outcome, health.",
@@ -110,6 +112,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
             description: (SiloPublishForms.Spelling + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and requests publication undrawn, as a release publishes it, through the authority root for the declared row named by <key> (owner/{oid}/{world} or the bare world id). Completion or failure is reported asynchronously."),
@@ -164,6 +167,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.activate",
             description: $"{SiloActivateForms.Spelling}: requests activation of the declared row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
@@ -175,6 +179,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.deactivate",
             description: $"{SiloDeactivateForms.Spelling}: requests deactivation (with a final checkpoint) of the admitted row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
@@ -186,6 +191,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             )
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.checkpoint",
             description: (SiloCheckpointForms.Spelling + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome."),
@@ -233,6 +239,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "silo.use",
             description: $"{SiloUseForms.Spelling}: selects the row an untagged console line (one with no leading '@<key> ') routes to. Never refuses admitted-row traffic addressed with an explicit tag.",

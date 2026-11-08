@@ -150,6 +150,7 @@ public sealed class BindingWheelSectorTextTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ActionCommand,
                 description: "Radial sector probe.",
                 valueKind: CommandValueKind.Digital,

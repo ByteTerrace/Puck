@@ -78,6 +78,7 @@ public sealed class FixedStepPumpStepGateTests {
     private sealed class LateReaderModule(Func<TextCommandSource> source, StandardInputBacklog backlog, Func<int> completed, List<string> log) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Queues probe.write and releases the backlog from another thread.",
                 handler: (_, _) => {
@@ -94,6 +95,7 @@ public sealed class FixedStepPumpStepGateTests {
                 name: "probe.late"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed step count at once.",
                 handler: (_, _) => {
@@ -104,6 +106,7 @@ public sealed class FixedStepPumpStepGateTests {
                 name: "probe.read"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Records the completed step count when its step applies.",
                 handler: (_, _) => {

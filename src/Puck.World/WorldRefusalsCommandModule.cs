@@ -14,6 +14,7 @@ internal sealed class WorldRefusalsCommandModule : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.refusals",
             description: $"Echoes the engine's declared refusal catalog (Immediate; reads compiled-in data, never simulation state — zero per-tick cost, and the doors themselves pay nothing for it): {WorldRefusalsForms.Spelling}. Each row reads `<door>/<id> [protocol-fault|verdict] <condition>`, the bracket adding `, unsupported` for a refusal classified as an intentionally unsupported operation (acceptance law 6 enumerates those) — door is the refusing surface's stable name, id is the enum member a door's refusal path is required to name (never free text), kind separates 'the input is not even legible' (protocol-fault) from 'the input is legible and a rule refused what it means' (verdict), and condition is the one-line trigger. Sourced by reflecting over every RefusalAttribute-tagged enum member in this build (RefusalCatalog) — never a hand-kept second list, so an unlisted reason cannot be constructed at a covered door, and every listed reason is exactly what that door's own throw sites can select from (see RefusalAttribute's remarks for what this does and does not guarantee). With a door token, lists only that door's rows; an unknown door is refused by name.",

@@ -135,7 +135,7 @@ public sealed class AuthoredCommandVocabularyLawTests {
 
     private sealed class Probe : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
-            yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Bindable, description: "Bindable.", handler: static (_, _) => CommandResult.None, name: "probe.go");
+            yield return CommandDefinition.WithWireArgs(audience: CommandAudience.Anyone, bindability: CommandBindability.Bindable, description: "Bindable.", handler: static (_, _) => CommandResult.None, name: "probe.go");
             yield return CommandDefinition.WithWireArgs(audience: CommandAudience.Operator, bindability: CommandBindability.Bindable, description: "Operator.", handler: static (_, _) => CommandResult.None, name: "probe.secret");
         }
     }

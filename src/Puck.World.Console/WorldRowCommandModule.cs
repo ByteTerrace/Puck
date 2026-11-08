@@ -1969,6 +1969,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.row.set",
             description: $"Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): {WorldRowSetForms.Spelling}. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) replace the whole row (views.post takes its whole ordered JSON array, so a post pass is added, reordered or removed by writing the list). ONE grammar exception: properties.names takes a BARE NAME token, not JSON — the last form declares it idempotently. The LITERAL forms (the second and third) set ONE field inside a row instead of the whole thing, the second for a keyed section and the third for a keyless one — discriminated from the whole-row form by the second token's own shape (a bare key/field path never starts with '{{' or '['). <fieldPath> is the same dotted/bracketed grammar world.row.step and world.row read — a numeric index (shapes[3]) or a name/id-addressed selector (shapes[name=forearmL], palette[1].specular), refused by name when a selector matches none or more than one element, listing the candidates. Composes the modified row and submits it through the SAME Upsert the whole-row form uses, so a field's own declared type (a DocumentVector3's [x,y,z]-or-'state.row.key' binding-string arm, a nullable field's JSON null to clear) is validated at reparse exactly as it always is. Two edits to the SAME row in one tick window collide — the second composes from the same pre-drain base and would revert the first — and are refused by name; fence with world.wait, or compose one JSON row with the whole-row form. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
@@ -1994,6 +1995,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.row.remove",
             description: $"Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: {WorldRowRemoveForms.Spelling}. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, views.graphs, groups.kinds, interactions.interactions), plus properties.names (its key is the BARE NAME token). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views, views.seatRig, views.seatControl, views.post, playerDefaults.seatLook) has no remove — it is refused by name. The second and third forms remove ONE ELEMENT of a list field instead of a whole row, the second for a keyed section and the third for a keyless one (discriminated by argument count — 4 vs 3 — never by JSON shape, since neither token carries a payload). <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.shapes[name=forearmL].swings); <selector> is a bare 0-based index or field=value, refused by name when it names none or more than one element, listing the candidates. Composes and submits a whole-row upsert through the SAME section table the row-level form uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
@@ -2019,6 +2021,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
             description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion row's key movement scalars, holds, and planar shaping, and the kit's tether facet ('tether=none' for a kit that carries no rope). The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
@@ -2040,6 +2043,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.assign",
             description: $"Sets a row→entity assignment sequence, keyed by which table it targets: {WorldAssignForms.Spelling}. r1 selects from every row of that table; cycle walks the named row view by index.",
@@ -2051,6 +2055,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.row.step",
             description: $"Steps ONE FIELD inside a document row or section by a delta — {WorldRowStepForms.Spelling}, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material, creations.myrow.document.shapes[name=forearmL].rounding) — the same section table world.row.set resolves against, and the same [n]/[field=value] list-selector grammar world.row.set's literal form and world.row read (a selector refused by name when it matches none or more than one element, listing the candidates). Field-type semantics: a number adds delta, typed by the field's real CLR type (an integer field steps in exact integer arithmetic, a float/double field in floating point — a fractional step on a whole-numbered float lands, and an out-of-range integer step refuses by name rather than throwing); a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. The delta is an explicit numeric token; this row-edit verb is unbindable. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result, and the accept/reject narration arrives there (no synchronous applied-result echo; a drain rejection additionally prints a per-verb [world.row.step: …] line). A second step against the same row in one tick window is refused by name — both would compose from the same pre-drain base and the later would revert the earlier; fence with world.wait between steps.",
@@ -2077,6 +2082,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.row.add",
             description: $"Inserts ONE element into a LIST field inside a row: {WorldRowAddForms.Spelling} (the first form for a keyed section, the second for a keyless one). <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.palette, document.shapes[name=forearmL].swings — the same grammar world.row.set's literal form and world.row.step resolve a field through, walked all the way to the list itself), and a list field the row omits (a shape with no swings yet) is created to hold the first element when the row's own type declares the member a list; <json> is the new element's inline JSON. Omitting after= appends; after=<n> inserts after that 0-based index; after=<field>=<value> inserts after the element whose own field equals value, refused by name when it names none or more than one, listing the candidates. Composes and submits a whole-row upsert through the SAME section table world.row.set uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. Buffers and applies at the tick boundary; a full-document revalidation rejects loudly.",
@@ -2102,6 +2108,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.row",
             description: $"Reads back a row, or one field inside it, as canonical JSON (Immediate): {WorldRowForms.Spelling} (the first form for a keyed section, the second for a keyless one). <fieldPath> is the same dotted/bracketed grammar world.row.set's literal form and world.row.step resolve a field through (document.shapes[name=forearmL].rounding), and may end at a bare list field — world.row echoes '[world.row <index>: <name-or-id> <json>]' one line per element instead of one JSON blob. Every set/add/remove echoes its own 'old -> new' outcome at the tick boundary the same way world.row.step does; this verb reads the CURRENT value directly, with no mutation. An unknown path/key/field is refused by name.",

@@ -244,6 +244,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: ScrollCommand,
             description: "Feeds relative Axis2D vertical notches to the open radial's explicit ring selector. Fractional notches accumulate for this gesture; a closed wheel consumes nothing.",
@@ -257,6 +258,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             valueKind: CommandValueKind.Axis2D
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: SelectCommand,
             description: "Aims the open radial for the binding's seat from an authored Axis2D source — a stick's deflection read as-is, a relative source (mouse.motion) accumulated from the moment the radial opened. Bind either on each radial hold page; nothing is hard-coded by the presenter.",
@@ -264,6 +266,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             valueKind: CommandValueKind.Axis2D
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: RingCommand,
             description: $"Cycles an Explicit open radial menu's ACTIVE ring (wrapping): {PlayerWheelRingForms.Spelling} (player 1..4, default 1). Authors may bind any digital source with a constant Axis1D direction; mouse-wheel motion cycles the pointer seat too. REFUSES when no radial is open or its ring selection is neutral-relative Excursion.",
@@ -274,6 +277,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: CommitCommand,
             description: $"Commits the open radial menu: {PlayerWheelCommitForms.Spelling} (player 1..4, default 1) — queues the hovered sector's compiled activation in that seat's deterministic lane, or cancels when nothing is selected. Authors decide which opener releases commit. A release is deferred while another source still holds the same radial open.",
@@ -281,6 +285,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             handler: CommitHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: CancelCommand,
             description: $"Cancels the open radial without activating a sector: {PlayerWheelCancelForms.Spelling}. Bind any desired key or gamepad button on a radial hold page.",
@@ -288,6 +293,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             handler: CancelHandler
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.view.wheel",
             description: $"Echoes a radial's last composed frame: {WorldViewWheelForms.Spelling} — without a player reads the pointer seat; otherwise reads seat 1..4. Reports open state, radial id/group, rings, active ring, hovered sector or reason, authored pointer/ring-selection and placement policy, and hub anchor.",

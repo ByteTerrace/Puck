@@ -649,13 +649,15 @@ public sealed class ControlTests {
                 (context, _) => new(((context.Principal == Principal.Console)
                 ? "operator"
                 : "wrong")),
-                bindability: CommandBindability.Unbindable
+                bindability: CommandBindability.Unbindable,
+                audience: CommandAudience.Anyone
             );
             yield return CommandDefinition.WithWireArgs(
                 "hold",
                 "Hold this session.",
                 (context, _) => { context.TextSession!.HoldWhile(hold: held); return new("holding"); },
-                bindability: CommandBindability.Unbindable
+                bindability: CommandBindability.Unbindable,
+                audience: CommandAudience.Anyone
             );
         }
     }

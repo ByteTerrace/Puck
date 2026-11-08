@@ -30,7 +30,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
 
     private const string BranchForm = "branch <name>";
     private const string DiffForm = "diff <a> <b> [--json]";
-    private const string OnForm = "on [<MiB>]";
+    private const string OnForm = "on [<seconds> [<MiB>]]";
     private const string ReplayEditForm = "replay-edit <n>";
     private const string SaveForm = "save <branch> <tape>";
     private const string ScrubForm = "scrub <0..1>";
@@ -120,29 +120,45 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     }
     private CommandResult On(WireArgs args) {
         var budget = WorldHistory.DefaultBudgetBytes;
+        var seconds = WorldHistory.DefaultWindowSeconds;
 
-        if (args.Count == 2) {
+        if (args.Count > 3) {
+            return WorldHistoryForms.Refuse(args: in args);
+        }
+
+        if (args.Count >= 2) {
             if (
-                !args.TryUnsignedDigits(index: 1, value: out var mebibytes) ||
+                !args.TryUnsignedDigits(index: 1, value: out var window) ||
+                (window == 0UL) ||
+                (window > ((ulong)WorldHistory.MaxWindowSeconds))
+            ) {
+                return CommandResult.Error(output: $"[world.history: the window is a whole number of seconds, 1 to {WorldHistory.MaxWindowSeconds}]");
+            }
+
+            seconds = ((int)window);
+        }
+
+        if (args.Count == 3) {
+            if (
+                !args.TryUnsignedDigits(index: 2, value: out var mebibytes) ||
                 (mebibytes == 0UL) ||
                 (mebibytes > 65536UL)
             ) {
-                return CommandResult.Error(output: "[world.history: the budget is a whole number of MiB, 1 to 65536]");
+                return CommandResult.Error(output: "[world.history: the memory ceiling is a whole number of MiB, 1 to 65536]");
             }
 
             budget = ((((long)mebibytes) * 1024L) * 1024L);
-        } else if (args.Count != 1) {
-            return WorldHistoryForms.Refuse(args: in args);
         }
 
         if (!m_history.TryOn(
             budgetBytes: budget,
-            refusal: out var refusal
+            refusal: out var refusal,
+            windowSeconds: seconds
         )) {
             return CommandResult.Error(output: $"[world.history: on refused — {refusal}]");
         }
 
-        return new CommandResult(Output: $"[world.history: on | budget {Bytes(bytes: budget)} | the next tick captures the first keyframe]");
+        return new CommandResult(Output: $"[world.history: on | window {seconds} s | ceiling {Bytes(bytes: budget)} | the next tick captures the first keyframe]");
     }
     private CommandResult ReplayEdit(WireArgs args) {
         if (
@@ -213,7 +229,9 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             : $"[world.history: live input {(wasPaused ? "resumes" : "was already running")} at the head]"));
     }
     // The authoritative hash folds every row, withheld ones included, so a seat is told only whether the re-simulation
-    // matched the recording; the operator is shown the hashes.
+    // matched the recording; the operator is shown the hashes. Whether the restore went through the load door follows
+    // the journal, which an operator's edit of a withheld row moves, so only the operator is told that too. The
+    // keyframe and the re-simulated count follow the window's tick cadence, which every reader may know.
     private CommandResult Seek(ulong target, string verb, Principal principal) {
         if (!m_history.TrySeek(
             documentPath: DocumentPath,
@@ -234,8 +252,11 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             );
         }
 
+        var route = (principal.IsAuthority
+            ? (report.RebuiltDocument ? " (through the load door)" : " (in place)")
+            : string.Empty);
         var how = ((report.KeyframeTick is { } keyframe)
-            ? $"restored keyframe {keyframe} ({(report.RebuiltDocument ? "through the load door" : "in place")}), re-simulated {report.TicksResimulated} tick(s)"
+            ? $"restored keyframe {keyframe}{route}, re-simulated {report.TicksResimulated} tick(s)"
             : $"re-simulated {report.TicksResimulated} tick(s) forward");
         var proof = (report.Matches
             ? (principal.IsAuthority ? $"authoritative 0x{report.LiveHash:X16} matches the recording" : "the authoritative state matches the recording")
@@ -255,12 +276,12 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         var status = m_history.Status();
 
         if (!status.On) {
-            return new CommandResult(Output: "[world.history: off — world.history on [<MiB>] starts recording]");
+            return new CommandResult(Output: "[world.history: off — world.history on [<seconds> [<MiB>]] starts recording]");
         }
 
         var counters = status.Counters;
         var window = ((status.Oldest is { } oldest)
-            ? $"window {oldest}..{status.Head} | cursor {status.Cursor} | {status.Keyframes} keyframe(s) every {status.Interval} tick(s)"
+            ? $"window {oldest}..{status.Head} of {status.WindowTicks} tick(s) | cursor {status.Cursor} | {status.Keyframes} keyframe(s) every {status.Interval} tick(s)"
             : $"no window — {status.Waiting}");
         var meanKeyframe = ((counters.KeyframesCaptured > 0L)
             ? (counters.KeyframeBytesCaptured / counters.KeyframesCaptured)
@@ -382,13 +403,15 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             forms: WorldHistoryForms,
-            description: $"Deterministic time travel over the boot world (Immediate): {WorldHistoryForms.Spelling}. on keeps a bounded ring of checkpoint keyframes plus each tick's recorded input and authoritative hash (default 64 MiB; off by default); off releases it; status (or no argument) echoes the window, the cursor, the keyframe spacing, the bytes held against the budget, and the counted cost. row echoes what the scrubber row draws: the window, the cursor, the keyframe ticks, and the kept branches as forks. seek moves the live world to the given tick in the window, backward or forward, by restoring the nearest keyframe and re-simulating the recorded input, proving every tick against the recorded hash; a seek behind the head pauses the world. step seeks n ticks relative to the cursor; scrub seeks to that fraction of the window. resume continues live input from the cursor and discards the recorded future at the next tick; branch keeps that future under the given name instead. switch re-enters a kept branch: the live world returns to its fork, the future recorded after the fork is kept under the same name in its place, and the branch's ticks re-simulate, each proved against the hash it recorded. save writes a kept branch as a .puckreplay tape that starts from the keyframe before its fork and names its fork, and reports the tape's re-drive verdict. diff re-simulates both ticks in an isolated shadow and prints which bodies, cells, fields, and hash components changed, with values (--json prints the exact machine form). replay-edit moves the document edits made at the cursor n ticks earlier in an isolated shadow and reports the first tick the world would have diverged, with the diff there. Bindable: on (bare, at the default budget), step, resume, branch, and scrub run for a seat that holds control over history (world.grant control history <seat>; the seeded control wildcard covers it), and row answers anyone; every other form answers the operator only. Refused by name across a crossing, a live neighbour, a remote peer, an engagement, an active replay recording or drive, input not yet run, and state a checkpoint cannot capture.",
+            description: $"Deterministic time travel over the boot world (Immediate): {WorldHistoryForms.Spelling}. on keeps a ring of checkpoint keyframes, one per simulated second, plus each tick's recorded input and authoritative hash, reaching <seconds> behind the head (default 60; off by default) within a memory ceiling of <MiB> (default 64, which evicts earlier only when the window does not fit it); off releases it; status (or no argument) echoes the window, the cursor, the keyframe spacing, the bytes held against the ceiling, and the counted cost. row echoes what the scrubber row draws: the window, the cursor, the keyframe ticks, and the kept branches as forks. seek moves the live world to the given tick in the window, backward or forward, by restoring the nearest keyframe and re-simulating the recorded input, proving every tick against the recorded hash; a seek behind the head pauses the world. step seeks n ticks relative to the cursor; scrub seeks to that fraction of the window. resume continues live input from the cursor and discards the recorded future at the next tick; branch keeps that future under the given name instead. switch re-enters a kept branch: the live world returns to its fork, the future recorded after the fork is kept under the same name in its place, and the branch's ticks re-simulate, each proved against the hash it recorded. save writes a kept branch as a .puckreplay tape that starts from the keyframe before its fork and names its fork, and reports the tape's re-drive verdict. diff re-simulates both ticks in an isolated shadow and prints which bodies, cells, fields, and hash components changed, with values (--json prints the exact machine form). replay-edit moves the document edits made at the cursor n ticks earlier in an isolated shadow and reports the first tick the world would have diverged, with the diff there. Bindable: on (bare, at the default window and ceiling), step, resume, branch, and scrub run for a seat that holds control over history (world.grant control history <seat>; the seeded control wildcard covers it), and row answers anyone; every other form answers the operator only. Refused by name across a crossing, a live neighbour, a remote peer, an engagement, an active replay recording or drive, input not yet run, and state a checkpoint cannot capture.",
             handler: Dispatch,
             name: Command
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             description: "The in-session history scrubber row's pointer (held; the build page binds the left mouse button): while held, seeks the boot world to the tick under the pressing seat's pointer on the row its view draws, as world.history scrub does, checked under the seat's principal against control over history. A press off the row, or on the tick the world already sits at, does nothing.",
             handler: Drag,

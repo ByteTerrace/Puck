@@ -1079,6 +1079,7 @@ public sealed class InputRouterTests {
     private sealed class DigitalModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: command,
                 description: "Digital held probe.",
                 valueKind: CommandValueKind.Digital,
@@ -1090,6 +1091,7 @@ public sealed class InputRouterTests {
     private sealed class SimulationDigitalModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: command,
                 description: "Simulation-routed digital probe.",
                 handler: static (_, _) => CommandResult.None,
@@ -1101,6 +1103,7 @@ public sealed class InputRouterTests {
     private sealed class AxisModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: command,
                 description: "Axis held probe.",
                 valueKind: CommandValueKind.Axis1D,
@@ -1112,6 +1115,7 @@ public sealed class InputRouterTests {
     private sealed class MappedModule(List<CommandPhase> phases) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "mapped.hold",
                 description: "Map release probe.",
                 valueKind: CommandValueKind.Axis1D,

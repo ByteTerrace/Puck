@@ -53,6 +53,7 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: Verb,
             description: "Resizes the offscreen display live: " + WorldResizeForms.Spelling + ", each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display follows its window's client area.",

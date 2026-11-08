@@ -165,6 +165,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.target",
             description: $"Sets the continuous presentation target live: {WorldTargetForms.Spelling}. <hz> is any positive finite number, capped by the effective display ceiling. 'display' (or 'vrr') uses verified VRR bounds when advertised and otherwise the active signal timing. Presentation only; present-mode switching remains a boot option.",
@@ -219,12 +220,14 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.cameras",
             description: "Lists every declared placeable camera with its anchor, independent motion and aim policies, and render dimensions. No argument; the camera-table twin of world.screens.",
             handler: CamerasHandler
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.fps",
             description: "Echoes the measured frame rate over the last 2 s, reaching back to the last four frames when they span longer — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target; a renderer that has composed nothing for longer than both the window and four times its longest recent frame reads as stalled. The slowest frame reads the frame-rate bar.",

@@ -568,6 +568,7 @@ public sealed class TextCommandSourceTests {
     private sealed class HoldModule(Func<bool> held) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "hold",
                 description: "Holds the issuing session while the law's flag is set.",
                 bindability: CommandBindability.Unbindable,
@@ -590,6 +591,7 @@ public sealed class TextCommandSourceTests {
     private sealed class IdentityModule(Action<CommandContext> observe) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "identity",
                 description: "Records the issuing session.",
                 bindability: CommandBindability.Unbindable,
@@ -609,6 +611,7 @@ public sealed class TextCommandSourceTests {
     private sealed class DeferredModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "sim.defer",
                 description: "Folds into the tick's snapshot instead of running inline.",
                 handler: static (_, _) => CommandResult.None,
@@ -620,6 +623,7 @@ public sealed class TextCommandSourceTests {
     private sealed class GateModule(Action arm) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: "step",
                 description: "Arms the source's hold gate from inside the drain.",
                 valueKind: CommandValueKind.Digital,
@@ -635,6 +639,7 @@ public sealed class TextCommandSourceTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "probe",
                 description: "Accepts any trailing tokens and does nothing.",
                 handler: static (_, _) => CommandResult.None,

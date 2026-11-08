@@ -166,6 +166,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             description: $"Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows, as the caller's own disclosure shows them: {WorldTabletopForms.Spelling}. With a placement id, echoes only that tabletop.",
             forms: WorldTabletopForms,

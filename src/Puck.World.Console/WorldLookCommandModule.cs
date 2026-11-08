@@ -126,6 +126,7 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority) : I
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.population.spawn",
             description: $"Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): {WorldPopulationSpawnForms.Spelling}.",

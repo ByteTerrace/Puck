@@ -57,6 +57,7 @@ public static class PlayerAssignmentCommand {
         ArgumentNullException.ThrowIfNull(roster);
 
         return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: PlayerCommandNames.AssignCommand,
             description: Description,

@@ -215,7 +215,7 @@ public sealed partial class WorldHistory {
             );
             m_cursor = tick;
 
-            if (m_segments[^1].Count >= m_interval) {
+            if (m_segments[^1].Count >= Interval) {
                 _ = TryKeyframe(authoritativeHash: hash, tick: tick);
             }
         }

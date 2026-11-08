@@ -339,6 +339,7 @@ public sealed class TextCommandSessionTests {
     private sealed class SessionModule(List<CommandContext> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "probe",
                 description: "Records its stamped context.",
                 handler: (context, _) => {
@@ -348,6 +349,7 @@ public sealed class TextCommandSessionTests {
                 bindability: CommandBindability.Unbindable
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 name: "simulate",
                 description: "Deferred session barrier probe.",
                 handler: (context, _) => {
@@ -361,6 +363,7 @@ public sealed class TextCommandSessionTests {
     }
     private sealed class FocusModule(List<string> dispatched) : ICommandModule {
         private CommandDefinition Definition(string name, CommandInputScope inputScope) => CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             name: name,
             description: "Focus routing probe.",
             valueKind: CommandValueKind.Digital,

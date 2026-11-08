@@ -213,15 +213,17 @@ public sealed class CommandSettlementTests {
 
     private sealed class SettlingModule(CommandSettlement? settlement) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
-            yield return CommandDefinition.WithWireArgs(name: "cancel", bindability: CommandBindability.Unbindable, description: "Cancels the host tick.",
+            yield return CommandDefinition.WithWireArgs(audience: CommandAudience.Anyone, name: "cancel", bindability: CommandBindability.Unbindable, description: "Cancels the host tick.",
                 handler: static (_, _) => throw new OperationCanceledException(), routing: CommandRouting.Simulation);
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Answers at once.",
                 handler: static (_, _) => new CommandResult(Output: "[now]"),
                 name: "now"
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Answers when its tick applies.",
                 handler: static (_, args) => ((args.Count == 0)
@@ -232,6 +234,7 @@ public sealed class CommandSettlementTests {
                 routing: CommandRouting.Simulation
             );
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Starts work an authority decides later.",
                 handler: (_, _) => CommandResult.Settling(settlement: settlement!),

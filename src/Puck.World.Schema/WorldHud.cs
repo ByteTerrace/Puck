@@ -279,7 +279,7 @@ public enum HudBindingKind : byte {
     HistoryCursor,
 
     /// <summary>The boot world's in-session history window (<c>history.window</c>): the oldest and newest recorded
-    /// ticks, with a gauge fraction for the bytes held against the budget.</summary>
+    /// ticks, with a gauge fraction for how far the window has filled toward its length.</summary>
     HistoryWindow,
 
     /// <summary>A named <c>state</c> row's live value, or one of its cells — see <see cref="HudBinding.StateName"/>/

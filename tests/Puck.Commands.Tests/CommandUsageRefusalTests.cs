@@ -90,6 +90,7 @@ public sealed class CommandUsageRefusalTests {
     }
 
     private static CommandDefinition Define(string description, CommandForms forms, string name) => CommandDefinition.WithWireArgs(
+        audience: CommandAudience.Anyone,
         bindability: CommandBindability.Unbindable,
         description: description,
         forms: forms,
@@ -106,6 +107,7 @@ public sealed class CommandUsageRefusalTests {
     private sealed class BareModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Does nothing: x.bare.",
                 handler: (_, args) => (CommandResult.RequireNoArguments(args: in args, verb: "x.bare") ?? CommandResult.None),

@@ -453,6 +453,7 @@ public sealed class InputRouterMomentaryReleaseTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: ChannelCommand,
                 description: "Channel destination shared by a chord row and a tapped activator.",
                 valueKind: CommandValueKind.Axis1D,
@@ -461,6 +462,7 @@ public sealed class InputRouterMomentaryReleaseTests {
                 map: "play"
             );
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 name: HudCommand,
                 description: "Registers a second map so a transition can keep the first one active.",
                 valueKind: CommandValueKind.Digital,

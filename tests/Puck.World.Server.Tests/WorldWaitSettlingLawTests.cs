@@ -33,6 +33,7 @@ public sealed class WorldWaitSettlingLawTests {
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Unbindable,
                 description: "Answers at once.",
                 handler: static (_, _) => new CommandResult(Output: "[probe]"),

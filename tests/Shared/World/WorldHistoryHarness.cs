@@ -54,7 +54,7 @@ internal sealed class WorldHistoryHarness : IDisposable {
 
         if (on) {
             Assert.True(
-                condition: History.TryOn(
+                condition: History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds,
                     budgetBytes: WorldHistory.DefaultBudgetBytes,
                     refusal: out var refusal
                 ),

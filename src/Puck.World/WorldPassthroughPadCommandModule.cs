@@ -53,6 +53,7 @@ public sealed class WorldPassthroughPadCommandModule(WorldSourcePassthrough? pas
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             description: "A local pad's stick as the pointer over the window its seat frames on an engaged window capture's screen (Axis2D, +X right / +Y up): the pointer moves across the framed picture at the screen route's padPointer feel, clamped to the picture, and the system cursor follows it. Only a local pad's own control drives it; a typed line, an authored command, a wheel sector, player.signal and a probe are refused. source.passthrough echoes the pad.",
             held: true,
@@ -72,6 +73,7 @@ public sealed class WorldPassthroughPadCommandModule(WorldSourcePassthrough? pas
             )
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             description: "A local pad's stick as the wheel at the pointer over the window its seat frames (Axis2D, +X scrolls right / +Y scrolls up), at the screen route's padPointer scrollSpeed, on a window the local user has opened. Only a local pad's own control drives it.",
             held: true,
@@ -95,6 +97,7 @@ public sealed class WorldPassthroughPadCommandModule(WorldSourcePassthrough? pas
             var verb = $"source.passthrough.button.{name}";
 
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: $"Held: a local pad's control as the {name} pointer button at the pointer over the window its seat frames. A press on the framed picture opens the window as a passthrough source when it is not open yet, as a physical click does, and reaches it; the release goes where the press went, so holding it drags. Only a local pad's own control drives it.",
                 held: true,
@@ -119,6 +122,7 @@ public sealed class WorldPassthroughPadCommandModule(WorldSourcePassthrough? pas
             var verb = $"source.passthrough.arrow.{name}";
 
             yield return CommandDefinition.Verb(
+                audience: CommandAudience.Anyone,
                 bindability: CommandBindability.Bindable,
                 description: $"Held: a local pad's control as the {name} arrow key on the window its seat frames, once the local user has opened it, wherever the keyboard is; the release goes to the window its press reached. Only a local pad's own control drives it.",
                 held: true,

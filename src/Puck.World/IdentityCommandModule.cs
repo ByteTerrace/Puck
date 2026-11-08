@@ -502,6 +502,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.list",
             description: "Lists owned identity worlds, their paths, any documents this catalog discarded at boot (moved into unloadable/), and any it refused in place (still in the catalog directory with their original bytes).",
@@ -509,6 +510,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: _ => new CommandResult(Output: Describe())
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.create",
             description: $"Creates an owned identity world: {IdentityCreateForms.Spelling}.",
@@ -516,6 +518,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: Create
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.show",
             description: $"Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: {IdentityShowForms.Spelling}. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under — the claimed-or-kit rate after the kit's own speed.envelope clamps it, so a kit whose envelope pins min == max reads its own pinned rate regardless of what the profile claims.",
@@ -523,6 +526,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: Show
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.motion",
             description: $"Sets identity-owned motion slots: {IdentityMotionForms.Spelling}. Camera preferences are authored as seatDefaults.seatCameraFeel on the identity document.",
@@ -531,6 +535,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.hud",
             description: "Replaces the identity-owned PRIVATE seat panel: " + IdentityHudForms.Spelling + " — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.",
@@ -539,6 +544,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.facts",
             description: $"Reads back the facts the identity driving a seat carries on its own document — the row identity.facts names, its fill against identity.facts.capacity, and every key:value — {IdentityFactsForms.Spelling}. The body's lane in the world's reserved 'identity' row is world.state's to echo.",
@@ -547,6 +553,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.fact.set",
             description: $"Writes one integer fact on the identity driving a seat and persists it through the owned-world catalog: {IdentityFactSetForms.Spelling}. A seat principal may address only its own seat; the console addresses the seat it names. The seat's body lane follows on the next tick. Refuses by name an unowned identity, a key that is not a cell name, and a row already holding identity.facts.capacity distinct keys.",
@@ -555,6 +562,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.Verb(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.writebacks",
             description: "Shows the latest owner-side cross-document durable-state verdict (numeric value= or text= depending on the submission's operand).",
@@ -562,6 +570,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: _ => new CommandResult(Output: DescribeWriteback())
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.deliver",
             description: "DEV/TEST cross-document TEXT delivery — issues one WorldDocumentSubmission carrying a TEXT operand through the SAME write-back door the sim's own per-tick numeric outputs use (Server.WorldOwnedWorlds.Decide): " + IdentityDeliverForms.Spelling + ". <source-id> is the asking document (the door checks OWNER'S OWN grants section for a Mutate/state:<row> hold naming document:<source-id> with a write mask admitting the requested operation); <owner-id> is the document the row lives in; <row> names an ALREADY-DECLARED text-kind state row in the OWNER's document (declare it there first — there is no spooled delivery for an undeclared row, which refuses by name with the remedy); <set|add> is the requested WorldDocumentWriteKind — carried through even though <add> against a text row ALWAYS refuses by name at the door regardless of what the write mask admits (text is Set-only; this harness carries both so that refusal is exercisable, not merely asserted), which is why it is a required token here rather than assumed Set; <text...> is the raw tail (everything after <set|add>, spaces included, capped at StateCapacity.MaxTextValueLength). Applies inline and echoes the receipt immediately; identity.writebacks re-echoes the same receipt afterward. This is the MINIMAL test harness for the door only — the real, chat-integrated whisper verb (source id derived from the acting player's own identity) is chat.whisper (ChatCommandModule); this dev harness stays for probing the door with an arbitrary source id chat.whisper can never send from its own identity.",
@@ -573,6 +582,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "identity.state",
             description: $"Reads back ONE state row from an owned identity's OWN document, addressed by id — not by joined seat, since the row a cross-document delivery lands in belongs to the OWNER's document regardless of whether that identity is currently seated: {IdentityStateForms.Spelling}. The same (row, kind, value) grain world.state's one-argument form reports for the running world's own document, over an owned IDENTITY document instead — the shape Server.WorldOwnedWorlds.Decide writes into. Refuses by name if <id> names no owned identity or <row> names no state row there.",

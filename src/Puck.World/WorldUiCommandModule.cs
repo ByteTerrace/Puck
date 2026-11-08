@@ -234,6 +234,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.screenshot",
             forms: WorldScreenshotForms,
@@ -359,6 +360,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: BindingBarCommand,
             description: $"Reads or overrides one local seat's resolved on-screen binding bar: {WorldBindingBarForms.Spelling}. on/off force visibility; auto returns to authored enabled/rest behavior. The override is a session lever — checked against Mutate over section:bindings before it applies, and player 1's forced state folds into bindingOverlays[0].bindingBar.enabled at world.save. The read-back reports the resolved world-or-identity policy, its text policy (off = a purely pictographic bar: no letter badges, no page name, no chord hint that needs either), its authored slot/bank counts, the resolved (world-or-player) hideUnbound and stacked preferences, current hidden state and reason, and every layout value (scale reflects a player's own override when set). Player defaults to 1 (1..4).",

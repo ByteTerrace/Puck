@@ -22,6 +22,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "update.status",
             description: "Reports the resolved self-update configuration (Immediate): app, channel, cache root, installed version, check interval, and keep-N-versions.",
@@ -40,6 +41,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "update.check",
             description: "Fetches and verifies the tracked channel's current release manifest and reports what would change — signature, sequence-replay, revocation, minimumSupported, version-monotonicity, and rollout-bucket checks, in that order. Downloads nothing (Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull).",
@@ -61,6 +63,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "update.apply",
             description: "Re-checks the tracked channel and, only when a verified in-rollout newer version is found, stages and applies it — writing state-generation and atomically swapping the install's 'current' pointer the stub reads at its NEXT launch. Refuses without touching anything on disk when the check does not report available. Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull.",
