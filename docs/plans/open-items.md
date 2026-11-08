@@ -3130,6 +3130,14 @@ Klondike table stands north of the Go table in the board game room
 (`worlds/debug/shapes.md`); the look is the owner's review.
 
 - The Klondike table had three defects in a window (court figures standing through the cards laid over them, unreadable pips on the dark ground, a layout crammed at the far edge); the standard deck's two variants, the flattened court figures and the centred 10.6 cm layout answer them headless. Next: a windowed look, close and wide, with the script in `worlds/debug/cardtable.md`.
+- [medium] The standard's deck departs from the true-size ruling: `cards.puck`
+  authors a card 1.76 wide and 2.48 tall and the table's look scales it
+  (`cardScale`, `worlds/debug/cardtable.puck`). The bake samples a group in
+  its slot's own units, so the card is baked at the resolution of a 1.76 m
+  object and drawn at 10.6 cm (`docs/plans/creation-library/puck-creations.md`,
+  section 5). Author the deck at its real millimetres with the look at scale
+  one; `puck mesh audit --prototype card-h-k --cpu` before and after shows the
+  triangle count fall to what the drawn size needs. Owner: debug-world content.
 - Prior art still quarantined for the next steps (the
   [port packet](#port-the-experimental-worlds-missing-features) inventories it): `experimental/src/Puck.World/Assets/worlds/games/`
   holds Spider (one, two or four suits), FreeCell and poker with a hand-strength
@@ -3413,6 +3421,18 @@ hang, then the pre-`main` language findings.
   Override by id is the standard's customisation mechanism (AGENTS.md), so a
   refinement must name its target by a stable id and carry only the fields it
   writes. Owner: language.
+- [medium] The authoring-time creation store `WorldPrototype`'s remarks name
+  ("the CAS is an authoring-time import/export cache") has no implementation:
+  no code puts or gets a creation document outside a projection
+  (`docs/plans/creation-library/puck-creations.md`, section 3). Build it when
+  a creation-library step needs it ([the memo](creation-library.md), option 2),
+  or delete the remark. Owner: authoring.
+- [medium] No log of author walls exists, though the "Ergonomic is optimal"
+  ruling (AGENTS.md) asks for "a log of where authors (the games, the debug
+  world, agents authoring from prompts) hit walls or reach for clumsy forms".
+  The walls sit in the language plan's S11 audit, this section and the
+  sdf-authoring skill's evals. Start the one page under `docs/plans/` those
+  three link to, and move the walls recorded here into it. Owner: lead.
 - [medium] A rule `local` costs more than the expression it names: with
   computed keys lowered into the program (rule-faults step 2),
   `local k = a + 1` then `cards[k]` prices the gate at 6 plus the local's 3 tokens
@@ -4587,6 +4607,12 @@ read one. The plans that keep open items:
 - [Play](play.md#open-items): the seat's standard chase camera, the finder, MCP's
   surfaces and housekeeping; the population waits for the job-system memo, and
   the One World, content and federation waves are dormant.
+- [The creation library](creation-library.md#5-engineering-versus-the-owners-product-calls):
+  the engineering steps that pay inside one author's packages (declared
+  controls and presets, field extents in `creation stats`, the recorded
+  expansion, named attachment frames, a shared role table, creations in the
+  cost report), and the owner's calls that wait for creations to cross between
+  parties.
 - [Rendering](rendering.md): the status table names each package's open
   remainder: the frame-rate bars on the RTX 2060 and the Steam Deck, the mesh
   bake and its defects, glass, GPU capture findings and the remaining parts of
