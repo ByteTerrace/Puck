@@ -7,11 +7,11 @@
 // false at a gate and skips an effect, so its negation fires and its increment commits: the gates are evaluated, and
 // only the fault keeps the others shut.
 //
-// Each block is one finding of the rule-faults design, named W1 to W15 (L1, its nested-scope law, is a C# law beside
+// Each block is one finding of the rule-faults design, named W1 to W16 (L1, its nested-scope law, is a C# law beside
 // the latch laws). Every block is green: W1 to W9, W12 and W13 pin what the interpreter and the gate's verdict provide,
 // W10 and W11 pin that a firing's latch bit and decision state rewind with its scope (W11 for its option, no-choice and
 // neighbour effects, and for the liveness step reading the population its firing installs), and W14 and W15 that a
-// decision's common and option effects are one firing.
+// decision's common and option effects are one firing. W16 distinguishes an absent body target from a stored zero.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -59,6 +59,25 @@ state {
     }
   }
   world {
+    // W16: topology cell 0 has never held a target. Cell 1 stores body index 0; the keyed row loses its cell at tick 19.
+    row {
+      name: "bodyTargets"
+      kind: "Int"
+      domain: cellsOf(topology: faultGrid)
+      cells [{ key: "1", value: 0 }]
+    }
+    row {
+      name: "removedBodyTarget"
+      kind: "Int"
+      cells [{ key: "target", value: 0 }]
+    }
+    table bodyTargetWitness {
+      emptyLanded = 0
+      removedLanded = 0
+      zeroLanded = 0
+      emptyFact = 0
+      zeroFact = 0
+    }
     row {
       name: "a"
       kind: "Int"
@@ -964,6 +983,57 @@ rule "install-delivery-fault" {
   afterInstall += 1
   removePlacement(id: `rule-faults-inhabited`)
   emitCue(name: "ruleFaultProbe", key: 1 / ($population - populationSeen + 1))
+}
+
+// W16: both body-reference paths read the same live absence. An absent pose refuses its whole firing, including
+// the preceding increment. A stored zero still selects body 0, in both an effect and a fact.
+// Start after the population witnesses settle, so moving the seat cannot change their neighbour selection.
+rule "body-target-remove" {
+  when $tick == 19
+  mode: Level
+  remove removedBodyTarget.target
+}
+rule "body-target-zero" {
+  when $tick >= 20
+  mode: Level
+  bodyTargetWitness.zeroLanded += 1
+  poseCell(key: `cell:bodyTargets:1`, topology: faultGrid, expression: 0, offset: [2, 0.05, 0])
+}
+rule "body-target-empty" {
+  when $tick >= 20
+  mode: Level
+  bodyTargetWitness.emptyLanded += 1
+  poseCell(key: `cell:bodyTargets:0`, topology: faultGrid, expression: 3, offset: [20, 0.05, 0])
+}
+rule "body-target-removed" {
+  when $tick >= 20
+  mode: Level
+  bodyTargetWitness.removedLanded += 1
+  poseCell(key: `cell:removedBodyTarget:target`, topology: faultGrid, expression: 3, offset: [30, 0.05, 0])
+}
+rule "body-target-empty-fact" {
+  when $tick >= 20 and not bodyPosition(cell, bodyTargets, 0, x) == bodyPosition(body, 0, x)
+  mode: Level
+  bodyTargetWitness.emptyFact += 1
+}
+rule "body-target-zero-fact" {
+  when $tick >= 20 and bodyPosition(cell, bodyTargets, 1, x) == bodyPosition(body, 0, x)
+  mode: Level
+  bodyTargetWitness.zeroFact += 1
+}
+
+test "W16 an empty body target refuses its firing and a stored zero still names body 0" {
+  when {
+    ticks 30
+  }
+  expect {
+    bodyTargetWitness.emptyLanded == 0
+    bodyTargetWitness.removedLanded == 0
+    bodyTargetWitness.zeroLanded > 0
+    bodyTargetWitness.emptyFact > 0
+    bodyTargetWitness.zeroFact > 0
+    bodyPosition(body, 0, x) == 2.5
+  }
 }
 
 test "W1 a faulting remove key refuses its whole firing and the write before it" {

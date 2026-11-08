@@ -214,10 +214,11 @@ public sealed partial class WorldRuleHost {
                 index: index,
                 key: out var key
             ) ||
-                (Host.ReadArenaCell(
+                !Host.ReadArenaCell(
                 key: key,
                 rowOrdinal: tagRowOrdinal
-            ) == FixedQ4816.Zero)
+            ).TryFinite(raw: out var value) ||
+                (value == 0L)
             ) {
                 continue;
             }
@@ -393,41 +394,6 @@ public sealed partial class WorldRuleHost {
 
         return 0L;
     }
-    // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
-    // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
-    // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A
-    // row or cell the document no longer declares reads as zero rather than throwing — a mid-tick RemoveStateRow is
-    // the only way to get there, and the next Install's recompile refuses the rule outright if it can no longer
-    // resolve.
-    private FixedQ4816 ReadStateCell(string row, string key, ulong tick) {
-        if (
-            !WorldStateReader.TryRead(arena: Host.Arena,
-            definition: Host.Definition,
-            key: key,
-            rawValue: out var rawValue,
-            row: out var declared,
-            rowName: row,
-            text: out _,
-            tick: tick,
-            engineTick: Host.CompletedEngineTicks
-        ) ||
-            (rawValue is not { } raw)
-        ) {
-            return FixedQ4816.Zero;
-        }
-
-        return ((declared.Kind == CellKind.Fixed)
-            ? FixedQ4816.FromRawBits(value: raw)
-            : StateReader.LiftSaturating(raw: raw)
-        );
-    }
-    // Resolves ONE body reference to a live 0-based index (or -1 for "no body") — a literal index passes through
-    // unchanged (compile time already bounded it against the document's declared capacity), an argmax/argmin
-    // resolves through the same ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
-    // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
-    // The integer part of a Q48.16 value — the key or index a cell's value names.
-    private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
-
     /// <summary>Installs admission's pinned tables before boot reconciliation can query them.</summary>
     /// <param name="compilation">The boot definition's validated programs.</param>
     internal void InstallTables(WorldRuleCompilation compilation) => m_tables = compilation.Tables;
