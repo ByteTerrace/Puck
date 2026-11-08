@@ -1105,11 +1105,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         static float Oldest(List<float> values) => values.Count == 0 ? 0 : values[^1];
     }
     private void CaptureViewCameras(SdfFrame frame) {
+        // Indexed: the frame's views are an interface list, whose enumerator boxes every frame.
+        var views = frame.Views;
         var count = 0;
-        foreach (var view in frame.Views) { if (!view.Elsewhere) { count++; } }
+        for (var view = 0; view < views.Count; view++) { if (!views[view].Elsewhere) { count++; } }
         if (m_viewCameras.Length != count) { m_viewCameras = new CameraSnapshot[count]; }
         var index = 0;
-        foreach (var view in frame.Views) { if (!view.Elsewhere) { m_viewCameras[index++] = view.Camera; } }
+        for (var view = 0; view < views.Count; view++) { if (!views[view].Elsewhere) { m_viewCameras[index++] = views[view].Camera; } }
     }
     private static bool InView(Vector3 center, CameraSnapshot camera, float far) => camera.MaySee(center, default, default, default, 0, far);
     private static bool InAnyView(Vector3 center, in Snapshot snapshot) {
