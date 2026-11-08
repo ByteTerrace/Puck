@@ -23,9 +23,8 @@ public sealed class AzureResourceMetrics : IWorldExtensionObservationSource {
     private static readonly HashSet<string> Intervals = ["PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D"];
 
     private readonly string m_aggregationField;
-    private readonly HttpClient? m_httpClient;
+    private readonly AzureArmPipeline m_arm;
     private readonly int m_maximumItems;
-    private readonly HttpPipeline m_pipeline;
     private readonly AzureResourceMetricsSettings m_settings;
     private readonly Uri m_uri;
 
@@ -92,24 +91,17 @@ public sealed class AzureResourceMetrics : IWorldExtensionObservationSource {
         if (!Intervals.Contains(item: m_settings.Interval)) {
             throw new ArgumentException(message: "Metrics interval must be one of PT1M, PT5M, PT15M, PT30M, PT1H, PT6H, PT12H, P1D.");
         }
-        var endpoint = environment.Endpoint;
+        var scope = new ResourceIdentifier(resourceId: m_settings.ResourceId);
 
-        if (
-            (endpoint.Scheme != "https") ||
-            (endpoint.AbsolutePath != "/") ||
-            (endpoint.UserInfo.Length != 0) ||
-            (endpoint.Query.Length != 0) ||
-            (endpoint.Fragment.Length != 0)
-        ) {
-            throw new ArgumentException(message: "Metrics requires an HTTPS ARM origin.");
-        }
+        m_arm = new AzureArmPipeline(credential: credential, environment: environment, maximumRetries: 2, scope: scope,
+            transport: transport);
         var path = string.Join(
             separator: '/',
             values: m_settings.ResourceId.Split('/').Select(selector: Uri.EscapeDataString)
         );
 
         m_uri = new Uri(
-            baseUri: endpoint,
+            baseUri: m_arm.Origin,
             relativeUri: ((((((((path + "/providers/microsoft.insights/metrics?api-version=") + Uri.EscapeDataString(stringToEscape: m_settings.ApiVersion)) +
             "&metricnames=") + Uri.EscapeDataString(stringToEscape: string.Join(
                 separator: ',',
@@ -117,23 +109,6 @@ public sealed class AzureResourceMetrics : IWorldExtensionObservationSource {
             ))) +
             "&aggregation=") + Uri.EscapeDataString(stringToEscape: m_settings.Aggregation)) + "&interval=") + Uri.EscapeDataString(stringToEscape: m_settings.Interval))
         );
-        if (transport is null) {
-            m_httpClient = new(handler: new SocketsHttpHandler { AllowAutoRedirect = false });
-            transport = new HttpClientTransport(client: m_httpClient);
-        }
-        var options = new ArmClientOptions { Environment = environment, Transport = transport };
-
-        options.Retry.MaxRetries = 2;
-        options.Diagnostics.IsLoggingEnabled = false;
-        options.Diagnostics.IsDistributedTracingEnabled = false;
-        m_pipeline = new MetricsResource(
-            client: new ArmClient(
-                credential,
-                defaultSubscriptionId: null,
-                options
-            ),
-            scope: new ResourceIdentifier(resourceId: m_settings.ResourceId)
-        ).RequestPipeline;
     }
 
     /// <summary>Finds the newest bucket carrying a numeric value for the requested aggregation, scanning from the
@@ -173,43 +148,15 @@ public sealed class AzureResourceMetrics : IWorldExtensionObservationSource {
     }
 
     /// <summary>Disposes the owned transport; the supplied credential and any custom transport remain host-owned.</summary>
-    public void Dispose() => m_httpClient?.Dispose();
+    public void Dispose() => m_arm.Dispose();
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<WorldExtensionObservationItem>> ReadAsync(CancellationToken cancellationToken) {
-        using var message = m_pipeline.CreateMessage();
-
-        message.BufferResponse = false;
-        message.Request.Method = RequestMethod.Get;
-        message.Request.Uri.Reset(value: m_uri);
-        message.Request.Headers.SetValue(
-            name: "Accept",
-            value: "application/json"
-        );
-        await m_pipeline.SendAsync(
+        using var document = await m_arm.GetJsonAsync(
             cancellationToken: cancellationToken,
-            message: message
+            maximumBytes: m_settings.MaximumResponseBytes,
+            subject: "Metrics",
+            uri: m_uri
         ).ConfigureAwait(continueOnCapturedContext: false);
-        if (message.Response.Status != 200) { throw new InvalidOperationException(message: ("Metrics HTTP " + message.Response.Status)); }
-        using var buffer = new MemoryStream();
-        var bytes = new byte[8192];
-        var stream = (message.Response.ContentStream ?? throw new JsonException(message: "Metrics response has no body."));
-        int read;
-
-        while ((read = await stream.ReadAsync(
-            buffer: bytes,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false)) != 0) {
-            if ((buffer.Length + read) > m_settings.MaximumResponseBytes) { throw new InvalidOperationException(message: "Metrics response exceeds byte budget."); }
-            buffer.Write(
-                buffer: bytes,
-                count: read,
-                offset: 0
-            );
-        }
-        using var document = JsonDocument.Parse(buffer.GetBuffer().AsMemory(
-            0,
-            ((int)buffer.Length)
-        ));
         var values = new Dictionary<string, decimal>(comparer: StringComparer.Ordinal);
 
         foreach (var metric in document.RootElement.GetProperty(propertyName: "value").EnumerateArray()) {
@@ -243,13 +190,6 @@ public sealed class AzureResourceMetrics : IWorldExtensionObservationSource {
             ? throw new InvalidOperationException(message: "Metrics exceeds item budget.")
             : result
         );
-    }
-
-    private sealed class MetricsResource(ArmClient client, ResourceIdentifier scope) : ArmResource(
-        client,
-        scope
-    ) {
-        public HttpPipeline RequestPipeline => Pipeline;
     }
 }
 

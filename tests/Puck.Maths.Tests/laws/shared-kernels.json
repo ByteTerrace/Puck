@@ -393,9 +393,22 @@
       {
         "Type": "Puck.Maths.FixedVector3",
         "Name": "TryRejectNormalized"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "LimitAlong"
       }
     ],
     "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedVector3.LimitAlong at the swept vector along the swept axis normalized, at bounds of zero, the vector's own component and the folded third lane, bit for bit",
+        "Against": "Dot(v, axis) > bound ? v − axis * (Dot(v, axis) − bound) : v spelled inline, and, for lanes folded below 2^40 where Dot cannot wrap, at the negated axis with a zero bound v − axis * min(Dot(v, axis), 0), the approach-removal form the contact responses held",
+        "Shared": "the member IS that expression over FixedVector3.Dot, operator * and operator −, so this leg pins carriage of the inline forms the call sites held, including the sign symmetry of Dot's and the product's ties-to-even rounding that the negated-axis form rests on",
+        "Citation": "Dot and the operators are pinned at vector.space-products-vs-oracle",
+        "Absolute": ""
+      },
       {
         "Kind": "SharedSubstrate",
         "Flavor": "Transcription",

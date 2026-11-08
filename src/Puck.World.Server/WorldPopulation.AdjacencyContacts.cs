@@ -66,17 +66,12 @@ public sealed partial class WorldPopulation {
             var normal = face.Frame.Normal;
             var outwardSpeed = FixedVector3.Dot(left: velocity, right: normal);
 
-            admitted = Below(
-                normal: normal,
-                room: ((outwardSpeed < FixedQ4816.Zero) ? FixedQ4816.Zero
-                    : FixedQ4816.Max(x: FixedQ4816.Zero, y: ((face.Threshold - face.Outward(point: start)) - OwnershipGuard))),
-                value: admitted
+            admitted = admitted.LimitAlong(
+                unitAxis: normal,
+                maximum: ((outwardSpeed < FixedQ4816.Zero) ? FixedQ4816.Zero
+                    : FixedQ4816.Max(x: FixedQ4816.Zero, y: ((face.Threshold - face.Outward(point: start)) - OwnershipGuard)))
             );
-            admittedVelocity = Below(
-                normal: normal,
-                room: outwardSpeed,
-                value: admittedVelocity
-            );
+            admittedVelocity = admittedVelocity.LimitAlong(unitAxis: normal, maximum: outwardSpeed);
         }
 
         ref var spent = ref m_adjacencyCorrectionSpent[entityIndex];
@@ -111,20 +106,9 @@ public sealed partial class WorldPopulation {
         if (carrier.SweepRefusedThisTick) { return; }
         var position = carrier.FixedPosition;
         var velocity = carrier.ApproximateWorldVelocity();
-        var proposedVelocity = velocity;
-        var normal = displacement.Normalize();
-        var inward = FixedVector3.Dot(velocity, normal);
-        if (inward < FixedQ4816.Zero) { proposedVelocity -= normal * inward; }
+        var proposedVelocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -displacement.Normalize());
         AdmitAdjacencyResponse(entityIndex: carrier.EntityIndex, overlapDepth: overlapDepth, position: ref position,
             velocity: ref velocity, displacement: displacement, proposedVelocity: proposedVelocity);
         carrier.ApplyAdmittedContactResponse(position: position, velocity: velocity);
-    }
-    // Removes the part of value's component along a unit normal that exceeds room.
-    private static FixedVector3 Below(FixedVector3 normal, FixedQ4816 room, FixedVector3 value) {
-        var along = FixedVector3.Dot(left: value, right: normal);
-
-        return ((along > room)
-            ? (value - (normal * (along - room)))
-            : value);
     }
 }

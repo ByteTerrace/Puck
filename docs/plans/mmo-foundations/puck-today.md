@@ -537,14 +537,9 @@ reference's owner (`src/Puck.World.Azure/WorldApiCounterpartResolver.cs:31-34`,
 
 The admission door's trust list sets no per-entry, root-binding or
 subject-binding age ceiling and no replay horizon **[opened]**
-(`src/Puck.World.Schema/WorldAdmissionDoor.cs:86-97`):
+(`src/Puck.World.Schema/WorldAdmissionDoor.cs:88-94`; each entry is built with `MaximumAge: null` by `WorldAdmissionDoor.TrustEntry`):
 
 ```csharp
-                Reach: NoReach,
-                MaximumAge: null
-            ));
-        }
-
         return new TrustList(
             defaultMaximumAge: defaultMaximumAge,
             defaultRootBindingMaximumAge: null,

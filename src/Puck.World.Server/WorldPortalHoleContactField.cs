@@ -133,14 +133,10 @@ public sealed class WorldPortalHoleContactField : IContactField {
             left: (position - steppedPosition),
             right: normal
         );
-        var turned = (FixedVector3.Dot(left: velocity, right: normal) - FixedVector3.Dot(left: steppedVelocity, right: normal));
-
         if (pushed > FixedQ4816.Zero) {
             position -= (normal * pushed);
         }
-        if (turned > FixedQ4816.Zero) {
-            velocity -= (normal * turned);
-        }
+        velocity = velocity.LimitAlong(maximum: FixedVector3.Dot(left: steppedVelocity, right: normal), unitAxis: normal);
 
         return ((resolution.Grounded && (FixedVector3.Dot(left: resolution.GroundNormal, right: normal) > FixedQ4816.Zero))
             ? (resolution with {
