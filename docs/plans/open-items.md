@@ -1597,6 +1597,14 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low] `FixedFrameSource` is copied in at least three SdfVm tests
+  (`tests/Puck.SdfVm.Tests/SdfWorldPassesLawTests.cs:199`,
+  `SdfWorldPipelineCatalogLawTests.cs:138`, `SdfWorldResidencyBuildRefusalLawTests.cs:351`);
+  move it to `tests/Shared` with the `HeapAllocator` copies below.
+- [medium · frame allocation] `SdfShadeDispatch.Record` iterates an
+  `IReadOnlyList<Job>`, allocating an enumerator every frame; this is why
+  `AViewAllocatesEachScratchBufferOnce` fails on the tip. Iterate the backing
+  array. Seen by the shade-1 GPU-lifetime fix lane; unverified beyond its read.
 - [low] `HeapAllocator` is copied three times in the Vulkan tests
   (`tests/Puck.Vulkan.Tests/VulkanGroupedBindingLawTests.cs:206`,
   `VulkanGroupedPipelineLayoutLawTests.cs:233`, `VulkanIndirectCountLawTests.cs:155`);
