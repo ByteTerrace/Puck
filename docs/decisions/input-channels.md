@@ -848,7 +848,7 @@ The implementation extends these owners rather than introducing parallel paths:
 - [Channel schema and compiled table](../../src/Puck.World.Schema/WorldChannel.cs),
   [intent storage](../../src/Puck.World.Schema/PlayerIntent.cs), and
   [permission masks](../../src/Puck.World.Schema/ChannelPolicy.cs).
-- [Binding composition](../../.claude/skills/puck-world/references/documents-binding.md)
+- [Binding composition](../../.claude/skills/input/references/bindings.md)
   and [state ownership](../../.claude/skills/puck-world/references/documents-state.md).
 - [Tick admission order](../../src/Puck.World.Server/WorldTick.Step.cs),
   [contribution folds](../../src/Puck.World.Server/WorldTick.Channels.cs), and

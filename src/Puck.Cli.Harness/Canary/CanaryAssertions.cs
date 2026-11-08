@@ -56,7 +56,7 @@ public static partial class CanaryAssertions {
             );
         }
 
-        var equal = File.ReadAllBytes(path: beforePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: afterPath));
+        var equal = Puck.Confinement.FileContent.Equals(left: beforePath, right: afterPath);
         var passed = (assertion.Different
             ? !equal
             : equal

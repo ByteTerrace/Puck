@@ -93,6 +93,38 @@ public sealed partial class ConfinedDirectory : IDisposable {
             return null;
         }
     }
+    /// <summary>Reports whether <paramref name="path"/> lies in, or would be created in, the directory
+    /// <paramref name="root"/>, by file identity rather than by spelling: a <c>\\?\</c> path, an 8.3 name, a link or a
+    /// case-folding mount that names the same directory still counts. Each existing ancestor of
+    /// <paramref name="path"/> (itself included when it is a directory) is compared with the root's identity, so a
+    /// path that does not exist yet is judged by its deepest existing ancestor.</summary>
+    /// <param name="root">The directory that may contain the path; a missing root contains nothing.</param>
+    /// <param name="path">The file or directory to place, which need not exist.</param>
+    /// <returns><see langword="true"/> when the root is the path or one of its ancestors.</returns>
+    /// <exception cref="IOException">The root or an ancestor is a network path or cannot be opened.</exception>
+    /// <exception cref="PlatformNotSupportedException">The platform is neither Windows nor Linux x64.</exception>
+    public static bool Contains(string root, string path) {
+        RequireSupported();
+        var rootFull = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: root));
+        var full = System.IO.Path.GetFullPath(path: path);
+
+        if (System.IO.Path.GetDirectoryName(path: rootFull) is null) {
+            return string.Equals(a: System.IO.Path.GetPathRoot(path: full), b: System.IO.Path.GetPathRoot(path: rootFull), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        }
+        using var held = OpenAnchor(create: false, path: rootFull);
+
+        if (held is null) { return false; }
+        var identity = held.Identity;
+
+        // A volume root is never compared: the root here is not one, so no ancestor at that level can be it.
+        for (var current = full; (System.IO.Path.GetDirectoryName(path: current) is not null); current = System.IO.Path.GetDirectoryName(path: current)!) {
+            if (!Directory.Exists(path: current)) { continue; }
+            using var candidate = OpenAnchor(create: false, path: current);
+
+            if ((candidate is not null) && (candidate.Identity == identity)) { return true; }
+        }
+        return false;
+    }
     /// <summary>Opens a child directory relative to this one, holding only the child.</summary>
     /// <param name="name">The child's name: one component, never a path.</param>
     /// <param name="create">Whether a missing child is created.</param>

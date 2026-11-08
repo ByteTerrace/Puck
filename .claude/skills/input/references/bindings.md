@@ -1,6 +1,6 @@
 # Binding composition (`WorldBindingComposer.cs`)
 
-Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
+Part of [`puck.world.definition.v1`](../../puck-world/references/documents.md). Field names and defaults are
 generated (`puck schema`, or `src/Puck.World.Schema/Schemas/schema/bindingOverlays.schema.json`);
 this file is the decision/derivation prose the schema cannot state.
 
@@ -349,21 +349,8 @@ Run each with a fresh boot. C7 observed authored state-writing rules refused
 after `world.load`, while a fresh boot runs them. Loss of the seeded Edit grant
 is an unconfirmed inference; the boot/reload finding is recorded in the open items.
 
-**Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
-seat's player-scope panel, `hud.defaults` (the gate over every world panel),
-`hud.defaults.cursor`, and `bindingBar` — takes an optional `visible` predicate
-over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
-`WorldOverlayVisibility.cs`; evaluated by `WorldOverlayFacts`): `now {fact}`,
-`recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
-routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
-`SeatCameraApplication` (the seat's camera control application is active —
-`WorldSeatBindings.IsCameraModeActive`), `ScreenFramed` (the seat is captured
-on a screen and its view shows that picture alone — `WorldPerceptionAnchor.ScreenFramed`).
-Absent = always visible. `{ "$type": "recently", "fact":
-"SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
-seat's last input and shows it on the next; a world-scope panel reads a fact as
-true when it holds for any joined local seat. Windows compile through the world's
-simulation rate; nothing here enters the simulation.
+The bar's `visible` predicate is the overlay visibility contract every HUD
+element shares ([HUD](../../puck-world/references/hud.md#overlay-visibility)).
 
 **Context rows.** `puck.bindings.v1` carries an optional `contexts` section:
 `{family, state, group}` rows (`BindingContextDefinition`), merged across

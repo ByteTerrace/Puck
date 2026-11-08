@@ -560,8 +560,8 @@ public static partial class CanaryCommand {
             );
             transcripts[authorityId] = new CanaryTranscript(
                 RunDirectory: runDirectory,
-                Stderr: SplitLines(text: result.Stderr),
-                Stdout: SplitLines(text: result.Stdout)
+                Stderr: CliText.Lines(text: result.Stderr),
+                Stdout: CliText.Lines(text: result.Stdout)
             );
         }
 
@@ -666,7 +666,7 @@ public static partial class CanaryCommand {
     // How many lines of a script open with the verb: the response ordinal its last occurrence answers at. Blank and
     // comment lines never match, exactly as the console skips them.
     private static int CountVerbLines(string script, string verb) =>
-        SplitLines(text: script).Count(predicate: line => {
+        CliText.Lines(text: script).Count(predicate: line => {
             var content = line.AsSpan().Trim();
             var end = content.IndexOfAny(
                 value0: ' ',

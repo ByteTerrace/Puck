@@ -142,9 +142,6 @@ public sealed class SdfWorldPicker {
             m_program = frame?.Program;
             m_map = frame?.PickMap;
         }
-        foreach (var readback in m_readbacks) {
-            readback.Poll();
-        }
     }
     internal void Attach(SdfWorldPickReadback readback) => m_readbacks.Add(item: readback);
     // A retired recorder takes its copy in flight with it: the latest request, if unanswered, records again through
@@ -171,7 +168,8 @@ public sealed class SdfWorldPicker {
             Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.MeshDrawsRevision, Map: frame.PickMap) { CutRevision = cut, Sample = (m_surface ? sample : null) };
         return true;
     }
-    // Ends the copy in flight: an answer, or null when its recording was never submitted.
+    // Ends the copy in flight: an answer once its node proved the copy's slot complete, or null when its recording was
+    // never submitted.
     internal void Complete(SdfWorldPickReadback readback, SdfPickResult? result) {
         if (ReferenceEquals(objA: m_flight, objB: readback)) {
             m_flight = null;

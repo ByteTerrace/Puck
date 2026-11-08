@@ -172,12 +172,7 @@ public sealed partial class SdfWorldTables {
             throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds.");
         }
 
-        var wanted = (needBytes + (needBytes / 8UL));
-
-        return Math.Min(
-            val1: (((wanted + (MeshRegionGranuleBytes - 1UL)) / MeshRegionGranuleBytes) * MeshRegionGranuleBytes),
-            val2: MostMeshRegionBytes
-        );
+        return (ulong)GpuCapacity.Headroom(required: ((long)needBytes), ceiling: ((long)MostMeshRegionBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes));
     }
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>

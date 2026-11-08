@@ -187,16 +187,29 @@ public static class ImageSourceConversion {
         min: 0.0,
         value: value
     ));
-    /// <summary>Returns the luma weights of a Y'CbCr matrix: the red and blue shares of luma, green taking the rest.
-    /// <c>imageSourceYuvToRgb</c> in <c>image-source.hlsli</c> holds the same literals.</summary>
+    /// <summary>The red share of luma under ITU-R BT.601.</summary>
+    public const double Bt601Kr = 0.299;
+    /// <summary>The blue share of luma under ITU-R BT.601.</summary>
+    public const double Bt601Kb = 0.114;
+    /// <summary>The red share of luma under ITU-R BT.709, and of a linear Rec. 709 colour's luminance.</summary>
+    public const double Bt709Kr = 0.2126;
+    /// <summary>The blue share of luma under ITU-R BT.709, and of a linear Rec. 709 colour's luminance.</summary>
+    public const double Bt709Kb = 0.0722;
+    /// <summary>The red share of luma under ITU-R BT.2020.</summary>
+    public const double Bt2020Kr = 0.2627;
+    /// <summary>The blue share of luma under ITU-R BT.2020.</summary>
+    public const double Bt2020Kb = 0.0593;
+
+    /// <summary>Returns the luma weights of a Y'CbCr matrix: the red and blue shares of luma, green taking the rest. The
+    /// kernels read the same constants from the generated <c>Shared/luma.hlsli</c> (<c>ShaderLumaHlsl</c>).</summary>
     /// <param name="matrix">The matrix.</param>
-    /// <returns><c>Kr</c> and <c>Kb</c>: BT.601 0.299 and 0.114, BT.709 0.2126 and 0.0722, BT.2020 0.2627 and
-    /// 0.0593.</returns>
+    /// <returns><c>Kr</c> and <c>Kb</c>: <see cref="Bt601Kr"/> and <see cref="Bt601Kb"/>, <see cref="Bt709Kr"/> and
+    /// <see cref="Bt709Kb"/>, or <see cref="Bt2020Kr"/> and <see cref="Bt2020Kb"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="matrix"/> is not defined.</exception>
     public static (double Kr, double Kb) Coefficients(ImageYuvMatrix matrix) => matrix switch {
-        ImageYuvMatrix.Bt601 => (0.299, 0.114),
-        ImageYuvMatrix.Bt709 => (0.2126, 0.0722),
-        ImageYuvMatrix.Bt2020 => (0.2627, 0.0593),
+        ImageYuvMatrix.Bt601 => (Bt601Kr, Bt601Kb),
+        ImageYuvMatrix.Bt709 => (Bt709Kr, Bt709Kb),
+        ImageYuvMatrix.Bt2020 => (Bt2020Kr, Bt2020Kb),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: matrix,
             message: "The Y'CbCr matrix is not defined.",

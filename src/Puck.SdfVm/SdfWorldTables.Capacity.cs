@@ -77,39 +77,26 @@ public sealed partial class SdfWorldTables {
     // The one growth path of the program region and the instance capacity the bake's masks are sized by. The region grows
     // without waiting for the device: what it replaces retires after the following upload, which signals only once every
     // earlier view and background job that bound it has finished. A grown region keeps every word it held (GpuRegion.Grow),
-    // so no caller writes the program again after growth. A size that crosses the ring's share of the aperture
-    // (GpuResidency.Select) needs another policy, which Grow keeps fixed, so that region is replaced from its host copy and
-    // retires the same way. No per-frame allocations.
+    // so no caller writes the program again after growth, and a size past the ring's share of the aperture restages it
+    // there. No per-frame allocations.
     private void EnsureProgramCapacity(SdfProgram program, SdfShadeProgram? shade) {
         var requiredWords = ProgramRegionWords(program: program, shade: shade);
         if ((requiredWords <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
             return;
         }
 
-        var words = GrowCapacity(m_programWordCapacity, requiredWords, (int.MaxValue / sizeof(uint)));
-        var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
+        var words = (int)GpuCapacity.Grown(current: m_programWordCapacity, required: requiredWords, ceiling: (int.MaxValue / sizeof(uint)), divisor: 2);
+        var instances = (int)GpuCapacity.Grown(current: m_instanceCapacity, required: program.Instances.Count, ceiling: SdfProgramBuilder.MaxInstances, divisor: 2);
 
         if (words != m_programWordCapacity) {
             var bytes = checked(((long)words) * sizeof(uint));
 
             // Retirement allocates nothing once the region has changed.
-            m_retired.EnsureCapacity(capacity: checked((m_retired.Count + 1)));
-            if (GpuResidency.Select(byteCount: ((ulong)bytes), profile: m_deviceContext.MemoryProfile, readersInFlight: true) == m_programRegion.Policy) {
-                Retire(replaced: m_programRegion.Grow(byteCount: bytes));
-            } else {
-                var replacement = CreateRegion(byteCount: checked((int)bytes), region: ProgramRegionIndex);
-
-                _ = replacement.Write(bytes: m_programRegion.Contents, offset: 0);
-                Retire(replaced: m_programRegion);
-                m_programRegion = replacement;
-            }
+            m_retired.Reserve();
+            Retire(replaced: m_programRegion.Grow(byteCount: bytes));
         }
         m_programWordCapacity = words;
         m_instanceCapacity = instances;
         m_bindingRevision++;
-    }
-    private static int GrowCapacity(int current, int required, int ceiling) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(required, ceiling);
-        return ((required <= current) ? current : (int)Math.Max(val1: required, val2: Math.Min(val1: ceiling, val2: (((long)current) + Math.Max(val1: 1, val2: (current / 2))))));
     }
 }

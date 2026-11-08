@@ -45,10 +45,9 @@ public sealed class CliLease : IDisposable {
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
     /// <exception cref="LeaseProtocolException">The lease directory records a newer lease protocol than <see cref="Protocol"/>.</exception>
     public static Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
-        if (name is not ("build" or "gpu" or "heavy")) { throw new ArgumentException("Use AcquireQuietAsync for a measurement reservation.", nameof(name)); }
-        return AcquireCoreAsync(root, name, holder, wait, clock, checkout, cancellationToken, ancestor, lane, null);
+        if (name is not ("build" or "gpu" or "heavy")) { throw new ArgumentException(message: "Use AcquireQuietAsync for a measurement reservation.", paramName: nameof(name)); }
+        return AcquireCoreAsync(ancestor: ancestor, cancellationToken: cancellationToken, checkout: checkout, clock: clock, holder: holder, lane: lane, name: name, quiet: null, root: root, wait: wait);
     }
-
     /// <summary>Queues a priority measurement window, then drains and holds all three resources. One deadline bounds acquisition;
     /// current work is never killed. The returned lease releases the resources before releasing the priority reservation.</summary>
     /// <param name="root">The shared lease directory.</param>
@@ -62,11 +61,13 @@ public sealed class CliLease : IDisposable {
     /// <returns>The priority reservation holding heavy, build and gpu.</returns>
     public static async Task<CliLease> AcquireQuietAsync(string root, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
         var started = clock.GetTimestamp();
-        var quiet = await AcquireCoreAsync(root, "quiet", holder, wait, clock, checkout, cancellationToken, ancestor, lane, null).ConfigureAwait(false);
+        var quiet = await AcquireCoreAsync(ancestor: ancestor, cancellationToken: cancellationToken, checkout: checkout, clock: clock, holder: holder, lane: lane, name: "quiet", quiet: null, root: root, wait: wait).ConfigureAwait(continueOnCapturedContext: false);
+
         try {
             foreach (var name in LeaseCommand.QuietOrder) {
-                var remaining = wait - clock.GetElapsedTime(started);
-                quiet.m_children.Add(await AcquireCoreAsync(root, name, holder, (remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero), clock, checkout, cancellationToken, ancestor, lane, quiet).ConfigureAwait(false));
+                var remaining = (wait - clock.GetElapsedTime(startingTimestamp: started));
+
+                quiet.m_children.Add(item: await AcquireCoreAsync(ancestor: ancestor, cancellationToken: cancellationToken, checkout: checkout, clock: clock, holder: holder, lane: lane, name: name, quiet: quiet, root: root, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero)).ConfigureAwait(continueOnCapturedContext: false));
             }
             return quiet;
         } catch { quiet.Dispose(); throw; }
@@ -79,7 +80,7 @@ public sealed class CliLease : IDisposable {
             throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, lane and checkout, and a nonnegative wait.");
         }
         lane = (lane?.Trim() ?? DefaultLane(holder: holder));
-        checkout = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)).Replace(oldChar: '\\', newChar: '/');
+        checkout = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)).Replace(newChar: '/', oldChar: '\\');
         Directory.CreateDirectory(path: root);
         var request = new Request(Ancestor: Remembered(ancestor: ancestor), Checkout: checkout, Clock: clock, Holder: holder, Lane: lane, Name: name, Quiet: quiet, Root: root);
         var started = clock.GetTimestamp();
@@ -98,7 +99,7 @@ public sealed class CliLease : IDisposable {
 
                 if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held or queued at {CliPaths.ToDisplay(fullPath: (pass.Directory ?? Path.Combine(path1: root, path2: name)))}; use --wait <seconds> to wait."); }
                 var ahead = pass.Place.Ahead;
-                var report = $"lease: {holder} waiting for {name} lease{(pass.Directory is null ? " behind the admission lock" : (pass.Measurement ? " for the measurement window" : ((pass.HeldBy is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {pass.HeldBy}")))}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {pass.Place.Position} of {pass.Place.Lanes} in the round")}.";
+                var report = $"lease: {holder} waiting for {name} lease{((pass.Directory is null) ? " behind the admission lock" : (pass.Measurement ? " for the measurement window" : ((pass.HeldBy is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {pass.HeldBy}")))}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {pass.Place.Position} of {pass.Place.Lanes} in the round")}.";
 
                 if ((reported != report) || (clock.GetElapsedTime(startingTimestamp: reportedAt) >= Heartbeat)) {
                     var waited = clock.GetElapsedTime(startingTimestamp: started);
@@ -121,7 +122,6 @@ public sealed class CliLease : IDisposable {
     /// <summary>What one pass through the grant door decided: the lease when granted, the ticket the waiter holds now, and
     /// what a wait line names. <see cref="Directory"/> is null when the admission lock stayed busy past its bound.</summary>
     private readonly record struct Pass(CliLease? Lease, Ticket? Ticket, string? Directory, Place Place, string? HeldBy, bool Measurement);
-
     /// <summary>How an acquisition reaches its grant. A <see cref="Root"/> acquisition takes the lease itself and waits while a
     /// quiet reservation is queued or held. A <see cref="Nested"/> one runs under a live ancestor that holds the lease, proved by
     /// that holder's guard and its process identity, and takes a child lease that quiet never blocks: a current holder's
@@ -141,14 +141,16 @@ public sealed class CliLease : IDisposable {
             directory += ChildSuffix;
             nested = true;
         }
-        return (nested ? Route.Nested : (((request.Quiet is not null) || (request.Name == "quiet")) ? Route.Quiet : Route.Root), directory);
+        return ((nested ? Route.Nested : (((request.Quiet is not null) || (request.Name == "quiet")) ? Route.Quiet : Route.Root)), directory);
     }
+
     /// <summary>A child lease's directory sits beside its parent's, never inside it, so a parent's release cannot delete a
     /// descendant's ticket, rotation or holder.</summary>
     private const string ChildSuffix = ".child";
     /// <summary>The lock every ticket registration, protocol stamp and grant is made under. It is held for one pass and never
     /// across a wait.</summary>
     private const string AdmissionGuard = "admission.guard";
+
     /// <summary>How long a pass waits for <see cref="AdmissionGuard"/>, which another process holds only for its own pass; a
     /// pass that cannot take it counts as a pass without a grant, so even <c>--wait 0</c> is decided on the lease itself.</summary>
     private static readonly TimeSpan AdmissionLockBound = TimeSpan.FromSeconds(seconds: 30);
@@ -169,7 +171,6 @@ public sealed class CliLease : IDisposable {
     /// <summary>The process a holder file or ticket names, by id and start ticks; null when its metadata is unrecognized.</summary>
     private static (int Pid, long Ticks)? Identity(string[] lines) =>
         (((lines.Length is (4 or 5)) && int.TryParse(s: lines[2], provider: CultureInfo.InvariantCulture, result: out var pid) && (pid > 0) && long.TryParse(s: lines[3], provider: CultureInfo.InvariantCulture, result: out var ticks)) ? (pid, ticks) : null);
-
     /// <summary>Takes the admission lock, bounded, and passes through the grant door once.</summary>
     private static async Task<Pass> PassAsync(Request request, Ticket? ticket, CancellationToken cancellationToken) {
         var asked = Stopwatch.GetTimestamp();
@@ -184,6 +185,7 @@ public sealed class CliLease : IDisposable {
     /// and how host admission classifies the processes it waits on (<c>HostProcesses</c>). Raise it in any change to one of
     /// those meanings: a copy built before the change then refuses by name instead of deadlocking against a newer one.</summary>
     public const int Protocol = 2;
+
     private const string ProtocolFile = "protocol";
 
     /// <summary>Reads the lease protocol a lease root records: the highest any CLI that queued there spoke; zero when none has
@@ -192,19 +194,21 @@ public sealed class CliLease : IDisposable {
     /// <returns>The recorded protocol.</returns>
     public static int RecordedProtocol(string root) =>
         (((ReadLines(path: Path.Combine(path1: root, path2: ProtocolFile)) is [var line, ..]) && int.TryParse(s: line, provider: CultureInfo.InvariantCulture, result: out var recorded)) ? recorded : 0);
+
     /// <summary>Refuses a lease root a newer CLI has stamped, and raises an older stamp to this CLI's protocol. Called only under
     /// <see cref="AdmissionGuard"/>, so a raise and every grant under the old protocol are ordered.</summary>
     private static void AgreeOnProtocol(string root) {
         var recorded = RecordedProtocol(root: root);
 
         if (recorded > Protocol) { throw new LeaseProtocolException(recorded: recorded, root: root, spoken: Protocol); }
-        if (recorded < Protocol) { WriteMetadata(contents: Protocol.ToString(provider: CultureInfo.InvariantCulture) + "\n", path: Path.Combine(path1: root, path2: ProtocolFile)); }
+        if (recorded < Protocol) { WriteMetadata(contents: (Protocol.ToString(provider: CultureInfo.InvariantCulture) + "\n"), path: Path.Combine(path1: root, path2: ProtocolFile)); }
     }
     /// <summary>Whether a quiet reservation is queued or held: a live quiet ticket, or the quiet guard taken.</summary>
     private static bool QuietPending(string root, DateTimeOffset now) {
         var directory = Path.Combine(path1: root, path2: "quiet");
         var queue = (directory + ".queue");
-        PruneQuiet(directory);
+
+        PruneReleased(directory: directory);
 
         // Placing a ticket name no waiter holds counts every live ticket ahead of it.
         return ((Directory.Exists(path: queue) && (Admission(now: now, rotation: (directory + ".rotation"), ticket: Path.Combine(path1: queue, path2: "probe")).Ahead > 0))
@@ -232,15 +236,16 @@ public sealed class CliLease : IDisposable {
     /// none.</param>
     public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null, string? Checkout = null);
 
-    /// <summary>Inspects a lease without taking a ticket, removing dead tickets or writing rotation. An unlocked quiet
-    /// holder's metadata is pruned under its exclusive guard. Other holders' liveness is read with a momentary shared hold.</summary>
+    /// <summary>Inspects a lease without taking a ticket, removing dead tickets or writing rotation. An unlocked
+    /// holder's metadata is pruned under its exclusive guard. Active holders' liveness is read with a momentary shared hold.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="name">The resource: build, gpu or heavy.</param>
     /// <param name="now">The time the metadata of a process the OS cannot name is judged against.</param>
     /// <returns>The holder and the live waiters; an absent directory reads as an idle lease.</returns>
     public static LeaseState Inspect(string root, string name, DateTimeOffset now) {
         var directory = Path.Combine(path1: root, path2: name);
-        if (name == "quiet") { PruneQuiet(directory); }
+
+        PruneReleased(directory: directory);
         var holder = ReadHolder(directory: directory);
         string? holderName = null, holderLane = null, holderCheckout = null;
         var alive = false;
@@ -285,7 +290,6 @@ public sealed class CliLease : IDisposable {
     /// <summary>The checkout a sidecar records, when the sidecar names the process the holder or ticket metadata names.</summary>
     private static string? CheckoutOf(string sidecar, string[] owner) =>
         (((owner.Length >= 4) && (ReadLines(path: sidecar) is [var pid, var ticks, var checkout]) && (pid == owner[2]) && (ticks == owner[3])) ? checkout : null);
-
     /// <summary>Whether a process holds a lease's guard: a momentary shared hold succeeds only when no exclusive holder has
     /// it. A guard that cannot be probed for another reason falls back to the holder file's process identity.</summary>
     private static bool GuardHeld(string directory, string[] holder, DateTimeOffset now) {
@@ -302,12 +306,13 @@ public sealed class CliLease : IDisposable {
     }
     // The same exclusive guard used by acquisition proves there is no holder and prevents a replacement racing
     // cleanup. Never unlink the guard itself, nor infer death from metadata age or a process inventory.
-    private static void PruneQuiet(string directory) {
-        if (!Directory.Exists(directory)) { return; }
+    private static void PruneReleased(string directory) {
+        if (!Directory.Exists(path: directory)) { return; }
         try {
-            using var held = FileLock.TryAcquire(directory + ".guard");
-            if (held is not null) { ConfinedDirectory.RemoveTree(directory); }
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or PlatformNotSupportedException) { }
+            using var held = FileLock.TryAcquire(path: (directory + ".guard"));
+
+            if (held is not null) { ConfinedDirectory.RemoveTree(path: directory); }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
     }
     private static string TicketCheckoutPath(string ticket) {
         var queue = Path.GetDirectoryName(path: ticket)!;
@@ -340,7 +345,6 @@ public sealed class CliLease : IDisposable {
             return reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
     }
-
     /// <summary>The acquisition or ticket time a holder file or ticket records on its second line.</summary>
     private static DateTimeOffset? Stamped(string[] lines) => (((lines.Length > 1) && DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var at)) ? at : null);
     /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
@@ -459,7 +463,7 @@ public sealed class CliLease : IDisposable {
     private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
-        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return 0; }
+        try { return (long.TryParse(s: ReadLines(path: path)?.FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return 0; }
     }
     /// <summary>Gives a lane that has no serial yet the highest serial any lane has had, as it first queues, so a lane that has
     /// never held the lease ranks by when it arrived instead of ahead of every lane that has waited: it still ranks behind
@@ -467,21 +471,17 @@ public sealed class CliLease : IDisposable {
     /// whole and never replaces one a holder has written.</summary>
     private static void Stamp(string rotation, string lane) {
         var path = LanePath(lane: lane, rotation: rotation);
-        string? temporary = null;
 
         try {
             if (File.Exists(path: path)) { return; }
             Directory.CreateDirectory(path: rotation);
             var serial = Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max();
 
-            temporary = $"{path}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllText(path: temporary, contents: serial.ToString(provider: CultureInfo.InvariantCulture));
-            File.Move(destFileName: path, overwrite: false, sourceFileName: temporary);
-            temporary = null;
+            using var pending = AtomicFile.StageAllText(path: path, contents: serial.ToString(provider: CultureInfo.InvariantCulture));
+
+            pending.Commit(overwrite: false);
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
             // A holder wrote this lane's serial first, or the directory refuses: the lane ranks as it did.
-        } finally {
-            if (temporary is not null) { try { File.Delete(path: temporary); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { } }
         }
     }
     /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
@@ -518,7 +518,7 @@ public sealed class CliLease : IDisposable {
     /// <returns>The main checkout's lease directory.</returns>
     public static Task<string> RootAsync(string checkout, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!CliGit.TryResolveMainCheckout(repository: checkout, mainCheckout: out var mainCheckout)) { throw new InvalidOperationException(message: $"git names no common directory for {checkout}."); }
+        if (!CliGit.TryResolveMainCheckout(mainCheckout: out var mainCheckout, repository: checkout)) { throw new InvalidOperationException(message: $"git names no common directory for {checkout}."); }
         return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
@@ -532,6 +532,7 @@ public sealed class CliLease : IDisposable {
     private static Pass TryAcquire(Request request, Ticket? ticket) {
         AgreeOnProtocol(root: request.Root);
         var now = request.Clock.GetUtcNow();
+
         var (route, directory) = Decide(now: now, request: request);
         var queue = (directory + ".queue");
         var rotation = (directory + ".rotation");
@@ -544,7 +545,7 @@ public sealed class CliLease : IDisposable {
         // Admission rotates between lanes: the lease goes to the oldest ticket of the lane served least recently, and within a
         // lane first come, first served.
         var place = Admission(now: now, rotation: rotation, ticket: ticket.Path);
-        var heldBy = ((ReadHolder(directory: directory) is { Length: > 0 } holder) && GuardHeld(directory: directory, holder: holder, now: now)) ? holder[0] : null;
+        var heldBy = (((ReadHolder(directory: directory) is { Length: > 0 } holder) && GuardHeld(directory: directory, holder: holder, now: now)) ? holder[0] : null);
         var waiting = new Pass(Directory: directory, HeldBy: heldBy, Lease: null, Measurement: false, Place: place, Ticket: ticket);
 
         if ((route == Route.Root) && QuietPending(now: now, root: request.Root)) { return (waiting with { Measurement = true }); }
@@ -574,14 +575,14 @@ public sealed class CliLease : IDisposable {
             throw;
         }
     }
-    /// <summary>Writes a guard owner's metadata file whole, so a reader never sees it half written. A leftover file that a
-    /// reader holds open without delete sharing cannot be renamed over; only the guard owner writes here, so that file is
-    /// overwritten in place, which such a reader permits.</summary>
+    /// <summary>Publishes diagnostic metadata while holding the exclusive guard. A reader that denies deletion of an
+    /// old metadata file must not keep the released guard: overwrite that file in place when replacement is refused.
+    /// Such a reader can observe incomplete metadata, which is not authority; the guard alone excludes holders.</summary>
     private static void WriteMetadata(string path, string contents) {
         try {
-            AtomicFile.WriteAllText(path: path, contents: contents);
+            AtomicFile.WriteAllText(contents: contents, path: path);
         } catch (IOException) when (File.Exists(path: path)) {
-            File.WriteAllText(path: path, contents: contents);
+            File.WriteAllText(contents: contents, path: path);
         }
     }
     /// <summary>Decides from a queued ticket's metadata whether its process is gone; null when the metadata is unrecognized.</summary>
@@ -601,7 +602,7 @@ public sealed class CliLease : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        for (var index = m_children.Count - 1; index >= 0; index--) { m_children[index].Dispose(); }
+        for (var index = (m_children.Count - 1); (index >= 0); index--) { m_children[index].Dispose(); }
         try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { } finally { m_gate.Dispose(); }
     }
 }

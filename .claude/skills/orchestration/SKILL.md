@@ -78,12 +78,18 @@ bottleneck).**
 |---|---|---|---|
 | Iterate | every lane, in parallel | load-independent only: counters, state hashes, bytes, executes, law results, captures; laws filtered to the step; a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; a second heavy job queued behind one's own |
 | Integrate | the lead, once per landing batch | full reproduce suites, the sweep against the tip report, windowed boots on both backends, over the merged batch | per-lane repetition of the same suites |
-| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run`: one priority quiet lease, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; a window that waits for the machine to go quiet by itself |
+| Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run --window-seconds 600`: one priority quiet lease for at most ten minutes plus process cleanup, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; an unbounded drain; a window that waits for the machine to go quiet by itself |
 
 A window has a stated end: the lead's open message names the time it closes,
 and a lane resumes on that time if no close message arrived first (a window
 whose close was never sent left four lanes idle past it). The lead sends the
-close the moment its legs finish.
+close the moment its legs finish. `measure run --window-seconds` enforces the
+budget (default 600 seconds), including acquisition and settling. At expiry it
+starts no further request or sample, stops and reaps the active sample, releases
+quiet priority and lists the snapshot's pending requests. Incomplete requests
+keep their partial evidence and are retried from the first pair next window;
+they are never published as measured answers. Keep the command's budget within
+the announced close and allow for process cleanup.
 
 A lane with a timing question uses `puck measure request` (the frozen builds
 or commits, the bench startup or sweep command, JSON-pointer metrics and what
@@ -1036,7 +1042,9 @@ reading its telemetry device id from the registry ("Requested registry access
 is not allowed"), and copying its CLI into the worktree's `.claude/scratch/`
 was denied part-way. So an Antigravity launch sets
 `DOTNET_CLI_TELEMETRY_OPTOUT=1`, the lead pre-builds and copies the lane's CLI
-before launch, and a coding brief asks for a short edit plan written to the
+before launch to `<worktree>/.tmp/puck-cli/` (its sandbox denies writes under `.claude/`, and a
+copy outside the worktree trips the hook and stops the run, as a duplication audit did) and the
+brief names that path, and a coding brief asks for a short edit plan written to the
 worktree within its first steps and then edits; with `stream-json`, the lead
 counts edit tool calls in the log and treats a long run with none as a stall
 to act on. Re-test with the next bounded coding item before concluding

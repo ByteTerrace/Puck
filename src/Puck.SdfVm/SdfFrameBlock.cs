@@ -88,6 +88,30 @@ public static partial class SdfFrameBlock {
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
+    // One common frame value's bytes in this block and in another pass layout.
+    internal readonly record struct Copy(int Source, int Destination, int Length);
+
+    // Where the common frame values (SdfWorldPackage.Values) lie in another pass layout, by name: compiled once per layout,
+    // since layout-only values may shift common members.
+    internal static Copy[] CopiesInto(ShaderPipelineParameterLayout layout) => [.. SdfWorldPackage.Values.Select(selector: member => new Copy(
+        Source: Offset(member: member.Name),
+        Destination: ((int)layout.BlockOffsetOf(member: member.Name)),
+        Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
+    // Writes a view's common frame values into a pass block of another layout: the frame, the instance's temporal sample
+    // and the preceding view, laid out by this one writer and copied by name, so every pass reads them as the world passes do.
+    internal static void WriteInto(Span<byte> passBlock, ReadOnlySpan<Copy> copies, in SdfPassValues tables, SdfFrame frame, int view,
+        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled) {
+        Span<byte> block = stackalloc byte[SizeBytes];
+
+        block.Clear();
+        Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height);
+        WriteTemporal(block: block, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: temporalEnabled);
+        WritePreviousView(block: block, view: temporal.PreviousView, valid: temporal.HasPreviousView);
+        foreach (var copy in copies) {
+            block.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: passBlock.Slice(length: copy.Length, start: copy.Destination));
+        }
+    }
+
     /// <summary>Writes the instance's temporal sample after the frame values, keeping cadence signatures independent of jitter.</summary>
     /// <param name="block">The pass block.</param>
     /// <param name="jitter">The ray offset in render pixels.</param>

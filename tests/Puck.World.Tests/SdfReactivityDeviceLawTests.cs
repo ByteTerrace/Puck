@@ -157,7 +157,11 @@ public sealed class SdfReactivityDeviceLawTests {
                 SizeBytes: sizeof(float), Destination: m_copies[slot]);
             return (index == 0);
         }
-        public void Submitted(int slot, IGpuSubmissionFence fence) => m_owner.Latest = m_copies[slot];
+        public void Submitted(int slot) {
+            (m_inner as IRenderGraphPackageReadback)?.Submitted(slot: slot);
+            m_owner.Latest = m_copies[slot];
+        }
+        public void Completed(int slot) => (m_inner as IRenderGraphPackageReadback)?.Completed(slot: slot);
         public void Dispose() {
             m_inner.Dispose();
             foreach (var copy in m_copies) { copy.Dispose(); }

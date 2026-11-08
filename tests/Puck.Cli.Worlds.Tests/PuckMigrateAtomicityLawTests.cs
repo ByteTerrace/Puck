@@ -106,7 +106,7 @@ public sealed class PuckMigrateAtomicityLawTests {
         // A staging file left in the tree would be picked up by nothing and would confuse the next run's author.
         Assert.Empty(collection: Directory.GetFiles(
             path: directory,
-            searchPattern: "*.migrate-tmp"
+            searchPattern: "*.tmp"
         ));
     }
 
@@ -188,7 +188,7 @@ public sealed class PuckMigrateAtomicityLawTests {
 
         Assert.Empty(collection: Directory.GetFiles(
             path: directory,
-            searchPattern: "*.migrate-tmp"
+            searchPattern: "*.tmp"
         ));
     }
 }

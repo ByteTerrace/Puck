@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
@@ -87,7 +88,7 @@ public static partial class CompileCommand {
             }
             claimed.Add(key: destination, value: (destination, sourcePath));
         }
-        var staged = new List<(string Temporary, string Destination)>();
+        var staged = new List<(AtomicFile.PendingWrite Write, string Destination)>();
         var documents = new byte[destinations.Length][];
         // Each compiled world composes where its source sits, so it reads the document as the source wrote it.
         var composedDocuments = outputs.Select(selector: static output => CanonicalJsonDocument.Serialize(node: output.Json)).ToArray();
@@ -119,19 +120,15 @@ public static partial class CompileCommand {
             for (var index = 0; (index < destinations.Length); index++) {
                 var destination = destinations[index];
 
-                Directory.CreateDirectory(path: Path.GetDirectoryName(path: destination)!);
-                var temporary = (((destination + ".") + Guid.NewGuid().ToString(format: "N")) + ".compile-tmp");
-
-                staged.Add(item: (temporary, destination));
                 documents[index] = CanonicalJsonDocument.Serialize(node: outputs[index].Json);
-                File.WriteAllBytes(temporary, documents[index]);
+                staged.Add(item: (AtomicFile.StageAllBytes(path: destination, bytes: documents[index]), destination));
             }
             if (compilation.Assets?.SaveUpdatedLock(diagnostics: diagnostics) == false) {
                 PrintDiagnostics(diagnostics: diagnostics, filePath: sourcePath, sourceText: source);
                 return 1;
             }
-            foreach (var (temporary, destination) in staged) {
-                File.Move(temporary, destination, overwrite: true);
+            foreach (var (pending, destination) in staged) {
+                pending.Commit();
                 written?.Add(
                     key: destination,
                     value: sourcePath
@@ -164,8 +161,8 @@ public static partial class CompileCommand {
             Console.Error.WriteLine(value: $"error: Could not publish compiled worlds: {error.Message}");
             return 2;
         } finally {
-            foreach (var (temporary, _) in staged) {
-                try { File.Delete(path: temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            foreach (var (pending, _) in staged) {
+                pending.Dispose();
             }
         }
     }

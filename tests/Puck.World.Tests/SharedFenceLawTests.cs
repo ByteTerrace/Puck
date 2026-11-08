@@ -1,10 +1,10 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
+using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -347,18 +347,4 @@ public sealed unsafe class SharedFenceLawTests {
         return default!;
     }
 
-    private sealed class HeapAllocator : Puck.Abstractions.Memory.IAllocator {
-        public void* Allocate(nuint size, nuint alignment = 0) => NativeMemory.Alloc(byteCount: Math.Max(
-            val1: size,
-            val2: 1
-        ));
-        public void Free(void* ptr) => NativeMemory.Free(ptr: ptr);
-        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => NativeMemory.Realloc(
-            byteCount: Math.Max(
-                val1: newSize,
-                val2: 1
-            ),
-            ptr: ptr
-        );
-    }
 }

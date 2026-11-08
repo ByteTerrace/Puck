@@ -92,7 +92,7 @@ public static partial class WorldDecompiler {
             elide.Add(item: "name");
         }
 
-        foreach (var key in WorldDocumentRowDefaults.ShapeKeys) {
+        foreach (var key in (ComposesDocuments.Value ? (IEnumerable<string>)[] : WorldDocumentRowDefaults.ShapeKeys)) {
             if (WorldDocumentRowDefaults.IsDefaultValue(
                 key,
                 shape[key],

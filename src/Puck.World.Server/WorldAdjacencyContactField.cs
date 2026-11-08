@@ -161,14 +161,8 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
 
                 neighbourPosition += correction;
                 var normal = correction.Normalize();
-                var inward = FixedVector3.Dot(
-                    left: neighbourVelocity,
-                    right: normal
-                );
 
-                if (inward < FixedQ4816.Zero) {
-                    neighbourVelocity -= (normal * inward);
-                }
+                neighbourVelocity = neighbourVelocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -normal);
                 dynamicObstruction = normal;
             }
 

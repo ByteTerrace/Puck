@@ -53,8 +53,7 @@ public static class AgentsCommand {
 
         return ((run.ExitCode == 0) ? run.Stdout.Trim() : null);
     }
-    private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path)).Replace(oldChar: '\\', newChar: '/');
-
+    private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path)).Replace(newChar: '/', oldChar: '\\');
     /// <summary>Reads one checkout's branch and configuration keys.</summary>
     /// <param name="roles">What the checkout is to the session.</param>
     /// <param name="path">The checkout's top level.</param>
@@ -66,7 +65,7 @@ public static class AgentsCommand {
         if (string.IsNullOrEmpty(value: branch)) {
             var head = await GitLineAsync(path, cancellationToken, "rev-parse", "--short", "HEAD").ConfigureAwait(continueOnCapturedContext: false);
 
-            branch = $"(detached {head ?? "?"})";
+            branch = $"(detached {(head ?? "?")})";
         }
         if (!CheckoutContent.TryRead(reason: out var reason, repositoryRoot: path, roots: [.. ConfigurationPaths], snapshot: out var snapshot)) {
             return (null, reason);
@@ -87,7 +86,7 @@ public static class AgentsCommand {
         var top = await GitLineAsync(checkout, cancellationToken, "rev-parse", "--show-toplevel").ConfigureAwait(continueOnCapturedContext: false);
 
         if (string.IsNullOrEmpty(value: top)) { return CliExit.Refuse(verb: Verb, what: Normalize(path: checkout), why: "is not inside a git checkout."); }
-        var common = await GitLineAsync(top, cancellationToken, "rev-parse", "--path-format=absolute", "--git-common-dir").ConfigureAwait(continueOnCapturedContext: false);
+        var common = await CliGit.CommonDirectoryAsync(cancellationToken: cancellationToken, repository: top).ConfigureAwait(continueOnCapturedContext: false);
 
         if (string.IsNullOrEmpty(value: common)) { return CliExit.Refuse(verb: Verb, what: Normalize(path: top), why: "git names no common directory."); }
         var candidates = new List<(string Role, string Path)> { ("working checkout", Normalize(path: top)) };

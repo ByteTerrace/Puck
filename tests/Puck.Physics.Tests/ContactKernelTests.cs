@@ -135,6 +135,41 @@ public sealed class ContactKernelTests {
             actual: FixedDynamicBodyContacts.BroadphaseRadius(volumes: left)
         );
     }
+    /// <summary>THE LAW: a round pair has one contact answer. Static sphere contact, dynamic sphere correction and the
+    /// overlap sense agree at a one-raw separation (which keeps its own direction rather than reading as coincident),
+    /// at exact touching (no contact, no overlap) and at coincident centers (the tie axis at the whole radius).</summary>
+    [Fact]
+    public void RoundPairsAnswerOneContactInEveryPath() {
+        FixedBodyColliderVolume[] sphere = [Sphere(radius: 1d)];
+        var volume = sphere[0];
+        var orientation = FixedQuaternion.Identity;
+        var still = FixedStaticCollider.Sphere(center: FixedVector3.Zero, radius: Scalar(value: 1d));
+
+        foreach (var (offset, overlapping) in new[] {
+            (new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Zero), true),
+            (Vector(x: 0d, y: 2d, z: 0d), false),
+            (FixedVector3.Zero, true),
+        }) {
+            var corrected = FixedDynamicBodyContacts.TryCorrection(correction: out var correction, leftOrientation: orientation,
+                leftPosition: offset, leftVolumes: sphere, rightOrientation: orientation, rightPosition: FixedVector3.Zero,
+                rightVolumes: sphere, tieBreaker: 0);
+            var pushed = still.TryGetPush(uncertain: out _, orientation: in orientation, position: offset, push: out var push,
+                skin: FixedQ4816.Zero, volume: in volume);
+            var overlaps = FixedDynamicBodyContacts.Overlaps(leftOrientation: orientation, leftPosition: offset,
+                leftVolumes: sphere, rightOrientation: orientation, rightPosition: FixedVector3.Zero, rightVolumes: sphere);
+
+            Assert.Equal(expected: overlapping, actual: corrected);
+            Assert.Equal(expected: overlapping, actual: pushed);
+            Assert.Equal(expected: overlapping, actual: overlaps);
+            if (!overlapping) { continue; }
+            var expected = ((offset == FixedVector3.Zero)
+                ? Vector(x: 2d, y: 0d, z: 0d)
+                : new FixedVector3(X: FixedQ4816.Zero, Y: (Scalar(value: 2d) - FixedQ4816.Epsilon), Z: FixedQ4816.Zero));
+
+            Assert.Equal(expected: expected, actual: correction);
+            Assert.Equal(expected: expected, actual: (push.Normal * push.Penetration));
+        }
+    }
     [Fact]
     public void RigidSolverRefusesAnInvalidSubstepCountByName() {
         var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () =>

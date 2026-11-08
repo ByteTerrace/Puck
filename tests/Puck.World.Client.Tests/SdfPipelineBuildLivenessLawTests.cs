@@ -356,10 +356,6 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             timeout: TestLiveness.Bound
         ));
     }
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
     // "probe" answers at once; "arm" holds its session behind a one-second pipeline.wait for an extent no one requests.
     private sealed class ProbeModule(WorldViewGraphHost runtime) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

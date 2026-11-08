@@ -225,42 +225,13 @@ public sealed class WorldLaunch : IDisposable {
 
         var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
 
-        // A device World waits for headroom before it asks for the GPU lease, reserving nothing, so the GPU never idles
-        // under a lease while memory is short. Headroom is then judged again, and reserved, with the lease held: the lease
-        // is what serializes device starts across processes (a reservation lives only in the process that made it), so of
-        // two device starts only the holder reads the headroom it is about to take. A leased judgement that does not pass
-        // within LeasedAdmissionBound gives the lease back and waits for headroom again rather than idling the GPU.
-        for (var attempt = 1; ; attempt++) {
-            stage?.Invoke(obj: "host-admission");
-            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, refuse: true, request: request, reserve: false, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
-            stage?.Invoke(obj: "gpu-lease");
-
-            var gpu = await WorldGpuHold.AcquireAsync(cancellationToken: cancellationToken, checkout: checkout, holder: (request.Holder ?? request.Step), lane: (request.Lane ?? CliLease.LaneOf(checkout: checkout))).ConfigureAwait(continueOnCapturedContext: false);
-
-            try {
-                stage?.Invoke(obj: "host-admission");
-
-                if (await AdmitHostAsync(bound: LeasedAdmissionBound, cancellationToken: cancellationToken, refuse: false, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false)) {
-                    return new WorldLaunch(gpu: gpu, request: request);
-                }
-            } catch {
-                gpu.Dispose();
-
-                throw;
-            }
-
-            gpu.Dispose();
-
-            if (attempt == MaximumRequeues) { throw new HostAdmissionRefusedException(step: request.Step); }
-            Console.Error.WriteLine(value: $"{request.Step}: the host's headroom went to another start while the GPU lease was held; released it and waiting for headroom again.");
-        }
+        var gpu = await LeasedAdmission.AcquireAsync(
+            acquire: async (_, token) => await WorldGpuHold.AcquireAsync(cancellationToken: token, checkout: checkout, holder: (request.Holder ?? request.Step), lane: (request.Lane ?? CliLease.LaneOf(checkout: checkout))).ConfigureAwait(false),
+            admit: (place, step, device, heavy, kind, bound, reserve, progress, phase, token) => WorldAdmission.TryAdmitAsync(step: step, device: device, heavySuite: heavy, kind: kind, bound: bound, reserve: reserve, stage: phase, cancellationToken: token),
+            checkout: checkout, step: request.Step, device: true, heavySuite: request.HeavySuite, kind: request.Kind,
+            clock: TimeProvider.System, bound: null, progress: Console.Error, stage: stage, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return new WorldLaunch(gpu: gpu, request: request);
     }
-
-    /// <summary>The longest a device start judges headroom while it holds the GPU lease before it gives the lease back:
-    /// three readings at the host admission's ten-second interval, so the GPU idles under a lease for no longer.</summary>
-    public static readonly TimeSpan LeasedAdmissionBound = TimeSpan.FromSeconds(seconds: 30);
-    /// <summary>How many times a device start gives the GPU lease back for headroom before it is refused.</summary>
-    public const int MaximumRequeues = 8;
 
     private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
         var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, reserve: reserve, stage: stage, step: request.Step).ConfigureAwait(continueOnCapturedContext: false);

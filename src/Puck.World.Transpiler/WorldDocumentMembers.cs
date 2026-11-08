@@ -23,6 +23,11 @@ internal static class WorldDocumentMembers {
     // diagnostics, refuses a member no document member consumes.
     internal static void Canonicalize(JsonObject? document, SourceMap sourceMap, DiagnosticBag? diagnostics) {
         if ((document is null) || ((document["schema"]?.ToString() is { } schema) && (schema != "puck.world.definition.v1"))) { return; }
+        // A document that names a basis or imports is a delta over documents not yet composed: a shape row of it that
+        // omits a member refines the row of that name, so such a row keeps exactly what the author wrote. Only a
+        // document that composes nothing is whole, and takes the one canonical form.
+        var whole = ((document["basis"] is null) && (document["imports"] is null));
+
         _ = Visit(node: document, pointer: "", refuse: true, type: typeof(WorldDefinition));
 
         // Returns the node to keep in the visited one's place: itself, rewritten in place, or a canonical scalar. Below
@@ -48,6 +53,9 @@ internal static class WorldDocumentMembers {
                 return WorldDocumentRowDefaults.CanonicalFloat(value: node);
             }
             if (node is JsonArray array) {
+                if (whole && (type == typeof(ShapeDocument))) {
+                    WorldDocumentRowDefaults.CompleteShapes(shapes: array);
+                }
                 for (var index = 0; (index < array.Count); ++index) {
                     if ((Visit(node: array[index], type: type, pointer: DocumentJsonPointer.Child(index: index, pointer: pointer), refuse: refuse) is var element) && !ReferenceEquals(objA: element, objB: array[index])) {
                         array[index] = element;
@@ -63,7 +71,7 @@ internal static class WorldDocumentMembers {
                 Puck.Assets.ContentPin.TryParse(text: obj["hash"]?.ToString(), pin: out var pin)) {
                 obj["hash"] = pin.Hex;
             }
-            if (type == typeof(ShapeDocument)) {
+            if (whole && (type == typeof(ShapeDocument))) {
                 WorldDocumentRowDefaults.OmitAbsentShapeMembers(shape: obj);
             }
             var polymorphic = (shape.Arms.Count > 0);

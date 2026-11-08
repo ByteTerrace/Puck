@@ -32,7 +32,10 @@ namespace Puck.World;
 /// surviving identity after merging; missing targets and cycles refuse.</description></item>
 /// <item><description>A list that cannot key (scalar elements, mixed shapes, or duplicate keys on either side)
 /// replaces wholesale, and a keyed list can opt into the same with a leading marker row
-/// <c>{"$replace": true}</c>.</description></item>
+/// <c>{"$replace": true}</c>. A creation's <c>shapes</c> list is the exception: two non-empty lists that cannot key
+/// refuse by name, because a refinement that loses its identity would otherwise discard the basis creation's shapes
+/// silently; a creation's shape rows name themselves (an <c>id</c> or a <c>name</c> on every row) or lead with
+/// <c>$replace</c>.</description></item>
 /// </list>
 /// <para><c>$drop</c>/<c>$replace</c>/<c>$before</c> are compose-time vocabulary only: <see cref="TryMerge"/> consumes them, so
 /// they never reach the parser, and one appearing anywhere a keyed list is not being merged refuses by name rather
@@ -437,6 +440,12 @@ public static class WorldDocumentBasis {
         )) {
             if (ambiguity.Length > 0) {
                 throw new JsonException(message: $"{path} {ambiguity}");
+            }
+
+            // A creation's shapes are refined row by row, and replacing them wholesale is a decision the author
+            // states with `$replace`: rows that cannot be told apart would silently discard the basis creation's.
+            if ((basis.Count > 0) && (overlay.Count > 0) && path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".shapes")) {
+                throw new JsonException(message: $"{path} cannot refine the basis creation's shapes: they share no identity key (an id or a name on every row of both lists). Name every shape, or lead the list with {{\"{ReplaceMemberName}\": true}} to replace it wholesale.");
             }
 
             for (var index = 0; (index < overlay.Count); index++) {

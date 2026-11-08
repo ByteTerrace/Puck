@@ -1,7 +1,9 @@
+using Puck.Shaders;
+
 namespace Puck.SdfVm;
 
-// One submission's shading identities, held by the residency whose commands carry them (SdfWorldResidency.SubmittedShade
-// alone creates one). It stays reported in flight until its completion is proven, and only a proof removes it: the node
+// One submission's shading identities, held by the residency whose commands carry them from its submission
+// (SdfWorldResidency.SubmittedShade). It stays reported in flight until its completion is proven, and only a proof removes it: the node
 // waited the slot it was submitted on (SdfShadeSlots.Completed), or its recorder was released after its submissions
 // completed and its package began another frame (SdfShadeReleases.BeginFrame). A device loss before either proof marks it
 // lost, and a lost submission stays reported until the quarantine reads it. No fence is queried: a reusable slot fence
@@ -31,56 +33,44 @@ internal sealed class SdfShadeSubmission {
 /// that skipped or stood, or a residency the recorder has since followed away from, never receives another recording's
 /// identities. Single-threaded, on the frame thread.</summary>
 public sealed class SdfShadeSlots {
-    private readonly (SdfWorldResidency Residency, IReadOnlyList<string> Identities)?[] m_recorded;
-    private readonly SdfShadeSubmission?[] m_submitted;
+    private readonly RenderGraphSlotResults<SdfShadeSubmission> m_slots;
 
     /// <summary>Initializes a new instance of the <see cref="SdfShadeSlots"/> class.</summary>
     /// <param name="slots">The frames the recorder's graph keeps in flight; positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slots"/> is not positive.</exception>
-    public SdfShadeSlots(int slots) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(slots);
-        m_recorded = new (SdfWorldResidency, IReadOnlyList<string>)?[slots];
-        m_submitted = new SdfShadeSubmission?[slots];
-    }
+    public SdfShadeSlots(int slots) => m_slots = new RenderGraphSlotResults<SdfShadeSubmission>(slots: slots,
+        complete: static submission => submission.Complete(), submit: static submission => submission.Residency.SubmittedShade(submission: submission));
 
     /// <summary>Captures what a recording into the slot dispatched: the residency that recorded it and the identities its
-    /// plan may execute. It replaces any earlier capture of the slot that never reached a submission.</summary>
+    /// plan may execute. It replaces any earlier capture of the slot that never reached a submission; a plan that may
+    /// execute no identity captures nothing.</summary>
     /// <param name="slot">The frame slot recorded into.</param>
     /// <param name="residency">The residency whose tables the dispatches bind.</param>
     /// <param name="plan">The recorded plan.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="residency"/> or <paramref name="plan"/> is null.</exception>
     public void Recorded(int slot, SdfWorldResidency residency, SdfShadeDispatch plan) {
         ArgumentNullException.ThrowIfNull(residency);
         ArgumentNullException.ThrowIfNull(plan);
-        m_recorded[slot] = (residency, plan.Identities);
+        if (plan.Identities.Count == 0) {
+            m_slots.Withdraw(slot: slot);
+        } else {
+            m_slots.Record(slot: slot, result: new SdfShadeSubmission(residency: residency, identities: plan.Identities));
+        }
     }
     /// <summary>Reports the slot's recording submitted: its capture enters the recording residency's in-flight set. A slot
     /// with no capture since its last submission submits nothing.</summary>
     /// <param name="slot">The submitted frame slot.</param>
-    public void Submitted(int slot) {
-        if (m_recorded[slot] is not { } recorded) { return; }
-        m_recorded[slot] = null;
-        // The node waits a slot before recording into it (Completed); an earlier submission still held here was completed
-        // by that same wait.
-        m_submitted[slot]?.Complete();
-        m_submitted[slot] = recorded.Residency.SubmittedShade(identities: recorded.Identities);
-    }
+    public void Submitted(int slot) => m_slots.Submitted(slot: slot);
     /// <summary>Reports the slot's previous submission completed: its identities leave the residency that recorded them,
     /// and a capture that never reached a submission is dropped.</summary>
     /// <param name="slot">The frame slot whose previous submission completed.</param>
-    public void Completed(int slot) {
-        m_recorded[slot] = null;
-        m_submitted[slot]?.Complete();
-        m_submitted[slot] = null;
-    }
+    public void Completed(int slot) => m_slots.Completed(slot: slot);
     /// <summary>Hands every submission not yet proven complete to the package's releases, as the recorder is released.</summary>
     /// <param name="releases">The releases of the recorder's package.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="releases"/> is null.</exception>
     public void Release(SdfShadeReleases releases) {
         ArgumentNullException.ThrowIfNull(releases);
-        Array.Clear(array: m_recorded);
-        for (var slot = 0; (slot < m_submitted.Length); slot++) {
-            if (m_submitted[slot] is { } submission) { releases.Add(submission: submission); }
-            m_submitted[slot] = null;
-        }
+        m_slots.Release(unproven: releases.Add);
     }
 }
 

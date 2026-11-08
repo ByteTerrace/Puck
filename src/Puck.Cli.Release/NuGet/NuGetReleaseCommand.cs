@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Xml.Linq;
 
 namespace Puck.Cli.NuGet;
 
@@ -9,55 +8,9 @@ namespace Puck.Cli.NuGet;
 /// GITHUB_REF, GITHUB_REPOSITORY, GITHUB_RUN_ID, and GITHUB_RUN_ATTEMPT come from the workflow.
 /// </summary>
 internal static class NuGetReleaseCommand {
-    private const string Package = "byteterrace.puck.cli";
     // nuget.org indexes a push minutes after it accepts it, so the install check waits the index out rather than failing.
     private const int InstallAttempts = 30;
 
-    private static string CandidateConfig(string directory, string feed) {
-        // An exclusive feed and a private cache keep a same-version official package from replacing the candidate.
-        var path = Path.Combine(
-            path1: directory,
-            path2: "nuget.config"
-        );
-
-        new XDocument(new XElement(
-            "configuration",
-            new XElement(
-                "packageSources",
-                new XElement(name: "clear"),
-                new XElement(
-                    "add",
-                    new XAttribute(
-                        name: "key",
-                        value: "candidate"
-                    ),
-                    new XAttribute(
-                        name: "value",
-                        value: Path.GetFullPath(path: feed)
-                    )
-                )
-            ),
-            new XElement(
-                "config",
-                new XElement(
-                    "add",
-                    new XAttribute(
-                        name: "key",
-                        value: "globalPackagesFolder"
-                    ),
-                    new XAttribute(
-                        name: "value",
-                        value: Path.Combine(
-                            path1: directory,
-                            path2: "packages"
-                        )
-                    )
-                )
-            )
-        ))
-            .Save(fileName: path);
-        return path;
-    }
     private static async Task<int> GateAsync() {
         var root = RepositoryPaths.RequireRoot();
         var tag = Version(root: root);
@@ -94,40 +47,8 @@ internal static class NuGetReleaseCommand {
         fileName: "git",
         workingDirectory: root
     )).Trim();
-    private static async Task<string> InstallAsync(string configFile, string directory, string root, string version) {
-        var tool = Path.Combine(
-            path1: directory,
-            path2: "tool"
-        );
-
-        await CliProcess.RunCheckedAsync(
-            arguments: ["tool", "install", Package, "--version", version, "--tool-path", tool, "--configfile", configFile, "--no-http-cache"],
-            fileName: "dotnet",
-            workingDirectory: root
-        );
-        var executable = Path.Combine(
-            path1: tool,
-            path2: (OperatingSystem.IsWindows()
-            ? "puck.exe"
-            : "puck")
-        );
-        var actual = (await CliProcess.RunCheckedAsync(
-            arguments: ["--version"],
-            capture: true,
-            fileName: executable,
-            workingDirectory: root
-        )).Trim();
-
-        if (
-            (actual != version) &&
-            !actual.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: (version + "+")
-        )
-        ) { throw new InvalidDataException(message: $"Installed CLI reports {actual}; expected {version}."); }
-        Console.WriteLine(value: $"Puck CLI {actual}");
-        return executable;
-    }
+    private static Task<string> RunInstallAsync(string file, IEnumerable<string> arguments) => CliProcess.RunCheckedAsync(
+        fileName: file, arguments: arguments, capture: true, workingDirectory: RepositoryPaths.RequireRoot());
     private static async Task<int> VerifyInstallAsync(string version) {
         var root = RepositoryPaths.RequireRoot();
         // Install attempts retry while the publication propagates, so a failed one is not evidence worth keeping.
@@ -138,13 +59,13 @@ internal static class NuGetReleaseCommand {
         var directory = run.Path;
 
         // The published package is proven in an empty tool path before tracked configuration changes.
-        var executable = await InstallAsync(
+        var executable = await CandidateCliInstall.InstallAsync(
             configFile: Path.Combine(
                 path1: root,
                 path2: "nuget.config"
             ),
-            directory: directory,
-            root: root,
+            tool: Path.Combine(path1: directory, path2: "tool"),
+            run: RunInstallAsync,
             version: NuGetCommand.ValidateVersion(version: version)
         );
 
@@ -220,25 +141,12 @@ internal static class NuGetReleaseCommand {
     }
     private static async Task<int> SmokeAsync(string packages) {
         var root = RepositoryPaths.RequireRoot();
-        var package = Directory.GetFiles(
-            path: packages,
-            searchPattern: "ByteTerrace.Puck.Cli.*.nupkg"
-        ).Single();
-        var version = Path.GetFileName(path: package)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
         using var run = RunDirectory.Create(prefix: "puck-package-smoke-");
         var directory = run.Path;
 
         CliScratchDirectories.PinSdk(directory: directory);
 
-        var executable = await InstallAsync(
-            configFile: CandidateConfig(
-                directory: directory,
-                feed: packages
-            ),
-            directory: directory,
-            root: root,
-            version: version
-        );
+        var executable = await CandidateCliInstall.CandidateAsync(feed: packages, tool: Path.Combine(path1: directory, path2: "tool"), directory: directory, run: RunInstallAsync);
         var project = Path.Combine(
             path1: root,
             path2: "src/Puck.Cli/Puck.Cli.csproj"

@@ -5,11 +5,6 @@ namespace Puck.Input.Tests;
 
 public sealed class ContractTests {
     [Fact]
-    public void Lane_policy_rejects_undefined_modes_and_negative_seats() {
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new InputLanePolicy(mode: ((InputLaneMode)99)));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => InputLanePolicy.ForPlayer(playerIndex: -1));
-    }
-    [Fact]
     public void Normalization_rejects_non_finite_and_invalid_ranges() {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GamepadNormalization.ApplyRadialDeadzone(
             stick: Vector2.One,

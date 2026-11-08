@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 // environment producer runs afterward, once its panorama images have been acquired.
 public sealed partial class SdfWorldTables {
     // Device objects the tables replaced without waiting for the device, each with the upload after which it is disposed.
-    private readonly List<(ulong Upload, IDisposable Replaced)> m_retired = [];
+    private readonly GpuRetirementQueue<IDisposable> m_retired = new();
     // One-based submitted uploads known complete through the existing previous-upload wait. A required geometry
     // upload older than this prefix never consults a fence whose ring slot may since have been reused for poses/GI.
     private ulong m_completedUploads;
@@ -91,25 +91,11 @@ public sealed partial class SdfWorldTables {
     // Hands a device object the tables replaced to the upload that follows: GPU work recorded before it may still read
     // the object, and that upload may read it once more (a grown region's carry), so it is disposed once that upload's
     // fence signals, which one queue signals only after every earlier submission, every view that bound it among them.
-    private void Retire(IDisposable replaced) => m_retired.Add(item: (m_uploads, replaced));
+    private void Retire(IDisposable replaced) => m_retired.Retire(after: m_uploads, item: replaced);
     // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
     internal void RetireBackgroundResource(IDisposable replaced) => Retire(replaced);
     // Disposes every replaced object whose following upload has completed.
-    private void DisposeRetired(ulong completed) {
-        var kept = 0;
-
-        for (var index = 0; (index < m_retired.Count); index++) {
-            var (upload, replaced) = m_retired[index];
-
-            if (upload <= completed) {
-                replaced.Dispose();
-            } else {
-                m_retired[kept++] = (upload, replaced);
-            }
-        }
-
-        m_retired.RemoveRange(count: (m_retired.Count - kept), index: kept);
-    }
+    private void DisposeRetired(ulong completed) => m_retired.Release(completed: completed, release: static replaced => replaced.Dispose());
     // Waits until every upload in flight has retired: what a rewrite of the only table no view reads, a bake request,
     // pays.
     private void WaitForUploads() {

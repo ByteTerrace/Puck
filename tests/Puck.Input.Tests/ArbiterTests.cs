@@ -7,7 +7,7 @@ namespace Puck.Input.Tests;
 
 public sealed class ArbiterTests {
     [Fact]
-    public void Multicast_uses_player_order_and_copy_reuses_caller_storage() {
+    public void Drain_copies_every_device_in_player_order_into_caller_storage() {
         var source = new TestAcquisitionSource();
         using var manager = new GamepadManager(
             acquisitionSource: source,
@@ -31,14 +31,8 @@ public sealed class ArbiterTests {
         });
 
         var arbiter = new InputArbiter(manager: manager);
-        var lane = arbiter.RegisterLane(policy: InputLanePolicy.Multicast);
 
         arbiter.DrainFrame(frameKey: 1UL);
-
-        Assert.Equal(
-            expected: 0.25f,
-            actual: arbiter.Sample(laneToken: lane).LeftStick.X
-        );
 
         var destination = new List<GamepadDrain> { default, default, default, };
 
@@ -57,25 +51,6 @@ public sealed class ArbiterTests {
             actual: destination[1].DeviceId
         );
     }
-    [Fact]
-    public void Unregistered_lane_is_rejected_by_every_lane_operation() {
-        using var manager = new GamepadManager(
-            clock: new ManualInputClock(),
-            hidSource: new EmptyHidDeviceSource()
-        );
-        var arbiter = new InputArbiter(manager: manager);
-        var lane = arbiter.RegisterLane(policy: InputLanePolicy.Owned);
-
-        arbiter.UnregisterLane(laneToken: lane);
-
-        _ = Assert.Throws<ArgumentException>(testCode: () => arbiter.Sample(laneToken: lane));
-        _ = Assert.Throws<ArgumentException>(testCode: () => arbiter.SuppressLane(
-            laneToken: lane,
-            suppressed: true
-        ));
-        _ = Assert.Throws<ArgumentException>(testCode: () => arbiter.UnregisterLane(laneToken: lane));
-    }
-
     private sealed class TestAcquisitionSource : IGamepadAcquisitionSource {
         public TestConnection? PlayerOne { get; private set; }
         public TestConnection? PlayerZero { get; private set; }

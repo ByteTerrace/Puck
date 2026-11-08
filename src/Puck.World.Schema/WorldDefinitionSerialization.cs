@@ -1271,10 +1271,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
     }
     /// <inheritdoc/>
     public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(
-            reader: ref reader,
-            options: Puck.World.Authoring.CreationJsonContext.Document.Options
-        );
+        Puck.World.Authoring.CreationDocumentJson.Read(reader: ref reader);
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.World.Authoring.CreationDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(

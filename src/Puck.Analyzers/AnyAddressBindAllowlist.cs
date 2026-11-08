@@ -34,39 +34,9 @@ public static class AnyAddressBindAllowlist {
     /// <param name="path">The source file's path as the compiler was given it, spelled with either separator.</param>
     /// <param name="member">The name of the member holding the site.</param>
     /// <returns><see langword="true"/> when an entry names the assembly, the file and the member.</returns>
-    public static bool Admits(string assembly, string path, string member) {
-        var normalized = path.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
-
-        foreach (var entry in Entries) {
-            if (
-                string.Equals(
-                    a: entry.Assembly,
-                    b: assembly,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                string.Equals(
-                    a: entry.Member,
-                    b: member,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                (string.Equals(
-                    a: normalized,
-                    b: entry.Path,
-                    comparisonType: StringComparison.Ordinal
-                ) || normalized.EndsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: ("/" + entry.Path)
-                ))
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool Admits(string assembly, string path, string member) => Entries.Any(predicate: entry =>
+        (AnalyzerAllowlistPath.Matches(assembly: assembly, path: path, expectedAssembly: entry.Assembly, expectedPath: entry.Path) &&
+        string.Equals(a: entry.Member, b: member, comparisonType: StringComparison.Ordinal)));
 }
 /// <summary>One allowlisted any-address site.</summary>
 /// <param name="Assembly">The assembly that compiles the site.</param>

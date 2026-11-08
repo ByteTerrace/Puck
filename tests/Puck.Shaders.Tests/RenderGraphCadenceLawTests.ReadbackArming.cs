@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
@@ -22,8 +21,10 @@ public sealed partial class RenderGraphCadenceLawTests {
         factory.Events.Clear();
         factory.Skip = true;
         for (var frame = 0; (frame < 3); frame++) { _ = node.ProduceFrame(context: default); }
-        // A skipped pass is told each slot it would reuse has completed, and is never armed with that slot's fence.
-        Assert.Equal(3, factory.Events.Count);
+        // The armed slot is proven complete as soon as its fence reads signaled, before its reuse; a skipped pass is then
+        // told each slot it would reuse has completed, and is never armed.
+        Assert.Equal(4, factory.Events.Count);
+        Assert.Equal("completed 0", factory.Events[0]);
         Assert.All(factory.Events, static entry => Assert.StartsWith("completed ", entry));
         var next = $"{((int.Parse(factory.Events[^1]["completed ".Length..], provider: System.Globalization.CultureInfo.InvariantCulture) + 1) % 3)}";
 
@@ -56,7 +57,7 @@ public sealed partial class RenderGraphCadenceLawTests {
                 return RenderGraphPackageOutcome.Drew;
             }
             public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
-            public void Submitted(int slot, IGpuSubmissionFence fence) => owner.Events.Add(item: $"submitted {slot}");
+            public void Submitted(int slot) => owner.Events.Add(item: $"submitted {slot}");
             public void Completed(int slot) => owner.Events.Add(item: $"completed {slot}");
         }
     }

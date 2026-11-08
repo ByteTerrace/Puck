@@ -9,6 +9,30 @@ namespace Puck.Cli.Analysis;
 // — and it is the tier that can see files no project compiles. Exit 0 when anything was found, 1 when
 // nothing was, 2 on a usage error.
 public static class DeclarationsCommand {
+    /// <summary>Reads the same syntax-backed type inventory as the declaration verb for callers selecting a project.
+    /// Comments and string literals cannot declare a type.</summary>
+    /// <param name="files">The source files to parse.</param>
+    /// <param name="relativeTo">The base of returned file paths.</param>
+    /// <returns>Each declared type's source path and simple name.</returns>
+    public static IReadOnlyList<(string Path, string Name)> ReadTypes(IReadOnlyList<string> files, string relativeTo) {
+        var options = new DeclarationsOptions {
+            Attribute = null,
+            Base = null,
+            Doc = false,
+            Exclude = [],
+            Include = [],
+            Json = false,
+            Kinds = new HashSet<string>(comparer: StringComparer.Ordinal),
+            Members = false,
+            Name = null,
+            Quiet = false,
+            Roots = [],
+        };
+
+        return [.. DeclarationsWalker.Collect(corpus: SourceCorpus.Parse(files: files, relativeTo: relativeTo), options: options)
+            .Select(selector: static record => (record.Path, record.SimpleName!))];
+    }
+
     // The requested kinds, empty for "every type kind", or null with the error already written.
     private static IReadOnlySet<string>? ParseKinds(string? raw) {
         if (raw is null) {

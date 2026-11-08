@@ -30,7 +30,8 @@ namespace Puck.Abstractions.Gpu;
 /// (<see cref="RecordCarry"/>), so growing writes no carried word from the host and leaves the old destination to the
 /// caller, who disposes it once that recording's submission and every earlier reader have completed. A ring or in-place
 /// region grows too, by replacing its host-visible buffers and owing each the whole region, so an owner grows a region
-/// without knowing which policy <see cref="GpuResidency.Select"/> chose for it. The host copy lives in native memory, so a
+/// without knowing which policy <see cref="GpuResidency.Select"/> chose for it; a region created from the device's
+/// profile chooses again at each new size, so growth is the one door that moves a region between policies. The host copy lives in native memory, so a
 /// large region holds no managed copy of its contents, including when it grows.
 /// </para>
 /// <para>
@@ -122,6 +123,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
     // policies. MoveCopySets hands a reserved region another share.
     private GpuRegionCopySets? m_copySets;
+    // The share its owner reserved, whatever policy the region holds now, which a selecting region stages through once
+    // it grows past a ring's share (Restage); null when the owner reserved none.
+    private readonly GpuRegionCopySets? m_reservedCopySets;
+    // The device profile a selecting region chooses its policy from at every size (GpuResidency.Select), and whether a
+    // reader is in flight while the host writes it; null for a region created under a fixed policy.
+    private readonly GpuMemoryProfile? m_profile;
+    private readonly bool m_readersInFlight;
 
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBufferFactory m_buffers;
@@ -134,18 +142,19 @@ public sealed unsafe class GpuRegion : IDisposable {
     private long m_carryBytes;
     private readonly bool m_external;
     // The copy pool the region created for itself, which it destroys with it; null when its owner reserved its sets.
-    private readonly GpuRegionCopyPool? m_ownedCopyPool;
+    // The policy-dependent state below is replaced together, only by the constructor and Restage.
+    private GpuRegionCopyPool? m_ownedCopyPool;
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
     // The ranges each host-visible buffer still owes: one list under InPlace and Staged, one per slot under Ring.
-    private readonly GpuUploadRuns[] m_owed;
+    private GpuUploadRuns[] m_owed;
     // Under Ring, the ranges written since the slots last took them (OwedOf): a write owes into this one list, in the
     // order it writes, rather than into every slot's, where it would land among the older frames' runs. Every read of a
     // slot's list folds it first.
-    private readonly GpuUploadRuns? m_fresh;
+    private GpuUploadRuns? m_fresh;
     private readonly IGpuRecorder m_recorder;
     // The header and run table a staged flush writes at the front of the slot's staging buffer.
-    private readonly uint[] m_header;
-    private readonly IGpuStorageBuffer[] m_hostBuffers;
+    private uint[] m_header;
+    private IGpuStorageBuffer[] m_hostBuffers;
 
     private int m_destinationWord;
     private bool m_disposed;
@@ -206,6 +215,55 @@ public sealed unsafe class GpuRegion : IDisposable {
         slotCount: slotCount,
         usage: usage
     ) { }
+    /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class that chooses its own residency: the
+    /// policy <see cref="GpuResidency.Select"/> picks for its size on <paramref name="profile"/>, a ring's buffers in the
+    /// memory <see cref="GpuResidency.RingMemory"/> picks. <see cref="Grow"/> chooses again for each new size, so a
+    /// region that grows past a ring's share of the aperture moves to the staged policy without its owner selecting
+    /// anything. Its buffers are storage, read as uints.</summary>
+    /// <param name="profile">The device's memory profile.</param>
+    /// <param name="readersInFlight">Whether a submission reading the region can be in flight while the host writes
+    /// it, as every per-frame owner's ring keeps one.</param>
+    /// <param name="byteCount">The region's size in bytes; positive, a whole number of uints and at most
+    /// <see cref="MaxByteCount"/>.</param>
+    /// <param name="slotCount">The caller's frame slots; at least one.</param>
+    /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
+    /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
+    /// <param name="recorder">The recorder the staged policy's copy is recorded through.</param>
+    /// <param name="copyPipeline">The copy kernel's pipeline, created from <see cref="CopyPipeline"/>, which the region
+    /// stages through whenever its size selects the staged policy; the caller owns it and keeps it alive while the region
+    /// records copies.</param>
+    /// <param name="name">The region's debug name, as the policy constructor names it.</param>
+    /// <param name="copySets">The region's share of the copy pool its owner reserved (<see cref="GpuRegionCopyPool.Region"/>),
+    /// written whenever the region is staged, or <see langword="null"/> to create a pool of its own when it is.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="buffers"/>, <paramref name="bindings"/>,
+    /// <paramref name="recorder"/> or <paramref name="copyPipeline"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not a whole number of
+    /// uints or past <see cref="MaxByteCount"/>, or <paramref name="slotCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
+    /// <paramref name="slotCount"/>.</exception>
+    public GpuRegion(GpuMemoryProfile profile, bool readersInFlight, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null) : this(
+        bindings: bindings,
+        buffers: buffers,
+        byteCount: byteCount,
+        copyPipeline: (copyPipeline ?? throw new ArgumentNullException(paramName: nameof(copyPipeline))),
+        copySets: copySets,
+        destination: null,
+        memory: GpuResidency.RingMemory(profile: profile),
+        name: in name,
+        policy: ((byteCount > 0)
+            ? GpuResidency.Select(
+                byteCount: ((ulong)byteCount),
+                profile: profile,
+                readersInFlight: readersInFlight
+            )
+            : GpuResidencyPolicy.Staged),
+        recorder: recorder,
+        slotCount: slotCount,
+        usage: GpuBufferUsage.Storage
+    ) {
+        m_profile = profile;
+        m_readersInFlight = readersInFlight;
+    }
     /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class that stages into an external
     /// destination: its policy is <see cref="GpuResidencyPolicy.Staged"/>, its word 0 lands at word 0 of
     /// <paramref name="destination"/> until <see cref="Target"/> moves it, and it owes nothing until a write, since what
@@ -342,67 +400,31 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_usage = usage;
         m_destination = destination;
         m_external = (destination is not null);
+        m_reservedCopySets = copySets;
         m_recorder = recorder;
-        m_header = new uint[((policy == GpuResidencyPolicy.Staged)
-            ? CopyBlockBase
-            : 0
-        )];
-        m_owed = new GpuUploadRuns[((policy == GpuResidencyPolicy.Ring)
-            ? slotCount
-            : 1
-        )];
-        m_fresh = ((policy == GpuResidencyPolicy.Ring)
-            ? new GpuUploadRuns(capacity: HostRunCapacity)
-            : null
+        m_header = HeaderOf(policy: policy);
+        m_owed = OwedOf(
+            policy: policy,
+            slotCount: slotCount,
+            words: (m_external
+                ? 0
+                : words
+            )
         );
-
-        for (var index = 0; (index < m_owed.Length); index++) {
-            m_owed[index] = ((policy == GpuResidencyPolicy.Staged)
-                ? new GpuUploadRuns(
-                    capacity: MaxCopyRuns,
-                    mergeGap: StagedMergeGapWords
-                )
-                : new GpuUploadRuns(capacity: HostRunCapacity)
-            );
-
-            if (!m_external) {
-                m_owed[index].Add(
-                    length: words,
-                    start: 0
-                );
-            }
-        }
-
+        m_fresh = FreshOf(policy: policy);
         m_knownWords = (m_external
             ? 0
             : words
         );
-        m_hostBuffers = new IGpuStorageBuffer[((policy == GpuResidencyPolicy.InPlace)
-            ? 1
-            : slotCount
-        )];
+        m_hostBuffers = [];
 
         try {
-            var hostBytes = ((policy == GpuResidencyPolicy.Staged)
-                ? ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)byteCount))
-                : ((ulong)byteCount)
+            m_hostBuffers = CreateHostBuffers(
+                byteCount: byteCount,
+                memory: Memory,
+                policy: policy
             );
-
-            for (var index = 0; (index < m_hostBuffers.Length); index++) {
-                m_hostBuffers[index] = ((Memory == GpuHostVisibleMemory.DeviceLocal)
-                    ? buffers.CreateHostVisibleDeviceLocal(
-                        name: name.At(index: index),
-                        sizeBytes: hostBytes,
-                        usage: usage
-                    )
-                    : buffers.CreateHostVisible(
-                        name: name.At(index: index),
-                        sizeBytes: hostBytes,
-                        usage: usage
-                    )
-                );
-                m_ownedBuffers.Add(item: m_hostBuffers[index]);
-            }
+            m_ownedBuffers.AddRange(collection: m_hostBuffers);
 
             if (policy == GpuResidencyPolicy.Staged) {
                 if (!m_external) {
@@ -414,20 +436,9 @@ public sealed unsafe class GpuRegion : IDisposable {
                     m_ownedBuffers.Add(item: m_destination);
                 }
 
-                if (copySets is null) {
-                    m_ownedCopyPool = new GpuRegionCopyPool(
-                        bindings: bindings,
-                        copyPipeline: copyPipeline!,
-                        name: in name,
-                        regions: [name],
-                        slotCount: slotCount
-                    );
-                    copySets = m_ownedCopyPool.Region(index: 0);
-                }
-
                 // No slot's copy set is written here: RecordCopy writes a slot's set the first time that slot records a
                 // copy, inside the pass that records it, so the writes are counted where the upload's work is.
-                m_copySets = copySets;
+                m_copySets = (copySets ?? (m_ownedCopyPool = CreateCopyPool()).Region(index: 0));
             }
         } catch {
             Dispose();
@@ -435,6 +446,89 @@ public sealed unsafe class GpuRegion : IDisposable {
             throw;
         }
     }
+    // The header and run table a flush under the policy writes: the staged copy's, and none under the others.
+    private static uint[] HeaderOf(GpuResidencyPolicy policy) => new uint[((policy == GpuResidencyPolicy.Staged)
+        ? CopyBlockBase
+        : 0
+    )];
+    // The owed lists of a region under the policy, one per slot under the ring and one under the others, each owing its
+    // first words.
+    private static GpuUploadRuns[] OwedOf(GpuResidencyPolicy policy, int slotCount, int words) {
+        var owed = new GpuUploadRuns[((policy == GpuResidencyPolicy.Ring)
+            ? slotCount
+            : 1
+        )];
+
+        for (var index = 0; (index < owed.Length); index++) {
+            owed[index] = ((policy == GpuResidencyPolicy.Staged)
+                ? new GpuUploadRuns(
+                    capacity: MaxCopyRuns,
+                    mergeGap: StagedMergeGapWords
+                )
+                : new GpuUploadRuns(capacity: HostRunCapacity)
+            );
+
+            if (words > 0) {
+                owed[index].Add(
+                    length: words,
+                    start: 0
+                );
+            }
+        }
+
+        return owed;
+    }
+    // The ring's list of ranges written since the slots last took them, and none under the other policies.
+    private static GpuUploadRuns? FreshOf(GpuResidencyPolicy policy) => ((policy == GpuResidencyPolicy.Ring)
+        ? new GpuUploadRuns(capacity: HostRunCapacity)
+        : null
+    );
+    // Creates the host-visible buffers of a region of byteCount bytes under the policy, in memory: one per slot under the
+    // ring and staged (a staging buffer carrying the header and run-table reserve before the region's bytes), and the one
+    // in place. Every buffer is created or none is: a failed creation releases those created before it.
+    private IGpuStorageBuffer[] CreateHostBuffers(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount) {
+        var created = new IGpuStorageBuffer[((policy == GpuResidencyPolicy.InPlace)
+            ? 1
+            : SlotCount
+        )];
+        var hostBytes = ((policy == GpuResidencyPolicy.Staged)
+            ? ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)byteCount))
+            : ((ulong)byteCount)
+        );
+
+        try {
+            for (var index = 0; (index < created.Length); index++) {
+                created[index] = ((memory == GpuHostVisibleMemory.DeviceLocal)
+                    ? m_buffers.CreateHostVisibleDeviceLocal(
+                        name: m_name.At(index: index),
+                        sizeBytes: hostBytes,
+                        usage: m_usage
+                    )
+                    : m_buffers.CreateHostVisible(
+                        name: m_name.At(index: index),
+                        sizeBytes: hostBytes,
+                        usage: m_usage
+                    )
+                );
+            }
+        } catch {
+            foreach (var buffer in created) {
+                buffer?.Dispose();
+            }
+
+            throw;
+        }
+
+        return created;
+    }
+    // Creates the copy pool of a staged region whose owner reserved no sets for it: one set per slot, named as the region.
+    private GpuRegionCopyPool CreateCopyPool() => new(
+        bindings: m_bindings,
+        copyPipeline: m_copyPipeline!,
+        name: in m_name,
+        regions: [m_name],
+        slotCount: SlotCount
+    );
 
     /// <summary>Gets the copy kernel's request, destination and source-data descriptor bindings.</summary>
     public static IReadOnlyList<GpuComputeBinding> CopyBindings { get; } = [
@@ -621,9 +715,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
-    public GpuHostVisibleMemory Memory { get; }
-    /// <summary>Gets the residency policy the region was created under.</summary>
-    public GpuResidencyPolicy Policy { get; }
+    public GpuHostVisibleMemory Memory { get; private set; }
+    /// <summary>Gets the residency policy the region holds: the one it was created under, or the staged policy once a
+    /// region that chooses its own residency has grown past a ring's share (<see cref="Grow"/>).</summary>
+    public GpuResidencyPolicy Policy { get; private set; }
     /// <summary>Gets the number of frame slots the region serves.</summary>
     public int SlotCount { get; }
 
@@ -668,8 +763,11 @@ public sealed unsafe class GpuRegion : IDisposable {
         NativeMemory.Free(ptr: m_contents);
         m_contents = null;
     }
-    /// <summary>Grows a region that owns its buffers to <paramref name="byteCount"/> bytes under the policy it was
-    /// created with, without waiting for any submission, and extends <see cref="Contents"/> with zeros. A staged region
+    /// <summary>Grows a region that owns its buffers to <paramref name="byteCount"/> bytes, without waiting for any
+    /// submission, and extends <see cref="Contents"/> with zeros. A region that chooses its own residency chooses again
+    /// for the new size: past a ring's share of the aperture a ring or in-place region becomes staged, creating its
+    /// staging buffers, destination and (unless its owner reserved its sets) copy pool, owing every word, and returning
+    /// its host-visible buffers as a ring's grow does. Any other region keeps its policy. A staged region
     /// creates a destination of the new size and owes its next copy recording a carry (<see cref="RecordCarry"/>) that
     /// clears the new destination and copies the old one's bytes into it on the GPU, so no word the region held is staged
     /// again; owed words stay owed, the copy sets are written again before each slot's next copy, and no staging buffer is
@@ -720,40 +818,106 @@ public sealed unsafe class GpuRegion : IDisposable {
             );
         }
 
-        return ((Policy == GpuResidencyPolicy.Staged)
-            ? GrowDestination(byteCount: byteCount)
-            : GrowHostBuffers(byteCount: byteCount)
+        if (Policy == GpuResidencyPolicy.Staged) {
+            return GrowDestination(byteCount: byteCount);
+        }
+        // Select's choice between the ring and in place does not depend on size, and a larger size only ever moves a
+        // region to the staged policy, so a selecting region that leaves its policy is restaged.
+        if (
+            (m_profile is { } profile) &&
+            (GpuResidency.Select(
+                byteCount: ((ulong)byteCount),
+                profile: profile,
+                readersInFlight: m_readersInFlight
+            ) == GpuResidencyPolicy.Staged)
+        ) {
+            return Restage(byteCount: byteCount);
+        }
+
+        return GrowHostBuffers(byteCount: byteCount);
+    }
+    // Moves a ring or in-place region to the staged policy at byteCount bytes: creates its staging buffers, its
+    // device-local destination and, unless its owner reserved its sets, its copy pool, all before anything changes, then
+    // grows the host copy and owes every word, since the new destination holds nothing. Nothing is carried on the GPU: the
+    // host copy holds the whole region (a source needs the staged policy from the start). The old host-visible buffers are
+    // returned for the caller to retire, as a ring's grow returns them.
+    private ReplacedBuffers Restage(long byteCount) {
+        var staging = CreateHostBuffers(
+            byteCount: byteCount,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged
         );
+        IGpuBuffer? destination = null;
+        GpuRegionCopyPool? pool = null;
+
+        try {
+            destination = m_buffers.CreateDeviceLocal(
+                name: m_name,
+                sizeBytes: ((ulong)byteCount),
+                usage: GpuBufferUsage.Storage
+            );
+            pool = ((m_reservedCopySets is null)
+                ? CreateCopyPool()
+                : null
+            );
+            GrowContents(byteCount: byteCount);
+        } catch {
+            pool?.Dispose();
+            destination?.Dispose();
+
+            foreach (var buffer in staging) {
+                buffer.Dispose();
+            }
+
+            throw;
+        }
+
+        var replaced = new IGpuBuffer[m_hostBuffers.Length];
+
+        for (var index = 0; (index < replaced.Length); index++) {
+            replaced[index] = m_hostBuffers[index];
+            _ = m_ownedBuffers.Remove(item: m_hostBuffers[index]);
+        }
+
+        m_hostBuffers = staging;
+        m_ownedBuffers.AddRange(collection: staging);
+        m_destination = destination;
+        m_ownedBuffers.Add(item: destination);
+        m_ownedCopyPool = pool;
+        m_copySets = (m_reservedCopySets ?? pool!.Region(index: 0));
+        m_copySets.ForgetWriter(region: this);
+        m_header = HeaderOf(policy: GpuResidencyPolicy.Staged);
+        m_owed = OwedOf(
+            policy: GpuResidencyPolicy.Staged,
+            slotCount: SlotCount,
+            words: ((int)(byteCount / sizeof(uint)))
+        );
+        m_fresh = null;
+        m_stagedSlot = -1;
+        Memory = GpuHostVisibleMemory.Host;
+        Policy = GpuResidencyPolicy.Staged;
+        ByteCount = byteCount;
+
+        return new ReplacedBuffers(buffers: replaced);
     }
     // Replaces every host-visible buffer of a ring or in-place region with one of byteCount bytes, created before any is
     // released so a failed creation leaves the region as it was, and owes the whole grown region in every buffer.
     private ReplacedBuffers GrowHostBuffers(long byteCount) {
-        var created = new IGpuStorageBuffer[m_hostBuffers.Length];
+        var created = CreateHostBuffers(
+            byteCount: byteCount,
+            memory: Memory,
+            policy: Policy
+        );
         var replaced = new IGpuBuffer[m_hostBuffers.Length];
         var retirement = new ReplacedBuffers(buffers: replaced);
 
         try {
-            for (var index = 0; (index < created.Length); index++) {
-                created[index] = ((Memory == GpuHostVisibleMemory.DeviceLocal)
-                    ? m_buffers.CreateHostVisibleDeviceLocal(
-                        name: m_name.At(index: index),
-                        sizeBytes: ((ulong)byteCount),
-                        usage: m_usage
-                    )
-                    : m_buffers.CreateHostVisible(
-                        name: m_name.At(index: index),
-                        sizeBytes: ((ulong)byteCount),
-                        usage: m_usage
-                    )
-                );
-            }
-
             // Finish every allocation before moving ownership. If the CPU shadow cannot grow, the region still owns
             // its old buffers and the replacements are released just as on a failed buffer creation.
             GrowContents(byteCount: byteCount);
         } catch {
             foreach (var buffer in created) {
-                buffer?.Dispose();
+                buffer.Dispose();
             }
 
             throw;
@@ -1650,13 +1814,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         var replacement = m_buffers.CreateHostVisible(
             name: m_name.At(index: slot),
             sizeBytes: (grows
-                ? Math.Max(
-                    val1: bytes,
-                    val2: Math.Min(
-                        val1: (2UL * buffer.SizeBytes),
-                        val2: reserve
-                    )
-                )
+                ? ((ulong)GpuCapacity.Grown(current: ((long)buffer.SizeBytes), required: ((long)bytes),
+                    ceiling: ((long)Math.Max(val1: bytes, val2: reserve)), divisor: 1))
                 : Math.Min(
                     val1: reserve,
                     val2: Math.Max(

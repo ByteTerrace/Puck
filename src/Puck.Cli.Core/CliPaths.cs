@@ -39,7 +39,7 @@ public static class CliPaths {
     public static bool Same(string left, string right) => string.Equals(
         a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)),
         b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)),
-        comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+        comparisonType: Puck.Abstractions.PuckPaths.Comparison
     );
     // The default display base is the working directory.
     public static string ToDisplay(string fullPath) =>
@@ -51,9 +51,7 @@ public static class CliPaths {
     public static string ToDisplay(string relativeTo, string fullPath) {
         relativeTo = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: relativeTo));
         fullPath = Path.GetFullPath(path: fullPath);
-        var comparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-        var prefix = (Path.EndsInDirectorySeparator(path: relativeTo) ? relativeTo : (relativeTo + Path.DirectorySeparatorChar));
-        var contained = (string.Equals(a: relativeTo, b: fullPath, comparisonType: comparison) || fullPath.StartsWith(comparisonType: comparison, value: prefix));
+        var contained = Puck.Abstractions.PuckPaths.IsWithin(path: fullPath, root: relativeTo);
 
         return (contained
             ? Path.GetRelativePath(path: fullPath, relativeTo: relativeTo)

@@ -4,6 +4,51 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class MeasureLawTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AWindowDeadlineLeavesTheNextRequestPendingAndReleasesQuiet(bool interruptSample) {
+        using var temporary = new Puck.Testing.TemporaryDirectory(prefix: "puck-measure-deadline-");
+        var clock = new Puck.Testing.VirtualClock();
+        var budget = TimeSpan.FromSeconds(1);
+        using var deadline = new Puck.Abstractions.OperationDeadline(budget, clock, TestContext.Current.CancellationToken);
+        var first = new MeasurementRequest("a", "first", temporary.RootPath, clock.GetUtcNow(), new("a", "tree-a", null), new("b", "tree-b", null), ["bench", "world"], ["/metric"], "zero", null);
+        var second = first with { Id = "b", Name = "second" };
+        var calls = new List<string>();
+        var a = temporary.PathOf("a/request.json");
+        var b = temporary.PathOf("b/request.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(a)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(b)!);
+        File.WriteAllText(a, JsonSerializer.Serialize(first));
+        var untouched = JsonSerializer.Serialize(second);
+        File.WriteAllText(b, untouched);
+
+        IEnumerable<(string, MeasurementRequest)> Pending() {
+            yield return (a, first);
+            clock.Advance(budget);
+            yield return (b, second);
+        }
+        using (var quiet = await CliLease.AcquireQuietAsync(temporary.PathOf("leases"), "deadline", TimeSpan.Zero, clock, temporary.RootPath, TestContext.Current.CancellationToken)) {
+            var exit = await MeasureCommand.DrainAsync(Pending(), 1, async (item, side, round, directory, token) => {
+                calls.Add(item.Id);
+                if (interruptSample) {
+                    clock.Advance(budget);
+                    await Task.Delay(Timeout.Infinite, token);
+                }
+                return new MeasurementSample(side, round, new Dictionary<string, double> { ["/metric"] = 1 }, "fixture");
+            }, TestContext.Current.CancellationToken, deadline);
+            Assert.Equal(CliExit.Success, exit);
+        }
+        Assert.Equal(interruptSample ? new[] { "a" } : new[] { "a", "a" }, calls);
+        Assert.Equal(untouched, File.ReadAllText(b));
+        Assert.False(Directory.Exists(temporary.PathOf("b/answers")));
+        using var request = JsonDocument.Parse(File.ReadAllText(a));
+        Assert.Equal(interruptSample, request.RootElement.GetProperty("Report").ValueKind == JsonValueKind.Null);
+        Assert.Equal(JsonValueKind.Null, request.RootElement.GetProperty("Failure").ValueKind);
+        using var next = await CliLease.AcquireQuietAsync(temporary.PathOf("leases"), "next window", TimeSpan.Zero, clock, temporary.RootPath, TestContext.Current.CancellationToken);
+        Assert.True(CliLease.Inspect(temporary.PathOf("leases"), "quiet", clock.GetUtcNow()).HolderAlive);
+    }
+
     [Fact]
     public async Task QuietWithNoExtraWaitRefusesBusyLoadAfterOnlySamplerSetup() {
         var clock = new Puck.Testing.VirtualClock();
@@ -132,11 +177,12 @@ public sealed class MeasureLawTests {
         var b = temporary.PathOf("b/request.json");
         Directory.CreateDirectory(Path.GetDirectoryName(a)!);
         Directory.CreateDirectory(Path.GetDirectoryName(b)!);
+        using var deadline = new Puck.Abstractions.OperationDeadline(Timeout.InfiniteTimeSpan, TimeProvider.System);
         var (exit, output, error) = await ConsoleCapture.RunSplitAsync(() => MeasureCommand.DrainAsync([(a, first), (b, second)], 2,
             (item, side, round, directory, token) => {
                 using var json = JsonDocument.Parse("""{"schema":"puck.bench.v1","metrics":{"idle-tick":{"median":2}}}""");
                 return Task.FromResult(new MeasurementSample(side, round, item.Metrics.ToDictionary(p => p, p => MeasureCommand.ReadMetric(json.RootElement, p)), "fixture"));
-            }, CancellationToken.None));
+            }, CancellationToken.None, deadline));
         Assert.Equal(CliExit.Refused, exit);
         Assert.Contains("stale control", error);
         Assert.Contains("/Summary/MedianMilliseconds", error);

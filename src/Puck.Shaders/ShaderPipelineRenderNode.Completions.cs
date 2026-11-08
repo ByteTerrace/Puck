@@ -8,10 +8,11 @@ public sealed partial class ShaderPipelineRenderNode {
     private ShaderPipelineCompletions m_completions;
     private (long Submission, double Grid, IGpuSubmissionFence? Fence)[] m_pendingRenders = [];
 
-    /// <summary>Gets whether a submission's work counters or timestamps are still to be read back: a sealed submission
-    /// waits on its fence, a render awaits completion across an install, or a timed frame slot holds a fence or a pool to
-    /// retire. A node that owes nothing has nothing for <see cref="PollReadbacks"/> to read.</summary>
-    public bool OwesReadbacks => (!m_disposed && (m_work.HasPending || RendersPending || TimingPending));
+    /// <summary>Gets whether a submission's work counters, timestamps or package readbacks are still to be read back: a
+    /// sealed submission waits on its fence, a render awaits completion across an install, a timed frame slot holds a
+    /// fence or a pool to retire, or a readback pass awaits its slot's completion. A node that owes nothing has nothing for
+    /// <see cref="PollReadbacks"/> to read.</summary>
+    public bool OwesReadbacks => (!m_disposed && (m_work.HasPending || RendersPending || TimingPending || ReadbacksOwed));
 
     /// <summary>Reads and clears the summary of the renders this node found complete since the previous read: how many,
     /// and the one grid every one of them recorded, or zero when they recorded different grids. Every render in the span

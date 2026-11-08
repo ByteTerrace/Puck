@@ -40,10 +40,25 @@ public static class WorldConsoleVerbCatalog {
 
         var rows = verbs
             .OrderBy(keySelector: static verb => verb.Name, comparer: StringComparer.Ordinal)
-            .Select(selector: static verb => $"    {{ \"name\": \"{verb.Name}\", \"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{((verb.Audience == CommandAudience.Operator) ? "operator" : "anyone")}\", \"valueKind\": \"{verb.ValueKind.ToString().ToLowerInvariant()}\", \"wireArgs\": {(verb.AcceptsWireArgs ? "true" : "false")} }}");
+            .Select(selector: static verb => $"    {{ \"name\": \"{verb.Name}\", \"bindable\": {((verb.Bindability == CommandBindability.Bindable) ? "true" : "false")}, \"audience\": \"{verb.Audience.ToString().ToLowerInvariant()}\", \"valueKind\": \"{verb.ValueKind.ToString().ToLowerInvariant()}\", \"wireArgs\": {(verb.AcceptsWireArgs ? "true" : "false")} }}");
 
         return $"{{\n  \"schema\": \"{SchemaId}\",\n  \"verbs\": [\n{string.Join(separator: ",\n", values: rows)}\n  ]\n}}\n";
     }
+    /// <summary>Reads one verb row: a catalog row, or a command row of the <c>world.affordances</c> manifest, which
+    /// spell a verb's facts alike.</summary>
+    /// <param name="verb">The row, carrying <c>name</c>, <c>bindable</c>, <c>audience</c>, <c>valueKind</c> and
+    /// <c>wireArgs</c>.</param>
+    /// <returns>The verb's facts.</returns>
+    /// <exception cref="KeyNotFoundException">The row lacks one of those members.</exception>
+    /// <exception cref="ArgumentException">The row's <c>audience</c> or <c>valueKind</c> names no member of its enum.</exception>
+    public static CommandMetadata ReadVerb(JsonElement verb) => new(
+        AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
+        Audience: Enum.Parse<CommandAudience>(ignoreCase: true, value: verb.GetProperty(propertyName: "audience").GetString()!),
+        Bindability: (verb.GetProperty(propertyName: "bindable").GetBoolean() ? CommandBindability.Bindable : CommandBindability.Unbindable),
+        Name: verb.GetProperty(propertyName: "name").GetString()!,
+        Routing: CommandRouting.Immediate,
+        ValueKind: Enum.Parse<CommandValueKind>(ignoreCase: true, value: verb.GetProperty(propertyName: "valueKind").GetString()!)
+    );
     /// <summary>Reads a catalog document.</summary>
     /// <param name="json">The parsed <c>puck.console.verbs.v1</c> document.</param>
     /// <returns>Each verb's facts keyed by name, ignoring case.</returns>
@@ -59,14 +74,7 @@ public static class WorldConsoleVerbCatalog {
 
         return verbs.EnumerateArray().ToFrozenDictionary(
             comparer: StringComparer.OrdinalIgnoreCase,
-            elementSelector: static verb => new CommandMetadata(
-                AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
-                Audience: ((verb.GetProperty(propertyName: "audience").GetString() == "operator") ? CommandAudience.Operator : CommandAudience.Anyone),
-                Bindability: (verb.GetProperty(propertyName: "bindable").GetBoolean() ? CommandBindability.Bindable : CommandBindability.Unbindable),
-                Name: verb.GetProperty(propertyName: "name").GetString()!,
-                Routing: CommandRouting.Immediate,
-                ValueKind: Enum.Parse<CommandValueKind>(ignoreCase: true, value: verb.GetProperty(propertyName: "valueKind").GetString()!)
-            ),
+            elementSelector: ReadVerb,
             keySelector: static verb => verb.GetProperty(propertyName: "name").GetString()!
         );
     }

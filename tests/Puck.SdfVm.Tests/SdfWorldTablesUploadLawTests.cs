@@ -81,11 +81,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eleven per-frame tables; mesh and shadow handoffs are staged. The other nine each use one aperture
-        // buffer per ring slot, and a transform move copies nothing.
+        // Twelve per-frame tables; mesh and shadow handoffs are staged. The other ten (program, transforms, screen
+        // surfaces and mappings, volumes, decals, lights, sky, sky layers, frame-sampled) each use one aperture buffer
+        // per ring slot, and a transform move copies nothing.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (9 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (10 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -1131,10 +1132,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         return transforms;
     }
 
-    private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {
-        public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            frame;
-    }
     // A producer's moved set: every Move owes its slot on the next rendered frame, as an emitter would.
     private sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();

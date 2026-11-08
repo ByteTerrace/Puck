@@ -1385,6 +1385,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             slot.Commands = null;
             slot.Fence?.Dispose();
             slot.Fence = null;
+            slot.ReadbacksOwed = false;
         }
         Array.Clear(array: m_pendingRenders);
         m_passes = [];
@@ -1876,7 +1877,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         foreach (var pass in m_passes) {
             if (pass.Recorded) { pass.Package?.Submitted(); }
         }
-        SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
+        SubmitPackageReadbacks(slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             if (DefersExportCompletion) {

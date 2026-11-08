@@ -59,15 +59,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
         using var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2]);
         var frame = 0L;
-        TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return producer.ReadbackFence is { IsSignaled: true }; });
-        var actual = new byte[32];
-        answer.Read(actual);
-        Assert.Equal(firstBytes.AsSpan(12, 20).ToArray(), actual.AsSpan(4, 20).ToArray());
+        TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return (producer.Answers.Count > 0); });
+        Assert.Equal(firstBytes.AsSpan(12, 20).ToArray(), producer.Answers[^1].AsSpan(4, 20).ToArray());
         producer.CurrentBuffer = second;
-        ProducePackageFrame(runtime, frame++);
-        Assert.True(producer.ReadbackFence!.IsSignaled);
-        answer.Read(actual);
-        Assert.Equal(secondBytes.AsSpan(12, 20).ToArray(), actual.AsSpan(4, 20).ToArray());
+        var expected = secondBytes.AsSpan(12, 20).ToArray();
+        TestLiveness.Until(() => { ProducePackageFrame(runtime, frame++); return producer.Answers[^1].AsSpan(4, 20).SequenceEqual(expected); });
     }
 
     [Fact]
@@ -149,7 +145,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public SharedBufferOwner? LiveOwner { get; set; }
         public IGpuBuffer? CurrentBuffer { get; set; }
         public IGpuReadbackBuffer? Readback { get; set; }
-        public IGpuSubmissionFence? ReadbackFence { get; set; }
+        public List<byte[]> Answers { get; } = [];
         public int Builds => Volatile.Read(ref m_builds);
         public RenderGraphPackageFragment Fragment { get; set; } = ProducerFragment(bytes: buffer.SizeBytes);
         public bool OwnsAllocation { get; set; } = true;
@@ -192,8 +188,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 readback = default;
                 return false;
             }
-            public void Submitted(int slot, IGpuSubmissionFence fence) {
-                if ((part == "shade") && (owner.Readback is not null)) { owner.ReadbackFence = fence; }
+            private readonly HashSet<int> m_submitted = [];
+            public void Submitted(int slot) {
+                if ((part == "shade") && (owner.Readback is not null)) { m_submitted.Add(slot); }
+            }
+            // A copy is read only once the node proves its slot complete.
+            public void Completed(int slot) {
+                if (!m_submitted.Remove(slot)) { return; }
+                var bytes = new byte[32];
+                owner.Readback!.Read(bytes);
+                owner.Answers.Add(bytes);
             }
         }
     }

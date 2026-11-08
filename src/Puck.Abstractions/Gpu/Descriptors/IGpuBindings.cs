@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
@@ -8,6 +10,15 @@ public interface IGpuBindings {
     /// <summary>The size in bytes a constant buffer's view is a multiple of: Direct3D 12's constant buffer view
     /// alignment, which a Vulkan uniform buffer range also satisfies.</summary>
     const ulong ConstantBufferAlignment = 256UL;
+
+    /// <summary>Returns the bytes of a constant buffer holding a block: <paramref name="blockBytes"/> rounded up to whole
+    /// <see cref="ConstantBufferAlignment"/> views, the size a uniform buffer or region holding the block is created
+    /// at.</summary>
+    /// <param name="blockBytes">The block's size in bytes.</param>
+    /// <returns>The buffer's size in bytes.</returns>
+    /// <exception cref="OverflowException">The rounded size does not fit an <see cref="int"/>.</exception>
+    static int ConstantBufferBytes(uint blockBytes) =>
+        checked((int)((ulong)blockBytes).AlignUp(alignment: ConstantBufferAlignment));
 
     /// <summary>The one check every backend's <see cref="WriteConstantBuffer"/> makes: a view's size is a non-zero
     /// multiple of <see cref="ConstantBufferAlignment"/>.</summary>

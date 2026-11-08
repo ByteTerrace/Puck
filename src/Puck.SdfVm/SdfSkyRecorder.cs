@@ -20,10 +20,7 @@ namespace Puck.SdfVm;
 // temporal view's samples. The composite writes the view's color, so it completes the render.
 internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
-    private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: static member => (
-        Source: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)),
-        Destination: ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: member.Name)),
-        Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
+    private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.SkyParameters);
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
     private static readonly int SkyFieldExtentOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyFieldExtent));
     private static readonly int SkyViewsOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews));
@@ -90,8 +87,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             return;
         }
         m_disposed = true;
-        m_owner.Unhold(residency: m_view.Residency);
-        m_view.Residency.Release();
+        m_owner.Leave(view: m_view);
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
@@ -116,15 +112,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         return hash.Value;
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
-            if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
-                current.Residency.Retain();
-                m_owner.Hold(residency: current.Residency);
-                m_owner.Unhold(residency: m_view.Residency);
-                m_view.Residency.Release();
-                DeclareScreens(residency: current.Residency);
-            }
-            m_view = current;
+        if (m_owner.Follow(instance: m_context.Instance, view: ref m_view)) {
+            DeclareScreens(residency: m_view.Residency);
         }
         var residency = m_view.Residency;
 
@@ -132,17 +121,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
-        Span<byte> frameBlock = stackalloc byte[SdfFrameBlock.SizeBytes];
 
-        frameBlock.Clear();
-        SdfFrameBlock.Write(block: frameBlock, tables: tables.PassValues, frame: frame, view: index, width: recording.RenderWidth, height: recording.RenderHeight);
-        var temporal = m_owner.SkyTemporalOf(instance: m_context.Instance);
-
-        SdfFrameBlock.WriteTemporal(block: frameBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
-        SdfFrameBlock.WritePreviousView(block: frameBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
-        foreach (var copy in FrameCopies) {
-            frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));
-        }
+        SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
+            width: recording.RenderWidth, height: recording.RenderHeight, temporal: m_owner.SkyTemporalOf(instance: m_context.Instance), temporalEnabled: m_temporal);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[ResolvedSurfaceOffset..], value: ((m_resolved && (m_kernel == SdfKernel.Composite)) ? 1u : 0u));
         var fieldFraction = frame.Views[index].Quality.SkyFieldFraction;
         var fieldWidth = ((fieldFraction == .5f) ? ((recording.RenderWidth + 1u) / 2u) : recording.RenderWidth);
@@ -220,16 +201,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
     }
-    // Notes the screens a residency declares, which alone may bind a source.
-    private void DeclareScreens(SdfWorldResidency residency) {
-        Array.Clear(array: m_declaredScreens);
-
-        if (residency.ScreenSources is { } sources) {
-            foreach (var screen in sources.Screens) {
-                m_declaredScreens[screen] = true;
-            }
-        }
-    }
+    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Writes each screen the frame's sky samples into the slot's pass set every frame, since a host's image handle is
     // unique only among live objects, and the filler once at every other screen. The image is the one the views pass
     // binds (SdfWorldResidency.ScreenImage), under the lease it already holds.
