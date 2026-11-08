@@ -67,7 +67,12 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {
         if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
         var source = view.Images.Definition(view);
-        if (ReferenceEquals(source, m_recipientSource) && m_held is not null) { return WorldProjectionDelivery.Nothing; }
+        if (ReferenceEquals(source, m_recipientSource) && m_held is not null) {
+            // State-clock sources need not cross as observations. Even an unchanged disclosed document can owe
+            // an anchor correction, including administrative writes before another simulation tick.
+            var time = view.Time;
+            return Step(view, cursor, time.Tick, time.EngineTick);
+        }
         m_recipientSource = source;
         var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;
         var payload = WorldProjection.SerializeCompact(projection);

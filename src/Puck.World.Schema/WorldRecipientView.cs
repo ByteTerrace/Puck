@@ -12,6 +12,7 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     internal StateArena Arena => arena();
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;
+    internal ArenaTime Time => time();
     internal bool Unrestricted => recipient?.IsAuthority == true;
     internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted);
 
@@ -47,7 +48,7 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     /// <summary>Resolves a named row inside the capability, exposing no arena.</summary>
     public bool Discloses(string row, string? key) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && Discloses(handle.Ordinal, key);
     internal bool Includes(int row) => Observes && (ceiling == WorldDisclosureTier.Replica ||
-        (Arena.Rows[row].Visibility is not null || Arena.DeclaresCellVisibility(row) || images.Presented(Source).Contains(Arena.Rows[row].Name.Value)));
+        (Arena.Rows[row].HostOwned || Arena.Rows[row].Visibility is not null || Arena.DeclaresCellVisibility(row) || images.Presented(Source).Contains(Arena.Rows[row].Name.Value)));
     /// <summary>Reads a stored value at this ceiling; absent and withheld values return the same empty carrier.</summary>
     public bool TryRead(string row, string? key, out CellValue value) {
         value = default;

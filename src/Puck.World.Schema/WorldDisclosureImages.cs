@@ -30,7 +30,7 @@ public sealed class WorldDisclosureImages {
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
     private readonly Dictionary<ContentPin, WeakReference<WorldRecipientImage>> m_content = [];
     private readonly Dictionary<string, (WorldDefinition Source, ContentPin[] Rows, WorldDefinition Disclosed, ContentPin Identity)> m_definitions = [];
-    private ArenaChangedKeys m_changes = new();
+    private ArenaChangedKeys? m_changes;
     private long m_tick;
     private WorldDefinition? m_presentedSource;
     private IReadOnlySet<string> m_presented = new HashSet<string>();
@@ -51,6 +51,11 @@ public sealed class WorldDisclosureImages {
     /// <summary>Starts the world's next disclosure window. The carrier accumulates its committed writes.</summary>
     public void BeginTick(ArenaChangedKeys changes) {
         m_changes = changes; m_tick++; Compositions = 0; ComposedBytes = 0; Skipped = 0;
+        // Only images still current at the boundary can use the new window's key proof. A throttled stream may
+        // have missed a readable write in the window whose keys its owner just cleared.
+        foreach (var (key, entry) in m_rows.ToArray()) {
+            if (entry.Version == m_arena!.RowVersion(key.Row)) { m_rows[key] = entry with { Tick = m_tick }; }
+        }
         foreach (var pin in m_content.Where(pair => !pair.Value.TryGetTarget(out _)).Select(pair => pair.Key).ToArray()) { m_content.Remove(pin); }
     }
     /// <summary>Reports live shared image storage and current tick work, for the operator's budget.</summary>
@@ -120,7 +125,7 @@ public sealed class WorldDisclosureImages {
         var key = (row, audience);
         if (m_rows.TryGetValue(key, out var entry) && entry.Dependencies == dependencies) {
             if (entry.Version == version) { m_rows[key] = entry with { Tick = m_tick }; return entry.Image; }
-            if (entry.Tick >= m_tick - 1 && !m_changes.Overlaps(row, entry.Keys) &&
+            if (entry.Tick == m_tick && m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
                 !arena.ChangedKeys.Overlaps(row, entry.Keys)) {
                 Skipped++;
                 m_rows[key] = entry with { Version = version, Tick = m_tick };
@@ -157,7 +162,7 @@ public sealed class WorldDisclosureImages {
         var disclosed = WorldStateDisclosure.Disclose(source, view.Arena, view.Recipient, view.Unrestricted).Definition;
         if (disclosed.StateRaw is { } state) {
             disclosed = disclosed with { StateRaw = state with { World = disclosed.AuthoredState.Select((row, ordinal) =>
-                WorldStateDisclosure.WithoutStorageMetadata(row) with { Cells = images[ordinal].Cells }).ToArray() } };
+                row with { Cells = images[ordinal].Cells }).ToArray() } };
         }
         var identity = ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(disclosed));
         if (had && identity == held.Identity) { disclosed = held.Disclosed; }

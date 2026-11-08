@@ -317,6 +317,14 @@ arrives over MCP, a schedule row or a session, and those are not the room.
 
 ### 3. A writer that cannot read a row whole cannot write it
 
+Step 3 also owns the whole-document write doors. `world.load`, `world.reload`
+and `world.undo` are still runnable by any seat: `WorldMutationCommandModule`
+registers them without an operator audience, and their every-section Mutate
+hold does not check disclosure. `WorldPersistence.ApplyUndo` drops the tail of
+the authority's journal and replays what remains, including journal entries
+with mutations hidden from that seat. Step 2's operator-only `world.save` and
+recipient-trimmed `world.status` do not close these write doors.
+
 A sealed bid is a write into a row the writer may not read. The first draft of
 this plan admitted such writes blind (a pure `Set`, one `accepted` receipt, the
 resolution private). The review showed no receipt discipline survives the
@@ -442,9 +450,19 @@ Implementation choices for step 1:
   rows. Structural and audience writes rebuild that index. The world owns it;
   a cursor holds only hashes, sequence and any pending observation headers.
 - Replica definitions carry readable cells. Their immediate snapshot primers
-  carry a row's hidden count and anonymous backs in `FieldCellDelta.Observation`;
-  those headers are pending even when no cell changed on the resumed tick.
+  carry every restricted row's observation header in `FieldCellDelta.Observation`,
+  including a zero hidden count under `Omit`, `Count` or `Placeholder`. A session
+  pairs later document and placement-state replacements with the same
+  non-consuming primer, so replacing its arena cannot erase those headers or
+  defer count-dependent sequence work to a quiet tick. A Resume already inside
+  a snapshot uses that snapshot rather than rebuilding its borrowed carrier.
   Later count, order and deletion changes compare the complete image.
+- A key-skip proof covers only its current change window. A cached image still
+  current at a window boundary may use the next window's keys; an image whose
+  version already differs must recompose. Before any change carrier is bound,
+  no key skip is available. Presentation physical fields use the same admitted
+  rows as their field projection, and an unchanged disclosed definition still
+  checks the feed's carried state-clock anchors.
 - Typed receipts use the actor's sole attached delivery cursor. With no stream,
   or several streams at different ceilings and no stream identity on the
   submission, the sequence is zero. They never borrow an authority counter or
@@ -908,16 +926,9 @@ pool later declares enters through `ReadsWhole` alone.
 
 ## Open items
 
-- Argon's adversarial review of step 1 (findings unverified until a fix lane
-  reopens each quotation; the lead holds the report): [high] `deal` leaks preceding hidden cells through `DealSlot` and position,
-  which step 4 owns; [medium] `WorldDeliveryRows.Advance` may drop public
-  field-cell deltas at the presentation tier; [medium] the image key-skip check
-  in `WorldDisclosureImages.Image` may skip readable writes and poison the cached
-  image; [medium] `WorldDisclosureImages.Definition` and
-  `WorldProjectionFeed.Compose` may suppress state-clock anchors and strip
-  unrestricted storage metadata; [medium] `WorldDeliveryCursor.Seed` and
-  `WorldSessionSink.DeliverState` may make sequence numbers depend on the hidden
-  count. The medium four are step 1's own and get a fix pass after step 2 lands.
+- Argon's adversarial review of step 1: [high] `deal` leaks preceding hidden
+  cells through `DealSlot` and position, which step 4 owns. Its remaining
+  delivery findings are closed by the view/cursor work in decision 5.
 - Whether blind writes return: rejected here (decision 3). The auction fixture
   (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
   needs nothing more: each bid lands in the bidder's own inbox, a rule moves

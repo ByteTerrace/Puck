@@ -876,7 +876,7 @@ public sealed partial class WorldDocument {
     // "Observation and display" section). Stamped with the server's actual current tick/step width
     // (Host.CompletedTick/Host.LastStepTicks), which are still their default 0/0 before the very first Step has ever
     // run — the one case where 0/0 is the honest answer, preserved exactly.
-    private WorldSnapshot BuildPrimerSnapshot() => BuildSnapshotCore(
+    internal WorldSnapshot BuildPrimerSnapshot() => BuildSnapshotCore(
         consumeContinuity: false,
         stepTicks: Host.LastStepTicks,
         tick: Host.CompletedTick
