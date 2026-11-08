@@ -1295,7 +1295,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
                 continue;
             }
 
-            // A physical Start press relocates an ALREADY-BOUND device onto its own next candidate slot —
+            // A cycle press relocates an ALREADY-BOUND device onto its own next candidate slot —
             // self-service, never a third party's action — authorized under actingPrincipal, the caller's
             // ingress-stamped SOURCE identity (never a handler/primitive-constructed one; AssignDevice's own logic
             // decides whether that identity or self-provisioning governs the target, since it alone knows this
