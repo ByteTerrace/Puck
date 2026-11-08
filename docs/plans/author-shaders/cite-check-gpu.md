@@ -53,7 +53,7 @@ Checked by opening each URL (WebFetch, curl and pdftotext for the PDFs) and each
 
 | Claim | Verdict | Evidence |
 |---|---|---|
-| `views` is one invocation per pixel in an 8x8 workgroup (`sdf-pixel-entry.hlsli:1`; `sdf-views-stage.hlsli:124`) | CONFIRMED | Header comment: "one invocation a pixel of the render extent in an 8x8 workgroup"; `SDF_VISIBILITY_GROUP_EDGE 8u` is defined in `isa/sdf-render.hlsli:104`. Line 124 loads `sdfLoadSurfaceSample(worldVisibilityRecord(...))`. |
+| `views` is one invocation per pixel in an 8x8 workgroup (`sdf-pixel-entry.hlsli:1`; `sdf-views-stage.hlsli:36`) | CONFIRMED | Header comment: "one invocation a pixel of the render extent in an 8x8 workgroup"; `SDF_VISIBILITY_GROUP_EDGE 8u` is defined in `isa/sdf-render.hlsli:104`. Line 124 loads `sdfLoadSurfaceSample(worldVisibilityRecord(...))`. |
 | Gathers a tile with an apron, group barrier, 4x4 filter (`:12`, `:24`, `:65`, `:118`, `:135`) | CONFIRMED | Tile edge is group+3, origin is -2; `GroupMemoryBarrierWithGroupSync()` at `:54`; the filter loops are 4x4 (`for y<4u`, `x<4u`); gather called at `:118`, filter at `:135`. |
 | Material decode rows 0-31 plus paint, weathering, flow, toon, glass (`sdf-material.hlsli:9`, `:106`) | CONFIRMED | `sdfMaterialLoad` at `:106` reads `materialBase + 31u` for glass. I did not check each row. |
 | Paint is evaluated before the full material load, to shorten live state; flow, emissive, lighting and indirect/specular follow (`sdf-light-stage.hlsli:132..232`; `sdf-material.hlsli:172`) | CONFIRMED | Comment at `:129-130` says "none of it is live across their shape dispatch"; the paint call is `:132`, `sdfMaterialLoad` at `:136`, flow at `:142`, the `meshIndirect` branch at `:209`, the specular/metal test at `:232`. |

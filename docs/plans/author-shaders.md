@@ -718,8 +718,9 @@ identity, kernel and bin; an `octaves` edit changes all three.
    own pipeline set and a reload still in flight still wait on release
    (`SdfWorldPipelineSource.Release`, `CancelShaderReload`; the
    [refactoring packet](open-items.md#refactoring-campaign) holds that).
-4. *Publication changes no scene revision and no render history.* Only
-   `world.shaders.tier`, a diagnostic, invalidates the shading passes.
+4. *Publication changes no scene revision and no render history.* Only the
+   comparison levers `world.shaders.tier` and `world.shaders.bins` invalidate
+   the shading passes, from the frame `PrepareShade` takes them on.
 5. *A set compiles exactly the source its interpreter was compiled from.* A
    kernel set carries, beside the views and glass bytecode, the `SdfKernelSource`
    it was compiled from (`SdfKernelSet.SourceOf`): the stage and every include's
@@ -735,6 +736,49 @@ identity, kernel and bin; an `octaves` edit changes all three.
    sources are taken as its bytecode's because the build publishes them
    together; a process whose output directory is rebuilt between those two reads
    is outside it.
+
+**Step 4's GPU-lifetime invariants (binning, section 3.5), and what enforces
+each.**
+
+6. *Every pass of a frame records one shading selection and one bins
+   decision.* `SdfWorldResidency.PrepareShade` takes both once a produced frame
+   (`ShadeSelection`, `ShadesInBins`), after publication and before any pass
+   records; `world.shaders.tier` and `world.shaders.bins` only set the levers,
+   which take effect there, and a lever change, never a publication,
+   invalidates the shading passes. A views recording takes every bin's kernel
+   from one capture (`SdfShadeSlots.RecordSelection`), which pins the set for
+   the whole recording, so no bin can record with a set another bin did not.
+7. *A tile in the plain bin holds no pixel with a program.* The filter
+   classifies a pixel through the generated `sdfShadeBinding`, the function
+   the shading kernels bind a pixel's program through, so the plain kernel only
+   ever shades pixels whose binding is none, which it shades as the full
+   kernel does. A tile whose pixels part between bins takes bin one, whose
+   kernel shades every program the frame runs. The bins depend on the bindings
+   and the visibility record alone, which the views signature (the lighting
+   signature) and the visibility input's generation cover, so a views pass that
+   re-records while its filter stands (a screen changed) reads bins that are
+   still the frame's.
+8. *Every job the views pass records reads arguments the bins pass wrote for
+   it this frame, and covers its own tiles.* The three passes of one view share
+   one plan a frame (`SdfWorldPasses.ShadePlanOf`, cached by its inputs), so the
+   widths the bins pass reads from its pass block (`SdfFrameBlock.WriteShadeBins`)
+   are the widths the views pass's jobs advance by; the argument record of bin
+   `b`'s job `k` is `b × tiles + k` on both sides (`SdfShadeDispatch.RecordBin`,
+   `sdfShadeArgumentWord`), and the buffer holds a record a tile a bin, so no
+   plan can name a record past it. The graph orders the arguments' write before
+   their indirect read (the views pass's `Dispatch`); the recorder orders its
+   own clear before the filter's atomics and the offsets before the scatter.
+9. *The binned storages and kernels live only while a binned graph does.* The
+   filter record, the bins and the arguments are the binned fragment's graph
+   storages, allocated with that graph and retired with it; the binned kernels
+   are on-demand slots of the residency's pipeline set (`BuildOnDemandAsync`
+   before a binned pass's recorder exists, `RequestOnDemand` when a view
+   follows another residency), owned and released with the set.
+
+Where these stop: the bins plan's widths are a pure function of the frame and
+the passes' common extent, which every pass of one view shares; a recorder
+that recorded a binned pass at another extent than its siblings would break
+invariant 8, and no type prevents it beyond the one door all three passes call.
 
 **Tier 1, the interpreter.** The views kernel gains one rolled `[loop]` over
 the program's ops with a `switch` over the op table, one per phase, running in
@@ -836,60 +880,77 @@ past the bar. The bound and the quarantine hold on both (section 3.7).
 
 ### 3.5 Binning: authored code out of the views pass's register budget
 
-The views kernel today is one dispatch over every pixel. With interpreter
-loops in it, every pixel pays the loops' register allocation, programs or not
-(E68). The design splits views in two:
+The unsplit views kernel is one dispatch over every pixel, so every pixel pays
+the registers of whatever program code the kernel holds, programs or not
+(E68): the specialized set's 168 registers on the RTX 4070 under Vulkan, in a
+frame where most tiles run no program. Step 4 split views for a frame that runs
+programs (`SdfWorldPackage.WithBins`, chosen by `SdfWorldPasses.FragmentOf`
+through a bit of the render-extent revision while `world.shaders.bins` is on):
 
-1. **`views-filter`**, the existing tile-coherent head: the group gather, the
-   barrier, `sdfViewsFilter`, and then a write of the filtered occlusion and
-   the four shadow visibilities into a **filter record of its own**, a new
-   two-word per-pixel storage the package declares beside the visibility
-   record (the occlusion as a half, the four visibilities as four bytes, the
-   precisions the record holds them in today), plus a per-program pixel count
-   through a wave-reduced atomic per group (the pattern `SdfMeshOcclusion`
-   uses to count draws on the GPU). The visibility record is immutable after
-   the surface pass: its eight words have no spare field, and a group writing
-   its own filtered values into the AO or K words would race a neighbouring
-   group's apron gather, which the group barrier does not order (finding 11).
-   The graph declares the filter record as this pass's write and the shade
-   bins' read, with the transition between them, and step 4 prices its bytes
-   and traffic (eight bytes a pixel per view at full extent).
-2. **`views-shade`**, indirect dispatches per bin over a list of **whole
-   8×8 tiles**, not pixels: a tile whose pixels share one program enters that
-   program's bin; a mixed tile enters the interpreter bin. A prefix sum over
-   the tile counts gives each bin its range of a tile list; a scatter writes
-   each tile's index into its program's range; each bin dispatches over its
-   range with the pipeline its program has (its specialized kernel, or the
-   interpreter kernel for a program still compiling, not yet specialized, or
-   sharing a tile with another). A bin's kernel reads the filter record and the
-   visibility record and shades. A list entry is a tile index over the
-   view-stacked extent the visibility record is addressed by
-   (`sdfVisibilityRecord` takes the view index with the pixel), so a nested or
-   multi-viewport frame bins each view's tiles and no entry loses its view.
-   Tiles keep the 2D locality the probe gather (`sdfMeshProbesAt`) and the
-   cascade reads depend on, and keep a wave on one program; a pixel-granular
-   list is a variant step 4 measures only if mixed tiles turn out to dominate.
+1. **`views-filter`**, the tile-coherent head: the group gather, the barrier,
+   `sdfViewsFilter`, then a write of each hit's filtered occlusion and four
+   shadow visibilities into a **filter record of its own**, two words a pixel
+   addressed like the visibility record (`passes/sdf-views-filter.hlsli`: the
+   occlusion as UNORM16 and the visibilities as UNORM12, finer than the
+   record's own half and bytes, since the filter averages them), written only
+   for what the view's mode filters. The visibility record stays immutable after
+   the surface pass: a group writing its filtered values into the AO or K
+   words would race a neighbouring group's apron gather, which the group
+   barrier does not order (finding 11). Each group also classifies its 8×8
+   tile through the generated `sdfShadeBinding` the shading kernels use, and
+   writes the tile's bin and adds it to the bin's count with one atomic a
+   group, after a recorder-side clear of the bins.
+2. **`views-bins`**, two dispatches with an internal barrier: one group turns
+   the counts into each bin's first entry and zeroes the scatter's cursors;
+   then an invocation a tile writes each tile into its bin's range of the tile
+   list and writes the indirect arguments of every job (the memo's count,
+   prefix sum and scatter, with the scatter and the argument writer folded into
+   one parallel dispatch). The per-bin counts are the pass's detail rows
+   (`no-program`, `program`) in `world.counters gpu`.
+3. **`views`** dispatches each bin's jobs indirectly with that bin's kernel
+   over **whole 8×8 tiles** of the list: bin zero, the tiles no pixel of which
+   has a program, on the plain shading kernel (`sdf-world-views-shade-plain`,
+   `SDF_SHADE_EMPTY`); bin one, every other tile, on the frame's shading
+   selection (the interpreter `sdf-world-views-shade`, or the published set's
+   specialization of it). The binned kernels hold no filter tile and no
+   barrier: they read the filter record in the gather's place. A list entry is
+   a tile index over the view-stacked extent, so a nested or multi-viewport
+   frame bins each view's tiles; tiles keep the 2D locality the probe gather
+   and the cascade reads depend on, and keep a wave on one program.
 
-**A world with no program pays nothing for bins.** When a frame has no active
-program, the planner (section 3.7) emits today's one dispatch over the extent
-with the plain views and glass kernels (step 3: compiled with no interpreter
-and no program state), allocates no filter record and no pixel list, and records
-no classification; the split exists only while a program exists, and the
-no-program frame is one of the decision matrix's rows (section 6).
+The graph declares the filter record, the bins (one retained storage, the
+bins pass's version preserving the filter pass's) and the argument buffer (a
+record a tile a bin, sized by the `ExtentTiles` count basis) as the passes'
+ports, with the transitions between them and the indirect-argument read; the
+views pass names the arguments as its `Dispatch`. The binned kernels join a
+pipeline set on demand (`SdfWorldPipelines.AcquiredOnDemand`, the resolve's
+path), so a world that never runs a program builds none of them.
 
-The pipeline count is one interpreter plus the specialized programs in view,
-tens rather than thousands, every one enumerable from the document before the
-first frame. The interpreter kernel then carries the interpreter's registers
-only for the pixels that need it, and a specialized kernel carries only its
-program's. The cost is the classification, the prefix sum, the scatter, the
-indirect arguments, the tail waves of small bins, the filter record's traffic
-and the lost 8×8 locality in shading; gpu.md's warning is that none of these
-is free and the Burns/Hunt visibility-buffer paper found "little to no net
-benefit" at two million samples on 2013 hardware (S6). So the split is step 4,
-after the interpreter's cost is measured, and it lands only by the decision
-matrix; otherwise the set-specialization fallback of section 3.4 is taken.
-Both outcomes keep the same language, lowering, tiers, identity, bound and
-quarantine.
+**A world with no program pays nothing for bins.** A frame with no active
+program runs the unsplit fragment: one dispatch over the extent with the plain
+views kernel, no filter record, no bins, no classification. A binned graph that
+records such a frame (until the rebuild the frame's revision asks for
+installs) records the same one unsplit dispatch and skips its filter and bins
+passes.
+
+**Per-program bins are the next variant, not this one.** Section 3.4 ruled the
+per-program kernels a second variant, taken only where the matrix shows the
+set kernel's registers or time past the bar. Step 4 bins by whether a tile runs
+a program at all, which is the named cause; the classifier already resolves a
+pixel's arm through `sdfShadeBinding`, so per-program bins add a specialized
+filter, per-program shading kernels and more bins
+(`SdfWorldPackage.ShadeBins`, at most four in the pass block's widths) rather
+than a new mechanism. Step 4's readings (section 6) say what that variant
+would buy.
+
+The cost is the filter pass, the bins pass, the indirect arguments, the tail
+waves of small bins, the filter record's traffic and the empty jobs a bin
+records past its count; gpu.md's warning is that none of these is free, and the
+Burns/Hunt visibility-buffer paper found "little to no net benefit" at two
+million samples on 2013 hardware (S6). So the split lands only by the decision
+matrix's timing; `world.shaders.bins off` keeps the unsplit columns
+measurable. Both outcomes keep the same language, lowering, tiers, identity,
+bound and quarantine.
 
 ### 3.6 Pipeline state stays engine-owned and enumerable
 
@@ -936,10 +997,20 @@ count: it records, per bin, a fixed number of indirect dispatches, each over
 the next `W` entries of the bin's tile list where `W × 64 × cost <= MaxWork`,
 and as many as the whole extent could fill (`ceil(tiles / W)`, a small number
 once `MaxWork` admits a full-extent cap-cost bin in a few chunks); the GPU-side
-argument writer fills each chunk's group count from the bin's count (zero for
-a chunk past the count, which the GPU skips at the cost of one recorded
-dispatch). So every indirect dispatch's work is bounded on the host without a
-readback, and the chunks a bin does not fill cost records, not work. On the unsplit
+argument writer (the bins pass's scatter, an invocation a job slot) fills each
+chunk's group count from the bin's count (zero for a chunk past the count, which
+the GPU skips at the cost of one recorded dispatch), and the argument buffer
+holds a slot a tile a bin, so no plan names a slot past it
+(`SdfShadeDispatch.PlanBins`, `RecordBin`). So every indirect dispatch's work is
+bounded on the host without a readback, and the chunks a bin does not fill cost
+records, not work. Under the provisional `MaxWork` the debug world's largest
+program (`cel`, a static cost near 3.9 million) admits about 20 tiles a job, so
+its program bin records about 900 jobs a frame at 1280×900, as the unsplit
+path records about 900 dispatches; step 5's calibration sets that count on both
+paths. A dispatch that runs no program (the plain views and glass kernels, the
+plain bin, the binned view's filter) runs only the engine's fixed stage, which
+`MaxWork` does not bound, so it is one dispatch within the backend's group-count
+limit, as every engine pass is. On the unsplit
 path (views today, the glass pass, and the set-specialization fallback) a job
 is a run of whole 8×8 groups of the extent, in group rows, its work the groups'
 pixels times the largest program cost the loaded documents declare, since the
@@ -1069,9 +1140,10 @@ behalf is either (a) the interpreter kernel, whose per-pixel work is bounded by
 the program's static cost and which reads only the program's own slice through
 the slice reader, or (b) a kernel the engine emitted from the same canonical
 stream through the same op table under the same IR semantics; every shading
-dispatch is a job the planner sized to at most `MaxWork` of predicted work on
-every path; and no shadow slot a program's response can reach is left
-unqueried.
+dispatch that may run a program is a job the planner sized to at most
+`MaxWork` of predicted work on every path (a dispatch of a kernel that holds no
+program state, the plain kernels, runs engine work alone and is one dispatch);
+and no shadow slot a program's response can reach is left unqueried.
 
 **Enforced by five doors, none of which a new caller can bypass:**
 
@@ -1097,7 +1169,8 @@ unqueried.
    other read of a program's words in the shading kernels.
 4. **One planner.** `SdfShadeDispatch` turns every shading extent or bin into
    bounded jobs and records their identities for the quarantine; no recorder
-   dispatches shading around it, on either path or in the glass pass.
+   dispatches shading around it, on either path or in the glass pass. Its
+   `Record` and `RecordBin` are the only shading dispatch calls.
 5. **One surface-pass decision.** The surface pass queries slots by the
    material's packed demand, which only the lowering writes, and the stage
    zeroes an unqueried slot's visibility for an authored light phase.
@@ -1123,7 +1196,7 @@ the driver, as every kernel's does today.
 | DXC compile time per kernel | Settled above: 2.4 to 3.1 s to SPIR-V and 5.0 to 7.0 s to DXIL for `sdf-world-views`, 8.7 to 12.2 s and 5.0 to 6.1 s for `sdf-resolve`, with every kernel's three runs in the table. Decides: tier 2 never on the edit path; the interpreter covers edits and misses. |
 | Interpreter overhead against the fixed-function shade on the bar devices | Step 2, by the decision matrix. Shows the views pass's GPU time and counted work with the whole standard program set interpreted versus today's layers, same build, world, camera, tick and exposure, both backends. Decides whether tier 2 is required for the bar or an enhancement. |
 | The interpreter loop's register cost in views | Step 2, from driver-native registers, spills and occupancy limiters (PIX, Nsight, RenderDoc's pipeline statistics; `gpu-cost.md`), not DXIL counts. Decides how much live state the stamp may carry and whether binning is required to keep the interpreter out of specialized kernels. Read on the RTX 4070 under Vulkan: the three phases put views at 255 registers (8 of 48 warps); with the light phase compiled out of the light walk it takes 168 and spills 144 bytes, with no phase 128 and 176 bytes, and the probe gather's live state moves none of these counts. Direct3D 12 reads 98 % register allocation with 16 % of the warps active. The light phase alone puts the RTX 4070 past its bar's register budget, so steps 3 and 4 are required; the RTX 2060 and the Deck remain to read. Step 3's kernels on the RTX 4070 under Vulkan: the plain views kernel takes 128 registers (176 bytes of local memory), a specialized views kernel of the tier corpus's seven programs 168 (none), the interpreter kernel 255 (none); glass 128 (80 bytes), 168 and 255. PIX on Direct3D 12 reads achieved compute warps on views at 24 %, 23 % and 15 %. |
-| Binning's payoff | Step 4, by the decision matrix: the split views against the unsplit, with every added pass, byte and recording operation counted. Decides whether bins land or the set-specialization fallback is taken. |
+| Binning's payoff | Step 4 built the split and counted it (section 6). On the RTX 4070 under Vulkan the binned kernels take 128 registers for both bins (16 of 48 warps) where the unsplit specialized views takes 168 (12) and the interpreter 255 (8); the filter takes 40 and the bins pass 29. The decision matrix's timing is a queued measurement (`shade-4-bins`); it decides whether bins stay on by default or the set-specialization fallback is taken. |
 | Tier equivalence | Step 3's corpus on both targets; a class of program the corpus does not hold is not claimed. |
 | The 4.3 ms views figure | Unmeasured in the record (E75, S95). Step 2 captures it first. |
 
@@ -1197,13 +1270,49 @@ final set:
    world comparison of the tiers waits for lockstep convergence. The binned
    path's per-program kernels and a debug-world sweep through both tiers remain
    for step 4 and step 6.
-4. **Binning** (GPU leg). The `views-filter` and `views-shade` split, the
-   filter record, the per-program count, prefix sum, scatter and indirect
-   jobs. Check: the decision matrix's binned columns against the unsplit, with
-   every added pass, byte and recording operation counted in
-   `world.counters gpu`; the no-program row allocates no filter record and
-   records one dispatch; the matrix's rule decides, and the outcome and its
-   readings go in the commit.
+4. **Binning** (GPU leg). Landed (section 3.5): the `views-filter`,
+   `views-bins` and binned `views` passes of a frame that runs programs, the
+   filter record, the per-bin count, offsets, scatter and indirect jobs, the
+   binned kernels on demand, the set specializing the binned shading kernel, and
+   `world.shaders.bins on|off` for the unsplit columns. The choices this step
+   made: two bins (no program, any program), since the named cause is the
+   no-program pixels and section 3.4 makes per-program kernels a second variant;
+   the scatter and the argument writer as one parallel dispatch; an argument slot
+   a tile a bin, so no plan falls back for want of slots; a dispatch that runs no
+   program as one dispatch; and the planner prices a pixel's walk by the frame's
+   light count (`SdfLights.Count`) rather than the light table's 128 records.
+   Readings on the RTX 4070:
+   - Vulkan pipeline statistics: `sdf-world-views-filter` 40 registers,
+     `sdf-world-views-bins` 29, `sdf-world-views-shade-plain` 128 (16 bytes of
+     local memory, against the unsplit plain kernel's 176), the interpreter
+     `sdf-world-views-shade` 255, and the debug world's eight-program
+     specialization `sdf-world-views-shade.shade-<set>` 128 (64 bytes), against
+     168 for the unsplit specialization: both bins run at 16 of 48 warps where
+     the unsplit set ran 12. The filter's gather leaving the shading kernel is
+     what moved the specialization across the 128-register edge.
+   - Counted work, debug world at its spawn view, 1280×900, programs on, both
+     backends alike: `views-filter` 1 dispatch, 1 clear, 5 buffer barriers;
+     `views-bins` 2 dispatches, 3 buffer barriers, 3,638 no-program tiles and
+     14,442 program tiles; `views` 905 indirect dispatches (one no-program job
+     and 904 program jobs under the provisional `MaxWork`), 2 pipeline binds, 6
+     set binds, 3,620 push-constant bytes, 7 buffer barriers. Unsplit: `views`
+     904 dispatches, 1 pipeline bind, 3,616 push-constant bytes. The binned
+     storages add 9,794,584 bytes at that extent (filter record 9,216,000, bins
+     144,664, arguments 433,920; `pipeline.inspect world`). The no-program row
+     records one views dispatch per view, and its graph declares none of the
+     binned storages.
+   - Stills, non-lockstep settled, tick paused, exposure pinned: the tier corpus
+     on Direct3D 12 renders byte-identical binned and unsplit, under both tiers.
+     The debug world (indirect lighting off) differs binned against unsplit in
+     0.75 to 0.78 % of pixels past the sweep's 16-level tolerance on Vulkan,
+     against 0.52 % between two binned stills of one parity, and 0.98 to 1.59 %
+     on Direct3D 12, against 1.31 % between two binned stills taken as far apart
+     in time; within the sweep's 2 % amber bound on both.
+   Remaining: the decision matrix's timing, queued as `shade-4-bins` (views
+   versus filter, bins and views, both backends, the debug world with programs
+   on and off); Direct3D 12 occupancy per bin (two PIX captures of the tier
+   corpus wrote 2,272-byte files that pixtool refused); and, if the timing shows
+   the program bin's 128 registers or time past the bar, per-program bins.
 5. **The work bound calibrated, and the quarantine** (GPU for the fault
    injection). The planner's binned-path chunks, `MaxWork` set from the
    slowest device's throughput on the adversarial row with its margin

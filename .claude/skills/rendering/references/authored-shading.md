@@ -129,13 +129,34 @@ Every views and glass recording takes its kernel from one door,
   so every program branch of the stages compiles out, not only the interpreter.
 - **Interpreter** (`sdf-world-views`, `sdf-glass`): a frame with active programs
   that no published specialized set holds, and `world.shaders.tier interpreted`.
-- **Specialized** (`sdf-world-views.shade-<set>`, `sdf-glass.shade-<set>`):
-  `SdfShadeHlsl.Specialize` spliced in as `isa/sdf-shade.hlsli`, each program an
+- **Specialized** (`sdf-world-views.shade-<set>`, `sdf-glass.shade-<set>`,
+  `sdf-world-views-shade.shade-<set>`): `SdfShadeHlsl.Specialize` spliced in as
+  `isa/sdf-shade.hlsli`, each program an
   arm of straight-line `precise` phases chosen once a pixel by the identity its
   header carries (`SdfShadeProgram.IdentityVector`). There is no interpreter arm:
   one would keep the interpreter's registers allocated for the whole kernel. A
   set records only a frame whose active programs it holds
   (`SdfShadeKernels.Covers`).
+
+A frame with active programs shades its views **in bins** while
+`world.shaders.bins` is on (`SdfWorldPackage.WithBins`; the residency's
+`ShadesInBins`, taken once a frame by `PrepareShade` with the selection):
+`views-filter` writes each hit's filtered occlusion and shadows into a filter
+record and each 8×8 tile's bin (no pixel with a program, or any) into the shade
+bins; `views-bins` sorts the tiles and writes each job's indirect arguments; and
+`views` shades bin zero with `sdf-world-views-shade-plain` and bin one with the
+selection's `sdf-world-views-shade` (interpreter or specialization), each bin's
+jobs through `SdfShadeDispatch.RecordBin`. The three passes share one plan a
+frame (`SdfWorldPasses.ShadePlanOf`) and the views recording takes every bin's
+kernel from one capture (`SdfShadeSlots.RecordSelection`). The binned kernels
+join the pipeline set on demand (`SdfWorldPipelines.AcquiredOnDemand`). A frame
+with no program, or the lever off, records the unsplit kernels above; a binned
+graph records unsplit on such a frame until the rebuild its revision asks for
+installs. A dispatch that runs no program (the plain kernels, the plain bin, the
+filter) is one dispatch within the group-count limit: `MaxWork` bounds only
+what a program adds. `[pipeline-statistics]` names the binned kernels apart, and
+`world.counters gpu` counts the bins pass's tiles in its `no-program` and
+`program` detail rows.
 
 `SdfWorldResidency.PrepareShade` is the one publication door, once a frame
 after packing, on the frame the passes record. It requests the frame's active
@@ -158,8 +179,9 @@ interpreter shows an edit on its next frame. A recording pins the set it records
 with; the pin moves to its submission and drops only on a completion proof,
 abandonment before submission or a device loss, and a retired set is freed only
 at zero pins (or at device teardown and the residency's final idle drain).
-Publication moves no revision; `world.shaders.tier` alone invalidates the
-shading passes. `world.shaders.status` lists each program's state.
+Publication moves no revision; `world.shaders.tier` and `world.shaders.bins`
+alone invalidate the shading passes, from the frame `PrepareShade` takes them
+on. `world.shaders.status` lists each program's state.
 `SdfShadeKernels.Plan` refuses a plan whose closure lacks the generated text: the
 closure looks generated includes up by `Path.GetFullPath`'s spelling (derived
 from the stage's path, `passes/../isa/`), and a key spelled otherwise silently
@@ -170,9 +192,17 @@ Check changes with the `shade-*` spelling pairs and `ShadeLoweringTests` in
 The pairs compare canonical documents, program words, identities and costs.
 `puck shaders generate --check` checks generated-table drift. CPU shader
 compilation can check both backend formats. `SdfShadeDispatchTests` checks padded
-group coverage and work bounds. GPU comparisons use fresh lockstep processes,
-pinned camera/tick/exposure and settled meadow, forest-road, water and cel stills
-on Direct3D 12 and Vulkan, with the debug sweep's still tolerance. Check backfaces
+group coverage and work bounds. GPU comparisons use non-lockstep settled stills
+in one process, the tick paused (`world.rate pause`), the exposure pinned to an
+explicit EV and the camera fixed (`view.override camera look`), on Direct3D 12
+and Vulkan, with the debug sweep's still tolerance (`worlds/debug/sweep.json`:
+a channel more than 16 levels apart, amber past 2 % of pixels). Fresh lockstep
+processes do not repeat. The debug world's stills drift between captures even
+paused (two back-to-back captures of one mode differ in 0.2 to 0.5 % of pixels
+past the tolerance, and more as wall time passes), so a comparison reads each
+cross-mode pair beside a same-mode pair taken over the same interval; confirm
+the graph a still came from before it (`world.counters gpu pass <label>` names
+a binned pass only while the binned graph is installed). Check backfaces
 under wrap and animated normals, contact foam and static transformed flow, and
 clock/world-lane/no-read cadence separately. `puck mesh identity --against`
 checks that presentation changes leave the bake identity alone. Timing belongs

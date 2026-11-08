@@ -163,7 +163,12 @@ under `experimental/tests/Puck.World.Canaries` with every other canary.
 **Violations to hunt.** A path that returns null, empty or a default handle and
 lets the frame present; a stand-in bound without being recorded; a refusal
 whose message omits the name a reader needs; a released or retired producer
-whose readers still bind its last image.
+whose readers still bind its last image; a package recorder that binds a buffer
+port by its version name and leaves a name it does not map on the dummy. A
+preserving forward version (`PreservesPredecessor`) reaches a recorder's
+context under its storage root's name, not its own, so a recorder that maps
+only the forward's name binds the dummy and reads zeros
+(`SdfWorldPassRecorder.ReadMemberOf` maps both of the shade bins' names).
 
 ## 3. A capture's pixels are pinned or copied
 
