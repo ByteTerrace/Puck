@@ -490,9 +490,19 @@ Implementation choices for step 1:
   The earlier composer overloads remain
   for existing callers until the read and retirement steps migrate them.
 - The shared table's work/byte counters are visible only in the operator's
-  budget; a recipient receives a fixed message in their place. Snapshot cadence
-  alone does not advance a document sequence; delivered document, state-image
-  and anchor changes do.
+  budget and `world.counters world.disclosure`; a recipient receives a fixed
+  message in their place. Snapshot cadence alone does not advance a document
+  sequence; delivered document, state-image and anchor changes do.
+- A stream's document identity is a digest of the audience's frame (the
+  disclosed document less its state rows) and every row's image and cell-free
+  skeleton, all functions of the recipient's view. Between two moves of
+  `StateArena.DisclosureRevision` a row changes only by a keyed cell write
+  (`StateArena.MarkVersion` names the keyed columns; every other write moves the
+  revision), so a cell-only tick refreshes the image digests of the rows it
+  wrote and a revision move also their skeletons. The frame is composed from the
+  whole document again only for a new source, a changed policy index, or a
+  change to a withheld row the disclosed placements read
+  (`WorldStateDisclosed.PlacementReads`, recorded as `DisclosePlacements` reads).
 
 `DeliveryReviewLawTests` checks physical deltas at both tiers, administrative
 and missed-window readable writes, clock corrections without source
