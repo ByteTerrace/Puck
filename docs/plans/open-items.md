@@ -3032,6 +3032,12 @@ failing case is argued from source, not run):
 
 ### Vulkan regressions and GPU robustness
 
+- [medium · unconfirmed] The World descriptor set is one per ring slot,
+  rewritten in place when the binding revision moves (`SdfWorldTables.WorldSet`),
+  on the argument that no revision changes mid-frame; `ScreenContent` bumps the
+  revision in two places not shown to run only between frames. Prove it or
+  move the bump to the frame boundary. Seen from the code by the vk-glass-loss
+  lane.
 - [low] The Vulkan pipeline-statistics readout reads the logical device to
   build `CapturesStatistics`'s argument before checking that naming is on
   (`VulkanGpuPipelineFactory.cs:94`, guard at `:108`); move the guard first.
