@@ -1862,7 +1862,9 @@ a leak, and 2 for usage, a fixture or world that does not load, a world that did
 not finish, a run that is INVALID (a variant step refused, answered after the
 fuzz window began when it was armed before it, or never answered; an operator
 act refused; a step or script line at or after the export tick; a fixture
-session the world did not admit), or a control that differs from the first
+session the world did not admit; a variant whose steps left the authority's
+live document failing validation, since a recipient's document edits would then
+refuse for a reason hidden state decided), or a control that differs from the first
 variant: such a recipient is told something with no hidden difference at all,
 so the run judges nothing. `--seed`, `--lines` and `--actions` override the
 fixture's draws; `--keep` keeps the staged world, every world's transcripts and

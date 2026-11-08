@@ -589,14 +589,15 @@ site, and a `pushRay`'s pool (`state:<pool>`; pools share the rows' namespace).
 Read: a sort's key rows, a source board, mask, rank row, vector table or operand.
 `TransformDisclosureLawTests` exercises the sort with edit over its destination
 and observe over its key row. Authority is not disclosure: whatever
-the actor holds, a transform whose written row some reader sees while a read row
-(or one of its declared cells) withholds from that reader is refused
+the actor holds, a transform whose written row some reader sees while a read row's
+declared policy withholds from that reader is refused
 `TransformWidensAudience`. `RuleCompiler` applies `StateVisibility.Encloses` to
-resolved dependencies, including rows both read and written, dynamic keys, live
-zone selectors, declared sets and control flow. The shared arena transform door
-checks current cell and containing-zone restrictions again before writes. A rule
-refuses at validation when the declarations prove the mismatch, and refuses
-atomically at firing when live visibility proves it. A written-and-read row
+the row policies of resolved dependencies, including rows both read and written,
+dynamic keys, live zone selectors, declared sets and control flow, and never to
+seeded cells. The shared arena transform door checks current cell and
+containing-zone restrictions before writes. A rule refuses at validation when the
+row declarations prove the mismatch, and refuses atomically at firing when live
+cell visibility proves it. A written-and-read row
 requires Edit; distinct read-only subjects require Observe.
 `TransformDisclosureLawTests` holds both doors. A transform never declassifies; a
 rule that shows a hidden value writes it through its own `setState` (word spy's

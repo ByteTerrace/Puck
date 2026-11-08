@@ -400,13 +400,7 @@ public sealed partial class StateArena {
             key: keyOrdinal,
             value: out var slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_keys.TryGetName(
-                key: key,
-                name: out var name
-            )
-                ? name.Value
-                : "?"
-            )}'";
+            reason = MissingCellReason(row: RowName(rowOrdinal: rowOrdinal), key: (m_keys.TryGetName(key: key, name: out var name) ? name.Value : "?"));
 
             return false;
         }

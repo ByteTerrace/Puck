@@ -9,8 +9,6 @@ public static partial class WorldDefinitionValidator {
         public readonly Queue<string> Queue = new();
         public readonly Dictionary<string, StateSpace> Spaces = new(comparer: StringComparer.Ordinal);
         public readonly Dictionary<string, StateEnum> Enums = new(comparer: StringComparer.Ordinal);
-        public readonly Dictionary<string, List<WorldStateRow>> Dependents = new(comparer: StringComparer.Ordinal);
-        public readonly Stack<List<WorldStateRow>> DependentLists = new();
 
         public void Clear() {
             Dynamics.Clear();
@@ -20,8 +18,6 @@ public static partial class WorldDefinitionValidator {
             Queue.Clear();
             Spaces.Clear();
             Enums.Clear();
-            foreach (var rows in Dependents.Values) { rows.Clear(); DependentLists.Push(item: rows); }
-            Dependents.Clear();
         }
     }
 
@@ -84,7 +80,6 @@ public static partial class WorldDefinitionValidator {
         var enumsByName = workspace.Enums;
 
         foreach (var value in definition.Enums) { if (value is not null) { enumsByName.Add(key: value.Name.Value, value: value); } }
-        Dictionary<string, List<WorldStateRow>>? dependentsByRow = null;
         BoardDerivation? derivation = null;
 
         while (queue.Count > 0) {
@@ -153,37 +148,12 @@ public static partial class WorldDefinitionValidator {
                 );
             }
 
-            if (dependentsByRow is null) {
-                // Missing row names must not trigger unrelated domain inference before a row is validated.
-                // Lists retain authored order; dictionary enumeration never determines validation order.
-                dependentsByRow = workspace.Dependents;
-                foreach (var dependent in (definition.State ?? [])) {
-                    if (
-                        (dependent is null) ||
-                        (dependent.EffectiveDomain is not StateDomain.KeysOf keysOf) ||
-                        (keysOf.Row.Value is not { } source)
-                    ) {
-                        continue;
-                    }
-                    if (!dependentsByRow.TryGetValue(
-                        key: source,
-                        value: out var dependents
-                    )) {
-                        dependents = (workspace.DependentLists.TryPop(result: out var reused) ? reused : []);
-                        dependentsByRow[key: source] = dependents;
-                    }
-                    dependents.Add(item: dependent);
-                }
-            }
+            // The same declared relation the arena's commit check and recipient admission read; declaration order.
+            foreach (var dependent in catalog.DependentRows(rowOrdinal: handle.Ordinal)) {
+                var name = catalog.Rows[dependent].Name.Value;
 
-            if (dependentsByRow.TryGetValue(
-                key: rowName,
-                value: out var matchingDependents
-            )) {
-                foreach (var dependent in matchingDependents) {
-                    if (seen.Add(item: dependent.Name.Value)) {
-                        queue.Enqueue(item: dependent.Name.Value);
-                    }
+                if (!StateRows.IsGeneratedRowName(name: name, rows: definition.State) && seen.Add(item: name)) {
+                    queue.Enqueue(item: name);
                 }
             }
         }

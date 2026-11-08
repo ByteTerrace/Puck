@@ -436,7 +436,11 @@ A `StateVisibility` has three parts:
 
 A row policy and a cell policy intersect: a reader must pass both. A seeded cell
 policy reserves its own storage; `cellVisibility: true` declares that capability
-even on an empty row. Use that declaration when hidden members can appear later.
+even on an empty row. Use that declaration when hidden members can appear later,
+and only then: a row that can carry a cell policy reads whole for no recipient,
+so every seat's, session's and addon's write to it, or to a row keyed over it,
+is refused as undisclosed whatever its cells hold now. A public row a host
+observation or a seat writes declares no visibility at all.
 Row-level `visibility` alone never enables cell-level restrictions: a per-seat
 inbox with only its owner's reader token reads whole for that owner. A row or cell can list at most 32 readers of up to 256
 characters each. The policy filters what Puck.World discloses to ordinary peers

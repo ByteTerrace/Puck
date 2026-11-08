@@ -12,7 +12,9 @@ public static class WorldRecipientMutations {
         switch (mutation) {
             case WorldMutation.UpsertStateCell write: row = write.Row; break;
             case WorldMutation.RemoveStateCell remove: row = remove.Row; break;
-            case WorldMutation.UpsertStateRow replace: row = replace.Row.Name.Value; break;
+            case WorldMutation.UpsertStateRow replace:
+                if (!view.AdmitsDeclaration(replace.Row, out row)) { return false; }
+                break;
             case WorldMutation.RemoveStateRow remove: row = remove.Name; break;
             case WorldMutation.Generate generate: row = generate.Row; break;
             case WorldMutation.UpsertPlacement placement:

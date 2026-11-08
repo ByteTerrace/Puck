@@ -593,13 +593,20 @@ public sealed partial class WorldDocument {
             candidate: mutation.Key,
             name: out var cellKey,
             reason: out _
-        ) ||
-            !arena.Keys.TryResolve(
-            key: out var key,
-            name: cellKey
         )
         ) {
             reason = $"state row '{mutation.Row}' has no cell keyed '{mutation.Key}'";
+
+            return false;
+        }
+
+        // The key table is shared by every row, hidden ones included, so whether a name was ever interned is not the
+        // submitter's to learn: a name no row minted answers exactly as a minted key the row does not hold.
+        if (!arena.Keys.TryResolve(
+            key: out var key,
+            name: cellKey
+        )) {
+            reason = StateArena.MissingCellReason(row: mutation.Row, key: mutation.Key);
 
             return false;
         }

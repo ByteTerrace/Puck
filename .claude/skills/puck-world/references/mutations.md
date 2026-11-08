@@ -116,8 +116,10 @@ Compose → validate → capacity → solids → install (swap + derived rebuild
 journal → echo. Precisely:
 
 1. **Disclosure, then authority.** `WorldRecipientView.Admits` (the mutation adapter in
-   `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`) refuses every target or guard that
-   touches a row the recipient cannot read whole, before grants, key lookup or composition.
+   `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`) refuses every mutation or guard whose
+   declared write footprint (its rows, their token domains and the rows keyed over them, an
+   incoming declaration's names, a placement's parent chain and dealt templates) holds a row the
+   recipient cannot read whole, before grants, key lookup or composition.
    This includes seats. `TryAdmitCompleteMutation`, live state members and detached composition
    share it; a batch rechecks after earlier members change declarations or reader lists.
    Cell and fingerprint guards use the view's `Fingerprint`, through one `CheckGuards`.
