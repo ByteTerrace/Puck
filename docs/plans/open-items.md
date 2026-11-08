@@ -4367,6 +4367,16 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
+- [low] Five new area skills (state, physics, media, platform, dashboard) have
+  ten capability eval cases that have not run, and seven sibling skills gained
+  routing rows (re-run `puck-world`'s regression cases): `puck evals run <skill>
+  --model claude-opus-5-5 --runs 5`, then `puck evals graders`. Pages still cite
+  canaries that moved to `experimental/tests/Puck.World.Canaries`
+  (`docs/reference/audio.md`, `src/Puck.World/Audio/README.md`,
+  `docs/reference/physics.md`, `docs/reference/state/testing.md`).
+- [medium] `CaptureSink` (`src/Puck.Recording/Capture/CaptureSink.cs`) is
+  constructed nowhere in `src`: an unreached capture capability to wire, not
+  delete (AGENTS.md, "Unreached is not unwanted").
 - [high, edit-to-running] A fresh landscape World artifact builds for minutes
   before boot, against the owner's 30-second edit bar; an incremental CLI build
   of a different target is far faster, so the two are observations, not a
