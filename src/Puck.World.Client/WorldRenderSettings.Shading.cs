@@ -6,7 +6,6 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public sealed partial class WorldRenderSettings {
-    private static readonly ConditionalWeakTable<SdfShadeDefinition, SdfShadeProgram> CompiledShades = new();
     private static readonly ConditionalWeakTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
     private SdfShadeProgram? m_shadeOverride;
     private SdfProgram? m_shadeScene;
@@ -15,8 +14,12 @@ public sealed partial class WorldRenderSettings {
     /// <summary>The live default override; null follows each world's document.</summary>
     public SdfShadeDefinition? ShadeOverride => m_shadeOverride?.Definition;
 
-    /// <summary>Compiles a reloadable default once per immutable definition.</summary>
-    public static SdfShadeProgram? CompileShade(SdfShadeDefinition? definition) => definition is null ? null : CompiledShades.GetValue(definition, SdfShadeProgram.Compile);
+    /// <summary>Compiles a reloadable default through <see cref="SdfShadeProgram.Compile"/>, which compiles each distinct
+    /// source once.</summary>
+    /// <param name="definition">The source, or <see langword="null"/> for none.</param>
+    /// <returns>The program, or <see langword="null"/> when <paramref name="definition"/> is.</returns>
+    /// <exception cref="SdfShadeException"><paramref name="definition"/> is refused.</exception>
+    public static SdfShadeProgram? CompileShade(SdfShadeDefinition? definition) => definition is null ? null : SdfShadeProgram.Compile(definition);
 
     /// <summary>Returns every palette slot a world's documents declare that can shade: each creation's palette and each
     /// field region's material, with the program it runs (its own, or the document's <c>render.shade</c> default when it
