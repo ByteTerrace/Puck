@@ -7,6 +7,7 @@ public sealed partial class SdfWorldTables {
     private SdfShadeProgram? m_shadeDefault;
     private SdfProgram? m_shadeDefaultProgram;
     private uint m_shadeDefaultFirst;
+    internal void InvalidateShadeSelection() => m_programRevision++;
 
     // Defaults share the ring-uploaded appearance allocation, after its last word. All readers receive owned ranges.
     // Neither their code nor their parameters enter the field's words or its bake identity.

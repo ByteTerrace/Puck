@@ -15,6 +15,7 @@ public sealed class SdfKernelSet {
     public const string LoadWorkSourceName = "shaders.sdf-kernels";
 
     private readonly ReadOnlyMemory<byte>[] m_bytecode;
+    private readonly string m_contentKey;
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode.</summary>
     /// <param name="bytecode">The bytecode of every kernel in <see cref="Kernels"/> order.</param>
@@ -31,6 +32,7 @@ public sealed class SdfKernelSet {
         }
 
         m_bytecode = [.. bytecode];
+        m_contentKey = Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
     }
 
     /// <summary>Gets every kernel, in pipeline order.</summary>
@@ -86,9 +88,11 @@ public sealed class SdfKernelSet {
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
         SdfKernel.Surface => "sdf-world-surface",
         SdfKernel.Views => "sdf-world-views",
+        SdfKernel.ViewsPlain => "sdf-world-views-plain",
         SdfKernel.Sky => "sdf-sky-runs",
         SdfKernel.Composite => "sdf-composite",
         SdfKernel.Glass => "sdf-glass",
+        SdfKernel.GlassPlain => "sdf-glass-plain",
         SdfKernel.BloomDown => "sdf-bloom-down",
         SdfKernel.BloomUp => "sdf-bloom-up",
         SdfKernel.BloomApply => "sdf-bloom-apply",
@@ -115,7 +119,7 @@ public sealed class SdfKernelSet {
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
-            SdfKernel.Glass => SdfWorldInterfaces.GlassParameters.Layout,
+            SdfKernel.Glass or SdfKernel.GlassPlain => SdfWorldInterfaces.GlassParameters.Layout,
             SdfKernel.BloomDown or SdfKernel.BloomUp or SdfKernel.BloomApply => SdfWorldInterfaces.BloomParameters.Layout,
             SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
@@ -205,8 +209,7 @@ public sealed class SdfKernelSet {
     /// A host keys its persistent pipeline cache by it (<see cref="Puck.Abstractions.Gpu.GpuPipelineCacheStore"/>), so a
     /// changed kernel starts a new cache file.</summary>
     /// <returns>A lowercase 16-digit hexadecimal key.</returns>
-    public string ContentKey() =>
-        Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
+    public string ContentKey() => m_contentKey;
     /// <summary>Returns a copy of the set with one kernel's bytecode replaced.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <param name="bytecode">Its new bytecode.</param>

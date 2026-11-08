@@ -9,9 +9,9 @@ public sealed partial class SdfWorldResidency {
     /// stays here: neither a lost nor an abandoned submission is ever read as completed.</summary>
     public IReadOnlyList<string> InFlightShadeIdentities => m_shadeSubmissions.SelectMany(static s => s.Identities).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-    internal SdfShadeSubmission? SubmittedShade(IReadOnlyList<string> identities) {
-        if (identities.Count == 0) { return null; }
-        var submission = new SdfShadeSubmission(residency: this, identities: identities);
+    internal SdfShadeSubmission? SubmittedShade(IReadOnlyList<string> identities, SdfShadePipelines? pipelines) {
+        if (identities.Count == 0 && pipelines is null) { return null; }
+        var submission = new SdfShadeSubmission(residency: this, identities: identities, pipelines: pipelines);
 
         m_shadeSubmissions.Add(item: submission);
         return submission;

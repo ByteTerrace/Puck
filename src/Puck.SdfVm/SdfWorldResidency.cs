@@ -369,6 +369,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = null;
         ResetReady();
         CancelShaderReload(reason: "the residency was released");
+        ReleaseShadePipelines();
         m_meshDresser.Dispose();
         MeshPathBake.Retire();
         m_ownedLibrary?.Dispose();
@@ -506,6 +507,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if ((IndirectTierOverride is { } tier) && (frame.IndirectTier != tier)) { frame = frame with { IndirectTier = tier }; }
 
         ApplyPendingShaderReload();
+        PrepareShade(frame, device);
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -784,6 +786,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt tables build their pipelines anew on the recreated one.
         CancelShaderReload(reason: "the device was lost");
+        ReleaseShadePipelines();
         m_pipelines.Release();
         m_work.Invalidate();
         m_glyphAtlasInitialized = false;

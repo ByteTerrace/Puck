@@ -133,7 +133,7 @@ public sealed partial class SdfShadeProgram {
             var pixelWork = checked(costs[0] + MaxLights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
             if (checked(128UL * pixelWork) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
             // Header: instruction ranges for each phase, constant and layout ranges. Every range is vector relative.
-            const int HeaderVectors = 4;
+            const int HeaderVectors = 6;
             const int InstructionVectors = 3;
             var words = new List<uint>(collection: Enumerable.Repeat(count: (HeaderVectors * 4), element: 0u));
 

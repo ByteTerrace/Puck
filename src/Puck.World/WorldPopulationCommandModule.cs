@@ -161,8 +161,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             .GroupBy(static program => program.Identity, StringComparer.Ordinal).Select(selector: static group => group.First()).ToArray();
         var worstShade = shades.MaxBy(keySelector: static program => program.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights));
 
-        var interpreted = renderProbe?.Residency?.Frame is { ShadePrograms: true } ? shades.Length : 0;
-        render += $", shading programs {shades.Length}, interpreted {interpreted}, specialized 0, pending 0, quarantined 0";
+        var shaderStates = renderProbe?.Residency?.ShadeStatus ?? [];
+        var specialized = shaderStates.Count(p => p.State == "specialized");
+        var pending = shaderStates.Count(p => p.State == "compiling");
+        var interpreted = renderProbe?.Residency?.Frame is { ShadePrograms: true } ? Math.Max(0, shades.Length - specialized) : 0;
+        render += $", shading programs {shades.Length}, interpreted {interpreted}, specialized {specialized}, pending {pending}, quarantined 0";
         if (worstShade is not null) {
             render += $", worst static cost {worstShade.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights)} ({worstShade.Name})";
             var worstDemand = shadeMaterials.MinBy(keySelector: static material => material.Program.Demand.Cosine(baseWrap: material.Wrap));
