@@ -57,7 +57,12 @@ agent works in that mode by default, without asking:
   values it wants. Engine code keeps only mechanisms and correctness (a surface
   drawn black by a lighting defect is a defect, not a style). Authors bringing
   their own shaders is in scope
-  ([open items](docs/plans/open-items.md#author-shaders)).
+  ([open items](docs/plans/open-items.md#author-shaders)). How authors
+  license, credit, sell or restrict their content is theirs too (the owner's
+  ruling: "We can't be in the business of 'policing' how authors perform
+  attribution and whatnot"): the engine carries what an author writes in a
+  creation's identified bytes and enforces no licence vocabulary,
+  compatibility or attribution policy.
 - Puck code over engine code (the owner's ruling). Behaviour is written as
   Puck programs that authors build and own: camera programs, physics and
   motion programs, the state system's rules, board games, emulated machines
