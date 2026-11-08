@@ -216,6 +216,68 @@ public sealed class WorldRowFieldEditLawTests {
         Value: 0L
     ));
 
+    // A shading edit keeps the arena, the rules and the population, and leaves the authoritative state exactly where an
+    // unedited twin stepped to; a geometry edit installs fully and a cell write installs values alone.
+    [Fact]
+    public void EachEditInstallsOnlyWhatItChanged() {
+        using var edited = Build(state: [ArmLift()]);
+        using var control = Build(state: [ArmLift()]);
+
+        Step(row: edited);
+        Step(row: control);
+
+        var arena = edited.Server.Arena;
+        var placements = edited.Server.Definition.PlacementsRaw;
+        var registry = BuildRegistry(row: edited);
+        var shading = new WorldBootWork();
+
+        using (WorldBootWork.Attribute(work: shading)) {
+            var result = registry.Submit(line: "world.row.set creations moth document.palette[1].roughness 0.4");
+
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+            Step(row: edited);
+        }
+        Step(row: control);
+
+        Assert.Equal(expected: 1L, actual: shading.Read(kind: WorldBootWork.PresentationInstalls));
+        Assert.Equal(expected: 0L, actual: shading.Read(kind: WorldBootWork.FullInstalls));
+        Assert.Equal(expected: 0L, actual: shading.Read(kind: WorldBootWork.ArenaBuilds));
+        Assert.Same(expected: arena, actual: edited.Server.Arena);
+        Assert.Same(expected: placements, actual: edited.Server.Definition.PlacementsRaw);
+        Assert.Equal(expected: 0.4f, actual: MothDocument(row: edited).Palette![1].Roughness);
+
+        var tick = (edited.Server.NextInputTick - 1UL);
+
+        Assert.Equal(expected: tick, actual: (control.Server.NextInputTick - 1UL));
+        Assert.Equal(
+            expected: WorldStateHashComposition.HashAuthoritative(server: control.Server, tick: tick),
+            actual: WorldStateHashComposition.HashAuthoritative(server: edited.Server, tick: tick)
+        );
+
+        var geometry = new WorldBootWork();
+
+        using (WorldBootWork.Attribute(work: geometry)) {
+            var result = registry.Submit(line: "world.row.set creations moth document.shapes[name=forearmL].rounding 0.02");
+
+            Assert.False(condition: result.IsError, userMessage: result.Output);
+            Step(row: edited);
+        }
+        Assert.Equal(expected: 1L, actual: geometry.Read(kind: WorldBootWork.FullInstalls));
+        Assert.Equal(expected: 0L, actual: geometry.Read(kind: WorldBootWork.PresentationInstalls));
+
+        // A row redeclared exactly as it stood but for its cells' values is a state transaction on the live arena:
+        // it installs no document at all.
+        var arenaBefore = edited.Server.Arena;
+        var value = new WorldBootWork();
+
+        using (WorldBootWork.Attribute(work: value)) {
+            edited.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: Principal.Console, Row: ArmLift(text: "[5,6,7]")));
+            Step(row: edited);
+        }
+        Assert.Equal(expected: 0L, actual: (value.Read(kind: WorldBootWork.FullInstalls) + value.Read(kind: WorldBootWork.PresentationInstalls) + value.Read(kind: WorldBootWork.ValueInstalls)));
+        Assert.Same(expected: arenaBefore, actual: edited.Server.Arena);
+        Assert.Equal(expected: "[5,6,7]", actual: edited.Server.ExportDefinition().State.Single().Cells!.Single().Value.AsText);
+    }
     [Fact]
     public void Add_AppendsByDefaultAndInsertsAfterASelector() {
         using var row = Build();
@@ -315,18 +377,19 @@ public sealed class WorldRowFieldEditLawTests {
             condition: WorldStateDocumentValues.TryResolveGraph(
                 graph: copy,
                 reason: out var resolveReason,
+                resolved: out var resolved,
                 source: definition
             ),
             userMessage: resolveReason
         );
         Assert.Equal(
             expected: "state.armRot",
-            actual: copy.Document.Shapes![1].Rotation.Reference
+            actual: resolved.Document.Shapes![1].Rotation.Reference
         );
 
         // Stage 2: canonicalization keeps the reference (it normalizes a literal quaternion only).
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: copy.Document,
+            document: resolved.Document,
             source: PrototypeId
         );
 
@@ -335,11 +398,11 @@ public sealed class WorldRowFieldEditLawTests {
             actual: canonical.Document.Shapes![1].Rotation.Reference
         );
 
-        // Stage 3: the whole-candidate rehydration keeps it too.
-        var candidate = (definition with { CreationsRaw = [(copy with { Document = canonical.Document, HashRaw = canonical.Hash })] });
+        // Stage 3: the whole-candidate resolution keeps it too.
+        var candidate = (definition with { CreationsRaw = [(resolved with { Document = canonical.Document, HashRaw = canonical.Hash })] });
 
         Assert.True(
-            condition: WorldStateDocumentValues.TryRehydrate(
+            condition: WorldStateDocumentValues.TryRefresh(
                 definition: candidate,
                 reason: out var rehydrateReason,
                 refreshed: out var refreshed
