@@ -76,6 +76,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // Read-back and compilation share the same layer composition; state changes matter only when an overlay gate flips.
     private readonly ComposedLayers?[] m_composedLayers = new ComposedLayers?[SeatCount];
     private readonly FilteredComposition?[] m_filteredCompositions = new FilteredComposition?[SeatCount];
+    // Per seat: the registered command vocabulary its last recompose skipped and compiled against. Commands register
+    // after a seat first composes (a document's authored commands among them), so SyncSeat recomposes when it moves.
+    private readonly (CommandRegistry? Registry, AuthoredCommandSet? Commands)[] m_composedVocabulary = new (CommandRegistry?, AuthoredCommandSet?)[SeatCount];
     private sealed record FilteredComposition(BindingProfileDocument Source, WorldChannelTable Channels,
         (CommandRegistry? Registry, AuthoredCommandSet? Commands) Vocabulary, BindingProfileDocument Document);
 
@@ -464,6 +467,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     }
     private void RecomposeSeat(int slot) {
         var label = $"seat {(slot + 1)}";
+
+        m_composedVocabulary[slot] = WorldAffordances.RegistrationIdentity;
         // Drop any page (or bare-command/channel row) naming a command outside this composition's registered
         // vocabulary, or a channel this seat's currently routed table cannot carry — a world-authored group can name
         // a command a leaner boot shape never registers, and a channel row goes stale the moment a seat crosses into
@@ -1533,7 +1538,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             return;
         }
 
-        if (gateChanged) {
+        // A composition skips and compiles against the commands registered when it ran, so one registered since is a
+        // changed input like an overlay or a gate.
+        if (gateChanged || (m_composedVocabulary[slot] != WorldAffordances.RegistrationIdentity)) {
             RecomposeSeat(slot: slot);
         }
     }
