@@ -157,7 +157,14 @@ hash sequences, inconsistent recording/cursor flags, and unordered, out-of-range
 or out-of-scope cell, command and intent inputs by scope name. Saved latch keys
 must already exist in the retained arena key table; restoring a scope cannot
 intern a forged key into the shared namespace. There is no binary
-scope tape or hash ledger to commit. A rebuild drops the derived tape.
+scope tape or hash ledger to commit. A scope outlives arena replacement:
+`WorldServer.ContinueScopes` keeps its start and tape across any mutation's
+install that keeps every scope row's declaration (the image moves by row and
+key name, `StateArena.CarryScope`), and drops them on an edit that re-declares a
+scope row (its control row's `status` becomes -1) and on every load
+(`world.load`, `world.reload`, `world.reset`, a history seek, a checkpoint
+restore, which then restores its own)
+([what an install rebuilds](../../../../src/Puck.World.Server/README.md#what-an-install-rebuilds)).
 
 The live example is [the chess table](../../../../worlds/debug/chess.md), with
 positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck`.

@@ -129,19 +129,30 @@ public static class WorldStateSettlement {
     /// <summary>Settles a document against an arena a caller already seeded from it.</summary>
     /// <param name="definition">The document to settle.</param>
     /// <param name="seeded">The arena seeded from that document's own state section.</param>
+    /// <param name="bornRows">The names of the rows the arena was born with from the document, or <see langword="null"/>
+    /// when every row was: a row outside it carries live values the document's seeds do not describe, so it is not
+    /// settled.</param>
     /// <returns>The settled document, or the same instance when nothing settled.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static WorldDefinition SettleFrom(WorldDefinition definition, StateArena seeded) {
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="seeded"/> is
+    /// <see langword="null"/>.</exception>
+    public static WorldDefinition SettleFrom(WorldDefinition definition, StateArena seeded, IReadOnlySet<string>? bornRows = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: seeded);
 
         var rows = definition.AuthoredState;
+
+        if (bornRows is { Count: 0 }) {
+            return definition;
+        }
         var exported = seeded.ToRows();
         List<WorldStateRow>? settled = null;
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
 
+            if ((bornRows is not null) && !bornRows.Contains(item: row.Name.Value)) {
+                continue;
+            }
             if (StateRows.FindStateRow(
                 rows: exported,
                 name: row.Name.Value

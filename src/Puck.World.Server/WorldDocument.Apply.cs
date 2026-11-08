@@ -1127,7 +1127,8 @@ public sealed partial class WorldDocument {
         MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
-        definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);
+        definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition,
+            continuity: (rebuildKind.HasValue ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit));
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -1224,7 +1225,7 @@ public sealed partial class WorldDocument {
         if (arena is null) {
             Host.SyncArenaValues(definition: definition, previous: previous);
         } else {
-            Host.AdoptPreparedArena(arena: arena, definition: definition);
+            Host.AdoptPreparedArena(arena: arena, continuity: WorldArenaContinuity.Edit, definition: definition);
         }
         m_pendingStateDelivery = true;
 

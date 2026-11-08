@@ -1618,19 +1618,35 @@ a shading-only creation edit keeps the arena, the rules and the population, and
 document values bind by copying only the paths to their references
 (`WorldStateDocumentValues.BindLive`). What is left:
 
-- [medium · determinism] A full install that changes the state section (a row
-  declared, removed or re-declared) installs a replacement arena seeded from
-  the exported rows, and that replacement still drops state the edit was not
-  asked to change: every scoped replay's captured start and tape
-  (`WorldServer.ScopedReplays` rebinds whenever the arena instance changes, so
-  the debug world's chess demo must capture again), and the per-cell trait
-  declarations of authored cells a rule removed before the install
-  (`StateArena.ToRows` carries a cell's traits only while the cell is present,
-  so the replacement catalog no longer declares them). Carrying a scope across
-  needs key ordinals that survive the replacement (`ArenaScopeSnapshot` holds
-  ordinals local to its arena, and `StateArena.TryRestoreKeys` keeps a row
-  key's new address); a full install that leaves the state section alone
-  already keeps the live arena (`WorldServer.KeepsArena`).
+- [medium · determinism] A rule latch (`RuleLatch`, keyed by `LatchKey`
+  intern ordinals) is not remapped when an install adopts a replacement arena
+  whose key ordinals differ. An edit's replacement takes the live key ledger
+  before any row (`WorldServer.TryBuildEditArena`), so every name keeps its
+  ordinal while the catalog's declared keys keep their order; an edit that adds
+  or reorders declared keys, and every load's replacement, can still move a
+  latched binding to another key. Remap latch keys by name at adoption, as
+  `StateArena.CarryScope` does for a scope image.
+- A world whose state section declares pools does not narrow a state edit to
+  its named rows (`WorldDocument.NameStateEdit`): its replacement is seeded from
+  the whole export, so the per-cell traits of cells a rule removed are lost there
+  as before. Carrying pool storage rows into a replacement (`TryRelayout` loads
+  them under the pool mutation depth) lifts it.
+- A row named by a value write (a console cell removal composed through
+  `ExportComposeArena`) exports without the per-cell traits of its absent cells,
+  so its document row stops declaring them; the next state-section install
+  compiles the trait away. The export needs a declaration-carrying form of an
+  absent traited cell, or the compose must keep the declaration row.
+- A cell written back under a per-cell `advance` trait after removal
+  (`world.state.cell.set` through `TryApplyCellUpsert`) gets no birth clock and
+  accumulates from the origin: a 1/s advance read 270 three seconds after
+  `world.state.cell.set traitProbe a 0` at tick 8026 (8116 ticks at 30 Hz). An
+  import settles such a cell to its install time; the live write does not.
+- A state-section edit builds five arenas on the debug world
+  (`world.boot.arena-builds` +5 per `world.row.set state` re-declaration): the
+  compose's own (`TryOpenComposeArena` seeds every row when the catalog
+  changes), the validator's seed view and the client mirror of the new section,
+  the replacement, and one not yet attributed. An undisturbed scratch run of the
+  debug world also grows the counter by 16 over 7000 ticks with no edit at all.
 - [medium] `DeliveryReviewLawTests` fails four cases on the tip
   (`ReplicaMetadataPriming...` three times and
   `ReplicaRestoreCompletesItsObservationHeaders...`), seen by the edit-install
@@ -1642,17 +1658,12 @@ document values bind by copying only the paths to their references
   a quiet tick's; then narrow the validation as `TryValidateTouchedStateRows`
   narrows a state write, to the edited row and the checks that read a palette.
 - Every other mutation composes over `MaterializeArena`, which exports every
-  document row anew, so its candidate carries a new state section: the client
-  mirror (`WorldDocumentStateView.Shape`) builds a fresh arena, the validator's
-  seed view (`WorldStateReader.Seed`, built once per state section) builds one:
-  a neutral `world.row.set hud.defaults` edit on the debug world moves
-  `world.boot.arena-builds` by 3 though its install keeps the live arena. A
-  state-section edit still prepares a replacement arena even when the catalog
-  keeps its shape (`StateCatalog.HasSameShape` is still unused). Compose a
-  non-state edit over the installed seeds, export only the rows whose arena
-  version moved since the document last agreed with the arena (a version table
-  that publication does not overwrite), and reload a same-catalog arena in place
-  rather than replacing it.
+  document row anew, though `WorldDocument.NameStateEdit` then restores every row
+  it did not name to the installed declaration (a neutral `world.row.set
+  hud.defaults` edit builds no arena). Export only the rows whose arena version
+  moved since the document last agreed with the arena (a version table that
+  publication does not overwrite), and reload a same-catalog arena in place
+  rather than replacing it (`StateCatalog.HasSameShape` is still unused).
 - A bound document value read by the in-process client reads the server's arena
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.

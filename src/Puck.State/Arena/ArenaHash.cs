@@ -49,8 +49,9 @@ public sealed partial class StateArena {
     /// the cache against it a row and a segment at a time.</para>
     /// <para>The caller excludes every writer for the duration: the arena is not thread-safe, and a hash taken beside
     /// a write can cache the old bytes under the new version.</para>
-    /// <para>A host-owned row folds as its ordinal alone: it has no columns here, and its facet hashes what it
-    /// serves.</para>
+    /// <para>A host-owned row folds as a fixed mark: it has no columns here, and its facet hashes what it
+    /// serves. Each segment folds its rows' digests in ordinal order, so a row's position is framed there rather than
+    /// in its digest.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
     /// folds its count and order-independent digest sum because orphan names affect future mint admission.</para>
     /// </remarks>
@@ -243,8 +244,9 @@ public sealed partial class StateArena {
     /// empty value from one holding none, and its runtime-state columns carry what a live read answers from. Two
     /// rows with the same stored fields fold the same independently of key allocation order, so a
     /// caller keying a cache by a set of rows folds each through here rather than reading values back by position.
-    /// <para>A host-owned row stores nothing here and folds as its ordinal alone; its facet hashes what it
-    /// serves. The lane roster belongs to a lane rather than a row and is not folded.</para>
+    /// <para>The fold is independent of the row's catalog ordinal, so a row keeps its fold across a re-declared
+    /// catalog that moves it. A host-owned row stores nothing here and folds as one fixed mark; its facet hashes what
+    /// it serves. The lane roster belongs to a lane rather than a row and is not folded.</para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> addresses no row.</exception>
     public void AddRowTo(ref Fnv1aHash hash, int rowOrdinal) {
@@ -258,11 +260,12 @@ public sealed partial class StateArena {
 
         ref readonly var layout = ref m_layout[rowOrdinal];
 
-        // The ordinal and each column's own ordinal frame the row's runs, so neither two rows nor two adjacent
-        // columns of one row can present the same values by dividing them differently.
-        hash.Add(value: ((ulong)rowOrdinal));
-
+        // Each column's own ordinal frames the row's runs, so two adjacent columns cannot present the same values by
+        // dividing them differently. The row's ordinal is not folded: a row's fold is its content wherever the catalog
+        // places it, so a scope's recorded row digests survive a declaration edit that moves the row's ordinal, and a
+        // caller folding several rows frames them by the order it folds them in.
         if (layout.HostOwned) {
+            hash.Add(value: ulong.MaxValue);
             return;
         }
 
