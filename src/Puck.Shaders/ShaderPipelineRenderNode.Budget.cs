@@ -167,10 +167,10 @@ public sealed partial class ShaderPipelineRenderNode {
             return 0UL;
         }
 
-        var views = ((ulong)UniformBytes(blockBytes: grouped[0].Parameters.FrameBlockSizeBytes));
+        var views = ((ulong)IGpuBindings.ConstantBufferBytes(blockBytes: grouped[0].Parameters.FrameBlockSizeBytes));
 
         foreach (var pass in grouped) {
-            views = checked((views + ((ulong)UniformBytes(blockBytes: pass.Parameters.SizeBytes))));
+            views = checked((views + ((ulong)IGpuBindings.ConstantBufferBytes(blockBytes: pass.Parameters.SizeBytes))));
         }
 
         return checked((views * inFlight));

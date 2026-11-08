@@ -152,12 +152,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             // An absent optional publication binds the shared one-pixel stand-in. It scatters nothing while
             // the endpoint's new graph is building, and no old transport image can become a lens image.
             float scatter = all(bloomDims > 1u) ? passGroup.bloomScatter : 0.0;
-            float3 selected = color;
-            if (passGroup.bloomCutoff > 0.0) {
-                selected *= smoothstep(passGroup.bloomCutoff * 0.5, passGroup.bloomCutoff * 1.5,
-                    dot(color, float3(0.2126, 0.7152, 0.0722)));
-            }
-            color = passGroup.bloomOnly != 0u ? (all(bloomDims > 1u) ? veil : 0.0) : color + scatter * (veil - selected);
+            float3 selected = bloomSelected(color, passGroup.bloomCutoff);
+            color =passGroup.bloomOnly != 0u ? (all(bloomDims > 1u) ? veil : 0.0) : color + scatter * (veil - selected);
         }
         color = ((passGroup.tonemap != 0u) ? filmicTonemap(color) : color);
 

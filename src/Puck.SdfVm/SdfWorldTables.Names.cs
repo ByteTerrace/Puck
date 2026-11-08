@@ -21,7 +21,4 @@ public sealed partial class SdfWorldTables {
             owner: ObjectOwner,
             part: part
         );
-    // The bytes of a uniform buffer holding a block: whole constant-buffer views.
-    internal static int UniformBytes(uint blockBytes) =>
-        checked(((int)(((blockBytes + (IGpuBindings.ConstantBufferAlignment - 1UL)) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)));
 }

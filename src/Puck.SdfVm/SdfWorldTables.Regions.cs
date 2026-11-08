@@ -38,8 +38,7 @@ public sealed partial class SdfWorldTables {
     // The upload's owed copies, recorded through the tables' counted recorder into the upload's command buffer.
     private readonly GpuRegionCopyRecording m_regionCopies;
 
-    // Replaced when UploadProgram grows the program capacity.
-    private GpuRegion m_programRegion;
+    private readonly GpuRegion m_programRegion;
     // Whether the dynamic-transform region has been packed whole once: its first frame packs every slot.
     private bool m_dynamicTransformsPacked;
     // One more when packed transform contents or the active row count changes. Replacing a source collection with
@@ -75,28 +74,32 @@ public sealed partial class SdfWorldTables {
     // device-local memory rather than in the small host-visible device-local heap every residency's rings share. Its
     // meshes land through the background GPU work (SdfWorldTables.MeshLanding.cs), so it has a slot per background slot
     // past the upload ring's, and copy sets of its own for all of them (MeshRegionCopyPoolSizes).
-    private GpuRegion CreateRegion(int region, int byteCount) {
-        var profile = m_deviceContext.MemoryProfile;
-
-        return new GpuRegion(
+    // Every other region chooses its own residency (GpuRegion's profile constructor), again whenever it grows, so no table
+    // selects or re-selects a policy itself.
+    private GpuRegion CreateRegion(int region, int byteCount) => ((region is MeshRegionIndex)
+        ? new GpuRegion(
             bindings: m_gpu.Bindings,
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
-            copySets: ((region is MeshRegionIndex) ? null : m_regionCopyPool.Region(index: region)),
-            memory: GpuResidency.RingMemory(profile: profile),
+            memory: GpuHostVisibleMemory.Host,
             name: RegionName(region: region),
-            policy: ((region is MeshRegionIndex)
-                ? GpuResidencyPolicy.Staged
-                : GpuResidency.Select(
-                    byteCount: ((ulong)byteCount),
-                    profile: profile,
-                    readersInFlight: true
-                )),
+            policy: GpuResidencyPolicy.Staged,
             recorder: m_gpu.Recorder,
-            slotCount: ((region is MeshRegionIndex) ? MeshRegionSlotCount : FrameRingSize)
-        );
-    }
+            slotCount: MeshRegionSlotCount
+        )
+        : new GpuRegion(
+            bindings: m_gpu.Bindings,
+            buffers: m_gpu.BufferFactory,
+            byteCount: byteCount,
+            copyPipeline: m_regionCopyPipeline,
+            copySets: m_regionCopyPool.Region(index: region),
+            name: RegionName(region: region),
+            profile: m_deviceContext.MemoryProfile,
+            readersInFlight: true,
+            recorder: m_gpu.Recorder,
+            slotCount: FrameRingSize
+        ));
     // Disposes every region, then the copy pool reserved for them.
     private void DisposeRegions() {
         for (var index = 0; (index < RegionCount); index++) {
