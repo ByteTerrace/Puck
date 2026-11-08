@@ -385,13 +385,7 @@ public sealed class FixedFieldContactSolver(
                 } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && contact.Pushes && !extracted) {
                     extracted = true;
                     position += (contact.Normal * contact.Penetration);
-
-                    var into = FixedVector3.Dot(left: velocity, right: contact.Normal);
-
-                    if (into < FixedQ4816.Zero) {
-                        velocity -= (contact.Normal * into);
-                    }
-
+                    velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -contact.Normal);
                     pushed = true;
                 }
             }

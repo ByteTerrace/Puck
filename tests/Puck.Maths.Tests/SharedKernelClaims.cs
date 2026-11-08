@@ -475,7 +475,8 @@ internal static class SharedKernelClaims {
     /// <summary>RejectFrom is bit-identical to the inline v − axis·(v·axis) over the public operators, and for a unit
     /// axis the rejection's component along the axis is within a few raw of zero; TryRejectNormalized's unit has a
     /// Q16 length within one raw of one, its length is the nearest root of the rejection's exact squares, and it
-    /// refuses a vector along the axis.</summary>
+    /// refuses a vector along the axis. LimitAlong is bit-identical to its inline one-sided form, and against the
+    /// negated axis with a zero bound to the inline approach removal.</summary>
     /// <param name="left">The vector's three raws.</param>
     /// <param name="right">The axis's three raws, normalized before use.</param>
     public static string? RejectFromAndNormalized(long[] left, long[] right) {
@@ -493,6 +494,28 @@ internal static class SharedKernelClaims {
         )));
 
         if (rejected != inline) { return $"RejectFrom at {Render(vector: vector)} about {Render(vector: axis)} is not the inline rejection"; }
+
+        var component = FixedVector3.Dot(left: vector, right: axis);
+
+        foreach (var bound in (ReadOnlySpan<FixedQ4816>)[FixedQ4816.Zero, component, Raw(value: (left[2] % RawOne))]) {
+            var limited = vector.LimitAlong(maximum: bound, unitAxis: axis);
+            var limitedInline = ((component > bound) ? (vector - (axis * (component - bound))) : vector);
+
+            if (limited != limitedInline) { return $"LimitAlong at {Render(vector: vector)} along {Render(vector: axis)} under {bound.Value} raw is not the inline limit"; }
+        }
+
+        // The negated-axis identity rests on Dot's sign symmetry, which holds while the dot fits the carrier: at the
+        // carrier's edge one sign wraps and the other does not, so the check folds the lanes below 2⁴⁰.
+        var bounded = new FixedVector3(
+            X: Raw(value: (left[0] % (1L << 40))),
+            Y: Raw(value: (left[1] % (1L << 40))),
+            Z: Raw(value: (left[2] % (1L << 40)))
+        );
+        var boundedComponent = FixedVector3.Dot(left: bounded, right: axis);
+        var approach = bounded.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -axis);
+        var approachInline = ((boundedComponent < FixedQ4816.Zero) ? (bounded - (axis * boundedComponent)) : bounded);
+
+        if (approach != approachInline) { return $"LimitAlong against {Render(vector: axis)} at {Render(vector: bounded)} is not the inline approach removal"; }
 
         // The residual along the axis is (v·a)(1 − |a|²) plus a raw or two of lane rounding, and a Q16 unit axis
         // holds |a|² within about 2⁻¹⁵ of one, so the residual is small only while v·a is: the check folds the vector

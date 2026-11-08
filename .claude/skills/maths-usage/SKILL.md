@@ -45,7 +45,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A 64-bit mix with an inverse | `InvertibleBitMix.Mix64` (SplitMix64's finalizer) | A hand-rolled multiply-xorshift |
 | An angle in degrees entering the sim | `FixedQ4816.FromDegrees` (one rounding against `PiQ189`) | `FromDouble(degrees * (Math.PI / 180))`, a rounded radians-per-degree factor |
 | π, π/2, 2π, or an angle reduced to one turn | `FixedQ4816.Pi`/`HalfPi`/`Tau`, `FixedQ4816.WrapAngle` | `FromDouble(Math.PI)`, `Pi + Pi` (one raw short of `Tau`), a floor-and-correct wrap |
-| A vector shortened to a length, or rejected from an axis | `FixedVector3.ClampLength`/`WithLength` (toward zero, never above), `RejectFrom`/`TryRejectNormalized` | `(v / v.Length) * limit`, which can land above the limit |
+| A vector shortened to a length, or rejected from an axis | `FixedVector3.ClampLength`/`WithLength` (toward zero, never above), `RejectFrom`/`TryRejectNormalized`; a one-sided limit (a contact removing approach velocity) is `LimitAlong` | `(v / v.Length) * limit`, which can land above the limit |
 | A sphere or cone test | `FixedVector3.IsWithin` (exact `\|d\|² ≤ r²`), `IsWithinCone` (apex inside, normalized forward) | `LengthSquared > r * r` (rounded twice), a cone that rejects its apex |
 | Spread points, or stratification that must be a theorem | `LowDiscrepancy` (R1, R2), `DigitalNetSampler` | Plain random scatter |
 | A per-tick state hash for a replay probe | `Fnv1aHash` | `string.GetHashCode` or `HashCode.Combine` (randomly seeded per process) |

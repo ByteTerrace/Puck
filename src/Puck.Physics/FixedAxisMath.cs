@@ -2,9 +2,8 @@ using Puck.Maths;
 
 namespace Puck.Physics;
 
-/// <summary>The box-interior nearest-exit-face rule <see cref="FixedStaticCollider"/>'s sphere push and
-/// <see cref="FixedSurfaceQuery"/>'s box query both resolve an interior probe with. One home so a correction to the
-/// exit-face tie-break reaches every caller in the same change.</summary>
+/// <summary>The box-interior nearest-exit-face rule <see cref="FixedRoundedBoxContact.Nearest"/> resolves an interior
+/// probe with, for sphere/box contact and <see cref="FixedSurfaceQuery"/>'s box query alike.</summary>
 internal static class FixedAxisMath {
     /// <summary>Resolves a probe inside (or exactly on the boundary of) an axis-aligned box to its nearest exit
     /// face: the axis with the smallest gap to its half-extent, ties breaking X, then Y, then Z.</summary>

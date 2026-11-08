@@ -88,30 +88,13 @@ public sealed partial class AzureResourceOperationProvider {
         );
     }
     private async ValueTask<string?> ReadStateAsync(Response response, string? pollKind, CancellationToken cancellationToken) {
-        if (response.ContentStream is not { } stream) { return null; }
-        using var bytes = new MemoryStream();
-        var buffer = new byte[Math.Min(
-            val1: 8192,
-            val2: m_maximumResponseBytes
-        )];
-        int count;
+        using var body = await AzureArmPipeline.ReadJsonAsync(
+            cancellationToken: cancellationToken,
+            maximumBytes: m_maximumResponseBytes,
+            response: response
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
-        while ((count = await stream.ReadAsync(
-            buffer: buffer,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false)) != 0) {
-            if ((bytes.Length + count) > m_maximumResponseBytes) { throw new IOException(message: "Azure response exceeds its byte budget."); }
-            bytes.Write(
-                buffer: buffer,
-                count: count,
-                offset: 0
-            );
-        }
-        if (bytes.Length == 0) { return null; }
-        using var body = JsonDocument.Parse(bytes.GetBuffer().AsMemory(
-            0,
-            checked((int)bytes.Length)
-        ));
+        if (body is null) { return null; }
         var root = body.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object) { throw new JsonException(message: "ARM status must be an object."); }
