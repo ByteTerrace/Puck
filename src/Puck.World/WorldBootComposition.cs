@@ -176,6 +176,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfFieldEvaluator.PointWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfQueryWork.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.SdfShadeProgram.CompileWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldCreationWork.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldFieldQueryWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfMeshHistory.ProcessWork);
