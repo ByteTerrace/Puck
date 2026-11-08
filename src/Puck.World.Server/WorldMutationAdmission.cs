@@ -39,10 +39,13 @@ public enum WorldMutationAdmissionRule : byte {
     ObservationDenied,
     /// <summary>Denied — a batch has malformed guards, no members, or a member claiming another actor.</summary>
     MalformedBatch,
+    /// <summary>Denied by the recipient's declared disclosure policy, before grants or state are inspected.</summary>
+    NotDisclosed,
 }
 /// <summary>The decided outcome of <see cref="WorldServer.TryAdmitMutation"/> — which rule fired and the row-level
 /// evidence behind it, produced inside the decision so a caller's narration can never disagree with the door (the
 /// same posture <see cref="GrantVerdict"/> carries for a bare capability check).</summary>
+/// <param name="DisclosureRefusal">The view's one policy refusal, for NotDisclosed.</param>
 /// <param name="Rule">Which gate decided.</param>
 /// <param name="Verdict">The capability verdict the deciding gate produced (the Mutate hold, or the Edit hold for the
 /// two row-scoped rules).</param>
@@ -61,7 +64,8 @@ public readonly record struct WorldMutationAdmission(
     GrantSubject Subject,
     GrantSubject DecidingSubject,
     MutationKindMask Mask,
-    ushort Budget
+    ushort Budget,
+    string? DisclosureRefusal = null
 ) {
     /// <summary>Gets a value indicating whether every gate cleared.</summary>
     public bool IsAdmitted => (Rule is WorldMutationAdmissionRule.Admitted or WorldMutationAdmissionRule.Structural);
@@ -71,6 +75,7 @@ public readonly record struct WorldMutationAdmission(
     /// print the same sentence for the same decision.</summary>
     /// <returns>The refusal fragment, or <c>"admitted"</c>.</returns>
     public string Describe() => Rule switch {
+        WorldMutationAdmissionRule.NotDisclosed => DisclosureRefusal!,
         WorldMutationAdmissionRule.MalformedBatch => "cannot submit a batch with malformed guards, no members, or a different actor in a member",
         WorldMutationAdmissionRule.ObservationDenied => $"cannot observe {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.Admitted => "admitted",

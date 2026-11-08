@@ -521,9 +521,10 @@ public sealed partial class WorldReplayInspector {
         /// <inheritdoc/>
         public void Commit(IWorldAddonPreparedPlan plan) => m_inner.Commit(plan: plan);
         /// <inheritdoc/>
-        public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) => m_inner.CompleteMutation(
+        public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied, string? refusalCode = null) => m_inner.CompleteMutation(
             actOrdinal: actOrdinal,
             addonInstanceId: addonInstanceId,
+            refusalCode: refusalCode,
             applied: applied
         );
         /// <inheritdoc/>

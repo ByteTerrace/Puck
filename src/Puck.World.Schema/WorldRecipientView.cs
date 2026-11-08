@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>A stateless capability for a recipient's live document. Its ceiling and live Observe admission apply
 /// to every read. Delivery history belongs exclusively to a <see cref="WorldDeliveryCursor"/>.</summary>
-public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<StateArena> arena, Principal? recipient,
+public sealed partial class WorldRecipientView(Func<WorldDefinition> definition, Func<StateArena> arena, Principal? recipient,
     WorldDisclosureTier ceiling, Func<bool> observes, WorldDisclosureImages images, string authority,
     Func<ArenaTime> time) {
     internal WorldDefinition Source => definition();

@@ -175,31 +175,6 @@ public static class WorldStateDisclosure {
         }
         return new WorldWithheldRow(Count: count, Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit), WholeRow: !rowReadable);
     }
-    /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
-    /// the recipient may not read exactly as it answers an absent one.</summary>
-    /// <param name="definition">The live document, for the row declarations.</param>
-    /// <param name="arena">The live store.</param>
-    /// <param name="rowName">The name of the row carrying the cell.</param>
-    /// <param name="key">The cell's key.</param>
-    /// <param name="recipient">The recipient.</param>
-    /// <returns><see langword="true"/> when the document declares the row, generated storage included, and the
-    /// recipient may read the cell; <see langword="false"/> for an undeclared row.</returns>
-    public static bool CanReadCell(WorldDefinition definition, StateArena arena, string rowName, CellName key, Principal recipient) {
-        if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: rowName)) { return false; }
-        var observer = new Observer(arena: arena, recipient: recipient);
-
-        return observer.CanRead(row: arena.Rows[handle.Ordinal], rowOrdinal: handle.Ordinal,
-            key: (arena.Keys.TryResolve(key: out var cell, name: key) ? cell : default));
-    }
-    /// <summary>Determines whether the recipient may read a named row, evaluating its reader list against the
-    /// arena on every call.</summary>
-    /// <param name="arena">The live store and its declarations.</param>
-    /// <param name="rowName">The name of the row.</param>
-    /// <param name="recipient">The recipient.</param>
-    /// <returns><see langword="true"/> when the document declares the row and its visibility admits the recipient.</returns>
-    public static bool CanReadRow(StateArena arena, string rowName, Principal recipient) =>
-        (arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: rowName) &&
-        new Observer(arena, recipient).Allows(policy: arena.Rows[handle.Ordinal].Visibility));
 
     private static bool Allows(StateArena arena, StateVisibility? policy, string? recipient) {
         if ((policy is null) || policy.Allows(recipient: recipient)) { return true; }

@@ -49255,7 +49255,7 @@
         "null"
       ],
       "items": {
-        "description": "A presentation observation, without draw seeds, cursors, masks or grants: each cell as it is stored, with the value-over-time trait that governs it (WorldObservedCell). HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind. Min and Max are the row\u0027s declared envelope, which an eased read is clamped to and a bound value is read against.",
+        "description": "A presentation observation, without draw seeds, cursors, masks or grants: each cell as it is stored, with the value-over-time trait that governs it (WorldObservedCell). HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind. Min and Max are the row\u0027s declared envelope, which an eased read is clamped to and a bound value is read against. Domain carries the disclosed storage shape (slot or keys), without authority-only domain dependencies; Capacity is the authored ceiling, never a live reservation or member count.",
         "type": [
           "object",
           "null"
@@ -49465,6 +49465,102 @@
               "title": "WorldObservedCell"
             }
           },
+          "domain": {
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "One cell, keyed SlotKey \u2014 a scalar row. An omitted key addresses it. Carries no data, so InferDomain answers with the single Instance rather than allocating one per unauthored row.",
+                "properties": {
+                  "$type": {
+                    "const": "slot"
+                  }
+                },
+                "additionalProperties": false,
+                "title": "StateDomainSlot"
+              },
+              {
+                "description": "Explicit author-keyed cells (StateRow.Capacity and Cells carry the shape); no omitted-key address exists. The token-domain declaration row (the old dedicated tokens facet) is simply a row of this case whose Capacity is the domain\u0027s token-count ceiling \u2014 other rows address its keys through KeysOf rather than through a second facet of their own. Carries no data, so InferDomain answers with the single Instance rather than allocating one per unauthored keyed row.",
+                "properties": {
+                  "$type": {
+                    "const": "keys"
+                  }
+                },
+                "additionalProperties": false,
+                "title": "StateDomainKeys"
+              },
+              {
+                "description": "The row\u0027s key domain is another row\u0027s keys (see Keys). Ordered true gives the old zone semantics \u2014 cell order is pile order, first/last selection has gameplay meaning \u2014 while false gives the old plain keysFrom attribute-row semantics (a numeric fact per token, no pile order). The one shape two different authored roles used to spell as two different facets.",
+                "properties": {
+                  "$type": {
+                    "const": "keysOf"
+                  },
+                  "row": {
+                    "description": "The row whose keys this row\u0027s own keys are drawn from.",
+                    "title": "CellName",
+                    "type": "string"
+                  },
+                  "ordered": {
+                    "description": "Whether cell order carries gameplay meaning (a pile) rather than being incidental.",
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "row"
+                ],
+                "additionalProperties": false,
+                "title": "StateDomainKeysOf"
+              },
+              {
+                "description": "One value per cell of a named state.lattices topology \u2014 the old board and lattice facets\u0027 shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying Empty, or the dense physical-field composite) is an implementation choice keyed on the row\u0027s own Kind \u2014 a Fixed row over a Field-kind topology compiles into the host\u0027s dense field storage, every other combination is the sparse board \u2014 never two authored traits.",
+                "properties": {
+                  "$type": {
+                    "const": "cellsOf"
+                  },
+                  "topology": {
+                    "description": "The state.lattices topology this row lies over.",
+                    "type": "string"
+                  },
+                  "empty": {
+                    "description": "The value a sparse (board) cell reads before it is ever written; meaningless for the dense physical-field case, whose unwritten value is the field trait\u0027s own initial instead.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "topology"
+                ],
+                "additionalProperties": false,
+                "title": "StateDomainCellsOf"
+              },
+              {
+                "description": "The history ring: the row keeps the last Capacity pushed values in slots keyed 0..Capacity-1, oldest overwritten first \u2014 the old history facet.",
+                "properties": {
+                  "$type": {
+                    "const": "ring"
+                  },
+                  "capacity": {
+                    "description": "How many pushes the ring keeps, from 1 to MaxCellsPerRow.",
+                    "type": "integer"
+                  },
+                  "empty": {
+                    "description": "The value read for an age older than the ring holds.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "capacity"
+                ],
+                "additionalProperties": false,
+                "title": "StateDomainRing"
+              }
+            ],
+            "title": "StateDomain"
+          },
           "hiddenCount": {
             "type": "integer",
             "default": 0
@@ -49489,12 +49585,20 @@
               "null"
             ],
             "default": null
+          },
+          "capacity": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
           "name",
           "kind",
-          "cells"
+          "cells",
+          "domain"
         ],
         "additionalProperties": false,
         "title": "WorldObservedRow"

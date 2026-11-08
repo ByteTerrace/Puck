@@ -8,6 +8,8 @@ public sealed partial class WorldDocument {
     // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
+    private string m_lastMutationFailureCode = "world.mutation.refused";
+    internal string LastMutationFailureCode => m_lastMutationFailureCode;
 
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
     // State slices; overwritten by the next snapshot, like the entry array itself.
@@ -380,6 +382,11 @@ public sealed partial class WorldDocument {
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = RebuildVerb(kind: request.Kind);
+        if (!principal.IsAuthority) {
+            DenyGrantTable(denial: $"{verb} requires the operator", connectionId: connectionId,
+                correlationId: correlationId, echoKind: WorldEditEchoKind.Rebuild);
+            return false;
+        }
         var priorDefinition = m_definition;
 
         // THE CAS RESOLUTION, FIRST — before any refusal gate, so a rebuild the door goes on to refuse below is
@@ -1405,7 +1412,7 @@ public sealed partial class WorldDocument {
             return;
         }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: $"{WorldServer.Describe(mutation: mutation)} rejected: {reason}",
+            Message: m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode ? reason : $"{WorldServer.Describe(mutation: mutation)} rejected: {reason}",
             Rejected: true,
             Kind: WorldEditEchoKind.Mutation,
             Mutation: mutation,

@@ -762,35 +762,35 @@ state {
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryResources"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryRegions"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryKinds"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granarySkus"
       kind: "Text"
       capacity: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     // The feed's state, kept by the host: 0 pending (no feed, or no read yet), 1 live, 2 offline.
@@ -801,7 +801,7 @@ state {
       min: 0
       max: 2
       cells [{ key: "status", value: 0 }]
-      visibility {}
+      cellVisibility: true
     }
 
     // The play board: 1 where a piece stands, over the same grid the pieces are dealt on; and each account's cell.
@@ -821,7 +821,7 @@ state {
       min: 1
       max: 16
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     // How many providers cover each account's piece.
@@ -832,7 +832,7 @@ state {
       min: 0
       max: 99
       cells []
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerCoverage"
@@ -841,7 +841,7 @@ state {
       min: 0
       max: 99
       cells []
-      visibility {}
+      cellVisibility: true
     }
 
     row {
@@ -849,52 +849,52 @@ state {
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationPatches"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationSelected"
       kind: "Text"
       value: granaryReachVolume[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryIrrigationPatch"
       kind: "Text"
       value: granaryReachPatch[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerVolumes"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerPatches"
       kind: "Text"
       capacity: 3
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerSelected"
       kind: "Text"
       value: granaryReachVolume[0]
-      visibility {}
+      cellVisibility: true
     }
     row {
       name: "granaryPowerPatch"
       kind: "Text"
       value: granaryReachPatch[0]
-      visibility {}
+      cellVisibility: true
     }
     slot granaryPhase = 0 bounds(0..11)
     slot granaryIrrigationRequest = 0 bounds(0..2)

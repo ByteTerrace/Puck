@@ -31,19 +31,19 @@
           "run": "world.state.cell.remove sheddingDeck 18"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHeld1 18 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHand1 18 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingSealed 2 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingDeck 2 true"
         }
       ]
@@ -68,19 +68,19 @@
           "run": "world.state.cell.remove sheddingHand1 4"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHeld1 4 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHand1 4 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHeld1 2 true"
         },
         {
-          "at": 42,
+          "at": 40,
           "run": "world.state.cell.set sheddingHand1 2 true"
         }
       ]
@@ -105,19 +105,19 @@
           "run": "world.state.cell.remove sheddingDeck 15"
         },
         {
-          "at": 72,
+          "at": 70,
           "run": "world.state.cell.set sheddingHeld3 15 true"
         },
         {
-          "at": 72,
+          "at": 70,
           "run": "world.state.cell.set sheddingHand3 15 true"
         },
         {
-          "at": 72,
+          "at": 70,
           "run": "world.state.cell.set sheddingSealed 19 true"
         },
         {
-          "at": 72,
+          "at": 70,
           "run": "world.state.cell.set sheddingDeck 19 true"
         }
       ]

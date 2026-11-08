@@ -43,6 +43,7 @@ public sealed partial class WorldAddonRuntime {
             if (!SafeName.TryParse(candidate: row, name: out _, reason: out _) || !CellName.TryParse(candidate: key, name: out var name, reason: out _)) {
                 return AddonVerdict.MalformedPayload;
             }
+            if (!(addon.View ??= m_server.ReadAddonView(addon.Instance.Name)).Admits(row)) { return AddonVerdict.NotDisclosed; }
             cells[i] = new BoundCell(GrantSubject.State(name: row), name);
         }
         addon.Cells = cells;
@@ -86,6 +87,7 @@ public sealed partial class WorldAddonRuntime {
         }
         ref var cell = ref addon.Cells[query.HandleIndex];
         var subject = cell.Subject;
+        if (!(addon.View ??= m_server.ReadAddonView(addon.Instance.Name)).Admits(subject.Id!)) { return AddonVerdict.NotDisclosed; }
 
         if (!IsRequested(addon: addon, capability: WorldCapability.Edit, subject: subject)) {
             return AddonVerdict.AttenuatedToEmpty;
@@ -117,10 +119,6 @@ public sealed partial class WorldAddonRuntime {
             }
         }
 
-        // Resolution caches the address, never the disclosure: a cell hidden from the addon refuses as an absent one does.
-        if (!IsDisclosed(addon: addon, subject: subject, name: cell.Name)) {
-            return AddonVerdict.NoSuchSubject;
-        }
         if (!cell.Resolved) {
             if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out cell.Row) ||
                 !arena.Keys.TryResolve(key: out cell.Key, name: cell.Name) || !arena.TryRead(cell.Row.Ordinal, cell.Key, out _)) {
@@ -135,6 +133,7 @@ public sealed partial class WorldAddonRuntime {
         }
         return m_server.WriteStateCell(addon.Principal, cell.Row, cell.Key, query.A, write, (text ? value : null)) switch {
             WorldCellWriteVerdict.Applied => AddonVerdict.Applied,
+            WorldCellWriteVerdict.NotDisclosed => AddonVerdict.NotDisclosed,
             WorldCellWriteVerdict.StaleAddress => AddonVerdict.StaleHandle,
             WorldCellWriteVerdict.Denied => AddonVerdict.NoHold,
             WorldCellWriteVerdict.Masked => AddonVerdict.AttenuatedToEmpty,

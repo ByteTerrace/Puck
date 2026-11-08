@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
-using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -58,7 +57,8 @@ public sealed partial class WorldDocument {
             (row.Advance != previous.Advance) || (row.Draw != previous.Draw) || (row.Dynamics != previous.Dynamics) ||
             (row.Field != previous.Field) || (row.Cycle != previous.Cycle) || (row.Domain != previous.Domain) ||
             (row.ValuesFrom != previous.ValuesFrom) || (row.Inverse != previous.Inverse) || (row.Phase != previous.Phase) ||
-            (row.Visibility != previous.Visibility) || (row.Knowledge != previous.Knowledge) || (row.PhaseOf != previous.PhaseOf) ||
+            (row.Visibility != previous.Visibility) || (row.CellVisibility != previous.CellVisibility) ||
+            (row.Knowledge != previous.Knowledge) || (row.PhaseOf != previous.PhaseOf) ||
             (row.Space != previous.Space) || (row.Enum != previous.Enum) || (row.HostOwned != previous.HostOwned) ||
             (row.Generated != previous.Generated) || (row.Verdict != previous.Verdict) || (row.Witness != previous.Witness)) { return false; }
         // Only explicit per-cell time traits are declaration. All other cell fields live in columns.
@@ -285,18 +285,6 @@ public sealed partial class WorldDocument {
             reason: out var keyReason
         )) {
             reason = $"state row '{mutation.Row}' cell key '{mutation.Key}' {keyReason}";
-
-            return false;
-        }
-
-        if (IsWithheldFromWriter(
-            arena: arena,
-            key: cellKey,
-            principal: mutation.Principal,
-            row: mutation.Row,
-            working: working
-        )) {
-            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not writable by {mutation.Principal.Describe()}";
 
             return false;
         }
@@ -567,36 +555,6 @@ public sealed partial class WorldDocument {
             )
         );
     }
-    // A write by a principal that reads through disclosure (an addon, a peer or a session) is refused for a cell or row
-    // it may not read, before the write looks at whether the cell or row exists, so the refusal of a hidden one is the
-    // one an absent one gets and a mod cannot probe for it. The console, the seats and the world's own program write
-    // under their grants alone. WorldAddonRuntime's bound cell write asks the same WorldStateDisclosure.CanReadCell.
-    private static bool ReadsThroughDisclosure(Principal principal) =>
-        (principal.Kind is PrincipalKind.Addon or PrincipalKind.Peer or PrincipalKind.Session);
-    private static bool IsWithheldFromWriter(StateArena arena, WorldDefinition working, Principal principal, string row, CellName key) => (
-        ReadsThroughDisclosure(principal: principal) &&
-        !WorldStateDisclosure.CanReadCell(
-        arena: arena,
-        definition: working,
-        key: key,
-        recipient: principal,
-        rowName: row
-    )
-    );
-    // A row the document declares and the principal may not read; an undeclared row is absent, not withheld.
-    private static bool IsRowWithheldFromWriter(WorldDefinition definition, Principal principal, string row) {
-        if (!ReadsThroughDisclosure(principal: principal) ||
-            (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { Visibility: not null })) { return false; }
-        // Declaration edits have a materialized candidate. Evaluate its policy through the same arena reader
-        // as live disclosure, including earlier writes in a composed edit batch.
-        var time = ArenaTime.Origin;
-        if (!TryOpenComposeArena(definition: definition, time: in time, arena: out var arena, mark: out var mark, reason: out _)) { return true; }
-        try {
-            return !WorldStateDisclosure.CanReadRow(arena: arena, recipient: principal, rowName: row);
-        } finally {
-            CloseComposeArena(arena: arena, mark: mark);
-        }
-    }
     // Composes one cell removal onto the row it names, on the same terms as TryApplyCellUpsert.
     private static bool TryApplyCellRemove(StateArena arena, WorldDefinition working, WorldMutation.RemoveStateCell mutation, out string reason) {
         reason = string.Empty;
@@ -632,13 +590,6 @@ public sealed partial class WorldDocument {
             candidate: mutation.Key,
             name: out var cellKey,
             reason: out _
-        ) ||
-            IsWithheldFromWriter(
-            arena: arena,
-            key: cellKey,
-            principal: mutation.Principal,
-            row: mutation.Row,
-            working: working
         ) ||
             !arena.Keys.TryResolve(
             key: out var key,

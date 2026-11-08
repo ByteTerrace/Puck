@@ -8,6 +8,14 @@ public sealed partial class WorldDocument {
     private readonly List<int> m_setReadOrdinals = [];
 
     internal bool TryAdmitCompleteMutation(WorldMutation mutation, bool preMetered, out WorldMutationAdmission admission) {
+        m_lastMutationFailureCode = "world.mutation.refused";
+        var view = Host.ReadView(mutation.Principal);
+        if (!view.Admits(mutation, out var withheld)) {
+            m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
+            admission = new WorldMutationAdmission(WorldMutationAdmissionRule.NotDisclosed, default,
+                GrantSubject.State(withheld), default, default, 0, view.Refusal("mutation", withheld));
+            return false;
+        }
         // A batch is admitted member by member, each on its own subject; the first member meters the dispatch budget.
         if (mutation is WorldMutation.Batch batch) {
             admission = default;

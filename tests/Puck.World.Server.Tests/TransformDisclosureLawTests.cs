@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -9,6 +10,91 @@ namespace Puck.World.Server.Tests;
 /// table: <c>rank</c> is a token attribute only <c>seat1</c> reads, <c>table</c> is a zone every seat sees, and
 /// <c>hand</c> is a zone only <c>seat1</c> sees.</summary>
 public sealed class TransformDisclosureLawTests {
+    [Fact]
+    public void EveryRecipientWriteAndGuardRefusesByPolicyBeforeMembershipOrGrants() {
+        foreach (var actor in new[] { Principal.Seat(0), Principal.Seat(1), Dealer, Principal.Addon("guest") }) {
+            foreach (var hiddenPresent in new[] { false, true }) {
+                var hidden = new WorldStateRow(CellName.Parse("hidden"), CellKind.Int, Capacity: 4, CellVisibility: true,
+                    Cells: hiddenPresent ? [new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat1"]))] : []);
+                var marker = new WorldStateRow(CellName.Parse("marker"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]);
+                using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([hidden, marker]));
+                var write = new WorldMutation.UpsertStateCell(actor, "marker", StateRow.SlotKey.Value, 1, WorldDocumentWriteKind.Set);
+                WorldMutation[] mutations = [
+                    new WorldMutation.UpsertStateCell(actor, "hidden", "secret", 5, WorldDocumentWriteKind.Set),
+                    new WorldMutation.UpsertStateCell(actor, "hidden", "absent", 5, WorldDocumentWriteKind.Add),
+                    new WorldMutation.RemoveStateCell(actor, "hidden", "secret"),
+                    new WorldMutation.RemoveStateCell(actor, "hidden", "absent"),
+                    new WorldMutation.UpsertStateRow(actor, hidden with { Cells = [] }),
+                    new WorldMutation.RemoveStateRow(actor, "hidden"),
+                    new WorldMutation.Generate(actor, "hidden"),
+                    new WorldMutation.TransformState(actor, new StateTransform.Sort("hidden", [])),
+                    new WorldMutation.TransformState(actor, new StateTransform.Sort("marker", []), new PhaseGuard("hidden", 0)),
+                    new WorldMutation.Batch(actor, [write, new WorldMutation.RemoveStateCell(actor, "hidden", "secret")]),
+                    new WorldMutation.Batch(actor, [write], ExpectedCells: [new WorldStateExpectation("hidden", "secret")]),
+                    new WorldMutation.Batch(actor, [write], ExpectedCells: [new WorldStateExpectation("hidden", "absent")]),
+                    new WorldMutation.Batch(actor, [write], ExpectedDefinition: new string('0', 64), ExpectedStateRows: ["hidden"]),
+                    new WorldMutation.Batch(actor, [write], ExpectedInputs: new WorldDefinitionReadDependency([], ["hidden"], new string('0', 64))),
+                ];
+                foreach (var mutation in mutations) {
+                    var results = new List<WorldSubmissionResult>();
+                    fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+                        SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: actor, OperationId: Guid.NewGuid(),
+                        Payload: new WorldSubmissionPayload.Mutation(mutation)), results.Add);
+                    fixture.Step();
+                    var outcome = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+                    Assert.Equal(WorldRecipientMutations.NotDisclosedCode, outcome.Code);
+                    Assert.Equal($"'hidden' is not disclosed to {actor.Describe()}", outcome.Detail);
+                    Assert.Equal(0, WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "marker")!.Cells![0].Value.AsInt);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void APrivateInboxReadsWholeForItsOwnerAndItsTypedWriteUsesTheSamePolicy() {
+        var inbox = new WorldStateRow(CellName.Parse("inbox"), CellKind.Int, Capacity: 2,
+            Cells: [Cell("bid", 0)], Visibility: new StateVisibility(Readers: ["seat1"]));
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([inbox]));
+        var owner = Principal.Seat(0);
+        var other = Principal.Seat(1);
+        var view = WorldRecipientView.ForComposition(fixture.Server.Definition, owner, fixture.Server.Arena);
+        Assert.True(view.ReadsWhole("inbox"));
+        Assert.True(view.Admits(new WorldMutation.UpsertStateCell(owner, "inbox", "bid", 12, WorldDocumentWriteKind.Set), out _));
+        fixture.Server.Arena.Catalog.TryResolve(StateLane.Document, "inbox", out var row);
+        fixture.Server.Arena.Keys.TryResolve(CellName.Parse("bid"), out var key);
+        Assert.Equal(WorldCellWriteVerdict.NotDisclosed, fixture.Server.WriteStateCell(other, row, key, 12));
+        Assert.Equal(WorldCellWriteVerdict.Applied, fixture.Server.WriteStateCell(owner, row, key, 12));
+    }
+
+    [Fact]
+    public void ASpatialGuardChecksAnEmptyTemplatesDeclaredSourceAndABatchRechecksNewPolicies() {
+        var row = new WorldStateRow(CellName.Parse("hidden"), CellKind.Int, Capacity: 4, CellVisibility: true, Cells: []);
+        var placement = new WorldPlacement("pieces", "piece", new DocumentVector3(0, 0, 0), 0, 1, Deal: new WorldPlacementDeal("hidden"),
+            Spatial: [new WorldPlacementSpatialVolume("space", WorldPlacementSpatialRole.Occupation,
+                new WorldSpatialShape(WorldSpatialShapeKind.Sphere, new DocumentVector3(0, 0, 0), new DocumentVector3(0, 0, 0), 1))]);
+        var document = Fixtures.BuildDocument().WithWorldState([row]) with { PlacementsRaw = new WorldPlacementsSection([placement]) };
+        var actor = Principal.Seat(0);
+        var view = WorldRecipientView.ForComposition(document, actor);
+        var batch = new WorldMutation.Batch(actor, [new WorldMutation.RemoveStateCell(actor, "absent", "key")],
+            ExpectedSpatialReads: [new WorldSpatialReadDependency(-65536, -65536, 65536, 65536, new string('0', 64))]);
+        Assert.False(view.Admits(batch, out var withheld));
+        Assert.Equal("hidden", withheld);
+
+        var publicRow = row with { CellVisibility = false, Cells = [Cell("secret", 7)] };
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([publicRow]));
+        var results = new List<WorldSubmissionResult>();
+        fixture.Server.Submit(new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId,
+            SessionGeneration: 0, Sequence: 1, CorrelationId: 1, Principal: actor, OperationId: Guid.NewGuid(),
+            Payload: new WorldSubmissionPayload.Mutation(new WorldMutation.Batch(actor, [
+                new WorldMutation.UpsertStateRow(actor, publicRow with { CellVisibility = true }),
+                new WorldMutation.RemoveStateCell(actor, "hidden", "secret")]))), results.Add);
+        fixture.Step();
+        var outcome = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
+        Assert.Equal(WorldRecipientMutations.NotDisclosedCode, outcome.Code);
+        Assert.Equal("'hidden' is not disclosed to seat1", outcome.Detail);
+        Assert.Equal(7, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
+    }
+
     private static readonly Principal Dealer = Principal.Peer(
         generation: 1,
         index: 4
@@ -204,13 +290,10 @@ public sealed class TransformDisclosureLawTests {
 
         var result = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(results)).Outcome;
         Assert.Equal(Dealer, result.Actor);
-        Assert.Equal(confined, result.Applied);
-        if (confined) {
-            Assert.Equal("b,e,c,f,a,d", Order(definition: fixture.Server.ExportDefinition(), zone: "rank"));
-        } else {
-            Assert.Contains(nameof(RuleRefusal.TransformWidensAudience), result.Detail);
-            Assert.Equal(before, Order(definition: fixture.Server.ExportDefinition(), zone: "rank"));
-        }
+        Assert.False(result.Applied);
+        Assert.Equal(WorldRecipientMutations.NotDisclosedCode, result.Code);
+        Assert.Equal($"'rank' is not disclosed to {Dealer.Describe()}", result.Detail);
+        Assert.Equal(before, Order(definition: fixture.Server.ExportDefinition(), zone: "rank"));
     }
 
     [Theory]

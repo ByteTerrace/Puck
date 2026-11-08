@@ -90,7 +90,7 @@ public sealed partial class StateArena {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     public bool HasCellVisibility(int rowOrdinal) => (m_visibilities?.HasRow(row: rowOrdinal) == true);
     /// <summary>Returns whether a row's declaration lets its cells carry their own audience restriction: the row
-    /// declares a visibility policy, or a seed cell does, so its storage holds the visibility column. A row that does
+    /// declares cellVisibility, or a seed cell declares a visibility policy, so its storage holds the visibility column. A row that does
     /// not, and a host-owned row, which has no cell slots, can never hold a restricted cell. The answer depends on the
     /// declaration alone, never on which members are present or restricted now.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>

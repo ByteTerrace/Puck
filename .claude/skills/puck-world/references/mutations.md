@@ -115,7 +115,16 @@ board's empty scratch inputs must never journal and export over its live row.
 Compose → validate → capacity → solids → install (swap + derived rebuild) →
 journal → echo. Precisely:
 
-1. **Authority.** The principal must hold `WorldCapability.Mutate` over
+1. **Disclosure, then authority.** `WorldRecipientView.Admits` (the mutation adapter in
+   `Puck.World.Protocol/Protocol/WorldRecipientMutations.cs`) refuses every target or guard that
+   touches a row the recipient cannot read whole, before grants, key lookup or composition.
+   This includes seats. `TryAdmitCompleteMutation`, live state members and detached composition
+   share it; a batch rechecks after earlier members change declarations or reader lists.
+   Cell and fingerprint guards use the view's `Fingerprint`, through one `CheckGuards`.
+   The echo and typed outcome carry the same refusal; its code is
+   `world.mutation.undisclosed`. Addon binds and typed writes use the same row policy and
+   answer `NotDisclosed`. `cellVisibility: true` reserves cell policies on empty rows;
+   row-level visibility alone lets its admitted owner read the row whole. Then the principal must hold `WorldCapability.Mutate` over
    `GrantSubject.Section(SectionOf(mutation))`. A denial prints a
    `[world.grant denied: …]` stderr line, fires a `WorldEditEcho`
    (`Denied: true`), and drops.

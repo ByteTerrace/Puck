@@ -536,13 +536,7 @@ public sealed partial class WorldServer {
         var dependencies = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in localRows.Append(element: template)) {
-            WorldStateDocumentValues.CollectReferencedRows(
-                graph: placement,
-                rows: dependencies
-            );
-            if (placement.Deal is not { } deal) { continue; }
-            dependencies.Add(item: deal.Row);
-            if (deal.Variants is { } variants) { dependencies.Add(item: variants.Row); }
+            WorldDefinitionFingerprint.CollectPlacementStateInputs(placement, dependencies);
         }
         var stateRows = dependencies.Order(comparer: StringComparer.Ordinal).ToArray();
         var placementIds = localRows.Append(element: template)
@@ -587,7 +581,8 @@ public sealed partial class WorldServer {
             InstanceIdentity,
             out _,
             out reason,
-            out _
+            out _,
+            refusalCode: out _
         )) { return false; }
         proposal = new WorldPlacementProposal(
             Candidates: work,

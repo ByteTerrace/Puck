@@ -13536,6 +13536,10 @@ export type WorldStateRow = {
   historyCursor?: number;
   visibility?: StateVisibility;
   /**
+   * Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.
+   */
+  cellVisibility?: boolean;
+  /**
    * A persisted token-keyed knowledge layer refreshed explicitly by the authority.
    */
   knowledge?: {
