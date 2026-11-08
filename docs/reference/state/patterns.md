@@ -104,10 +104,19 @@ names both:
   token before it, and each must address a row keyed over the pile's token
   domain. `$previous` on the first token reads the cell no row holds, which is
   0. A letter is always the number its expression computed. A token whose
-  expression reads an absence leaves the word spelling nothing, so the match is
+  expression returns absence leaves the word spelling nothing, so the match is
   absent and no comparison against it holds. A token whose expression faults
   faults the match, which a gate or a firing answers like any other fault: see
   [Rules and firing](rules.md#follow-one-evaluation).
+
+`IWordFoldOperand.WordProgram` declares that per-token expression.
+`RuleExpressions.FoldWord` spells the word through the one interpreter before
+`PatternOperand.MatchWord` matches it; the operand never evaluates its own
+letters or substitutes zero for a failed letter. `PatternOperand.ReadWord`
+uses the same fold for host read-back. W6 in
+[the rule-fault examples](../../../worlds/debug/rule-faults-tests.puck)
+compares a faulting letter, an absent letter and a genuine zero; W2 also
+checks that a faulting pattern origin faults before matching.
 
 A `value` expression can combine several attributes into one letter, such as
 `suit * 16 + rank`, or compare neighbors. This pattern accepts a run: any first
