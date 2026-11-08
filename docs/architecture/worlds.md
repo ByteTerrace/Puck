@@ -20,7 +20,9 @@ everything else from it:
 - A zone, a dungeon, a card table and a lobby are each a world.
 - A character is a world: a small document that holds its name, look, progress
   and possessions. The host that holds the player's account runs it; today that
-  is the Puck process the player launches.
+  is the Puck process the player launches. In the settled design, a scarce
+  possession (currency, a tradeable item) is a record its issuer keeps, and the
+  character holds a reference to it and the receipts for every move.
 - A hub, the place a player starts from and returns to, is a world. Its screens
   show other worlds the player has joined.
 - What other games call a server is a world that many players join and whose
@@ -86,12 +88,20 @@ rules, or ignore it. The studio decides what it vouches for; the friend decides
 what that is worth in their world. Where something must stay unique or
 tradeable, such as currency or a stake at a card table, the world that issued it
 keeps the record itself and escrow and custody move it, so a copy gains nothing.
+That issuer is a settlement world the player does not host, with one door per
+trust community that alone creates units and signs a receipt for every move,
+which both sides keep. A dealer, a referee or a witness is a role such a world
+vouches, never a property a world claims about itself
+([the decisions](../decisions/worlds-and-federation.md)).
 
 What exists today falls short of that intent in ways that matter to anyone
 designing across worlds:
 
-- What a visited world writes onto a traveller is adopted at home unsigned;
-  signed provenance for carried state does not exist yet.
+- What a visited world writes onto a traveller is adopted at home unsigned when
+  both run in one process, and not adopted at all across machines; signed
+  provenance for carried state does not exist yet.
+- No settlement door exists: currency and items are facts on the character's
+  own document.
 - A character's world runs on the player's own host, so everything on it is the
   player's own assertion until another world vouches for it.
 - An authority sees all of its own state: a host sees every hand at a table it
@@ -99,8 +109,9 @@ designing across worlds:
 - When bodies under two authorities act on each other, only physical contact has
   a settlement rule; the rest of player-to-player interaction is unbuilt.
 
-Which kinds of value use which form, and how these gaps close, are the open
-questions of [MMO foundations](../plans/mmo-foundations.md); its
+Which kinds of value use which form, and how these gaps close, are settled in
+[the decision register](../decisions/worlds-and-federation.md), which the
+[MMO foundations](../plans/mmo-foundations.md) round produced; its
 [attack catalogue](../plans/mmo-foundations/attacks.md) lists the ways the model
 can be broken today.
 
@@ -404,7 +415,7 @@ Common networking terms remain useful, with the following qualifications:
 | character, alt | a world you own |—|
 | account | the set of worlds you own | there is no tier above them |
 | spectator | a participant joined but not embodied | not a mode |
-| item, inventory | durable slots on a world you own | the engine never learns what an item is |
+| item, inventory | durable slots on a world you own; a scarce item is a record its issuer keeps, which your world references | the engine never learns what an item is |
 
 The following terms describe the simulation and its document:
 
@@ -801,6 +812,10 @@ only those, and is saved after every landing succeeds and the arrival record is 
 arrival leaves the owned identity and its saved document unchanged. An id match alone is not enough,
 since every catalog seeds identities from its template. Facts another world wrote are unsigned: provenance attestation for carried state
 does not exist yet, so an owner adopts whatever a visited world wrote onto its traveler.
+The settled design narrows this at one write door: a visited world writes only
+in its own package's namespace and never a home-scoped class, and remote
+adoption is built only as signed submissions
+([what a visited world may write](../decisions/worlds-and-federation.md#what-a-visited-world-may-write)).
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
 reservation has no field that could ask for a local seat, so it is always a peer admission. Remote
 home adoption remains deferred. Checkpoint restore rebinds a local home seat to its restored owned
@@ -1375,7 +1390,10 @@ transfer durability is the source's crossing log, and a reservation held for a s
 before its departure is durable expires at its deadline with capacity released. What dies with a
 host is in-world body state only: identity and its facts—items, currency, achievements—live on the
 owned identity document, which adopts a traveler's carried facts when its seat comes home, so a player
-loses position rather than possessions.
+loses position rather than possessions. In the settled design, scarce items and currency are records
+their issuer keeps at a settlement door the player does not host, and the identity holds references and
+receipts, so a vanished destination cannot take them either
+([scarce value](../decisions/worlds-and-federation.md#scarce-value-settles-at-one-door-per-domain)).
 
 For population-backed admission, the connection receives a body index, so its
 principal and body arrive together. During transfer, the source authority holds
@@ -1411,7 +1429,10 @@ chosen—not impossible. Clusters also grow by *transitive closure* of the inter
 chain of engagements can sweep in players beyond the visible fight. Both are why bounding the
 cluster, reserving headroom and co-hosting neighbours are work rather than polish—and why the
 authoring guidance is not "put a world wherever people fight", which is reactive topology, but "do
-not run an authority boundary through a place designed to be contested".
+not run an authority boundary through a place designed to be contested". A contested place runs on an
+authority neither combatant controls, a silo or a referee world a settlement domain vouches, and nothing
+settled rides on a fight between two player hosts that no such authority runs
+([contested places](../decisions/worlds-and-federation.md#contested-places-and-fights-between-player-hosts)).
 
 ## Signed attestation
 
@@ -1428,7 +1449,9 @@ These are compositions of existing mechanisms; they do not require new engine
 concepts.
 
 - **A library, a shelf, a rental desk, a trading post.** Durable slots, targeted effects, regions and
-  write-back. The engine stays ignorant of what an item is.
+  write-back. The engine stays ignorant of what an item is. A trading post for scarce goods settles
+  each sale at its domain's settlement door, which this model does not have yet
+  ([the decision](../decisions/worlds-and-federation.md#scarce-value-settles-at-one-door-per-domain)).
 - **Cross-game avatars.** A creation is hash-pinned content and an identity is a world; wearing your
   own appearance elsewhere is a per-slot read grant, and a body can collide as the shape it is
   wearing, so it is physical rather than cosmetic. The visited world clamps what it accepts, so
@@ -1500,4 +1523,7 @@ reopen it.
 ### Trust and attestation
 
 Attestation's rejected shapes live in its reference:
-[Offline attestation, "Ruled out"](../reference/attestation.md#ruled-out).
+[Offline attestation, "Ruled out"](../reference/attestation.md#ruled-out). The
+trust decisions between worlds (the settlement door, vouched roles, revocation
+below expiry, reactive spatial splitting rejected) live in
+[the decision register](../decisions/worlds-and-federation.md).

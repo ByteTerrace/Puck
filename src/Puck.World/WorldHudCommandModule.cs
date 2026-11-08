@@ -33,7 +33,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         ? $"[world.hud toast: #{frame.Sequence} {(frame.IsError ? "error" : "ok")} '{frame.Message}']"
         : "[world.hud toast: none]"));
 
-    private string DescribeElement(string panelId, WorldHudElement element, int slot) {
+    private string DescribeElement(string panelId, WorldHudElement element, int slot, WorldStateReadView view) {
         var bindingToken = (element.Binding ?? "(none)");
         var frameText = string.Empty;
         var valueText = string.Empty;
@@ -52,10 +52,10 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             // A validated document element's placeholders are already proven against the closed vocabulary and the
             // document's own state section (WorldDefinitionValidator), so this walk resolves unconditionally — the
             // same trust a render-frame's own template resolve extends.
-            valueText = $" template='{template}' resolved='{ResolveTemplateEcho(seat: slot, template: template)}'";
+            valueText = $" template='{template}' resolved='{ResolveTemplateEcho(seat: slot, template: template, view: view)}'";
         } else if (
             (element.Binding is { Length: > 0 } binding) &&
-            bindings.TryResolve(
+            TryResolveBinding(view: view,
             binding: binding,
             fraction: out var fraction,
             seat: slot,
@@ -114,8 +114,8 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
         ).ToString();
     }
-    private string DescribeHud() {
-        var section = server.Definition.Hud;
+    private string DescribeHud(WorldStateReadView view) {
+        var section = view.Definition.Hud;
         // The cursor policy echoes what the drawn cursor actually uses: the authored row, or 'hidden' for an
         // unauthored one (the engine draws no cursor of its own), so this read-back and the cursor cannot disagree.
         var cursorText = ((section.Defaults.Cursor is { } cursor)
@@ -138,7 +138,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
                 lines.Add(item: DescribeElement(
                     panelId: panel.Id,
                     element: element,
-                    slot: -1
+                    slot: -1, view: view
                 ));
             }
         }
@@ -148,9 +148,9 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             values: lines
         );
     }
-    private CommandResult DescribeHudHandler(WireArgs args) {
+    private CommandResult DescribeHudHandler(CommandContext context, WireArgs args) {
         if (args.Count == 0) {
-            return new CommandResult(Output: DescribeHud());
+            return new CommandResult(Output: DescribeHud(WorldStateReadView.Of(server, context.Principal)));
         }
 
         if ((args.Count == 1) && string.Equals(a: args[0].ToString(), b: ToastFilter, comparisonType: StringComparison.OrdinalIgnoreCase)) {
@@ -164,12 +164,12 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             seat: out var seat
         )
         ) {
-            return DescribeSeatHud(seat: seat);
+            return DescribeSeatHud(seat: seat, view: WorldStateReadView.Of(server, context.Principal));
         }
 
         return WorldHudForms.Refuse(got: args[0].ToString());
     }
-    private CommandResult DescribeSeatHud(int seat) {
+    private CommandResult DescribeSeatHud(int seat, WorldStateReadView view) {
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
 
         if (roster.ProfileAt(slot: slot) is not { } profile) {
@@ -188,7 +188,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             lines.Add(item: DescribeElement(
                 panelId: panel.Id,
                 element: element,
-                slot: slot
+                slot: slot, view: view
             ));
         }
 
@@ -251,13 +251,13 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             }
         }
 
-        return new CommandResult(Output: $"[world.hud.template: '{ResolveSegments(seat: -1, segments: segments)}']");
+        return new CommandResult(Output: $"[world.hud.template: '{ResolveSegments(seat: -1, segments: segments, view: view)}']");
     }
     // The ONE substitution walk this module owns: every placeholder resolves through the SAME IHudBindingResolver
     // the renderer emits with, so an echo and the screen cannot disagree about a value. Callers decide what a
     // failed resolve MEANS — world.hud.template refuses ahead of this walk, world.hud's echo trusts a document
     // template already proven at validation — so an unresolvable placeholder simply contributes nothing here.
-    private string ResolveSegments(IReadOnlyList<HudTemplateSegment> segments, int seat) {
+    private string ResolveSegments(IReadOnlyList<HudTemplateSegment> segments, int seat, WorldStateReadView view) {
         var resolved = new System.Text.StringBuilder();
 
         foreach (var segment in segments) {
@@ -267,12 +267,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
                 continue;
             }
 
-            if (bindings.TryResolve(
-                binding: segment.Text,
-                seat: seat,
-                fraction: out _,
-                text: out var value
-            )) {
+            if (TryResolveBinding(view, segment.Text, seat, out _, out var value)) {
                 resolved.Append(value: value);
             }
         }
@@ -283,13 +278,28 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
     // ALREADY-PARSED runs by WorldHudFeed, so this echo and the screen agree by construction rather than by two
     // scanners being kept in step. A validated document template always parses; showing the raw text if one somehow
     // does not beats inventing a reading of it.
-    private string ResolveTemplateEcho(string template, int seat) {
+    private bool TryResolveBinding(WorldStateReadView view, string binding, int seat, out float fraction, out ReadOnlySpan<char> text) {
+        if (HudBindingVocabulary.TryParse(binding, out var parsed) && parsed.Kind == HudBindingKind.StateNamed) {
+            fraction = 0;
+            text = string.Empty;
+            if (!view.TryReadValue(parsed.StateName!, parsed.StateCellKey, out var row, out var value, eased: !parsed.Target)) { return false; }
+            text = WorldHudBindingResolver.FormatValue(value);
+            if (value.Kind is CellKind.Int or CellKind.Fixed) {
+                var fixedPoint = value.Kind == CellKind.Fixed;
+                var number = fixedPoint ? (double)Puck.Maths.FixedQ4816.FromRawBits(value.AsFixed) : value.AsInt;
+                fraction = WorldHudBindingResolver.Fraction(number, row.Min, row.Max, fixedPoint);
+            }
+            return true;
+        }
+        return bindings.TryResolve(binding, seat, out fraction, out text);
+    }
+    private string ResolveTemplateEcho(string template, int seat, WorldStateReadView view) {
         return (HudTemplate.TryParse(
             error: out _,
             segments: out var segments,
             template: template
         )
-            ? ResolveSegments(seat: seat, segments: segments)
+            ? ResolveSegments(seat: seat, segments: segments, view: view)
             : template
         );
     }
@@ -329,7 +339,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             name: "world.hud",
             description: $"Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: {WorldHudForms.Spelling}. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             forms: WorldHudForms,
-            handler: (_, args) => DescribeHudHandler(args: args),
+            handler: (context, args) => DescribeHudHandler(context, args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

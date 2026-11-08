@@ -165,7 +165,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: CycleCommand,
-            description: "Rotates the pressing device to the next player slot, wrapping 1→2→3→4→1 (pad Start). Onto an empty slot it creates a pending player; onto an occupied one it joins that team. Over stdin it cycles the keyboard.",
+            description: "Rotates the pressing device to the next player slot, wrapping 1→2→3→4→1. Onto an empty slot it creates a pending player; onto an occupied one it joins that team. Over stdin it cycles the keyboard.",
             valueKind: CommandValueKind.Digital,
             handler: CycleHandler
         );

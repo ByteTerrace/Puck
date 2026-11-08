@@ -12,7 +12,7 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     internal StateArena Arena => arena();
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;
-    internal bool Unrestricted => recipient?.Kind is PrincipalKind.Console or PrincipalKind.World;
+    internal bool Unrestricted => recipient?.IsAuthority == true;
     internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted);
 
     /// <summary>The admission tier; no operation can raise it.</summary>
@@ -32,6 +32,16 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     }
     /// <summary>Whether the declaration can withhold any member of this row.</summary>
     public bool ReadsWhole(int row) => Includes(row) && Observer.ReadsWhole(row);
+    /// <summary>Whether a named row is carried whole at this ceiling.</summary>
+    public bool ReadsWhole(string row) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && ReadsWhole(handle.Ordinal);
+    /// <summary>The policy's withheld metadata, never an undisclosed member count.</summary>
+    public WorldWithheldRow? Withheld(string row) {
+        if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) || ReadsWhole(handle.Ordinal)) { return null; }
+        var observation = Image(handle.Ordinal).Observation;
+        return new WorldWithheldRow(observation?.HiddenCount ?? 0,
+            observation is null ? HiddenCells.Omit : Arena.Rows[handle.Ordinal].Visibility?.Hidden ?? HiddenCells.Omit,
+            observation is null);
+    }
     /// <summary>Whether this cell is disclosed; absent and withheld cells answer alike.</summary>
     public bool Discloses(int row, string? key) => Includes(row) && Observer.Discloses(row, key);
     /// <summary>Resolves a named row inside the capability, exposing no arena.</summary>
@@ -66,9 +76,9 @@ public sealed class WorldRecipientView(Func<WorldDefinition> definition, Func<St
     public IReadOnlyList<WorldFieldsSection> FieldRegions => Observes
         ? WorldStateDisclosure.FieldProjection(Source, Arena, recipient, Unrestricted) : [];
     /// <summary>A one-off presentation projection. It changes no delivery cursor.</summary>
-    public WorldProjectionDocument? Project(WorldClockAnchorLedger? anchors = null, int sequence = 0) => !Observes ? null :
+    public WorldProjectionDocument? Project(WorldClockAnchorLedger? anchors = null, int sequence = 0, Puck.Assets.ContentAddressedStore? content = null) => !Observes ? null :
         WorldProjection.Compose(Source, WorldDisclosureTier.Presentation, authority, sequence, Arena, time(),
-            recipient, Unrestricted, anchors, view: this);
+            recipient, Unrestricted, anchors, content: content, view: this);
     /// <summary>Advances a delivery's row images, never a read's history.</summary>
     public IReadOnlyList<WorldRowReplacement> Advance(WorldDeliveryCursor cursor, ReadOnlySpan<int> rows) => cursor.Advance(this, rows);
 }

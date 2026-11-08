@@ -120,14 +120,13 @@
     <!--
         PROVIDER INDEPENDENCE (PUCKARCH009) — Azure and Entra are today's deployment and identity providers, never part
         of an engine, protocol or trust contract (AGENTS.md, "Puck is provider-independent"). A project that implements
-        a provider declares <PuckProvider> in its csproj, read like <PuckLayer>; a RANKED project that declares no
+        a provider declares <PuckProvider> in its csproj, read like <PuckLayer>; a project that declares no
         provider, or another one, may hold neither a provider project nor a provider's SDK assemblies in its resolved
         closure. A host reaches a provider through Puck's own abstraction (a store target from an installed extension's
         storage provider, an authenticator from its authentication provider), never a reference.
 
-        Terminal kinds are exempt, as from the rank rule: a test exercises a provider, and a tool deploys to one. The
-        tooling exemption is the open edge: the CLI's Azure deployment verbs live in Puck.Cli.Release rather than a
-        provider project of their own (docs/plans/open-items.md, "Provider independence").
+        Only Test kinds are exempt: a test exercises a provider. Tools select installed provider contributions;
+        Puck.Cli.Azure owns Azure deployment and contributes a release host to the provider-neutral CLI.
 
         Assemblies are name prefixes. Microsoft.Identity.Client is Entra's token library; Microsoft.IdentityModel.* is
         the provider-neutral JWT and OpenID Connect stack and stays allowed.

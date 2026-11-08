@@ -2,14 +2,19 @@
 
 The synthesis memo of [the MMO foundations round](../mmo-foundations.md). It
 weighs the five research records and [the attack catalogue](attacks.md) into
-the decisions the owner will rule on. Nothing here is decided. Each decision
-names its options, the evidence for each, what each closes and leaves open,
-which option the evidence favours, the strongest case against it, and the
-plain question the owner must answer. A second attack pass
+the decisions the engine's design needs. Each decision names its options, the
+evidence for each, what each closes and leaves open, which option the evidence
+favours, the strongest case against it, and the ruling in `AGENTS.md` or the
+architecture that settles what the engine does. Only three questions stay the
+owner's, and the owner has deferred them ([section 7](#7-owner-calls)). A
+second attack pass
 ([attacks on the synthesis](synthesis-attacks.md)) and two adversarial reviews
 read the first revision of this memo; [the review answers](#9-review-answers)
 take every finding one by one, and the sections above them carry the changes
-those findings forced.
+those findings forced. The decisions now live in
+[the decision register](../../decisions/worlds-and-federation.md), and the
+order of work in the plans and work packets it names; this memo stays as their
+evidence.
 
 Labels: **[record]** means the claim is taken from a named record's section;
 **[opened]** means this memo reopened the code or document at this tree and
@@ -32,8 +37,8 @@ issuer-kept records behind one transactional settlement door per domain, at an
 authority the player does not host; only that door creates units, every award
 by another authority draws a prefunded budget it cannot exceed, every terminal
 decision at the door is a signed receipt both parties hold, and no scarce right
-crosses settlement domains until the owner says whether Puck has one economy,
-sealed economies or exchange between them. Progress another world gates on
+crosses settlement domains until a later round builds exchange between them
+(domains are sealed by default). Progress another world gates on
 travels as a signed claim from the world that granted it, and a reward paid for
 that progress is a redemption the door consumes once. Cosmetics and personal
 saves stay the player's own unsigned data. A character's identity document is
@@ -58,13 +63,18 @@ durable images, and puts the settlement door, the identity abstraction, remote
 seating and per-seat table sessions ahead of any federation beyond loopback and
 any table with stakes.
 
-The owner's calls are [collected at the end](#7-owner-calls). The largest are:
-whether Puck has one economy, many sealed economies or exchange between them;
-who may be vouched to mint, deal, referee and witness; what happens when an
-accepted issuer cheats or loses its state; what the casino fantasy is allowed
-to be; whether a friend's machine may be a destination for a stranger's body
-and what its awards count for; and whether raw PvP between two player hosts may
-ever run without a neutral witness.
+At the owner's question whether all fifteen owner calls of the first revision
+were truly the owner's, twelve proved settled by rulings already in `AGENTS.md`
+and the architecture: each is now a decision stated in the section that holds
+it, citing the ruling that settles it (economies, who may be vouched, a failed
+issuer, tradeable or bound, whose level, state across edits, retention, mucked
+hands, raw PvP between player hosts, the ban delay, strangers on friends'
+machines, and the purpose, which is the owner's recorded words). Three remain
+the owner's, and the owner has deferred them until the systems they depend on
+mature: the casino product, the scope of dealing that hides cards even from
+the dealer, and how a layer move feels. Each has a condition that brings it
+back, and the engine keeps each option open as a mechanism, so **no owner call
+blocks the round's order of work** ([section 7](#7-owner-calls)).
 
 ## How the records were weighed
 
@@ -97,20 +107,15 @@ the memo:
    the mechanism is unbuilt, and the memo decides what to build, not what to
    patch ([decision 4](#decision-4-value-across-trust-boundaries)). The
    architecture page already says so **[opened]**
-   (`docs/architecture/worlds.md:804-806`): "Remote round trips do not adopt
+   (`docs/architecture/worlds.md:819-821`): "Remote round trips do not adopt
    ... Remote home adoption remains deferred."
 2. **`WorldRecipientView` was a plan when the records were written.** Lane
    C's options I1 and C1 lean on it; lane E and lane C's own citation check
    found it absent from `src/` ([seams, citation check](seams.md#7-citation-check)).
    Disclosure step 1 has since landed: `WorldRecipientView` and
    `WorldDeliveryCursor` exist and the session sink delivers through them
-   **[opened]** (`src/Puck.World.Server/WorldSessionSink.cs:27-29`):
-
-   ```csharp
-       private readonly WorldDeliveryCursor m_cursor = new();
-       private readonly WorldDeliveryRows m_rows = new();
-       private readonly WorldRecipientView m_view = server.DeliveryView(observation.Session, observation.Tier, () => observation.CanObserve);
-   ```
+   (`WorldSessionSink`, `WorldSessionObservation.View`). Step 2 also routes
+   reads through that live view without advancing the delivery cursor.
 
    Body disclosure still runs through `Redact` at the hub until I1. The order
    of work keeps step 1 as the floor the table and interest-management steps
@@ -150,8 +155,8 @@ honest or complete ([economy, fairness by replay](economy.md#the-hypothesis-fair
 
 ### Decision 1: the engine's purpose
 
-**What must be decided.** How the owner's purpose is recorded, and how every
-later design round weighs it. It matters because the round found that the
+**What must be decided.** How the owner's stated purpose is recorded, and how
+every later design round weighs it. It matters because the round found that the
 model's intent and the code differ in ways that only a stated purpose can
 rank: an engine for friends' machines and an engine for a WoW-scale economy
 make opposite calls on who may issue value.
@@ -160,17 +165,21 @@ make opposite calls on who may issue value.
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md#the-frame)) **[record]** | One paragraph | Nothing; it is prose |
+| 1a. Record the owner's words in AGENTS.md as a ruling, with one weighing rule: a design round asks what each established answer becomes when every zone, character and server is a world, and judges it at MMO scale | The round's own frame ([the round](../mmo-foundations.md), which read [the idea in plain terms](../../architecture/worlds.md#the-idea-in-plain-terms) first) **[record]** | One paragraph | Nothing; it is prose |
 | 1b. Record the purpose in a decision page only | Decision pages hold settled design | Same | A ruling in a decision page does not reach every agent's rules file |
 
 **Favoured.** 1a. **Strongest case against:** a rules file that grows a purpose
 statement invites every lane to argue from it; the weighing rule bounds that by
 naming what a round asks, not what it concludes.
 
-**Owner call 1.** Is this the purpose, in these words: Puck exists to make it
-possible to build an MMO at World of Warcraft's scale that redefines the genre;
-the emulators, the screen-within-a-screen, the tables and portals are parts of
-that MMO; and every design round weighs its question at that scale?
+**Decided: the purpose is the owner's recorded words.** The owner stated it in
+session, and [the round's record](../mmo-foundations.md#what-the-owner-said)
+holds it: "Puck exists to make it possible, eventually, to build an MMO at the
+scale of World of Warcraft that redefines the genre the way WoW did. The
+emulators and the screen-within-a-screen work were envisioned as seamless parts
+of that MMO." This memo takes those words as the purpose and weighs every
+decision at that scale. The paragraph and the weighing rule are in
+`AGENTS.md` (option 1a, [Puck's purpose](../../../AGENTS.md#pucks-purpose)).
 
 ### Decision 2: player state across author edits
 
@@ -245,10 +254,24 @@ The answer is that the failure exists today in a worse form (a whole character
 set aside), and that the conversion surface is the author's program, which
 AGENTS.md already asks for.
 
-**Owner calls 2 and 3.** Does saved state carry over an edit that keeps a row's
-declaration, with an authored conversion as the only path for a row whose
-meaning changed? How long is set-aside data (a dropped row, a refused image, a
-quarantined identity) kept, and who may restore it?
+**Decided: state across edits.** The engine carries a character's saved state
+across an edit that keeps a row's declaration, and offers an authored
+conversion as the only path for a row whose meaning changed. Whether a world
+resets its characters at an edit is that world's author's choice, made per
+world with 2c or 2d. `AGENTS.md` settles this under "Authors rule": "a rule of
+play is an authored parameter or program with a neutral engine default, and the
+standard package chooses the values it wants". Carrying is the neutral
+default and the conversion is the author's program, so identity recomposition,
+per-row admission and the conversion surface
+([step 6](#6-the-order-of-work)) are built without waiting on anyone.
+
+**Decided: retention of set-aside data.** How long set-aside data (a dropped
+row, a refused image, a quarantined identity) is kept, and who may restore it,
+is an operator setting with a neutral engine default and a restore verb. It is
+not engine design: the same "Authors rule" paragraph keeps a rule of play out of
+engine code, and "the owner decides only what the engine should do, how it
+should look, and the owner-only actions", with "everything else" left to the
+lane to decide. A studio sets its window when it runs a world.
 
 ### Decision 3: custody of owned things
 
@@ -372,9 +395,20 @@ domains; lane B names the three mechanisms an exchange would need (a common
 escrow authority, independent ledgers with enforceable conditional exchange, or
 deliberately limited bilateral credit, `custody.md:587-589`) and the condition
 none of them survives ("either domain can invent balances", `custody.md:411`)
-**[opened]**. Which, if any, Puck builds follows from the owner's answer to
-what Puck's economy is ([owner call 4](#7-owner-calls))
+**[opened]**
 ([B1](synthesis-attacks.md#b1-the-sock-puppet-settlement-domain); Codex R1).
+
+**Decided: one, sealed or exchanged economies.** The world model settles it:
+"**Meaning is bilateral.** The engine never adjudicates trust. It carries proof
+and enforces capabilities; whether a claim *counts* is the receiving world's
+policy" (`docs/architecture/worlds.md`, the invariants), and "trust is declared
+per world instead of assumed". Each world decides whose claims it accepts, so
+the engine never says that one economy is the economy. Settlement domains are
+sealed by default: acceptance is the reader's policy, a studio may run one
+domain and a community may run another, and nothing either issues is worth
+anything in the other until a mechanism for exchange exists. Cross-domain
+exchange is a future mechanism that a later round picks from lane B's three,
+and until one lands the door refuses mixed-domain operations by name.
 
 **Neutrality is a grant, not a property.** "An authority neither party
 controls" is a phrase the first revision used as if something issued it, and
@@ -388,10 +422,17 @@ fight's outcome or a silence attestation only from an authority vouched for
 that role, and the reservation names that authority before the hand or fight
 begins, beside the roster, rules identity and recovery policy lane D already
 freezes. A table no vouched authority runs is table-local score by
-construction, whatever its fiction. Who may be vouched is the owner's
-([owner call 5](#7-owner-calls)), and it decides who may deal, referee and
-witness, not only who may mint
+construction, whatever its fiction. The same role list decides who may deal,
+referee and witness, not only who may mint
 ([B3](synthesis-attacks.md#b3-the-table-authority-settles-the-hand)).
+
+**Decided: who may be vouched.** The same invariant answers it ("whether a
+claim *counts* is the receiving world's policy"): each settlement domain
+declares its own trust and roles, the studio's authorities only, operators a
+root vouches for, or any community that names them, and the engine adjudicates
+none of those policies. The role list is data the domain authors (step 10), and
+the wider a domain's list, the more a player's trust rests on reading who
+vouched whom, which is the domain's cost and not the engine's.
 
 **The invariant and what enforces it.** Within a settlement domain, every
 scarce right is available, held for one unresolved transaction, transferred,
@@ -416,23 +457,32 @@ before witnesses compare views") **[opened]**. When a domain's store is
 restored, economic decisions, consumption and refusal high-water marks sit
 outside gameplay rollback, and the issuer reconciles against its
 counterparties' receipts or withdraws its namespace (`custody.md:97-99`)
-**[opened]**; who bears a loss the receipts prove is the owner's
-([owner call 6](#7-owner-calls)).
+**[opened]**.
+
+**Decided: a failed or cheating issuer.** The engine fails closed: an
+equivocation proof or a namespace withdrawal freezes that issuer's rights, and
+the door refuses the frozen rights by name. What a domain does after that
+(honour the rights to the last receipt the counterparties hold, void them, or
+split the loss) is the reconciliation that domain authors, because "meaning is
+bilateral" and the engine never adjudicates trust. Signatures cannot choose the
+reconciliation, so it is the domain's program, run by the door after the
+freeze (step 9).
 
 **Strongest case against 3b.** It reintroduces a centre in an engine whose
 plain-terms page begins "Puck has no such centre" **[opened]**
 (`docs/architecture/worlds.md:17`). The answer is that a settlement world is a
 world: chosen per trust community, replaceable, and small, while zones,
 characters and tables stay where their authors put them. What it does not
-answer is the owner's taste: a friends-only economy may prefer 3d everywhere.
+answer is a world author's taste: a friends-only economy may prefer 3d
+everywhere, which each world is free to choose.
 
-**Owner calls 4 to 7.** Does Puck have one economy, many sealed economies, or
-exchange between them? Who may be vouched to mint, deal, referee and witness:
-the studio's own authorities only, operators a root vouches for, or any
-community that names them? When an accepted issuer cheats or loses its state,
-what happens to the rights it issued and who bears the loss? Is a scarce item
-tradeable by default, or bound to its holder unless its class opts into
-transfer?
+**Decided: tradeable or bound.** "Authors rule" covers it: "a rule of play is
+an authored parameter or program with a neutral engine default, and the
+standard package chooses the values it wants". Each item class declares its
+transfer. The engine default is bound, which fails closed: a sale of a class
+that has not declared transfer is refused by name, and the escrow transfer path
+is built for the classes that declare it. The standard package picks its
+values, and any author imports or replaces them.
 
 ### Decision 4: value across trust boundaries
 
@@ -465,7 +515,7 @@ document, `Mutate` and the slot, with a required write mask **[opened]**
             (candidate.Subject == subject)));
 ```
 
-The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:86-88`):
+The model's own answer is in prose **[opened]** (`docs/architecture/worlds.md:88-90`):
 "Where something must stay unique or tradeable, such as currency or a stake at
 a card table, the world that issued it keeps the record itself and escrow and
 custody move it, so a copy gains nothing."
@@ -584,15 +634,19 @@ namespace is policy over who may write what; home scope is policy over what
 may be written abroad at all; a signature is provenance a third reader can
 check. Dropping any one reopens an attack the other two do not reach.
 
-**Owner call 8.** Whose record are levels and experience: one issuer's (the
-main game's, so a visited world submits an award the issuer applies by its own
-rule or draws from a budget), a per-world claim readers filter (many games in
-one engine), or the player's own number (single-player worlds)? The first
+**Decided: whose level.** Levels and experience can be one issuer's record
+(the main game's, so a visited world submits an award the issuer applies by its
+own rule or draws from a budget), a per-world claim readers filter (many games
+in one engine), or the player's own number (single-player worlds). The first
 revision offered the first two as if they differed; at MMO scale the only
 reader policy that holds for a per-world claim is "the studio's worlds and no
 other", at which point it is the first option
 ([B8](synthesis-attacks.md#b8-levels-and-experience-as-every-worlds-claim)). The
-engine supports all three; the standard package picks one.
+engine supports all three, because "A level is a durable counter someone called
+a level" (`docs/architecture/worlds.md`, the invariant "The engine ships
+mechanisms; the game supplies names"), and the standard package authors the
+answer under "Authors rule" and "The Puck standard is authored, never baked
+in".
 
 ### Decision 5: seams
 
@@ -629,7 +683,7 @@ is a two-scan filter at the hub with three modes and a flat cadence
 |---|---|---|---|---|
 | S1. Fiction-aligned split: visible portals for travel and scope changes; `WorldAdjacency` for continuous shards; population layers moved only under an unobservability predicate (no combat, no channel in progress, in a transition volume or by a prompt) with an increasing hop cooldown | Blizzard's own layering deferred transfers during combat and before loot, added a longer delay after PvP, and hotfixed an increasing hop cooldown **[record]** | Authoring transition corridors or the predicate; a last-hop stamp kept by the layer authority; layer ordinals and a deferral queue the engine lacks | Cannot hide a layer change in an open field while the player watches a node | Closes layer-hop farming beside A7; A10 goes to C3 |
 | S2. Framed transitions everywhere; no silent layers | FFXIV's numbered instances (summary only) | Gives up re-layering an entered field | A flash mob in an entered field | Removes mid-cast vanishes by construction |
-| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1413-1414`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
+| S3. Reactive spatial splitting at runtime | None that held; contradicts "Destinations are boot-authored document data" and "do not run an authority boundary through a place designed to be contested" **[opened]** (`docs/architecture/worlds.md:1431-1432`) | Reactive topology | The crowd at a junction (M2-XFE) | None |
 | F1. A frameless portal is a creation with an aperture face and no frame rings, placed with a `WorldPlacementFace` portal; a standard `threshold` template | The glass fills the aperture edge to edge with no bezel; the door and the screen are independent facts about one face **[record]** | A template in `worlds/standard/`; no C# | Nothing it claims | None |
 | F2. An adjacency that falls back to a frameless `window` across scopes it cannot project directly | Adjacency requires a global persisted destination **[opened]** (`src/Puck.World.Schema/WorldAdjacencies.cs:149`) | Teaching adjacency to host a window | Mixed lighting and sky | None |
 | I1. Fold spatial grid, hysteresis, an explicit unembodied-observer policy and distance-tiered cadence into the disclosure view and cursor | The disclosure plan watches this seam as the view's natural second occupant **[record]**; Unreal's actor priority gives each actor a fair share under saturation **[record]** | Replaces `Redact`; builds on disclosure step 1, which has landed | Nothing it claims | Closes A16; narrows A12 |
@@ -710,10 +764,15 @@ complexity that S2 avoids by never moving a layer in place. The answer is that
 Blizzard shipped S2's failure first (mid-cast vanishes) and then built S1's
 predicate as the fix; S2 remains the right choice for a world that chooses it.
 
-**Owner call 9.** When a player joins a friend on another population layer,
-does the move wait until they leave combat and enter a transition volume, or
-happen in place after a visible countdown, with an increasing cooldown on later
-hops?
+**Deferred owner call: how the standard package's layer move feels.** When a
+player joins a friend on another population layer, does the move wait until
+they leave combat and enter a transition volume, or happen in place after a
+visible countdown with an increasing cooldown on later hops? It is a feel call
+and the owner has deferred it until layers exist. The first answer authors
+corridors and the second authors the countdown; both are authored data on the
+layer mechanism (step 15), which the engine builds neutral, so nothing in the
+order of work waits on the answer. The condition that brings it back is the
+layer mechanism existing ([section 7](#7-owner-calls)).
 
 ### Decision 6: the tables
 
@@ -808,7 +867,8 @@ replays the same operation id ([economy, debug world](economy.md#how-the-debug-w
 
 **The regulatory line.** Lane D's product forks
 ([economy, product forks](economy.md#product-forks-to-put-before-the-owner))
-**[record]** are the owner's to pick before an escrow schema picks one quietly:
+**[record]** are the owner's to pick, and the owner has deferred the pick (see
+the deferred owner call below), so no escrow schema picks one quietly:
 table-local score; earned persistent chips; purchased chips or paid random
 rewards; tradeable items as stakes; real-money deposit and cash-out. Belgium,
 the Netherlands, the UK, China and Washington each draw the line in a
@@ -819,11 +879,32 @@ casino fantasy exists to question. The answer is that 6c removes the dealer's
 knowledge and not the seated players' collusion, and that both options need the
 same escrow and the same transcript policy; 6b proves those first.
 
-**Owner calls 10 to 12.** Which product row is the casino fantasy: table-local
-score, earned chips, purchased chips, tradeable stakes, or real money, and for
-which territories and ages? Is an independent dealer acceptable, or must the
-table keep its secrets from every host including a non-seated one? Must mucked
-hands stay secret after the hand, which forbids the simplest transcript?
+**Deferred owner call: the casino product.** Which product row is the casino
+fantasy: table-local score, earned chips, purchased chips, tradeable stakes, or
+real money, and for which territories and ages? It is a business and legal
+call, and the owner has deferred it until the economy's design exists to
+answer it against. The engineering consequence stays attached: table-local
+score removes the settlement door from the tables' path; every other row needs
+it, and the last two need counsel before the schema. The door and the tables
+are built as mechanisms that serve every row (step 9, step 13), so the call
+picks the standard package's values and waits on nothing.
+
+**Deferred owner call: the scope of dealing.** Should Puck build dealing that
+hides cards even from the dealer (the encrypted-dealing prototype, 6c)? The
+owner has deferred it until the per-seat table sessions (step 12) and the
+settlement door (step 9) have landed, because 6c rests on both. Which dealer a
+given table uses stays the author's choice either way. The engineering
+consequence: an independent dealer is 6b with per-seat sessions, which the
+order of work builds regardless; the other answer funds the 6c prototype and
+accepts its cost in proof work and abort handling, and the prototype is
+bounded work the order of work does not depend on.
+
+**Decided: mucked hands.** Whether mucked hands stay secret after the hand is a
+table's authored rule, because "a rule of play is an authored parameter or
+program with a neutral engine default" ("Authors rule"). A table that keeps
+them secret keeps a redacted transcript, which is not full replay verification;
+a table that reveals them can publish the simplest public transcript. The
+engine's transcript mechanism supports both.
 
 ### Decision 7: the order of work
 
@@ -861,17 +942,8 @@ as outside replay determinism **[opened]** (`src/Puck.World.Server/WorldAdjacenc
 
 Lane E found the missing per-tick cap. The seam clamp now admits a
 neighbour's body pushes and terrain sweep through one per-body budget and keeps
-them behind the body's ownership faces **[opened]**
-(`src/Puck.World.Server/WorldAdjacencyContactField.cs:25-30`):
-
-```csharp
-/// <para><b>Untrusted neighbours.</b> A neighbour's bodies and solid geometry move a local body only through
-/// <see cref="WorldPopulation.AdmitAdjacencyResponse"/>, which bounds their combined displacement per body per tick by
-/// that body's locally owned reach and keeps it, and the body's outward speed, behind every ownership face the body is
-/// still owned behind: a crossing comes from the body's own motion. A query naming no local body takes nothing from a
-/// neighbour. Body contacts are settled by one responder per authority pair
-/// (<see cref="WorldCrossAuthoritySettlement"/>).</para>
-```
+them behind the body's ownership faces (`WorldPopulation.AdmitAdjacencyResponse`).
+`WorldCrossAuthoritySettlement` selects one responder per authority pair.
 
 Tick-addressed neighbour records remain the
 [replay packet](../open-items.md#transfers-federation-and-server).
@@ -907,7 +979,7 @@ The remote identity stays a claim until attested. So A10 is narrowed, not closed
 Taped neighbour records then close the replay boundary. C1 as the rule for any contested
 place, which is the architecture page's existing rule, and the owner's "do not
 run an authority boundary through a place designed to be contested"
-**[opened]** (`docs/architecture/worlds.md:1413-1414`); the referee world is a
+**[opened]** (`docs/architecture/worlds.md:1431-1432`); the referee world is a
 vouched role ([decision 3, neutrality](#decision-3-custody-of-owned-things)).
 C2 as the Puck-native prototype for duels between friends, which no float-based
 MMO can run, stated with what it removes: the host's simulation advantage, and
@@ -932,10 +1004,15 @@ reachable neutral capacity and adds a hop; two friends on a LAN cannot duel
 without it. C2 is the answer for that case and nothing larger, and only with
 a witness or an agreed draw on stall.
 
-**Owner call 13.** May two player hosts ever fight raw PvP without a vouched
-witness, accepting that a stall or disconnect is then a draw by prior
-agreement and nothing settled rides on the fight, or does every fight with
-stakes or durable progress run on a vouched authority?
+**Decided: PvP between player hosts.** Whether two player hosts may fight raw
+PvP without a vouched witness is per-world policy, a rule of play under
+"Authors rule". Nothing settled rides on an unwitnessed fight, because scarce
+rights move only through a settlement door and the door accepts a fight's
+outcome only from a vouched role ([decision 3, neutrality](#decision-3-custody-of-owned-things)).
+So the LAN duel stays a friends' feature with no stakes, where a stall or
+disconnect is a draw by prior agreement, and a fight with stakes or durable
+progress runs on a vouched authority (step 18's witness or a C1 authority).
+The world's author chooses which fights a world offers.
 
 ### Decision 9: revocation below expiry
 
@@ -990,14 +1067,18 @@ actions, so that a delivery failure degrades a world rather than stopping it.
 **Strongest case against.** A snapshot is a bounded attack window by
 construction, and the snapshot's delivery is a single point of denial for every
 world in the domain: a world that fails closed on a late snapshot turns one
-delivery outage into a domain outage. The owner names the window knowing that
+delivery outage into a domain outage. The domain names the window knowing that
 trade; nothing closes it under partition while allowing unlimited offline
 high-value use.
 
-**Owner call 14.** How long may a world keep accepting new valuable actions on
-a refusal snapshot older than the ban delay the owner tolerates, knowing that a
-shorter window makes the snapshot's delivery a single point of denial for
-every world in the domain?
+**Decided: the ban delay.** How long a world may keep accepting new valuable
+actions on a refusal snapshot older than the tolerated ban delay is a
+per-domain setting with a neutral engine default, and the studio sets its value
+when it runs a domain ("Authors rule"). A short window makes bans bite fast and
+makes the snapshot's delivery a single point of denial for every world in the
+domain; a long window lets a banned key act for that long. The engine
+enforces whichever window the domain sets, and the trade is the domain
+operator's to weigh.
 
 ### Decision 10: what a player host may be
 
@@ -1051,14 +1132,22 @@ admission door refuses for a direct peer join; the routing comment reads
 That routing is a step in the order of work before the table checks (Argon 8).
 
 **Strongest case against.** 10b limits what a player-hosted world can be: it
-cannot run its own economy. That is the owner's call, and 3d (forkable
-personal worlds) is the honest name for a host that wants to.
+cannot run its own economy. A host that wants to runs a domain of its own,
+and 3d (forkable personal worlds) is the honest name for one that wants no
+outside trust.
 
-**Owner call 15.** May a friend's machine be a destination for a stranger's
-body at all; if so, is it the rule that nothing scarce is decided there; and
-is it acceptable that what a player-hosted world grants counts only where a
-reader trusts that host, so that player-hosted content feeds the main game
-only through a budget and a vouching the main game's domain grants?
+**Decided: strangers on friends' machines.** A friend's machine may be a
+destination for a stranger's body. The architecture's goal is that anyone can
+host a world others join ("lets anyone host a world others join",
+`docs/architecture/worlds.md`; "Players hosting their own authoritative worlds
+is a goal"), and admission is each world's choice. "Nothing scarce is decided
+there" follows from the settlement invariant, since scarce rights move only
+through a settlement door at an authority the player does not host. What a
+player-hosted world grants counts only where a reader's policy trusts that
+host, so player-hosted content feeds the main game only through a budget and a
+vouching the main game's domain grants. A world that wants its content to feed
+the main game asks that domain for the vouching, which is the domain's policy
+under "who may be vouched" in decision 3.
 
 ## 2. Classes of value
 
@@ -1072,12 +1161,12 @@ engine enum.
 
 | Class | Answer | Reason | What it closes and leaves |
 |---|---|---|---|
-| Currency and stackable goods | Issuer-kept record moved by escrow; units are created only at the settlement door, and an award by any other authority is a unique redemption against a prefunded budget the door delegated (3c) | Amounts split and merge; one body per incarnation says nothing about supply; a signed balance is ruled out by the attestation reference; an award id deduplicates a retry and not a re-issue, so who may cause creation must be bounded | Closes A1 and A7 double-spend at that issuer and B5's minting by a non-issuer; A8 needs durable consumed ids; issuer inflation is a trust decision; a right never crosses domains until owner call 4 |
-| Unique tradeable items | Issuer-kept record (title at the issuer) moved by escrow and custody; tradeable or bound by default is owner call 7 | A sale changes the owner, which companion custody never does; craft, split, destroy and restore must consume prior rights | Same as currency; A7 when crossing uniqueness is enforced |
+| Currency and stackable goods | Issuer-kept record moved by escrow; units are created only at the settlement door, and an award by any other authority is a unique redemption against a prefunded budget the door delegated (3c) | Amounts split and merge; one body per incarnation says nothing about supply; a signed balance is ruled out by the attestation reference; an award id deduplicates a retry and not a re-issue, so who may cause creation must be bounded | Closes A1 and A7 double-spend at that issuer and B5's minting by a non-issuer; A8 needs durable consumed ids; issuer inflation is a trust decision; a right never crosses domains until a later round builds exchange ([decision 3](#decision-3-custody-of-owned-things)) |
+| Unique tradeable items | Issuer-kept record (title at the issuer) moved by escrow and custody; tradeable or bound is each class's declaration, bound by default ([decision 3](#decision-3-custody-of-owned-things)) | A sale changes the owner, which companion custody never does; craft, split, destroy and restore must consume prior rights | Same as currency; A7 when crossing uniqueness is enforced |
 | Table stakes | A reservation at the settlement door, all of a hand's inputs under one domain, one terminal decision per hand, accepted only from the vouched table authority the reservation names | A partial landing is wrong for an all-or-nothing wager; recall cannot refund a committed loss; a mixed-domain hand has no atomic commit | Closes A3's refund-by-restart, A7's reuse and B3's self-vouched dealer; not A4 or A5 |
 | Reward paid for a claim (a first clear's chest, a quest's gold) | Signed evidence plus an issuer-kept redemption id, consumed once at the door within a named redemption domain; a deliberately repeatable reward is a new authorised event | Evidence is copyable and harmless; the payment is not, and two places that both accept one clear would each credit it (`custody.md:577`) | Closes R3's double redemption and B21's refund re-run; reusable access stays in the progress row |
 | Appearance | Unsigned, cosmetic only; an issuer-kept entitlement reference when scarce or sold | Ordinary authored looks are freely copyable; exclusive custody of them adds outages and protects nothing | Leaves A1 within a non-economic scope by choice |
-| Progress a world gates on (clears, unlocks, levels, experience) | Signed claim with provenance from the world that granted it, with an issuer-qualified predicate and a sequence; whose record a level is (one issuer's, a filtered per-world claim, or the player's own) is owner call 8 | A copied non-exclusive claim for the same subject is harmless; a reader applies its own policy per issuer | Closes A1 and A2 for what others issue; an authorised issuer can still lie within its predicate; A9 |
+| Progress a world gates on (clears, unlocks, levels, experience) | Signed claim with provenance from the world that granted it, with an issuer-qualified predicate and a sequence; whose record a level is (one issuer's, a filtered per-world claim, or the player's own) is the standard package's authored choice ([decision 4](#decision-4-value-across-trust-boundaries)) | A copied non-exclusive claim for the same subject is harmless; a reader applies its own policy per issuer | Closes A1 and A2 for what others issue; an authorised issuer can still lie within its predicate; A9 |
 | Progress nothing gates on | Unsigned, cosmetic only | Nothing to protect | Leaves A1 by choice |
 | Reputation, two kinds | Collections and achievements: signed claims per issuer, kept per issuer, merged monotonically (best value, union) by the reader over the issuers its policy accepts, never by the document; current standing: an issuer-versioned claim the reader replaces by the newest version per issuer, with a freshness rule, so a decrease takes effect; never spendable | The studied merge is one operator over its own characters (`persistence.md:138-140`); across issuers a best-value merge hands the value to the least trusted issuer, and a mandatory maximum lets a player keep an old high claim against a penalty | As progress; B7 and R9 closed by the reader's filter and the version rule |
 | Machine save RAM | Unsigned, forkable personal data; a competitive result exists only when the run executes on an authority the player does not host, which issues the claim | A save is legitimately forkable; a tape the player signed proves nothing, since replay proves execution only when someone other than the authority holds the inputs | Local persistence addresses crash A3; B18 closed by moving the run, not by signing it |
@@ -1186,7 +1275,9 @@ restored store reconciles against its counterparties' receipts or withdraws its
 namespace. Never assumes a signature is a debit, that an award id deduplicates
 anything but a retry, or that the domain's operator is honest: equivocation is
 detectable from two receipts for one right and version, never prevented, and
-the loss policy is the owner's ([owner call 6](#7-owner-calls)). Today: none.
+the engine freezes a failed issuer's rights and the loss policy is the domain's
+authored reconciliation ([decision 3](#decision-3-custody-of-owned-things)).
+Today: none.
 
 **Deadlines** (new; [F7](synthesis-attacks.md#f7-a-missing-abstraction-deadlines)).
 Guarantees that a deadline on a right (a stake reservation, a custody lease, a
@@ -1299,8 +1390,7 @@ that shows it worked. Steps marked "new" are not in any plan today.
    identity template on load, the image ladder's row-by-row admission applied
    to identities, and an authored conversion phase that runs before admission
    drops the rows it reads; a refund of a settled class is a settlement
-   operation (step 9). Checks 2 (2b), 2 (2c) and 2 (set-aside). Needs H1 and
-   owner call 2.
+   operation (step 9). Checks 2 (2b), 2 (2c) and 2 (set-aside). Needs H1.
 7. **H7a to H7e, with the desktop crossing log** (10a): durable images and the
    log on any desktop that is a destination, with the A13 constraint (a
    qualified generation identity when a host both restores and spawns). Closes
@@ -1320,14 +1410,14 @@ that shows it worked. Steps marked "new" are not in any plan today.
    contract; the frozen-door review from decision 2; the Deadlines
    abstraction's first user; the outbox and the conserved-value checks. Checks
    3 (fence at effect), 3 (seat), 3 (budget), 3 (receipts), 3 (restore), 3
-   (domain) and 6 (stakes). Needs owner calls 4 to 7. Unblocks currency,
+   (domain) and 6 (stakes). Unblocks currency,
    items, stakes, the refund half of step 6 and the tables.
 10. **Identity, issuance, revocation and roles as abstractions** (section 3,
     decision 9; new): the signing oracle's remote shape, binding ceilings at
     the admission door, the refusal snapshot with a not-after per entry and the
     receiver's recorded acceptance time, the role list a domain vouches
     (issuer, dealer, referee, witness, budget holder), and the provider behind
-    them. Check 9 (9b). Needs owner calls 5 and 14. Unblocks any federation
+    them. Check 9 (9b). Unblocks any federation
     beyond loopback, any vouched role and any table with stakes.
 11. **A network peer into a spawned place** (new): `WorldPeerHost` routes a
     remote peer's session into a spawned instance, and the debug world's
@@ -1341,7 +1431,8 @@ that shows it worked. Steps marked "new" are not in any plan today.
 13. **The tables** (6b): the vouched table role, stakes at the door with the
     dealer named in the reservation, commit-reveal on draw sites, the
     transcript policy. Checks 6 (stakes) and 6 (draws). Needs steps 9, 10 and
-    12 and owner calls 10 to 12.
+    12. The stake rows are mechanisms, so the deferred casino product waits on
+    nothing here.
 14. **Federation adoption as signed submissions** (4d): remote write-back built
     on steps 4, 5 and 10, signing (authority, package, fact), with the
     reader's authority-to-packages map; never unsigned adoption. Closes A3's
@@ -1349,7 +1440,8 @@ that shows it worked. Steps marked "new" are not in any plan today.
 15. **S1's layer mechanism and gate** (decision 5): layer ordinals under one
     destination in the resolver and the durable identity, a deferral queue in
     the transfer door, the unobservability predicate and the authority-kept hop
-    cooldown. Check 5 (S1). Independent of step 1; needs owner call 9.
+    cooldown. Check 5 (S1). Independent of step 1; the mechanism serves either
+layer-move feel.
 16. **I1** (decision 5): the view's spatial grid, hysteresis, the unembodied
     policy with a window or camera anchor, and cadence tiers. Check 5 (I1).
     Needs step 1.
@@ -1359,7 +1451,7 @@ that shows it worked. Steps marked "new" are not in any plan today.
     role that signs receipt times and silence, lockstep commitments or
     witness-ordered inputs with a held-input horizon, a match-entry reservation
     that forfeits on an attested stall, and the loopback duel under the five
-    fault legs. Check 8 (C2). Needs steps 9 and 10 and owner call 13.
+    fault legs. Check 8 (C2). Needs steps 9 and 10.
 
 What moved, and why: the write door and write-through go before durable
 images, because every write-back check needs the door and write-through
@@ -1379,94 +1471,50 @@ the hostile-home half of I3 to the settlement door.
 
 ## 7. Owner calls
 
-Each is a product or taste question, with the engineering that follows from
-each answer. Engineering and security decisions the first revision put here
-(the frozen-door start, the lease-missed recall, the seam clamp's shape) are
-made in the decisions above and placed in the order of work.
+Three questions stay the owner's. The owner has deferred all three until the
+systems they depend on mature, and each comes back on a named condition. Nothing
+in [the order of work](#6-the-order-of-work) waits on any of them, because the
+engine keeps each option open as a mechanism and the answer only picks the
+standard package's values or funds a bounded prototype. The round therefore has
+no owner call blocking its order of work.
 
-1. ([Decision 1](#decision-1-the-engines-purpose)) Is this the purpose, in
-   these words: Puck exists to make it possible to build an MMO at World of
-   Warcraft's scale that redefines the genre; the emulators, nested screens,
-   tables and portals are parts of that MMO; and every design round weighs its
-   question at that scale? Yes writes the paragraph and the weighing rule into
-   AGENTS.md; no changes how every decision below is ranked.
-2. ([Decision 2](#decision-2-player-state-across-author-edits)) When you edit
-   a template or a world, does a player's saved character keep what it had,
-   with a conversion you write as the only way to change what a kept row
-   means? Yes builds identity recomposition, per-row admission and the
-   conversion surface (step 6); no keeps copy-at-seed, so the first retune
-   leaves old characters on old values forever.
-3. ([Decision 2](#decision-2-player-state-across-author-edits)) How long is
-   set-aside data (a dropped row, a refused image, a quarantined identity)
-   kept, and who may restore it: the player, an operator, or no one? The
-   answer is a retention window and either a restore verb or a deletion.
-4. ([Decision 3](#decision-3-custody-of-owned-things)) Does Puck have one
-   economy, many sealed economies, or exchange between them? One economy means
-   one settlement domain, the studio's, and no exchange code at all; sealed
-   economies mean any community may run a door and nothing it issues is worth
-   anything elsewhere; exchange means a later round picks one of lane B's
-   three mechanisms, and the door refuses mixed-domain operations until it
-   lands.
-5. ([Decision 3](#decision-3-custody-of-owned-things)) Who may be vouched to
-   mint value, deal a table, referee a fight and witness a duel: the studio's
-   own authorities only, operators a root vouches for, or any community that
-   names its own? The answer is the role list's policy (step 10); the wider
-   the answer, the more a player's trust rests on reading who vouched whom.
-6. ([Decision 3](#decision-3-custody-of-owned-things)) When an accepted
-   issuer is caught cheating, or loses its state for good, what happens to the
-   rights it issued: frozen, honoured to the last receipt the counterparties
-   hold, or void; and who bears the loss? The answer is the reconciliation the
-   door runs after an equivocation proof or a namespace withdrawal (step 9);
-   signatures cannot choose it.
-7. ([Decision 3](#decision-3-custody-of-owned-things)) Is a scarce item
-   tradeable by default, or bound to its holder unless its class opts into
-   transfer? Tradeable by default gives every item record an escrow transfer
-   path; bound by default builds that path only for the classes the standard
-   package names, and a sale of anything else is refused by name.
-8. ([Decision 4](#decision-4-value-across-trust-boundaries)) Whose number is a
-   level: the main game's (one issuer's record, which visited worlds feed
-   through awards and budgets), each world's own (a claim readers filter, for
-   many games in one engine), or the player's (single-player worlds)? The
-   standard package authors the answer; the engine supports all three.
-9. ([Decision 5](#decision-5-seams)) When a player joins a friend on another
-   population layer, does the move wait until they leave combat and enter a
-   transition volume, or happen in place after a visible countdown with an
-   increasing cooldown on later hops? The first authors corridors; the second
-   authors the countdown; both need the layer mechanism (step 15).
-10. ([Decision 6](#decision-6-the-tables)) Which product is the casino
-    fantasy: table-local score, earned chips, purchased chips, tradeable
-    stakes, or real money; and for which territories and ages? Table-local
-    score removes the settlement door from the tables' path; every other row
-    needs it, and the last two need counsel before the schema.
-11. ([Decision 6](#decision-6-the-tables)) Is a dealer the studio vouches
-    acceptable, or must a table keep its secrets from every host, the dealer
-    included? The first is 6b with per-seat sessions; the second funds the
-    encrypted-dealing prototype (6c) and accepts its cost in proof work and
-    abort handling.
-12. ([Decision 6](#decision-6-the-tables)) Must mucked hands stay secret after
-    the hand? Yes forbids the simplest public transcript and keeps a redacted
-    one, which is not full replay verification.
-13. ([Decision 8](#decision-8-where-a-contested-place-runs)) May two player
-    hosts fight raw PvP without a vouched witness, accepting that a stall or
-    disconnect is a draw by prior agreement and nothing settled rides on the
-    fight, or does every fight with stakes or durable progress run on a
-    vouched authority? Yes keeps the LAN duel as a friends' feature with no
-    stakes; no routes every such fight through step 18's witness or a C1
-    authority.
-14. ([Decision 9](#decision-9-revocation-below-expiry)) How long may a world
-    keep accepting new valuable actions on a refusal snapshot older than the
-    ban delay you tolerate? A short window makes bans bite fast and makes the
-    snapshot's delivery a single point of denial for every world in the
-    domain; a long window lets a banned key act for that long.
-15. ([Decision 10](#decision-10-what-a-player-host-may-be)) May a friend's
-    machine be a destination for a stranger's body; if so, is it the rule that
-    nothing scarce is decided there; and is it acceptable that what a
-    player-hosted world grants counts only where a reader trusts that host, so
-    that player-hosted content feeds the main game only through a budget and a
-    vouching the main game's domain grants? No to the first removes 10a's
-    desktop log from the near term; yes to all three is the favoured
-    composition; wanting player-hosted content to feed the main game widens
-    call 5.
+The other twelve calls of the first revision are settled by the rulings cited in
+their decisions, at the owner's question whether they were truly the owner's:
+the purpose ([decision 1](#decision-1-the-engines-purpose)), state across edits
+and retention ([decision 2](#decision-2-player-state-across-author-edits)),
+economies, who may be vouched, a failed issuer and tradeable or bound
+([decision 3](#decision-3-custody-of-owned-things)), whose level
+([decision 4](#decision-4-value-across-trust-boundaries)), mucked hands
+([decision 6](#decision-6-the-tables)), PvP between player hosts
+([decision 8](#decision-8-where-a-contested-place-runs)), the ban delay
+([decision 9](#decision-9-revocation-below-expiry)) and strangers on friends'
+machines ([decision 10](#decision-10-what-a-player-host-may-be)).
+Engineering and security decisions the first revision also put here (the
+frozen-door start, the lease-missed recall, the seam clamp's shape) are made in
+the decisions and placed in the order of work.
+
+1. **The casino product** ([decision 6](#decision-6-the-tables)). Which product
+   is the casino fantasy: table-local score, earned chips, purchased chips,
+   tradeable stakes or real money, and for which territories and ages? It is a
+   business and legal call. *Deferred; it returns when the economy's design
+   exists.* Engineering consequence: table-local score removes the settlement
+   door from the tables' path; every other row needs it, and the last two need
+   counsel before the schema. The door and the tables are mechanisms that serve
+   every row, so no step waits.
+2. **The scope of hidden dealing** ([decision 6](#decision-6-the-tables)).
+   Should Puck build dealing that hides cards even from the dealer (the
+   encrypted-dealing prototype, 6c)? Which dealer a given table uses stays the
+   author's choice. *Deferred; it returns when per-seat table sessions
+   (step 12) and the settlement door (step 9) have landed.* Engineering
+   consequence: an independent dealer is 6b with per-seat sessions, built
+   either way; the other answer funds the 6c prototype and accepts its cost in
+   proof work and abort handling.
+3. **How the standard package's layer move feels** ([decision 5](#decision-5-seams)).
+   A transition area out of combat, or a countdown in place with a rising
+   cooldown. It is a feel call. *Deferred; it returns when the layer mechanism
+   (step 15) exists.* Engineering consequence: the first authors corridors and
+   the second authors the countdown; both are authored data on the same layer
+   mechanism, which the engine builds neutral.
 
 ## 8. What would change the answer
 
@@ -1497,14 +1545,14 @@ made in the decisions above and placed in the order of work.
   desync, disconnect attribution). Lane C's witness and referee steps answer
   inferred threats; a documented one would fix the witness's shape, and a
   refuted one would drop it ([seams, citation check](seams.md#7-citation-check)).
-- **The owner choosing table-local score.** That removes the settlement door
+- **The deferred casino-product call resolving to table-local score.** That removes the settlement door
   from the tables' path and leaves it for currency and items alone, which
   reorders steps 9 and 13; per-seat sessions (step 12) stay, because a
   score-only table with hidden hands still cannot show them through the room.
 - **The owner choosing forkable personal worlds (3d) as the default.** That
   removes most of decisions 3, 4 and 10 from the near term and makes the
   write door and write-through the whole of the value work.
-- **The owner choosing exchange between economies.** That reopens decision 3
+- **A later round choosing to build exchange between economies.** That reopens decision 3
   for a round of its own over lane B's three mechanisms, each with a finality
   and deadline contract, and the door's mixed-domain refusal becomes the
   placeholder that round replaces.
@@ -1536,7 +1584,9 @@ does federation switch to `Puck.Attestation`?", a "Decision 7" at lines
 commits touching it, and neither contains those phrases **[opened]**. Argon's
 code evidence was kept where it holds and is cited as such; its claims about
 the memo's text are rejected where the text never existed. Where two reviews
-raised one point it is answered once with every id.
+raised one point it is answered once with every id. Call numbers in these
+answers are the first revision's fifteen; [section 7](#7-owner-calls) says what
+became of them.
 
 ### Fable's attacks
 
@@ -1544,7 +1594,8 @@ raised one point it is answered once with every id.
   domains is undecided). **Accepted.** [Decision 3](#decision-3-custody-of-owned-things)
   gains "Value across domains": no scarce right crosses domains at this stage,
   a mixed-domain operation is refused by name at the door, and whether Puck
-  builds exchange is [owner call 4](#7-owner-calls); the Settlement
+  builds exchange is settled in decision 3 (sealed by default, exchange a later
+  round's mechanism); the Settlement
   abstraction and check 3 (domain) carry the refusal.
 - **B2, with F8, Codex R2, Argon 7 and Argon 11's dropped call** (the issuer
   equivocates or restores; no receipt, no loss contract). **Accepted.** Every
@@ -1552,12 +1603,15 @@ raised one point it is answered once with every id.
   row; two receipts for one right and version prove equivocation; the
   abstraction states that this detects and never prevents, and names the
   restore contract (`custody.md:97-99`); who bears the loss is
-  [owner call 6](#7-owner-calls). Checks 3 (receipts) and 3 (restore).
+  decided in [decision 3](#decision-3-custody-of-owned-things) (the engine
+  freezes the issuer's rights; the domain authors the reconciliation). Checks 3
+  (receipts) and 3 (restore).
 - **B3, with F10 on call 5** (neutrality is unissued). **Accepted.** [Decision 3](#decision-3-custody-of-owned-things)
   gains "Neutrality is a grant": the door accepts a hand outcome, a fight
   outcome or a silence attestation only from a role the domain vouches, named
   in the reservation; the Identity abstraction states a role is a grant;
-  [owner call 5](#7-owner-calls) asks who may mint, deal, referee and witness;
+  who may mint, deal, referee and witness is the domain's role policy
+  ([decision 3](#decision-3-custody-of-owned-things), "who may be vouched");
   check 6 (stakes) refuses an unnamed dealer.
 - **B4, with F3, Codex R5 and Argon 5** (bodies titled at home while value
   settles elsewhere leaves A7 open for characters; the A7 check tested a right
@@ -1580,14 +1634,15 @@ raised one point it is answered once with every id.
   after its filter) and current standing (issuer-versioned replacement with a
   freshness rule).
 - **B8, with F10 on call 8** (two options that coincide at scale). **Accepted.**
-  [Owner call 8](#7-owner-calls) offers one issuer's record, a filtered
-  per-world claim or the player's own number, and says why the first two
-  coincide at scale.
+  [Decision 4](#decision-4-value-across-trust-boundaries) names one issuer's
+  record, a filtered per-world claim or the player's own number, says why the
+  first two coincide at scale, and leaves the choice to the standard package.
 - **B10, with F10 on call 14** (the snapshot's three edges). **Accepted.** A
   revocation entry carries a not-after instant; acceptance time is the
   receiver's recorded decision; a stale snapshot refuses new valuable actions,
-  not all actions; [owner call 14](#7-owner-calls) states the single-point-of-
-  denial trade (decision 9; check 9 (9b)).
+  not all actions; [decision 9](#decision-9-revocation-below-expiry) states the
+  single-point-of-denial trade and leaves the window to each domain (check 9
+  (9b)).
 - **B11** (the hop stamp lives on the attacker's record). **Accepted.** The
   cooldown is kept by the layer set's authority per identity subject (decision
   5 favoured; check 5 (S1) adds a home that resets its record).
@@ -1598,7 +1653,9 @@ raised one point it is answered once with every id.
   ordering, a held-input horizon, a match-entry reservation that forfeits on
   an attested stall, and "invalid history" until the replay attributes; step
   18 is the witness's own step; check 8 (C2) gains the five fault legs; the
-  LAN duel is a draw on stall by agreement, in [owner call 13](#7-owner-calls).
+  LAN duel is a draw on stall by agreement, as the first revision's owner call 13
+  stated it and [decision 8](#decision-8-where-a-contested-place-runs) now
+  decides.
 - **B14, with Codex R7 and Argon 4** (pinned at the seam; A10 claimed closed).
   **Accepted.** Decision 8 names exactly what the clamp closes and leaves
   (the aggregate bound, no neighbour-induced crossing, protected retreat,
@@ -1608,8 +1665,9 @@ raised one point it is answered once with every id.
   multi-collider, solid-placement, retreat and grinding legs.
 - **B15, with F10 on call 15** (a player host decides nothing scarce and
   nothing gated, and the call hid it). **Accepted.** Decision 10 states what a
-  player host may grant and where it counts; [owner call 15](#7-owner-calls)
-  carries the third clause.
+  player host may grant and where it counts, including the third clause that
+  player-hosted content feeds the main game only through a budget and a
+  vouching.
 - **B16, with F10 on calls 6 and 7** (hostage bodies under "wait forever"; two
   calls that are one mechanism). **Accepted.** The lease-missed recall is
   engineering in decision 3, with the margin authored; the two calls are gone;
@@ -1626,9 +1684,9 @@ raised one point it is answered once with every id.
   document fact (decision 2 favoured; check 2 (2c); step 6).
 - **B22, with F10 on call 11** (the room host as relay). **Accepted.**
   Decision 6 gains "The seat's view" with the screen path quoted; per-seat
-  sessions are step 12; check 6 (seat view) replaces the 6b check; [owner call
-  11](#7-owner-calls) is answerable because the seat's view no longer passes
-  through the room.
+  sessions are step 12; check 6 (seat view) replaces the 6b check; the
+  deferred scope-of-dealing call ([section 7](#7-owner-calls)) is answerable
+  because the seat's view no longer passes through the room.
 
 ### Fable's text findings
 
@@ -1647,7 +1705,9 @@ raised one point it is answered once with every id.
 - **F10** (owner calls hiding engineering or a one-sided trade). **Accepted**
   for every item: call 3 (frozen doors) is decided in decision 2 as
   engineering with evidence; calls 5, 6, 7, 8, 11, 14 and 15 are answered
-  above with their attacks.
+  above with their attacks. At the owner's later question, twelve of the
+  fifteen are settled by rulings and the other three are deferred
+  ([section 7](#7-owner-calls)).
 - **F11** (provider questions). **Accepted, no change needed**: the snapshot's
   delivery path stays a host data path in the Revocation abstraction's "as
   data"; the memo asks no question of a provider's configuration.
@@ -1765,8 +1825,9 @@ raised one point it is answered once with every id.
   calls dropped). **Accepted in part.** The three calls as quoted ("When does
   federation switch to `Puck.Attestation`?", the C3 clamp, log compaction)
   have never been in this memo. Accepted: the two dropped calls are restored
-  as [owner calls 6 and 7](#7-owner-calls); the second is asked because it is
-  a product question with an engineering consequence, and not because
+  as the first revision's calls 6 and 7 (now decided in
+  [decision 3](#decision-3-custody-of-owned-things)); the second was asked
+  because it is a product question with an engineering consequence, and not because
   `economy.md:575-590` raises it (that passage classes unique tradeable
   equipment and does not ask about binding; the persistence record's
   soulbound and account-bound citations are the nearest evidence). Call 2 now

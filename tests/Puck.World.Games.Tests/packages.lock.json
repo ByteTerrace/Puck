@@ -677,6 +677,7 @@
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State.Rules": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State.Search": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
           "Puck.World.Authoring": "[1.0.0, )"
         }

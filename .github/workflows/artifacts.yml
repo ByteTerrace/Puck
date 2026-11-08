@@ -73,6 +73,7 @@ jobs:
         run: |
           dotnet publish src/Puck.Azure.Functions -c Release --no-build --no-restore -o artifacts/runtime/functions
           dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
+          dotnet publish src/Puck.Cli.Azure -c Release --no-build --no-restore -o artifacts/cli-extensions/Puck.Cli.Azure
       # The engine ships no world: the worlds directory is compiled beside it, the debug world's package and every
       # package it imports (worlds/standard, worlds/games) in their authored layout, documents, compiled worlds and shader package
       # store included, so the published World boots the debug world compiling nothing.
@@ -89,6 +90,12 @@ jobs:
           if-no-files-found: error
           name: compiled-windows
           path: artifacts/compiled-windows.zip
+      - name: Upload the Azure CLI release-host extension
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          name: cli-azure-extension
+          path: artifacts/cli-extensions
       - name: Upload NuGet packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

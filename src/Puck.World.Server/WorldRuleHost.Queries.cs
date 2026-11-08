@@ -112,11 +112,8 @@ public sealed partial class WorldRuleHost {
     // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
     // Console and pass through the same check using the permissive local seed rather than a separate bypass.
     private QueryAnswer AnswerStateObservations(Principal? principal, string? row = null) {
-        var rows = (WorldStateDisclosure.Compose(
-            arena: Host.Arena,
-            definition: Host.Definition,
-            recipient: principal
-        ) ?? []).Where(predicate: r => ((row is null) || (r.Name == row))).ToArray();
+        var rows = (Host.ReadView(principal).Observations() ?? [])
+            .Where(predicate: r => ((row is null) || (r.Name == row))).ToArray();
 
         return new QueryAnswer(
             System.Text.Json.JsonSerializer.Serialize(

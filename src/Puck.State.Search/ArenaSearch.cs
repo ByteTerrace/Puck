@@ -145,6 +145,8 @@ public sealed partial class ArenaSearch {
 
         // Steps that faulted and landed nothing; a diagnostic, never part of the job's answer.
         public long Faults;
+        public bool DisclosureRefused;
+        public int[] OutputRows = [];
 
         public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
         public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
@@ -408,6 +410,7 @@ public sealed partial class ArenaSearch {
                 tokenCapacity: m_arena.CellCount(rowOrdinal: plan.TokensOrdinal)
             ) {
                 Judge = judge,
+                OutputRows = plan.Outputs(),
                 Ordinal = index,
                 ReachKeys = ResolveReachKeys(plan: plan),
             };
@@ -472,7 +475,7 @@ public sealed partial class ArenaSearch {
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
 
-            if ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
+            if (!AdmitsAudience(job) || (job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
             stamps[index] = Stamp(
@@ -496,7 +499,7 @@ public sealed partial class ArenaSearch {
             var job = m_jobs[index];
 
             if (
-                ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) ||
+                job.DisclosureRefused || ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) ||
                 ((job.Stamp == stamps[index]) && !job.Running && job.Done)
             ) {
                 continue;
@@ -519,7 +522,7 @@ public sealed partial class ArenaSearch {
 
         // A restart and a replay are work the step does before the walk moves, so both come out of the step's
         // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
-        if (job.Stamp != jobStamp) {
+        if (job.Stamp != jobStamp || (!job.Running && !job.Done)) {
             Restart(
                 job: job,
                 stamp: jobStamp
@@ -817,35 +820,26 @@ public sealed partial class ArenaSearch {
     // The rows a position key folds: what the plan itself addresses, plus what the judge's own rules and score
     // read. A row outside this set cannot change a candidate's verdict, so two positions differing only there are
     // the same position to the job.
-    private static int[] ResolveKeyRows(ArenaSearchPlan plan, IArenaSearchJudge judge) {
-        var rows = new SortedSet<int> {
-            plan.TokensOrdinal,
-            plan.TurnOrdinal,
-            plan.VerdictOrdinal,
-        };
+    private static int[] ResolveKeyRows(ArenaSearchPlan plan, IArenaSearchJudge judge) => plan.Dependencies(judge.KeyRows);
 
-        foreach (var ordinal in plan.ZoneOrdinals) {
-            _ = rows.Add(item: ordinal);
-        }
-        foreach (var ordinal in plan.CodeOrdinals) {
-            if (ordinal >= 0) {
-                _ = rows.Add(item: ordinal);
+    private bool AdmitsAudience(Job job) {
+        foreach (var target in job.OutputRows) {
+            foreach (var source in job.KeyRows) {
+                if (m_arena.ReadAudienceEncloses(source, m_arena.Rows[target].Visibility)) { continue; }
+                if (!job.DisclosureRefused) {
+                    Suspend(job);
+                    job.Running = false;
+                    job.Done = false;
+                    job.Stamp = 0;
+                    job.Faults++;
+                    m_narrate?.Invoke("state.search", $"[state.search: SearchWidensAudience: '{job.Plan.Name}' reads '{m_arena.Rows[source].Name}' beyond the audience of '{m_arena.Rows[target].Name}']");
+                }
+                job.DisclosureRefused = true;
+                return false;
             }
         }
-        foreach (var ordinal in judge.KeyRows) {
-            if (ordinal >= 0) {
-                _ = rows.Add(item: ordinal);
-            }
-        }
-
-        if (plan.ScoresOrdinal >= 0) {
-            _ = rows.Add(item: plan.ScoresOrdinal);
-        }
-        if (plan.Chance is { } chance) {
-            _ = rows.Add(item: chance.RowOrdinal);
-        }
-
-        return [.. rows];
+        if (job.DisclosureRefused) { job.Stamp = 0; job.DisclosureRefused = false; }
+        return true;
     }
     // The retained-key ledger and byte charge, which limit a judge's future mints and so are inputs to every job.
     private ulong LedgerFold() {
@@ -1061,6 +1055,7 @@ public sealed partial class ArenaSearch {
         Tick: m_tick
     );
     private bool Land(Job job, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
+        if (!AdmitsAudience(job)) { return false; }
         var plan = job.Plan;
 
         m_outputs.Clear();

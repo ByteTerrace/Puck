@@ -128,7 +128,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             return CommandResult.Error(output: "[world.cameras: no arguments — lists every declared camera]");
         }
 
-        var cameras = server.Definition.Cameras;
+        var cameras = server.ReadView(context).Definition.Cameras;
 
         if (cameras.Count == 0) {
             return new CommandResult(Output: "[world.cameras: none declared]");
@@ -229,7 +229,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             name: "world.fps",
             description: "Echoes the measured frame rate over the last 2 s, reaching back to the last four frames when they span longer — avg, the slowest single frame (the floor check), the sample count — and the pacer's current target; a renderer that has composed nothing for longer than both the window and four times its longest recent frame reads as stalled. The slowest frame reads the frame-rate bar.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => {
+            handler: context => {
                 var (averageFps, worstFps, frameCount, stalledSeconds) = frameRate.Summarize();
 
                 if (frameCount == 0) {

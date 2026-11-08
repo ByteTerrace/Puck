@@ -19,6 +19,7 @@ public sealed class WorldSessionObservation : IDisposable {
         Session = session;
         Tier = tier;
         SourceAuthority = sourceAuthority;
+        View = server.DeliveryView(session, tier, () => CanObserve);
     }
 
     /// <summary>Gets a value indicating whether the observation ended: disposed, ended by its world or a rebuild, or
@@ -35,6 +36,8 @@ public sealed class WorldSessionObservation : IDisposable {
     /// document, and its current live session still holds observe all. Withholding data does not end the observation;
     /// the same recorded session can resume it when its grant returns.</summary>
     public bool CanObserve => (!m_ended && (Tier != WorldDisclosureTier.Frames) && m_server.ObservesAsSession(session: Session));
+
+    internal WorldRecipientView View { get; }
 
     /// <summary>Returns whether this observation observes a world: the one server it was admitted by.</summary>
     /// <param name="server">The server.</param>
@@ -60,9 +63,6 @@ public sealed class WorldSessionObservation : IDisposable {
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
     internal bool AllowsQuery(WorldQuery query) => (!m_ended && (m_sink?.AllowsQuery(query: query) == true));
-    internal WorldDefinition? ReadDefinition() => (AllowsQuery(query: new WorldQuery.StateObservations())
-        ? m_sink!.Disclose(definition: m_server.Definition)
-        : null);
     // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it. The first
     // end names the cause its observer is told.
     internal void MarkEnded(string reason) {

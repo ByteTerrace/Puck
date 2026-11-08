@@ -86,16 +86,15 @@ A method reports failure beside its value (an `out` flag, a register, a `bool`)
 and a caller discards it, or a nested call's success overwrites an outer
 failure.
 
-- `GateOpen(faulted: out _)` discards the fault on the strength of an enclosing
-  scope (`RuleEvaluator.EvaluateOnceCore`, `RuleEvaluator.Armed`,
-  `WorldRuleHost.DecisionOptionGate` and `WorldRuleHost.TryScoreDecisionChoice`).
-- A nested `RuleExpressions.Run` is handed its caller's `fault` variable, so a
-  nested success writes `None` over an outer fault
-  ([rule faults](../plans/rule-faults.md#the-verdict-on-the-approach), reason 1).
+- The retired gate protocol allowed `GateOpen(faulted: out _)` to discard a
+  fault on the strength of an enclosing scope.
+- The retired `RuleExpressions.Run` protocol handed a nested call its caller's
+  fault variable, so a nested success could clear an outer fault
+  ([Rule faults](../decisions/state-and-language.md#rule-faults)).
 - `out _` on a key's `Resolved<T>` or `TryNamed` drops whether an address named anything.
 
 **Closed by** carrying the fault in the value: `Outcome`, `Resolved<T>` and
-`Verdict` in the [rule-faults design](../plans/rule-faults.md#the-design), whose
+`Verdict` in the [rule-fault decision](../decisions/state-and-language.md#rule-faults), whose
 default is the faulted case. **Detected by** `OutcomeAnalyzer`, exactly, from
 the compiler's symbols, in every build:
 

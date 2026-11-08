@@ -57,7 +57,10 @@ public static partial class RuleCompiler {
     // to show a hidden value writes it through its own setState. Resolved dependencies include live keys, zone
     // selectors, declared sets and writes that also read. Current cell and containing-zone restrictions are checked
     // again by the arena before the kernel runs.
-    private static void RequireEnclosedAudience(IReadOnlyList<int> reads, IReadOnlyList<int> writes, string ruleName, RuleCompileContext context) {
+    /// <summary>Refuses a derived result whose declared output audience exceeds any input's row or cell policy.
+    /// Transforms and searches share this compile-time boundary.</summary>
+    public static void RequireEnclosedAudience(IReadOnlyList<int> reads, IReadOnlyList<int> writes, string ruleName, RuleCompileContext context,
+        RuleRefusal code = RuleRefusal.TransformWidensAudience) {
         foreach (var written in writes) {
             if (context.FindRowAt(rowOrdinal: written) is not { } target) {
                 continue;
@@ -81,7 +84,7 @@ public static partial class RuleCompiler {
                 if (withholding is not null) {
                     throw new RuleException(
                         detail: $"it writes '{target.Name}' ({DescribeAudience(visibility: target.Visibility)}) from '{source.Name}' ({DescribeAudience(visibility: withholding)}), so what it writes would show '{source.Name}' to readers it withholds from; give '{target.Name}' an audience '{source.Name}' encloses, or disclose through a rule's own write",
-                        refusal: RuleRefusal.TransformWidensAudience,
+                        refusal: code,
                         ruleName: ruleName
                     );
                 }

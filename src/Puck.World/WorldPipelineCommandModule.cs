@@ -56,11 +56,8 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         CultureInfo.InvariantCulture,
         $"paused={entry.ClockPaused.ToString().ToLowerInvariant()} seconds={entry.ClockSeconds:0.###} scale={entry.ClockScale:0.###}"
     );
-    private WorldViewGraphHost.Entry? FindEntry(string name) {
-        pipelines?.Reconcile(
-            tonemap: server.Definition.Render.Tonemap,
-            views: server.Definition.Views
-        );
+    private WorldViewGraphHost.Entry? FindEntry(CommandContext context, string name) {
+        if (WorldDefinitionRows.FindGraph(server.ReadView(context).Definition.Views.Graphs, name) is null) { return null; }
         return (((pipelines is not null) && pipelines.TryGet(
             entry: out var entry,
             name: name
@@ -69,7 +66,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             : null
         );
     }
-    private ShaderPipelineRenderNode? FindInspectionNode(string name) {
+    private ShaderPipelineRenderNode? FindInspectionNode(CommandContext context, string name) {
         if (renderProbe?.Root?.Runtime is { } runtime) {
             var index = runtime.Instances.IndexOf(name: name);
 
@@ -78,7 +75,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
             }
         }
 
-        return FindEntry(name: name)?.Node;
+        return FindEntry(context, name: name)?.Node;
     }
     private static CommandDefinition Immediate(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
         CommandDefinition.WithWireArgs(
@@ -180,19 +177,16 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineReloadForms,
             description: $"{PipelineReloadForms.Spelling} — compile a complete candidate in the background; keep the last good pipeline on errors.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count > 1) {
                     return PipelineReloadForms.Refuse();
                 }
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.reload: requires a rendered host]"); }
-                pipelines.Reconcile(
-            tonemap: server.Definition.Render.Tonemap,
-            views: server.Definition.Views
-        );
+
                 if (args.Count == 1) {
                     var name = args[0].ToString();
 
-                    if (FindEntry(name: name) is not { } entry) {
+                    if (FindEntry(context, name: name) is not { } entry) {
                         return Missing(
                         name: name,
                         verb: "pipeline.reload"
@@ -216,13 +210,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineWatchForms,
             description: $"{PipelineWatchForms.Spelling} — watch the graph document, shaders and includes; compile changes after a quiet period.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count is < 1 or > 2) {
                     return PipelineWatchForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.watch"
@@ -252,13 +246,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineTimeForms,
             description: $"{PipelineTimeForms.Spelling} — control the presentation clock and feedback advancement.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count is < 1 or > 3) {
                     return PipelineTimeForms.Refuse(args: in args);
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.time"
@@ -303,13 +297,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineStepForms,
             description: $"{PipelineStepForms.Spelling} — pause and advance exactly one pipeline frame by 1/60 second.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 1) {
                     return PipelineStepForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.step"
@@ -322,13 +316,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineResetForms,
             description: $"{PipelineResetForms.Spelling} — reset time and feedback resources to their declared initial values.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 1) {
                     return PipelineResetForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.reset"
@@ -341,7 +335,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineSentinelsForms,
             description: $"{PipelineSentinelsForms.Spelling} — write each frame-block word's echo sentinel in place of the frame values and config, so an echo pass shows whether every member reads back exactly.",
-            (_, args) => {
+            (context, args) => {
                 if (
                     (args.Count != 2) ||
                     !(args.Is(
@@ -356,7 +350,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.sentinels"
@@ -372,13 +366,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineOutputForms,
             description: $"{PipelineOutputForms.Spelling} — preview a named image version as the instance's output; pipeline.commit makes it authored.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 2) {
                     return PipelineOutputForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.output"
@@ -402,7 +396,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.set"
@@ -443,7 +437,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.commit: requires a rendered host]"); }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.commit"
@@ -466,7 +460,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineOverridesForms,
             description: $"{PipelineOverridesForms.Spelling} — show the instance's committed overrides, time scale and output beside its uncommitted preview, each bound parameter with the value its pass holds, the row revision the preview is based on, and the source identity of the installed graph.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 1) {
                     return PipelineOverridesForms.Refuse();
                 }
@@ -474,7 +468,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
 
                 if (
                     (WorldDefinitionRows.FindGraph(
-                        graphs: server.Definition.Views.Graphs,
+                        graphs: server.ReadView(context).Definition.Views.Graphs,
                         name: name
                     ) is not { } row) ||
                     (row.Source is null)
@@ -482,7 +476,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: $"[pipeline.overrides: no views.graphs row with a source named '{name}']");
                 }
                 return new CommandResult(DescribeOverrides(
-                    entry: FindEntry(name: name),
+                    entry: FindEntry(context, name: name),
                     row: row
                 ));
             }
@@ -490,13 +484,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineCaptureForms,
             description: $"{PipelineCaptureForms.Spelling} — capture the selected output on the next produced frame, including a paused frame.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 2) {
                     return PipelineCaptureForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.capture"
@@ -527,7 +521,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 if (pipelines is null) { return CommandResult.Error(output: "[pipeline.wait: requires a rendered host]"); }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.wait"
@@ -635,13 +629,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineInspectForms,
             description: $"{PipelineInspectForms.Spelling} — inspect an authored pipeline or a rendered graph node named by world.counters gpu (including world and session views). Show the bytes the instance owns beside the active graph's steady-state bytes, the peak a reload of it would reach and the budget, then its ordered passes, typed resources and named outputs, the GPU work each pass recorded in the newest completed submission, the device's memory profile, and the residency policy the selector chooses for the instance's parameter region.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count != 1) {
                     return PipelineInspectForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindInspectionNode(name: name) is not { } node) {
+                if (FindInspectionNode(context, name: name) is not { } node) {
                     return Missing(
                     name: name,
                     verb: "pipeline.inspect"
@@ -670,13 +664,13 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             forms: PipelineBudgetForms,
             description: $"{PipelineBudgetForms.Spelling} — show the instance's memory budget in bytes: the device's (1/{ShaderPipelineMemoryBudget.DeviceLocalShare} of its device-local memory, or {ShaderPipelineMemoryBudget.UnreportedBytes} when it reports none), a cap that only lowers it, and the installed graph's owned, steady-state and reload-peak bytes. A byte count sets the cap; device clears it. A replacement whose peak does not fit is refused by name before it allocates, and the installed graph keeps running; lowering the cap never frees it.",
-            (_, args) => {
+            (context, args) => {
                 if (args.Count is < 1 or > 2) {
                     return PipelineBudgetForms.Refuse();
                 }
                 var name = args[0].ToString();
 
-                if (FindEntry(name: name) is not { } entry) {
+                if (FindEntry(context, name: name) is not { } entry) {
                     return Missing(
                     name: name,
                     verb: "pipeline.budget"
@@ -712,11 +706,11 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         yield return Immediate(
             "pipeline.status",
             "pipeline.status — show authored sources and quality tiers, pending compilation, last results, watches, clocks and each instance's work counters.",
-            (_, args) => {
+            (context, args) => {
                 if (CommandResult.RequireNoArguments(args: in args, verb: "pipeline.status") is { } refusal) {
                     return refusal;
                 }
-                var rows = (server.Definition.Views.Graphs ?? []);
+                var rows = (server.ReadView(context).Definition.Views.Graphs ?? []);
                 var result = new StringBuilder(value: $"[pipeline.status: {rows.Count} row(s)");
 
                 foreach (var row in rows) {
@@ -724,7 +718,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                         result.Append(handler: $"\n  {row.Name} package={package}");
                         continue;
                     }
-                    var rowEntry = FindEntry(name: row.Name);
+                    var rowEntry = FindEntry(context, name: row.Name);
 
                     // The tier the row names, then the variant its latest compilation at that tier took, such as
                     // high->default where the graph declares no high variant.

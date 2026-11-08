@@ -114,7 +114,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                 // world.rate resume that would be the only thing able to lift it, since Immediate lines queue behind
                 // an armed wait too. See WorldConsoleWaitGate.ReleaseStalled for the OTHER edge this module does not
                 // own directly: a wait already armed when a pause lands mid-hold.
-                if (instance.Server.Definition.SimulationRateHz <= 0) {
+                if (instance.Server.ReadView(context).Definition.SimulationRateHz <= 0) {
                     return CommandResult.Error(output: "[world.wait: refused (the world authors rateHz 0 — a durable stop that never produces another completed tick, so this wait could never release; see world.rate)]");
                 }
 
@@ -132,7 +132,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
 
                 // A caller with an answer deadline (a control attachment's call) is refused a wait its rate cannot
                 // complete in time, rather than left to lose its attachment to the deadline mid-wait.
-                var rateHz = ((ulong)instance.Server.Definition.SimulationRateHz);
+                var rateHz = ((ulong)instance.Server.ReadView(context).Definition.SimulationRateHz);
                 var span = TimeSpan.FromTicks(value: ((long)((ticks * ((ulong)TimeSpan.TicksPerSecond)) / rateHz)));
 
                 if (
@@ -189,7 +189,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
             ));
         }
 
-        var rateHz = instance.Server.Definition.SimulationRateHz;
+        var rateHz = instance.Server.ReadView(context).Definition.SimulationRateHz;
 
         if (rateHz <= 0) {
             return CommandResult.Error(output: "[world.wait: refused (the world authors rateHz 0, so it never completes another tick)]");

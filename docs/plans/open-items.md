@@ -104,9 +104,8 @@ milestone. The owner requested its baseline and implementation plan, which
    `main`]: steps 1-6 behind the harness and step 0b's principals; step 2
    refuses a search output wider than its restricted inputs (the owner's
    ruling).
-9. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
-   outcome type, single interpreter and journal-backed firing in its steps,
-   each reviewed.
+9. [Rule faults](rule-faults.md) [high, before `main`]: queued body-target
+   generations, proposal-owned host scratch, source-read timing and measurements.
 10. [Engine job system](#engine-job-system) [high]: scheduling, the
     garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
     ordinary work.
@@ -117,7 +116,7 @@ milestone. The owner requested its baseline and implementation plan, which
 12. [Certified field contact](#certified-field-contact): box and ellipsoid
     bodies, then clearance on slopes within a third of a metre.
 13. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-    to 10.
+    to 10, step 7 with the lease-missed recall.
 14. [Language and authoring](#language-and-authoring) and [author leaks to the
     standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
     cost corpus, the overlay text advance.
@@ -161,16 +160,32 @@ milestone. The owner requested its baseline and implementation plan, which
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- The MMO foundations round ([open questions](mmo-foundations.md)): the owner asked
-  for a full design session reaching consensus before anything about the
-  engine's purpose, player state across edits, custody, double spending, seams or
-  the tables is ruled. Nothing in that page is decided.
+- Three calls from [the MMO foundations round](mmo-foundations.md), deferred by
+  the owner until their systems mature. Nothing in the round's order of work
+  waits on them; the [decision register](../decisions/worlds-and-federation.md#the-owners-deferred-calls)
+  states each one's engineering consequence.
+  - The casino product: table-local score, earned chips, purchased chips,
+    tradeable stakes or real money, and for which territories and ages.
+    Returns when the economy's design exists to answer it against.
+  - The scope of hidden dealing: whether Puck builds dealing that hides cards
+    even from the dealer (the encrypted-dealing prototype). Returns when
+    per-seat table sessions and the settlement door have landed
+    ([card tables](#card-tables-in-the-board-game-room),
+    [settlement](#settlement-trust-roles-and-revocation)).
+  - How the standard package's layer move feels: a transition area out of
+    combat, or a countdown in place with a rising cooldown. Returns when the
+    layer mechanism exists ([transfers](#transfers-federation-and-server)).
 - Pushing `main` (owner-only: a push to `main` deploys to Azure). The
   integration branch `lead/velocity` is far ahead of `main`, hundreds of commits.
   Recommendation: push once the milestone's riskiest areas have had a fresh fix
   pass and their invariant checks have run (AGENTS.md); the red tests listed
   under [Tests](#tests-suspended) hold nothing back while test requirements are
   suspended.
+  The deploy path itself has changed since `main`: Azure release verbs moved
+  into the `Puck.Cli.Azure` extension, which `artifacts.yml` publishes as the
+  `cli-azure-extension` artifact, `setup-puck` installs with `azure: "true"`,
+  and `azure.yml` deploys with `puck world release deploy ... --host azure`;
+  no CI run has exercised it, so the first push is also its first test.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -178,9 +193,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   mirror of the front ([rendering plan](rendering.md)).
 - Whether the engine ships or requires the GameInput redistributable
   ([input](#input-channels)).
-- Whether proof of possession is a product requirement for the identity
-  provider's bearer tokens (Entra's today) and for initial binding issuance
-  ([security](#security-review)).
 - Looks in the transmission design ([transmission](transmission.md)), each
   with the design's choice first:
   - A body's own overhangs and hollows shadow its wrapped dark side (the
@@ -921,8 +933,10 @@ Neighbour contact replay packet (independent of companion custody):
 - [high] Tape fixed neighbour inputs at their local admission tick.
   `WorldPopulation.AdmitAdjacencyResponse` bounds what a neighbour's bodies and
   geometry do to a local body each tick and keeps it behind its ownership
-  faces, and contact settles by authority pair through the link's settled
-  identity, but `WorldAdjacencyFields.Handle.Pin`
+  faces, including carried blocks and support-selected lifts. Mapped arrivals
+  share the upcoming tick's pinned image and correction allowance with ordinary
+  advance, and contact settles by authority pair through the authored link's
+  identity across observation replacements, but `WorldAdjacencyFields.Handle.Pin`
   copies the latest presentation snapshot and discards `sourceTick`;
   `WorldAdjacencyContactField.ResolveCore`
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:25`) still quantizes floats
@@ -944,7 +958,8 @@ Neighbour contact replay packet (independent of companion custody):
   depenetration fix; the bound does not claim replay determinism or prove a
   neighbour's bodies exist.
 - [medium] The rest of C3's residual rules
-  ([synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
+  ([decision](../decisions/worlds-and-federation.md#contested-places-and-fights-between-player-hosts);
+  [synthesis, decision 8](mmo-foundations/synthesis.md#decision-8-where-a-contested-place-runs)):
   a neighbour correction a body's own motion does not ask for still carries a
   still body toward the plane up to its ownership threshold. Retreat is protected
   by `WorldPopulation.AdmitAdjacencyResponse`: an incoming velocity away from an
@@ -955,6 +970,44 @@ Neighbour contact replay packet (independent of companion custody):
 - [medium] The settlement's remote identity is the link's first claimed
   `Authority`; a neighbour that picks its identity before linking still picks
   which side of a pair yields. Attested authority identities close it.
+
+From the MMO round's [order of work](mmo-foundations/synthesis.md#6-the-order-of-work)
+(its steps 11 and 15; the [decision register](../decisions/worlds-and-federation.md)
+holds why):
+
+- [high, before any remote table check] A network peer into a spawned place
+  (step 11). A live socket connection addresses only the boot instance: the
+  routing comment on `WorldInstanceCommandModule` says composing the
+  peer-admission door with the seating seam (`WorldServer.ApplySession`) "is
+  not built" (`src/Puck.World/WorldInstanceCommandModule.cs:30-31`), the
+  debug world's admission rows are `mode: FederatedAuthority` only
+  (`worlds/debug/debug.puck:96`, `garden.puck:50`, `night.puck:44`), which the
+  admission door refuses for a direct peer join, and `WorldPeerHost`'s
+  convenience constructor builds `new WorldAttestedAuthenticator()` with no
+  trusted issuers (`src/Puck.World.Server/WorldPeerHost.cs:109`). Route a
+  remote peer's session into a spawned instance through `WorldPeerHost` and
+  give the debug world an attested-identity admission row beside
+  `FederatedAuthority`. Needs no earlier step. Unblocks every check that seats
+  a remote player in the garden or a table room, first the seat-view check of
+  [card tables](#card-tables-in-the-board-game-room).
+- [medium] The layer mechanism and its gate (step 15; check 5 (S1) in
+  [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option)).
+  The resolver keys every global resolution to one scope key
+  (`WorldSessionResolver.GlobalScopeKey`), a persisted destination refuses two
+  running instances of one origin as ambiguous, and the transfer door aborts a
+  transfer the leave rule refuses instead of deferring it, within
+  `TransferRetryCeiling`. Build layer ordinals under one destination in the
+  resolver and the durable identity, a deferral queue in the transfer door, the
+  authored unobservability predicate, and the hop cooldown kept by the layer
+  set's authority per identity subject (never read from the mobility record;
+  a party waits on its slowest member). Independent of every other step. The
+  mechanism is neutral: both answers to the owner's deferred layer-feel call
+  ([owner decisions](#owner-decisions)) are authored data on it.
+- Signed remote write-back (step 14) is
+  [records and pools' remote home adoption](records-and-pools.md#remote-home-adoption);
+  it needs the hub plan's write door and award commit and the
+  [settlement packet's](#settlement-trust-roles-and-revocation) identity
+  abstraction.
 
 Still open from the companion build:
 
@@ -1048,6 +1101,60 @@ Still open from the companion build:
   - `ValidateBodyScale` and `ValidateRowSelector` throw on a null `bodyState`
     entry.
 
+### Settlement, trust roles and revocation
+
+Owner: specialist, transfers and server, with a reviewer from another family on
+the door's invariant · high, before any federation beyond loopback and any table
+with stakes · Next: a specification of the settlement door in the custody
+protocol's form (records, messages, transitions, and a model the transitions
+are checked against), reviewed by another family, then the build. The
+[decision register](../decisions/worlds-and-federation.md#scarce-value-settles-at-one-door-per-domain)
+states the invariant and its one enforcement point, the door's commit; nothing
+enforces it today. The steps are the MMO round's
+[steps 9, 10 and 18](mmo-foundations/synthesis.md#6-the-order-of-work), and each
+names its check in [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option).
+
+- [high] The settlement door (step 9): one transactional door per domain at an
+  authority the player does not host, holding issuer-kept records; unit
+  creation at the door alone and delegated budgets for every other award; the
+  active seat as a domain right, consumed at landing and released at departure;
+  signed receipts to every counterparty; the one-domain-per-operation refusal;
+  the restore contract; the review of the frozen value doors a world starts
+  with after an inexact image; the outbox; and the Deadlines abstraction's
+  first user. Receipts cannot reuse the identity's delivery rows: `Decide`
+  lands a text delivery "only on a slot or a bounded, evicting row"
+  (`src/Puck.World.Server/WorldOwnedWorlds.cs:411`), so the receipt row refuses
+  when full and never evicts, and the silo hosts no account catalog
+  (`src/Puck.World.Silo/` references no `WorldOwnedWorlds`), so an offline
+  holder pulls its receipts from the door. Checks 3 (fence at effect), 3
+  (seat), 3 (budget), 3 (receipts), 3 (restore), 3 (domain) and 6 (stakes).
+  Vouched outcomes need step 10's role list. Unblocks currency, items, stakes,
+  the refund half of the hub plan's H17, and the tables.
+- [high] Identity, issuance, revocation and roles as abstractions (step 10).
+  The signing oracle's remote shape (`ISigningOracle` names a `Vouches` claim
+  "obtained from the platform at connect time" that nothing implements);
+  binding ceilings and a replay horizon at the admission door, where
+  `WorldAdmissionDoor` builds its `TrustList` with
+  `defaultRootBindingMaximumAge: null`, `defaultSubjectBindingMaximumAge: null`
+  and `replayAcceptanceHorizon: null`
+  (`src/Puck.World.Schema/WorldAdmissionDoor.cs:91-96`); the refusal snapshot,
+  with a not-after instant per entry and the receiver's recorded acceptance
+  time (`Puck.Attestation` has no revocation today); the role list a domain
+  vouches (issuer, dealer, referee, witness, budget holder); and the provider
+  behind each. Proof of possession is decided by the identity abstraction,
+  which binds an arrival to the connection's challenge with a signature: the
+  Entra authenticator echoes a bearer token beside the challenge
+  (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:140`), and initial binding
+  issuance from caller-writable key blobs
+  ([security review](#security-review)) both need a key the caller proves it
+  holds. Check 9 (9b). Unblocks any federation beyond loopback, any vouched
+  role and any table with stakes.
+- [medium] The duel witness and prototype (step 18): a relay vouched as a
+  witness role that signs receipt times and silence; lockstep commitments or
+  witness-ordered inputs with a held-input horizon; a match-entry reservation
+  that forfeits on an attested stall; and the loopback duel in an authored
+  arena under the five fault legs of check 8 (C2). Needs steps 9 and 10.
+
 ### Delivery, launcher and CI
 
 Owner: delivery lane · medium · Next: the production deploy below, then the
@@ -1068,7 +1175,7 @@ retirement.
 
 - [medium] A solution build intermittently fails in `Puck.Azure.Functions`:
   the Functions worker's generated `obj/azure_functions/azure_functions.g.csproj`
-  cannot resolve `Azure.Functions.Sdk` ("no version specified in the project or
+  cannot resolve Azure.Functions.Sdk ("no version specified in the project or
   global.json"), and an identical retry builds clean. It appears when several
   restores run at once; find whether it is a restore race on the generated
   project, pin the SDK where it resolves, and name the hazard in contributing's
@@ -1133,31 +1240,15 @@ retirement.
 
 ### Provider independence
 
-Owner: delivery lane · medium · Next: the CLI's Azure verbs. AGENTS.md's
+Owner: delivery lane · medium · Next: player storage identity. AGENTS.md's
 "Puck is provider-independent" ruling: Azure and Entra are one replaceable
 implementation behind Puck's own abstractions. A provider project declares
 `<PuckProvider>`; the architecture gate (PUCKARCH009, `PuckArchitectureGate`'s
 `CheckProviders`) refuses a provider project or a provider's SDK assemblies
 (`PuckArchitectureProviderAssemblies` in `build/Architecture.props`) in any
-other ranked project's closure. Terminal kinds are exempt, and that exemption
-is what the first item below narrows.
+other project's closure. Only tests compose providers by reference; hosts and
+tools select installed contributions.
 
-- [high] The CLI's Azure deployment verbs live in the provider-neutral
-  `Puck.Cli.Release` (`src/Puck.Cli.Release/Azure/`, namespace `Puck.Cli.Azure`),
-  which therefore references `Puck.Storage.Azure` and the Azure SDK. The generic
-  `puck world release` verbs call them directly
-  (`src/Puck.Cli.Release/Automation/WorldReleaseCommand.cs`: `AzureCommand`
-  calls for status, finalize, resume, deploy, rollback, capture and restore), and
-  `OfficialWorldDocumentScanner.RootDocumentName` reads
-  `AzureCommand.HostedWorldName`. Abstraction: a release host, the driver
-  `WorldReleaseCoordinator`'s runtime results already come from; move the Azure
-  verbs into a `Puck.Cli.Azure` provider project selected through it, then drop
-  the gate's Tool exemption so only tests compose providers by reference. The
-  other Tool edge is `puck embed`: `Puck.Cli.Worlds`' `EmbedCommand` builds an
-  `AzureOpenAiEmbeddingGeneratorFactory` generator directly, so the CLI
-  references `Puck.Embeddings.Azure`; it should select an embedding provider
-  type (`WorldExtensionEmbeddingProviderType`) from installed extensions as a
-  World host does.
 - [medium] Player storage identity is an authored user id
   (`storage.userId` / `--user-id`, `ExplicitOverridePlayerStorageIdentityResolver`),
   which today is an Entra `oid` used as the container name. Abstraction: the
@@ -1170,8 +1261,9 @@ is what the first item below narrows.
   keys, Microsoft Graph directory provisioning, on-behalf-of blob containers,
   App Configuration and Orleans Azure Storage clustering
   (`src/Puck.Actors/Program.cs`, `src/Puck.Actors/Extensions.cs`). Nothing
-  references it. Name it for its provider (a `Puck.Azure` prefix) once the MMO
-  round's research pages, which cite its paths, are synthesized; a non-Azure
+  references it. Name it for its provider (a `Puck.Azure` prefix); the MMO
+  round that waited on it is closed, and the rename retargets its research
+  records' path citations, which `puck docs links` checks. A non-Azure
   deployment needs a provisioning abstraction (identity, storage, keys) before
   it can onboard users.
 - [medium] The dashboard portal and host sign in through MSAL and talk to Azure
@@ -3084,6 +3176,29 @@ Klondike table stands north of the Go table in the board game room
    children out by slot, never by a cell value, so a unit standing on its cell
    needs a body or a `respond` placement per cell). The language walls the
    games hit are [S11's G17](state-and-language.md#s11--ergonomic-is-optimal).
+4. Per-seat table sessions (the MMO round's step 12; a server specialist's
+   step, [the tables decision](../decisions/worlds-and-federation.md#the-tables)).
+   A screen in a player's room observes a nested destination as the room's
+   authority into the room's mirror (`WorldServer.TryObserveAsSession` called
+   from `src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:292-295`),
+   so a seat's cards either pass through the room host's process or never
+   reach the seat. A seat's own authority opens a session with the table, the
+   table delivers the seat's private view to the seat's client, and the room's
+   screen observes the table's public tier. Check 6 (seat view) in
+   [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option):
+   the room host's mirror holds no cell of any seat's hand while each seat's
+   client renders its own. Needs disclosure step 1 (landed) and
+   [a network peer into a spawned place](#transfers-federation-and-server).
+   Poker's hidden hands (step 2) read right only through it, whatever the
+   stakes.
+5. Tables with stakes (step 13): the vouched table role, stakes reserved at the
+   settlement door with the dealer named in the reservation, per-participant
+   commitments on draw sites (a draw's seed folds only the document seed, the
+   instance identity and the site descriptor today, `GeneratorEngine`'s draw
+   site fold), and the transcript policy. Checks 6 (stakes) and 6 (draws).
+   Needs step 4 and the [settlement packet's](#settlement-trust-roles-and-revocation)
+   steps 9 and 10. The stake rows are mechanisms that serve every product row,
+   so the owner's deferred casino call waits on nothing here.
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).
@@ -3548,17 +3663,6 @@ brief's priorities ([security review](../development/security-review.md)).
     and step 0b's principals (a socket peer, Observe revoked and regranted, a
     federated traveller, a mounted addon). The harness green over the fixtures
     and the fuzzer is the definition of done.
-  - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
-    [high] `world.budget`
-    publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:226`,
-    no audience at `:461`); [high] `world.reflow.preview` runs over the
-    authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);
-    [low] `world.identify` hashes authored hidden seeds for a seat with Control
-    over a screen (`src/Puck.World/WorldIdentifyCommandModule.cs:72`); [low]
-    `world.timeline` withholds through a predicate of its own
-    (`src/Puck.World.Console/WorldTimelineCommandModule.cs:137-140`);
-    [unconfirmed] a `search` over an arena holding private keyed sites may
-    compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`).
   - Step 3, the write door refuses by policy ([decision 3](disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)):
     [high] batch `ExpectedCells` is a read oracle, implemented twice
     (`src/Puck.World.Server/WorldDocument.StateCommands.cs:135`,
@@ -3620,8 +3724,10 @@ brief's priorities ([security review](../development/security-review.md)).
   (`src/Puck.Azure.Functions/HttpTriggers/AttestKeys.cs:57, 147`,
   `Services/DefaultBindingService.cs:109`): an authenticated user can supply a
   public key under their own prefix and trigger issuance when `binding.cbor` is
-  absent; the subject is that caller. Establish the proof-of-possession policy
-  and a concrete authority crossing before classifying it.
+  absent; the subject is that caller. The policy is decided: the identity
+  abstraction requires a key the caller proves it holds
+  ([settlement packet](#settlement-trust-roles-and-revocation), step 10).
+  Establish a concrete authority crossing before classifying today's path.
 - The bearer-token admission trust model, asked of the authentication provider
   contract (`WorldAuthenticationProvider`) and checked against today's
   implementation, the Entra authenticator
@@ -3633,6 +3739,9 @@ brief's priorities ([security review](../development/security-review.md)).
   (`WorldRemoteAuthority`'s `pinnedTransport` branch), so the authority name
   compared with the pin is whatever the key holder sends; decide whether the
   transport pin alone is the intended authority proof. No bypass was reproduced.
+  The [identity abstraction](../decisions/worlds-and-federation.md#abstractions-not-providers)
+  wants a signature over the challenge, which the settlement packet's step 10
+  builds.
 - Azure deployment policy, independent of Front Door: the API-host storage
   condition omits tag and queue-message actions
   (`src/Puck.Azure.Resources/abacConditions.bicep:50`); establish the identity's
@@ -3803,6 +3912,15 @@ ordinary · Next: new content and art on the owner's call.
   (`SelectCensus`'s `reports` flag in `WorldPopulation.Reconcile.cs`; the
   parent behaved the same). Decide whether a moved census body should keep
   its grant.
+- [low] A frameless portal, authored and not built
+  ([seams decision](../decisions/worlds-and-federation.md#seams); check 5 (F1)
+  in [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option)):
+  a `threshold` template in `worlds/standard/`, a box face that draws no frame
+  (`WorldFaceApertures` derives a walkable aperture from a `Box` face shape and
+  nothing else), standing beside the gallery paintings. Walk through it:
+  `world.portals` and a crossing capture show no frame, and the glass sits
+  inside the aperture face rather than proud of it. No C#; the round's order
+  of work leaves it out because it waits on nothing.
 - [high] Player-state defects found grounding the hub design. The design memo
   ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
   whatever it decides:
@@ -3820,8 +3938,11 @@ ordinary · Next: new content and art on the owner's call.
     ([durable images](hub-and-saves.md#durable-images): identity from the
     scope key and the referenced document, stored under its content hash,
     restored onto the current source through one ladder, durable rows kept
-    across an edit); a Codex design review of that section and the two owner
-    calls it names come before H7a, and H7a to H7e build it;
+    across an edit); a Codex design review of that section comes before H7a,
+    the two calls it named are decided
+    ([saved state](../decisions/worlds-and-federation.md#player-state-across-author-edits),
+    [custody](../decisions/worlds-and-federation.md#an-unreachable-title-authority-a-crash-and-an-inexact-image)),
+    and H7a to H7e build it;
   - the deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`) admits a
     solid variant whose shape the load validator refuses (`CreationShapeLaws
     .SolidRefusals` runs only on the template's base prototype), so the sweep can
@@ -4463,7 +4584,11 @@ read one. The plans that keep open items:
   [the valley, the moons and the flight between](valley-and-moons.md#phases):
   the quality test at the bar, then eight phases from a measured baseline to the
   round trip.
-- [Companion custody protocol](companion-redesign.md): build steps 6 to 10.
+- [Companion custody protocol](companion-redesign.md): build steps 6 to 10,
+  step 7 with the lease-missed recall.
+- [The hub, player saves and the player menu](hub-and-saves.md#build-order):
+  H1 to H17, with the MMO round's write door (H9), durable award commit (H16),
+  identity recomposition (H17) and desktop crossing log (H7) among them.
 - [UI](ui.md#open-items): step 1's remainder, then steps 3 to 6 behind the
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.

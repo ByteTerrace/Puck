@@ -12,7 +12,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Untrusted neighbour reports, bodies or geometry, cannot buy more local displacement with more bodies or
 /// bigger shapes, cannot herd a body across its ownership face, and cannot choose who yields.</summary>
-public sealed class WorldAdjacencyCorrectionLawTests {
+public sealed partial class WorldAdjacencyCorrectionLawTests {
     private const string LocalAuthority = "local";
 
     private static WorldDefinition Document() {
@@ -294,13 +294,16 @@ public sealed class WorldAdjacencyCorrectionLawTests {
                 FixedQ4816.FromDouble(depth), true);
         }
         public IWorldAdjacencyNeighbour Neighbour { get; }
-        public WorldAdjacencyProjection Projection { get; }
+        public WorldAdjacencyProjection Projection { get; set; }
+        public WorldAdjacencyProjection[] Extra { get; set; } = [];
+        public int Pins { get; private set; }
         public WorldEntityAddress LocalEntityAddress(int index) => new(LocalAuthority, 0, index);
         public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
         public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) { departedFrom = default; return false; }
         public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) { neighbour = Neighbour; return true; }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [Projection];
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [Projection, .. Extra];
         public void BeginTick(ulong tick) {
+            Pins++;
             if (Neighbour is not ReportedBodies bodies) { return; }
             bodies.Reissue();
             for (var index = 0; index < bodies.EntityCapacity; index++) {

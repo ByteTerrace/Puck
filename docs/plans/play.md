@@ -607,7 +607,7 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   [`Puck.Audio`](#wave-4--puckaudio).
 - [Housekeeping, last](#housekeeping-last): the client seam, the signing chain,
   namespace normalization.
-- Owner-run: the live smoke against `Web.Functions`, the feel sitting.
+- Owner-run: the live smoke against `Puck.Azure.Functions`, the feel sitting.
 
 ---
 

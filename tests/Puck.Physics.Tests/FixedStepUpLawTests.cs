@@ -41,7 +41,7 @@ public sealed class FixedStepUpLawTests {
                 volumes: Capsule
             );
         // A ref struct cannot take the interface's default member, so it names the plain sweep itself.
-        public ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+        public ContactResolution SweepSupport(in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position, ref FixedVector3 velocity) =>
             Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity);
     }
 

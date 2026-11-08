@@ -26,6 +26,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private bool m_tickProjectionsCurrent;
 
     private readonly Dictionary<string, Handle> m_handles = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<(string Name, string Destination, string Counterpart), LinkAuthority> m_linkAuthorities = [];
     private WorldAdjacencyProjection[] m_tickProjections = [];
 
     /// <summary>Initializes the source.</summary>
@@ -235,6 +236,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             var mirror = new WorldSessionMirror(placeholder: observedDefinition);
 
             existing = new Handle(
+                authority: LinkAuthorityFor(key, destinationName, counterpart),
                 identity: identity,
                 mirror: mirror,
                 lease: attach(mirror),
@@ -302,6 +304,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         }
 
         m_handles.Clear();
+        m_linkAuthorities.Clear();
     }
     /// <inheritdoc/>
     public WorldBodyContactMode LocalBodyContact(int index) {
@@ -420,6 +423,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             var lease = attach(mirror);
 
             handle = new Handle(
+                authority: LinkAuthorityFor(adjacencyName, adjacency.Destination, adjacency.Counterpart),
                 identity: identity,
                 mirror: mirror,
                 lease: lease,
@@ -444,7 +448,23 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     // One adjacency's held observation: the mirror (kept live for the row's lifetime), the attach lease, and the
     // counterpart frame/solid field cache — refreshed only when the mirror's own delivery revision moves.
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
-    private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
+    private LinkAuthority LinkAuthorityFor(string name, string destination, string counterpart) {
+        var key = (name, destination, counterpart);
+        if (!m_linkAuthorities.TryGetValue(key, out var authority)) {
+            authority = new LinkAuthority();
+            m_linkAuthorities.Add(key, authority);
+        }
+        return authority;
+    }
+    // Observation generations and transient resolution failures do not replace the authored link's identity.
+    private sealed class LinkAuthority {
+        public string Value { get; private set; } = string.Empty;
+        public bool Settle(string delivered) {
+            if ((Value.Length == 0) && (delivered.Length > 0)) { Value = delivered; }
+            return Value.Length > 0;
+        }
+    }
+    private sealed class Handle(HandleIdentity identity, LinkAuthority authority, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
         private readonly bool[] m_active = new bool[WorldBodiesLimits.CapacityCeiling];
         private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
         private readonly string?[] m_placementIds = new string?[WorldBodiesLimits.CapacityCeiling];
@@ -476,10 +496,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         private ulong m_pinnedSnapshotTick;
         private float m_pinnedStepSeconds;
 
-        // Settled at the first frozen image naming one; a link is replaced, never re-identified.
-        private string? m_settledAuthority;
-
-        public string Authority => (m_settledAuthority ?? mirror.Authority);
+        public string Authority => authority.Value;
         public WorldFaceFrame CounterpartFrame => (m_hasPin
             ? m_pinnedFrame
             : m_frame
@@ -655,9 +672,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 stepSeconds: out m_pinnedStepSeconds,
                 tick: out m_pinnedSnapshotTick
             );
-            if ((m_settledAuthority is null) && (mirror.Authority is { Length: > 0 } delivered)) {
-                m_settledAuthority = delivered;
-            }
+            _ = authority.Settle(delivered: mirror.Authority);
             m_pinnedDefinition = mirror.Definition;
             m_pinnedFrame = m_frame;
             m_pinnedField = m_field;
@@ -695,7 +710,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 Refresh();
             }
 
-            if (!(m_hasPin || m_frameResolved)) {
+            if (!(m_hasPin || m_frameResolved) || !authority.Settle(delivered: mirror.Authority)) {
                 return false;
             }
 

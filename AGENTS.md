@@ -2,6 +2,19 @@
 
 Puck defines worlds in documents; `Puck.World` composes simulation, presentation and hosted machines. Every agent reads this one rules file. The [manual](docs/README.md) owns concepts, [development](docs/development/README.md) procedures, and `.claude/skills/` code maps, contracts and execution. Load the owning skill (rule 7); [evaluate its benefit](docs/development/documentation.md#evaluate-an-agent-skill). Rule 2 applies here too.
 
+## Puck's purpose
+
+The owner's words: "Puck exists to make it possible, eventually, to build an
+MMO at the scale of World of Warcraft that redefines the genre the way WoW did.
+The emulators and the screen-within-a-screen work were envisioned as seamless
+parts of that MMO." The card and board tables serve the casino fantasy, and
+portals are meant to solve many of an MMO's hard problems. Every design round
+weighs its question at that scale: it asks what each established answer becomes
+when every zone, character and server is a world with its authority placed per
+world ([the world model](docs/architecture/worlds.md#the-idea-in-plain-terms)),
+and records what it settled in [the MMO foundations memo](docs/plans/mmo-foundations/synthesis.md)'s
+manner: options, evidence, the attacks each closes, and the ruling it rests on.
+
 ## Puck is pre-release
 
 Nothing has shipped, and nothing outside this repository depends on Puck. Every
@@ -73,7 +86,8 @@ agent works in that mode by default, without asking:
   never of one provider's settings; a provider type or assumption outside the
   provider's own project is a leak, fixed when found. A provider project
   declares `<PuckProvider>`, and the architecture gate (PUCKARCH009) refuses
-  a provider project or SDK in any other ranked project's closure.
+  a provider project or SDK in any other project's closure except tests. Tools
+  select installed provider contributions, just as runtime hosts do.
 - Puck is independent work (the owner's ruling). For an external protocol,
   format or device, consult several independent sources as second opinions
   (vendor documentation, kernel drivers, community reverse engineering, other

@@ -62,9 +62,8 @@ against trusted code that deliberately captures a definition in a lambda or
 reads a property by reflection; that is review, and the guards are shaped so
 such code has nowhere ordinary to stand ([decision 6](#6-the-compiler-holds-the-line)).
 Rules are the authority's program: a rule that copies a hidden value into a
-public cell, or a `search` whose public outputs are judged over private rows,
-is an authored disclosure, like a binding to a restricted row on the shared
-screen.
+public cell is an authored disclosure, like a binding on the shared screen.
+Search cannot widen its inputs' audiences; a reveal is an explicit rule write.
 
 ## Where the boundary stands
 
@@ -197,14 +196,38 @@ that erase key faults) are not disclosure and stay in the
 | [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions (`Compose.Cells.cs:292,576,636`; `WorldServer.Arena.cs:98`) | `CanReadCell` reads current visibility; an absent key passes a public row policy | 3 |
 | [medium] A seat writes under its grants alone and learns which hidden keys exist (`Compose.Cells.cs:574`) | Seats are not recipients at the write door | 3 |
 | [high] Dealt children keep hidden-dependent slots and positions (`WorldStateDisclosure.cs:481,621`, `WorldTick.Deals.cs:426`) | The layout is authority history, shown as is | 4 |
-| [high] `world.budget` publishes raw placement counts (`WorldPopulationCommandModule.cs:225`) | A diagnostic reads `server.Definition` with no audience | 2 |
-| [low] `world.identify` hashes authored hidden seeds for a seat with Control over a screen (`WorldIdentifyCommandModule.cs:72`) | Reads `server.Definition` | 2 |
-| [low] `world.timeline` withholds through a predicate of its own, provable only windowed (`WorldTimelineCommandModule.cs:137-140`) | A door with its own check | 2 |
-| [unconfirmed] A search over an arena holding private keyed sites may compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`) | Search runs as the authority; its outputs are rows with their own policy | 2 (confirm), see [what serves authors](#what-serves-authors) |
 
 ## The decisions
 
 ### 1. One capability: the recipient's view
+
+Step 2's implementation invariant: every recipient read derives from its live
+`WorldRecipientView` at the server-minted ceiling; reading never advances a
+`WorldDeliveryCursor`. The existing `WorldStateReadView` remains a console
+adapter until step 6, with its definition and value reads delegated to that
+capability. Session capabilities retain their admission tier and recheck live
+Observe. Resource/work measurements in `world.budget` remain operator reads;
+recipient budgets count only the disclosed document. Search output audiences
+must be enclosed by every dependency of candidate generation, judging and
+scoring, checked before execution and before landing against live policy.
+The compiler wall against new authority-reading callers remains step 5.
+
+Authority diagnostics (`world.budget.rules`, `world.inspect`, `world.cost`,
+`world.contacts`, `world.collision.status`, `world.rigid`, `world.explain`,
+`world.debug-view report` and `goto`, and diagnostic finding picks) are
+operator reads. Their counts, work and revisions cannot be reconstructed from
+a recipient's view. A `world.debug-view` mode stays bindable for anyone: it
+selects what the shared screen draws, the operator's own presentation, and a
+seat's `colliders` or `contacts` selection answers the mode without the
+report's summary (the debug world's `gallery.view` and `range.tiers` commands
+call it). Standard seat controls no longer bind the operator inspector or the
+debug view.
+The journal and the save snapshot are the authority's edit history and its
+whole document: `world.save` is an operator verb (it writes the authority
+document, withheld cells included, to a host path and answers its byte
+count), and a recipient's `world.status` omits `session-drift` and `dirty`,
+whose journal length moves with an operator's hidden-only edit.
+`Principal.IsAuthority` is the one spelling of "the operator or the world".
 
 **Puck builds:** `WorldRecipientView`, the one object every per-recipient
 answer is derived from: reads, write admission and refusal, placements and
@@ -596,13 +619,26 @@ boundary the language gives, and IVT001 is what makes it hold.
 | 5. Deltas from the view | A replica or federation peer sees a restricted row move only when what it may read moves, and sees versions of its own | Nothing |
 | 6. The compiler | A verb, a mod host or a codec added later cannot reach the authority by omission | A new operator verb is registered as one |
 
-**Rules are the authority.** A rule reads every cell (it is the world's own
-program), and a rule that copies a hidden value into a public cell, or a
-`search` job whose outputs are public rows judged over private sites
-(`ArenaSearchEffectHost.cs:30-32`), is an authored disclosure, exactly like a
-binding on the shared screen. Step 2 confirms that a search's outputs carry the
-policy the author gave them, and a search output whose audience is wider than
-its restricted inputs is refused (the owner's ruling, [open items](#open-items)).
+**Rules are the authority.** A rule reads every cell and can deliberately
+reveal through its own write, like a binding on a shared screen. The owner's
+ruling for search is different: a search output whose audience is wider than
+any of its inputs is refused with `SearchWidensAudience`. Compilation shares
+`RuleCompiler.RequireEnclosedAudience` with transforms; execution shares
+`StateArena.ReadAudienceEncloses`, before advancing and before landing. A
+refused job lands nothing. Candidate generation, judge rules, scores, chance,
+enabled and revision rows all belong to that dependency set, maintained by
+`ArenaSearchPlan.Dependencies`. Their audience-check work is priced by
+`RuleCompiler.DisclosureCost`.
+
+`WorldSearchCompilation.JudgeRules` excludes a rule only when its gate is
+provably false at a positive search ply (besides the existing host-fact
+exclusions). Thus a live-only reveal into a side's memory does not make the
+memory's original authority inputs speculative dependencies. Unknown gates
+remain in the judge. The skirmish's fair job uses blue's memory for candidates
+and judging as well as scoring; its sharp job remains authority-only. Both
+`search evidence` scenarios refuse an attempt to publish the sharp output.
+The runtime law narrows a cell's audience during an open search, verifies no
+landing, restores the audience and observes a fresh completed search.
 
 **The games decide, and the harness is the definition of done.** Four authored
 games in `worlds/debug/`, played at the tables room's tables, are the fixtures
@@ -638,8 +674,8 @@ games and its fuzzer, not when a review runs out of findings.
 | A separate authority project as the guard | Reject as the sole guard | SDK references flow transitively and Server's public API would still carry the members | Nothing |
 | The assembly-level denied-API gate | Reject as the guard | Sees assembly references, not members | Nothing; it stays for `System.Console` and Azure |
 | Making `world.identify` operator-only | Watch | Hashing the recipient's view gives a per-recipient identity, which is what the recipient was handed; operator-only is simpler | The owner wanting one QR for every seat |
-| A separate body-disclosure view (`WorldOutputHub.Redact`, `WorldSinkDisclosure`) folded into the recipient view | Watch | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone | The view landed and a body-disclosure finding |
-| Refusing `search` jobs whose public outputs are judged over restricted sites | Watch | An authored disclosure like a shared-screen binding; a lint is the owner's product call | The owner's ruling on what authors may hide and from whom |
+| Refusing `search` jobs whose outputs are wider than their inputs | Adopt | The owner requires the transform boundary for search too; explicit rule writes remain authored reveals | Nothing |
+| A separate body-disclosure view (`WorldOutputHub.Redact`, `WorldSinkDisclosure`) folded into the recipient view | Adopt as its own step | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone. Both conditions have arrived: the view landed with step 1, and the MMO round's A16 is the body-disclosure finding ([open items](#open-items)) | Nothing |
 | Isolating the arena byte ceiling per row or per audience | Watch | A resource channel outside the guarantee; the per-row `capacity` already bounds cells | An authored world where the shared ceiling is reached with hidden rows |
 
 ## The build order
@@ -818,19 +854,27 @@ from that tick the variants' worlds differ by what those blind writes did:
 
 | Door | Recipient | Pair | What differs | Step |
 |---|---|---|---|---|
-| `world.budget` | seat2 | any hidden member | the raw placement count and rows, dealt children included | 2 |
 | `world.placements` | seat2 | any hidden member dealt before `pub` | `pub`'s `dealSlot` and position | 4 |
-| `world.projection` | seat2 | any hidden member | the presentation projection's byte count | 2 |
+| `world.projection` | seat2 | a hidden member dealt before `pub` | the disclosed layout still carries the authority deal slot and position, changing the composed projection size | 4 |
 | `echo` | seat2 | any hidden member | `world.state.cell.remove hand secret0` answers `ran` with no text in both, and its echo says `applied` against `has no cell keyed 'secret0'`: a membership oracle a fire-and-forget verb carries only on the echo | 3 |
 | `deliver.state`, `deliver.definition` | every session | any hidden member | the re-deal after seat2's blind removal moves `pub`'s dealt position (`$.placements.rows[2].position[0]`) | 3, 4 |
 | `world.state.transform`, `world.state.act` | seat2 | two hidden members | after seat2 overwrites the hidden `secret1`, a transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` | 3 |
 | `outcome.transform`, `outcome.act` | writer | two hidden members | the same refusal texts on the typed outcome | 3 |
-| `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 2, 3 |
-| `world.state.observe`, `world.observe`, `world.state` | seat2 | two hidden members | the observations of `hand` after the blind overwrite | 2, 3 |
-| `deliver.definition`, `deliver.snapshot`, `outcome.*`, `query.state` | every session | `late`, after the blind writes and fuzz | the re-authored row restores `pub` and removes keys the earlier writes made readable; that visible change advances the recipient's sequence | 2, 3, 4 |
+| `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 3 |
+| `world.state.observe`, `world.observe`, `world.state` | seat2 | two hidden members | the observations of `hand` after the blind overwrite | 3 |
+| `deliver.definition`, `deliver.snapshot`, `outcome.*`, `query.state` | every session | `late`, after the blind writes and fuzz | the re-authored row restores `pub` and removes keys the earlier writes made readable; that visible change advances the recipient's sequence | 3, 4 |
 | `echo`, `world.state.transform` | seat2 | `late` | a drawn transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` (a drawn `Generate 'hand'` likewise as `draw site is not disclosed` against `requires a redrawable draw site`) | 3 |
-| `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 2, 4 |
+| `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 3, 4 |
 
+Step 2's remaining layout doors are `world.placements`, `world.reflow.preview`,
+`world.projection` (including its byte count), and placements in `deliver.state`
+and `deliver.definition`. They consume the view already; step 4 replaces the
+hidden-dependent deal slots and base/displacement calculation inside it.
+Read differences after a blind write are step 3's public-state consequences,
+including `query.state`, `world.state`, observation replies and later budgets;
+changing the read path cannot undo a public write. `wire.errors` also retains
+write refusal text. Neither these nor the card fixture's intermediate disclosed
+count changes are claimed green by step 2.
 The drawn doors move with the registry, since the fuzzer draws over every verb
 anyone may run: a verb added or removed elsewhere changes which lines a seed
 draws. The authored rows (the schedule's and the script's) stay where they are.
@@ -848,7 +892,7 @@ one wins.
 |---|---|---|
 | 0. The harness and the games | The noninterference harness (above): paired boots differing only in hidden state, one principal of each kind driven identically in both, byte-for-byte comparison of everything it receives, leaks named by door; the input fuzzer over the principal's grants; `DisclosureHarnessLawTests` and `puck disclosure <world>`. The four fixtures as authored Puck games in `worlds/debug/`, each at a table in the tables room and each with its pair script and its hidden difference: **the auction** (sealed bids into an authority-only row, the reveal, the winner; its pair differs by one bid present or absent), **the card game** (a draw pile, a discard pile and dealt hands under `Count` and `Placeholder`, a displaced visible card; its pair differs by one hidden card), **social deduction** (roles in a restricted row, private chat channels through `chat.whisper` inboxes with `readersFrom` audiences, a vote; its pair differs by one role and one whisper), **the skirmish** (units with hidden positions under fog, a `search` job over what a side can see, physics on a small board; its pair differs by one unit in the fog). The existing probe is the fifth, smallest fixture | The harness runs over the five fixtures and the fuzzer and is red on today's code at exactly the findings' doors, naming each. The games settle what the plan left open: the auction shows whether an authored private inbox gives a sealed bid everything it needs (if it does, blind writes stay rejected; if it cannot, decision 3 is revisited with the auction's requirement in hand); the skirmish shows whether a `search` with public outputs over hidden rows leaks and so decides the lint; the card game decides the `$back` contract and the layout; social deduction decides whether `readersFrom` audiences and inbox eviction (`chat.whisper`'s bounded inbox) need a door of their own |
 | 1. The view and the cursor, deltas first — landed | `WorldRecipientView`, `WorldDeliveryCursor`, `WorldDisclosureImages` and the carrier's key bitsets; both sinks use `Advance` and seed on definition/Resume; recipient sequences on deliveries, outcomes and provenance; traveller validity by delivered projection identity; the old change-disclosure cache and its forget path removed. `host.frames`, `host.memory`, `world.counters`, `world.gpu-timing` and `world.collision.probe` are Operator; the operator's budget reports image work/storage. [Decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream) records the choices | `DisclosureHarnessLawTests` compares hidden-only installs with intervening reads; `StateChangeDisclosureLawTests` covers independent cursors, in-place vectors, count primers, seat receipts and shared spectator composition; `WorldProjectionBackpressureLawTests` compares both peer tiers' wire bytes using the harness nonce normalization. Session Resume, authenticated traveller lifetime and observation/anchor restore laws cover boundaries step 0b has not yet added to every fixture. The five fixtures still expose the read/write/layout causes below; equality is required while the actual disclosed image remains equal |
-| 2. Reads through the view | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; the skirmish's `search` doors confirmed | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
+| 2. Reads through the view — landed | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; search audience widening refused at compile time and live execution; the skirmish's fair search uses blue's memory throughout | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
 | 3. The write door refuses by policy | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Harness: every write the fuzzer makes (set, add, remove, transform, generate, guarded batches, addon binds and writes) compares equal in reply, typed outcome and later deliveries; the auction plays to its reveal with each bidder's receipts on its own row; `TransformDisclosureLawTests` updated to the one text |
 | 4. The layout | The view re-deals restricted templates with base and displacement split; `$back` children under `Placeholder` with their pick and submission contract; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template; `world.placements`, the projection and reflow from the re-deal | Harness: the card game's and the skirmish's `world.placements`, `world.reflow.preview`, picks and projections compare equal across their pairs, the displaced card included; `puck compile --validate` refuses the card game's template with `solid` by name; `PlacementResponseDisclosureLawTests` and `WorldDeckAndDisclosureLawTests` updated to the renumbered slots |
 | 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; an operator factory on `CommandDefinition` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
@@ -865,11 +909,7 @@ pool later declares enters through `ReadsWhole` alone.
 ## Open items
 
 - Argon's adversarial review of step 1 (findings unverified until a fix lane
-  reopens each quotation; the lead holds the report): [high] non-operator
-  verbs (`world.budget.rules --spent`, `world.inspect`, `world.cost`,
-  `world.collision.status`, `world.contacts`) expose firing counts, timings and
-  revisions that vary with hidden state, which step 2's read doors own;
-  [high] `deal` leaks preceding hidden cells through `DealSlot` and position,
+  reopens each quotation; the lead holds the report): [high] `deal` leaks preceding hidden cells through `DealSlot` and position,
   which step 4 owns; [medium] `WorldDeliveryRows.Advance` may drop public
   field-cell deltas at the presentation tier; [medium] the image key-skip check
   in `WorldDisclosureImages.Image` may skip readable writes and poison the cached
@@ -878,30 +918,6 @@ pool later declares enters through `ReadsWhole` alone.
   unrestricted storage metadata; [medium] `WorldDeliveryCursor.Seed` and
   `WorldSessionSink.DeliverState` may make sequence numbers depend on the hidden
   count. The medium four are step 1's own and get a fix pass after step 2 lands.
-- The owner's ruling: a `search` job whose outputs reach a wider audience than
-  the restricted rows its scoring reads is **refused**, at compile time for
-  declared audiences and at run time where an audience changes live (fog that
-  follows line of sight), exactly as a transform is refused with
-  `TransformWidensAudience`. A refused job lands nothing, as a faulted search
-  does. The author confines the output's audience (the authority, the side
-  that may read the input, an omniscient spectator tier) or discloses
-  deliberately through a rule's own write, which makes every reveal mechanic
-  (a sonar ping, hot-and-cold hints, an end-of-game reveal) an explicit line of
-  the document. A search over the side's own view or memory compiles as before.
-  Step 2 builds the check beside the transform's. The evidence:
-  `worlds/debug/skirmish-tests.puck`, the two `search evidence` scenarios.
-  Blue's `skirmishSharp` scores its move by
-  red's real `skirmishPos`, which only `seat1` reads, and lands its best move in
-  the public `skirmishSharpBest`, so the destination says which side of the
-  board the hidden unit is on and the score gives its exact distance; its twin
-  `skirmishFair`, scored over blue's own `knowledge` row, answers the same every
-  time. A transform that reads a restricted row is refused when its
-  destination's audience is wider (`TransformWidensAudience`,
-  `src/Puck.State.Rules/Transforms/Disclosure.cs:118-141`); a search's outputs
-  go through no such check. The fair job is honest only because its score reads
-  nothing but blue's memory: its candidates still step onto cells where red's
-  hidden units stand (`relocate(displace: true)` takes them), so a score reading
-  what the step changed would leak the same way.
 - Whether blind writes return: rejected here (decision 3). The auction fixture
   (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
   needs nothing more: each bid lands in the bidder's own inbox, a rule moves
@@ -925,14 +941,9 @@ pool later declares enters through `ReadsWhole` alone.
   its `.disclosure.json`; each admits a replica, a presentation and an
   `editor` session, the last with Mutate of the state section and Edit of the
   game's restricted rows, so its drawn writes reach the mutation path). Every
-  variant's setup steps apply, and every control agrees. The skirmish is red
-  at `world.state` to `seat2` (tick 40) and at `deliver.snapshot` to the
-  replica and editor sessions (tick 15) in each of its three fog pairs: the
-  public `skirmishSharpBest` row (`to`/`score` 25/-4 against 26/-7, 24/-4 and
-  24/-5), which is the search door; its late in-fog move is green. The card
-  game remains red at `world.budget`, `world.projection` and session
-  `query.state` (step 2), at policy-dependent write refusals including
-  `world.reset` (step 3), and at dealt slots and placements (step 4). Its
+  variant's setup steps apply, and every control agrees. The skirmish is green after its output-audience refusal and memory-only fair job.
+  The card game remains red at dealt layout and its projection size (step 4),
+  and at policy-dependent write outcomes (step 3). Its
   swap removes cards before returning them two ticks later: `Count` and
   `Placeholder` deliberately disclose that intermediate change. Those
   observations and the remaining layout differences legitimately cause
@@ -948,8 +959,23 @@ pool later declares enters through `ReadsWhole` alone.
   per-seat rows that move nothing a crew seat or a session is delivered.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
-- Body disclosure (`WorldOutputHub.Redact`) joins the recipient view when its
-  next finding arrives; the view is designed to hold it.
+- Body disclosure (`WorldOutputHub.Redact`) joins the recipient view: the MMO
+  round's I1 (its step 16; [the seams decision](../decisions/worlds-and-federation.md#seams)).
+  Its finding is the attack catalogue's
+  [A16](mmo-foundations/attacks.md#a16-watching-without-a-body): under the
+  default `All` an unembodied spectator receives every body, and under `Radius`
+  an observer anchored to a window or a camera receives none, because `Redact`
+  anchors only to the observer's own body (`WorldObserverDisclosure`'s
+  `Radius` mode: "An observer with no body of its own is delivered nothing").
+  Fold a spatial grid, hysteresis, an unembodied-observer policy with a window
+  or camera anchor, and distance-tiered cadence into the view and its cursor,
+  replacing `Redact`. Check 5 (I1) in
+  [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option):
+  at `Radius 15` with 64 autonomous bodies crossing the radius, a spectator
+  anchored to a window grant receives the bodies within 15 m of its window, an
+  unanchored one receives none under `All` as well as `Radius`, a body
+  oscillating 0.1 m at 15.0 m does not flicker, and `world.budget` shows
+  redaction cost scaling with nearby bodies. Needs step 1 (landed) alone.
 - The resource channels named as best effort are measured, not assumed: step
   1's spectator check records the per-tick disclosure work a hidden write
   costs, so the width of the timing channel is a number in `world.budget`.

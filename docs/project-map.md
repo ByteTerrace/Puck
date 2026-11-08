@@ -121,11 +121,11 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.World.Protocol.Tests  Puck.World.Schema.Tests
                          Puck.World.Server.Tests  Puck.World.Silo.Tests
                          Puck.World.Tests  Puck.World.Transpiler.Tests
-(Tool)                   Puck.Cli  Puck.Cli.Bench  Puck.Cli.Content
-                         Puck.Cli.Core  Puck.Cli.Format  Puck.Cli.Gate
-                         Puck.Cli.Harness  Puck.Cli.Laws  Puck.Cli.Release
-                         Puck.Cli.Runs  Puck.Cli.Shaders  Puck.Cli.Source
-                         Puck.Cli.Worktrees  Puck.Cli.Worlds
+(Tool)                   Puck.Cli  Puck.Cli.Azure  Puck.Cli.Bench
+                         Puck.Cli.Content  Puck.Cli.Core  Puck.Cli.Format
+                         Puck.Cli.Gate  Puck.Cli.Harness  Puck.Cli.Laws
+                         Puck.Cli.Release  Puck.Cli.Runs  Puck.Cli.Shaders
+                         Puck.Cli.Source  Puck.Cli.Worktrees  Puck.Cli.Worlds
                          Puck.Shaders.Generator
 (Analyzer)               Puck.Analyzers
 ```
@@ -171,7 +171,7 @@ the wrong ones.
 | `PUCKARCH006` | A resolved Puck assembly that arrives by a route other than a project reference (a raw `<Reference>`, or a package)—the route is refused before its layer is ever considered. |
 | `PUCKARCH007` | A resolved reference that declares no `<PuckKind>` at all—outside the gate's scope, so depending on it imports the freedom the gate never checked. |
 | `PUCKARCH008` | A project's compiled output references an assembly `PuckArchitectureDeniedApi` denies it, even though nothing in its declared or resolved references would have caught the edge. |
-| `PUCKARCH009` | Provider independence: a ranked project that declares no `<PuckProvider>` (or another one) holds a provider project or one of that provider's SDK assemblies (`PuckArchitectureProviderAssemblies`) in its resolved closure. Terminal kinds are exempt. |
+| `PUCKARCH009` | Provider independence: a project that declares no `<PuckProvider>` (or another one) holds a provider project or one of that provider's SDK assemblies (`PuckArchitectureProviderAssemblies`) in its resolved closure. Only Test kinds are exempt; tools select installed contributions. |
 
 ## Contracts and data
 
@@ -296,7 +296,7 @@ filter somewhere else.
 | Path | Purpose |
 |---|---|
 | `src/Puck.Dashboard/` | The world-authoring studio: a TypeScript/React portal (`src/portal`) plus a module-federation host (`src/host`), outside `Puck.slnx` and the architecture gate—no `<PuckKind>`/`<PuckLayer>`, built and tested through `npm`, never `dotnet`. Edits `puck.world.definition.v1` documents and previews their rules; `Puck.World.Browser`'s `browser-wasm` publish is its native engine. |
-| `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), the layering report (`architecture`), and the repository automation CI runs (`artifacts`, `azure`, `nuget`). It is the root that composes the verb assemblies under `src/Puck.Cli.*` (`Core`, `Harness`, `Source`, `Format`, `Shaders`, `Worlds`, `Gate`, `Laws`, `Worktrees`, `Runs`, `Bench`, `Release`, `Content`), each referencing only what its own verbs need, with a suite of its own under `tests/`. Kind `Tool`: they consume the tree and nothing below them consumes them; the game's build runs `Puck.Cli.Worlds` to compile the shipped worlds. |
+| `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), the layering report (`architecture`), and the repository automation CI runs (`artifacts`, `nuget`). It composes the provider-neutral verb assemblies under `src/Puck.Cli.*` and discovers installed extensions through `CliExtensions`; `Puck.Cli.Azure` supplies `puck azure` and the `azure` `WorldReleaseHost`. Each assembly references only what its own verbs need, with a suite of its own under `tests/`. Kind `Tool`: they consume the tree and nothing below them consumes them; the game's build runs `Puck.Cli.Worlds` to compile the shipped worlds. |
 | `src/Puck.Shaders.Generator/` | The build-time host of `ShaderDeclarations` and of every shader project's `ShaderBuild`: every project whose kernels include a declaration the C# model owns references it with `ReferenceOutputAssembly="false"`, its build writes each declaration whose text the model has changed before those kernels compile, and `build/Shaders.targets` runs it to compile each project's shaders through the shared cache. A `Tool`, referenced as no assembly. |
 | `build/` | Build policy the whole tree imports: the marker attribute sources, the architecture ledger (`Architecture.props`), the gate (`Puck.Architecture.targets`), the one inline MSBuild task every build operation implemented in the tree runs as (`PuckBuildTasks.targets` + `PuckBuildTasks.cs`: the gate, the shader build, the Direct3D 11 kernels and the World's stale package sweep, which `PuckBuildTasks.targets` compiles once per version of the source rather than in every build node), and the NuGet packaging policy (`Packaging.targets`—shared version and metadata, applied only to projects that opt in with `<IsPackable>true</IsPackable>`; the tree default is `false`). |
 | `.claude/skills/` | Current factual and procedural agent references for repository-specific work. |

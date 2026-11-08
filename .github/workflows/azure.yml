@@ -104,6 +104,7 @@ jobs:
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
+          azure: "true"
       - name: Sign in to Azure with OIDC
         uses: ./.github/actions/azure-login
         with:
@@ -150,6 +151,7 @@ jobs:
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
+          azure: "true"
       - id: current
         name: Skip a superseded commit
         run: puck azure current
@@ -215,7 +217,7 @@ jobs:
         shell: bash
       - if: steps.current.outputs.deploy == 'true'
         name: Deploy the primary Puck world
-        run: puck world release deploy artifacts/world-release
+        run: puck world release deploy artifacts/world-release --host azure
         shell: bash
       - if: always() && steps.vault.outcome != 'skipped'
         name: Restore signing-key vault restrictions
@@ -304,6 +306,7 @@ jobs:
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
+          azure: "true"
       - name: Download the Functions payload and its source identity
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -420,6 +423,7 @@ jobs:
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
+          azure: "true"
       - if: matrix.image == 'world-silo'
         name: Verify primary Puck activation, QUIC, and checkpoint recovery
         run: puck azure test-world-container --image "puck/world-silo:$GITHUB_SHA"

@@ -152,7 +152,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, W
                 var document = JsonSerializer.SerializeToNode(
                     inputType: typeof(WorldDefinition),
                     options: WorldJsonContext.Default.Options,
-                    value: server.Definition
+                    value: server.ReadView(context).Definition
                 )!.AsObject();
                 var working = document.DeepClone().AsObject();
                 IReadOnlyList<SculptPatchResult> results;

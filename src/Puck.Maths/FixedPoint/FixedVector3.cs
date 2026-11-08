@@ -678,6 +678,18 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         (IsWithin(radius: maximum)
             ? this
             : WithLength(length: maximum));
+    /// <summary>Shortens this vector only when its exact length exceeds another vector's exact length.</summary>
+    /// <param name="maximum">The vector supplying the length bound.</param>
+    /// <returns>This vector when already within the bound; otherwise a vector rounded toward zero within it.</returns>
+    public FixedVector3 ClampLength(FixedVector3 maximum) {
+        static UInt128 Squared(FixedVector3 value) => FusedArithmetic.SquareMagnitude(value.X.Value) +
+            FusedArithmetic.SquareMagnitude(value.Y.Value) + FusedArithmetic.SquareMagnitude(value.Z.Value);
+        var squared = Squared(maximum);
+        if (Squared(this) <= squared) { return this; }
+        var length = maximum.Length;
+        if (FusedArithmetic.SquareMagnitude(length.Value) > squared) { length -= FixedQ4816.Epsilon; }
+        return WithLength(length: length);
+    }
     /// <summary>Rescales the vector to a length of at most <paramref name="length"/> along its own direction, each
     /// component rounded toward zero.</summary>
     /// <param name="length">The length to scale to.</param>

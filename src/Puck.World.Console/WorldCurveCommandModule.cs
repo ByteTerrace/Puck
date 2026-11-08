@@ -87,7 +87,7 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
             description: "Reports the curves census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored closed flag and knot count, the compiled segment count and total arc length (the SAME derivation the camera path op and the sim curve-follow target read), and how many document members reference it.",
-            describe: server => DescribeCurves(definition: server.Definition),
+            describe: (server, view) => DescribeCurves(definition: view.Definition),
             name: "world.curves"
         );
     }

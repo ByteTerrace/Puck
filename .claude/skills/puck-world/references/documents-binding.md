@@ -521,11 +521,12 @@ and movement keys while it rebinds the rest. A binding document validates its ch
 its own `modifiers`, so every overlay that adds entries to a trigger page declares the
 modifiers again (`let padModifiers` in `pad-kit.puck`); entries from several overlays on the
 same page id merge by source. A binding to a verb only a rendered World registers
-(`world.debug-view`, `world.quality`) is judged by the verb catalog in every shape: `puck compile --validate` checks every
+(`world.quality`) is judged by the verb catalog in every shape: `puck compile --validate` checks every
 binding's command (named, Bindable, accepting `text`, the value kind) against it, a typo is refused there, and a headless
 boot admits the document and drops that entry from the seat's composition with one narrated line, as the seat recompose
 already does for any command a leaner shape lacks. The bar's Debug and Tour pages bind the render levers
-(`world.quality next`, `world.rates toggle`), `world.screenshot`, `world.history on` and `world.debug-view` directly. An
+(`world.quality next`, `world.rates toggle`), `world.screenshot` and `world.history on` directly. Authority diagnostics
+(`world.inspect`, `world.debug-view`) are operator commands and have no standard seat binding. An
 imported module's state rows are private, so a binding in another module that reads one
 (`worlds/debug/controls.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
 `WorldWheelFeed` owns logical gesture state and optional presentation;

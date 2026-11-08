@@ -15,8 +15,8 @@ namespace Puck.World;
 public sealed class WorldContributionCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     private static readonly CommandForms ContributionsForms = CommandForms.Of(verb: "world.contributions", "[placementId]");
 
-    private static string Describe(WorldServer server, string? filter) {
-        var definition = server.Definition;
+    private static string Describe(WorldServer server, string? filter, WorldRecipientView view) {
+        var definition = view.Definition;
         var echo = CommandEcho.Open(verb: "world.contributions");
         var matched = 0;
 
@@ -89,7 +89,7 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateOptionalFilterCommand(
-            describe: (filter, server) => Describe(filter: filter, server: server),
+            describe: (filter, server, view) => Describe(filter: filter, server: server, view: view),
             description: $"Echoes every contribution slot — the host-authored half (tenure, slotCreationId, link, graceSeconds and its compiled tick count) and the server-stamped half (contributor, retractDeadlineTick) — beside the live reachability of each presence slot's watched link: {ContributionsForms.Spelling}. With a placement id, echoes only that slot.",
             forms: ContributionsForms
         );

@@ -319,7 +319,7 @@ Every reservation decoded from the federation wire is a peer admission
 incarnation this authority minted at that slot
 (`src/Puck.World.Server/WorldServer.Crossings.cs:43-58`) **[opened]**. The
 architecture page states the consequence **[opened]**
-(`docs/architecture/worlds.md:804-806`):
+(`docs/architecture/worlds.md:819-821`):
 
 ```text
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
@@ -731,7 +731,7 @@ deployment group (section 3) **[opened]**; it gates connection, not a world's
 ### Which build-plan steps are in the code
 
 The plan says steps 1 to 5 are built **[opened]**
-(`docs/plans/companion-redesign.md:551-554`):
+(`docs/plans/companion-redesign.md:553-556`):
 
 ```text
 Steps 1 to 5 are built. Durable record kinds for later steps already exist in
@@ -802,28 +802,19 @@ Three filters exist **[opened]**:
 - The per-observer body policy `population.disclosure`, `All` (default),
   `Radius` or `SelfOnly`, applied at the output hub's sink boundary
   (`src/Puck.World.Schema/WorldObserverDisclosure.cs:8-22`).
-- State visibility: `WorldStateDisclosure` composes a recipient's rows, and
-  `WorldStateReadView` is the console's per-principal read
-  (`src/Puck.World.Schema/WorldStateDisclosure.cs:57-61`,
-  `src/Puck.World.Server/WorldStateReadView.cs:5-10`).
+- State visibility and admission tier meet in `WorldRecipientView`.
+  `WorldStateReadView` adapts it for console reads; `WorldSessionObservation`
+  supplies the same live capability to session reads and delivery.
 
-The disclosure plan's own inventory says the chokepoint is partial and every
-delivery sink discloses by hand (`docs/plans/disclosure.md:80-150`)
-**[opened]**. `WorldRecipientView` does not exist (a search over `src/` finds
-none) **[opened]**.
+Disclosure steps 1 and 2 have landed. `WorldDeliveryCursor` owns delivery history;
+a read never advances it. The remaining write, layout and compiler work is in
+the [disclosure plan](../disclosure.md).
 
 ### What the authority sees
 
-Everything. The operator reads the live document whole **[opened]**
-(`src/Puck.World.Server/WorldStateReadView.cs:5-9`):
-
-```csharp
-/// <summary>One principal's read of a live world's state: the document as <see cref="WorldStateDisclosure"/>
-/// discloses it to that principal, and the refusal a read of anything withheld answers with.
-/// <para>A console read-back verb reads state through this view rather than through <see cref="WorldServer.Definition"/>,
-/// so a seat, an addon or a peer is shown what its visibility admits and nothing else. The operator — the
-/// <see cref="PrincipalKind.Console"/> principal — reads the live document whole.</para></summary>
-```
+The operator reads the live document whole (`WorldStateReadView.IsOperator`,
+`WorldRecipientView.Definition`). Non-operator views retain their ceiling and
+current visibility.
 
 Local and colocated sinks take every body **[opened]**
 (`src/Puck.World.Server/WorldOutputHub.cs:11-15`):
@@ -1082,7 +1073,7 @@ cites correct lines whose conclusion this lane's reading narrows.
 | A1 `TrySetFact` | `src/Puck.World.Schema/WorldIdentity.cs:497-522` | lines hold; claim incomplete | also refuses a new key past capacity, `src/Puck.World.Schema/WorldIdentity.cs:539-543` |
 | A1 model answer | lines 84-88 | moved and reworded | `docs/architecture/worlds.md:86-88`: "so a copy gains nothing", not "a copied claim gains nothing" |
 | A2 write-back | lines 778-781 | moved | `docs/architecture/worlds.md:795-797` |
-| A2 adoption chain | `src/Puck.World.Server/WorldTransferEscrow.cs:1357-1409` | lines hold; claim narrower | adoption is colocated only: `HomeIdentity` at `src/Puck.World.Server/WorldTransferEscrow.cs:1431-1440`, federated arrivals peer-admitted at `src/Puck.World.Server/WorldFederationCodec.cs:1363`, stated at `docs/architecture/worlds.md:804-806` |
+| A2 adoption chain | `src/Puck.World.Server/WorldTransferEscrow.cs:1357-1409` | lines hold; claim narrower | adoption is colocated only: `HomeIdentity` at `src/Puck.World.Server/WorldTransferEscrow.cs:1431-1440`, federated arrivals peer-admitted at `src/Puck.World.Server/WorldFederationCodec.cs:1363`, stated at `docs/architecture/worlds.md:819-821` |
 | A3 departure | lines 1160-1170 | moved | `docs/architecture/worlds.md:1177-1187` |
 | A3 "loses position" | lines 1358-1361 | moved | `docs/architecture/worlds.md:1375-1378` |
 | A3 "home adopts on return" | (A2 chain) | claim narrower | a federated destination's writes are never adopted, returned or not (row A2 above) |

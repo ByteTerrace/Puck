@@ -7,8 +7,8 @@ namespace Puck.World;
 /// The <c>captures</c> section's read-back surface: <c>world.captures</c> (the authored schedule).
 /// </summary>
 internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRoot stateRoot, WorldCaptureRoot captureRoot) : ICommandModule {
-    private CommandResult Describe() {
-        var captures = server.Definition.Captures;
+    private CommandResult Describe(CommandContext context) {
+        var captures = server.ReadView(context).Definition.Captures;
 
         if (captures is not { Rows: { Count: > 0 } rows }) {
             return new CommandResult(Output: "[world.captures: no schedule authored]");
@@ -16,7 +16,7 @@ internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRo
 
         var directory = captureRoot.Resolve(
             captures: captures,
-            documentDirectory: server.Definition.DocumentDirectory,
+            documentDirectory: server.ReadView(context).Definition.DocumentDirectory,
             stateRoot: stateRoot
         );
         var lines = new List<string>(capacity: (1 + rows.Count)) {
@@ -43,12 +43,12 @@ internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRo
             bindability: CommandBindability.Unbindable,
             name: "world.captures",
             description: "Reads the document's captures section (Immediate, no arguments): the resolved output directory and every station's declared tick schedule and palette-entry count. Absent captures reports an empty schedule, never a refusal.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.captures"
             ) is { } refusal)
             ? refusal
-            : Describe())
+            : Describe(context))
         );
     }
 }

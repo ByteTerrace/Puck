@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Assets;
-using Puck.Cli.Azure;
 using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
@@ -12,7 +11,7 @@ namespace Puck.Cli.Automation;
 
 /// <summary>Operator-facing release preparation and durable deployment-group inspection commands.</summary>
 public static class WorldReleaseCommand {
-    internal static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
+    public static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
         if (!Directory.Exists(path: packageDirectory)) {
             throw new DirectoryNotFoundException(message: packageDirectory);
         }
@@ -235,7 +234,7 @@ public static class WorldReleaseCommand {
         _ when (record.ActiveRelease is null) => "Prepare the first managed deployment.",
         _ => "Prepare the next release."
     };
-    private static async Task<int> StatusAsync(string? path, bool json, CancellationToken cancellationToken) {
+    private static async Task<int> StatusAsync(string? path, bool json, string? host, CancellationToken cancellationToken) {
         WorldReleaseGroupRecord record;
 
         if (path is not null) {
@@ -244,7 +243,7 @@ public static class WorldReleaseCommand {
                 cancellationToken
             ));
         } else {
-            var snapshot = await AzureCommand.ReadWorldReleaseStatusAsync(cancellationToken: cancellationToken);
+            var snapshot = await WorldReleaseHost.Select(name: host).ReadWorldReleaseStatusAsync(cancellationToken: cancellationToken);
 
             if (snapshot is null) {
                 return CliExit.Refuse(
@@ -294,6 +293,7 @@ public static class WorldReleaseCommand {
     /// Docker.</param>
     /// <returns>The verb.</returns>
     public static Command Create(TimeProvider clock, IWorldReleaseQualificationContainers? containers = null) {
+        var host = new Option<string?>(name: "--host") { Description = "Installed release host key; defaults to the single installed host.", Recursive = true };
         var package = new Argument<string>(name: "package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
         var silo = new Option<string>("--silo") { Description = "Validated silo configuration whose owner/world rows name the composed definitions.", Required = true };
         var output = CliOptions.Output(description: "The manifest's path; absent, release.json in the package directory.");
@@ -319,7 +319,7 @@ public static class WorldReleaseCommand {
         ));
 
         var status = new Command(
-            description: "Inspect the configured Azure world deployment, or a saved deployment-group file.",
+            description: "Inspect the selected release host's world deployment, or a saved deployment-group file.",
             name: "status"
         );
         var statusPath = new Argument<string?>(name: "group-file") { Arity = ArgumentArity.ZeroOrOne, Description = "A saved deployment-group record to read instead of the configured deployment." };
@@ -330,6 +330,7 @@ public static class WorldReleaseCommand {
         status.SetAction(action: (parse, cancellationToken) => StatusAsync(
             parse.GetValue(argument: statusPath),
             parse.GetValue(option: json),
+            parse.GetValue(option: host),
             cancellationToken
         ));
 
@@ -338,9 +339,9 @@ public static class WorldReleaseCommand {
             name: "finalize"
         );
 
-        finalize.SetAction(action: (_, token) => WithRecoveryHintAsync(
+        finalize.SetAction(action: (parse, token) => WithRecoveryHintAsync(
             action: async () => {
-                var finalized = await AzureCommand.FinalizeWorldReleaseAsync(
+                var finalized = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).FinalizeWorldReleaseAsync(
                     cancellationToken: token,
                     clock: clock
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -450,9 +451,9 @@ public static class WorldReleaseCommand {
             name: "resume"
         );
 
-        resume.SetAction(action: (_, token) => WithRecoveryHintAsync(
+        resume.SetAction(action: (parse, token) => WithRecoveryHintAsync(
             action: async () => {
-                var result = await AzureCommand.ResumeWorldReleaseAsync(
+                var result = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).ResumeWorldReleaseAsync(
                     cancellationToken: token,
                     clock: clock
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -473,7 +474,7 @@ public static class WorldReleaseCommand {
 
         deploy.SetAction(action: (parse, token) => WithRecoveryHintAsync(
             action: async () => {
-                var result = await AzureCommand.DeployWorldReleaseAsync(
+                var result = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).DeployWorldReleaseAsync(
                     parse.GetRequiredValue(argument: deployPackage),
                     parse.GetValue(option: deployOperation),
                     clock,
@@ -495,7 +496,7 @@ public static class WorldReleaseCommand {
 
         rollback.SetAction(action: (parse, token) => WithRecoveryHintAsync(
             action: async () => {
-                var result = await AzureCommand.RollbackWorldReleaseAsync(
+                var result = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).RollbackWorldReleaseAsync(
                     parse.GetValue(option: rollbackOperation),
                     clock,
                     token
@@ -515,7 +516,7 @@ public static class WorldReleaseCommand {
         ) { checkpointId };
 
         checkpoint.SetAction(action: async (parse, token) => {
-            var point = await AzureCommand.CaptureWorldReleasePointAsync(
+            var point = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).CaptureWorldReleasePointAsync(
                 clock: clock,
                 requestId: (parse.GetValue(option: checkpointId) ?? Guid.NewGuid()),
                 token: token
@@ -538,7 +539,7 @@ public static class WorldReleaseCommand {
 
         restore.SetAction(action: (parse, token) => WithRecoveryHintAsync(
             action: async () => {
-                var result = await AzureCommand.RestoreWorldReleaseAsync(
+                var result = await WorldReleaseHost.Select(name: parse.GetValue(option: host)).RestoreWorldReleaseAsync(
                     parse.GetRequiredValue(argument: restorePoint),
                     parse.GetValue(option: restoreOperation),
                     parse.GetValue(option: discardProgress),
@@ -556,6 +557,6 @@ public static class WorldReleaseCommand {
         return new Command(
             description: "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.",
             name: "release"
-        ) { prepare, status, finalize, qualify, resume, deploy, rollback, checkpoint, restore, WorldReleaseExerciseCommand.Create() };
+        ) { host, prepare, status, finalize, qualify, resume, deploy, rollback, checkpoint, restore, WorldReleaseExerciseCommand.Create() };
     }
 }

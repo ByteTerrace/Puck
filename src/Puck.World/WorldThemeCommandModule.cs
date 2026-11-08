@@ -16,7 +16,7 @@ namespace Puck.World;
 internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeResolve theme) : ICommandModule {
     private static readonly CommandForms WorldThemeForms = CommandForms.Of(verb: "world.theme", "[contrast high|normal|toggle]");
 
-    private CommandResult Describe() => new(Output: $"[world.theme: source={((server.Definition.ThemeRaw is null)
+    private CommandResult Describe(CommandContext context) => new(Output: $"[world.theme: source={((server.ReadView(context).Definition.ThemeRaw is null)
         ? "engine-default"
         : "document")} contrast={(theme.HighContrast
         ? "high"
@@ -29,9 +29,9 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
             name: "world.theme",
             description: $"Reads the overlay theme's source and the contrast preference, or sets the preference: {WorldThemeForms.Spelling}. The source is document (the world authors or imports a theme) or engine-default (the engine's neutral theme, which a world that authors none draws). High contrast raises every scrim to at least WorldThemeCapacity.HighContrastScrimAlpha opaque, so overlay text stays legible over any scene. Presentation only and this process's own: the document is untouched and nothing reaches the simulation.",
             forms: WorldThemeForms,
-            handler: (_, args) => {
+            handler: (context, args) => {
                 if (args.Count == 0) {
-                    return Describe();
+                    return Describe(context);
                 }
 
                 if (
@@ -67,7 +67,7 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
 
                 theme.HighContrast = resolved;
 
-                return Describe();
+                return Describe(context);
             },
             routing: CommandRouting.Immediate
         );

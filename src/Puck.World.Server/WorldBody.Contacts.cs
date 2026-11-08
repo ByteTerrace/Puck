@@ -384,10 +384,10 @@ public sealed partial class WorldBody {
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
             SweepContact(entityIndex: m_entityIndex, field: m_field, orientation: in m_orientation, position: ref position,
                 previousPosition: in previousPosition, up: in m_axis, velocity: ref velocity, volumes: m_volumes);
-        public ContactResolution SweepSupport(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+        public ContactResolution SweepSupport(in FixedVector3 previousPosition, in FixedVector3 responseOrigin, ref FixedVector3 position, ref FixedVector3 velocity) =>
             ((m_field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySupportSweep(entityIndex: m_entityIndex, orientation: in m_orientation,
-                    position: ref position, previousPosition: in previousPosition, up: in m_axis,
+                    position: ref position, previousPosition: in previousPosition, responseOrigin: in responseOrigin, up: in m_axis,
                     velocity: ref velocity, volumes: m_volumes)
                 : Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity));
     }

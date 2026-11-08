@@ -190,11 +190,11 @@ public sealed class AnyAddressBindAnalyzerTests {
             }
 
             """;
-        const string Site = "C:/repo/src/Puck.Cli.Release/Azure/AzureWorld.cs";
+        const string Site = "C:/repo/src/Puck.Cli.Azure/Azure/AzureWorld.cs";
 
         Assert.Contains(
             actualString: Assert.Single(collection: Messages(result: Run(
-                assemblyName: "Puck.Cli.Release",
+                assemblyName: "Puck.Cli.Azure",
                 body: Body,
                 fileName: Site
             ))),
@@ -203,9 +203,9 @@ public sealed class AnyAddressBindAnalyzerTests {
         );
         Assert.Equal(
             actual: Messages(result: Run(
-                assemblyName: "Puck.Cli.Release",
+                assemblyName: "Puck.Cli.Azure",
                 body: Body,
-                fileName: "C:/repo/src/Puck.Cli.Release/Azure/AzureVerification.cs"
+                fileName: "C:/repo/src/Puck.Cli.Azure/Azure/AzureVerification.cs"
             )).Length,
             expected: 2
         );

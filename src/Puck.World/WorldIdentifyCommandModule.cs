@@ -20,7 +20,7 @@ namespace Puck.World;
 /// hashed at load, so re-serializing on every invocation is the only answer that always tells the truth about the world
 /// actually running. It costs one canonical serialization of the definition per invocation — a one-shot cost on an
 /// operator verb, never a per-frame one — and it removes the degraded case entirely: there is no world whose identity
-/// this verb has to guess at or print stale. The echo says so (<c>hash-covers=live-definition</c>) rather than leaving
+/// this verb has to guess at or print stale. The echo says so (<c>hash-covers=recipient-view</c>) rather than leaving
 /// the reader to assume it matches the file on disk.</para>
 /// <para>A separate module from <see cref="ScreenCommandModule"/>: this verb's subject is the world, not a screen — the
 /// screen is only where the answer is drawn — and carving by subject is how this project keeps each class under its
@@ -70,7 +70,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
             return CommandResult.Error(output: $"[world.identify: {principal.Describe()} lacks Control over screen {index} — grant it (world.grant {principal.Describe()} control screen:{index})]");
         }
 
-        var definition = m_server.Definition;
+        var definition = m_server.ReadView(context).Definition;
 
         // No documentId, no identity: a payload carrying only a hash would name the bytes without naming the world,
         // and inventing a stand-in id here would be minting an identity rather than reporting one.
@@ -105,7 +105,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.identify: {index} v{authoring.Version} {QrErrorCorrection.Letter(level: authoring.Level)} mask{authoring.Mask} quietZone={authoring.QuietZoneModules} {authoring.Width}x{authoring.Height} hash-covers=live-definition payload='{authoring.Payload}']"
+            handler: $"[world.identify: {index} v{authoring.Version} {QrErrorCorrection.Letter(level: authoring.Level)} mask{authoring.Mask} quietZone={authoring.QuietZoneModules} {authoring.Width}x{authoring.Height} hash-covers=recipient-view payload='{authoring.Payload}']"
         ));
     }
 
@@ -114,7 +114,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.identify",
-            description: $"Draws the running world's own identity onto a declared screen as a scannable QR code: {WorldIdentifyForms.Spelling} — [ecLevel] one of L|M|Q|H (default M, the document default). The payload is puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>, deterministic in the definition alone (no clock, no counter, no session state): the same world always mints the same payload. The hash is recomputed from the LIVE definition's canonical bytes on every invocation, so a world mutated since boot reports its CURRENT identity rather than the identity of the file it was loaded from — the echo says which document it covers. Drives the same live-QR path screen.source <index> qr does (any existing producer on the slot is cleared; a booted machine ejects first through the ordered domain) and echoes what it drew: version, EC level, mask, quiet zone, rendered extent, and the payload in full. Errors on an undeclared screen, an unrecognized EC-level letter, a world carrying no documentId, or a payload too large for the encoder's supported version range.",
+            description: $"Draws the running world's own identity onto a declared screen as a scannable QR code: {WorldIdentifyForms.Spelling} — [ecLevel] one of L|M|Q|H (default M, the document default). The payload is puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>, deterministic in the definition alone (no clock, no counter, no session state): the same disclosed world mints the same payload. The hash is recomputed from the caller's LIVE recipient view's canonical bytes on every invocation, so a world mutated since boot reports its CURRENT identity rather than the identity of the file it was loaded from — the echo says which document it covers. Drives the same live-QR path screen.source <index> qr does (any existing producer on the slot is cleared; a booted machine ejects first through the ordered domain) and echoes what it drew: version, EC level, mask, quiet zone, rendered extent, and the payload in full. Errors on an undeclared screen, an unrecognized EC-level letter, a world carrying no documentId, or a payload too large for the encoder's supported version range.",
             forms: WorldIdentifyForms,
             handler: IdentifyHandler,
             routing: CommandRouting.Simulation

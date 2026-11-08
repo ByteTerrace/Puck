@@ -542,8 +542,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             _ => "0",
         })
     );
-    private static WorldStateRow? FindRow(WorldServer server, string name) => WorldDefinitionRows.FindStateRow(
-        rows: server.Definition.State,
+    private static WorldStateRow? FindRow(WorldRecipientView view, string name) => WorldDefinitionRows.FindStateRow(
+        rows: view.Definition.State,
         name: name
     );
     // Row existence, row KIND (for the same-batch-declare edge case below), and the bool+add refusal are ALL asked
@@ -563,7 +563,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         var rowName = args[0].ToString();
         var row = FindRow(
             name: rowName,
-            server: server
+            view: server.ReadView(context)
         );
 
         if (
@@ -719,6 +719,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
+            audience: CommandAudience.Operator,
             description: $"Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost, then the rule's read schedule (the rows and host facts it depends on, and why it is volatile when it is). '--spent [top]' prints the measured sheet instead: per rule, the visits, the ticks a due list left it alone (elided=), the evaluations, skips and firings the evaluator ran since the latches began, and the work units they spent at the same prices (setup per visit, check per evaluation that ran, fire per firing), costliest first, each with its schedule; its first line sums them over the ticks counted.",
             forms: WorldBudgetRulesForms,
             handler: (context, args) => {

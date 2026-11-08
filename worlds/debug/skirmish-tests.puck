@@ -6,6 +6,7 @@
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "skirmish-tests"
+grants [{ capability: Mutate, grantee: "seat2", subject: "section:State" }]
 import "skirmish"
 
 bodies {
@@ -82,7 +83,7 @@ test "blue sees a red unit in its line of sight and remembers its cell" {
   when {
     ticks 5
     seat2: world.state skirmishKnows2 1
-    seat2 refused "no such cell": world.state skirmishPos 1
+    seat2 refused "not disclosed": world.state skirmishPos 1
     seat1 refused "no such cell": world.state skirmishKnows2 1
     seat1 refused "no such cell": world.state skirmishSeen2 19
     ticks 2
@@ -96,8 +97,8 @@ test "blue sees a red unit in its line of sight and remembers its cell" {
 }
 
 // The search evidence: one pair, the same public script, red's first unit in the fog on cell 1 (A) or cell 5 (B). Blue's
-// two computer players work out its answer to red's first step. `skirmishSharpBest`, a public row, moves with the
-// fogged unit (A: unit 4 to 25, score -4; B: to 26, score -7), so every seat reads where it is; `skirmishFairBest`,
+// two computer players work out its answer to red's first step. `skirmishSharpBest`, an authority-only row, moves with the
+// fogged unit (A: unit 4 to 25, score -4; B: to 26, score -7), so exposing it is refused with SearchWidensAudience; `skirmishFairBest`,
 // which reads only blue's memory, is the same in both.
 test "search evidence A: red's first unit in the fog on cell 1" {
   when {
@@ -107,8 +108,9 @@ test "search evidence A: red's first unit in the fog on cell 1" {
     ticks 3
     seat2: world.state.cell.set skirmishSharpOn $value 1
     seat2: world.state.cell.set skirmishFairOn $value 1
+    seat2 refused "SearchWidensAudience": world.row.set state {"name":"skirmishSharpBest","kind":"Int","capacity":4,"cells":[{"key":"token","value":-1},{"key":"to","value":-1},{"key":"score","value":0},{"key":"revision","value":-1}]}
     ticks 90
-    seat2: world.state skirmishSharpBest
+    seat2 refused "no such cell": world.state skirmishSharpBest to
   }
   expect {
     skirmishSharpBest.token == 3
@@ -131,8 +133,9 @@ test "search evidence B: red's first unit in the fog on cell 5" {
     ticks 3
     seat2: world.state.cell.set skirmishSharpOn $value 1
     seat2: world.state.cell.set skirmishFairOn $value 1
+    seat2 refused "SearchWidensAudience": world.row.set state {"name":"skirmishSharpBest","kind":"Int","capacity":4,"cells":[{"key":"token","value":-1},{"key":"to","value":-1},{"key":"score","value":0},{"key":"revision","value":-1}]}
     ticks 90
-    seat2: world.state skirmishSharpBest
+    seat2 refused "no such cell": world.state skirmishSharpBest to
   }
   expect {
     skirmishSharpBest.token == 3
