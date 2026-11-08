@@ -192,7 +192,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   into the `Puck.Cli.Azure` extension, which `artifacts.yml` publishes as the
   `cli-azure-extension` artifact, `setup-puck` installs with `azure: "true"`,
   and `azure.yml` deploys with `puck world release deploy ... --host azure`;
-  no CI run has exercised it, so the first push is also its first test.
+  `setup-puck` also now installs the candidate CLI through the shared
+  `build/CandidateCliInstall.cs` file-based app (`dotnet run --file`), verified
+  locally on both install paths; no CI run has exercised either change, so the
+  first push is also their first test.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
