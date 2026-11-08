@@ -57,7 +57,7 @@ Six findings matter most to a library:
 ### The document
 
 The creation is its own document type, embedded in a world **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:537-538`):
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:546-547`):
 
 ```csharp
 /// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
@@ -67,9 +67,9 @@ The creation is its own document type, embedded in a world **[opened]**
 Its members are a schema tag, a name, a palette, shapes, frames, IK chains,
 cameras, a behaviour manifest, text runs, parts, a noise facet, drivers,
 effectors, volumes and `SizeBy` **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:578-599`). The palette
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:587-608`). The palette
 has 32 slots **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:609-611`):
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:618-620`):
 
 ```csharp
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
@@ -95,7 +95,7 @@ getting it backwards "the most expensive mistake in this surface" **[opened]**
 
 The document also preserves unknown members across a round trip
 (`CreationDocument.Extensions`, a `[JsonExtensionData]` bag) **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:615-619`).
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:624-628`).
 
 ### `.puck` as the source
 
@@ -158,25 +158,16 @@ refining the `walker` kit, look and prototype by id" **[opened]**
 (`worlds/standard/walker.puck:5`).
 
 A shape row's `id` defaults to its position in its list **[opened]**
-(`src/Puck.World.Transpiler/Lowering/WorldDocumentRowDefaults.cs:287`):
+(`src/Puck.World.Transpiler/Lowering/WorldDocumentRowDefaults.cs:309`):
 
 ```csharp
     /// <param name="index">The shape's 0-based position in its collection, which is the default <c>id</c>.</param>
 ```
 
-The shape lowering also fills in every shape key that carries a default
-**[opened]** (`src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.Rows.cs:69-76`):
-
-```csharp
-        foreach (var key in WorldDocumentRowDefaults.ShapeKeys) {
-            if (!shapeObj.ContainsKey(propertyName: key)) {
-                shapeObj[key] = WorldDocumentRowDefaults.ShapeDefault(
-                    index: shapeIdx,
-                    key: key
-                );
-            }
-        }
-```
+The shape lowering filled in every shape key that carries a default, a refining row included; it now
+completes them only for a document that composes nothing (`WorldDocumentMembers.Canonicalize`) and, for a
+composed creation, where it is read (`CreationDocumentJson.Read`). The scratch run below is of the tree
+before that change.
 
 A scratch world that imports the standard walker and refines its visor by name
 and scale only shows what follows **[ran]**. The walker's shapes are `body`

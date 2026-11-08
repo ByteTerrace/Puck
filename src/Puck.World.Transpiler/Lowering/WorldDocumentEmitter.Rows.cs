@@ -66,14 +66,9 @@ public static partial class WorldDocumentEmitter {
             shapeObj["name"] = shapeName;
         }
 
-        foreach (var key in WorldDocumentRowDefaults.ShapeKeys) {
-            if (!shapeObj.ContainsKey(propertyName: key)) {
-                shapeObj[key] = WorldDocumentRowDefaults.ShapeDefault(
-                    index: shapeIdx,
-                    key: key
-                );
-            }
-        }
+        // A row carries what the author wrote: whether it is a whole shape or a refinement of an imported one is only
+        // known once the document's layers compose, so defaults are completed by WorldDocumentMembers.Canonicalize
+        // for a document that composes nothing, and at read time otherwise.
         shapesArr.AppendNode(item: shapeObj);
 
         return true;

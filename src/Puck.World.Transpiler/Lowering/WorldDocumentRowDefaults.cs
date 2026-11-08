@@ -219,6 +219,28 @@ public static class WorldDocumentRowDefaults {
             vertices.Add(item: listed[((start + index) % listed.Length)]);
         }
     }
+    /// <summary>Writes each default a shape row omits, so a whole shape and the same shape spelling its defaults are one
+    /// row. A row's <c>id</c> defaults to its own position in <paramref name="shapes"/>.</summary>
+    /// <param name="shapes">The lowered <c>shapes</c> array of a document that composes nothing; its rows are rewritten
+    /// in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="shapes"/> is <see langword="null"/>.</exception>
+    public static void CompleteShapes(JsonArray shapes) {
+        ArgumentNullException.ThrowIfNull(argument: shapes);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index] is not JsonObject shape) {
+                continue;
+            }
+            foreach (var key in ShapeKeys) {
+                if (!shape.ContainsKey(propertyName: key)) {
+                    shape[key] = ShapeDefault(
+                        index: index,
+                        key: key
+                    );
+                }
+            }
+        }
+    }
     /// <summary>Removes each shape member written at the zero that means the member is absent
     /// (<see cref="ShapeDocument.ZeroIsAbsent"/>), so the member at zero and the member omitted are one row.</summary>
     /// <param name="shape">The lowered shape row; rewritten in place.</param>

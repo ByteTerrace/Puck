@@ -1153,7 +1153,7 @@ prototypes {
         }
       ]
       schema: "puck.creation.v1"
-      shape Box {
+      shape Box "ground" {
         material: skin
         position [0, -0.2, 0]
         scale [18, 0.2, 18]

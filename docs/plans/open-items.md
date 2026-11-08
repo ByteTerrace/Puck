@@ -3402,17 +3402,6 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
-- [high] Refining one shape of an imported creation by id is broken: an
-  unauthored shape `id` is its position in the list
-  (`WorldDocumentRowDefaults`, `src/Puck.World.Transpiler/Lowering/WorldDocumentRowDefaults.cs`)
-  and lowering fills every defaulted shape key into the refining row
-  (`WorldDocumentEmitter.Rows`), so `shape Box "visor" { scale [...] }` over
-  `standard/walker` took id 0 and replaced the walker's body, and with `id: 1`
-  it refined the visor but moved it to the origin (a scratch world in the
-  creation-library research, `docs/plans/creation-library/puck-creations.md`).
-  Override by id is the standard's customisation mechanism (AGENTS.md), so a
-  refinement must name its target by a stable id and carry only the fields it
-  writes. Owner: language.
 - [medium] A rule `local` costs more than the expression it names: with
   computed keys lowered into the program (rule-faults step 2),
   `local k = a + 1` then `cards[k]` prices the gate at 6 plus the local's 3 tokens
