@@ -16,8 +16,8 @@ namespace Puck.Cli.Transpiler;
 /// <para>The run is all-or-nothing: every source is planned, and each source the run would change is compiled
 /// before and after and judged against the migration's own declared members, before anything is written — so a
 /// refusal at plan time leaves the whole tree as it was.</para>
-/// <para>Each source is written by staging its rewrite in a sibling <c>.migrate-tmp</c> file and moving that over
-/// the destination, so one file is never left partly written. The one thing that is not atomic is the SET of
+/// <para>Each source is written by staging its rewrite in a sibling <c>&lt;name&gt;.&lt;random&gt;.tmp</c> file (<c>AtomicFile</c>) and moving that
+/// over the destination, so one file is never left partly written. The one thing that is not atomic is the SET of
 /// files: if a move fails after earlier moves succeeded, those destinations stay migrated, and the refusal names
 /// each of them. A destination that cannot be opened for writing is refused at plan time instead, so the common
 /// causes — a read-only file, a lock, a permission — never reach the move phase.</para>

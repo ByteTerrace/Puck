@@ -8,16 +8,18 @@ public static class CliTreeFiles {
         ".git", ".tmp", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
     };
 
-    /// <summary>Finds a linked component from a path through its ancestors, including an optional containment root.
-    /// An outside path is refused before inspection. This is input validation, not a race-proof deletion guard.</summary>
+    /// <summary>Finds a linked component from a path up through its ancestors. With a containment root, only the
+    /// components strictly below the root are inspected: the root is the caller's own choice (a checkout reached
+    /// through a link is still that checkout), so a linked root never refuses the paths under it. An outside path is
+    /// refused before inspection. This is input validation, not a race-proof deletion guard.</summary>
     public static string? LinkedAncestor(string path, string? root = null) {
         path = Path.GetFullPath(path: path);
         if ((root is not null) && !Puck.Abstractions.PuckPaths.IsWithin(path: path, root: root)) {
             throw new ArgumentException(message: $"{CliPaths.ToDisplay(fullPath: path)} is outside {CliPaths.ToDisplay(fullPath: root)}.");
         }
         for (var current = path; (current is not null); current = Path.GetDirectoryName(path: current)) {
-            if (Path.Exists(path: current) && ((File.GetAttributes(path: current) & FileAttributes.ReparsePoint) != 0)) { return current; }
             if ((root is not null) && CliPaths.Same(left: root, right: current)) { break; }
+            if (Path.Exists(path: current) && ((File.GetAttributes(path: current) & FileAttributes.ReparsePoint) != 0)) { return current; }
         }
         return null;
     }

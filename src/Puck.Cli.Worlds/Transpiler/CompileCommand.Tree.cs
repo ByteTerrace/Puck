@@ -30,7 +30,7 @@ public static partial class CompileCommand {
         var written = new Dictionary<string, string>(comparer: DocumentName.Comparer);
         // The output is swept of every document this run did not write, so it may never hold the tree's own
         // hand-authored documents.
-        if (Puck.Abstractions.PuckPaths.IsWithin(path: directory, root: root)) {
+        if (ConfinedDirectory.Contains(root: root, path: directory)) {
             Console.Error.WriteLine(value: $"error: the output '{CliPaths.ToDisplay(fullPath: directory)}' lies inside the tree '{CliPaths.ToDisplay(fullPath: root)}'; a tree run writes outside the sources it compiles.");
 
             return 2;

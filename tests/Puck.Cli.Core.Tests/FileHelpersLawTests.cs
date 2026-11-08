@@ -46,6 +46,58 @@ public sealed class FileHelpersLawTests {
         if (OperatingSystem.IsWindows()) { Assert.True(condition: PuckPaths.IsWithin(root: root.ToUpperInvariant(), path: root.ToLowerInvariant())); }
     }
     [Fact]
+    public void LinkedAncestorInspectsBelowTheRootNeverTheRootItself() {
+        using var directory = new TemporaryDirectory();
+        var real = Directory.CreateDirectory(path: directory.PathOf(name: "real")).FullName;
+        var linkedRoot = directory.PathOf(name: "linked-root");
+
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: real, path2: "inner/deeper"));
+        DirectoryLinks.Create(link: linkedRoot, target: real);
+
+        try {
+            // The checkout root reached through a link is still the root the caller chose.
+            Assert.Null(@object: CliTreeFiles.LinkedAncestor(path: Path.Combine(path1: linkedRoot, path2: "inner/deeper"), root: linkedRoot));
+            Assert.Null(@object: CliTreeFiles.LinkedAncestor(path: linkedRoot, root: linkedRoot));
+            Assert.Equal(expected: Path.GetFullPath(path: linkedRoot), actual: CliTreeFiles.LinkedAncestor(path: Path.Combine(path1: linkedRoot, path2: "inner")));
+
+            var below = Path.GetFullPath(path: directory.PathOf(name: "real/inner/alias"));
+
+            DirectoryLinks.Create(link: below, target: Path.Combine(path1: real, path2: "inner/deeper"));
+            try {
+                Assert.Equal(expected: below, actual: CliTreeFiles.LinkedAncestor(path: Path.Combine(path1: below, path2: "x"), root: real));
+            } finally { DirectoryLinks.Remove(link: below); }
+        } finally { DirectoryLinks.Remove(link: linkedRoot); }
+    }
+    [Fact]
+    public void ConfinedContainmentFollowsFileIdentityNotSpelling() {
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux())) { return; }
+        using var directory = new TemporaryDirectory();
+        var real = Directory.CreateDirectory(path: directory.PathOf(name: "real")).FullName;
+        var alias = directory.PathOf(name: "alias");
+        var source = directory.WriteText(name: "real/source.puck", text: "x");
+
+        DirectoryLinks.Create(link: alias, target: real);
+        try {
+            Assert.False(condition: PuckPaths.IsWithin(path: source, root: alias));
+            Assert.True(condition: Puck.Confinement.ConfinedDirectory.Contains(root: alias, path: source));
+            Assert.True(condition: Puck.Confinement.ConfinedDirectory.Contains(root: real, path: Path.Combine(path1: real, path2: "not-yet/child")));
+            Assert.False(condition: Puck.Confinement.ConfinedDirectory.Contains(root: Path.Combine(path1: real, path2: "absent"), path: source));
+            Assert.False(condition: Puck.Confinement.ConfinedDirectory.Contains(root: Directory.CreateDirectory(path: directory.PathOf(name: "sibling")).FullName, path: source));
+        } finally { DirectoryLinks.Remove(link: alias); }
+    }
+    [Fact]
+    public void OwningProjectDirectoryKeepsTheNearestDirectoryWhenItHoldsSeveralProjects() {
+        using var directory = new TemporaryDirectory();
+
+        directory.WriteText(name: "outer.csproj", text: "<Project />");
+        directory.WriteText(name: "child/a.csproj", text: "<Project />");
+        directory.WriteText(name: "child/b.csproj", text: "<Project />");
+        var nested = Directory.CreateDirectory(path: directory.PathOf(name: "child/nested")).FullName;
+
+        Assert.Equal(expected: Path.GetFullPath(path: directory.PathOf(name: "child")), actual: CliProjects.FindOwningProjectDirectory(start: nested));
+        Assert.Null(@object: CliProjects.FindOwningProject(start: nested));
+    }
+    [Fact]
     public void OwningProjectStopsAtBoundaryAndAtAmbiguousNearestDirectory() {
         using var directory = new TemporaryDirectory();
         var project = directory.WriteText(name: "parent.csproj", text: "<Project />");

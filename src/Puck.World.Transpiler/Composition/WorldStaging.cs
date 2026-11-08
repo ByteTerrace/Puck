@@ -62,7 +62,7 @@ public static class WorldStaging {
 
             if (
                 (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: directory)) is null) ||
-                Puck.Abstractions.PuckPaths.IsWithin(path: sourcePath, root: directory)
+                ConfinedDirectory.Contains(root: directory, path: sourcePath)
             ) {
                 reason = $"'{path}' cannot be staged under {directory}: the staging directory must not be a filesystem root or contain the composition source.";
                 return false;
@@ -88,7 +88,7 @@ public static class WorldStaging {
                     entryPath = staged;
                 }
             }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
             reason = $"'{path}' could not be staged under {directory}: {exception.Message}";
 
             return false;
@@ -250,7 +250,7 @@ public static class WorldStaging {
                             );
                         }
                     }
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
                     reason = $"content folder '{folder}' could not be staged: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
                     return false;

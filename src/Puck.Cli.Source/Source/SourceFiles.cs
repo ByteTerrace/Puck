@@ -13,7 +13,7 @@ public static class SourceFiles {
     // The nearest ancestor directory (from `start` up) that holds a .csproj — the owning project whose
     // build closure the semantic phase compiles against.
     public static string? FindOwningProjectDirectory(string start) =>
-        ((CliProjects.FindOwningProject(start: start) is { } project) ? Path.GetDirectoryName(path: project) : null);
+        CliProjects.FindOwningProjectDirectory(start: start);
     public static bool TryEnumerate(string verb, string rootArgument, out string scanRoot, out string[] files) {
         scanRoot = string.Empty;
         files = [];

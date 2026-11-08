@@ -2,6 +2,7 @@ using Puck.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Assets;
+using Puck.Confinement;
 
 namespace Puck.Cli;
 
@@ -77,7 +78,7 @@ public static class CheckoutContent {
             return null;
         } finally {
             if (index is not null) {
-                try { index.Delete(recursive: true); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+                try { ConfinedDirectory.RemoveTree(path: index.FullName); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
             }
         }
     }

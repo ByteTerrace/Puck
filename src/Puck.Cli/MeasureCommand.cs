@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Puck.Abstractions;
 using Puck.Cli.Affected;
 using Puck.Cli.Bench;
+using Puck.Confinement;
 
 namespace Puck.Cli;
 
@@ -187,7 +188,7 @@ public static class MeasureCommand {
                 if (!CliGit.TryListFiles(paths: out var paths, reason: out var reason, repository: source)) { throw new InvalidOperationException(message: $"Cannot freeze input tree {source}: {reason}"); }
                 CliFiles.CopyDirectory(source, target, paths.Distinct(comparer: StringComparer.Ordinal).Select(selector: p => Path.Combine(path1: source, path2: p)).Where(predicate: File.Exists));
             } else {
-                if (PuckPaths.IsWithin(path: target, root: source)) { throw new ArgumentException(message: "A standalone input tree cannot contain its frozen destination."); }
+                if (ConfinedDirectory.Contains(root: source, path: target)) { throw new ArgumentException(message: "A standalone input tree cannot contain its frozen destination."); }
                 CliFiles.CopyDirectory(source, target);
             }
         }
