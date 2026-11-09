@@ -144,7 +144,7 @@ the policy compares pins alone.
 |---|---|---|
 | **I0. Serialized transitions (U01)** | Every read-modify-write of the record, and every write of a version's install record, happens while holding the install root's `update.lock`. | `InstallTransaction` (`Puck.Confinement`): the only type with the record's writers, and it can be obtained only by acquiring `update.lock`. Its writers are private; callers get named operations. |
 | **I1. Complete payload identity** | A payload's identity is its `PayloadPin`. | `ReleasePayloadIdentity.Of`; the applier is its only caller that persists a pin. |
-| **I2. Durable rejection** | A payload whose launch attempts reach the stub's `MaxAttempts` is in `rejectedPayloads`, committed in the same replacement that moves selection away from it; no admission, launch, registration, rollback or retention slot accepts a rejected pin. | `InstallTransaction.SelectLaunch` writes it; `InstallTransaction.Refusal` (one private predicate) is the check every admission path calls. |
+| **I2. Durable rejection** | A payload whose launch attempts reach the stub's `MaxAttempts` is in `rejectedPayloads`, committed in the same replacement that moves selection away from it; no admission, launch, registration, rollback or retention slot accepts a rejected pin. | `InstallTransaction.SelectLaunch` writes it; `ReleasePolicy.Refusal` (one predicate) is the check every admission path calls. |
 | **I3. Persistent revocation** | Every authentic manifest's valid revocations are merged before the manifest's own eligibility is judged and before its sequence can advance; no admission, launch, registration, rollback or retention slot accepts a revoked version. | `InstallTransaction.MergeRevocations`, called only from `AttestationReleaseVerifier.VerifyCore`; the same `Refusal` predicate. |
 | **I4. Generation compatibility (U02)** | No version whose state generation is below `stateGenerationFloor` is admitted as an update, selected by the stub (current included) or registered as a running process; the floor is raised to the final launch choice's generation in the selection commit, before the stub starts the process (the lead's U03 ruling), and again at registration for a process not started by the stub. | `Refusal` for the check; one private `RaiseFloor` used by `SelectLaunch` and `AdmitProcess`. |
 | **I5. Proof bound to identity (U07, U10)** | An install is proven only when the process registered from it reached `ApplicationStarted`; the proof is its exact `(version, sequence, payloadPin)`, and a proof counts at selection only while the version's on-disk record has that exact sequence and pin. Proving clears that pin's attempt count in the same replacement. | `InstallTransaction.RecordHealthy`; `RollbackCandidates` for the match. |
@@ -264,9 +264,9 @@ immutable writes that precede each commit.
 Each operation below is one method of `InstallTransaction`, computes its new
 record in memory from the transaction's snapshot, and commits once.
 
-### Admission (`Refusal`, private)
+### Admission (`ReleasePolicy.Refusal`)
 
-`Refusal(version, stateGeneration, payloadPins)` returns the reason a version
+`ReleasePolicy.Refusal(version, stateGeneration, payloadPins)` returns the reason a version
 may not be admitted, or none: the version is revoked (ordinal, ignoring case,
 since version directories collide that way on Windows), any pin is rejected, or
 the generation is below the floor. Every admission path calls it: the
@@ -286,7 +286,7 @@ Under the caller's transaction, in order:
    the rest are unioned, retired entries are removed ([bounds](#bounds-u08)),
    and the record is committed when it changed. A merge that would exceed the
    bound refuses the manifest and writes nothing.
-3. `EvaluateManifest`: `Refusal(manifest.Version, manifest.StateGeneration, every payload's pin)`.
+3. Admission: `Refusal(manifest.Version, manifest.StateGeneration, every payload's pin)`.
    Checking every payload's pin rather than the target RID's needs no RID: a
    pin names one RID, so only this install's RID can be in its rejected set.
 4. `MinimumSupported` and strict version precedence over the installed version.
@@ -303,7 +303,7 @@ manifest, verifies and flushes every staged file, computes the pin, and calls
 `CommitApply(version, rid, stateGeneration, payloadPin, files, versionPrecedence)`:
 
 1. `Refusal` for the new version; the downgrade and case-insensitive collision
-   checks against `current` and the top rollback candidate (the protection the
+   checks against `current` and the rollback target (`RollbackTarget`, the protection the
    `last-good` file gave).
 2. Retire revocations; check [the bounds](#bounds-u08).
 3. Write the version's install record durably with sequence `lastSequence + 1`.
@@ -342,7 +342,7 @@ lock and starts the process, which registers ([U03](#u03--revocation-racing-proc
 `StubInstall.RevertToLastGood` and `StubHealth` are deleted.
 
 The stub no longer cancels a pending install intent: a recovering apply passes
-`ReserveInstall`, whose `EvaluateManifest` refuses a revoked or rejected
+`ReserveInstall`, whose admission (`ReleasePolicy.Refusal`) refuses a revoked or rejected
 version terminally and retires the intent. The stub thus parses nothing the
 updater writes except the record.
 
@@ -426,9 +426,14 @@ generation-2 launch and sees it refused before `current` moves.
 
 The lead's U03 ruling: `SelectLaunch` raises the floor from whichever version
 it chose, current or a rollback candidate, in the same commit that counts the
-attempt, before the stub starts the process. The law rolls back to a proven
-install of a higher generation than the floor and reads the raised floor from
-the committed record before launch.
+attempt, before the stub starts the process. On the rollback branch the raise
+never moves the floor: `RecordHealthy` raises the floor to every install it
+proves, and a candidate must meet the floor, so a proven candidate's generation
+equals it. The raise matters on the current branch, the first launch of a
+newly applied higher generation; the law
+(`TheFloorFollowsTheLaunchChoiceBeforeTheProcessStarts`) reads the raised floor
+from the committed record when selection returns, then sees the older proven
+install refused as below it and a lower-generation update refused.
 
 ### U03 — revocation racing process creation
 
@@ -515,7 +520,7 @@ unless `current` names it.
    `P100`, sets `current = 1.0.0`, commits once and launches it.
 5. `M2` (`1.1.0`, sequence 11, rollout 50%) and `M3` (`1.1.1`, sequence 12,
    rollout 100%, new notes, the same files) both compute `Pbad` and are refused
-   by `EvaluateManifest`, in `CheckAsync` and `ApplyAsync`.
+   by admission (`ReleasePolicy.Refusal`), in `CheckAsync` and `ApplyAsync`.
 6. `M4` (`1.1.2`, sequence 13, rebuilt binary, pin `Pfixed`) is accepted and
    applied.
 
@@ -586,8 +591,8 @@ interruption anywhere leaves either the old record or the new one:
 
 1. **`Puck.Confinement`**: `InstallLayout` names; `InstallRecord`; the record
    type and its source-generated JSON context; `InstallTransaction` with
-   `SelectLaunch`, `CommitApply`, `MergeRevocations`, `EvaluateManifest`,
-   `RecordHealthy`, `AdmitProcess`, `RollbackCandidates`, `ReadUnlocked`;
+   `SelectLaunch`, `CommitApply`, `MergeRevocations`, `RollbackTarget`, `Compact`,
+   `RecordHealthy`, `AdmitProcess`, `RollbackCandidates`; `ReleasePolicy.Refusal` and `ReadUnlocked`;
    `AtomicFile.WriteAllBytesDurably`; `ConfinedDirectory.Flush`; registration's
    `AdmitProcess` call. Check: the project builds with no project references and
    zero warnings (its AOT analysis included).

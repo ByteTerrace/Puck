@@ -2041,6 +2041,22 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · durable replace twice] Two durable file replacements exist:
+  `AtomicFile.WriteAllBytesDurably` (paths; `MoveFileExW` with
+  `MOVEFILE_WRITE_THROUGH` on Windows, rename then directory `fsync` on Linux),
+  which the release record, install records, replay mark and install intent
+  use, and `ConfinedDirectory.Publish` (handles; a handle rename then
+  `FlushFileBuffers` on Windows, `renameat` then directory `fsync` on Linux),
+  which `DirectoryObjectBlobStoreBackend` uses. Their Linux halves are the same
+  technique; the Windows halves differ in what is documented durable. Make one:
+  either give `Publish` a documented durable rename by handle or move the blob
+  store's write onto the confined directory's own call to the shared primitive.
+- [low · second lock] `FileReleaseSequenceStore.TryWrite` takes its own
+  `sequence-mark.lock` (`FileLock.TryAcquire`), but every caller now runs under
+  an `InstallTransaction` on `update.lock`, so the inner lock only adds a
+  transient refusal path. Fold the replay mark under the transaction (or into
+  the release record) and delete the second lock with its contention case.
+
 - [medium · parented frames] Two consumers read a parented placement's
   `position` as world space instead of composing its frame
   (`WorldPlacementFrameCompilation.Compose`): an animated placement with a
@@ -4089,31 +4105,16 @@ brief's priorities ([security review](../development/security-review.md)).
   credential selection, with a bound-seat positive control and an unbound-link
   refusal case.
 
-- [medium, confirmed] Rejected payload selection (verified finding 2.1;
-  [the updater policy memo](updater-policy.md)).
-  `StubInstall.RevertToLastGood` cancels the failed version's intent but records
-  no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
-  slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
-  higher-sequence authorization for the same failed payload, and
-  `InstallPruner.Prune` ranks inactive installs without rejection status. This
-  requires new valid signed authorization, not replay of a consumed sequence.
-  Next: persist the installed payload's complete identity and rejection before
-  rollback, consult it at install selection and retention, and prove that rollout
-  metadata progression cannot retry identical rejected content while changed
-  payloads remain eligible. Keep this state separate from transient launch attempts.
-- [medium, confirmed] Revoked rollback candidate (verified finding 2.2;
-  [the updater policy memo](updater-policy.md)).
-  `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
-  does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
-  revoked current as last-good; `StubDecisionTable.Decide` checks generations and
-  attempts, and `StubInstall.RevertToLastGood` publishes that candidate without
-  revocation selection. Next: share persisted accepted revocations across every
-  launch and rollback selection; select an allowed, state-compatible proven
-  candidate or refuse rollback. Prove the signed-release → failed-startup →
-  revoked-last-good schedule, including interruption during policy publication.
-  `ReleaseManifest.MinimumSupported` remains update eligibility, not an invented
-  persistent rollback floor. Implement alongside rejected-payload selection so
-  updater, stub and pruner use one durable policy mechanism.
+- [low, unverified] The release record's power-loss guarantee
+  ([the updater policy plan](updater-policy.md#durable-publication-u04-u05))
+  rests on `AtomicFile.WriteAllBytesDurably` (a post-rename directory `fsync` on
+  Linux, `MOVEFILE_WRITE_THROUGH` on Windows) and on flushing staged payload
+  files before the commit that selects them; that a newly created payload
+  file's directory entry is durable on NTFS once a later write-through move
+  commits is an inference from NTFS metadata journalling. Next: a power-cut
+  rig (or a block-device fault injector such as dm-log-writes on Linux)
+  replaying an apply and a stub rollback, cut at each write, showing the record
+  never selects a version whose files or install record are missing.
 
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes (`state-correctness`, `disclosure-2`) did not reach, and

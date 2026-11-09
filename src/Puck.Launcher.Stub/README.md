@@ -1,24 +1,29 @@
 # Puck.Launcher.Stub
 
 Puck.Launcher.Stub is the small executable that starts an installed application
-version. It reads the installation's current and last-good pointers, records
-launch attempts, and uses the health policy to decide whether to retry or
-roll back. It stays outside the application's self-update mechanism. Its only Puck dependency
-is the BCL-only `Puck.Confinement` leaf, which also supplies `AtomicFile` to the updater.
+version. It asks the install's release record which version to launch, counts
+the launch, and starts it. It stays outside the application's self-update
+mechanism. Its only Puck dependency is the BCL-only `Puck.Confinement` leaf,
+which also holds the release record and supplies `AtomicFile` to the updater.
 
 ## Usage
 
 The installation root is the stub executable's own directory. Configuration
-beside the stub selects the application executable and allowed attempt count;
-command-line arguments are forwarded to the selected application rather than
-used to redirect the installation root.
+beside the stub (`stub.json`) selects the application executable and the
+startup attempts a payload may use; command-line arguments are forwarded to the
+selected application rather than used to redirect the installation root.
 
-`StubDecisionTable` contains the selection policy. A rollback cannot select a
-last-good version whose state generation is older than the current version's;
-that case keeps launching the current version to avoid an incompatible read.
-`StubInstall` and `StubHealth` handle the installation pointers and attempt
-records. See [Puck.Launcher](../Puck.Launcher/README.md) for update staging and
-the application's side of the release workflow.
+The stub begins an `InstallTransaction` (waiting up to `StubInstall.LeaseWait`
+for `update.lock`) and calls `InstallTransaction.SelectLaunch`, its only policy
+call. A current version whose payload has used its attempts is rejected by its
+payload identity; a current version that is revoked, rejected, below the state
+generation floor or without a valid install record is replaced by the most
+recent proven install that is none of those, or the launch is refused by name
+with exit code 2, naming every disqualification. Selection raises the floor to
+the chosen version's generation, counts the launch under its payload and names
+it current in one durable commit, before the child starts. The policy and its
+failure schedules are in the [updater policy plan](../../docs/plans/updater-policy.md)
+and the [launcher README](../Puck.Launcher/README.md#the-release-record).
 
 Each successful process start writes its selected version, child PID and
 executable path to stderr. Standard output remains the application's stream,
@@ -30,27 +35,24 @@ stdio front and starts each activated backend through this same stub. The
 front retains earlier backends while they own Worlds, so application updates
 do not end the client's connection or those World processes.
 
-The stub holds the same persistent `update.lock` lease as `UpdateService`
-while reading pointers, deciding rollback and recording the launch attempt. It
-releases the lease before starting the child so the application can update.
-Contention refuses the launch for retry. Under the same lease it holds
-`versions/<version>` open (`StubInstall.HoldVersion`: a shared `flock` on Linux,
-a handle without `FILE_SHARE_DELETE` on Windows) until the child exits, so the
-launcher's pruner never removes the version the child runs from; the stub's exit
-releases it, a crash included, and the child registers itself as well. The lease
-and the hold go through `Puck.Confinement`, the stub's directory-confinement dependency, so
-the stub and the pruner share one implementation. Before rolling back, it deletes only
-the pending `install-intent.json` whose manifest version matches the rejected
-version; cancellation precedes the pointer write so interrupted cleanup cannot
-resurrect that version. An unrelated newer pending intent is preserved. A
-malformed intent refuses rollback before changing the pointer.
+Under the transaction the stub holds `versions/<version>` open
+(`StubInstall.HoldVersion`: a shared `flock` on Linux, a handle without
+`FILE_SHARE_DELETE` on Windows) until the child exits, so the launcher's pruner
+never removes the version the child runs from; the stub's exit releases it, a
+crash included. It releases the lease before starting the child: the child's
+registration waits for it, and re-checks the release record under it, so a
+revocation committed after selection still stops that start. A pending install
+intent for a rejected or revoked version is retired by the updater's next
+recovery, which refuses it; the stub parses nothing the updater writes except
+the release record.
 
 ## Verification
 
-The [launcher tests](../../tests/Puck.Launcher.Tests/README.md) exercise the
-stub's decision table, shared update lease and interrupted-install rollback
-alongside the release chain. Tests of that policy do
-not demonstrate recovery from damage to the stub executable itself.
+The [launcher tests](../../tests/Puck.Launcher.Tests/README.md) exercise
+selection, rejection, rollback and refusal through `InstallTransaction`
+alongside the release chain, and the `self-update` canary runs the real stub.
+Tests of that policy do not demonstrate recovery from damage to the stub
+executable itself.
 
 ## Documentation
 

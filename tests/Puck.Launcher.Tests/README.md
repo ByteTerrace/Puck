@@ -4,10 +4,12 @@ This xUnit suite checks [Puck.Launcher](../../src/Puck.Launcher/README.md) host
 controls and release handling. It covers fixed-step pumping, backend switching,
 console sessions, release manifests and signatures, content staging, update
 application, rollout selection, and the
-[stub's](../../src/Puck.Launcher.Stub/README.md) rollback policy.
+[stub's](../../src/Puck.Launcher.Stub/README.md) release record selection: the
+failure schedules of [the updater policy plan](../../docs/plans/updater-policy.md)
+are laws in `UpdateInstallTransactionTests.Policy.cs`.
 
 `UpdateInstallTransactionTests` uses signed manifests, persisted replay state and
-real install pointers. Its process-death cases terminate a child updater before
+the real release record. Its process-death cases terminate a child updater before
 and after replay reservation and pointer activation, then check lock release and
 recovery of the originally authorized manifest. `InstallProcessChild` is an
 explicit helper selected by those cases; it skips in an ordinary suite run.
