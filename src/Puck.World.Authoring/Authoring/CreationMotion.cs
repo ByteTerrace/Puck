@@ -15,7 +15,7 @@ public readonly record struct CreationMovingBlend(int Shape, int Other, int Grou
 /// group bakes as one mesh whose vertices each ride one shape's slot, so a blend between shapes that move apart keeps
 /// the seam it baked with until the shapes settle (<c>Puck.SdfVm.SdfMeshSettle</c>).
 /// </summary>
-public static class CreationMotion {
+public static partial class CreationMotion {
     /// <summary>Returns whether a creation animates: a driver or an inverse-kinematics effector moves it, or a timeline
     /// frame poses a shape away from its authored position or rotation (a state-bound value always differs from a
     /// literal). A creation whose frames carry no transforms, or only its shapes' authored poses, moves nothing.</summary>
@@ -71,7 +71,7 @@ public static class CreationMotion {
         while (index >= 0) {
             var shape = shapes[index];
 
-            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 })) { return index; }
+            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || FramesMove(document, index)) { return index; }
             foreach (var effector in (document.Effectors ?? [])) {
                 if ((shape.Name is { } name) && effector.Chain.Contains(value: name.Value)) { return index; }
             }
@@ -113,7 +113,6 @@ public static class CreationMotion {
             for (var earlier = 0; (earlier < index); earlier++) {
                 if (((shapes[earlier].Group ?? 0) == group) && ((owners[earlier] != owners[index]) || !FramesAlike(document: document, first: earlier, second: index))) {
                     found.Add(item: new CreationMovingBlend(Blend: blend, Group: group, Other: earlier, Shape: index));
-                    break;
                 }
             }
         }
@@ -166,7 +165,9 @@ public static class CreationMotion {
     public static string Describe(CreationDocument document, CreationMovingBlend blend) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        return $"joins shape '{NameOf(document: document, index: blend.Shape)}', which {MotionOf(document: document, index: blend.Shape)}, to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}', which {MotionOf(document: document, index: blend.Other)}, by {blend.Blend}: the group bakes one mesh at the pose its program arrives in, so the seam stretches as they move apart until their relative pose settles and the group bakes again there.";
+        var envelope = Envelope(document, blend);
+        var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : $"bakes as a crease; widen smooth to at least {2f * envelope.Displacement:G6} or reduce the motion to keep the blend");
+        return $"joins shape '{NameOf(document, blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document, blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {envelope.Smooth / 2f:G6}); {outcome}{(envelope.Refusal is { } reason ? $" ({reason})" : string.Empty)}.";
     }
     /// <summary>Returns a shape's name, or <c>#index</c> for an unnamed one.</summary>
     /// <param name="document">The creation document.</param>

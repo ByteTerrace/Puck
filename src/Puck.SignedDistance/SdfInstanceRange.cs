@@ -39,6 +39,8 @@ public readonly record struct SdfInstanceRange(
     bool BakesWithPrevious = false,
     float Detail = 0f
 ) {
+    /// <summary>Gets whether every referenced slot is a rigid delta from authored rest. The mesh bakes those deltas at identity.</summary>
+    public bool RestPoseSkin { get; init; }
     /// <summary>Gets whether this instance has its own bake while sharing its motion owner's transform.</summary>
     public bool BakesSeparately { get; init; }
     /// <summary>Gets whether a dynamic bound's offset is expressed in its slot's rotating local frame.</summary>

@@ -23,6 +23,7 @@ public sealed partial record SdfMesh {
         TriangleMaterials = source.TriangleMaterials;
         Members = source.Members;
         VertexMembers = source.VertexMembers;
+        Influences = source.Influences;
         m_levels = source.m_levels;
         m_levelledTriangleCount = source.m_levelledTriangleCount;
     }
@@ -74,7 +75,7 @@ public sealed partial record SdfMesh {
         if (attributes) {
             bytes += ((((long)mesh.Positions.Length) + mesh.Normals.Length) * (3 * sizeof(float)));
             bytes += (((long)mesh.TriangleMaterials.Length) * sizeof(uint));
-            bytes += ((((long)mesh.Members.Length) * System.Runtime.CompilerServices.Unsafe.SizeOf<SdfMeshMember>()) + mesh.VertexMembers.Length);
+            bytes += ((((long)mesh.Members.Length) * System.Runtime.CompilerServices.Unsafe.SizeOf<SdfMeshMember>()) + mesh.VertexMembers.Length + (12L * mesh.Influences.Length));
         }
         return bytes;
     }
@@ -160,7 +161,7 @@ public sealed partial record SdfMesh {
             return Restorable.Attach(restorable: restorable, mesh: new SdfMesh(
                 positions: positions, indices: payload.Copy(Indices, allocator),
                 normals: normals, triangleMaterials: materials,
-                members: payload.Copy(Members, allocator), vertexMembers: payload.Copy(VertexMembers, allocator)) {
+                members: payload.Copy(Members, allocator), vertexMembers: payload.Copy(VertexMembers, allocator), influences: payload.Copy(Influences, allocator)) {
                 BakeCell = BakeCell,
                 Chunks = chunks,
                 Levels = CopyLevels(levels: Levels, allocator: allocator, owner: payload, piece: 0, restorable: restorable),
@@ -197,6 +198,7 @@ public sealed partial record SdfMesh {
         TriangleMaterials = materials;
         Members = source.Members;
         VertexMembers = source.VertexMembers;
+        Influences = source.Influences;
         m_levels = levels;
         m_levelledTriangleCount = source.m_levelledTriangleCount;
         m_payload = payload;

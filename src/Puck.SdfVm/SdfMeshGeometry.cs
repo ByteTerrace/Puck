@@ -79,6 +79,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private static readonly IReadOnlyDictionary<int, DynamicTransform> NoPoses = new Dictionary<int, DynamicTransform>();
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
     private int m_chainSlot = -1;
+    private bool m_restPoseSkin;
+
+    /// <summary>Gets whether this group freezes its delta-frame slots at authored rest.</summary>
+    public bool RestPoseSkin { get; private set; }
     // The steps another slot's pose rounds to: PositionSteps and OrientationSteps unless Snap coarsened them.
     private float m_positionSteps = PositionSteps;
     private float m_orientationSteps = OrientationSteps;
@@ -239,6 +243,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         ArgumentNullException.ThrowIfNull(argument: sampled);
 
         var range = program.Instances[instance];
+        m_restPoseSkin = range.RestPoseSkin;
+        RestPoseSkin |= range.RestPoseSkin;
         var bound = (range.IsDynamic ? new Vector4(x: 0f, y: 0f, z: 0f, w: range.Radius) : new Vector4(value: range.Center, w: range.Radius));
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
@@ -333,7 +339,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
                         Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
                     } else {
-                        var pose = RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
+                        var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms));
                         var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });

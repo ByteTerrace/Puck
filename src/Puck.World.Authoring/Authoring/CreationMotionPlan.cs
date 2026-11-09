@@ -33,12 +33,28 @@ public sealed class CreationMotionPlan {
             }
         }
         Owners = owners.ToArray();
+        var rejected = CreationMotion.MovingBlends(document).Where(blend => !CreationMotion.Envelope(document, blend).Admitted).Select(blend => blend.Group).ToHashSet();
+        // A follower has no finite authored envelope. Partition its entire group by owner as well.
+        foreach (var index in followed) { if ((shapes[index].Group ?? 0) != 0) { rejected.Add(shapes[index].Group!.Value); } }
+        var partitions = new Dictionary<(int Group, int Slot), int>();
+        var nextGroup = shapes.Select(s => s.Group ?? 0).DefaultIfEmpty().Max();
+        var renderShapes = shapes.ToArray();
+        for (var index = 0; index < shapes.Count; index++) {
+            var group = (shapes[index].Group ?? 0);
+            if (!rejected.Contains(group)) { continue; }
+            var key = (group, ShapeSlots[index]);
+            if (!partitions.TryGetValue(key, out var partition)) { partitions.Add(key, partition = ++nextGroup); }
+            renderShapes[index] = shapes[index] with { Group = partition };
+        }
+        RenderDocument = document with { Shapes = renderShapes };
     }
 
     /// <summary>Gets each shape's slot relative to the root (zero means root).</summary>
     public int[] ShapeSlots { get; }
     /// <summary>Gets the independently moving shapes in slot order.</summary>
     public int[] Owners { get; }
+    /// <summary>Gets the presentation document with rejected seams partitioned by motion owner.</summary>
+    public CreationDocument RenderDocument { get; }
     /// <summary>Gets the root plus independently moving part count.</summary>
     public int SlotCount => (1 + Owners.Length);
 }

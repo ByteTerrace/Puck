@@ -40,7 +40,14 @@ public sealed partial record SdfMesh {
     /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or member pose is not finite,
     /// an attribute is neither empty nor one per vertex (one per triangle for <paramref name="triangleMaterials"/>), the
     /// mesh has more than <see cref="MaxMembers"/> members, or a vertex names no member.</exception>
-    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default) {
+    /// <param name="influences">One second-owner tuple per skinned vertex, or empty for rigid members.</param>
+    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default, ReadOnlyMemory<SdfMeshInfluence> influences = default) {
+        if (!influences.IsEmpty && ((influences.Length != positions.Length) || (vertexMembers.Length != positions.Length))) { throw new ArgumentException("Influences require one complete member tuple per vertex.", nameof(influences)); }
+        foreach (var influence in influences.Span) {
+            if ((influence.Second != NoMember) && (influence.Second >= members.Length)) { throw new ArgumentException("An influence names no member.", nameof(influences)); }
+            if (!float.IsFinite(influence.Gradient.LengthSquared())) { throw new ArgumentException("An influence gradient must be finite.", nameof(influences)); }
+        }
+        Influences = influences;
         if (
             indices.IsEmpty ||
             ((indices.Length % 3) != 0)
@@ -174,6 +181,8 @@ public sealed partial record SdfMesh {
     /// <summary>Gets each vertex's index in <see cref="Members"/>, or <see cref="NoMember"/> for a vertex that rides its
     /// draw; none when every vertex rides its draw.</summary>
     public ReadOnlyMemory<byte> VertexMembers { get; }
+    /// <summary>Gets the second-owner tuple per skinned vertex; empty for rigid skinning.</summary>
+    public ReadOnlyMemory<SdfMeshInfluence> Influences { get; }
     /// <summary>Gets the mesh's coarser levels of detail, finest first, each a triangle list over this mesh's own vertices
     /// (<see cref="SdfMeshCollapse"/>); none for a mesh drawn at its own triangles alone. The mesh's own triangles are
     /// its level zero, which the irradiance trace and every query read.</summary>
@@ -566,7 +575,7 @@ public static class SdfMeshRegion {
     public static int SkinWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return (mesh.VertexMembers.IsEmpty ? 0 : checked(((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + mesh.VertexMembers.Length)));
+        return (mesh.VertexMembers.IsEmpty ? 0 : checked(((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + (4 * mesh.VertexMembers.Length))));
     }
     /// <summary>Writes a list of draws into the region's words as <paramref name="layout"/> places them.</summary>
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
@@ -887,7 +896,11 @@ public static class SdfMeshRegion {
         var perVertex = skin[(1 + (members.Length * SdfMeshRecord.MemberWords))..];
 
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            perVertex[vertex] = ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]);
+            var influence = (mesh.Influences.IsEmpty ? default : mesh.Influences.Span[vertex]);
+            perVertex[4 * vertex] = vertexMembers[vertex];
+            perVertex[(4 * vertex) + 1] = influence.Blend;
+            perVertex[(4 * vertex) + 2] = influence.GradientXY;
+            perVertex[(4 * vertex) + 3] = influence.GradientZ;
         }
     }
 

@@ -172,7 +172,7 @@ public sealed partial class WorldCreationInstances {
                 detail = BodyDetail(floor: WorldPlacementStamper.FinestDetail, scale: placementScale, shape: shapes[last]);
                 parts.Clear();
             }
-            _ = builder.BeginInstanceDynamic(
+            _ = builder.BeginInstanceDynamic(restPoseSkin: true, 
                 separateBake: true, boundInSlotFrame: true,
                 slot: boundSlot,
                 boundOffset: boundOffset,
@@ -256,7 +256,7 @@ public sealed partial class WorldCreationInstances {
     // shapeSlots bounds the shape slots the registration reserves: every shape slot the probe fills, and past every
     // shape a live creation carries.
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = 0) {
-        var document = live?.Creation.EngineDocument;
+        var document = live?.Motion.RenderDocument;
         var shapes = (document?.Shapes ?? []);
 
         shapeSlots = shapes.Count;
@@ -356,7 +356,7 @@ public sealed partial class WorldCreationInstances {
         for (var round = 0; (round < 2); round++) {
             if (round == 1) {
                 if (!coupled) { break; }
-                _ = builder.BeginInstanceDynamic(
+                _ = builder.BeginInstanceDynamic(restPoseSkin: true, 
                     separateBake: true, boundInSlotFrame: true,
                     slot: rootSlot,
                     boundOffset: Vector3.Zero,
@@ -459,7 +459,7 @@ public sealed partial class WorldCreationInstances {
                 ) + trimMargin);
 
                 if (ownInstance) {
-                    _ = builder.BeginInstanceDynamic(
+                    _ = builder.BeginInstanceDynamic(restPoseSkin: true, 
                     separateBake: true, boundInSlotFrame: true,
                     slot: slot,
                     boundOffset: (hasDomain ? Vector3.Zero : (placed!.Position.Value * placementScale)),
@@ -580,7 +580,7 @@ public sealed partial class WorldCreationInstances {
             var textSlot = rootSlot;
 
             if (textApart) {
-                _ = builder.BeginInstanceDynamic(
+                _ = builder.BeginInstanceDynamic(restPoseSkin: true, 
                     separateBake: true, boundInSlotFrame: true,
                     slot: textSlot,
                     boundOffset: Vector3.Zero,

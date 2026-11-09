@@ -185,7 +185,7 @@ public static class SdfMeshPlanarMerge {
             if (regionOf[(at / 3)] >= 0) { turned[indices[at]] = planes[regionOf[(at / 3)]].Normal; }
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: turned, positions: moved, triangleMaterials: mesh.TriangleMaterials, vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: turned, positions: moved, triangleMaterials: mesh.TriangleMaterials, vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
 
     // One merge's state: the triangles as a pool of three half-edges each (half-edge h runs from corner h to the next corner
