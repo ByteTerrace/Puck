@@ -33,6 +33,8 @@ public sealed partial class WorldTick {
     private readonly List<WorldPlacement> m_dealInstalled = [];
     private bool[] m_dealSlotTaken = [];
 
+
+
     /// <summary>Describes every placement row as one reader's disclosure deals it: its prototype, resolved transform,
     /// parent, facets, and — for a dealt template — the row it deals from with the children present against the row's
     /// capacity, or — for a dealt child — the template that dealt it.</summary>
@@ -386,8 +388,7 @@ public sealed partial class WorldTick {
 
         m_dealtKeys.Clear();
         var cursor = 0;
-
-        if (rowOrdinal >= 0) { while (arena.TryNextCell(cursor: ref cursor, key: out var cellKey, rowOrdinal: rowOrdinal)) { m_dealtKeys.Add(item: arena.Keys[cellKey]); } }
+        if (rowOrdinal >= 0) { while (arena.TryNextCell(rowOrdinal, ref cursor, out var cellKey)) { m_dealtKeys.Add(arena.Keys[cellKey]); } }
         var cells = m_dealtKeys;
         var replaced = 0;
 
@@ -427,7 +428,7 @@ public sealed partial class WorldTick {
             }
 
             replaced++;
-            m_dealChanges.Add(item: (reconciled.Id, reconciled));
+            m_dealChanges.Add((reconciled.Id, reconciled));
         }
 
         var removed = 0;
@@ -444,7 +445,7 @@ public sealed partial class WorldTick {
             }
 
             removed++;
-            m_dealChanges.Add(item: (m_dealChildren[childIndex].Id, null));
+            m_dealChanges.Add((m_dealChildren[childIndex].Id, null));
         }
 
         var added = 0;
@@ -490,8 +491,7 @@ public sealed partial class WorldTick {
                     prototype: prototype,
                     template: template
                 ));
-
-            m_dealChanges.Add(item: (nextChild.Id, nextChild));
+            m_dealChanges.Add((nextChild.Id, nextChild));
         }
 
         if (

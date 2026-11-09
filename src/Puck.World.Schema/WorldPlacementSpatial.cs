@@ -163,7 +163,7 @@ public sealed class WorldSpatialQueryIndex {
     }
 
     private static Lazy<SpatialBvh> BuildLazily(ImmutableArray<CompiledSpatialVolume> volumes) => new(valueFactory: () => {
-        if (volumes.Length == 0) { return new SpatialBvh(Nodes: [], Root: -1); }
+        if (volumes.Length == 0) { return new SpatialBvh([], -1); }
         var order = Enumerable.Range(
             0,
             volumes.Length
@@ -178,8 +178,8 @@ public sealed class WorldSpatialQueryIndex {
             volumes: volumes
         );
         return new SpatialBvh(
-            Nodes: [.. nodes],
-            Root: 0
+            [.. nodes],
+            0
         );
     });
     private static ImmutableDictionary<string, FixedVector3> OccupationTargets(ImmutableArray<CompiledSpatialVolume> volumes) {
@@ -198,7 +198,6 @@ public sealed class WorldSpatialQueryIndex {
         }
         return occupationTargets.ToImmutable();
     }
-
     // The compiled volumes with the given indices replaced, in the same order: an influence or occupation read sees the
     // new geometry without the whole document compiling again.
     internal WorldSpatialQueryIndex WithGeometry(IReadOnlyDictionary<int, CompiledSpatialVolume> replacements) {
@@ -639,10 +638,9 @@ public static class WorldSpatialQueryCompilation {
 
     // Every frame resolves through the one parent-chain resolver, inside the narrowphase envelope.
     private static readonly Func<FixedQ4816, bool> NarrowphaseRange = WithinNarrowphaseRange;
-
     private static bool TryResolveFrame(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> byId,
         Dictionary<string, CompiledPlacementFrame> frames, HashSet<string> visiting, ulong worldSeed, out CompiledPlacementFrame frame, out string reason) =>
-        WorldPlacementFrameCompilation.TryResolveFrame(byId: byId, frame: out frame, frames: frames, placement: placement, reason: out reason, visiting: visiting, within: NarrowphaseRange, worldSeed: worldSeed);
+        WorldPlacementFrameCompilation.TryResolveFrame(placement, byId, frames, visiting, worldSeed, out frame, out reason, NarrowphaseRange);
     private static bool WithinNarrowphaseRange(FixedQ4816 value) =>
         ((value.Value >= -NarrowphaseRawLimit) && (value.Value <= NarrowphaseRawLimit));
     private static bool WithinNarrowphaseRange(FixedVector3 value) =>
@@ -662,7 +660,6 @@ public static class WorldSpatialQueryCompilation {
         placements: placements,
         worldSeed: worldSeed
     );
-
     // A volume whose center or extents read the live state (a document-value reference) is recorded with the values it
     // compiled, so Resolve can tell the cached index has gone stale and recompile that volume alone. A volume the index
     // does not hold (its placement was refused) records no slot, and a change to it compiles the whole document.
@@ -784,7 +781,6 @@ public static class WorldSpatialQueryCompilation {
             volumes: volumes
         );
     }
-
     /// <summary>Compiles one candidate placement against its already-authored parent frames.</summary>
     /// <param name="candidate">The candidate row, including any detached transform or spatial edit.</param>
     /// <param name="byId">The immutable placement lookup used to resolve the candidate's parent chain.</param>
@@ -879,12 +875,11 @@ public static class WorldSpatialQueryCompilation {
         );
         return entry.Index;
     }
-
     // Compiles again only the volumes whose bound values moved, in the slots they already hold. A volume whose new
     // geometry no longer compiles, or that holds no slot, makes the whole document compile again.
     private static CompiledIndex? Recompiled(CompiledIndex entry, List<int> moved) {
         var replacements = new Dictionary<int, CompiledSpatialVolume>();
-        var bound = ((BoundVolume[])entry.Bound.Clone());
+        var bound = (BoundVolume[])entry.Bound.Clone();
 
         foreach (var held in moved) {
             var volume = bound[held];
@@ -921,12 +916,11 @@ public static class WorldSpatialQueryCompilation {
         );
 
         return new CompiledIndex(
-            Bound: [.. bound],
-            Index: index,
-            WorldSeed: worldSeed
+            index,
+            [.. bound],
+            worldSeed
         );
     }
-
     /// <summary>Counts the volumes the placements declare that read a state-bound value, the ones a write can move.</summary>
     /// <param name="placements">The document's placements.</param>
     /// <returns>The bound volume count.</returns>
@@ -934,7 +928,6 @@ public static class WorldSpatialQueryCompilation {
 
     private sealed record BoundVolume(WorldPlacementSpatialVolume Authored, CompiledPlacementFrame Frame, int Slot, System.Numerics.Vector3 Center, System.Numerics.Vector3 HalfExtents);
     private sealed record CompiledIndex(WorldSpatialQueryIndex Index, BoundVolume[] Bound, ulong WorldSeed);
-
     // Hands a section's compiled index to a section whose rows differ from it only in their holding masks
     // (WorldDefinition.WithPlacementHoldings): the authored volumes it compiles read no shown creation.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {

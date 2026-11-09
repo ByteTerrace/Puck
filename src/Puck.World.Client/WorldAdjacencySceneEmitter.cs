@@ -146,11 +146,11 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     public void PrepareFrame() {
         if (m_liveSlots.Length != m_emittedEntities.Length) { m_liveSlots = new int[m_emittedEntities.Length]; }
-        Array.Fill(array: m_liveSlots, value: -1);
+        Array.Fill(m_liveSlots, -1);
         m_liveSlotCount = 0;
         var visuals = m_source.Visuals();
 
-        for (var band = 0; (band < Math.Min(val1: visuals.Count, val2: m_bandCount)); band++) {
+        for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
             SelectBand(visuals[band], m_polledEntities);
             for (var body = 0; (body < m_polledEntities.Length); body++) {
                 if (!m_polledEntities[body]) { continue; }
@@ -158,7 +158,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
             }
         }
-        PrepareStaticProjections(projections: visuals);
+        PrepareStaticProjections(visuals);
     }
 
     public int DynamicSlotCount => m_liveSlotCount;
@@ -513,8 +513,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (mappedCount > 0) {
-                var prepared = ((!queryOnly && includeEntities) ? m_staticProjections.GetValueOrDefault(key: projection.Name) : null);
-                var mappedRows = (prepared?.Rows ?? m_mappedPlacements.AsSpan(length: mappedCount, start: 0).ToArray());
+                var prepared = ((!queryOnly && includeEntities) ? m_staticProjections.GetValueOrDefault(projection.Name) : null);
+                var mappedRows = (prepared?.Rows ?? m_mappedPlacements.AsSpan(0, mappedCount).ToArray());
                 // The mapped rows are standalone source-space frames. Looking their ids up in the neighbour's
                 // original placement table would discard the mapped positions.
                 var mappedImage = (prepared?.Image ?? (image with { PlacementRowsRaw = mappedRows }));
@@ -549,9 +549,9 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             if (includeEntities) {
                 EmitEntities(
-                    bandIndex: bandIndex,
                     builder: builder,
                     projection: projection,
+                    bandIndex: bandIndex,
                     slotBase: slotBase
                 );
             }

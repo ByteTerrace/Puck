@@ -106,7 +106,7 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: $"world.grid pitch {Pitch}", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Step(row: row);
-        Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position.X, expected: (1.1f + Pitch));
+        Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).FixedPosition.X, expected: Puck.Maths.FixedQ4816.FromDouble(1.1f + Pitch));
 
         // A snapped nudge lands the moved axis on the lattice and leaves the others where they stand.
         Submit(line: "world.snap on", registry: registry);

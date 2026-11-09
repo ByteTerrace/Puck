@@ -113,14 +113,13 @@ public sealed record WorldPrototype(
 
     // The digest of a row with its palette removed, once per row; null for a row the normalizer refuses.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldPrototype, byte[]?[]> UnshadedDigests = new();
-
     private static byte[]? UnshadedDigest(WorldPrototype row) => UnshadedDigests.GetValue(key: row, createValueCallback: static row => {
         try {
             return [System.Security.Cryptography.SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(
                 jsonTypeInfo: WorldJsonContext.Default.WorldPrototype,
                 value: (row with { Document = (row.EngineDocument with { Palette = null }), HashRaw = null })
             ))];
-        } catch (Exception exception) when ((exception is DocumentValidationException or InvalidOperationException)) {
+        } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
             return [null];
         }
     })[0];

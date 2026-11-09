@@ -99,8 +99,8 @@ public sealed record WorldPlacementDeal(
     /// <param name="template">The template id, when it is one.</param>
     public static bool IsPlaceholderId(string? id, out string template) {
         template = string.Empty;
-        if ((id is null) || !TrySplitChildId(id: id, key: out var key, template: out var parent) ||
-            !GeneratedName.TryStripHead(head: PlaceholderHead, name: key, rest: out _)) {
+        if ((id is null) || !TrySplitChildId(id: id, template: out var parent, key: out var key) ||
+            !GeneratedName.TryStripHead(name: key, head: PlaceholderHead, rest: out _)) {
             return false;
         }
         template = parent;
@@ -195,7 +195,6 @@ public sealed record WorldPlacementDeal(
             if (Carries(value: read(arg: placement))) { yield return member.Name; }
         }
     }
-
     // Whether a member's value is set: absent, a zero or false scalar and an empty collection carry nothing; any other
     // value, a struct this does not know included, carries something.
     private static bool Carries(object? value) => value switch {
@@ -210,7 +209,6 @@ public sealed record WorldPlacementDeal(
         System.Collections.IEnumerable items => items.GetEnumerator().MoveNext(),
         _ => true,
     };
-
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>
@@ -300,9 +298,8 @@ public sealed record WorldPlacementDeal(
     public static FixedVector3 SlotOffset(WorldPlacement template, int? slot, ulong worldSeed) {
         var offsets = Offsets(template: template, worldSeed: worldSeed);
 
-        return (((slot is { } index) && (((uint)index) < ((uint)offsets.Length))) ? offsets[index] : FixedVector3.Zero);
+        return ((slot is { } index) && (((uint)index) < ((uint)offsets.Length))) ? offsets[index] : FixedVector3.Zero;
     }
-
     private static ImmutableArray<FixedVector3> DeriveOffsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution?.Region is WorldDistributionRegion.Lattice lattice) {
             var countA = Math.Max(
@@ -335,7 +332,6 @@ public sealed record WorldPlacementDeal(
             : []
         );
     }
-
     /// <summary>Returns the number of instances a template's region deals — <see cref="Offsets"/>' length, the exact count
     /// (seed-resolved for Noise) the dealt row's capacity is bounded by and <c>world.budget</c> folds into the
     /// placement census.</summary>
@@ -374,8 +370,8 @@ public sealed record WorldPlacementDeal(
     public string ResolvePrototype(StateArena arena, int variantOrdinal, string key, string templatePrototype) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        if ((variantOrdinal < 0) || (Variants?.Map is not { } map) || !CellName.TryParse(candidate: key, name: out var name, reason: out _) ||
-            !arena.Keys.TryResolve(key: out var cell, name: name) || !arena.TryRead(key: cell, rowOrdinal: variantOrdinal, value: out var value)) {
+        if ((variantOrdinal < 0) || (Variants?.Map is not { } map) || !CellName.TryParse(key, out var name, out _) ||
+            !arena.Keys.TryResolve(name, out var cell) || !arena.TryRead(variantOrdinal, cell, out var value)) {
             return templatePrototype;
         }
         if (value.Kind == CellKind.Text) {

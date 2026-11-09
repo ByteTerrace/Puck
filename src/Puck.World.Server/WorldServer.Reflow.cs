@@ -112,7 +112,7 @@ public sealed partial class WorldServer {
                 ) {
                     return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: WorldSessionObservation.QueryRefusal);
                 }
-                var disclosed = ReadView(recipient: principal).Definition;
+                var disclosed = ReadView(principal).Definition;
                 var template = ReflowTemplate(
                     definition: disclosed,
                     request: request

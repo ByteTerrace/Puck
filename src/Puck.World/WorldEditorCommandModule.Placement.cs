@@ -187,7 +187,7 @@ public sealed partial class WorldEditorCommandModule {
                     }
                 }
 
-                return WorldPlacementFrameCompilation.WithWorldPosition(definition, placement, Puck.Maths.FixedVector3.FromVector3(value: moved));
+                return WorldPlacementFrameCompilation.WithWorldPosition(definition, placement, moved);
             },
             context: context,
             id: id,

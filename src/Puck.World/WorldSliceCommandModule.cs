@@ -180,7 +180,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 var tokens = new string[args.Count];
 
                 for (var index = 0; (index < tokens.Length); index++) { tokens[index] = args[index].ToString(); }
-                if (!TryParse(args: tokens, definition: server.ReadView(context: context).Definition, refusal: out var refusal, request: out var request)) {
+                if (!TryParse(args: tokens, definition: server.ReadView(context).Definition, refusal: out var refusal, request: out var request)) {
                     return refusal;
                 }
                 return Arm(request: request);
@@ -227,7 +227,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                     path3: $"{placement}-{axis}.png"
                 );
                 for (var index = 2; (index < args.Count); index++) { tokens[(index + 1)] = args[index].ToString(); }
-                if (!TryParse(args: tokens, definition: server.ReadView(context: context).Definition, refusal: out var refusal, request: out var request)) {
+                if (!TryParse(args: tokens, definition: server.ReadView(context).Definition, refusal: out var refusal, request: out var request)) {
                     return refusal;
                 }
                 return Arm(request: request);
@@ -242,7 +242,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             return null;
         }
 
-        var definition = server.ReadView(context: context).Definition;
+        var definition = server.ReadView(context).Definition;
         var position = subject.FixedPosition.ToVector3();
         string? nearest = null;
         var best = float.PositiveInfinity;

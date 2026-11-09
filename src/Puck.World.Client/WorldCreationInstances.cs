@@ -1561,13 +1561,11 @@ public sealed partial class WorldCreationInstances {
         // Before the first pack there is no published animation pose; expose the authored rest/frame pose.
         if (live.PackedRoot is null) {
             var (position, rotation) = BasePose(poses: FramePoses(frameCursor: live.EffectiveCursor, live: live), shape: shapes[shapeSlot]);
-            var root = RootPose(client: client, live: live);
-
-            return new SdfAnchor(Position: (root.Position + Vector3.Transform(rotation: root.Rotation, value: (position * root.Scale))),
-                Orientation: Quaternion.Normalize(value: (root.Rotation * rotation)));
+            var root = RootPose(live: live, client: client);
+            return new SdfAnchor(Position: root.Position + Vector3.Transform(position * root.Scale, root.Rotation),
+                Orientation: Quaternion.Normalize(root.Rotation * rotation));
         }
-        var pose = PackedShapePose(live: live, shapeIndex: shapeSlot);
-
+        var pose = PackedShapePose(live, shapeSlot);
         return new SdfAnchor(Position: pose.Position, Orientation: pose.Orientation);
     }
 
@@ -1577,7 +1575,7 @@ public sealed partial class WorldCreationInstances {
 
         if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(paramName: nameof(shapeIndex)); }
         NotePoseRead(live: live);
-        return PackedShapePose(live: live, shapeIndex: shapeIndex);
+        return PackedShapePose(live, shapeIndex);
     }
 
     // Anchor and rig readers use exactly the pose the pack published, including uniform size and followers.
@@ -1589,7 +1587,6 @@ public sealed partial class WorldCreationInstances {
             Position: (pose.Position + Vector3.Transform((shape.Position.Value * pose.Scale), pose.Orientation)),
             Orientation: Quaternion.Normalize(value: (pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) { Scale = pose.Scale } : pose);
     }
-
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>

@@ -45,7 +45,7 @@ public sealed class WorldInstanceStopLawTests {
         Assert.True(condition: answered.Refused);
         Assert.Equal(actual: answered.Code, expected: WorldServer.StoppedCode);
         Assert.Equal(actual: answered.Detail, expected: "instance 'boot' stopped");
-        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).Position).X, expected: 1.1f);
+        Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).FixedPosition.X, expected: Puck.Maths.FixedQ4816.FromDouble(1.1f));
 
         // After the stop, a submission is refused at once, naming it.
         _ = row.Instance.Link.Submit(echoes: echoes, mutation: mutation!, observe: result => late = result, verb: "world.row.set");

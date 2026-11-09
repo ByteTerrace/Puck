@@ -26,7 +26,6 @@ public readonly record struct CompiledPlacementFrame(FixedVector3 FixedPosition,
     public FixedQuaternion FixedRotation => FixedQuaternion.FromAxisAngle(FixedVector3.UnitY, FixedYawRadians);
     /// <summary>Gets the presentation widening of that same rotation.</summary>
     public Quaternion Rotation => FixedRotation.ToQuaternion();
-
     /// <summary>Replaces the world origin without narrowing through presentation.</summary>
     /// <param name="position">The new exact origin.</param><returns>The updated frame.</returns>
     public CompiledPlacementFrame WithFixedPosition(FixedVector3 position) => this with { FixedPosition = position };
@@ -93,17 +92,20 @@ public static class WorldPlacementFrameCompilation {
             : localPosition);
     }
     /// <summary>Writes a world-space edit back into the row's exact stored translation, undoing its parent frame
-    /// and its dealt slot through <see cref="StoredPosition"/>.</summary>
-    public static WorldPlacement WithWorldPosition(WorldDefinition definition, WorldPlacement row, FixedVector3 position) {
+    /// and its dealt slot through <see cref="StoredPosition"/>. Quantizes finite authoring intent once; a non-finite
+    /// intent remains invalid for the shared placement validator rather than being clamped into an admissible value.</summary>
+    public static WorldPlacement WithWorldPosition(WorldDefinition definition, WorldPlacement row, Vector3 position) {
+        if (!VectorFunctions.IsFinite(vector: position)) { return row with { Position = position }; }
+        var fixedPosition = FixedVector3.FromVector3(value: position);
         var parent = ((row.Parent is { } id) ? WorldDefinitionRows.FindPlacement(definition.Placements, id) : null);
 
         if (parent is not null) {
             var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: parent);
 
-            position = frame.FixedRotation.RotateInverse(vector: checked((position - frame.FixedPosition)));
-            if (!WorldPlacementDeal.IsChild(parent: parent, placement: row)) { position /= frame.FixedScale; }
+            fixedPosition = frame.FixedRotation.RotateInverse(vector: checked((fixedPosition - frame.FixedPosition)));
+            if (!WorldPlacementDeal.IsChild(parent: parent, placement: row)) { fixedPosition /= frame.FixedScale; }
         }
-        return row with { Position = StoredPosition(parent, row, position, (definition.Generation?.WorldSeed ?? 0UL)) };
+        return row with { Position = StoredPosition(parent, row, fixedPosition, (definition.Generation?.WorldSeed ?? 0UL)) };
     }
     /// <summary>Composes a child's local transform (<see cref="LocalFrame"/>) over its parent's canonical fixed frame.</summary>
     /// <param name="parentFrame">The already resolved parent frame.</param>
@@ -113,19 +115,18 @@ public static class WorldPlacementFrameCompilation {
     /// <returns>The exact world frame.</returns>
     /// <exception cref="OverflowException">The composition exceeds the fixed-point range.</exception>
     public static CompiledPlacementFrame Compose(CompiledPlacementFrame parentFrame, WorldPlacement parent, WorldPlacement child, ulong worldSeed) =>
-        ComposeCore(parentFrame, LocalFrame(inheritScale: out var inherit, parent: parent, row: child, worldSeed: worldSeed), inherit, null);
+        ComposeCore(parentFrame, LocalFrame(parent: parent, row: child, worldSeed: worldSeed, inheritScale: out var inherit), inherit, null);
 
     private static CompiledPlacementFrame ComposeCore(CompiledPlacementFrame parent, CompiledPlacementFrame local,
         bool inheritScale, Func<FixedQ4816, bool>? within) {
-        var inherited = (inheritScale ? parent.FixedScale : FixedQ4816.One);
-        var offset = checked((local.FixedPosition * inherited));
-
-        if ((within is not null) && !Within(value: offset, within: within)) { throw new OverflowException(message: "Placement rotation input exceeds the query range."); }
+        var inherited = inheritScale ? parent.FixedScale : FixedQ4816.One;
+        var offset = checked(local.FixedPosition * inherited);
+        if (within is not null && !Within(within, offset)) { throw new OverflowException("Placement rotation input exceeds the query range."); }
         return new CompiledPlacementFrame(
-            checked((parent.FixedPosition + parent.FixedRotation.Rotate(vector: offset))),
-            checked((parent.FixedYawRadians + local.FixedYawRadians)), checked((local.FixedScale * inherited)));
+            checked(parent.FixedPosition + parent.FixedRotation.Rotate(offset)),
+            checked(parent.FixedYawRadians + local.FixedYawRadians), checked(local.FixedScale * inherited));
     }
-    private static bool Within(Func<FixedQ4816, bool> within, FixedVector3 value) => (within(value.X) && within(value.Y) && within(value.Z));
+    private static bool Within(Func<FixedQ4816, bool> within, FixedVector3 value) => within(value.X) && within(value.Y) && within(value.Z);
 
     // The one parent-chain resolver. A caller with a representability envelope (spatial compilation) passes it as
     // within, which every rotation input, resolved position and scale on the chain must satisfy; the general document
@@ -195,17 +196,15 @@ public static class WorldPlacementFrameCompilation {
         Cache.AddOrUpdate(key: section, value: table);
         return table.Frames;
     }
-
     // A holding-only replacement has the same authored transforms.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
-        if (Cache.TryGetValue(key: source, value: out var table)) { Cache.AddOrUpdate(key: target, value: table); }
+        if (Cache.TryGetValue(source, out var table)) { Cache.AddOrUpdate(target, table); }
     }
-
     /// <summary>Rotates an authored vector through the same fixed rotation used by parent composition.</summary>
     /// <param name="vector">The local vector.</param><param name="degrees">The yaw in degrees.</param>
     /// <returns>The widened fixed result.</returns>
     public static Vector3 RotateY(Vector3 vector, float degrees) => new CompiledPlacementFrame(Vector3.Zero, degrees)
-        .FixedRotation.Rotate(vector: FixedVector3.FromVector3(value: vector)).ToVector3();
+        .FixedRotation.Rotate(FixedVector3.FromVector3(vector)).ToVector3();
     /// <summary>Validates every placement's <see cref="WorldPlacement.Parent"/> chain, refusing BY NAME the first bad
     /// edge found in authored order: an unknown parent, a self-parent, a parent cycle, a distributed/mirrored parent
     /// (an expanded row has no single frame), or a non-unit-scale parent (composition rotates and translates only)

@@ -121,7 +121,7 @@ public sealed class WorldEditorEditQueueLawTests {
         // Red leg: the row it would have queued cannot be serialized at all, which a callback composing it would throw.
         var unbounded = WorldDefinitionRows.FindPlacement(id: "crate1", placements: rig.Away.Placements)! with { Position = new Vector3(x: float.PositiveInfinity, y: 0f, z: 0f) };
 
-        _ = Assert.ThrowsAny<ArgumentException>(testCode: () => JsonSerializer.Serialize(value: unbounded, jsonTypeInfo: WorldJsonContext.Default.WorldPlacement));
+        _ = Assert.ThrowsAny<JsonException>(testCode: () => JsonSerializer.Serialize(value: unbounded, jsonTypeInfo: WorldJsonContext.Default.WorldPlacement));
 
         // The verdict of the edit in flight submits nothing more: nothing was queued behind it.
         rig.Link.Complete(index: 0, result: rig.Link.Applied());
@@ -239,7 +239,7 @@ public sealed class WorldEditorEditQueueLawTests {
             Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'boot' rolled back to 1.1,3,-1]");
 
             // Red leg: the stopped world never stepped, so the edit was answered by the stop, never applied.
-            Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: stopped.Server.Definition.Placements)!, 0UL, out _).Position).X, expected: 1.1f);
+            Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: stopped.Server.Definition.Placements)!, 0UL, out _).FixedPosition.X, expected: Puck.Maths.FixedQ4816.FromDouble(1.1f));
 
             // A new 'boot', at the very tick the stopped one had reached, takes the next edit at once, from its own document:
             // neither the queue nor the console's row guard carries anything over from the world it replaced.

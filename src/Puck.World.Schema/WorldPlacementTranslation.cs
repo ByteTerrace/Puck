@@ -87,8 +87,7 @@ public sealed class WorldPlacementTranslation : IDocumentSpatialValue, IEquatabl
         }
 
         private static FixedQ4816 ReadComponent(ref Utf8JsonReader reader) {
-            if (!reader.Read() || (reader.TokenType != JsonTokenType.Number)) { throw new JsonException(message: "Expected a translation number."); }
-            return FixedQ4816.Parse(reader.GetDecimal().ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+            return FixedQ4816.Parse(JsonComponentReader.ReadDecimal(ref reader, "Expected a translation number.").ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 System.Globalization.CultureInfo.InvariantCulture);
         }
 
