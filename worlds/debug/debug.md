@@ -218,6 +218,16 @@ cliffs (panel 4). The cycle's levers:
 | Read the conserved water | `world.fields`, each lattice row's `total` |
 | Restart the cycle | boot the world again: a reload keeps the lattice's water |
 
+A barn swallow ([`birds.puck`](birds.puck)) perches on the reservoir
+pavilion's west rail beside the pool, facing out over the water it hunts above.
+Its references are a perched male barn swallow: a glossy steel-blue back, wings
+and tail; a chestnut forehead and throat closed off by a dark blue breast band
+from cream underparts; long pointed wings crossing over the rump; and a deeply
+forked tail whose streamers reach past the wingtips, with white spots on their
+inner webs. It reads in the art direction's treatment as one shaped body in
+flat values with crisp painted markings, at 1.3 times a real bird's size so it
+reads from the pool's path.
+
 ## Going places
 
 The [wind meadow](meadow.md), east of the hero studio, is reached with

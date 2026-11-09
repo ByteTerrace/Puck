@@ -341,7 +341,14 @@ What a first swallow taught, in the order it went wrong:
 - **Detail at least two bake cells wide.** A 3 mm leg vanishes from a static
   bake (5 mm refined cell) and a 4 mm streamer fragments on the animated path,
   which bakes coarser still. Make a thin part a flat blade, wider in one axis,
-  or leave it out.
+  or leave it out. A tapering `flare` thins a pointed tip below the cell (the
+  swallow's flared wingtips frayed); a thin convex `Prism` grown by `dilate`
+  rounds every edge and keeps even its tip twice the dilation thick, which is
+  how the swallow's wings and streamers are made.
+- **A static creation's markings are parented paints.** They ride the
+  creation's frame on a static copy as on an animated one
+  ([surface](references/surface.md#paints), Frames); an unparented paint is in
+  world space there.
 - **Animating a creation changes its bake.** Drivers make the creation
   animated and its shapes pooled: `group: 0` is ungrouped there, so every
   `SmoothUnion` silently becomes a hard union and the head reads as a ball on
