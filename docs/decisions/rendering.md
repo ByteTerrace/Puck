@@ -1132,7 +1132,9 @@ time when the device is overloaded.
 Indirect capture precision is authored as `render.indirect.lightingGrid`.
 Its neutral engine default is continuous; the standard chooses angular and
 radiometric steps. Directional records used for the lighting key and shading
-come from one snap function. Projected sky coefficients use a fixed quantum
+come from one snap function. The sky radiance each probe ray carries (the
+sky texels the relight and the meter read, and the only sky a capture is
+compared by) uses a fixed quantum
 per colour channel and power-of-two range, rather than a tolerance relative
 to an earlier capture. Converged captures compare the resulting values
 exactly, including with a zero grid. Thus a frame's drained bounce depends

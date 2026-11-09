@@ -2868,14 +2868,14 @@ the fixed poses and the approaches already rejected.
 - [medium] A surface no published probe answers is lit by the exposure meter's
   camera sample (`sdfMeshAnswers`, [mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)).
   Re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the
-  valley summit on both backends after a `debug.go` cut. The sample is one
-  scalar luminance and one open-sky share per view, so a doorway that frames
-  the outdoors from inside lights both sides alike until the windows land; the
-  meter's six axis readings would make it directional.
+  valley summit on both backends after a `debug.go` cut. Its diffuse light is
+  the sample's six-axis RGB light (`meterLight`), read about the normal as a
+  probe's cube; its reflection still takes the open share and the grey metered
+  luminance.
 - [low] The meter's open-sky share (`airLight`) reads about 0.42 on the open
   lawn at noon (`world.exposure`, the boot's first views), where the meter's
   `SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE` scaling means it to read one. It
-  scales the atmosphere's in-scatter and the camera sample's sky; check the
+  scales the atmosphere's in-scatter and the camera sample's reflected sky; check the
   probes-source path's per-axis sky shares against the camera trace's.
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white
   sun key, hard black shadows with no sky fill, no rim and no aerial haze. A
@@ -3506,6 +3506,16 @@ measurement.
   activating in the shared root reaches every session's tools, so it cannot be
   the measurement. The placement swap needs no more work.
 
+- [medium] Lockstep Worlds drop an attachment mid-call while converging: the
+  call answers "Host disconnected" (`LocalControlClient.ExecuteAsync` reading
+  end of stream), meaning the World's `LocalControlServer.ServeAsync` closed
+  the connection before the client's own deadline fired. Its causes there are
+  the World's deadline for the request (the same `timeoutMs`, started later than
+  the client's), a session operation throwing a connection-class exception
+  (`IsConnectionError` includes `OperationCanceledException`), or the World
+  exiting. Unconfirmed: reproduce with a lockstep windowed World and a capture
+  or `world.wait` near its `timeoutMs`, read `host.log` for the close, and fix
+  the side that closes early. The error now names what to inspect.
 - [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout. Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`.
 
 - [medium] Investigate a GPU lease held by an older operator worker while no

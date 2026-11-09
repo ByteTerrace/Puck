@@ -1166,6 +1166,12 @@
           "Microsoft.Extensions.Hosting": "[10.*, )"
         }
       },
+      "puck.launcher.stub": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )"
+        }
+      },
       "puck.mcp": {
         "type": "Project",
         "dependencies": {

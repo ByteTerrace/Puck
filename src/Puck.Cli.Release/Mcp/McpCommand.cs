@@ -123,7 +123,8 @@ public static class McpCommand {
         try {
             if ((installRoot is not null) && (buildSource is not null)) {
                 if (prepareInstall) {
-                    _ = await LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    // The activated version is this verb's one line of standard output: a following front reads it.
+                    Console.Out.WriteLine(value: await LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: stop.Token).ConfigureAwait(continueOnCapturedContext: false));
                     return 0;
                 }
                 if (!worker) {
@@ -134,7 +135,7 @@ public static class McpCommand {
                         Path.Combine(path1: installRoot, path2: (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "Puck.Launcher.Stub")),
                         ["mcp", "--profile", "operator", "--worker", "--install-root", installRoot, "--build-source", buildSource,
                             "--checkout", (checkoutPath ?? RepositoryPaths.FindRoot()!), "--attach", (attachmentPath ?? "latest")],
-                        token => LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: token), stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                        LocalAdapterInstall.Follow(build: buildSource, install: installRoot), stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                     return 0;
                 }
                 await LocalAdapterInstall.HealthyAsync(install: installRoot, cancellationToken: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
