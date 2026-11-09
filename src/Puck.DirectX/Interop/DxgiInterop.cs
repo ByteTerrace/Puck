@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.Maths;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dxgi;
@@ -26,6 +27,6 @@ internal static unsafe class DxgiInterop {
     /// <param name="luid">The locally unique identifier to pack.</param>
     /// <returns>The identifier as <c>(HighPart &lt;&lt; 32) | LowPart</c>.</returns>
     public static long ToLuid(in LUID luid) {
-        return (((long)luid.HighPart) << 32) | luid.LowPart;
+        return PackedIntPair.Pack(high: luid.HighPart, low: unchecked(((int)luid.LowPart)));
     }
 }

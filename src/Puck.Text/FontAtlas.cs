@@ -18,19 +18,15 @@ namespace Puck.Text;
 /// concepts; callers that draw the atlas derive their own pixel-space geometry from its em-space metrics and bounds.
 /// </remarks>
 public sealed class FontAtlas {
-    private static long ComposeKerningKey(int leftUnicode, int rightUnicode) {
-        return (((long)leftUnicode) << 32) | ((uint)rightUnicode);
-    }
-
     /// <summary>Returns the kerning advance adjustment, in em units, for the ordered pair of code points.</summary>
     /// <param name="leftUnicode">The Unicode scalar value of the left (preceding) glyph.</param>
     /// <param name="rightUnicode">The Unicode scalar value of the right (following) glyph.</param>
     /// <returns>The advance adjustment in em units, or <c>0</c> when the atlas defines no kerning for the pair.</returns>
     public float GetKerningAdjustment(int leftUnicode, int rightUnicode) {
         return (m_kerningAdjustments.TryGetValue(
-            key: ComposeKerningKey(
-                leftUnicode: leftUnicode,
-                rightUnicode: rightUnicode
+            key: PackedIntPair.Pack(
+                high: leftUnicode,
+                low: rightUnicode
             ),
             value: out var adjustment
         )
@@ -172,9 +168,9 @@ public sealed class FontAtlas {
         m_kerningAdjustments = m_kerningPairs.ToDictionary(
             comparer: PackedIntPairComparer.Instance,
             elementSelector: pair => pair.AdvanceAdjustment,
-            keySelector: pair => ComposeKerningKey(
-                leftUnicode: pair.Unicode1,
-                rightUnicode: pair.Unicode2
+            keySelector: pair => PackedIntPair.Pack(
+                high: pair.Unicode1,
+                low: pair.Unicode2
             )
         );
     }
