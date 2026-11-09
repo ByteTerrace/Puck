@@ -35,7 +35,7 @@ public enum SdfExposureMode {
 /// ceiling beside a sunlit window lifts and the sunlit ground through the window compresses while a dark paint stays
 /// dark, as the eye adapts across a scene; the sky is scaled so its brightest reaches display white
 /// (<see cref="SkyPeakTarget"/>). Zero exposes the whole view alike, one meters every surface on its own. The image the
-/// view meters is the adapted one, so the view's reading settles by a factor of <paramref name="Local"/> a reading.</param>
+/// view meters is the adapted one, and <see cref="Settled"/> removes the adaptation's feedback from each reading.</param>
 /// <param name="Band">The dead band, in stops: an automatic exposure holds while its meter reads within this far of the
 /// reading it last settled on, and once a reading leaves the band it follows the meter until it settles again, so the
 /// small changes of a walk through an evenly lit room never move the exposure. Zero follows every change.</param>

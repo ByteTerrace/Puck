@@ -445,8 +445,11 @@ exposure from the view's toward the one its own illumination (the lights'
 diffuse terms and the volume's indirect light, against the image meter's
 reading taken as a scene of 0.4 albedo) would meter, within six stops; the
 reference is the meter's held and eased reading, so it moves only when the
-exposure does. The view meters the adapted image, which settles by a factor
-of the share a reading. So a room beside its sunlit windows reads as a
+exposure does. The view meters the adapted image, whose reading follows that
+reference by the local share of its covered weight (the composite sums the
+coverage beside the bins); `SdfExposure.Settled` solves each reading for the
+reference that reads itself, so the band holds as wide as authored instead of
+widening by 1 / (1 − local) and holding wherever the meter arrived from. So a room beside its sunlit windows reads as a
 room and the sunlit ground through the window as ground, while a dark paint
 under the same light stays dark; the composite scales the sky share so the
 sky's brightest texel reaches display white rather than clipping, and a window
