@@ -1143,7 +1143,12 @@ re-arming a narrower filter beside a live one left two watchers running. A findi
 `report: <its findings path>` (a Codex log whose header names a read-only
 sandbox needs none), so `puck lanes` judges it by its log and report rather
 than by writes, and tells a delivered report (`reported`) from a process that
-exited without one (`exited`).
+exited without one (`exited`). A Codex review writes its findings as it goes,
+so `reported` means the file exists, not that the review ended: the lead acts
+on a findings file only after the lane's own process has exited (its
+background task's completion). A lead that briefed an implementation from an
+updater-memo review's first three findings, while the review went on to
+eleven, had to re-scope the running lane.
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
