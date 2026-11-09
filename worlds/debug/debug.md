@@ -222,14 +222,15 @@ A barn swallow ([`birds.puck`](birds.puck)) perches on the reservoir
 pavilion's west rail beside the pool, gripping the rail's pool-side edge with
 its tail hanging free over the water and its face toward the path. Its
 references are a perched male barn swallow: an upright stance on short dark
-legs; a glossy steel-blue back, wings and tail; a chestnut forehead joined to
-the bill and a chestnut chin and throat, closed off by a narrow dark blue
-breast band from warm buff underparts; long pointed wings crossing past the
-rump; and a deeply forked tail whose fine streamers reach past the wingtips,
-with white spots on their inner webs. It reads in the art direction's
-treatment as one shaped body in flat values with crisp painted markings and a
-painted gloss band along the back and crown, at 1.5 times a real bird's size so
-it reads from the pool's path.
+legs with split toes; a glossy steel-blue back and crown; near-black folded
+wings lying along the flanks and crossing past the rump; a chestnut forehead
+blaze joined to a small dark wedge of a bill, and a chestnut chin and throat
+closed off by a narrow dark blue breast band from warm buff underparts; and a
+deeply forked tail whose fine streamers, about the body's length, reach past
+the wingtips, with a band of white spots on the inner webs near the fork. It
+reads in the art direction's treatment as one shaped body in held values with
+crisp painted markings and a graded painted gloss band along the back and
+crown, at 1.5 times a real bird's size so it reads from the pool's path.
 
 ## Going places
 
