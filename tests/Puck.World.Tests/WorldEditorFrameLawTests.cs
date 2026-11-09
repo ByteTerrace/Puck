@@ -288,6 +288,6 @@ public sealed class WorldEditorFrameLawTests {
         var placed = registry.Submit(line: "world.place crate");
 
         Assert.False(condition: placed.IsError, userMessage: placed.Output);
-        Assert.True(condition: (Vector3.Distance(value1: link.Placement(index: 0).Position, value2: new Vector3(x: 4f, y: 0.25f, z: 6f)) < 0.02f), userMessage: $"placed at {((Vector3)link.Placement(index: 0).Position)}");
+        Assert.True(condition: (Vector3.Distance(value1: WorldPlacementFrameCompilation.LocalFrame(null, link.Placement(index: 0), 0UL, out _).Position, value2: new Vector3(x: 4f, y: 0.25f, z: 6f)) < 0.02f), userMessage: $"placed at {(WorldPlacementFrameCompilation.LocalFrame(null, link.Placement(index: 0), 0UL, out _).Position)}");
     }
 }

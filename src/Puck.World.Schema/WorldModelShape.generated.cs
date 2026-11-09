@@ -4476,7 +4476,7 @@ public static partial class WorldModelShape {
             [
                 M("id", typeof(global::System.String), typeof(global::Puck.World.WorldPlacement), "Id", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).Id),
                 M("prototypeId", typeof(global::System.String), typeof(global::Puck.World.WorldPlacement), "PrototypeId", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).PrototypeId),
-                M("position", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.WorldPlacement), "Position", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).Position),
+                M("position", typeof(global::Puck.World.WorldPlacementTranslation), typeof(global::Puck.World.WorldPlacement), "Position", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).Position),
                 M("yawDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacement), "YawDegrees", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).YawDegrees),
                 M("scale", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacement), "Scale", Read | Write | Required, static value => ((global::Puck.World.WorldPlacement)value).Scale),
                 M("distribution", typeof(global::Puck.World.WorldDistribution), typeof(global::Puck.World.WorldPlacement), "Distribution", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Distribution),
@@ -4691,6 +4691,15 @@ public static partial class WorldModelShape {
                 M("requireHit", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacementSurface), "RequireHit", Read | Write, static value => ((global::Puck.World.WorldPlacementSurface)value).RequireHit),
             ],
             []),
+        T(typeof(global::Puck.World.WorldPlacementTranslation), true, JsonTypeInfoKind.None, null,
+            [],
+            [],
+            [
+                M("reference", typeof(global::System.String), typeof(global::Puck.World.WorldPlacementTranslation), "Reference", Read, static value => ((global::Puck.World.WorldPlacementTranslation)value).Reference),
+                M("binder", typeof(global::System.Object), typeof(global::Puck.World.WorldPlacementTranslation), "Binder", Read, static value => ((global::Puck.World.WorldPlacementTranslation)value).Binder),
+                M("expectedValue", typeof(global::System.String), typeof(global::Puck.World.WorldPlacementTranslation), "ExpectedValue", Read, static value => ((global::Puck.World.WorldPlacementTranslation)value).ExpectedValue),
+                M("isFinite", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacementTranslation), "IsFinite", Read, static value => ((global::Puck.World.WorldPlacementTranslation)value).IsFinite),
+            ]),
         T(typeof(global::Puck.World.WorldPlacementsSection), true, JsonTypeInfoKind.Object, null,
             [],
             [

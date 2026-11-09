@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Text.Json;
 using Puck.Commands;
 using Puck.World.Client;
@@ -203,7 +202,7 @@ public sealed partial class WorldEditorCommandModule {
     // names what the link answered it with.
     private void Report(EditTarget target, WorldEditorEditQueue.Edit edit, WorldEditorEditQueue.Settlement settlement) {
         if (settlement.RolledBack) {
-            var position = ((settlement.RolledBackTo is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it is not placed");
+            var position = ((settlement.RolledBackTo is { } row) ? Format(value: WorldDefinitionRows.ResolvedPosition(definition: edit.Source.Delivered().Definition, placement: row)) : "nothing: it is not placed");
             var dropped = ((settlement.Dropped > 0) ? $", dropping {settlement.Dropped} queued edit{((settlement.Dropped == 1) ? string.Empty : "s")}" : string.Empty);
 
             echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{edit.Source.World}' rolled back to {position}{dropped}]"));
@@ -222,7 +221,7 @@ public sealed partial class WorldEditorCommandModule {
         .Field(key: "world", value: world.Name)
         .Field(key: "placement", value: placement.Id)
         .Field(key: "prototype", value: placement.PrototypeId)
-        .Field(key: "position", value: Format(value: ((Vector3)placement.Position)))
+        .Field(key: "position", value: Format(value: WorldDefinitionRows.ResolvedPosition(definition: world.Definition, placement: placement)))
         .Field(key: "yaw", value: Format(value: placement.YawDegrees))
         .Field(key: "edit", value: pending)
         .Field(key: "as", value: context.Principal.Describe())

@@ -83,11 +83,20 @@ public sealed partial class WorldServer {
                 );
             }
             m_reflowReviews[principal] = entry with { Reviewed = true };
-            var changes = proposal.Mutation.Mutations.OfType<WorldMutation.UpsertPlacement>().Select(selector: edit =>
-                string.Create(
+            var definition = ReadView(recipient: principal).Definition;
+            var edits = proposal.Mutation.Mutations.OfType<WorldMutation.UpsertPlacement>().ToDictionary(keySelector: edit => edit.Placement.Id);
+            var proposed = definition with {
+                PlacementRowsRaw = [.. definition.Placements.Select(selector: row =>
+                (edits.TryGetValue(key: row.Id, value: out var edit) ? edit.Placement : row))],
+            };
+            var changes = edits.Values.Select(selector: edit => {
+                var frame = WorldDefinitionRows.ResolvedFrame(definition: proposed, placement: edit.Placement);
+
+                return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{edit.Placement.Id} -> local ({edit.Placement.Position.X:0.###}, {edit.Placement.Position.Y:0.###}, {edit.Placement.Position.Z:0.###}), scale={edit.Placement.Scale:0.###}"
-            ));
+                $"{edit.Placement.Id} -> world ({frame.Position.X:0.###}, {frame.Position.Y:0.###}, {frame.Position.Z:0.###}), scale={frame.Scale:0.###}"
+            );
+            });
 
             return new QueryAnswer(
                 $"[world.reflow: {proposal.Moved} moved; cost={proposal.Cost}; checks={proposal.Candidates}; {string.Join(

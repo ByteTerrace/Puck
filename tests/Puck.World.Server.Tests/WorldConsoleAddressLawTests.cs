@@ -54,7 +54,7 @@ public sealed class WorldConsoleAddressLawTests {
         ownedMachines: null,
         server: row.Server
     );
-    private static Vector3 CrateIn(HostRow row) => ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position);
+    private static Vector3 CrateIn(HostRow row) => (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).Position);
 
     [Fact]
     public void ARowSetAppliesInTheAddressedInstanceAndNeverInBoot() {

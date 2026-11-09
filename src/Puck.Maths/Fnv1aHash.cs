@@ -35,15 +35,15 @@ public struct Fnv1aHash {
             if (BinaryPrimitives.ReadUInt64LittleEndian(source: values) == 0) {
                 hash *= Prime8;
             } else {
-                hash = (hash ^ values[0]) * Prime; hash = (hash ^ values[1]) * Prime;
-                hash = (hash ^ values[2]) * Prime; hash = (hash ^ values[3]) * Prime;
-                hash = (hash ^ values[4]) * Prime; hash = (hash ^ values[5]) * Prime;
-                hash = (hash ^ values[6]) * Prime; hash = (hash ^ values[7]) * Prime;
+                hash = ((hash ^ values[0]) * Prime); hash = ((hash ^ values[1]) * Prime);
+                hash = ((hash ^ values[2]) * Prime); hash = ((hash ^ values[3]) * Prime);
+                hash = ((hash ^ values[4]) * Prime); hash = ((hash ^ values[5]) * Prime);
+                hash = ((hash ^ values[6]) * Prime); hash = ((hash ^ values[7]) * Prime);
             }
             values = values[sizeof(ulong)..];
         }
         foreach (var value in values) {
-            hash = (hash ^ value) * Prime;
+            hash = ((hash ^ value) * Prime);
         }
         m_hash = hash;
     }
@@ -53,17 +53,17 @@ public struct Fnv1aHash {
         // A zero byte only multiplies. Fold a whole zero lane without eight/four dependent multiplies;
         // this is the same polynomial modulo 2^64, for any incoming accumulator and any alignment.
         if (value == 0) { m_hash *= Prime4; return; }
-        Add(value: (byte)value); Add(value: (byte)(value >> 8));
-        Add(value: (byte)(value >> 16)); Add(value: (byte)(value >> 24));
+        Add(value: ((byte)value)); Add(value: ((byte)(value >> 8)));
+        Add(value: ((byte)(value >> 16))); Add(value: ((byte)(value >> 24)));
     }
     /// <summary>Folds a 64-bit value into the hash, least-significant byte first.</summary>
     /// <param name="value">The value to fold.</param>
     public void Add(ulong value) {
         if (value == 0) { m_hash *= Prime8; return; }
-        Add(value: (byte)value); Add(value: (byte)(value >> 8));
-        Add(value: (byte)(value >> 16)); Add(value: (byte)(value >> 24));
-        Add(value: (byte)(value >> 32)); Add(value: (byte)(value >> 40));
-        Add(value: (byte)(value >> 48)); Add(value: (byte)(value >> 56));
+        Add(value: ((byte)value)); Add(value: ((byte)(value >> 8)));
+        Add(value: ((byte)(value >> 16))); Add(value: ((byte)(value >> 24)));
+        Add(value: ((byte)(value >> 32))); Add(value: ((byte)(value >> 40)));
+        Add(value: ((byte)(value >> 48))); Add(value: ((byte)(value >> 56)));
     }
     /// <summary>Folds a signed 64-bit value's bit pattern into the hash, least-significant byte first.</summary>
     /// <param name="value">The value to fold.</param>
@@ -79,8 +79,12 @@ public struct Fnv1aHash {
         }
 
         Add(value: ((uint)value.Length));
-
-        foreach (var character in value) {
+        Add(values: value.AsSpan());
+    }
+    /// <summary>Folds UTF-16 chars in order, each as a 32-bit value, without a length prefix.</summary>
+    /// <param name="values">The chars to fold. A caller framing a sequence adds its length separately.</param>
+    public void Add(ReadOnlySpan<char> values) {
+        foreach (var character in values) {
             Add(value: ((uint)character));
         }
     }
@@ -100,9 +104,7 @@ public struct Fnv1aHash {
     public static ulong Compute(ReadOnlySpan<char> values) {
         var hash = Create();
 
-        foreach (var character in values) {
-            hash.Add(value: ((uint)character));
-        }
+        hash.Add(values: values);
 
         return hash.Value;
     }

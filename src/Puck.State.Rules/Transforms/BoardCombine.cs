@@ -29,49 +29,33 @@ public static partial class ArenaTransforms {
 
         if (
             BoardCombination.NeedsLeft(operation: combine.Operation) &&
-            !((combine.LeftSet is { } leftSet)
-            ? TrySourceSet(
+            !TryCombineSource(
                 context: in context,
                 empty: out leftEmpty,
                 member: combine.Value,
                 nonMember: target.Empty,
                 refusal: out refusal,
-                set: leftSet,
+                rowOrdinal: combine.LeftRowOrdinal,
+                set: combine.LeftSet,
                 topology: topology,
                 values: left
             )
-            : TrySourceBoard(
-                context: in context,
-                empty: out leftEmpty,
-                refusal: out refusal,
-                rowOrdinal: combine.LeftRowOrdinal,
-                topology: topology,
-                values: left
-            ))
         ) {
             return false;
         }
         if (
             BoardCombination.NeedsRight(operation: combine.Operation) &&
-            !((combine.RightSet is { } rightSet)
-            ? TrySourceSet(
+            !TryCombineSource(
                 context: in context,
                 empty: out rightEmpty,
                 member: combine.Value,
                 nonMember: target.Empty,
                 refusal: out refusal,
-                set: rightSet,
+                rowOrdinal: combine.RightRowOrdinal,
+                set: combine.RightSet,
                 topology: topology,
                 values: right
             )
-            : TrySourceBoard(
-                context: in context,
-                empty: out rightEmpty,
-                refusal: out refusal,
-                rowOrdinal: combine.RightRowOrdinal,
-                topology: topology,
-                values: right
-            ))
         ) {
             return false;
         }
@@ -116,6 +100,10 @@ public static partial class ArenaTransforms {
 
         return Applied(refusal: out refusal);
     }
+    private static bool TryCombineSource(in ArenaTransformContext context, CellSetRow? set, int rowOrdinal, CompiledTopology topology, long member, long nonMember, Span<long> values, out long empty, out EffectRefusal refusal) =>
+        ((set is not null)
+            ? TrySourceSet(context: in context, empty: out empty, member: member, nonMember: nonMember, refusal: out refusal, set: set, topology: topology, values: values)
+            : TrySourceBoard(context: in context, empty: out empty, refusal: out refusal, rowOrdinal: rowOrdinal, topology: topology, values: values));
     // A declared set reads as a board whose members hold the written value and whose other cells hold the written
     // board's empty value, so Copy paints the set and every other operation reads its membership.
     private static bool TrySourceSet(in ArenaTransformContext context, CellSetRow set, CompiledTopology topology, long member, long nonMember, Span<long> values, out long empty, out EffectRefusal refusal) {

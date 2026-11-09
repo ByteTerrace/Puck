@@ -311,7 +311,7 @@ public sealed partial class WorldServer {
             }
             // Candidates are compared and placed in the template's frame; a dealt member stores each as its
             // displacement from its own slot, which reflow never changes.
-            var origin = WorldPlacementFrameCompilation.LocalFrame(parent: template, row: child, worldSeed: worldSeed, inheritScale: out _).FixedPosition;
+            var origin = WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: template, row: child, worldSeed: worldSeed).FixedPosition;
             var member = child;
 
             options[index] = ((editById.ContainsKey(key: children[index].Id) || IsPinned(placement: child))
@@ -319,7 +319,7 @@ public sealed partial class WorldServer {
                 : [child, .. offsets
                 .Where(predicate: offset => (offset != origin))
                 .OrderBy(keySelector: offset => (offset - origin).LengthSquared)
-                .Select(selector: offset => member with { Position = WorldPlacementFrameCompilation.StoredPosition(parent: template, row: member, localPosition: offset, worldSeed: worldSeed).ToVector3() })]
+                .Select(selector: offset => member with { Position = WorldPlacementFrameCompilation.StoredPosition(localPosition: offset, parent: template, row: member, worldSeed: worldSeed) })]
             );
         }
         var optionVolumes = options
@@ -542,7 +542,7 @@ public sealed partial class WorldServer {
         var dependencies = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var placement in localRows.Append(element: template)) {
-            WorldDefinitionFingerprint.CollectPlacementStateInputs(placement, dependencies);
+            WorldDefinitionFingerprint.CollectPlacementStateInputs(placement: placement, rows: dependencies);
         }
         var stateRows = dependencies.Order(comparer: StringComparer.Ordinal).ToArray();
         var placementIds = localRows.Append(element: template)

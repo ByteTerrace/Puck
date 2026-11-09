@@ -259,6 +259,13 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.BoxLow, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in low)));
             Hash(fact: Fact.BoxHigh, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in high)));
         }
+        // So do the parts a dynamic instance declares, each by its slot's offset from the instance's own so one creation's
+        // shapes key alike on every body that wears it.
+        foreach (var part in range.Parts) {
+            var words = new PartWords(part: part, ownSlot: ownSlot);
+
+            Hash(fact: Fact.Part, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<PartWords>(reference: in words)));
+        }
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {
@@ -447,6 +454,15 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         SampledValues,
         SideTable,
         Instruction,
+        Part,
+    }
+    // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PartWords(SdfInstancePart part, int ownSlot) {
+        private readonly int m_slot = (part.Slot - ownSlot);
+        private readonly Vector3 m_low = part.Low;
+        private readonly Vector3 m_high = part.High;
+        private readonly float m_detail = part.Detail;
     }
     // A vector's components rounded to steps a unit; a component no int holds rounds to int.MinValue.
     [StructLayout(LayoutKind.Sequential)]

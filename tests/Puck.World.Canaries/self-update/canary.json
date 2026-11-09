@@ -1,6 +1,6 @@
 {
   "id": "self-update",
-  "title": "The self-update stub checks, applies, and relaunches on the new version; a broken version reverts to last-good",
+  "title": "The self-update stub checks, applies, and relaunches on the new version; a broken version is rejected and rolls back to the proven version",
   "bootShape": "stub",
   "requirements": [],
   "timeoutSeconds": 60,
@@ -16,7 +16,7 @@
     ],
     "expect": [
       { "type": "line", "name": "apply reports applied", "stream": "stdout", "match": "contains", "text": "[update.apply: applied", "present": true },
-      { "type": "filesDiffer", "name": "the pointer ends on the applied version", "before": "current-after", "after": "expected-2.0.0.txt", "different": false },
+      { "type": "filesDiffer", "name": "the release record ends on the applied version", "before": "current-after", "after": "expected-2.0.0.txt", "different": false },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -28,7 +28,7 @@
     ],
     "expect": [
       { "type": "line", "name": "the broken version refuses to launch", "stream": "stderr", "match": "contains", "text": "does not exist", "present": true },
-      { "type": "filesDiffer", "name": "the pointer reverts to the last-good version", "before": "current-after", "after": "expected-1.0.0.txt", "different": false },
+      { "type": "filesDiffer", "name": "the release record rolls back to the proven version", "before": "current-after", "after": "expected-1.0.0.txt", "different": false },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

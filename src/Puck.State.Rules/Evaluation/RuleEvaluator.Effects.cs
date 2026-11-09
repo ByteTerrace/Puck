@@ -628,23 +628,7 @@ public sealed partial class RuleEvaluator {
             ReportRefusal(detail: reason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
             return Step.Refused;
         }
-        var previous = bindings[effect.BindingSlot];
-
-        bindings[effect.BindingSlot] = handle;
-        try {
-            var bodyMoved = false;
-
-            var sequence = FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved);
-
-            if (sequence != Step.Done) {
-                return sequence;
-            }
-
-            moved = true;
-            return Step.Done;
-        } finally {
-            bindings[effect.BindingSlot] = previous;
-        }
+        return FireClaimBody(effects: effect.Effects, bindingSlot: effect.BindingSlot, handle: handle, firing: in firing, strict: strict, moved: out moved);
     }
     private Step FireClaimPair(ClaimPairEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
@@ -672,13 +656,20 @@ public sealed partial class RuleEvaluator {
             return Step.Refused;
         }
 
-        var previous = bindings[effect.BindingSlot];
+        return FireClaimBody(effects: effect.Effects, bindingSlot: effect.BindingSlot, handle: handle, firing: in firing, strict: strict, moved: out moved);
+    }
+    // Both claim kinds restore their lexical register even when a body refuses or throws. A successful claim
+    // counts as movement independently of whether its initializer writes anything.
+    private Step FireClaimBody(IRuleEffect[] effects, int bindingSlot, StateInstanceHandle handle, in EffectFiring firing, bool strict, out bool moved) {
+        moved = false;
+        var bindings = m_host.InstanceBindings;
+        var previous = bindings[bindingSlot];
 
-        bindings[effect.BindingSlot] = handle;
+        bindings[bindingSlot] = handle;
         try {
             var bodyMoved = false;
 
-            var sequence = FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved);
+            var sequence = FireSequence(applied: ref bodyMoved, effects: effects, firing: in firing, strict: strict);
 
             if (sequence != Step.Done) {
                 return sequence;
@@ -686,7 +677,7 @@ public sealed partial class RuleEvaluator {
             moved = true;
             return Step.Done;
         } finally {
-            bindings[effect.BindingSlot] = previous;
+            bindings[bindingSlot] = previous;
         }
     }
     private Step FireRelease(ReleaseEffect effect, in EffectFiring firing, out bool moved) {

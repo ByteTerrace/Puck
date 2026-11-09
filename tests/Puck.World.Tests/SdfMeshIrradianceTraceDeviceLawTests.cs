@@ -215,10 +215,13 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         var module = owned.Own(gpu.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(Path.Combine(SdfKernelSet.DefaultDirectory, "sdf-probe-relight.comp" + extension))));
         var pipeline = owned.Own(gpu.PipelineFactory.Create(computeShaderModule: module, description: description, name: default));
+        var combineModule = owned.Own(gpu.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
+            bytecode: File.ReadAllBytes(Path.Combine(SdfKernelSet.DefaultDirectory, "sdf-probe-combine.comp" + extension))));
+        var combine = owned.Own(gpu.PipelineFactory.Create(computeShaderModule: combineModule, description: description with { Name = "sdf-probe-combine" }, name: default));
         var cacheBuffer = Host(cache);
         var workBuffer = Host(work);
         var payload = origins.Length * SdfMeshProbeRelight.ResultWords;
-        var resultReset = Host(new uint[payload + 1]);
+        var resultReset = Host(new uint[payload + 1 + (origins.Length * SdfMeshProbeRelight.Slices * SdfMeshProbeRelight.PartialWords)]);
         var resultBuffer = owned.Own(gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: resultReset.SizeBytes, usage: GpuBufferUsage.Storage));
         var buffers = new Dictionary<string, IGpuBuffer> {
             [SdfKernelInterfaces.ProbeScene] = Host(hierarchy),
@@ -257,6 +260,13 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         recorder.BindPipeline(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, descriptorSetHandle: set,
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
+        recorder.Dispatch(command, (uint)(origins.Length * SdfMeshProbeRelight.Slices), 1, 1);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
+            sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+        recorder.BindPipeline(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, pipelineHandle: combine.Handle);
+        recorder.BindDescriptorSet(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, descriptorSetHandle: set,
+            group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: combine.LayoutHandle);
         recorder.Dispatch(command, (uint)origins.Length, 1, 1);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
@@ -267,9 +277,9 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
         recorder.EndCommandBuffer(command);
         gpu.QueueSubmitter.SubmitAndWait([command]);
-        var result = new uint[payload + 1];
+        var result = new uint[resultReset.SizeBytes / 4];
         readback.Read(MemoryMarshal.AsBytes(result.AsSpan()));
-        Assert.Equal(0u, result[^1]);
+        Assert.Equal(0u, result[payload]);
         for (var probe = 0; probe < origins.Length; probe++) {
             var position = new Vector3(origins[probe].X, origins[probe].Y, origins[probe].Z);
             for (var light = 0; light < LightCount; light++) {

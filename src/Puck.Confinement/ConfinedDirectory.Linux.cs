@@ -117,11 +117,14 @@ public sealed partial class ConfinedDirectory {
                 (RenameAt(newName: destinationName, newParent: Fd(handle: destinationParent), oldName: sourceName, oldParent: Fd(handle: sourceParent)) == 0)) { return; }
             throw Error(message: $"Cannot move confined entry '{sourceName}' to '{destinationName}'");
         }
-        public static void ReplaceFile(SafeFileHandle parent, string sourceName, string destinationName) {
-            if ((RenameAt(newName: destinationName, newParent: Fd(handle: parent), oldName: sourceName, oldParent: Fd(handle: parent)) != 0) ||
-                (Fsync(fd: Fd(handle: parent)) != 0)) {
+        public static void RenameReplace(SafeFileHandle parent, string sourceName, string destinationName) {
+            if (RenameAt(newName: destinationName, newParent: Fd(handle: parent), oldName: sourceName, oldParent: Fd(handle: parent)) != 0) {
                 throw Error(message: $"Cannot replace confined file '{destinationName}'");
             }
+        }
+        // fsync(2) on a directory makes its entries (a rename into it, a file created in it) durable.
+        public static void Flush(SafeFileHandle directory) {
+            if (Fsync(fd: Fd(handle: directory)) != 0) { throw Error(message: "Cannot flush confined directory"); }
         }
         // False when the entry was already gone.
         public static bool Unlink(SafeFileHandle parent, string name, bool directory) {

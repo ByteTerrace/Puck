@@ -7,15 +7,36 @@ namespace Puck.Confinement;
 /// <summary>The names an install root holds, shared by the stub, every entry point that can run from an install, and
 /// the launcher that installs and prunes versions.</summary>
 public static class InstallLayout {
-    /// <summary>The current-version pointer file's name, directly under the install root. Its presence marks a directory
-    /// as an install root.</summary>
-    public const string CurrentFileName = "current";
+    /// <summary>The pending install intent's file name, directly under the install root.</summary>
+    public const string InstallIntentFileName = "install-intent.json";
+    /// <summary>The install's release record's file name (<see cref="ReleasePolicy"/>), under
+    /// <see cref="StateDirectoryName"/>.</summary>
+    public const string ReleasePolicyFileName = "release-policy.json";
+    /// <summary>The install's release replay mark's file name, under <see cref="StateDirectoryName"/>. It is read and
+    /// written only under an <see cref="InstallTransaction"/>.</summary>
+    public const string SequenceMarkFileName = "sequence-mark";
+    /// <summary>The install's durable state directory, directly under the install root.</summary>
+    public const string StateDirectoryName = "state";
     /// <summary>Where a version waits for deletion after leaving <see cref="VersionsDirectoryName"/>.</summary>
     public const string TrashDirectoryName = "trash";
-    /// <summary>The update lease's file name, directly under the install root.</summary>
+    /// <summary>The update lease's file name, directly under the install root. <see cref="InstallTransaction"/> holds it.</summary>
     public const string UpdateLockFileName = "update.lock";
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = "versions";
+
+    /// <summary>Gets how two version directory names are compared: ignoring case on Windows, where such names name one
+    /// directory, and ordinally on Linux. Every comparison of a version name with another (a registration, the release
+    /// record's current version, a proof of health, a pruner entry) uses it.</summary>
+    public static StringComparison NameComparison => (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    /// <summary>Gets the comparer form of <see cref="NameComparison"/>.</summary>
+    public static StringComparer NameComparer => (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    /// <summary>Reports whether <paramref name="name"/> can name a version directory: one non-empty component that is
+    /// not <c>.</c> or <c>..</c> and holds no separator, drive colon or NUL.</summary>
+    /// <param name="name">The candidate name.</param>
+    /// <returns><see langword="true"/> when the name is a single plain component.</returns>
+    public static bool IsPlainName(string? name) =>
+        (!string.IsNullOrEmpty(value: name) && (name is not ("." or "..")) && (name.IndexOfAny(anyOf: ['/', '\\', ':', '\0']) < 0));
 }
 /// <summary>A launch that cannot confirm the version directory it runs from: the launcher removed or replaced it
 /// before this process registered, or its install cannot be read, so running on would read files that are not this
@@ -32,7 +53,10 @@ public sealed class InstallRegistrationException(string message) : IOException(m
 /// <para>Registration waits for <see cref="InstallLayout.UpdateLockFileName"/> without a deadline, the lease every
 /// removal holds, and then confirms by identity that <c>versions/&lt;name&gt;</c> is still the directory this process was
 /// loaded from: the loaded image's file must be the very file that names it there now. Whether the process runs from the
-/// install at all is decided by the identity of the image's parent directory, never by the spelling of a path.</para>
+/// install at all is decided by the identity of the image's parent directory, never by the spelling of a path. Under the same
+/// lease the version must then pass the release record's admission (<see cref="InstallTransaction.AdmitProcess"/>): a version
+/// that is not a committed current or proven install, or is revoked, rejected or below the state generation floor, refuses
+/// to start, whoever started it.</para>
 /// </summary>
 public sealed class InstallRegistration : IDisposable {
     private static readonly Lock ProcessGate = new();
@@ -105,6 +129,20 @@ public sealed class InstallRegistration : IDisposable {
             if (!held.TryHoldShared()) {
                 throw new InstallRegistrationException(message: $"versions/{name} is being removed; relaunch through the stub.");
             }
+            // Every installed entry point passes here first, so this is the launch policy's door for every start, the stub's
+            // children included: a version revoked, rejected or below the floor since the stub chose it does not run.
+            string? refusal;
+
+            try {
+                using var transaction = InstallTransaction.Under(root: root);
+
+                refusal = transaction.AdmitProcess(version: name);
+            } catch (InvalidDataException error) {
+                refusal = error.Message;
+            }
+            if (refusal is not null) {
+                throw new InstallRegistrationException(message: $"versions/{name} may not run: {refusal}.");
+            }
             return new InstallRegistration(held: held, root: root.Identity, version: name);
         } catch {
             held.Dispose();
@@ -114,7 +152,7 @@ public sealed class InstallRegistration : IDisposable {
     /// <summary>Registers a process by where it runs from. Membership is decided by the process's own directory,
     /// <paramref name="baseDirectory"/>: a directory directly under one named <see cref="InstallLayout.VersionsDirectoryName"/>
     /// (or <see cref="InstallLayout.TrashDirectoryName"/>) belongs to the install root above it, whether or not that root
-    /// has published <see cref="InstallLayout.CurrentFileName"/> yet, and registers against it. Any other directory
+    /// has a release record yet, and registers against it. Any other directory
     /// registers as nothing. The image whose identity is confirmed is the entry assembly's file, or the process's own
     /// executable for a single-file app.</summary>
     /// <param name="baseDirectory">The process's own directory (<see cref="AppContext.BaseDirectory"/>).</param>

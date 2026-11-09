@@ -7,11 +7,6 @@ public sealed partial class StateArena {
     public bool TryClaim(int poolOrdinal, out StateInstanceHandle handle, out string reason) => TryClaim(poolOrdinal: poolOrdinal, time: ArenaTime.Origin, handle: out handle, reason: out reason);
     /// <summary>Attempts to claim the lowest free slot, birthing timed fields at <paramref name="time"/>.</summary>
     public bool TryClaim(int poolOrdinal, in ArenaTime time, out StateInstanceHandle handle, out string reason) {
-        m_poolMutationDepth++;
-        try { return TryClaimCore(handle: out handle, poolOrdinal: poolOrdinal, reason: out reason, time: in time); } finally { m_poolMutationDepth--; }
-    }
-
-    private bool TryClaimCore(int poolOrdinal, in ArenaTime time, out StateInstanceHandle handle, out string reason) {
         handle = default;
         if (!TryPool(pool: out var pool, poolOrdinal: poolOrdinal, reason: out reason)) {
             return false;
@@ -36,33 +31,8 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var generation = generationValue.AsInt;
-        var position = slot;
-
-        var mark = BeginScope();
-
-        InsertPoolCell(rowOrdinal: pool.DomainRowOrdinal, position: position, key: key, value: CellValue.Int(value: generation));
-        for (var fieldOrdinal = 0; (fieldOrdinal < pool.Fields.Count); fieldOrdinal++) {
-            var field = pool.Fields[fieldOrdinal];
-
-            InsertPoolCell(rowOrdinal: field.RowOrdinal, position: position, key: key, value: field.Default);
-            if ((field.Declaration.Advance is not null) && !TryWriteClock(rowOrdinal: field.RowOrdinal, key: key, epochTick: unchecked((long)time.Tick), epochEngineTick: unchecked((long)time.EngineTick), y0: 0L, v0: 0L, substepTicks: 0L, reason: out reason)) {
-                Rewind(mark: mark);
-                return false;
-            }
-        }
-        if (m_journal.OverCeiling) {
-            reason = $"State pool '{pool.Name.Value}' claim exceeds the {ArenaCapacity.MaxJournalBytes}-byte journal ceiling.";
-            Rewind(mark: mark);
-            return false;
-        }
-
-        Commit(mark: mark);
-        handle = m_catalog.CreateInstanceHandle(generation: generation, poolOrdinal: poolOrdinal, slot: slot);
-        reason = string.Empty;
-        return true;
+        return TryBirthPoolSlot(generation: generationValue, handle: out handle, key: key, leftSlot: -1, pool: pool, reason: out reason, rightSlot: -1, slot: slot, time: in time);
     }
-
     /// <summary>Attempts to release one live generation-checked pool instance.</summary>
     public bool TryRelease(StateInstanceHandle handle, out string reason) {
         m_poolMutationDepth++;
@@ -99,7 +69,7 @@ public sealed partial class StateArena {
                 for (var pairSlot = NextOccupiedPoolSlot(poolOrdinal: pairPool.Ordinal, start: 0); (pairSlot >= 0); pairSlot = NextOccupiedPoolSlot(poolOrdinal: pairPool.Ordinal, start: (pairSlot + 1))) {
                     _ = TryPoolKey(key: out var pairKey, slot: pairSlot);
 
-                    if (((pairPool.LeftPoolOrdinal != handle.PoolOrdinal) || (m_numbers[m_layout[pairPool.LeftRowOrdinal].CellStart + pairSlot] != handle.Slot)) && ((pairPool.RightPoolOrdinal != handle.PoolOrdinal) || (m_numbers[m_layout[pairPool.RightRowOrdinal].CellStart + pairSlot] != handle.Slot))) {
+                    if (((pairPool.LeftPoolOrdinal != handle.PoolOrdinal) || (m_numbers[(m_layout[pairPool.LeftRowOrdinal].CellStart + pairSlot)] != handle.Slot)) && ((pairPool.RightPoolOrdinal != handle.PoolOrdinal) || (m_numbers[(m_layout[pairPool.RightRowOrdinal].CellStart + pairSlot)] != handle.Slot))) {
                         continue;
                     }
                     _ = TryRead(rowOrdinal: pairPool.DomainRowOrdinal, key: pairKey, value: out var pairGeneration);
@@ -161,37 +131,46 @@ public sealed partial class StateArena {
             reason = $"State pair pool '{pool.Name.Value}' holds its {pool.MaxLive} live pairs.";
             return false;
         }
-        for (var occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: 0); occupied >= 0; occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: occupied + 1)) {
-            if ((m_numbers[m_layout[pool.LeftRowOrdinal].CellStart + occupied] == leftSlot) && (m_numbers[m_layout[pool.RightRowOrdinal].CellStart + occupied] == rightSlot)) {
+        for (var occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: 0); (occupied >= 0); occupied = NextOccupiedPoolSlot(poolOrdinal: pool.Ordinal, start: (occupied + 1))) {
+            if ((m_numbers[(m_layout[pool.LeftRowOrdinal].CellStart + occupied)] == leftSlot) && (m_numbers[(m_layout[pool.RightRowOrdinal].CellStart + occupied)] == rightSlot)) {
                 reason = $"State pair pool '{pool.Name.Value}' already holds that pair.";
                 return false;
             }
         }
         var slot = FirstFreePoolSlot(pool: pool);
+
         if ((slot < 0) || !TryPoolKey(key: out var key, slot: slot)) { reason = "The pair pool has no free identity slot."; return false; }
         if (!TryRead(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: out var generationValue)) {
             reason = $"State pair pool '{pool.Name.Value}' pair slot {slot} has no persistent generation.";
             return false;
         }
-        var position = slot;
+        return TryBirthPoolSlot(generation: generationValue, handle: out handle, key: key, leftSlot: leftSlot, pool: pool, reason: out reason, rightSlot: rightSlot, slot: slot, time: in time);
+    }
+
+    // Every claim births its domain, endpoints and record fields in one scope. Clock refusal and journal overflow
+    // rewind that scope before any handle escapes, for ordinary and pair pools alike.
+    private bool TryBirthPoolSlot(StatePoolDescriptor pool, int slot, CellKey key, CellValue generation, in ArenaTime time, int leftSlot, int rightSlot, out StateInstanceHandle handle, out string reason) {
+        handle = default;
         var mark = BeginScope();
 
         m_poolMutationDepth++;
         try {
-            InsertPoolCell(rowOrdinal: pool.DomainRowOrdinal, position: position, key: key, value: generationValue);
-            InsertPoolCell(rowOrdinal: pool.LeftRowOrdinal, position: position, key: key, value: CellValue.Int(value: leftSlot));
-            InsertPoolCell(rowOrdinal: pool.RightRowOrdinal, position: position, key: key, value: CellValue.Int(value: rightSlot));
+            InsertPoolCell(rowOrdinal: pool.DomainRowOrdinal, position: slot, key: key, value: generation);
+            if (pool.IsPair) {
+                InsertPoolCell(rowOrdinal: pool.LeftRowOrdinal, position: slot, key: key, value: CellValue.Int(value: leftSlot));
+                InsertPoolCell(rowOrdinal: pool.RightRowOrdinal, position: slot, key: key, value: CellValue.Int(value: rightSlot));
+            }
             for (var fieldOrdinal = 0; (fieldOrdinal < pool.Fields.Count); fieldOrdinal++) {
                 var field = pool.Fields[fieldOrdinal];
 
-                InsertPoolCell(rowOrdinal: field.RowOrdinal, position: position, key: key, value: field.Default);
+                InsertPoolCell(rowOrdinal: field.RowOrdinal, position: slot, key: key, value: field.Default);
                 if ((field.Declaration.Advance is not null) && !TryWriteClock(rowOrdinal: field.RowOrdinal, key: key, epochTick: unchecked((long)time.Tick), epochEngineTick: unchecked((long)time.EngineTick), y0: 0L, v0: 0L, substepTicks: 0L, reason: out reason)) {
                     Rewind(mark: mark);
                     return false;
                 }
             }
             if (m_journal.OverCeiling) {
-                reason = $"State pair pool '{pool.Name.Value}' claim exceeds the {ArenaCapacity.MaxJournalBytes}-byte journal ceiling.";
+                reason = $"State {(pool.IsPair ? "pair pool" : "pool")} '{pool.Name.Value}' claim exceeds the {ArenaCapacity.MaxJournalBytes}-byte journal ceiling.";
                 Rewind(mark: mark);
                 return false;
             }
@@ -199,10 +178,11 @@ public sealed partial class StateArena {
         } finally {
             m_poolMutationDepth--;
         }
-        handle = m_catalog.CreateInstanceHandle(poolOrdinal: poolOrdinal, slot: slot, generation: generationValue.AsInt);
+        handle = m_catalog.CreateInstanceHandle(poolOrdinal: pool.Ordinal, slot: slot, generation: generation.AsInt);
         reason = string.Empty;
         return true;
     }
+
     /// <summary>Resolves a live generation-checked instance to its fixed identity-slot storage position.</summary>
     public bool TryResolve(StateInstanceHandle handle, out int position) {
         var addresses = m_poolAddresses;
@@ -506,32 +486,12 @@ public sealed partial class StateArena {
         var pools = new StatePool[ordinary.Length];
 
         foreach (var pool in ordinary) {
-            var generations = new long[pool.Capacity];
-
-            for (var slot = 0; (slot < pool.Capacity); slot++) {
-                _ = TryPoolKey(key: out var key, slot: slot);
-                _ = TryRead(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: out var generation);
-                generations[slot] = generation.AsInt;
-            }
-
-            var live = new List<StatePoolSeed>();
-
-            foreach (var handle in SnapshotPool(poolOrdinal: pool.Ordinal)) {
-                var values = new StatePoolValue[pool.Fields.Count];
-
-                for (var field = 0; (field < values.Length); field++) {
-                    _ = TryRead(fieldOrdinal: field, handle: handle, value: out var value);
-                    values[field] = PoolValue(handle: handle, field: pool.Fields[field], value: value);
-                }
-                live.Add(item: new StatePoolSeed(Slot: handle.Slot, Values: values));
-            }
-
             pools[pool.Ordinal] = new StatePool(
                 Name: pool.Name,
                 Record: pool.Record,
                 Capacity: pool.Capacity,
                 Initial: null,
-                Snapshot: new StatePoolSnapshot(Generations: generations, Live: live)
+                Snapshot: ExportPoolSnapshot(pool: pool)
             );
         }
         return Array.AsReadOnly(array: pools);
@@ -543,22 +503,38 @@ public sealed partial class StateArena {
 
         for (var index = 0; (index < pairs.Length); index++) {
             var pool = pairs[index];
-            var generations = new long[pool.Capacity];
 
-            for (var slot = 0; (slot < pool.Capacity); slot++) { _ = TryPoolKey(key: out var key, slot: slot); _ = TryRead(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: out var generation); generations[slot] = generation.AsInt; }
-            var live = new List<StatePoolSeed>();
-
-            foreach (var handle in SnapshotPool(poolOrdinal: pool.Ordinal)) {
-                var values = new StatePoolValue[pool.Fields.Count];
-
-                for (var field = 0; (field < values.Length); field++) { _ = TryRead(fieldOrdinal: field, handle: handle, value: out var value); values[field] = PoolValue(handle: handle, field: pool.Fields[field], value: value); }
-                live.Add(item: new StatePoolSeed(Slot: handle.Slot, Values: values, LeftSlot: (int)m_numbers[m_layout[pool.LeftRowOrdinal].CellStart + handle.Slot], RightSlot: (int)m_numbers[m_layout[pool.RightRowOrdinal].CellStart + handle.Slot]));
-            }
-            result[index] = new StatePairPool(Name: pool.Name, Record: pool.Record, LeftPool: m_catalog.Pools[pool.LeftPoolOrdinal].Name, RightPool: m_catalog.Pools[pool.RightPoolOrdinal].Name, MaxLive: pool.MaxLive, Directed: pool.Directed, AllowSelf: pool.AllowSelf, Snapshot: new StatePoolSnapshot(Generations: generations, Live: live));
+            result[index] = new StatePairPool(Name: pool.Name, Record: pool.Record, LeftPool: m_catalog.Pools[pool.LeftPoolOrdinal].Name, RightPool: m_catalog.Pools[pool.RightPoolOrdinal].Name, MaxLive: pool.MaxLive, Directed: pool.Directed, AllowSelf: pool.AllowSelf, Snapshot: ExportPoolSnapshot(pool: pool));
         }
         return Array.AsReadOnly(array: result);
     }
 
+    private StatePoolSnapshot ExportPoolSnapshot(StatePoolDescriptor pool) {
+        var generations = new long[pool.Capacity];
+
+        for (var slot = 0; (slot < pool.Capacity); slot++) {
+            _ = TryPoolKey(key: out var key, slot: slot);
+            _ = TryRead(rowOrdinal: pool.GenerationRowOrdinal, key: key, value: out var generation);
+            generations[slot] = generation.AsInt;
+        }
+        var live = new List<StatePoolSeed>();
+
+        foreach (var handle in SnapshotPool(poolOrdinal: pool.Ordinal)) {
+            var values = new StatePoolValue[pool.Fields.Count];
+
+            for (var field = 0; (field < values.Length); field++) {
+                _ = TryRead(fieldOrdinal: field, handle: handle, value: out var value);
+                values[field] = PoolValue(handle: handle, field: pool.Fields[field], value: value);
+            }
+            live.Add(item: new StatePoolSeed(
+                Slot: handle.Slot,
+                Values: values,
+                LeftSlot: (pool.IsPair ? ((int)m_numbers[(m_layout[pool.LeftRowOrdinal].CellStart + handle.Slot)]) : null),
+                RightSlot: (pool.IsPair ? ((int)m_numbers[(m_layout[pool.RightRowOrdinal].CellStart + handle.Slot)]) : null)
+            ));
+        }
+        return new StatePoolSnapshot(Generations: generations, Live: live);
+    }
     private StatePoolValue PoolValue(StateInstanceHandle handle, StatePoolFieldDescriptor field, CellValue value) {
         _ = TryPoolKey(slot: handle.Slot, key: out var key);
         _ = TryReadClock(rowOrdinal: field.RowOrdinal, key: key, epochTick: out var epochTick, epochEngineTick: out var epochEngineTick, y0: out var y0, v0: out var v0, substepTicks: out var substepTicks, set: out var set);

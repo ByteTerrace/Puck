@@ -11,11 +11,13 @@ namespace Puck.World;
 public sealed class CompiledPlacementStamp {
     private readonly FixedCreationStampInstance[] m_instances;
     private readonly int[]? m_ordinals;
+
     internal CompiledPlacementStamp(CompiledPlacementFrame frame, FixedQuaternion rotation,
         FixedCreationStampInstance[] instances, int[]? ordinals = null) {
         Frame = frame; FixedRotation = rotation; Rotation = rotation.ToQuaternion();
         m_instances = instances; m_ordinals = ordinals;
     }
+
     /// <summary>The undistributed root's resolved frame, or the authored distribution/mirror group frame.</summary>
     public CompiledPlacementFrame Frame { get; }
     /// <summary>The canonical fixed-point orientation.</summary>
@@ -39,17 +41,20 @@ public sealed class CompiledPlacementStamp {
         foreach (var instance in m_instances) { visitor(instance); }
     }
 }
-
 public static partial class WorldPlacementStamp {
     private sealed class StampEntry {
         public object Gate { get; } = new();
+
         public CompiledPlacementFrame Frame;
         public ulong Seed;
+
         public GroundInput[] Inputs = [];
+
         public CompiledPlacementStamp? Stamp;
     }
     private sealed class ContextEntry {
         public object Gate { get; } = new();
+
         public IReadOnlyList<WorldPrototype>? Creations;
         public ulong Seed;
         public CompilationContext? Context;
@@ -76,10 +81,11 @@ public static partial class WorldPlacementStamp {
             return hash.ToHashCode();
         }
     }
+
     private static readonly WorldPlacementsSection EmptySection = new();
     private static readonly CodeDerivedTable<WorldPlacement, StampEntry> Stamps = new();
     private static readonly CodeDerivedTable<WorldPlacementsSection, ContextEntry> Contexts = new();
-    private static readonly FixedQ4816 SurfaceNormalBackoff = FixedQ4816.FromDouble(0.02);
+    private static readonly FixedQ4816 SurfaceNormalBackoff = FixedQ4816.FromDouble(value: 0.02);
 
     private static bool SameInputs(GroundInput[] a, GroundInput[] b) {
         if (a.Length != b.Length) { return false; }
@@ -87,11 +93,15 @@ public static partial class WorldPlacementStamp {
         return true;
     }
     private static CompilationContext ContextFor(WorldDefinition definition, ulong seed, int revision) {
-        var section = definition.PlacementsRaw ?? EmptySection;
+        var section = (definition.PlacementsRaw ?? EmptySection);
+
+        if (WorldPlacementFrameCompilation.HasLiveInputs(section: section)) { return new CompilationContext(section, definition.Creations, seed, revision); }
         var entry = Contexts.GetValue(section, static _ => new ContextEntry());
+
         lock (entry.Gate) {
-            if (entry.Context is { } held && ReferenceEquals(entry.Creations, definition.Creations) && entry.Seed == seed) { return held; }
+            if ((entry.Context is { } held) && ReferenceEquals(objA: entry.Creations, objB: definition.Creations) && (entry.Seed == seed)) { return held; }
             var context = new CompilationContext(section, definition.Creations, seed, revision);
+
             if (CodeRevision.Current == revision) {
                 entry.Creations = definition.Creations; entry.Seed = seed; entry.Context = context;
             }
@@ -110,6 +120,14 @@ public static partial class WorldPlacementStamp {
     /// distribution, reflection or deal template retains its authored group frame.</summary>
     public static IReadOnlyDictionary<string, CompiledPlacementFrame> ResolveFrames(WorldDefinition definition) =>
         ContextFor(definition, definition.Generation?.WorldSeed ?? 0UL, CodeRevision.Current).FrameTable;
+
+    // One row (declared or an edit in flight), through the same context the indexed provider uses. The dictionary
+    // owns row identity checks, avoiding a document scan on every audio, animation or editor frame read.
+    internal static CompiledPlacementFrame ResolveFrame(WorldDefinition definition, WorldPlacement row) {
+        var context = ContextFor(definition, (definition.Generation?.WorldSeed ?? 0UL), CodeRevision.Current);
+
+        lock (context.Gate) { return context.FrameOf(row: row); }
+    }
     /// <summary>Validates and holds one surface descriptor in the immutable indexed context, without projecting.</summary>
     public static bool TryValidateSurface(WorldDefinition definition, WorldPlacement placement, out string reason) {
         if (placement.Surface is null) { reason = string.Empty; return true; }

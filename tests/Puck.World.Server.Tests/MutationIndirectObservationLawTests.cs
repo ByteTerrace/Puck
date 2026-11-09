@@ -52,7 +52,7 @@ public sealed class MutationIndirectObservationLawTests {
 
         Assert.False(condition: denied.Applied);
         Assert.Contains("cannot observe state:secret", denied.Detail);
-        Assert.Empty(collection: WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells ?? []);
+        Assert.Empty(collection: (WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "target")!.Cells ?? []));
         Observe(fixture: fixture, row: "secret");
         var allowed = Apply(fixture: fixture, mutation: mutation);
 
@@ -82,6 +82,6 @@ public sealed class MutationIndirectObservationLawTests {
         var allowed = Apply(fixture: fixture, mutation: mutation);
 
         Assert.True(condition: allowed.Applied, userMessage: allowed.Detail);
-        Assert.Equal(new System.Numerics.Vector3(x: 2, y: 3, z: 4), ((System.Numerics.Vector3)WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed")!.Position));
+        Assert.Equal(new System.Numerics.Vector3(x: 2, y: 3, z: 4), WorldDefinitionRows.ResolvedPosition(definition: fixture.Server.ExportDefinition(), placement: WorldDefinitionRows.FindPlacement(fixture.Server.ExportDefinition().Placements, "placed")!));
     }
 }

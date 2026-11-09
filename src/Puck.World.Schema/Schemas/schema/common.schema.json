@@ -7833,6 +7833,25 @@
       "additionalProperties": false,
       "title": "WorldEffectRemoveHudPanel"
     },
+    "WorldPlacementTranslation": {
+      "description": "An opaque stored placement translation: a dealt child\u0027s displacement from its slot, otherwise an authored local offset. Geometry reads a resolved frame through WorldPlacementFrameCompilation, never this value as a position. Fixed-point writes and their JSON round trips retain every Q48.16 bit.",
+      "title": "WorldPlacementTranslation",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
     "WorldPlacementMirror": {
       "description": "A reflection plane in a placement\u0027s local frame.",
       "type": [
@@ -8563,7 +8582,7 @@
       "title": "WorldPlacementReflow"
     },
     "WorldPlacementDeal": {
-      "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region\u0027s offsets are metres in the template\u0027s frame, never scaled by it. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot\u0027s fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick\u0027s one mutation.",
+      "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region\u0027s offsets are metres in the template\u0027s frame, never scaled by it. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot\u0027s fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is installed by the per-tick sweep (Server.WorldTick.SweepPlacementDeals) through the shared placement projection install, which refreshes colliders and delivery. The source cells journal, undo and replay; their derived children are reprojected without adding declaration edits to the journal.",
       "type": [
         "object",
         "null"
@@ -8760,8 +8779,8 @@
           "type": "string"
         },
         "position": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+          "$ref": "#/$defs/WorldPlacementTranslation",
+          "description": "The opaque stored translation \u2014 a local offset when Parent is null, or relative to Parent\u0027s composed frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Exact runtime writes retain Q48.16 through serialization; geometric readers require a resolved frame. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
         },
         "yawDegrees": {
           "description": "The stamp yaw about \u002BY, degrees \u2014 world-space when Parent is null, added to the parent\u0027s own composed yaw otherwise. Same attach caveat as Position.",
@@ -8832,7 +8851,7 @@
           "default": null
         },
         "parent": {
-          "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child\u0027s local offset and resolved scale.",
+          "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved by WorldPlacementFrameCompilation into PlacementFrames, with cached frames only for immutable inputs and fresh frames for state-bound translations or lattice steps, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child\u0027s local offset and resolved scale.",
           "type": [
             "string",
             "null"

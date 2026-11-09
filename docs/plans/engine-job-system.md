@@ -375,8 +375,9 @@ checked against:
    ascending-index merge alone would put seat 0's outputs before a peer's where
    today they follow; the loop component of the key keeps today's order exactly.
 5. **A fixed order for slot allocation, key minting and draw order.** Pool
-   claims (`StateArena.Pools.cs:24-61`, lowest free slot through `BeginScope`,
-   `InsertPoolCell`, `Commit`) and key minting (`StateArena.Members.cs:30`) run
+   claims (`StateArena.TryClaim` and `StateArena.TryClaimPair` select the lowest
+   free slot; `StateArena.TryBirthPoolSlot` initializes and commits it) and key
+   minting (`StateArena.Members.cs:30`) run
    only in serial phases; no partitioned phase in this memo requests one. Draw
    order is positional: the pose pack writes a registration's slots at fixed
    positions, so recording order does not change what the GPU reads.

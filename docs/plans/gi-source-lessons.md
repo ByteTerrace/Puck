@@ -59,10 +59,12 @@ existing CPU hierarchy is exported without a second builder
 own arrays) and traced by a compute kernel, one thread per ray, 144 rays of a
 probe in adjacent lanes (`passes/sdf-probe-trace.comp.hlsl:5-19`), through a
 two-level software traversal with groupshared stacks
-(`shade/sdf-probe-trace.hlsli:9-10,66-135`). A relight kernel runs one
-32-lane group per probe and shades each hit with the same shadow ray and the
-same bounce gather as the CPU (`shade/sdf-probe-lighting.hlsli:33-76`,
-`passes/sdf-probe-relight.comp.hlsl:33-46`); a selection kernel decides
+(`shade/sdf-probe-trace.hlsli:9-10,66-135`). A relight kernel spreads each
+probe over `SdfMeshProbeRelight.Slices` 32-lane groups, one hit texel a lane, and
+shades each hit with the same shadow ray and the same bounce gather as the CPU
+(`sdfProbeShade` in `shade/sdf-probe-lighting.hlsli`,
+`passes/sdf-probe-relight.comp.hlsl`), and `passes/sdf-probe-combine.comp.hlsl`
+sums the slices; a selection kernel decides
 trace, due and stale per probe on the GPU (`passes/sdf-probe-select.comp.hlsl`);
 all of them are clients of the B1 service (`SdfMeshProbeGpuWork.cs`,
 `SdfGpuWork`: `SlotCount` 4, `GpuShare` 0.25 at `src/Puck.SdfVm/SdfGpuWork.cs:139-141`).

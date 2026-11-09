@@ -118,7 +118,7 @@ public static partial class CanaryCommand {
         return BuildStubLegRun(boot1: boot1, boot2: boot2, invariants: [
             new(Detail: $"baseline installed through UpdateService and booted: exit {baseline.ExitCode}", Passed: (!baseline.TimedOut && (baseline.ExitCode == 0))),
             new(Detail: $"final stub boot exited {boot2.ExitCode}", Passed: (!boot2.TimedOut && (boot2.ExitCode == 0))),
-            new(Detail: "the selected application cleared its health marker", Passed: !File.Exists(path: Path.Combine(path1: install, path2: "state", path3: "health.json")))
+            new(Detail: "the selected application recorded its startup health", Passed: StartupProven(installDirectory: install))
         ], leg: leg, runDirectory: run);
     }
     private static CanaryLegRun BuildStubLegRun(CliProcessResult boot1, CliProcessResult boot2, IReadOnlyList<CanaryAssertionResult> invariants, CanaryLeg leg, string runDirectory) {
@@ -204,7 +204,7 @@ public static partial class CanaryCommand {
             : (input + Environment.NewLine)
         );
     }
-    // <installDirectory>/Puck.Launcher.Stub.exe reads stub.json/current/versions/ from its own directory
+    // <installDirectory>/Puck.Launcher.Stub.exe reads stub.json, state/ and versions/ from its own directory
     // (AppContext.BaseDirectory) — the stub build output is copied here so nothing this leg does can touch the
     // artifact the other legs in this run share. The build log sits outside that output directory.
     private static void MaterializeStubInstall(string installDirectory, string stubArtifact) {
@@ -279,21 +279,17 @@ public static partial class CanaryCommand {
         path: path
     );
     // The proof a puck.release.manifest.v1-shaped positive.expect can read without parsing any wire format: literal
-    // expected-version fixtures beside a snapshot of the install's own current pointer after both boots, checked
+    // expected-version fixtures beside a snapshot of the release record's current version after both boots, checked
     // through the shared filesDiffer assertion. Both fixtures are written into every leg's run directory
     // (regardless of which one that leg's own expect references) because RunSelected re-evaluates the POSITIVE
     // leg's assertions against the DISCRIMINATING leg's transcript to prove the positive observation turns red —
     // that comparison reads files from the discriminating leg's own run directory.
     private static void WriteLegConfirmationFixtures(string installDirectory, string runDirectory) {
-        File.Copy(
-            destFileName: Path.Combine(
+        File.WriteAllText(
+            contents: (Puck.Confinement.ReleasePolicy.ReadUnlocked(installRoot: installDirectory).Current ?? ""),
+            path: Path.Combine(
                 path1: runDirectory,
                 path2: "current-after"
-            ),
-            overwrite: true,
-            sourceFileName: Path.Combine(
-                path1: installDirectory,
-                path2: "current"
             )
         );
         File.WriteAllText(
@@ -312,5 +308,12 @@ public static partial class CanaryCommand {
         );
     }
 
+    // The current version's startup proof is in the release record and no launch of its payload is still counted.
+    private static bool StartupProven(string installDirectory) {
+        var policy = Puck.Confinement.ReleasePolicy.ReadUnlocked(installRoot: installDirectory);
+
+        return ((policy.Current is { } current) && policy.ProvenInstalls.Any(predicate: proof => (proof.Version == current)) &&
+            policy.ProvenInstalls.Where(predicate: proof => (proof.Version == current)).All(predicate: proof => (policy.AttemptsFor(payloadPin: proof.PayloadPin) == 0)));
+    }
     private sealed record StubConfigurationFile(string AppExecutableFileName, int MaxAttempts);
 }

@@ -18,6 +18,29 @@ namespace Puck.World.Tests;
 /// Each claim pairs its passing case with a red leg that fails it.
 /// </summary>
 public sealed class WorldEditorPlacementLawTests {
+    [Fact]
+    public void AParentedNudgeUsesTheCapturedWorldFrameAndWritesBackALocalTranslation() {
+        var parent = new WorldPlacement("anchor", Crate.Id, new Vector3(x: 10, y: 0, z: 0), 90, 1);
+        var child = new WorldPlacement("child", Crate.Id, new Vector3(x: 2, y: 1, z: 0), 0, 1, Parent: parent.Id);
+        var definition = (Fixtures.BuildDocument() with {
+            CreationsRaw = [Crate],
+            EditorRaw = Editor,
+            PlacementRowsRaw = [parent, child],
+        }).WithRestingPage();
+        using var row = HostRow.Build(name: "boot", definition: definition);
+        var seats = new WorldEditorSeats();
+
+        seats.SetReference(0, "boot", parent.Id);
+        var registry = BuildRegistry(row, seats);
+
+        Submit(line: "world.nudge child x 1", registry: registry);
+        Step(row: row);
+        var moved = WorldDefinitionRows.FindPlacement(row.Server.Definition.Placements, child.Id)!;
+
+        Assert.InRange(Vector3.Distance(value1: new Vector3(x: 10, y: 1, z: -2.5f),
+            value2: WorldDefinitionRows.ResolvedPosition(definition: row.Server.Definition, placement: moved)), 0, .0001f);
+    }
+
     // Resolves whichever instance the console addresses now, so a law can stop one and start another under its name.
     private sealed class FakeConsoleAuthority(Func<WorldInstance> instance) : IWorldConsoleAuthority {
         public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
@@ -56,23 +79,23 @@ public sealed class WorldEditorPlacementLawTests {
         using var row = Build();
         var seats = new WorldEditorSeats();
         var registry = BuildRegistry(row: row, seats: seats);
-        var before = ((Vector3)Placement(id: "crate1", row: row).Position);
+        var before = (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position);
 
         Submit(line: $"world.grid pitch {Pitch}", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Step(row: row);
 
-        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: (before + new Vector3(x: Pitch, y: 0f, z: 0f)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: (before + new Vector3(x: Pitch, y: 0f, z: 0f)));
         Assert.Equal(actual: seats.CurrentOf(slot: 0, world: "boot"), expected: "crate1");
 
         // The seat's current placement is the default target, and a step count moves that many pitches.
         Submit(line: "world.nudge z -2", registry: registry);
         Step(row: row);
-        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: (before + new Vector3(x: Pitch, y: 0f, z: (-2f * Pitch))));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: (before + new Vector3(x: Pitch, y: 0f, z: (-2f * Pitch))));
 
         row.Instance.Link.SubmitUndo(count: 2, principal: Principal.Console);
         Step(row: row);
-        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: before);
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: before);
     }
     [Fact]
     public void ANudgeLandsOnTheLatticeOnlyWhileSnappingIsOn() {
@@ -83,13 +106,13 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: $"world.grid pitch {Pitch}", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Step(row: row);
-        Assert.Equal(actual: Placement(id: "crate1", row: row).Position.X, expected: (1.1f + Pitch));
+        Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).FixedPosition.X, expected: Puck.Maths.FixedQ4816.FromDouble(1.1f + Pitch));
 
         // A snapped nudge lands the moved axis on the lattice and leaves the others where they stand.
         Submit(line: "world.snap on", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Step(row: row);
-        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: new Vector3(x: 2f, y: 3f, z: -1f));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: new Vector3(x: 2f, y: 3f, z: -1f));
     }
     [Fact]
     public void ATurnTurnsByExactlyOneAngleStep() {
@@ -130,7 +153,7 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Step(row: row);
 
-        var boot = ((Vector3)Placement(id: "crate1", row: row).Position);
+        var boot = (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position);
 
         // Cross: the seat is now presented in the away world.
         _ = routes.Publish(endpoint: away, entity: away.Mirror.Address(index: 0), slot: 0);
@@ -147,10 +170,10 @@ public sealed class WorldEditorPlacementLawTests {
 
         var routed = Assert.IsType<WorldMutation.UpsertPlacement>(@object: Assert.IsType<WorldSubmissionPayload.Mutation>(@object: Assert.Single(collection: awayLink.Submitted)).Value);
 
-        Assert.Equal(actual: ((Vector3)routed.Placement.Position), expected: (AwayCrate + new Vector3(x: Pitch, y: 0f, z: 0f)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, routed.Placement, 0UL, out _).Position), expected: (AwayCrate + new Vector3(x: Pitch, y: 0f, z: 0f)));
         Assert.Equal(actual: seats.CurrentOf(slot: 0, world: "away"), expected: "crate1");
         Assert.Null(@object: seats.CurrentOf(slot: 0, world: "boot"));
-        Assert.Equal(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: boot);
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: boot);
 
         // Red leg: a module that edits the console's world whatever the seat's route moves the crate the seat left.
         var unrouted = BuildRegistry(row: row, seats: new WorldEditorSeats());
@@ -158,7 +181,7 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: $"world.grid pitch {Pitch}", registry: unrouted);
         Submit(line: "world.nudge crate1 x 1", registry: unrouted);
         Step(row: row);
-        Assert.NotEqual(actual: ((Vector3)Placement(id: "crate1", row: row).Position), expected: boot);
+        Assert.NotEqual(actual: (WorldPlacementFrameCompilation.LocalFrame(null, Placement(id: "crate1", row: row), 0UL, out _).Position), expected: boot);
     }
     [Fact]
     public void EditsFasterThanVerdictsAllLandAndARefusedOneRollsBackByName() {
@@ -181,12 +204,12 @@ public sealed class WorldEditorPlacementLawTests {
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         _ = Assert.Single(collection: awayLink.Submitted);
-        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 0).Position), expected: (AwayCrate + step));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, awayLink.Placement(index: 0), 0UL, out _).Position), expected: (AwayCrate + step));
 
         // The first applies, and the queued edit goes next: the crate lands at base + 3 steps, not base + 1.
         awayLink.Complete(index: 0, result: awayLink.Applied());
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
-        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 1).Position), expected: (AwayCrate + (3f * step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, awayLink.Placement(index: 1), 0UL, out _).Position), expected: (AwayCrate + (3f * step)));
         awayLink.Complete(index: 1, result: awayLink.Applied());
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 2);
 
@@ -194,7 +217,7 @@ public sealed class WorldEditorPlacementLawTests {
         // the value the world last confirmed, by name.
         Submit(line: "world.nudge crate1 x 1", registry: registry);
         Submit(line: "world.nudge crate1 x 1", registry: registry);
-        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 2).Position), expected: (AwayCrate + (4f * step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, awayLink.Placement(index: 2), 0UL, out _).Position), expected: (AwayCrate + (4f * step)));
         awayLink.Complete(index: 2, result: RecordingLink.Refused);
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 3);
         Assert.Contains(collection: lines, expected: "[world.nudge: world.grant.denied the seat may not mutate placements here]");
@@ -202,7 +225,7 @@ public sealed class WorldEditorPlacementLawTests {
 
         // The next edit starts from the confirmed value: the refused step never reappears.
         Submit(line: "world.nudge crate1 x 1", registry: registry);
-        Assert.Equal(actual: ((Vector3)awayLink.Placement(index: 3).Position), expected: (AwayCrate + (4f * step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, awayLink.Placement(index: 3), 0UL, out _).Position), expected: (AwayCrate + (4f * step)));
     }
     [Fact]
     public void APlaceWithNoViewToAimFromIsRefusedByName() {

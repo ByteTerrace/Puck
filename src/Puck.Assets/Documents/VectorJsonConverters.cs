@@ -18,6 +18,13 @@ public static class FixedArityNumberArraySchema {
 }
 /// <summary>The one array-element reader every fixed-arity numeric-array converter in the document graph shares.</summary>
 public static class JsonComponentReader {
+    /// <summary>Reads one array element as an exact decimal number for fixed-point document storage.</summary>
+    public static decimal ReadDecimal(ref Utf8JsonReader reader, string notNumberMessage) {
+        if (!reader.Read() || reader.TokenType != JsonTokenType.Number) {
+            throw new JsonException(message: notNumberMessage);
+        }
+        return reader.GetDecimal();
+    }
     /// <summary>Reads one array element as a float — a JSON number token, or a hard parse failure by
     /// <paramref name="notNumberMessage"/>. A supplied <paramref name="notFiniteMessage"/> additionally refuses a
     /// non-finite value (NaN/Infinity survive <see cref="Utf8JsonReader.GetSingle"/> even though they never appear

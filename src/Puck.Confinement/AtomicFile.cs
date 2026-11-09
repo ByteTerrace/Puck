@@ -107,6 +107,12 @@ public static class AtomicFile {
             options.UnixCreateMode = mode;
         }
 
+        // The directories this write creates, deepest first: a durable commit also makes each one's entry in its parent durable.
+        var created = new List<string>();
+
+        for (var missing = directory; ((missing is not null) && !Directory.Exists(path: missing)); missing = Path.GetDirectoryName(path: missing)) {
+            created.Add(item: missing);
+        }
         _ = Directory.CreateDirectory(path: directory);
         PendingWrite? pending = null;
 
@@ -115,7 +121,7 @@ public static class AtomicFile {
                 options: options,
                 path: temporary
             )) {
-                pending = new PendingWrite(destination: destination, temporary: temporary);
+                pending = new PendingWrite(created: created, destination: destination, temporary: temporary);
                 if (
                     (unixCreateMode is null) &&
                     !OperatingSystem.IsWindows()
@@ -148,12 +154,14 @@ public static class AtomicFile {
     /// <summary>A fully flushed sibling temporary. Publish it once, or dispose it to discard it. The temporary path
     /// is private so publication and cleanup always use the same atomic-file mechanism.</summary>
     public sealed class PendingWrite : IDisposable {
+        private readonly IReadOnlyList<string> m_created;
         private readonly string m_temporary;
         private readonly string m_destination;
 
         private bool m_finished;
 
-        internal PendingWrite(string temporary, string destination) {
+        internal PendingWrite(string temporary, string destination, IReadOnlyList<string> created) {
+            m_created = created;
             m_temporary = temporary;
             m_destination = destination;
         }
@@ -177,6 +185,33 @@ public static class AtomicFile {
                 if ((backup is not null) && File.Exists(path: backup)) { ReleaseBackup(backup: backup, destination: m_destination); }
             }
         }
+        /// <summary>Publishes the complete file durably, replacing an existing destination: the rename itself reaches
+        /// stable storage before this returns. It opens the destination's directory as a <see cref="ConfinedDirectory"/>
+        /// and ends in <see cref="ConfinedDirectory.Publish"/>, the one durable replacement (its documentation names the
+        /// platform calls and the sources they rest on). Unlike <see cref="Commit"/> it never falls back to
+        /// <c>ReplaceFile</c>: a refused rename leaves the destination as it was, deletes the temporary and throws, so no
+        /// state exists in which the old file sits under a backup name. The destination must be on a local volume.</summary>
+        /// <exception cref="IOException">The rename or the directory flush failed, or the directory is on a network path;
+        /// the destination is unchanged when the rename failed.</exception>
+        /// <exception cref="DirectoryNotFoundException">The destination's directory vanished.</exception>
+        /// <exception cref="ObjectDisposedException">The write was already published or disposed.</exception>
+        public void CommitDurably() {
+            ObjectDisposedException.ThrowIf(condition: m_finished, instance: this);
+            try {
+                using var directory = (ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: m_destination)!)
+                    ?? throw new DirectoryNotFoundException(message: $"The directory of '{m_destination}' vanished."));
+
+                directory.Publish(name: Path.GetFileName(path: m_destination), temporary: Path.GetFileName(path: m_temporary));
+                // A directory this write created exists durably only once its entry in its own parent is flushed too.
+                foreach (var created in m_created) {
+                    using var parent = ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: created)!);
+
+                    parent?.Flush();
+                }
+            } finally {
+                Dispose();
+            }
+        }
         /// <summary>Discards an unpublished temporary. Cleanup never hides a publication or staging failure.</summary>
         public void Dispose() {
             if (m_finished) { return; }
@@ -192,6 +227,20 @@ public static class AtomicFile {
     /// <returns>The unpublished write.</returns>
     public static PendingWrite StageAllBytes(string path, ReadOnlySpan<byte> bytes) =>
         Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+    /// <summary>Atomically and durably replaces <paramref name="path"/> with <paramref name="bytes"/>: the content is
+    /// flushed to stable storage, then renamed over the destination with <see cref="PendingWrite.CommitDurably"/>. When
+    /// this returns, a power loss leaves the new file; when it throws, the destination is the old file. A killed writer
+    /// leaves at most a sibling <c>&lt;file name&gt;.&lt;random&gt;.tmp</c>, never a displaced destination.</summary>
+    /// <param name="path">The destination file; a missing parent directory is created.</param>
+    /// <param name="bytes">The complete new content.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
+    /// <exception cref="IOException">The temporary could not be written or flushed, or the durable rename failed.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary or replace the destination.</exception>
+    public static void WriteAllBytesDurably(string path, ReadOnlySpan<byte> bytes) {
+        using var pending = Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+
+        pending.CommitDurably();
+    }
     /// <summary>Stages UTF-8 text without a byte order mark.</summary>
     /// <param name="path">The destination.</param>
     /// <param name="contents">The complete text.</param>

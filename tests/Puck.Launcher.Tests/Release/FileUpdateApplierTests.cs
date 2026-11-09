@@ -1,277 +1,110 @@
 using Puck.Assets;
+using Puck.Confinement;
 using Puck.Launcher.Release;
 using Xunit;
 
 namespace Puck.Launcher.Tests.Release;
 
-/// <summary>Laws over <see cref="FileUpdateApplier"/>: hash re-verification, the atomic <c>current</c> pointer, and
-/// <c>last-good</c> retention.</summary>
+/// <summary>Laws over <see cref="FileUpdateApplier"/>: hash re-verification, the release record's current version, the
+/// install record, and rollback targets that are never revoked or unproven.</summary>
 public sealed class FileUpdateApplierTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
+
+    private string Root => m_root.RootPath;
 
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void Apply_RefusesCaseAliasOfAnActiveDirectory(bool lastGood) {
-        var content = "verified bytes"u8.ToArray();
-        var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+    public void Apply_RefusesCaseAliasOfAnActiveDirectory(bool rollbackTarget) {
+        var file = Stage(version: "1.0.1-alpha", content: "verified bytes"u8.ToArray());
 
-        StageFile(version: "1.0.1-alpha", relativePath: file.Path, content: content);
-        File.WriteAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current"), contents: (lastGood ? "1.0.0" : "1.0.1-Alpha"));
-        if (lastGood) {
-            File.WriteAllText(path: Path.Combine(path1: m_root.RootPath, path2: "last-good"), contents: "1.0.1-Alpha");
+        _ = InstallSeed.Install(installRoot: Root, version: (rollbackTarget ? "1.0.0" : "1.0.1-Alpha"));
+        if (rollbackTarget) {
+            // A proven 1.0.1-Alpha stays the rollback target while a newer, unproven version is current.
+            _ = InstallSeed.Install(installRoot: Root, version: "1.0.1-Alpha");
+            _ = InstallSeed.Install(installRoot: Root, proven: false, version: "1.0.1-Beta");
         }
-        var result = new FileUpdateApplier().Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.1-alpha"), rid: "win-x64", cacheRoot: m_root.RootPath);
+        var result = Apply(file: file, version: "1.0.1-alpha");
 
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "collides", actualString: result.RefusalReason!);
     }
     [Fact]
-    public void Apply_RefusesDowngradeAndReapplyAgainstTheCurrentPointer() {
-        var content = "verified bytes"u8.ToArray();
-        var file = new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+    public void Apply_RefusesDowngradeAndReapplyAgainstTheCurrentVersion() {
+        var file = Stage(version: "1.0.2", content: "verified bytes"u8.ToArray());
 
-        StageFile(version: "1.0.2", relativePath: file.Path, content: content);
-        StageFile(version: "1.0.3", relativePath: file.Path, content: content);
-        var applier = new FileUpdateApplier();
-
-        Assert.True(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.3"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
-        Assert.False(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.2"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
-        Assert.False(condition: applier.Apply(manifest: ManifestFor(file: file, stateGeneration: 1, version: "1.0.3"), rid: "win-x64", cacheRoot: m_root.RootPath).Applied);
-        Assert.Equal(expected: "1.0.3", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current")));
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
+        _ = Stage(version: "1.0.3", content: "verified bytes"u8.ToArray());
+        Assert.True(condition: Apply(file: file, version: "1.0.3").Applied);
+        Assert.False(condition: Apply(file: file, version: "1.0.2").Applied);
+        Assert.False(condition: Apply(file: file, version: "1.0.3").Applied);
+        Assert.Equal(expected: "1.0.3", actual: InstallSeed.Current(installRoot: Root));
+        Assert.Null(@object: InstallSeed.RollbackTarget(installRoot: Root));
     }
-
-    private static ReleaseManifest ManifestFor(string version, int stateGeneration, ReleasePayloadFile file) => new(
-        App: "puck.world",
-        Channel: "stable",
-        MinimumSupported: null,
-        Notes: null,
-        Payloads: [new ReleasePayload(
-                Rid: "win-x64",
-                Files: [file]
-            )],
-        Revoked: null,
-        Rollout: new ReleaseRollout(Percent: 100),
-        Schema: ReleaseManifest.CurrentSchema,
-        Signature: null,
-        StateGeneration: stateGeneration,
-        Version: version
-    );
-    private void StageFile(string version, string relativePath, byte[] content) {
-        var stagedPath = Path.Combine(
-            path1: m_root.RootPath,
-            path2: "versions",
-            path3: version,
-            path4: relativePath
-        );
-
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: stagedPath)!);
-        File.WriteAllBytes(
-            bytes: content,
-            path: stagedPath
-        );
-    }
-
     [Fact]
     public void Apply_Refuses_WhenAStagedFileWasTamperedAfterStaging() {
-        var content = "original"u8.ToArray();
-        var hash = ContentPin.Compute(content: content).ToString();
+        var original = "original"u8.ToArray();
 
-        StageFile(
-            version: "1.0.1",
-            relativePath: "a.dll",
-            content: "tampered"u8.ToArray()
-        );
-
-        var applier = new FileUpdateApplier();
-        var manifest = ManifestFor(
-            version: "1.0.1",
-            stateGeneration: 1,
-            file: new ReleasePayloadFile(
-                Path: "a.dll",
-                Hash: hash,
-                Size: content.Length
-            )
-        );
-
-        var result = applier.Apply(
-            cacheRoot: m_root.RootPath,
-            manifest: manifest,
-            rid: "win-x64"
-        );
+        _ = Stage(version: "1.0.1", content: "tampered"u8.ToArray());
+        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: original).ToString(), Size: original.Length), version: "1.0.1");
 
         Assert.False(condition: result.Applied);
-        Assert.Contains(
-            expectedSubstring: "hash",
-            actualString: result.RefusalReason!,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        );
-        Assert.False(condition: File.Exists(path: Path.Combine(
-            path1: m_root.RootPath,
-            path2: "current"
-        )));
+        Assert.Contains(expectedSubstring: "hash", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
+        Assert.Null(@object: InstallSeed.Current(installRoot: Root));
     }
     [Fact]
     public void Apply_Refuses_WhenTheVersionWasNeverStaged() {
-        var applier = new FileUpdateApplier();
-        var manifest = ManifestFor(
-            version: "1.0.1",
-            stateGeneration: 1,
-            file: new ReleasePayloadFile(
-                Path: "a.dll",
-                Hash: $"sha256/{new string(
-                    c: '0',
-                    count: 64
-                )}",
-                Size: 1
-            )
-        );
-
-        var result = applier.Apply(
-            cacheRoot: m_root.RootPath,
-            manifest: manifest,
-            rid: "win-x64"
-        );
+        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: $"sha256/{new string(c: '0', count: 64)}", Size: 1), version: "1.0.1");
 
         Assert.False(condition: result.Applied);
-        Assert.Contains(
-            expectedSubstring: "not staged",
-            actualString: result.RefusalReason!,
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        );
+        Assert.Contains(expectedSubstring: "not staged", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
     [Fact]
-    public void Apply_RetainsThePreviousCurrentAsLastGood_OnASecondApply() {
-        var firstContent = "v1"u8.ToArray();
-        var firstHash = ContentPin.Compute(content: firstContent).ToString();
-        var secondContent = "v2"u8.ToArray();
-        var secondHash = ContentPin.Compute(content: secondContent).ToString();
+    public void Apply_RecordsTheInstallIdentityAndKeepsOnlyAProvenPreviousAsRollbackTarget() {
+        var first = Stage(version: "1.0.0", content: "v1"u8.ToArray());
+        var second = Stage(version: "1.0.1", content: "v2"u8.ToArray());
+        var third = Stage(version: "1.0.2", content: "v3"u8.ToArray());
 
-        StageFile(
-            content: firstContent,
-            relativePath: "a.dll",
-            version: "1.0.0"
-        );
-        StageFile(
-            content: secondContent,
-            relativePath: "a.dll",
-            version: "1.0.1"
-        );
+        Assert.True(condition: Apply(file: first, version: "1.0.0").Applied);
+        // Two applies before any launch: the unstarted 1.0.0 is never a rollback target.
+        Assert.Equal(expected: "1.0.0", actual: Apply(file: second, version: "1.0.1", stateGeneration: 2).PreviousVersion);
+        Assert.Null(@object: InstallSeed.RollbackTarget(installRoot: Root));
+        Assert.True(condition: InstallSeed.Healthy(installRoot: Root, version: "1.0.1"));
+        Assert.True(condition: Apply(file: third, version: "1.0.2", stateGeneration: 2).Applied);
+        Assert.Equal(expected: "1.0.1", actual: InstallSeed.RollbackTarget(installRoot: Root));
+        using var transaction = InstallTransaction.TryBegin(installRoot: Root)!;
+        var record = transaction.ReadRecord(version: "1.0.2")!;
 
-        var applier = new FileUpdateApplier();
-
-        var first = applier.Apply(
-            cacheRoot: m_root.RootPath,
-            manifest: ManifestFor(
-                version: "1.0.0",
-                stateGeneration: 1,
-                file: new ReleasePayloadFile(
-                    Path: "a.dll",
-                    Hash: firstHash,
-                    Size: firstContent.Length
-                )
-            ),
-            rid: "win-x64"
-        );
-
-        Assert.True(
-            condition: first.Applied,
-            userMessage: first.RefusalReason
-        );
-        // 1.0.0 proves healthy, as its started process would by clearing the marker.
-        File.Delete(path: Path.Combine(path1: m_root.RootPath, path2: "state", path3: "health.json"));
-
-        var second = applier.Apply(
-            cacheRoot: m_root.RootPath,
-            manifest: ManifestFor(
-                version: "1.0.1",
-                stateGeneration: 2,
-                file: new ReleasePayloadFile(
-                    Path: "a.dll",
-                    Hash: secondHash,
-                    Size: secondContent.Length
-                )
-            ),
-            rid: "win-x64"
-        );
-
-        Assert.True(
-            condition: second.Applied,
-            userMessage: second.RefusalReason
-        );
-        Assert.Equal(
-            expected: "1.0.0",
-            actual: second.PreviousVersion
-        );
-        Assert.Equal(
-            expected: "1.0.1",
-            actual: File.ReadAllText(path: Path.Combine(
-                path1: m_root.RootPath,
-                path2: "current"
-            )).Trim()
-        );
-        Assert.Equal(
-            expected: "1.0.0",
-            actual: File.ReadAllText(path: Path.Combine(
-                path1: m_root.RootPath,
-                path2: "last-good"
-            )).Trim()
-        );
+        Assert.Equal(expected: 3, actual: record.Sequence);
+        Assert.Equal(expected: 2, actual: record.StateGeneration);
+        Assert.Equal(expected: ReleasePayloadIdentity.Of(payload: Manifest(file: third, stateGeneration: 2, version: "1.0.2").Payloads[0], stateGeneration: 2),
+            actual: record.PayloadPin);
     }
     [Fact]
-    public void Apply_WritesCurrentAndStateGeneration_OnAFirstInstall_WithNoLastGood() {
-        var content = "bytes"u8.ToArray();
-        var hash = ContentPin.Compute(content: content).ToString();
-
-        StageFile(
-            content: content,
-            relativePath: "a.dll",
-            version: "1.0.0"
-        );
-
-        var applier = new FileUpdateApplier();
-        var manifest = ManifestFor(
-            version: "1.0.0",
-            stateGeneration: 1,
-            file: new ReleasePayloadFile(
-                Path: "a.dll",
-                Hash: hash,
-                Size: content.Length
-            )
-        );
-
-        var result = applier.Apply(
-            cacheRoot: m_root.RootPath,
-            manifest: manifest,
-            rid: "win-x64"
-        );
-
-        Assert.True(
-            condition: result.Applied,
-            userMessage: result.RefusalReason
-        );
-        Assert.Null(@object: result.PreviousVersion);
-        Assert.Equal(
-            expected: "1.0.0",
-            actual: File.ReadAllText(path: Path.Combine(
-                path1: m_root.RootPath,
-                path2: "current"
-            )).Trim()
-        );
-        Assert.Equal(
-            expected: "1",
-            actual: File.ReadAllText(path: Path.Combine(
-                path1: m_root.RootPath,
-                path2: "versions",
-                path3: "1.0.0",
-                path4: "state-generation"
-            )).Trim()
-        );
-        Assert.False(condition: File.Exists(path: Path.Combine(
-            path1: m_root.RootPath,
-            path2: "last-good"
-        )));
+    public void Apply_NeverKeepsARevokedPreviousAsRollbackTarget() {
+        _ = InstallSeed.Install(installRoot: Root, version: "1.0.0");
+        _ = InstallSeed.Install(installRoot: Root, version: "1.1.0");
+        using (var transaction = InstallTransaction.TryBegin(installRoot: Root)!) {
+            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["1.1.0"]));
+        }
+        Assert.True(condition: Apply(file: Stage(version: "1.2.0", content: "v12"u8.ToArray()), version: "1.2.0").Applied);
+        Assert.Equal(expected: "1.0.0", actual: InstallSeed.RollbackTarget(installRoot: Root));
     }
+
+    private static ReleaseManifest Manifest(string version, int stateGeneration, ReleasePayloadFile file) => new(
+        App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null, Payloads: [new ReleasePayload(Rid: "win-x64", Files: [file])], Revoked: null,
+        Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema, Signature: null, StateGeneration: stateGeneration, Version: version);
+    private UpdateApplyResult Apply(ReleasePayloadFile file, string version, int stateGeneration = 1) {
+        using var transaction = InstallTransaction.TryBegin(installRoot: Root)!;
+
+        return new FileUpdateApplier().Apply(manifest: Manifest(file: file, stateGeneration: stateGeneration, version: version), rid: "win-x64", transaction: transaction);
+    }
+    private ReleasePayloadFile Stage(string version, byte[] content) {
+        var stagedPath = Path.Combine(path1: Root, path2: "versions", path3: version, path4: "a.dll");
+
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: stagedPath)!);
+        File.WriteAllBytes(bytes: content, path: stagedPath);
+        return new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+    }
+
     public void Dispose() => m_root.Dispose();
 }

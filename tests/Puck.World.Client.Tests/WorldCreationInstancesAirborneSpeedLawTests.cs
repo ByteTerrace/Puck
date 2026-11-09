@@ -49,7 +49,7 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],
@@ -100,11 +100,11 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
     public void ALinearSpeedSwingTurnsItsLimbByAmplitudeTimesPhaseTimesWeight(BodyFacts facts, float frame) {
         var (client, pool, transforms) = Stage();
         // The first frame only seeds the drivers, so it leaves the limb at its rest pose.
-        var rest = Fly(client: client, pool: pool, tick: 1UL, transforms: transforms, facts: facts, frame: frame, seconds: frame);
+        var rest = Fly(client: client, facts: facts, frame: frame, pool: pool, seconds: frame, tick: 1UL, transforms: transforms);
         var turned = rest;
 
         for (var tick = 2UL; (tick <= 60UL); tick++) {
-            turned = Fly(client: client, pool: pool, tick: tick, transforms: transforms, facts: facts, frame: frame, seconds: frame);
+            turned = Fly(client: client, facts: facts, frame: frame, pool: pool, seconds: frame, tick: tick, transforms: transforms);
         }
 
         Assert.True(condition: pool.TryBodyRig(bodyIndex: 0, state: out var rig));
@@ -114,7 +114,7 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
         // 5 m/s at cadence 0.2 is a phase of 1; the weight has eased to one.
         Assert.Equal(expected: (Cadence * Speed), actual: driver.Phase, tolerance: 1e-3f);
         Assert.Equal(expected: 1f, actual: driver.Weight, tolerance: 1e-2f);
-        Assert.Equal(expected: ((Amplitude * driver.Phase) * driver.Weight), actual: AngleBetween(turned: turned, rest: rest), tolerance: 1e-3f);
+        Assert.Equal(expected: ((Amplitude * driver.Phase) * driver.Weight), actual: AngleBetween(rest: rest, turned: turned), tolerance: 1e-3f);
     }
     // A capture holds the frame it is armed in and renders it again with no time passing, at the pose the display last
     // interpolated to: the body has moved and the frame charges nothing, so a speed read as travel over no time would
@@ -123,18 +123,18 @@ public sealed class WorldCreationInstancesAirborneSpeedLawTests {
     public void AFrameThatChargesNoTimeKeepsTheSpeedPhaseOfTheLastFrameThatDid() {
         var (client, pool, transforms) = Stage();
         var frame = (1f / 60f);
-        var rest = Fly(client: client, pool: pool, tick: 1UL, transforms: transforms, facts: BodyFacts.Airborne, frame: frame, seconds: frame);
+        var rest = Fly(client: client, facts: BodyFacts.Airborne, frame: frame, pool: pool, seconds: frame, tick: 1UL, transforms: transforms);
         var turned = rest;
 
         for (var tick = 2UL; (tick <= 60UL); tick++) {
-            turned = Fly(client: client, pool: pool, tick: tick, transforms: transforms, facts: BodyFacts.Airborne, frame: frame, seconds: frame);
+            turned = Fly(client: client, facts: BodyFacts.Airborne, frame: frame, pool: pool, seconds: frame, tick: tick, transforms: transforms);
         }
 
-        var held = Fly(client: client, pool: pool, tick: 61UL, transforms: transforms, facts: BodyFacts.Airborne, frame: frame, seconds: 0f);
+        var held = Fly(client: client, facts: BodyFacts.Airborne, frame: frame, pool: pool, seconds: 0f, tick: 61UL, transforms: transforms);
 
         Assert.True(condition: pool.TryBodyRig(bodyIndex: 0, state: out var rig));
         Assert.Equal(expected: (Cadence * Speed), actual: rig!.Drivers[0].Phase, tolerance: 1e-3f);
-        Assert.Equal(expected: AngleBetween(turned: turned, rest: rest), actual: AngleBetween(turned: held, rest: rest), tolerance: 1e-3f);
-        Assert.True(condition: (AngleBetween(turned: held, rest: rest) > 0.5f));
+        Assert.Equal(expected: AngleBetween(rest: rest, turned: turned), actual: AngleBetween(rest: rest, turned: held), tolerance: 1e-3f);
+        Assert.True(condition: (AngleBetween(rest: rest, turned: held) > 0.5f));
     }
 }

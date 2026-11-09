@@ -230,6 +230,9 @@ public static class WorldSemanticValidator {
         foreach (var warning in MovingBlends(definition: definition)) {
             Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.MovingBlend, message: warning, severity: DiagnosticSeverity.Warning));
         }
+        foreach (var warning in UngroupedBlends(definition: definition)) {
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.UngroupedBlend, message: warning, severity: DiagnosticSeverity.Warning));
+        }
 
         return (errors.Count == 0);
     }
@@ -244,7 +247,23 @@ public static class WorldSemanticValidator {
     /// <param name="definition">The world.</param>
     /// <returns>The warnings, in prototype and shape order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) {
+    public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) => BlendWarnings(
+        definition: definition,
+        warn: static document => CreationMotion.MovingBlends(document: document).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, document: document)))
+    );
+    /// <summary>Returns a warning for each ungrouped shape of an animated creation that declares a blend other than
+    /// <c>Union</c> (<see cref="CreationMotion.UngroupedBlends"/>), which the pooled bake draws as a hard union, naming
+    /// the creation, the shape and the blend, its path first as a refusal's is.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype and shape order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> UngroupedBlends(WorldDefinition definition) => BlendWarnings(
+        definition: definition,
+        warn: static document => CreationMotion.UngroupedBlends(document: document).Select(selector: shape => (shape, CreationMotion.DescribeUngrouped(document: document, shape: shape)))
+    );
+    // A warning for each shape `warn` names in each creation, its blend's path first as a refusal's is, then the creation
+    // and the sentence `warn` gives it.
+    private static IReadOnlyList<string> BlendWarnings(WorldDefinition definition, Func<CreationDocument, IEnumerable<(int Shape, string Text)>> warn) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var warnings = new List<string>();
@@ -252,8 +271,8 @@ public static class WorldSemanticValidator {
 
         for (var index = 0; (index < creations.Count); index++) {
             if (creations[index]?.Document is not { } document) { continue; }
-            foreach (var blend in CreationMotion.MovingBlends(document: document)) {
-                warnings.Add(item: $"prototypes[{index}].doc.shapes[{blend.Shape}].blend: creation '{creations[index].Id}' {CreationMotion.Describe(blend: blend, document: document)}");
+            foreach (var (shape, text) in warn(arg: document)) {
+                warnings.Add(item: $"prototypes[{index}].doc.shapes[{shape}].blend: creation '{creations[index].Id}' {text}");
             }
         }
 

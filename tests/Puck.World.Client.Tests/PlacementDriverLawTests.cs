@@ -9,6 +9,21 @@ namespace Puck.World.Client.Tests;
 /// <summary>Scenery drivers animate without borrowing an inhabitant's facts or duplicating static geometry.</summary>
 public sealed class PlacementDriverLawTests {
     [Fact]
+    public void AnAnimatedRootUsesItsResolvedParentFrame() {
+        var creation = CreationDomainParentLawTests.Prototype(document: CreationDomainParentLawTests.FollowRig());
+        var parent = new WorldPlacement("anchor", creation.Id, new Vector3(x: 10, y: 2, z: 3), 90, 1);
+        var child = new WorldPlacement("animated", creation.Id, new Vector3(x: 2, y: 0, z: 0), 15, 1, Parent: parent.Id);
+        var definition = CreationDomainParentLawTests.Definition(creation) with { PlacementRowsRaw = [parent, child] };
+        var pool = new WorldCreationInstances();
+
+        pool.Reconcile(definition.PlacementFrames, [child], [creation], [], []);
+        var client = ClientFixtures.Client(definition: definition);
+        var transforms = new DynamicTransform[pool.DynamicSlotCount];
+
+        CreationDomainParentLawTests.Advance(client: client, pool: pool, tick: 1, transforms: transforms);
+        Assert.Equal(definition.PlacementFrames[child.Id].Position, transforms[0].Position);
+    }
+    [Fact]
     public void DriverOnlyPlacementCannotBypassAnimatedDistributionRestrictions() {
         var document = CreationDomainParentLawTests.FollowRig() with {
             Drivers = [new CreationDriverDocument(
@@ -128,13 +143,13 @@ public sealed class PlacementDriverLawTests {
         Assert.Equal(
             0,
             WorldPlacementStamper.StaticStampInstances(
-                new WorldDefinition(CreationsRaw: [creation]) { PlacementRowsRaw = [placement] },
-                [placement]
+                definition: new WorldDefinition(CreationsRaw: [creation]) { PlacementRowsRaw = [placement] },
+                placements: [placement]
             )
         );
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [placement], worldSeed: 0UL),
             bodyStamps: [],
             creations: [creation],
             dynamics: [],
@@ -152,7 +167,7 @@ public sealed class PlacementDriverLawTests {
         );
         var root = transforms[0];
 
-        Assert.True(pool.TryShapePosition("grass", 0, client, out var initial));
+        Assert.True(condition: pool.TryShapePosition(client: client, placementId: "grass", position: out var initial, shapeId: 0));
 
         for (ulong tick = 2; (tick <= 31); tick++) {
             CreationDomainParentLawTests.Advance(
@@ -170,8 +185,8 @@ public sealed class PlacementDriverLawTests {
             root.Orientation,
             transforms[0].Orientation
         );
-        Assert.True(pool.TryShapePosition("grass", 0, client, out var current));
-        var movement = Vector3.Distance(initial, current);
+        Assert.True(condition: pool.TryShapePosition(client: client, placementId: "grass", position: out var current, shapeId: 0));
+        var movement = Vector3.Distance(value1: initial, value2: current);
 
         if (requireGrounded) {
             // The fixture has a grounded body, but this placement does not ride it.
