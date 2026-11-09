@@ -127,8 +127,16 @@ milestone. The owner requested its baseline and implementation plan, which
        measured change of the deterministic query, not a probe-local one.
      - Mesh draw staging (`SdfWorldTables.StageChangedDraws`, through
        `SdfWorldTables.StageMeshDraw`) and dressing (`SdfMeshDresser.Dress`),
-       already proportional to the draws that changed; read `sdf.instances`'
-       `records.compared` against `records.changed` before cutting further.
+       already proportional to the draws that changed (`sdf.instances`'
+       `records.changed` is almost all of `records.compared`). What changes is
+       the posing the rates allow: a creation may hold only while no camera's
+       frustum and no cascade keeps its sphere (`WorldCreationInstances.Shown`),
+       and occlusion is not consulted, so at flight B, a view inside the
+       stairwell, the motion gallery's exhibits pose every frame (`world.rates`
+       lists them at 60 Hz); whether the stairwell hides them is for
+       `world.view.pick` to confirm. The mesh pass's occlusion result, which
+       `SdfPortalSight` already reads for session views, is the evidence that
+       would let them hold.
      - View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
        binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
        `WorldScreenBinder.TryRippleOf`), each frame for every screen.
