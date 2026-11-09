@@ -1944,6 +1944,27 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
 
+- [medium] Reload deltas cannot express key order: the sender proves its delta
+  with `JsonNode.DeepEquals`, which ignores object key order, and the diff and
+  merge (`WorldDocumentBasis`) keep old order and append new keys. Fields that
+  serialize in key order (kit `actions`, `pad`, `producers`; machine and probe
+  and view configurations) then rebuild differently on the server, which
+  refuses `world.reload.target-mismatch` on every retry with no fallback.
+  Fix at the cause: canonical (sorted) key order in the serializer, or a delta
+  that can replace an object whole; the sender's proof then compares bytes.
+- [low] Reload delta follow-ups from its trust-boundary review (no boundary
+  break found): the rebuilt document skips the codec's grantee check, so
+  `world.load` and `world.reload` accept different documents; a merge refusal
+  surfaces the composer's raw message without a `world.reload.*` code, and the
+  server README omits `delta-invalid` and `delta-unrepresentable`; any document
+  mutation queued ahead makes a reload refuse `stale-base`, so a world that
+  mutates its document most ticks may never reload; the apply-time check
+  re-hashes the whole document that the matching version already guarantees,
+  and the success line re-encodes the request to print a size; the "CAS
+  resolution first" comment in `WorldDocument.Apply` is now false; preparation
+  inside the ordered drain catches four exception types, so another escapes the
+  submit path unnamed.
+
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
 a shading-only creation edit keeps the arena, the rules and the population, and
