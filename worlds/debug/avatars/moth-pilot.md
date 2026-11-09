@@ -8,8 +8,9 @@ collar, straight-cut work trousers, soft knee and elbow pads, a contact harness
 with an ochre plate between her shoulder blades, small lavender shoulder
 patches, a belt with an ochre buckle and flat ankle boots. Her hands are bare,
 four fingers and a thumb each, so she can hold the 75 × 133 mm handheld of
-sheet 06 at true scale. The sheet draws gloves; the owner's direction is bare
-hands, and that wins.
+sheet 06 at true scale. Sheet 04 draws gloves; whether she wears them is the
+owner's open look call (no ruling is recorded), taken in the Moth's pair
+session.
 
 Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
 `mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed

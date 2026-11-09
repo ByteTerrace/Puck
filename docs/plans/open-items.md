@@ -34,19 +34,59 @@ together: they are one campaign, not rivals (the owner's ruling), since a look
 built properly on the engine's systems is a feature that stresses them, and
 what it surfaces is fixed at the cause.
 
-Owed at the integration tip, for whoever leads next:
-
-- a Vulkan look at glass under a roof, the pair of the Direct3D 12 look the
-  visual bar packet records (glass gathers the irradiance probes,
-  `SdfFrameBlock.WriteInto`), in the next batch window. Work whose correctness rests
-on an invariant is designed and reviewed before code
-([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
+Work whose correctness rests on an invariant is designed and reviewed before
+code ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
-([port](#port-the-experimental-worlds-missing-features)). The current focus is
-[dense landscapes](#dense-landscapes), including continuous forest in the first
-milestone. The owner requested its baseline and implementation plan, which
-[the plan](dense-landscapes.md) holds.
+([port](#port-the-experimental-worlds-missing-features)).
+
+**First, in this order (the owner's direction after the modeling session):**
+the limits and flaws that got in the way of authoring lead, because every agent
+modeling pass failed on them. They are three kinds, and each has its own fix:
+engine limits (fix in the engine), language ergonomics (the owner reviews the
+plan first) and agents judging looks badly (pair sessions and measured checks,
+not code). The [modeling authoring plan](modeling-authoring.md) holds the
+evidence, citations and steps.
+
+A. Engine limits on authoring [high], in the plan's
+   [section 1](modeling-authoring.md#1-the-engine-limits-authors-met) order:
+   - twist and bend are silently dropped on static placements
+     ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
+   - per-part bake detail: small round parts facet, thin parts shatter, and a
+     folded shape takes its repeat extent's cell. One detail rule is built on
+     `lane/part-detail` but blocked on a cost bound (see
+     [Bake detail](#bake-detail));
+   - blends between moving parts tear: steps 1 to 3 are built on
+     `lane/moving-blends`, unlanded behind two high review findings (see
+     [Bake detail](#bake-detail));
+   - a `Convex` prism refuses any rounding
+     ([1.4](modeling-authoring.md#14-convex-rounding-limit-6));
+   - paint outlines cap at eight vertices behind a generic message, and
+     compile does not check paint emission
+     ([1.5](modeling-authoring.md#15-paint-outlines-limit-7)).
+B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
+   answered; its windowed recipe is recorded on the
+   [virtual geometry plan](virtual-geometry.md)'s G5 row.
+C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
+   then its slices S1 to S3 (mirror, orientation builtins, relative
+   placement).
+D. The frame bar's hitches (item 1 below): flight B and the teal roof at p99 on
+   both backends, and Vulkan's meadow.
+E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
+   ordinary work, since nothing is live.
+
+**Unlanded branches on origin**, each kept on purpose:
+
+| Branch | Holds | Waits for |
+|---|---|---|
+| `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
+| `lane/moving-blends` | moving blends steps 1 to 3 | a fix pass on MB-1 and MB-2 |
+| `lane/part-detail` | one bake detail rule for every path | the owner's cost bound |
+| `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
+| `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
+| `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
+| `lane/swallow-7` | the swallow rebuilt to a cited reference (the barn swallow reference document, on the branch only) | the owner's pair session |
+| `lane/companion-v1` | older work, status unknown | someone to read it |
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
@@ -59,8 +99,12 @@ milestone. The owner requested its baseline and implementation plan, which
    bar]: the caldera water as its first proof (glacier, lake, falls, river,
    pool against the caldera pack), then the per-milestone review across every
    place.
-1. The frame bar [high]: measured quiet, the studio and the meadow meet 60 FPS
-   at p99 and the teal roof and flight B do not. The far cascade's cadence is settled: a
+1. The frame bar [high]: measured on the head with `bench frames` (five fresh
+   processes per backend), every stop holds 60 FPS on average; at p99 the
+   studio sits at about 17.2 ms on both backends, the meadow meets it on
+   Direct3D 12 (17.16 ms) but not on Vulkan (20.55 ms), and flight B (21.5 and
+   20.9 ms) and the teal roof (22.2 and 21.6 ms, worst frame 54.5 ms on
+   Direct3D 12) do not. The far cascade's cadence is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -288,6 +332,20 @@ milestone. The owner requested its baseline and implementation plan, which
 ## Owner decisions
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
+
+- The cost bound for one bake detail rule (`lane/part-detail`, see
+  [Bake detail](#bake-detail)): the rule rounds small parts but multiplies the
+  debug world's triangles about 8x through grass; D7's demand budget, a floor
+  relative to a creation's size, or round sections only where a turn is visible
+  at the creation's scale.
+- The Moth's and the swallow's look, in a pair session with the owner (both
+  stopped by the owner's ruling); within it, gloves or bare hands on the
+  off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
+- The [modeling authoring plan](modeling-authoring.md)'s review, before its
+  slices are dispatched.
+- Real-model runs of the agent harness and embeddings need an Azure OpenAI chat
+  and embedding deployment, set up outside the repository
+  ([debug world content](#debug-world-content)).
 
 - Three calls from [the MMO foundations round](mmo-foundations.md), deferred by
   the owner until their systems mature. Nothing in the round's order of work
@@ -1593,6 +1651,29 @@ judging are in [the art README](../game/art/README.md#the-visual-bar); each
 place's look intent is in its guide. The owner's walkthrough found the debug
 world failing it throughout; the readings below are from that session, named
 by `world.view.pick`.
+
+- [high] The cel treatment failed the look-critic three times. The third model
+  (`lane/toon-3`: the lit side equals the continuous response, each light's
+  shade side a stepped tint of that light restored, the step's normal from a
+  filtered screen-space form at an authored radius) fixed the earlier washed-out
+  shade and white slivers, then failed on its own: shade breaks into blotches
+  with lit islands inside (the Moth, boulders, canopies), large shade planes go
+  near-black navy where the selected direction's Study B wants warm mid-value
+  mauve, cast shadows turn grey, cream shifts pink-mauve, and the lobby reads
+  smooth and murky with a bright sliver along a wall and floor crease. Only the
+  tree canopies read better than continuous. A fourth attempt changes the
+  approach (or takes the owner's look call), not the parameters. The branch's
+  `world.toon off` fix (every cel style suppressed, a material's own included,
+  so a continuous and cel pair is one World) is worth landing on its own.
+- [high] Agent modeling of the Moth and the swallow did not converge; both wait
+  for a pair session with the owner (see the Moth and swallow items below).
+  Across the rounds the builders' own judgement passed views the critic failed
+  with pixel evidence, a fix to one part broke another, and a large share of
+  the critic's items were engine limits (bake detail, moving blends, the
+  material cut, stale CLI copies) rather than sculpting. The
+  [modeling authoring plan](modeling-authoring.md) takes the engine and
+  language causes; the critic verdicts' substance is in `lane/moth-suit`,
+  `lane/moth-pilot` and `lane/swallow-7`'s commit messages and guides.
 
 - [high] The caldera water fails its reference (the
   [caldera pack](../game/art/caldera-water-pack/README.md), intent in
@@ -3149,8 +3230,47 @@ reproduce worker for what remains.
 
 ### Bake detail
 
-Owner: specialist lane (rendering, sdf-authoring) · ordinary · Next: measure
-the static round-section term's cost with `puck mesh audit --cpu`.
+Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
+· Next: the owner's cost bound for `lane/part-detail`, then the moving blends
+fix pass on `lane/moving-blends`.
+
+- [high] `lane/part-detail` holds one detail rule (WorldShapeDetail.Of on the branch)
+  replacing the static, blend-group, ungrouped and coupled declarations, with
+  a refinement factor per region (SdfLatticeRegion.Factor), refinement only
+  where coarse samples show a turn (CurvedSplit), round sections for
+  cylinders and cones (SdfSampledLattice.RoundCell), and a folded shape
+  declaring its copies' smallest half extent. On the suited Moth it rounds the
+  lenses and seat plate and bakes the lids whole (817,280 to 1,698,672
+  triangles). On the whole debug world it multiplies triangles from 25,678,428
+  to 213,506,399, all of it foliage: meadow, lawn and forest grass blades that
+  refined nothing before now refine every blade. It cannot land without a cost
+  bound, and the bound is a look-against-budget call: (a) the visibility plan's
+  D7 demand budget supplies `SilhouetteError` and `FinestDetail` per tier (the
+  rule's chord term is already "the cell whose error stays under half a pixel
+  at the nearest camera"); (b) a floor relative to the creation's size; (c)
+  round sections only where a turn is visible at the creation's own scale. Its
+  curvature gate also refines sharp creases (toes, soles about 2x), since
+  sample values cannot tell a crease from a turn.
+- [high] `lane/moving-blends` holds
+  [moving blends](moving-blends.md) steps 1 to 3 (rest-pose bake and
+  envelope, propagated influences, dual-quaternion skinning on current,
+  previous and shadow positions; CPU pose error 1.11 mm under a 1.19 mm bound).
+  Its adversarial review found the C#/HLSL skin layout and the blend math right
+  and these to fix before landing: MB-1 (high, `SdfMeshSkin`) every vertex of a
+  moving part stores the root as its first member, so paints, insets and lanes
+  swim on every moving part and those vertices miss the rigid fast path; MB-2
+  (high, `SdfMeshPathBake`) skin `Build` and `Split` read the current program on
+  the bake pool, so a group kept across a restart reads another instance's
+  instructions and the mesh is no longer a function of its geometry; MB-3
+  (CreationMotion.Driven on the branch) shapes one frame moves together are flagged as
+  moving apart; MB-4 (`CreationMotionPlan`) a carve or clip one owner applies to
+  another is lost in both fallbacks, so the Moth's eye whites lose their clip;
+  MB-5 the envelope adds absolute frame shift instead of relative motion; MB-6
+  the third-owner CPU fallback contours with no sample cap; low: engraved runs
+  emitted per owner, the rotation bound under different pivots, the influence
+  stencil at millimetre radii, LINQ in the influence reading, a dead
+  `sdfMeshMemberLocal`, and docs that disagree with the code. A 60-frame
+  presented glance on both backends follows the fixes.
 
 - Static placements' plain round shapes still bake at
   15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
@@ -4551,6 +4671,11 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [low] The rate range's "lane of open ground" (`worlds/debug/range.puck`,
+  `laneX = -100`, `laneHead = 118`) spawns 0.83 m from the river's centreline
+  in a channel about 3 m half-wide, and `range-walker-10`'s loop crosses the
+  bank; move the lane onto open ground (it changes the range's measured
+  distances).
 - [medium] The agent harness and embeddings are unexercised by the debug world
   (the owner asked that both be exercised). No `agent.harness` participant is
   configured in `worlds/debug`, and the only embedding space is in the

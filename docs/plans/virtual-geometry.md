@@ -929,8 +929,20 @@ the work: G2 is parked with its comparison re-baselined to the corrected
 collapse, and the build order proceeds with the steps that do not wait on it
 (G3, G5) and with D7's budget; option 1d or the member-aware collapse is taken
 up again after the Moth's rebuild lands and D7 is measured on her. G4 is
-V2b and lands where the visibility plan places it; G5 waits on nothing but the
-sight step it grows; G6 waits on G2 and G3, and its one-draw tier on V2c; G7
+V2b and lands where the visibility plan places it; G5 is built on `lane/g5`,
+its adversarial review's findings answered (one rejected: a camera-cut frame is
+rated with the previous frame's cameras, a lag of at most one floor period, the
+same as the frustum tier's), and lands on its windowed check: boot the debug
+world windowed on Direct3D 12 from that branch, `world.wait bakes 240`,
+`world.wait ready 60`, `world.cadence off`, `world.rates bodies on`; pose at
+flight B (`body.pose 16 4.55 30 0 0 0`,
+`view.override camera look 12.6 8.3 39.3 13 9.4 35`, `world.wait 60`); expect
+`world.rates` to read the motion gallery `@5hz(occluded,latency=Nf)` with N
+about 3 to 5 and `sdf.rates.occluded` to rise; a presented burst stepping into
+the gallery shows no exhibit pose staler than 200 ms plus the latency; a body
+whose shadow reaches the lit stair keeps its shown-elsewhere tier; a camera cut
+shows no occluded reading for about N frames; `world.cull frustum` lapses every
+occluded reading; then the flight B reading on Vulkan; G6 waits on G2 and G3, and its one-draw tier on V2c; G7
 on G6 and on V1's buckets for its comparison; G8 on G2; G9 on V1b and a
 measurement. The visibility plan's table keeps V3a and V3b; V3c is replaced by
 G1 and G2. Beside the steps, one measurement with no build: the far cascade's
