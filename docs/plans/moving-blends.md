@@ -6,12 +6,12 @@ out how such a seam holds under continuous motion and recommends one design,
 reviewed before code. The Moth's rebuild relies on whatever lands here, so each
 step names its owner type and the check that shows it worked.
 
-## What happens today
+## Starting point before implementation
 
 - A pooled blend group bakes one mesh at the pose its program arrives in
   (`SdfMeshBakeGroup.Plan`, `SdfMeshGeometryBuilder.Poses`). A second points
   round over the finished mesh (`SdfMeshPathBake`, the `skinned` branch of
-  `Build`) samples each vertex lifted `SkinLift` (0.5 mm) along its normal and
+  `Build`) sampled each vertex lifted 0.5 mm along its normal and
   records the winning slot. The mesh keeps each other slot as a member
   (`SdfMesh.Members`) and each vertex as one member's (`SdfMesh.VertexMembers`).
   The vertex stage carries a member's vertex through that slot's live transform
@@ -255,6 +255,141 @@ takes the same rule through the shared helpers.
 
 ## Steps, each with the check that shows it worked
 
+### Implementation of steps 1–3
+
+The invariant is enforced at the pooled emission and mesh boundaries: only delta-frame
+instances opt into `SdfInstanceRange.RestPoseSkin`; `SdfMeshGeometryBuilder` freezes those
+slots, and the motion plan is the emitter's single partition. No presentation result
+feeds simulation state. Other dynamic instances retain their absolute-pose semantics.
+
+| Step | Result by symbol | Mechanical evidence |
+|---|---|---|
+| 1 | `CreationMotion.Envelope`, `CreationMotionPlan.RenderDocument`, `SdfMeshGeometryBuilder.RestPoseSkin` | `MovingBlendRestLawTests.EveryOwnerPublishesTheIdentityDeltaAtAuthoredRest` exercises swing, slide and timeline owners through `PackTransforms`; `MovingBlendLawTests.ArrivalPoseCannotChangeTheRestGeometryOrItsMembers` compares geometry, form and frozen poses at two arrivals. `CreationMotion.Describe` reports θ, D and the whole group's actual outcome. |
+| 2 | `SdfFieldEvaluator.ReadInfluences`, `ReadInfluenceGradient`, `SdfMeshSkin.Build`, `SdfMeshSkinTuple.Of`, `SdfMesh.Influences` | `MovingBlendLawTests.NestedSharesFollowLeavesAndScopes` gives ¼, ¼, ½; `CopiesShareTuplesAndTheStoreAndMergePreserveThem` covers crease copies and codec planes; `SdfMeshPlanarMergeLawTests.ABlendZoneKeepsItsInteriorVerticesAndEveryTuple` exercises a removable grid interior; `AThirdOwnerRefusesTheSkinAndBakesRigidPieces` exercises the fallback contour. The audit prints root, rigid-member and blended vertices and split-tuple places; `world.counters sdf.mesh-skin` counts the same paths over the meshes a World draws. |
+| 3 | `sdfMeshWorldVertex`, `sdfMeshSkinPose`, `sdfMeshSkinSlotsOf`, `sdfMeshMemberDelta`, `sdfMeshPreviousPosition` | One pose helper serves current and previous positions; each caller reads its own transform table. The shadow entry calls the same position helper. `TranslationBendsTheNormalAndQuaternionSignsDoNotChangeThePose` is the CPU witness; `SdfMeshSkin.Pose` reuses `FixedRigidTransform` for the audit counterpart. |
+
+Three invariants hold the skin, each behind one door:
+
+- **A skin is a function of its geometry.** `SdfMeshBakeGroup` seals a skinned group with
+  an `SdfMeshSkinSource` taken from the program it was planned from; `SdfMeshSkin.Build`
+  and `Split` take only that source, and its constructor is internal to the seal. A group
+  kept across a restart, or one still contouring after its program left, reads its own
+  instructions, never the program the bake carries now. The source copies the group's
+  instructions on first reading and lets the program go then or when the group's
+  workspace is released.
+- **A vertex wholly one owner's rides that owner first, with no share.**
+  `SdfMeshSkinTuple.Of` collapses a share that rounds to either end onto the owner that
+  holds the vertex, with `SdfMeshInfluence.Rigid`; `SdfMeshInfluence`'s constructor is
+  internal and the `SdfMesh` constructor refuses any tuple that is not
+  `SdfMeshInfluence.Canonical`. Such vertices take the vertex stage's rigid path, and
+  their material layers shade in their owner's frame (`sdfMeshSurfaceNormal`'s frame slot).
+- **A carve one owner makes in another stays cut in every fallback.** The third-owner
+  split keeps every carving shape (`SdfBoundAlgebra.Carves`) in every member's part
+  (`SdfMeshAudit.MemberFields`), and a partitioned group borrows every other owner's carve
+  (`CreationMotionPlan.Borrows`), riding its own slot. A carve that moves against the
+  surface it cuts keeps its rest cut there; one that moves with it is exact.
+
+Two shapes move apart only by motion below their nearest common ancestor
+(`CreationMotion.MovingBlends`): a swing, slide or effector on either side, or timeline
+frames that carry the two sides by different composed motions. Shapes one frame moves
+together, such as the Moth's eye whites and their openings in the blink, join without a
+crease. The envelope's frame term is each frame's largest separation of the two sides'
+composed motions over the seam box's corners, and each swing's reach grows by the
+displacement counted before it, so the bound holds for swings about different pivots.
+
+The rest-identity premise was checked, and holds: `WorldCreationInstances.PackRegistration`
+publishes each owner's pose after removing its authored shape pose; `EmitShape` reapplies
+the authored pose after the dynamic transform. One memo premise needed correction:
+`WorldGaitDrivers` clamps `weightBy` to [0,1] before the motion reads it, so those weights
+are already bounded. Curve waveforms still require a world-curve bound and crease here.
+
+The conservative partition is per authored group: any rejected pair splits the group by
+actual motion owner. Every diagnostic reports that group outcome, even for another pair
+whose own envelope fits. Empty inflated-box intersections contribute no seam bound.
+Followers and timeline descendants inherit their actual parent's slot. Unbounded
+followers cannot enter an admitted blend.
+
+The evaluator's existing gradient reading is central differences. `ReadInfluenceGradient`
+uses six fixed-point taps on the renormalized pair, in addition to the centre share
+reading; it is not an analytic gradient. `SdfMeshSkin.Build` sets the step to a sixteenth
+of the group's narrowest smooth radius, between 1/16384 and 1/1024 unit, so the stencil
+stays inside a millimetre blend zone. The step is a function of the group's instructions,
+which keeps the influence function independent of tessellation normals and backend. Three half
+components plus padding and the packed share/second-owner word add twelve GPU bytes.
+Planar merge compares complete tuples and removes no strictly blended vertex.
+
+An active case absent from the draft premise was engraved animated text: the old emitter
+coupled glyphs and several motion owners into one field. Glyphs have no CPU reading.
+`WorldCreationInstances.EmitEngravedOwners` now uses the existing group and text emitters
+to carve rigid owner surfaces, with engraving riding the surface it carved. A run riding
+a shape (`TextRunDocument.ShapeId`) is emitted only into that shape's owner; a run in
+creation space carves every owner. The updated
+`WorldTextAuthoringLawTests.AnEngravedMovingCreationCarvesEachRigidOwnerInItsOwnInstance`
+checks that no such instance reads another motion slot. Regular polygons partition before
+emission. A third-owner overflow uses `MemberFields` and the existing `ContourLevel`, with
+the same `SdfMeshCpuField` sampler the offline tools use; there is no second contourer.
+Its cell coarsens until each owner's lattice holds at most `SdfMeshSkin.SplitSamples`, a
+union final lattice's budget.
+
+Step 4 is next: material coordinates and blended lanes. Steps 1–3 do not claim that
+paints already follow the seam. Rest skins are excluded from the old settle watch now;
+deleting the remaining non-rest settle mechanism and counters belongs to step 5.
+
+### Lead verification request
+
+Prepare the debug-based admitted source described below. Start the lane checkout with
+`puck_world_start`, `document: "<verification-source>"`,
+`windowed: true`, `holder: "moving-blends verification"`, once with `backend: "directx"`
+and once with `backend: "vulkan"`. Use the shared mesh store, not a cold cache.
+The creation is the real `swallow` at the perch, framed by the following pose script.
+`worlds/debug/debug.puck` does not currently import `birds.puck`, so starting the
+ordinary package alone cannot show this witness.
+
+```text
+view.override camera look 3.3 1.22 3.62 3 1.15 4 30
+world.row.set creations swallow document.shapes[name=head].swings [{"driver":"glance","axis":[0,1,0],"amplitude":0.02,"pivot":[0,0.06,0.03],"wave":"sine","phase":0}]
+world.row.set creations swallow document.shapes[name=tailBase].swings []
+world.row.set creations swallow document.drivers [{"name":"glance","signal":"time","cadence":6.2831853},{"name":"bob","signal":"time","cadence":1.4}]
+world.wait bakes 120
+world.wait residency
+world.screenshot <absolute-path>/moving-blends.png presented 60
+world.wait 120
+```
+
+This is the admitted envelope fixture, not a change to the bird's shipped look. The
+glance sweeps its entire admitted ±0.02-radian range in a second; the tail's motion
+owner is removed to keep the witness on two owners. A zero-amplitude swing still
+reserves an owner and can trigger the third-share fallback. Require 60 completed capture receipts and inspect
+the reported ticks: the asynchronous burst must span both extremes and the return.
+If it does not, repeat the burst while the glance keeps cycling. Inspect throat and
+wing intersections from the portrait and the reverse view, with no spike, crack or
+fold. Repeat with `world.debug-view motion`: still body parts must have zero motion,
+while the head follows the glance. Stop each process with `puck_world_stop`.
+
+The CPU counterpart uses `worlds/debug/birds.puck` prefixed with
+`schema: "puck.world.definition.v1"` and `basis: "../../worlds/debug/debug"`, written
+to a temporary source two directories below the repository root (`<verification-source>`
+below). Set the head amplitude to `0.02`,
+remove the tail's `swings` block, and set the glance cadence to `6.2831853`.
+The head then owns slot offset 1. Pose about the engine-frame pivot [0, 0.06, −0.03]:
+`t = pivot − R pivot`, not a rotation about the origin. Run:
+
+```text
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0 --pose '1=0.0005999600008,0,-0.0000059998,0,0.0099998333,0,0.9999500004'
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0 --pose '1=-0.0005999600008,0,-0.0000059998,0,-0.0099998333,0,0.9999500004'
+```
+
+Each run prints the posed field error, which must stay under the head/body D bound
+(`compile --validate` prints θ and D for the pair), and the skin line: zero split-tuple
+places, and the head's own vertices counted as rigid member vertices, not blended. The
+error includes the rest contour's error, not only skin error, and the CPU audit alone
+does not establish the visual bar. The figures each run produced are in the commits that
+ran them.
+
+The rendering skill carries a capability eval, `moving-blend-crease-copies`, for the
+lead's eval window.
+
 1. **Rest-pose bake and the envelope.** `SdfMeshGeometryBuilder` keys a skinned
    group at rest. `CreationMotion` computes θ and D per moving blend, and
    PUCK122 reports the outcome. The pooled emitter splits a blend past its
@@ -312,7 +447,7 @@ later step.
 
 The settle rebake (`SdfMeshPathBake.Settle`, `SdfMeshSettle`). The skin members
 (`SdfMesh.Members`, `SdfMesh.VertexMembers`, the bake's skin round and
-`SkinLift`). Snapped pose keys and form reuse (`SdfMeshGeometryBuilder.Snap`,
+the former lifted skin sample). Snapped pose keys and form reuse (`SdfMeshGeometryBuilder.Snap`,
 `SdfMeshLibrary.TryTakeForm`). The pooled parts that bound each shape
 (`SdfInstancePart`). The moving-blend warning (`CreationMotion.MovingBlends`)
 and the swing bounds (`ShapeSwingDocument.MaxAmplitude`). Crease and material
@@ -325,3 +460,27 @@ walks no field ([rendering decisions](../decisions/rendering.md)).
 `experimental/` holds no skinned-seam or pose-bank prior art. A history search
 for "skin", "settle" and "seam" found the settle rebake and the skin members as
 the only prior work.
+
+The duplicate scan (`puck scan --only duplicates --against lead/velocity`) was read
+in full: 81 neighbours and four helper flags on the final implementation. Actual
+overlap was removed: the CPU contour sampler moved from the CLI into `SdfMeshCpuField`,
+and pair packing moved into Maths' `VectorFunctions.PackHalf2x16`, now shared by skin,
+irradiance and contact appearance. Searches and their relevant results:
+
+```text
+rg -n 'HalfToUInt16Bits|PackHalf2x16' src/Puck.Maths src/Puck.SdfVm/SdfMeshInfluence.cs src/Puck.SdfVm/SdfMeshIrradiance.cs src/Puck.SignedDistance/SdfAppearance.cs
+VectorFunctions.PackHalf2x16; SdfMeshInfluence.GradientXY; five irradiance pairs; contact reach/coverage pair
+rg -n 'FixedRigidTransform|ContourLevel|MemberFields' src/Puck.SdfVm -g 'SdfMeshSkin*.cs'
+SdfMeshSkin.Pose: FromRotationTranslation, FromDualQuaternion
+SdfMeshSkin.Split: SdfMeshAudit.MemberFields, SdfMeshPathBake.ContourLevel
+```
+
+The CPU pose witness therefore reuses the existing dual-quaternion carrier, while
+the shader supplies its presentation-float execution. The new envelope composes
+existing motion bounds and shape boxes; it is not another animation evaluator.
+Influences are an optional reading of the existing point interpreter, not a new
+field walker. The scanner's presentation hash helpers already call `Fnv1aHash`;
+their per-type `Add` overloads serialize different record layouts. Irradiance's
+`RefreshLighting` uses BCL `HashCode.Combine` for a local cache key. Neither is a
+private hash algorithm. Other neighbours compare unrelated record/cell layouts,
+or the two interfaces' sampling attribution wrappers, rather than duplicate kernels.

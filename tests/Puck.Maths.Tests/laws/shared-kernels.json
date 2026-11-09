@@ -1323,6 +1323,10 @@
       },
       {
         "Type": "Puck.Maths.VectorFunctions",
+        "Name": "PackHalf2x16"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
         "Name": "UnpackRgba8"
       }
     ],
@@ -1339,7 +1343,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "PackRgba8 lays red in the low byte and alpha in the high (0xFF030201 for (1, 2, 3, 255)/255), UnpackRgba8 is each byte over 255 lane by lane at every one of 256 codes and PackRgba8 inverts it there; PackUnorm2x16 lays u in the low half as sdfGlyphUnpackUv decodes, rounds a half to 32768, clamps both ends and codes NaN as zero. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Subject": "PackRgba8 lays red in the low byte and alpha in the high (0xFF030201 for (1, 2, 3, 255)/255), UnpackRgba8 is each byte over 255 lane by lane at every one of 256 codes and PackRgba8 inverts it there; PackHalf2x16 gives the exact IEEE binary16 words 0xC0003C00 for (1,-2) and 0x7C008000 for (-0,+infinity), pinning lane order and signed zero; PackUnorm2x16 lays u in the low half as sdfGlyphUnpackUv decodes, rounds a half to 32768, clamps both ends and codes NaN as zero. ENVELOPE: the subject is presentation-only single or double precision outside the determinism contract; the law pins bit patterns where the value is exact or packed and a band where it is transcendental, and never derives an expectation in the subject's own arithmetic",
         "Against": "",
         "Shared": "",
         "Citation": "",

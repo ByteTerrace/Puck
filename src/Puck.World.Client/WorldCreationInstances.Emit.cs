@@ -100,6 +100,7 @@ public sealed partial class WorldCreationInstances {
 
         var identity = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, scale, null);
         var box = CreationStampEmitter.ShapeStampBox(document: document, shapeIndex: index, transform: identity);
+
         var (low, high) = (box ?? Cube(bound: CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: identity)));
         var halo = new Vector3(value: ((shape.Smooth ?? 0f) * scale));
 
@@ -145,11 +146,12 @@ public sealed partial class WorldCreationInstances {
     // Groups with independent motion or followers retain the conservative creation-root bound. The group's instance
     // declares a part a shown member (PartOf); the probe's, with no document, none.
     private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, float materialScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden, CreationMotionPlan? motion, Vector3 boundOffset) {
-        var groupNeedsScope = GroupNeedsScope(
+        // A partition that borrows another owner's carve (CreationMotionPlan.Borrows) scopes it like any other carve.
+        var groupNeedsScope = (GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
             shapes: shapes
-        );
+        ) || ((motion is not null) && Enumerable.Range(start: fromIndex, count: (shapes.Count - fromIndex)).Any(predicate: member => motion.Borrows(renderGroup: groupId, shape: member, slot: out _))));
 
         if (ownInstance) {
             // Each shown member declares its own part, so the group bakes on a union's final lattice as a static copy's run
@@ -172,7 +174,7 @@ public sealed partial class WorldCreationInstances {
                 detail = BodyDetail(floor: WorldPlacementStamper.FinestDetail, scale: placementScale, shape: shapes[last]);
                 parts.Clear();
             }
-            _ = builder.BeginInstanceDynamic(
+            _ = builder.BeginInstanceDynamic(restPoseSkin: true,
                 separateBake: true, boundInSlotFrame: true,
                 slot: boundSlot,
                 boundOffset: boundOffset,
@@ -188,8 +190,12 @@ public sealed partial class WorldCreationInstances {
 
         for (var member = fromIndex; ((member < shapes.Count)); member++) {
             var shape = shapes[member];
+            var memberSlot = ((motion is null) ? 0 : motion.ShapeSlots[member]);
 
-            if (((shape.Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) {
+            if (
+                (((shape.Group ?? 0) != groupId) && ((motion is null) || !motion.Borrows(renderGroup: groupId, shape: member, slot: out memberSlot))) ||
+                ((hidden is not null) && hidden[member])
+            ) {
                 continue;
             }
 
@@ -227,7 +233,7 @@ public sealed partial class WorldCreationInstances {
                 : (shape.Scale * placementScale)),
                 shapePosition: shape.Position,
                 shapeRotation: shape.Rotation,
-                slot: (rootSlot + motion!.ShapeSlots[member]),
+                slot: (rootSlot + memberSlot),
                 motion: motion,
                 smooth: ((shape.Smooth ?? 0f) * placementScale),
                 twist: (shape.Twist ?? 0f),
@@ -256,7 +262,7 @@ public sealed partial class WorldCreationInstances {
     // shapeSlots bounds the shape slots the registration reserves: every shape slot the probe fills, and past every
     // shape a live creation carries.
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors? colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks, int[]? screenMaterials, int shapeSlots = 0) {
-        var document = live?.Creation.EngineDocument;
+        var document = live?.Motion.RenderDocument;
         var shapes = (document?.Shapes ?? []);
 
         shapeSlots = shapes.Count;
@@ -271,10 +277,10 @@ public sealed partial class WorldCreationInstances {
                 builder: builder,
                 colors: colors!,
                 document: (document ?? EmptyDocument),
-                pool: (rootSlot, (live?.Scale ?? 1f)),
-                tint: null,
                 hidden: hidden,
-                motion: live?.Motion
+                motion: live?.Motion,
+                pool: (rootSlot, (live?.Scale ?? 1f)),
+                tint: null
             )
         );
 
@@ -348,6 +354,12 @@ public sealed partial class WorldCreationInstances {
         var textApart = (hasText && TextApart(document: document!));
         var coupled = (hasText && !textApart);
 
+        if (coupled && (live!.Motion.Owners.Length > 0)) {
+            EmitEngravedOwners(builder: builder, document: document!, materialScale: materialScale, motion: live.Motion, paletteIds: paletteIds, placementScale: placementScale, radius: ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin),
+                rootSlot: rootSlot, textCatalog: textCatalog!, textLayouts: textLayouts);
+            return;
+        }
+
         // Pass 1 — one tight dynamic instance per authored ungrouped shape, unless text couples the whole placement.
         // Slot addresses remain stable even
         // though unused shapes emit nothing. The probe still emits every slot with the full modifier envelope. A glass
@@ -356,7 +368,7 @@ public sealed partial class WorldCreationInstances {
         for (var round = 0; (round < 2); round++) {
             if (round == 1) {
                 if (!coupled) { break; }
-                _ = builder.BeginInstanceDynamic(
+                _ = builder.BeginInstanceDynamic(restPoseSkin: true,
                     separateBake: true, boundInSlotFrame: true,
                     slot: rootSlot,
                     boundOffset: Vector3.Zero,
@@ -459,7 +471,7 @@ public sealed partial class WorldCreationInstances {
                 ) + trimMargin);
 
                 if (ownInstance) {
-                    _ = builder.BeginInstanceDynamic(
+                    _ = builder.BeginInstanceDynamic(restPoseSkin: true,
                     separateBake: true, boundInSlotFrame: true,
                     slot: slot,
                     boundOffset: (hasDomain ? Vector3.Zero : (placed!.Position.Value * placementScale)),
@@ -547,7 +559,7 @@ public sealed partial class WorldCreationInstances {
             var boundOffset = Vector3.Zero;
             var boundRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
 
-            if (!anyPartFollows && (live is not null) && TryTightGroupRadius(live, document!, index, groupId, out var localRadius)) {
+            if (!anyPartFollows && (live is not null) && TryTightGroupRadius(document: document!, fromIndex: index, groupId: groupId, live: live, radius: out var localRadius)) {
                 boundSlot = (rootSlot + live.Motion.ShapeSlots[index]);
                 boundOffset = (shapes[index].Position.Value * placementScale);
                 boundRadius = (localRadius * placementScale);
@@ -560,15 +572,15 @@ public sealed partial class WorldCreationInstances {
                 document: (probeWorstCase ? null : document),
                 fromIndex: index,
                 groupId: groupId,
+                hidden: hidden,
+                materialScale: materialScale,
+                motion: live!.Motion,
                 ownInstance: !coupled,
                 paletteIds: paletteIds,
                 placementScale: placementScale,
-                materialScale: materialScale,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
-                shapes: shapes,
-                hidden: hidden,
-                motion: live!.Motion
+                shapes: shapes
             );
         }
 
@@ -580,7 +592,7 @@ public sealed partial class WorldCreationInstances {
             var textSlot = rootSlot;
 
             if (textApart) {
-                _ = builder.BeginInstanceDynamic(
+                _ = builder.BeginInstanceDynamic(restPoseSkin: true,
                     separateBake: true, boundInSlotFrame: true,
                     slot: textSlot,
                     boundOffset: Vector3.Zero,

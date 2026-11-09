@@ -50,19 +50,22 @@ public static class MeshCommand {
         var imagesOption = new Option<string?>(name: "--images") { Description = "A directory to write a PNG of each cluster of the closing list into: the mesh around its worst sample from three sides, shading normals beside face normals." };
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
         var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
+        var poseOption = new Option<string?>("--pose") { Description = "Audit a skin against its posed field: slotOffset=tx,ty,tz,qx,qy,qz,qw; repeat separated by semicolons. Transforms are in the group's frame. Unnamed slots hold rest." };
         var levelOption = CliOptions.Count(defaultValue: 0, description: "Measure this rendered level, clamped to each piece's last available level. Keeps level zero's error thresholds and coverage lattice.", minimum: 0, name: "--level");
         var fieldLevelsOption = new Option<bool>(name: "--field-levels") { Description = "With --cpu, also contour each group's field levels (cells of twice the previous, offset outward by half a cell, per member where its shapes ride several slots, to an empty level) and measure them and the collapse's levels by the error contract: both geometric directions, enclosure, material and normal runs, vanished parts, open edges, flips and missing crossings, field evaluations and each path's own processor work." };
         var aimOption = new Option<string>(name: "--field-aim") { DefaultValueFactory = static _ => "local", Description = "How --field-levels converts a level's offset to field units to aim its contour: local, by each sample's own slope, or lattice, by the lattice's median slope. The oracle measures where either landed." };
+
         aimOption.AcceptOnlyFromAmong("local", "lattice");
         var command = new Command(
             description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, smooth vertices' shading normals against the gradient at the vertex (rough), folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
-        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption, fieldLevelsOption, aimOption };
+        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, poseOption, levelOption, fieldLevelsOption, aimOption };
 
         command.SetAction(action: parseResult => Run(request: new AuditRequest(
             Backend: parseResult.GetValue(option: backendOption)!,
             Build: parseResult.GetValue(option: buildOption),
             Cpu: parseResult.GetValue(option: cpuOption),
+            Pose: parseResult.GetValue(option: poseOption),
             FieldLevels: parseResult.GetValue(option: fieldLevelsOption),
             LocalAim: (parseResult.GetValue(option: aimOption) == "local"),
             CacheRoot: parseResult.GetValue(option: cacheOption),
@@ -80,6 +83,27 @@ public static class MeshCommand {
         return command;
     }
     private static int Run(AuditRequest request) {
+        var poses = new Dictionary<int, Puck.SignedDistance.DynamicTransform>();
+
+        if (request.Pose is { } poseText) {
+            try {
+                foreach (var entry in poseText.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ';')) {
+                    var pair = entry.Split('=');
+                    var offset = int.Parse(pair[0], CultureInfo.InvariantCulture);
+                    var values = pair[1].Split(',').Select(selector: v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+
+                    if ((pair.Length != 2) || (values.Length != 7) || values.Any(predicate: v => !float.IsFinite(f: v))) { throw new FormatException(); }
+                    var rotation = new Quaternion(values[3], values[4], values[5], values[6]);
+
+                    if (!(rotation.LengthSquared() > 0f)) { throw new FormatException(); }
+                    poses.Add(key: offset, value: new(new(x: values[0], y: values[1], z: values[2]), Quaternion.Normalize(value: rotation), Vector4.Zero));
+                }
+            } catch (Exception exception) when ((exception is FormatException or IndexOutOfRangeException or ArgumentException or OverflowException)) {
+                Console.Error.WriteLine(value: "mesh audit: --pose needs slotOffset=tx,ty,tz,qx,qy,qz,qw entries.");
+                return 2;
+            }
+            if (request.History || request.FieldLevels) { Console.Error.WriteLine(value: "mesh audit: --pose measures one skin, without --history or --field-levels."); return 2; }
+        }
         if (!CliWorldDocuments.TryExtension(backend: request.Backend, extension: out var extension, verb: Verb)) {
             return 2;
         }
@@ -128,7 +152,7 @@ public static class MeshCommand {
             var group = groups[ordinal];
 
             if (!selected.Contains(value: group)) { return; }
-            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), scene: scene, store: store, identity: identity);
+            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), scene: scene, store: store, identity: identity, poses: poses);
         });
 
         var audited = results.Count(predicate: static result => (result?.Report is not null));
@@ -198,19 +222,20 @@ public static class MeshCommand {
             return false;
         }
     }
+
     // Selection uses emission identity, not the presence of a body or a parsed display label.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
 
-        return (((request.Prototype is null) || string.Equals(a: scene.Prototype(group), b: request.Prototype, comparisonType: StringComparison.Ordinal))
+        return (((request.Prototype is null) || string.Equals(a: scene.Prototype(group: group), b: request.Prototype, comparisonType: StringComparison.Ordinal))
             && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
-    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked) {
-        var label = scene.Label(group: group, owner: owner);
+    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses) {
+        var label = $"{scene.Label(group: group, owner: owner)} geometry={group.Sealed.Hash:x32}{((poses.Count > 0) ? " posed" : string.Empty)}";
         var toWorld = scene.ToWorld(group: group);
 
-        if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program), refusal: out var why)) {
+        if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program, poses: poses), refusal: out var why)) {
             var held = ((baked is null) && store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out _, refusal: out _));
 
             return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: ((held || (baked is not null)) ? $"field {why}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
@@ -226,11 +251,14 @@ public static class MeshCommand {
         if (baked is not null) {
             var own = baked.GetValueOrDefault(key: group.Selector);
 
+            if ((own is not null) && (poses.Count > 0)) { own = SdfMeshSkin.Pose(mesh: own, poses: poses); }
+
             return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
         }
         if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out var refusal)) {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
         }
+        if ((mesh is not null) && (poses.Count > 0)) { mesh = SdfMeshSkin.Pose(mesh: mesh, poses: poses); }
 
         return new Outcome(Field: field, Label: label, Mesh: mesh, Owner: owner, Refusal: null, Report: ((mesh is null) ? null : SdfMeshAudit.Audit(field: field, mesh: mesh, options: options, shapes: shapes)), Stored: true, ToWorld: toWorld);
     }
@@ -277,6 +305,11 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered\n");
+        if (outcome.Mesh is { } skin) {
+            var influences = SdfMeshSkin.Audit(mesh: skin);
+
+            output.Append(CultureInfo.InvariantCulture, $"  skin: {influences.Root} root vertices, {influences.Member} rigid member vertices, {influences.Blended} blend-zone vertices, {influences.SplitPlaces} places with split tuples\n");
+        }
         for (var rank = 0; (rank < Math.Min(val1: top, val2: report.Clusters.Count)); rank++) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
         }
@@ -302,13 +335,13 @@ public static class MeshCommand {
         var collapseDeepest = chosen.Select(selector: static group => group.Collapse.Count).DefaultIfEmpty(defaultValue: 0).Max();
         var line = new StringBuilder();
 
-        line.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels total: L0 {chosen.Sum(selector: static group => (long)group.Triangles)}");
+        line.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels total: L0 {chosen.Sum(selector: static group => ((long)group.Triangles))}");
         for (var level = 1; (level <= collapseDeepest); level++) {
-            line.Append(provider: CultureInfo.InvariantCulture, handler: $" C{level} {chosen.Sum(selector: group => (long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[(Math.Min(val1: level, val2: group.Collapse.Count) - 1)].Triangles))}");
+            line.Append(provider: CultureInfo.InvariantCulture, handler: $" C{level} {chosen.Sum(selector: group => ((long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[(Math.Min(val1: level, val2: group.Collapse.Count) - 1)].Triangles)))}");
         }
         output.Append(value: line.Append(value: '\n').ToString());
 
-        var collapseFloor = chosen.Sum(selector: static group => (long)group.Follow.Triangles);
+        var collapseFloor = chosen.Sum(selector: static group => ((long)group.Follow.Triangles));
         var unlevelled = chosen.Count(predicate: static group => (group.Collapse.Count == 0));
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels floor: collapse coarsest {collapseFloor} ({unlevelled} group(s) with no collapse level, which level zero stands for)\n");
@@ -318,17 +351,17 @@ public static class MeshCommand {
             var appended = new StringBuilder();
 
             for (var at = 1; (at <= depth); at++) {
-                appended.Append(provider: CultureInfo.InvariantCulture, handler: $" A{at} {chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group).Where(predicate: static verdict => verdict.Kept).Take(count: at).ToArray()).Triangles)}");
+                appended.Append(provider: CultureInfo.InvariantCulture, handler: $" A{at} {chosen.Sum(selector: group => ((long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group).Where(predicate: static verdict => verdict.Kept).Take(count: at).ToArray()).Triangles))}");
             }
 
-            var floor = chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Triangles);
+            var floor = chosen.Sum(selector: group => ((long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Triangles));
             var gained = chosen.Count(predicate: group => verdicts(arg: group).Any(predicate: static verdict => verdict.Kept));
             var empty = chosen.Count(predicate: group => MeshFieldLevels.ReachesEmpty(verdicts: verdicts(arg: group)));
-            var share = chosen.Select(selector: group => (double)(MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Error / group.HalfDiagonal)).Order().ToArray();
+            var share = chosen.Select(selector: group => ((double)(MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Error / group.HalfDiagonal))).Order().ToArray();
             var refusals = chosen.SelectMany(selector: group => verdicts(arg: group).Where(predicate: static verdict => (verdict.Measured && !verdict.Kept))).ToArray();
-            var reasons = refusals.SelectMany(selector: static verdict => verdict.Reasons.Split(separator: ' ').Where(predicate: static word => char.IsLetter(c: word[0]) && (word != "mm"))).GroupBy(keySelector: static word => word).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
+            var reasons = refusals.SelectMany(selector: static verdict => verdict.Reasons.Split(separator: ' ').Where(predicate: static word => (char.IsLetter(c: word[0]) && (word != "mm")))).GroupBy(keySelector: static word => word).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
 
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name}: kept{appended} | coarsest nonempty {floor} ({((double)collapseFloor / Math.Max(val1: 1L, val2: floor)):0.0}x below the collapse's); {gained} group(s) gain a field level, {empty} run to the empty level unbroken; coarsest error over half-diagonal p50 {Quantile(sorted: share, at: 0.5):0.###} p90 {Quantile(sorted: share, at: 0.9):0.###}\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name}: kept{appended} | coarsest nonempty {floor} ({(((double)collapseFloor) / Math.Max(val1: 1L, val2: floor)):0.0}x below the collapse's); {gained} group(s) gain a field level, {empty} run to the empty level unbroken; coarsest error over half-diagonal p50 {Quantile(at: 0.5, sorted: share):0.###} p90 {Quantile(at: 0.9, sorted: share):0.###}\n");
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name} refusals: {refusals.Length} level(s); {string.Join(separator: ", ", values: reasons.Select(selector: static named => $"{named.Key} {named.Count()}"))}\n");
         }
 
@@ -337,16 +370,16 @@ public static class MeshCommand {
         var waivers = new StringBuilder();
 
         foreach (var (normals, waived) in new (bool, string[])[] { (false, ["refused"]), (false, ["outside"]), (false, ["refused", "outside"]), (true, ["refused", "outside"]), (true, ["refused", "outside", "dominated"]) }) {
-            var floor = chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: MeshFieldLevels.Judge(group: group, normals: normals, waived: waived)).Triangles);
+            var floor = chosen.Sum(selector: group => ((long)MeshFieldLevels.Floor(group: group, verdicts: MeshFieldLevels.Judge(group: group, normals: normals, waived: waived)).Triangles));
 
-            waivers.Append(provider: CultureInfo.InvariantCulture, handler: $"{((waivers.Length == 0) ? string.Empty : "; ")}{(normals ? "with" : "without")} normals less {string.Join(separator: "+", values: waived)} {floor} ({((double)collapseFloor / Math.Max(val1: 1L, val2: floor)):0.0}x)");
+            waivers.Append(provider: CultureInfo.InvariantCulture, handler: $"{((waivers.Length == 0) ? string.Empty : "; ")}{(normals ? "with" : "without")} normals less {string.Join(separator: "+", values: waived)} {floor} ({(((double)collapseFloor) / Math.Max(val1: 1L, val2: floor)):0.0}x)");
         }
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels waived: {waivers}\n");
 
         var rows = chosen.SelectMany(selector: static group => group.Field).ToArray();
         var binds = rows.Where(predicate: static row => (row.Error is not null)).Select(selector: static row => MeshFieldLevels.Binds(error: row.Error!)).GroupBy(keySelector: static name => name).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels binding: {string.Join(separator: ", ", values: binds.Select(selector: static named => $"{named.Key} {named.Count()}"))}; vanished {rows.Sum(selector: static row => row.Vanished)} component(s), {rows.Sum(selector: static row => (long)(row.Whole - row.Triangles))} triangle(s)\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels binding: {string.Join(separator: ", ", values: binds.Select(selector: static named => $"{named.Key} {named.Count()}"))}; vanished {rows.Sum(selector: static row => row.Vanished)} component(s), {rows.Sum(selector: static row => ((long)(row.Whole - row.Triangles)))} triangle(s)\n");
 
         var bakeEvaluations = chosen.Sum(selector: static group => group.BakeEvaluations);
         var contour = chosen.Sum(selector: static group => group.ContourEvaluations);
@@ -357,7 +390,7 @@ public static class MeshCommand {
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels cost: bake evaluations {bakeEvaluations}, contour evaluations {contour} ({(((double)contour) / Math.Max(val1: 1L, val2: bakeEvaluations)):0.00}x the bake's), oracle evaluations {oracle} (the audit's, not the bake's); {ThreadCycles.Unit} contour {contourCycles} ({(((double)contourCycles) / Math.Max(val1: 1UL, val2: collapseCycles)):0.00}x the collapse's {collapseCycles}), oracle {oracleCycles}\n");
     }
-    private static double Quantile(double[] sorted, double at) => ((sorted.Length == 0) ? 0.0 : sorted[(int)((sorted.Length - 1) * at)]);
+    private static double Quantile(double[] sorted, double at) => ((sorted.Length == 0) ? 0.0 : sorted[((int)((sorted.Length - 1) * at))]);
     // The worst clusters across every group, each with its image when a directory is named.
     private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, int level, StringBuilder output) {
         var clusters = ordered
@@ -380,7 +413,7 @@ public static class MeshCommand {
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
                 // The window spans eight cells either way of the worst sample, so a few cells of the defect and the surface
                 // beside it are seen.
-                MeshAuditImage.Write(axis: cluster.Axis, center: cluster.Worst, halfWidth: Math.Clamp(value: (8f * report.Cell), min: 0.02f, max: 0.08f), mesh: SdfMeshAudit.Surface(mesh: mesh, level: level), path: path, toward: SdfMeshAudit.Gradient(field: field, point: cluster.Worst, step: 0.004f));
+                MeshAuditImage.Write(axis: cluster.Axis, center: cluster.Worst, halfWidth: Math.Clamp(value: (8f * report.Cell), min: 0.02f, max: 0.08f), mesh: SdfMeshAudit.Surface(level: level, mesh: mesh), path: path, toward: SdfMeshAudit.Gradient(field: field, point: cluster.Worst, step: 0.004f));
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"      image {CliPaths.ToDisplay(fullPath: path)}\n");
             }
         }
@@ -406,13 +439,15 @@ public static class MeshCommand {
     }
     private static string Statistic(SdfMeshAuditStatistic statistic, float scale) =>
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {(statistic.P50 * scale):0.00} p99 {(statistic.P99 * scale):0.00} max {(statistic.Max * scale):0.00} over {statistic.Over}/{statistic.Count}");
+
     // A length in metres as millimetres, to a tenth by default.
     internal static string Millimetres(float metres, string format = "0.0") => (metres * 1000f).ToString(format: format, provider: CultureInfo.InvariantCulture);
+
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim);
+    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim, string? Pose);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);
