@@ -112,7 +112,7 @@ public sealed partial class UpdateInstallTransactionTests {
         var trust = new TrustList(entries: [fixture.Anchor.ToTrustListEntry(reach: new HashSet<string> { AttestationReleaseVerifier.Slot }, maximumAge: null)],
             defaultMaximumAge: null, replayAcceptanceHorizon: TimeSpan.FromDays(days: 30));
         var verifier = new AttestationReleaseVerifier(trustList: trust,
-            sequenceStore: new FileReleaseSequenceStore(filePath: Path.Combine(path1: install, path2: "sequence")), codec: new CborAttestationCodec());
+            sequenceStore: new FileReleaseSequenceStore(), codec: new CborAttestationCodec());
         var service = new UpdateService(source: source, verifier: new ProcessPausedVerifier(fixture: fixture, inner: verifier),
             stager: new ContentAddressedUpdateStager(source: source,
                 cache: new ContentAddressedStore(root: Path.Combine(path1: install, path2: "cache")), cacheRoot: install),

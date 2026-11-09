@@ -28,8 +28,6 @@ public sealed record ReleaseVerifyOutcome(ReleaseDecision Decision, string? Refu
         Decision: ReleaseDecision.TerminalRefusal,
         RefusalReason: reason
     );
-    /// <summary>Builds a transient refusal that retains a pending install intent.</summary>
-    public static ReleaseVerifyOutcome Retry(string reason) => new(Decision: ReleaseDecision.TransientRefusal, RefusalReason: reason);
 }
 /// <summary>
 /// Decides whether a fetched <see cref="ReleaseManifest"/> may be staged: its signature verifies against a pinned

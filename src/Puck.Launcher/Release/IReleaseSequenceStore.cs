@@ -1,5 +1,4 @@
 using Puck.Confinement;
-using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Attestation;
 using System.Globalization;
@@ -13,26 +12,31 @@ namespace Puck.Launcher.Release;
 /// server). <see cref="AttestationReleaseVerifier"/> compares against the stored mark BEFORE trusting anything else
 /// in the manifest (a replayed old manifest is refused before its embedded <c>revoked</c>/<c>minimumSupported</c>
 /// are even read), and calls <see cref="TryAdvance"/> only after every other verification check has passed.
-/// File-backed compare-and-advance excludes other writers, including separate processes. Install reservations
-/// bind the mark to a full signed-manifest pin so UpdateService can resume its durable intent before activation.
+/// Every member takes the caller's <see cref="InstallTransaction"/>, the install root's one lease
+/// (<see cref="InstallLayout.UpdateLockFileName"/>): a store is reachable only through a held transaction, so the
+/// lease alone excludes every other reader and writer, other processes included, and the store takes no lock of its
+/// own. Install reservations bind the mark to a full signed-manifest pin so UpdateService can resume its durable
+/// intent before activation.
 /// </summary>
 public interface IReleaseSequenceStore {
     /// <summary>Atomically reserves an install, or resumes the same epoch, sequence and full manifest pin.
     /// An ordinary committed mark or a different manifest never grants recovery.</summary>
-    ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin);
+    ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction);
     /// <summary>Whether this exact install reservation is still the current mark for its identity.</summary>
-    bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin);
-    /// <summary>Atomically compares and advances the stored mark to <paramref name="requirement"/>. A preceding
-    /// <see cref="IsAcceptable"/> is only a preview: another verifier may have committed since then.</summary>
+    bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction);
+    /// <summary>Compares and advances the stored mark to <paramref name="requirement"/>. A preceding
+    /// <see cref="IsAcceptable"/> is only a preview when the caller's transaction was not held across both calls.</summary>
     /// <param name="requirement">The replay-commit requirement to record.</param>
-    /// <returns>Accepted only when this call advanced the mark; terminal for stale or malformed state, transient for lease contention.</returns>
-    ReleaseDecision TryAdvance(ReplayCommitRequirement requirement);
+    /// <param name="transaction">The caller's transaction on the install root the mark belongs to.</param>
+    /// <returns>Accepted only when this call advanced the mark; terminal for stale or malformed state.</returns>
+    ReleaseDecision TryAdvance(ReplayCommitRequirement requirement, InstallTransaction transaction);
     /// <summary>Compares <paramref name="requirement"/> against the stored mark for its <c>(domain, subject)</c>
     /// pair without writing anything.</summary>
     /// <param name="requirement">The replay-commit requirement to check.</param>
+    /// <param name="transaction">The caller's transaction on the install root the mark belongs to.</param>
     /// <returns><see langword="true"/> when no mark is stored yet, or when the stored epoch is older, or when the
     /// epoch matches and the stored sequence is strictly less than <paramref name="requirement"/>'s.</returns>
-    bool IsAcceptable(ReplayCommitRequirement requirement);
+    bool IsAcceptable(ReplayCommitRequirement requirement, InstallTransaction transaction);
 }
 /// <summary>A process-lifetime <see cref="IReleaseSequenceStore"/> — for laws and the throwaway-chain canary path,
 /// where a durable file would leak state across runs that expect a clean high-water mark.</summary>
@@ -41,7 +45,8 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     private readonly Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> m_marks = [];
 
     /// <inheritdoc/>
-    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin) {
+    /// <remarks>The marks live in this instance, so the transaction is not consulted.</remarks>
+    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction) {
         lock (m_gate) {
             return m_marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark) &&
                 mark.EpochStart == requirement.EpochStartUnixSeconds && mark.Sequence == requirement.Sequence && mark.ManifestPin == manifestPin;
@@ -49,19 +54,19 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     }
 
     /// <inheritdoc/>
-    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) {
+    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction) {
         lock (m_gate) {
-            if (IsReserved(requirement: requirement, manifestPin: manifestPin)) { return ReleaseDecision.Accepted; }
-            if (!IsAcceptable(requirement: requirement)) { return ReleaseDecision.TerminalRefusal; }
+            if (IsReserved(requirement: requirement, manifestPin: manifestPin, transaction: transaction)) { return ReleaseDecision.Accepted; }
+            if (!IsAcceptable(requirement: requirement, transaction: transaction)) { return ReleaseDecision.TerminalRefusal; }
             m_marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
             return ReleaseDecision.Accepted;
         }
     }
 
     /// <inheritdoc/>
-    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) {
+    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement, InstallTransaction transaction) {
         lock (m_gate) {
-            if (!IsAcceptable(requirement: requirement)) {
+            if (!IsAcceptable(requirement: requirement, transaction: transaction)) {
                 return ReleaseDecision.TerminalRefusal;
             }
 
@@ -70,7 +75,7 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
         }
     }
     /// <inheritdoc/>
-    public bool IsAcceptable(ReplayCommitRequirement requirement) {
+    public bool IsAcceptable(ReplayCommitRequirement requirement, InstallTransaction transaction) {
         lock (m_gate) {
             if (!m_marks.TryGetValue(
                 key: (requirement.Domain, requirement.Subject),
@@ -87,22 +92,27 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
         }
     }
 }
-/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one mark per domain/subject in a text file, written through
-/// <see cref="AtomicFile"/> — the mark a compromised CDN cannot roll back by replaying old bytes, because it is never
-/// carried in the bytes being replayed.</summary>
-/// <param name="filePath">The mark file's path (created, with its parent directory, on first <see cref="TryAdvance"/>).</param>
-public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequenceStore {
-    private readonly string m_filePath = Path.GetFullPath(path: filePath);
-    private readonly Lock m_gate = new();
-
-    private Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> ReadMarks() {
+/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one mark per domain/subject in a text file under the
+/// install root's <see cref="InstallLayout.StateDirectoryName"/> (<see cref="InstallLayout.SequenceMarkFileName"/>),
+/// written through <see cref="AtomicFile"/> — the mark a compromised CDN cannot roll back by replaying old bytes,
+/// because it is never carried in the bytes being replayed.
+/// <para>The store holds no state and takes no lock. Every member reads and writes the file of the install root its
+/// <see cref="InstallTransaction"/> argument holds, and that transaction's lease is the only mutual exclusion: while
+/// it is held no other reader or writer of the file exists, in this process or another.</para></summary>
+public sealed class FileReleaseSequenceStore : IReleaseSequenceStore {
+    private static string MarkPath(InstallTransaction transaction) => Path.Combine(
+        path1: transaction.Root.Path,
+        path2: InstallLayout.StateDirectoryName,
+        path3: InstallLayout.SequenceMarkFileName
+    );
+    private static Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> ReadMarks(string filePath) {
         var marks = new Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)>();
 
-        if (!File.Exists(path: m_filePath)) {
+        if (!File.Exists(path: filePath)) {
             return marks;
         }
 
-        var lines = File.ReadAllLines(path: m_filePath);
+        var lines = File.ReadAllLines(path: filePath);
 
         if ((lines.Length < 2) || (lines[0] != "puck.release.sequence.v1")) {
             throw new InvalidDataException(message: "the release sequence store is malformed");
@@ -144,80 +154,71 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     }
 
     /// <inheritdoc/>
-    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) => TryWrite(requirement: requirement, manifestPin: null);
+    public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement, InstallTransaction transaction) => TryWrite(manifestPin: null, requirement: requirement, transaction: transaction);
 
     /// <inheritdoc/>
-    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin) => TryWrite(requirement: requirement, manifestPin: manifestPin);
+    public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction) => TryWrite(manifestPin: manifestPin, requirement: requirement, transaction: transaction);
 
     /// <inheritdoc/>
-    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin) {
-        lock (m_gate) {
-            try {
-                return ReadMarks().TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark) &&
-                    mark.EpochStart == requirement.EpochStartUnixSeconds && mark.Sequence == requirement.Sequence && mark.ManifestPin == manifestPin;
-            } catch (InvalidDataException) {
-                return false;
-            }
+    public bool IsReserved(ReplayCommitRequirement requirement, ContentPin manifestPin, InstallTransaction transaction) {
+        try {
+            return ReadMarks(filePath: MarkPath(transaction: transaction)).TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark) &&
+                mark.EpochStart == requirement.EpochStartUnixSeconds && mark.Sequence == requirement.Sequence && mark.ManifestPin == manifestPin;
+        } catch (InvalidDataException) {
+            return false;
         }
     }
 
-    private ReleaseDecision TryWrite(ReplayCommitRequirement requirement, ContentPin? manifestPin) {
-        lock (m_gate) {
-            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
+    private static ReleaseDecision TryWrite(ReplayCommitRequirement requirement, ContentPin? manifestPin, InstallTransaction transaction) {
+        var filePath = MarkPath(transaction: transaction);
+        Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
 
-            // Keep the lease file in place: deleting it could give two processes locks on different inodes.
-            using var lease = FileLock.TryAcquire(path: (m_filePath + ".lock"));
-            if (lease is null) { return ReleaseDecision.TransientRefusal; }
-
-            try {
-                marks = ReadMarks();
-            } catch (InvalidDataException) {
-                return ReleaseDecision.TerminalRefusal;
-            }
-
-            if (marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) &&
-                !ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence)) {
-                return manifestPin is not null && stored.ManifestPin == manifestPin &&
-                    stored.EpochStart == requirement.EpochStartUnixSeconds && stored.Sequence == requirement.Sequence
-                    ? ReleaseDecision.Accepted : ReleaseDecision.TerminalRefusal;
-            }
-
-            marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
-
-            var text = new StringBuilder(value: "puck.release.sequence.v1\n");
-
-            foreach (var (identity, mark) in marks.OrderBy(keySelector: pair => pair.Key.Domain, comparer: StringComparer.Ordinal)
-                .ThenBy(keySelector: pair => pair.Key.Subject, comparer: StringComparer.Ordinal)) {
-                text.Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Domain))).Append(value: '\t')
-                    .Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Subject))).Append(value: '\t')
-                    .Append(value: mark.EpochStart.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
-                    .Append(value: mark.Sequence.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
-                    .Append(value: mark.ManifestPin?.ToString()).Append(value: '\n');
-            }
-
-            // Durable before acceptance: a mark a power loss could roll back would reopen the sequences it consumed.
-            AtomicFile.WriteAllBytesDurably(bytes: Encoding.UTF8.GetBytes(s: text.ToString()), path: m_filePath);
-            return ReleaseDecision.Accepted;
+        try {
+            marks = ReadMarks(filePath: filePath);
+        } catch (InvalidDataException) {
+            return ReleaseDecision.TerminalRefusal;
         }
+
+        if (marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) &&
+            !ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence)) {
+            return manifestPin is not null && stored.ManifestPin == manifestPin &&
+                stored.EpochStart == requirement.EpochStartUnixSeconds && stored.Sequence == requirement.Sequence
+                ? ReleaseDecision.Accepted : ReleaseDecision.TerminalRefusal;
+        }
+
+        marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
+
+        var text = new StringBuilder(value: "puck.release.sequence.v1\n");
+
+        foreach (var (identity, mark) in marks.OrderBy(keySelector: pair => pair.Key.Domain, comparer: StringComparer.Ordinal)
+            .ThenBy(keySelector: pair => pair.Key.Subject, comparer: StringComparer.Ordinal)) {
+            text.Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Domain))).Append(value: '\t')
+                .Append(value: Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: identity.Subject))).Append(value: '\t')
+                .Append(value: mark.EpochStart.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
+                .Append(value: mark.Sequence.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
+                .Append(value: mark.ManifestPin?.ToString()).Append(value: '\n');
+        }
+
+        // Durable before acceptance: a mark a power loss could roll back would reopen the sequences it consumed.
+        AtomicFile.WriteAllBytesDurably(bytes: Encoding.UTF8.GetBytes(s: text.ToString()), path: filePath);
+        return ReleaseDecision.Accepted;
     }
     /// <inheritdoc/>
-    public bool IsAcceptable(ReplayCommitRequirement requirement) {
-        lock (m_gate) {
-            Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
+    public bool IsAcceptable(ReplayCommitRequirement requirement, InstallTransaction transaction) {
+        Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
 
-            try {
-                marks = ReadMarks();
-            } catch (InvalidDataException) {
-                // An existing corrupt mark is not an empty store: refuse rather than reopening every old release.
-                return false;
-            }
-
-            return !marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) || ReleaseSequenceComparison.IsAcceptable(
-                requirement: requirement,
-                storedEpochStart: stored.EpochStart,
-                storedSequence: stored.Sequence
-            );
+        try {
+            marks = ReadMarks(filePath: MarkPath(transaction: transaction));
+        } catch (InvalidDataException) {
+            // An existing corrupt mark is not an empty store: refuse rather than reopening every old release.
+            return false;
         }
+
+        return !marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var stored) || ReleaseSequenceComparison.IsAcceptable(
+            requirement: requirement,
+            storedEpochStart: stored.EpochStart,
+            storedSequence: stored.Sequence
+        );
     }
 }
 

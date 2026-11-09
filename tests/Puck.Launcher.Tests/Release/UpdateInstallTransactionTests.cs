@@ -11,12 +11,12 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public async Task RecoveryRetainsIntentAcrossSequenceContentionAndBackwardsClock(bool backwardsClock) {
+    public async Task RecoveryRetainsIntentAcrossLeaseContentionAndBackwardsClock(bool backwardsClock) {
         Publish(manifest: Manifest());
         Assert.False(condition: (await Service(applier: new InterruptedApplier(boundary: "before-pointer"))
             .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken)).Applied);
         var original = File.ReadAllBytes(path: Intent);
-        using (var lease = backwardsClock ? null : Puck.Abstractions.FileLock.TryAcquire(path: Path.Combine(Install, "sequence.lock"))) {
+        using (var lease = backwardsClock ? null : InstallTransaction.TryBegin(installRoot: Install)) {
             if (!backwardsClock) { Assert.NotNull(@object: lease); }
             var refused = await Service().ApplyAsync(now: backwardsClock ? Now.AddSeconds(seconds: -1) : Now,
                 cancellationToken: TestContext.Current.CancellationToken);
@@ -61,7 +61,7 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
     private AttestationReleaseVerifier Verifier(ReleaseChainFixture? fixture = null) {
         fixture ??= m_fixture;
         return new AttestationReleaseVerifier(codec: fixture.Codec,
-            sequenceStore: new FileReleaseSequenceStore(filePath: Path.Combine(path1: Install, path2: "sequence")),
+            sequenceStore: new FileReleaseSequenceStore(),
             trustList: fixture.BuildTrustList(replayHorizon: TimeSpan.FromDays(days: 30)));
     }
     // One verification under its own transaction on the install root, as a check runs it.

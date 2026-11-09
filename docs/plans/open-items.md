@@ -2067,21 +2067,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [low · durable replace twice] Two durable file replacements exist:
-  `AtomicFile.WriteAllBytesDurably` (paths; `MoveFileExW` with
-  `MOVEFILE_WRITE_THROUGH` on Windows, rename then directory `fsync` on Linux),
-  which the release record, install records, replay mark and install intent
-  use, and `ConfinedDirectory.Publish` (handles; a handle rename then
-  `FlushFileBuffers` on Windows, `renameat` then directory `fsync` on Linux),
-  which `DirectoryObjectBlobStoreBackend` uses. Their Linux halves are the same
-  technique; the Windows halves differ in what is documented durable. Make one:
-  either give `Publish` a documented durable rename by handle or move the blob
-  store's write onto the confined directory's own call to the shared primitive.
-- [low · second lock] `FileReleaseSequenceStore.TryWrite` takes its own
-  `sequence-mark.lock` (`FileLock.TryAcquire`), but every caller now runs under
-  an `InstallTransaction` on `update.lock`, so the inner lock only adds a
-  transient refusal path. Fold the replay mark under the transaction (or into
-  the release record) and delete the second lock with its contention case.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
