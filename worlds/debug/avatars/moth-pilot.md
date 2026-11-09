@@ -27,7 +27,7 @@ crown to points at the nape, loose hair falls down her left side past the ear
 to the jaw, and her right side is swept back to the braid. The braid roots
 beside her right cheek at its full thickness: a core along `braidAt` blended into
 the hair at its root, and twelve plait lobes alternating down it over her right
-collarbone to an ochre tie and a tapered tassel.
+collarbone to an ochre tie and a short tuft of three fanned locks.
 
 ## Wear her
 
@@ -134,18 +134,21 @@ hold pose was solved.
 The torso is one smoothly blended group (chest, waist, chest front, trapezius
 and the two rounded shoulder caps, which carry the deltoid) riding the torso
 shape; the sleeve's top sits inside the cap, so the shoulder reads as one form.
-The pelvis stands proud of the thighs at the front and seat and the thighs
-proud of it at the hips, so their surfaces cross rather than lie on each other.
+The thighs' rounded tops overlap across her middle, so the two trouser legs
+make her hips and seat themselves and meet in a seam down the front and back;
+the pelvis, which carries the body's motion, sits hidden inside them. The belt
+is one flat band, an ellipse in plan, round her hips.
 Each moving part of a limb is its own blended group, so no blend crosses a
 joint: the upper arm (the sleeve's sweep, biceps and triceps), the forearm (its
 sweep and the muscle below the elbow), the glove (cuff, wrist, palm, padded
 back, thumb and fingers, webbed at their roots) and the boot (shaft, instep and
-toe box over the foot effector's tip). The joints between them are plain
-unions, which the elbow and knee pads cover. The sole's lugs are one bar repeated
-along the foot. The harness, its buckles, the shoulder patches, the knee pads'
-front straps, the glove and boot straps and the handheld's picture are paint,
-so they sit exactly on the surface; the knee pad's back strap is a band on the
-thigh that covers where the narrower shin leaves the thigh's rounded end. A
+toe box over the foot effector's tip), and the sole, heel and five lugs bake
+as one group on the sole's lattice. The joints between the moving parts are
+plain unions: at the elbow and the knee a flat strap band rides the upper part
+(the upper arm, the thigh) and covers where the narrower lower part leaves its
+rounded end, and the lower part turns under it. The harness, its buckles, the
+shoulder patches, the knee pads' front straps, the glove and boot straps and
+the handheld's picture are paint, so they sit exactly on the surface. A
 palette slot draws at most eight paints, which is why the harness is two
 over-the-shoulder straps and one yoke. A paint sits in its parent shape's own frame. The palette's charcoals
 are authored darker than the sheet reads, since the studio's light lifts them

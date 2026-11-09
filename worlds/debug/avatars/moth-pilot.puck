@@ -47,6 +47,8 @@ let braidRoot = [-0.124, 1.47, 0.04]
 let braidBend = [-0.165, 1.33, 0.13]
 let braidEnd = [-0.098, 1.1, 0.112]
 let braidLean = 0.25
+// The tuft's locks below the tie, each [id, end's sideways and forward reach].
+let braidTuft = [[224, 0.0, 0.009], [221, 0.009, -0.006], [222, -0.009, -0.006]]
 function braidAt(t) = map(
   [0, 1, 2],
   k => (1 - t) * (1 - t) * braidRoot[k] + 2 * (1 - t) * t * braidBend[k] + t * t * braidEnd[k]
@@ -226,6 +228,18 @@ template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
     ]
   }
 
+  // The elbow pad's strap, a flat band round the elbow that rides the upper arm: it covers where the narrower forearm
+  // leaves the upper arm's rounded end, and the forearm turns under it about the elbow.
+  shape Superellipsoid $"elbowStrap-{name}" {
+    id: baseId + 1
+    position [side * 0.211, 1.058, -0.031]
+    rotation: turnAbout([0, 0, 1], side * 0.13)
+    scale [0.051, 0.016, 0.052]
+    material: pad
+    parent: $"upperArm-{name}"
+    exponent: 4
+  }
+
   // The biceps' swell on the front of the upper arm and the triceps' behind it.
   shape Superellipsoid $"biceps-{name}" {
     id: baseId + 12
@@ -262,7 +276,7 @@ template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
       a [0, 0, 0]
       b [side * 0.005, -0.115, 0.008]
       c [side * 0.01, -0.21, 0.02]
-      radiusStart: 0.0445
+      radiusStart: 0.04
       radiusEnd: 0.035
       bulge: 0.003
     }
@@ -457,17 +471,17 @@ template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
 // One leg: the straight-cut trouser thigh and shin, bloused over the boot, the knee pad and the work boot. The thigh's
 // stride swings sit between the yaw swings that turn the stride plane to the travel direction, as the suited Moth's
 // do; the boot is the foot effector's tip, its origin on the sole's top so the standoff is its rest height.
-template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
+template pilotLeg(name, side, baseId, shinGroup, bootGroup, soleGroup) {
   shape Sweep $"thigh-{name}" {
     id: baseId
-    position [side * 0.09, 0.93, -0.004]
+    position [side * 0.07, 0.9, -0.004]
     material: trousers
     parent: "pelvis"
     curve {
       a [0, 0, 0]
-      b [side * 0.009, -0.228, 0.014]
-      c [side * 0.016, -0.455, 0.016]
-      radiusStart: 0.1
+      b [side * 0.02, -0.213, 0.014]
+      c [side * 0.036, -0.425, 0.016]
+      radiusStart: 0.11
       radiusEnd: 0.087
       bulge: 0.004
     }
@@ -688,6 +702,7 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     rotation [diagonal, 0, 0, diagonal]
     scale [0.079, 0.098, 0.013]
     material: sole
+    group: soleGroup
     parent: $"boot-{name}"
     profile {
       kind: "RoundedRectangle"
@@ -702,6 +717,7 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     rotation [diagonal, 0, 0, diagonal]
     scale [0.074, 0.044, 0.016]
     material: sole
+    group: soleGroup
     parent: $"boot-{name}"
     profile {
       kind: "RoundedRectangle"
@@ -710,16 +726,18 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     rounding: 0.004
   }
 
-  // The sole's lugs, five bars across the tread: one bar repeated along the foot.
-  shape Box $"lugs-{name}" {
-    id: baseId + 11
-    position [side * 0.115, 0.002, 0.095]
-    scale [0.072, 0.004, 0.009]
-    material: sole
-    parent: $"boot-{name}"
-    domain [
-      repeat(spacing: [1, 1, 0.034], limit: [0, 0, 2], origin: [side * -0.115, 0.002, -0.095])
-    ]
+  // The sole's lugs, five bars across the tread under the ball and toe, in the sole's group so they bake on its
+  // lattice.
+  for i in range(0, 5) {
+    shape Superellipsoid $"lug-{name}-{i}" {
+      id: baseId + 11 + i
+      position [side * 0.115, 0.003, 0.027 + i * 0.034]
+      scale [0.056, 0.007, 0.011]
+      material: sole
+      group: soleGroup
+      parent: $"boot-{name}"
+      exponent: 4
+    }
   }
 }
 
@@ -844,14 +862,14 @@ prototypes {
             {
               parent: "thigh-left"
               type: "Box"
-              position [0.015, -0.37, 0.004]
+              position [0.03, -0.34, 0.004]
               scale [0.11, 0.009, 0.12]
               color: padStrap
             }
             {
               parent: "thigh-right"
               type: "Box"
-              position [-0.015, -0.37, 0.004]
+              position [-0.03, -0.34, 0.004]
               scale [0.11, 0.009, 0.12]
               color: padStrap
             }
@@ -1008,8 +1026,8 @@ prototypes {
       // acceleration and drops into a landing, as the suited Moth's does at her own height.
       shape Superellipsoid "pelvis" {
         id: 120
-        position [0, 0.92, -0.006]
-        scale [0.162, 0.115, 0.12]
+        position [0, 0.9, -0.004]
+        scale [0.1, 0.06, 0.06]
         material: trousers
         group: 43
         exponent: 2.4
@@ -1029,18 +1047,24 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "belt" {
+
+      // The belt: one flat band round her hips, an ellipse in plan.
+      shape Prism "belt" {
         id: 121
         position [0, 1.0, -0.004]
-        scale [0.152, 0.022, 0.117]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.158, 0.1, 0.022]
         material: belt
         parent: "pelvis"
-        exponent: 3
+        profile {
+          kind: "Ellipse"
+        }
+        rounding: 0.005
       }
 
       shape Box "beltBuckle" {
         id: 122
-        position [0, 1.0, 0.113]
+        position [0, 1.0, 0.1]
         scale [0.026, 0.018, 0.007]
         material: ochre
         parent: "pelvis"
@@ -1048,7 +1072,7 @@ prototypes {
 
       shape Box "beltTab-left" {
         id: 123
-        position [0.112, 1.0, 0.078]
+        position [0.112, 1.0, 0.072]
         rotation [0, 0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -1057,7 +1081,7 @@ prototypes {
 
       shape Box "beltTab-right" {
         id: 124
-        position [-0.112, 1.0, 0.078]
+        position [-0.112, 1.0, 0.072]
         rotation [0, -0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -1215,7 +1239,7 @@ prototypes {
           scale [0.021, 0.027, 0.02]
           material: hair
           blend: "SmoothUnion"
-          smooth: 0.005
+          smooth: 0.007
           group: 52
           parent: "collar"
           exponent: pilotSoftness
@@ -1232,25 +1256,30 @@ prototypes {
         rounding: 0.005
       }
 
-      shape Sweep "braidTassel" {
-        id: 224
-        position [-0.098, 1.086, 0.112]
-        material: hair
-        group: 52
-        parent: "collar"
-        curve {
-          a [0, 0, 0]
-          b [0.002, -0.03, 0.001]
-          c [0.004, -0.062, 0.003]
-          radiusStart: 0.016
-          radiusEnd: 0.007
+      // The braid's end below the tie: three short locks fanning out into a tuft.
+      for (lock, i) in braidTuft {
+        shape Sweep $"braidTassel-{i}" {
+          id: lock[0]
+          position [-0.098, 1.086, 0.112]
+          material: hair
+          blend: "SmoothUnion"
+          smooth: 0.009
+          group: 52
+          parent: "collar"
+          curve {
+            a [0, 0, 0]
+            b [lock[1] * 0.4, -0.017, lock[2] * 0.4]
+            c [lock[1], -0.036, lock[2]]
+            radiusStart: 0.0095
+            radiusEnd: 0.0065
+          }
         }
       }
 
       pilotArm("left", 1, 140, 41, 44, 46)
       pilotArm("right", -1, 160, 42, 45, 47)
-      pilotLeg("left", 1, 180, 48, 50)
-      pilotLeg("right", -1, 200, 49, 51)
+      pilotLeg("left", 1, 180, 48, 50, 54)
+      pilotLeg("right", -1, 200, 49, 51, 55)
 
       // The handheld is the Humble Gaming Brick of the gallery, a faithful simplified copy: 75 x 133 x 23 mm of orange
       // glass with the battery bay 4.5 mm proud of its back, 27.5 mm in all. It rests hidden inside her chest, and the
