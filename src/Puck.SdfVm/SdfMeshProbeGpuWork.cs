@@ -253,9 +253,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             slot.Origins?.Dispose();
             slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "origins", index: recording.Slot), sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
         }
-        if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4) {
+        // A relight's slices write their partial sums behind the results and the fault word, where the readback never
+        // reaches (sdf-probe-relight, sdf-probe-combine).
+        var partialBytes = relight ? (ulong)query.Origins.Length * SdfMeshProbeRelight.Slices * SdfMeshProbeRelight.PartialWords * 4 : 0UL;
+        if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4 + partialBytes) {
             slot.Hits?.Dispose();
-            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hits", index: recording.Slot), sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hits", index: recording.Slot), sizeBytes: bytes + 4 + partialBytes, usage: GpuBufferUsage.Storage);
         }
         slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "identities", index: recording.Slot), sizeBytes: 8, usage: GpuBufferUsage.Storage);
         if (query.Meter) {
@@ -339,7 +342,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set,
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
-        if (relight) { recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0); }
+        if (relight) {
+            recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            var combine = m_tables.Pipeline(SdfKernel.ProbeCombine);
+            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: combine.Handle);
+            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: combine.LayoutHandle);
+            recorder.Dispatch(command, (uint)query.Origins.Length, 1, 1);
+        }
         else { recorder.Dispatch(commandBufferHandle: command,
             groupCountX: (uint)(query.Meter ? query.Origins.Length : query.Selection ? (query.Origins.Length + SdfMeshProbeRelight.SelectGroupSize - 1) / SdfMeshProbeRelight.SelectGroupSize : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
         recording.CopyToReadback(slot.Hits, bytes + 4);

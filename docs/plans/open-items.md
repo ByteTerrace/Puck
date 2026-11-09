@@ -72,60 +72,69 @@ milestone. The owner requested its baseline and implementation plan, which
    bar]: the caldera water as its first proof (glacier, lake, falls, river,
    pool against the caldera pack), then the per-milestone review across every
    place.
-1. The frame bar [high]: 60 FPS steady state on the lead machine is not met at
-   p99. The far cascade's cadence is settled: a receiver-conditioned cascade's
-   coverage identity names the sample grid alone (`SdfWorldPasses.ReceiverSignatureOf`),
-   so it holds and splits under occlusion culling as it does box-only (it
-   rendered both layers on every frame of the live debug world before, since
-   the identity hashed the geometry signature and the jitter), and every timed
-   refresh splits over two frames whatever the frames' pace, so no frame draws
-   both far layers for the rate's sake and a slow frame is no longer held slow
-   by its own cascade. On the RTX 4070 at 1280×900 that took `shadow-far` from
-   4.4 to 2.2 ms at spawn, 3.4 to 1.8 at the teal roof, 2.0 to 1.4 at flight B
-   and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
-   of GPU at every one of those stops, under the bar with headroom; the frame
-   p50 sits at the display rate there, and what remains over 16.7 ms at p99 is
-   the CPU side, read under a loaded machine, so a quiet-window `bench frames`
-   pair is owed before the p99 is called. The frame thread's CPU side now
-   reads apart: `host.frames` splits produce into `produce-work` and
-   `produce-fence` (time blocked on submission fences) and prints the frame
-   thread's allocated bytes per iteration. A headless debug World's tick
-   allocates about 24 KB on the frame thread (p99 42 KB). Disclosure images are
-   shared by audience, never composed per sink: the debug world's 8.4 row
-   compositions a tick are the public rows one audience reads whole whose values
-   move every tick (the hydrology, glow, clock and watchdog rows), imaged
-   because `WorldDeliveryCursor.DeliveredRows` brings the definition identity
-   current after every delivered snapshot (the disclosure item below). Windowed
-   on the RTX 4070 (Direct3D 12) with `dotnet-trace` (gc-verbose, the GC
-   survival-and-movement keyword read against sampled allocation addresses, and
-   sampled thread time), what remains over 16.7 ms is:
+1. The frame bar [high]: 60 FPS at p99 is not met at the teal roof and, less
+   often, at flight B. The far cascade's cadence is settled: a
+   receiver-conditioned cascade's coverage identity names the sample grid alone
+   (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
+   two frames, so no frame draws both far layers for the rate's sake. `bench
+   frames` pauses authority at each stop, so its p99 reads the frame side alone;
+   a played frame also carries the tick. What remains, read with `host.frames`
+   (produce split into `produce-work` and `produce-fence`), `world.residency`'s
+   `gpu-work` line, `world.counters sdf.mesh-gi` and `dotnet-trace` sampled
+   thread time at both stops:
 
-   - A young collection, which the frame thread starts itself (it is the only
-     thread allocating small objects at volume): about 4 to 8 ms at a still
-     stop and 9 to 22 ms in the seconds after a move. Thread suspension is under
-     0.2 ms of it; the rest is marking through the cards of a 400 MB gen2 and a
-     2.2 GB large-object heap and copying what they keep alive, at a still spawn
-     about 1.1 MB through cards. The largest survivors are the disclosure
-     definition identities and what a move builds (meshes, draws, irradiance).
-   - GPU back-pressure, seen as `produce-fence` in `SdfWorldTables.SubmitUpload`:
-     the root view's passes take 12 to 14 ms (`views` 5.8 of it) beside the
-     beacon and session views, and the irradiance's relight and meter jobs share
-     the queue (`world.counters sdf.mesh-gi` at the teal roof: about 42 ms of
-     relight and 12 ms of meter GPU time a second, the lighting recaptured about
-     nine times a second as the sky moves). A deeper upload ring would hide a
-     spike, not remove it.
-   - A step frame whose tick runs long: the tick takes 5 to 9 ms (body contact
-     solves through `FixedFieldColliderContact`'s bounds about a fifth, rule
-     evaluation about a third, snapshot delivery about a tenth). Frames without
-     a step carry the rated work (body poses and their effector surface probes in
-     `WorldSurfaceQuery.March`, nested views, screens, the far cascade), which
-     the scheduler moves off step frames without a budget; their `produce-work`
-     p99 reads 9 to 15 ms at the stops below.
+   - Background GPU jobs longer than a frame's share, fixed for the irradiance
+     volume. The queue runs a background job whole before the frame submitted
+     after it, so a job's length, not the average `SdfGpuWork.GpuShare`, decides
+     how late that frame is. The volume's relight jobs were cut at a predicted-ray
+     bound sized against the device timeout (`SdfMeshIrradiance.RelightRaysPerJob`)
+     and charged at a fixed per-ray estimate that undercounted a shadow ray toward
+     a point light by more than an order of magnitude. Beside the teal room's
+     lamps a fresh probe's relight traces toward every one of them, and one probe
+     was one thread group, so a single probe's relight held the queue for about a
+     frame whatever the job's size, and the volume's fill after arrival submitted
+     such jobs a few times a second, seen as produce-fence and present stalls.
+     The relight now spreads each probe over `SdfMeshProbeRelight.Slices` groups,
+     one hit texel a lane, whose partial sums `sdf-probe-combine` adds into the
+     probe's output; jobs are cut to `SdfGpuWork.FrameShareSeconds` at each
+     kind's measured rate (`SdfGpuWorkRate`; `SdfMeshProbeGpuWork.Trace` cuts
+     traces itself and `SdfMeshProbeGpuWork.RelightRaysWithinShare` bounds
+     relights), the service is charged at the same rate, and its bank holds at
+     most one frame's share. `world.residency`'s `gpu-work` line counts the jobs
+     measured past the share (`over-frame-share`) and names the longest
+     (`most-job`); a queued measurement holds the timing question. A probe scene
+     upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
+     share against its `SdfGpuWork.UploadSecondsOf` estimate.
+   - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
+     lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
+     during play still submits jobs of several frames' length. Cutting them with
+     `SdfGpuWorkRate` changes the cold-bake bar's job count and needs its own
+     measured change.
+   - The volume's fill at a place with many point lights. A fresh probe's relight
+     traces every hit texel toward every shadowing point light in range
+     (`sdfProbeShade`), so filling the window beside the teal room's lamps spends
+     minutes of the background share, and indirect light there is stale for that
+     long after arrival. A per-light visibility the probe shares across its
+     texels, or culling lights by each hit's distance before the trace, would
+     cut it at the cause.
+   - The frame thread is CPU-bound at both stops: sampled thread time finds it
+     running almost the whole of every iteration. The tick (`WorldTick.StepCore`:
+     `WorldPopulation.AdvanceSimulated`, `WorldRuleHost.EvaluateWorldRules`,
+     `WorldTick.EmitSnapshot`) runs on the frame thread (`HostLoop.Run`) and takes
+     the largest share; then the frame's capture (`SdfWorldResidency.Capture`:
+     `WorldFramePresenter.CaptureFrame`, and `SdfCompositionFrameSource.PackTransforms`
+     through `WorldCreationInstances.PackRegistration`), table packing and screen
+     binding (`SdfWorldResidency.PrepareOnce`), and the upload's fence wait
+     (`SdfWorldTables.SubmitUpload`). Zero-fill and copies are a visible slice:
+     `HashSet<int>.Clear` in `WorldDeliveryRows.Advance`,
+     `WorldBody.CaptureIntegrationResidue` (beside the scoped replay's
+     `WorldScopedReplayRuntime.AfterTick`, whose `WorldPopulation.AppendContinuationHash`
+     encodes each scope body's checkpoint every tick the scope runs) and
+     `WorldInputOwner.TryAdmit`. Garbage collection
+     was not a factor in the traced windows. Rated work still lands on frames
+     without a step, so both kinds of frame sit near the budget and any jitter
+     misses it.
 
-   Readings at the lane's head (`host.frames` over 600 to 1200 iterations after
-   bakes settled and 150 ticks, a lightly loaded machine, not a timing claim):
-   spawn 50 of 1200 iterations over 16.7 ms (p99 23.6), the teal roof 7 of 1199
-   (p99 17.2), flight B 63 of 878 (p99 27.0), the meadow 38 of 899 (p99 19.1).
    `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
