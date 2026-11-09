@@ -248,6 +248,9 @@ public static class SdfMeshAudit {
     private const int ProbeCount = 16;
     // Two copies of a welded vertex carry one normal when their normals' dot product reaches this, within a degree.
     private const float CopyAgreement = 0.99985f;
+    // The narrowest step, in metres, of the gradient a smooth vertex is measured against: sixteen raws of the evaluator's
+    // 2^-16 m, so a raw of rounding on either side turns the gradient by under two degrees on a field of unit slope.
+    private const float RoughStepFloor = 0.000244140625f;
 
     /// <summary>Returns the field a bake group samples, as one program: its instructions in order, each transform into a
     /// dynamic slot replaced by the translation and rotation the group's geometry posed that slot at
@@ -645,7 +648,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var step = MathF.Max(options.GradientStep, (options.RoughCells * cell));
+        var step = MathF.Max(RoughStepFloor, (options.RoughCells * cell));
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             var normal = Unit(normal: normals[vertex]);
