@@ -167,6 +167,9 @@ let shoulderOutline = [[-0.95, 0.8], [-0.4, 1], [0.6, 0.62], [0.95, 0.35], [1, -
 // cap, widest at the second band and running down the outer side to the long lip's tip, its lower edge rising in toward
 // the spine over the nozzle; the extruded outline is domed by an ellipsoid so its back is a convex shell.
 let podOutline = [[-0.22, 1], [0.33, 0.93], [0.78, 0.62], [1, 0.08], [0.96, -0.45], [0.82, -1], [-0.6, -0.4], [-0.98, -0.2], [-1, 0.53], [-0.78, 0.86]]
+// The pod's side outline, x toward her back and wound clockwise: the front flat against her back, the cap rounded, the
+// back deepest at the second band and sweeping forward to the lip's point.
+let podSideOutline = [[-1, 0.92], [-0.3, 1], [0.5, 0.75], [1, 0.1], [0.75, -0.5], [-0.4, -1], [-1, -0.6]]
 
 template cameraLayout(name) {
   layout name {
@@ -238,13 +241,14 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
       exponent: 2
     }
 
-    // The side profile: an elliptic cylinder across the pod, so the shell is thickest at the second band and thins
-    // to the cap and down the long lip.
-    shape Cylinder $"{layer.name}Profile-{side}" {
+    // The side profile (sheet 07's right side), extruded across the pod: narrow at the cap, deepest at the second
+    // band and sweeping down to the long pointed lip. It reads the same from either side, so it is not mirrored.
+    shape Prism $"{layer.name}Profile-{side}" {
       id: baseId + 20 + k
-      position [sx * 0.19, 1.3, -0.14]
-      rotation [0, 0, diagonal, diagonal]
-      scale [0.42 + layer.grow, 0.3, 0.21 + layer.grow]
+      position [sx * 0.19, 1.3, -0.245]
+      rotation [0, diagonal, 0, diagonal]
+      scale [0.11 + layer.grow, 0.36 + layer.grow, 0.3]
+      profile { kind: "Convex", vertices: podSideOutline, cornerRadius: 0.2 }
       material: layer.material
       blend: "SmoothIntersection"
       smooth: 0.03
@@ -3106,32 +3110,31 @@ prototypes {
         exponent: 4
       }
 
-      // The lavender plate below the belt, narrowing to a point between the thighs.
+      // The lavender plate below the belt, narrowing between the thighs: a trapezoid turned point-down, its edges
+      // rounded so the slanted sides bake smooth.
       shape Prism "pelvicShield" {
         id: 7
         position [0, 1.0, 0.13]
+        rotation [0, 0, 1, 0]
         scale [0.125, 0.11, 0.04]
         material: violet
         parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
-          cornerRadius: 0.1
-        }
+        profile { kind: "Trapezoid" }
+        taper: 0.3
+        rounding: 0.014
       }
 
       // Its twin behind (sheet 01's back): a lavender plate over the seat between the pods' lips.
       shape Prism "seatShield" {
         id: 8
         position [0, 0.985, -0.15]
+        rotation [0, 0, 1, 0]
         scale [0.15, 0.115, 0.035]
         material: violet
         parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
-          cornerRadius: 0.1
-        }
+        profile { kind: "Trapezoid" }
+        taper: 0.3
+        rounding: 0.014
       }
 
       shape Superellipsoid "belt" {
