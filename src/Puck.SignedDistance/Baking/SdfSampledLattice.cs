@@ -1,4 +1,5 @@
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -290,9 +291,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private int m_factor = 1;
     // Division by the fine lattice's row length, its rows per slab and m_factor (FineCoordinates, FineCell), set with
     // m_factor: the fine-sample scans divide every key they read.
-    private FineDivisor m_byFineRow;
-    private FineDivisor m_byFineColumn;
-    private FineDivisor m_byFactor;
+    private ReciprocalDivisor32 m_byFineRow;
+    private ReciprocalDivisor32 m_byFineColumn;
+    private ReciprocalDivisor32 m_byFactor;
+    private int m_fineRowLength;
+    private int m_fineColumnLength;
 
     private readonly OwnedBuffer<bool> m_measured;
     // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
@@ -2252,30 +2255,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     }
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {
-        var row = m_byFineRow.Divide(value: key);
-        var z = m_byFineColumn.Divide(value: row);
+        var row = ((int)m_byFineRow.Divide(value: ((uint)key)));
+        var z = ((int)m_byFineColumn.Divide(value: ((uint)row)));
 
-        return ((key - (row * m_byFineRow.Divisor)), (row - (z * m_byFineColumn.Divisor)), z);
+        return ((key - (row * m_fineRowLength)), (row - (z * m_fineColumnLength)), z);
     }
     private void Divide(int factor) {
-        m_byFineRow = new FineDivisor(divisor: (((m_samplesX - 1) * factor) + 1));
-        m_byFineColumn = new FineDivisor(divisor: (((m_samplesY - 1) * factor) + 1));
-        m_byFactor = new FineDivisor(divisor: factor);
-    }
-    // Division of a non-negative int by a fixed positive one as a multiply (Lemire, Kaser and Kurz, "Faster Remainder by
-    // Direct Computation", 2019: with c = floor((2^64 - 1) / d) + 1, n / d = floor(c * n / 2^64) for every 32-bit n and
-    // d > 1), exact, so FineCoordinates and FineCell read the same coordinates the operator gives.
-    private readonly struct FineDivisor {
-        private readonly ulong m_multiplier;
-
-        public FineDivisor(int divisor) {
-            Divisor = divisor;
-            m_multiplier = ((divisor > 1) ? ((ulong.MaxValue / ((ulong)divisor)) + 1UL) : 0UL);
-        }
-
-        public int Divisor { get; }
-
-        public int Divide(int value) => ((Divisor == 1) ? value : ((int)Math.BigMul(a: m_multiplier, b: ((ulong)(uint)value), low: out _)));
+        m_fineRowLength = (((m_samplesX - 1) * factor) + 1);
+        m_fineColumnLength = (((m_samplesY - 1) * factor) + 1);
+        m_byFineRow = new ReciprocalDivisor32(divisor: checked((uint)m_fineRowLength));
+        m_byFineColumn = new ReciprocalDivisor32(divisor: checked((uint)m_fineColumnLength));
+        m_byFactor = new ReciprocalDivisor32(divisor: checked((uint)factor));
     }
     // The coarse cell a fine sample interpolates in and its position there, each in [0, 1].
     private (int X, int Y, int Z, float U, float V, float W) Interpolant(int x, int y, int z) {
@@ -2294,9 +2284,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // and the sample's place in it, 0 through m_factor along each axis.
     private (int X, int Y, int Z, int LX, int LY, int LZ) FineCell(int x, int y, int z) {
         var factor = m_factor;
-        var cx = Math.Min(val1: m_byFactor.Divide(value: x), val2: (m_samplesX - 2));
-        var cy = Math.Min(val1: m_byFactor.Divide(value: y), val2: (m_samplesY - 2));
-        var cz = Math.Min(val1: m_byFactor.Divide(value: z), val2: (m_samplesZ - 2));
+        var cx = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)x))), val2: (m_samplesX - 2));
+        var cy = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)y))), val2: (m_samplesY - 2));
+        var cz = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)z))), val2: (m_samplesZ - 2));
 
         return (cx, cy, cz, (x - (cx * factor)), (y - (cy * factor)), (z - (cz * factor)));
     }

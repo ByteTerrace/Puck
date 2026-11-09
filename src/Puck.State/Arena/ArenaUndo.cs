@@ -218,7 +218,7 @@ public sealed partial class StateArena {
                     reason = $"undo checkpoint group '{group.Name}' contains a null entry list";
                     return false;
                 }
-                var positions = new HashSet<long>();
+                var positions = new HashSet<long>(comparer: PackedIntPairComparer.Instance);
 
                 foreach (var entry in segment.Entries) {
                     if (entry is null) {
@@ -280,7 +280,7 @@ public sealed partial class StateArena {
     }
 
     private bool ValidateUndoChain(ArenaUndoGroup configured, ArenaUndoGroupSnapshot snapshot, out string reason) {
-        var projected = new Dictionary<long, ArenaUndoEntrySnapshot>();
+        var projected = new Dictionary<long, ArenaUndoEntrySnapshot>(comparer: PackedIntPairComparer.Instance);
         var segments = ((snapshot.Pending is null) ? snapshot.Segments.ToArray() : snapshot.Segments.Append(element: snapshot.Pending).ToArray());
 
         for (var segmentIndex = (segments.Length - 1); (segmentIndex >= 0); segmentIndex--) {
@@ -706,7 +706,7 @@ public sealed partial class StateArena {
             Rows = rows;
             Depth = depth;
             m_segments = new ArenaUndoSegment[(depth + 1)];
-            m_seen = new Dictionary<long, int>(capacity: entryCapacity);
+            m_seen = new Dictionary<long, int>(capacity: entryCapacity, comparer: PackedIntPairComparer.Instance);
             for (var index = 0; (index < m_segments.Length); index++) {
                 m_segments[index] = new ArenaUndoSegment(componentCapacity: componentCapacity, entryCapacity: entryCapacity);
             }

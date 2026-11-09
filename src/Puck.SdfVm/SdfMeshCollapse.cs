@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -125,7 +126,7 @@ public static class SdfMeshCollapse {
         private readonly List<double> m_lineZ = [];
         private readonly List<double> m_lineDistance = [];
         private readonly List<int> m_lineNext = [];
-        private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: MixedKey.Instance);
+        private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: PackedIntPairComparer.Instance);
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
         private readonly double[] m_stray;
@@ -141,7 +142,7 @@ public static class SdfMeshCollapse {
         // No cached result ever accepts a collapse.
         private readonly int[] m_revisions;
         // Keyed by the directed edge (from, to) and holding the two revisions it was refused at, each packed high then low.
-        private readonly Dictionary<long, long> m_rejected = new(comparer: MixedKey.Instance);
+        private readonly Dictionary<long, long> m_rejected = new(comparer: PackedIntPairComparer.Instance);
         private int m_revision;
         private int m_budget;
         // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
@@ -434,13 +435,6 @@ public static class SdfMeshCollapse {
         private const int AnyRevision = -1;
         private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure }
         private static long Directed(int from, int to) => ((((long)from) << 32) | ((uint)to));
-        // Long's own hash folds its halves together, so neighbouring pairs of places collide; a Fibonacci multiply spreads them.
-        private sealed class MixedKey : IEqualityComparer<long> {
-            public static readonly MixedKey Instance = new();
-
-            public bool Equals(long x, long y) => (x == y);
-            public int GetHashCode(long obj) => ((int)((((ulong)obj) * 0x9E3779B97F4A7C15UL) >> 32));
-        }
         // Lists a place's alive triangles: the pass's list less those a collapse this pass removed.
         private List<int> Alive(int place, List<int> fan) {
             fan.Clear();

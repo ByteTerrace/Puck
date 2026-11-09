@@ -129,6 +129,20 @@ internal static partial class LawRegistry {
     );
 
     private static LawCase[] SharedKernelCases() => [
+        Case(
+            id: "integer.reciprocal-divisor32-vs-division",
+            run: () => {
+                const string Id = "integer.reciprocal-divisor32-vs-division";
+                Laws.Claim(lawId: Id, claim: Subjects.ReciprocalDivisionBoundaries);
+                Laws.SweptClaim(lawId: Id, domain: ScalarDivision, tier: Tier.Default, width: 1, claim: Subjects.ReciprocalDivisionSample);
+            }
+        ),
+        SweptCase(
+            id: "sampling.packed-int-pair-hash",
+            domain: BitMix64,
+            width: 1,
+            claim: Subjects.PackedPairHash
+        ),
         ClaimCase(
             claim: SharedKernelClaims.PiConstantsVsMachin,
             id: "scalar.pi-constants-vs-machin"
