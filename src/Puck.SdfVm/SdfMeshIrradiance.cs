@@ -2202,6 +2202,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the probes Select chooses, each weighted as Gather weighs it.
     // It reads each probe's own cubes, exactly as the published volume does.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
+        var (sky, bounce) = IncomingParts(layout: layout, lighting: lighting, lows: lows, normal: normal, point: point);
+
+        return (sky + bounce);
+    }
+    // Incoming's two terms apart: the live sky under the probes' sky visibility, and the radiance the probes' cubes hold.
+    private (Vector3 Sky, Vector3 Bounce) IncomingParts(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
         var squared = (normal * normal);
         var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
         Span<float> cornerWeights = stackalloc float[GatherSlots];
@@ -2225,10 +2231,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         if (total <= 0f) {
-            return Vector3.Zero;
+            return (Vector3.Zero, Vector3.Zero);
         }
 
-        return ((skyIrradiance * (sky / total)) + (bounce / total));
+        return ((skyIrradiance * (sky / total)), (bounce / total));
     }
 
     /// <summary>Reads the probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): the chosen
@@ -2336,9 +2342,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 }
             }
             var level = selection.Level;
+            var (sky, bounce) = IncomingParts(layout: layout, lighting: m_lighting, lows: Lows(), normal: normal, point: point);
 
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
-                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
+                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)} indirect-sky=({sky.X:0.#}, {sky.Y:0.#}, {sky.Z:0.#}) indirect-bounce=({bounce.X:0.#}, {bounce.Y:0.#}, {bounce.Z:0.#})]"));
             lines.Add(item: Describe());
             for (var slot = 0; (slot < ((selection.RemainderLevel >= 0) ? GatherSlots : 8)); slot++) {
                 var report = reports[slot];
