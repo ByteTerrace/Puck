@@ -1,0 +1,230 @@
+// The valley's birds: a swallow perched on a post a few metres from spawn. It is drawn in the selected direction's
+// palette (worlds/debug/debug.md, the visual bar): a deep teal back and crown, a cream belly, a chestnut throat and
+// forehead, long pointed wings folded over a forked tail. `view.override camera look 3.3 1.22 3.62 3 1.15 4 30` frames
+// it (the named `swallow-portrait` and `swallow-side` rows do not take the view yet; open items).
+
+let swallowTeal = 0
+let swallowCream = 1
+let swallowChestnut = 2
+let swallowCharcoal = 3
+let swallowEye = 4
+
+// Every shape bakes in one pooled group so its blends hold once the rig makes the creation animated.
+let swallowGroup = 1
+
+// The body's pitch, nose up, shared by the parts laid along it.
+let swallowPitch = [-0.2164, 0, 0, 0.9763]
+
+// One folded wing a side: a flat convex blade rooted inside the shoulder, lying along the body with its tip back, a
+// little down and over the tail, reaching past the tail's base.
+let swallowSides = [
+  { name: "Left", sign: 1, rotation [-0.1545, 0.7269, -0.1391, 0.6545], tail [-0.8265, -0.0439, -0.065, 0.5575] }
+  { name: "Right", sign: -1, rotation [-0.1391, 0.6545, -0.1545, 0.7269], tail [-0.8265, 0.0439, 0.065, 0.5575] }
+]
+
+template swallowWing(side) {
+  shape Prism $"wing{side.name}" {
+    group: swallowGroup
+    blend: "SmoothUnion"
+    smooth: 0.004
+    material: swallowTeal
+    parent: "body"
+    position [side.sign * 0.016, 0.048, 0.02]
+    rotation: side.rotation
+    scale [1, 1, 0.003]
+    profile {
+      kind: "Convex"
+      vertices [[0, 0.006], [0.03, 0.013], [0.135, -0.005], [0.126, -0.01], [0.03, -0.011], [0, -0.004]]
+      cornerRadius: 0.1
+    }
+  }
+}
+
+// One streamer of the forked tail: a long thin cone splayed outward and back, its front half inside the tail.
+template swallowStreamer(side) {
+  shape Cone $"tail{side.name}" {
+    group: swallowGroup
+    material: swallowTeal
+    parent: "tailBase"
+    position [side.sign * 0.005, 0.014, -0.078]
+    rotation: side.tail
+    scale [0.0042, 0.05, 0.0042]
+  }
+}
+
+// An eye a side, a dark bead whose centre sits on the head's surface.
+template swallowEyeShape(side) {
+  shape Sphere $"eye{side.name}" {
+    group: swallowGroup
+    material: swallowEye
+    parent: "head"
+    position [side.sign * 0.014, 0.079, 0.047]
+    scale [0.0042, 0.0042, 0.0042]
+  }
+}
+
+prototypes {
+  prototype "swallow" {
+    document {
+      name: "swallow"
+      schema: "puck.creation.v1"
+      // A perched bird's idle: it glances side to side every few seconds and bobs its tail.
+      drivers [
+        { name: "glance", signal: "time", cadence: 0.3 }
+        { name: "bob", signal: "time", cadence: 1.4 }
+      ]
+      palette [
+        { color: "#0F3340", specular: 0.4, roughness: 0.35, sheen: 0.15 }
+        { color: "#F1E3C6", roughness: 0.8 }
+        { color: "#8E3522", roughness: 0.75 }
+        { color: "#1C1A19", roughness: 0.6, specular: 0.15 }
+        { color: "#0B0A0A", roughness: 0.25, specular: 0.5 }
+      ]
+      shape Ellipsoid "body" {
+        group: swallowGroup
+        material: swallowTeal
+        position [0, 0.034, 0]
+        rotation: swallowPitch
+        scale [0.021, 0.023, 0.052]
+      }
+      shape Ellipsoid "belly" {
+        blend: "SmoothUnion"
+        smooth: 0.008
+        group: swallowGroup
+        material: swallowCream
+        parent: "body"
+        position [0, 0.025, 0.008]
+        rotation: swallowPitch
+        scale [0.018, 0.017, 0.042]
+      }
+      shape Ellipsoid "tailBase" {
+        blend: "SmoothUnion"
+        smooth: 0.006
+        group: swallowGroup
+        material: swallowTeal
+        parent: "body"
+        position [0, 0.022, -0.052]
+        rotation: swallowPitch
+        scale [0.013, 0.004, 0.028]
+        swings [
+          { driver: "bob", axis [1, 0, 0], amplitude: 0.18, pivot [0, 0.026, -0.03], wave: "sine", phase: 0 }
+        ]
+      }
+      shape Sphere "head" {
+        blend: "SmoothUnion"
+        smooth: 0.014
+        group: swallowGroup
+        material: swallowTeal
+        parent: "body"
+        position [0, 0.074, 0.035]
+        scale [0.0195, 0.0195, 0.0195]
+        swings [
+          { driver: "glance", axis [0, 1, 0], amplitude: 0.55, pivot [0, 0.06, 0.03], wave: "sine", phase: 0 }
+        ]
+      }
+      shape Ellipsoid "throat" {
+        blend: "SmoothUnion"
+        smooth: 0.004
+        group: swallowGroup
+        material: swallowChestnut
+        parent: "head"
+        position [0, 0.066, 0.049]
+        scale [0.012, 0.012, 0.0085]
+      }
+      shape Ellipsoid "forehead" {
+        blend: "SmoothUnion"
+        smooth: 0.003
+        group: swallowGroup
+        material: swallowChestnut
+        parent: "head"
+        position [0, 0.08, 0.052]
+        scale [0.007, 0.005, 0.0045]
+      }
+      shape Cone "beak" {
+        group: swallowGroup
+        material: swallowCharcoal
+        parent: "head"
+        position [0, 0.074, 0.057]
+        rotation [0.6756, 0, 0, 0.7373]
+        scale [0.0055, 0.009, 0.0055]
+      }
+      for side in swallowSides {
+        swallowEyeShape(side: side)
+        swallowWing(side: side)
+        swallowStreamer(side: side)
+        shape Capsule $"foot{side.name}" {
+          group: swallowGroup
+          material: swallowCharcoal
+          parent: "body"
+          position [side.sign * 0.007, 0.002, 0.012]
+          scale [0.0045, 0.018, 0.0045]
+        }
+      }
+    }
+  }
+
+  prototype "birdPerch" {
+    document {
+      name: "birdPerch"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#8A6A48", roughness: 0.9 }
+        { color: "#6E5236", roughness: 0.9 }
+      ]
+      shape Cylinder "post" {
+        material: 0
+        position [0, 0.55, 0]
+        scale [0.045, 0.55, 0.045]
+        rounding: 0.01
+      }
+      shape Cylinder "cap" {
+        material: 1
+        position [0, 1.09, 0]
+        scale [0.052, 0.012, 0.052]
+        rounding: 0.008
+      }
+    }
+  }
+}
+
+placements {
+  placement "birdPerch" {
+    prototype: "birdPerch"
+    position [3, 0, 4]
+  }
+  placement "swallow" {
+    prototype: "swallow"
+    position [3, 1.102, 4]
+  }
+}
+
+cameras [
+  {
+    name: "swallow-portrait"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "swallow-portrait"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [3.22, 1.24, 3.66]))
+        lookAt(focusDistance: 0.4, opcode: "lookAt", subject: worldPoint(point: [3, 1.16, 4]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
+      ]
+    }
+  }
+  {
+    name: "swallow-side"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "swallow-side"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [3.42, 1.17, 4]))
+        lookAt(focusDistance: 0.42, opcode: "lookAt", subject: worldPoint(point: [3, 1.15, 4]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
+      ]
+    }
+  }
+]

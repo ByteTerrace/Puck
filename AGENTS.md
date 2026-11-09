@@ -252,8 +252,14 @@ agent works in that mode by default, without asking:
     concept packs, real-world reference and what agents already know; the
     owner corrects it, never supplies the obvious. A scene is read from the
     world (position, place guide, `world.view.pick`, the authored intent),
-    never named from pixels, and a look change lands only when a reader that
-    did not build it judged its captures against the reference.
+    never named from pixels, and a look change lands only when its captures
+    from every side meet the reference; work known to fail is never shown as
+    progress. Fundamentals and the visual bar are one campaign, not rivals
+    (the owner's ruling: "These ARE NOT mutually exclusive goals, they
+    complement one another completely"): a look built properly on the
+    engine's systems stresses them as real use does (a rigged bird found the
+    animated bake's coarser detail and torn moving seams), and the
+    fundamental it surfaces is fixed at the cause as part of meeting the bar.
   - Tests never depend on commercial ROMs. A test or check stage runs on
     committed sources (homebrew and test cartridges); a commercial ROM is used
     only locally, by hand, and is never committed.

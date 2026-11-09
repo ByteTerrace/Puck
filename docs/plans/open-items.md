@@ -29,7 +29,29 @@ packet; the packet holds the citations.
 
 The owner's direction: fundamentals, known or found along the way and driven
 by features that stress them (AGENTS.md), with vigilance against duplication.
-The frame bar and the cold-bake bar lead. Work whose correctness rests
+The frame bar, the cold-bake bar and [the visual bar](#the-visual-bar) lead
+together: they are one campaign, not rivals (the owner's ruling), since a look
+built properly on the engine's systems is a feature that stresses them, and
+what it surfaces is fixed at the cause.
+
+Owed at the integration tip, for whoever leads next:
+
+- a quiet frame-p99 window for the frame bar, the machine to itself, now that
+  the frame-cpu-2 lane's allocation cuts have landed (its readings were not
+  quiet: spawn 50 of 1200 frames over 16.7 ms, flight B 63 of 878);
+- Codex reviews of the trust-boundary and GPU-lifetime changes that landed
+  without one: the deal displacement (`WorldPlacementFrameCompilation.LocalFrame`,
+  `WorldPlacementDeal.Reconcile`, `WorldStateDisclosure.Shown`) and the
+  vk-glass-loss lane's whole-target clear (`SdfWorldPassRecorder.RecordMesh`)
+  and device-address report (`VulkanDeviceAddressBindings`);
+- a look at glass and water under a roof on both backends, since glass now
+  gathers the irradiance probes (`SdfFrameBlock.WriteInto`);
+- the duplicate found at the cold-bake lane's landing, dispatched rather than
+  left here: the reciprocal divisor and packed-pair comparer (refactoring
+  campaign), and the branch-scoped duplicate check (agent tooling);
+- the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
+  bar from references, then its idle rig once the animated bake holds
+  ([the visual bar](#the-visual-bar)). Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -1582,6 +1604,19 @@ by `world.view.pick`.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
+- [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
+  world cameras) is a first draft that fails the bar and is not imported by
+  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
+  around the beak, teal breast band, cream belly, wings past a forked tail)
+  from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
+  drivers) then tore the throat, faceted the eyes and fragmented the tail on
+  the animated path (the item above). Rebuild it per the authoring skill's
+  "Making it read": references named first, one shaped body (`flare`,
+  `shear`), inset eyes, painted markings, detail two bake cells wide; meet the
+  bar static from every side; then the idle rig with each moving part in its
+  own group, frame-checked, after the animated-bake item. Iterate live with
+  `world.row.set creations swallow document <json>` (compile the `.puck`
+  first), since `world.reload` is refused on the debug world.
 
 ### Water
 
