@@ -225,6 +225,28 @@ internal sealed class SdfMeshMaterialCut {
             return vertex;
         }
 
+        // A quartered quad's edge middles, one vertex per pair of corner vertices, and the site pairs of the edges they
+        // split: the triangle across such an edge takes the middle too (the pass after the quads), so the quartering
+        // leaves no T-junction, which the audit and the preview would count as an open edge. The position is the midpoint
+        // of the sites in site order, so a copy made for a crease's other side lands at the same bits and welds to it; the
+        // normal is the pair's own, so the copy shades its own face.
+        var middles = new Dictionary<(uint Low, uint High), uint>();
+        var quartered = new HashSet<(int Low, int High)>();
+
+        uint Middle(uint a, uint b) {
+            var key = ((a < b) ? (a, b) : (b, a));
+
+            if (!middles.TryGetValue(key: key, value: out var vertex)) {
+                var sites = Key(a: m_site[(int)a], b: m_site[(int)b]);
+
+                vertex = Add(normal: (Normal(vertex: (int)a) + Normal(vertex: (int)b)), point: Vector3.Lerp(value1: Position(vertex: sites.Low), value2: Position(vertex: sites.High), amount: 0.5f));
+                middles.Add(key: key, value: vertex);
+                quartered.Add(item: sites);
+            }
+
+            return vertex;
+        }
+
         Span<int> triangle = stackalloc int[3];
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
@@ -272,16 +294,47 @@ internal sealed class SdfMeshMaterialCut {
 
             uint At(Vector2 at) => Add(normal: Bilinear(a: n0, b: n1, c: n2, d: n3, at: at), point: Bilinear(a: p0, b: p1, c: p2, d: p3, at: at));
 
-            var ab = At(at: new Vector2(x: 0.5f, y: 0f));
-            var bc = At(at: new Vector2(x: 1f, y: 0.5f));
-            var cd = At(at: new Vector2(x: 0.5f, y: 1f));
-            var da = At(at: new Vector2(x: 0f, y: 0.5f));
+            var ab = Middle(a: (uint)corners[0], b: (uint)corners[1]);
+            var bc = Middle(a: (uint)corners[1], b: (uint)corners[2]);
+            var cd = Middle(a: (uint)corners[2], b: (uint)corners[3]);
+            var da = Middle(a: (uint)corners[3], b: (uint)corners[0]);
             var center = At(at: new Vector2(x: 0.5f, y: 0.5f));
 
             Quad(a: (uint)corners[0], b: ab, c: center, d: da, material: quarter[0]);
             Quad(a: ab, b: (uint)corners[1], c: bc, d: center, material: quarter[1]);
             Quad(a: center, b: bc, c: (uint)corners[2], d: cd, material: quarter[2]);
             Quad(a: da, b: center, c: cd, d: (uint)corners[3], material: quarter[3]);
+        }
+
+        // Every triangle holding a quartered edge whole (its two ends contour vertices at that edge's sites) splits at the
+        // edge's middle, and its halves go back on the stack, since a triangle can hold two such edges. A quarter's own
+        // triangles hold no such edge: each of their edges ends at a middle or the centre.
+        if (quartered.Count > 0) {
+            var pending = new Stack<int>(capacity: (indices.Count / 3));
+
+            for (var at = ((indices.Count / 3) - 1); (at >= 0); at--) { pending.Push(item: at); }
+            while (pending.TryPop(result: out var at)) {
+                for (var side = 0; (side < 3); side++) {
+                    var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
+
+                    if ((u >= (uint)contour.VertexCount) || (v >= (uint)contour.VertexCount) || !quartered.Contains(item: Key(a: m_site[(int)u], b: m_site[(int)v]))) {
+                        continue;
+                    }
+
+                    var w = indices[((3 * at) + ((side + 2) % 3))];
+                    var middle = Middle(a: u, b: v);
+
+                    indices[(3 * at)] = u;
+                    indices[((3 * at) + 1)] = middle;
+                    indices[((3 * at) + 2)] = w;
+                    indices.Add(item: middle); indices.Add(item: v); indices.Add(item: w);
+                    triangleMaterials.Add(item: triangleMaterials[at]);
+                    pending.Push(item: at);
+                    pending.Push(item: ((indices.Count / 3) - 1));
+
+                    break;
+                }
+            }
         }
 
         return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray());

@@ -2,24 +2,28 @@
 // with its tail hanging free over the water and its face toward the path. `debug.go pool` stands a body a few metres
 // in front of it.
 //
-// References (a male barn swallow, Hirundo rustica, perched on a rail or wire): an upright stance, the body pitched
-// 30 to 40 degrees nose up on short dark legs; a steel-blue back, crown, wings and tail with a glossy sheen; a rich
-// chestnut forehead joined to the bill and a chestnut chin and throat; a narrow dark blue breast band closing the
-// throat off from warm buff underparts; long pointed wings folded along the back, their tips crossing past the rump;
-// a deeply forked tail hanging below the perch, its outer streamers thin and tapering to fine points well past the
-// wingtips, with a row of white spots on its inner webs; a small head on a deep chest, a tiny dark bill. It is drawn in
-// the valley-and-gallery treatment (docs/game/art/README.md, the visual bar): one shaped body, flat values, crisp
-// painted markings and a painted sky-coloured gloss band along the back and crown.
+// Its reference is docs/game/art/barn-swallow-reference.md: the cited sources, the stylized proportions in
+// centimetres (the body length L, bill tip to tail root, is 7.6 cm), the silhouette each preview view must show and the
+// palette. It is drawn in the valley-and-gallery treatment (docs/game/art/README.md, the visual bar): one shaped body,
+// flat values, crisp painted markings and a painted sky-coloured gloss band along the back and crown.
 //
 // It is sculpted at a real bird's size, in metres, its feet just below the origin gripping the rail's rounded edge, and
-// placed at 1.5 times that, so it reads at the distances the pool's path shows it from. Its parts are grouped for the idle rig (open
-// items, the visual bar packet): the body, wings and legs in one group, the head with its bill and eyes in another, the
-// tail in a third.
+// placed at 1.5 times that, so it reads at the distances the pool's path shows it from. Its parts are grouped for the
+// idle rig (open items, the visual bar packet): the body, wings and legs in one group, the head with its bill and eyes
+// in another, the tail in a third.
+//
+// The construction makes the reference's silhouette by design rather than by patching: the body is one tapered sweep
+// (a torpedo, round in section, which bakes with its neighbours where a warped superellipsoid would bake alone), the
+// head a flattened superellipsoid sunk into its front, the bill a flat triangular prism, each folded wing one long
+// pointed blade rooted inside the flank and crossing its twin behind the rump, and each tail half one convex blade whose
+// outline carries the inner feathers and the streamer together. The blades meet the body in hard unions: at the
+// placement's bake cell (`mesh audit --cpu` reports 1.4 mm in placed metres, under 1 mm in the bird's units) a fillet
+// narrower than the cell bakes as stairs, where an exact intersection bakes as one clean crease.
 import "../standard/rotations"
 import "../standard/outlines"
 
 let swallowPlumage = 0
-let swallowTail = 1
+let swallowFeathers = 1
 let swallowEye = 2
 let swallowBill = 3
 
@@ -29,14 +33,6 @@ let swallowTailGroup = 3
 
 let swallowAxisX = [1, 0, 0]
 let swallowAxisY = [0, 1, 0]
-let swallowAxisZ = [0, 0, 1]
-
-// The body's centre above and a little behind the feet, and its nose-up pitch; the head sits on its upper end.
-let swallowBodyAt = [0, 0.02, -0.006]
-let swallowPitch = turn(swallowAxisX, -35)
-let swallowHeadAt = [0, 0.048, 0.023]
-// The breast: under the body's front, along its pitch (body-local [0, -0.008, 0.012]).
-let swallowBreastAt = [0, swallowBodyAt[1] + turned(swallowPitch, [0, -0.008, 0.012])[1], swallowBodyAt[2] + turned(swallowPitch, [0, -0.008, 0.012])[2]]
 
 // The plumage colours: the steel-blue back, the near-black blue of the flight feathers (wings and tail), the gloss
 // highlight, the chestnut and the buff.
@@ -46,22 +42,111 @@ let swallowGloss = "#44658A"
 let swallowChestnut = "#943C22"
 let swallowBuff = "#D6A266"
 
-// The feathered blades (the wings and the tail halves) are thin convex prisms grown by a dilation: the dilation rounds
-// every edge and keeps even a pointed tip twice its own radius thick, and the blade's thinness sets the bake's spacing
-// fine enough to draw it.
+let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 
-// One half of the forked tail, inset by its dilation: the inner edge runs from the fork's notch out along the streamer,
-// the outer edge from the root straight back, the two meeting where the blade hands the streamer on. Profile X runs out
-// to the bird's side and Y back. The blade is two bake cells thick at the finest spacing, as the wings are.
+// The body's frame: its axis pitched 35 degrees nose up through `swallowBodyAt`, which sits over the feet so the belly
+// clears the rail's top by a few millimetres. Body-local X runs to the bird's left, Y up off the back, Z forward along
+// the axis; every part is authored in that frame and placed with `swallowOnBody` and `swallowBodyTurn`.
+let swallowBodyAt = [0, 0.0055, -0.006]
+let swallowPitch = turn(swallowAxisX, -35)
+function swallowOnBody(v) = [
+  v[0]
+  swallowBodyAt[1] + turned(swallowPitch, v)[1]
+  swallowBodyAt[2] + turned(swallowPitch, v)[2]
+]
+function swallowBodyTurn(local) = turnThen(local, swallowPitch)
+
+// The body: a sweep from the chest's centre back to the tail root, its radius tapering from the chest to the rump with
+// a slight swell a third of the way back, and its path arched a little so the back rounds up behind the nape. The
+// breast is the sweep's front cap.
+let swallowChestAt = [0, 0, 0.016]
+let swallowRumpAt = [0, 0, -0.0305]
+let swallowChestRadius = 0.0125
+let swallowRumpRadius = 0.0045
+
+// The head: a flattened superellipsoid on the body's upper front, its crown no more than 3 mm proud of the back's line,
+// its lower half inside the breast so the throat runs into it, pitched 20 degrees flatter than the body.
+let swallowHeadLocal = [0, 0.0075, 0.0215]
+let swallowHeadTurn = turn(swallowAxisX, -15)
+let swallowHeadScale = [0.00825, 0.00775, 0.01]
+let swallowHeadAt = swallowOnBody(swallowHeadLocal)
+function swallowOnHead(v) = map(range(0, 3), k => swallowHeadAt[k] + turned(swallowHeadTurn, v)[k])
+
+// The bill: a flat triangle from above (its profile X across, Y forward), a wedge from the side, rooted 2.5 mm inside
+// the head's front and pitched 8 degrees below the head's axis. Its prism's extrusion is its thickness: the profile's
+// +Y turns to the head's +Z and its +Z to the head's -Y, then the pitches, all about X.
+let swallowBillRootLocal = [0, -0.0015, 0.009]
+let swallowBillProfile = [[-0.0036, -0.0025], [0, 0.0095], [0.0036, -0.0025]]
+let swallowBillTurn = turnThen(turn(swallowAxisX, 90 + 8), swallowHeadTurn)
+let swallowBillDepth = 0.0008
+let swallowBillRound = 0.0007
+
+// A folded wing a side: one long pointed blade, a convex triangle whose root edge stands inside the flank (buried, so
+// no edge of it shows there) and whose two straight edges run to the tip past the rump, where the two blades cross, the
+// right riding above the left. The blade's profile X runs root to tip and Y across it; its frame takes X onto the
+// root-to-tip line by the shortest turn (which keeps Y upward) and then rolls about that line so the upper edge leans
+// in over the back. The blade is dark flight feather; the coverts on the flank in front of it are a paint on the body.
+let swallowWingRootHalf = 0.0065
+let swallowWingTipX = 0.004
+let swallowWingTipZ = -0.09
+let swallowWingRoll = 50
+let swallowWingUpper = 0.0065
+let swallowWingLower = 0.0065
+let swallowWingWidest = 0.008
+let swallowWingDepth = 0.0001
+let swallowWingRound = 0.0013
+function swallowWingRootLocal(side) = [side.sign * swallowWingRootHalf, ((side.sign > 0) ? 0.003 : 0.006), 0]
+function swallowWingTipLocal(side) = [
+  0 - side.sign * swallowWingTipX,
+  ((side.sign > 0) ? -0.009 : -0.004)
+  swallowWingTipZ
+]
+function swallowWingLine(side) = map(range(0, 3), k => swallowWingTipLocal(side)[k] - swallowWingRootLocal(side)[k])
+function swallowWingLocalTurn(side) = turnThen(
+  turnBetween(swallowAxisX, unitVector(swallowWingLine(side))),
+  turn(unitVector(swallowWingLine(side)), 0 - side.sign * swallowWingRoll)
+)
+// The blade's outline: a short root edge inside the flank, an upper edge rising to its full breadth and then running
+// straight to the tip, and a lower edge straight from the root to the tip, which lies along the blade's own line, so
+// the blade stays inside the flank until the rump and emerges there along the back's side.
+function swallowWingProfile(side) = [
+  [0, 0.003],
+  [swallowWingWidest, swallowWingUpper],
+  [vectorLength(swallowWingLine(side)), 0],
+  [0, -0.002]
+]
+
+template swallowWing(side) {
+  shape Prism $"wing{side.name}" {
+    group: swallowBodyGroup
+    material: swallowFeathers
+    position: swallowOnBody(swallowWingRootLocal(side))
+    rotation: swallowBodyTurn(swallowWingLocalTurn(side))
+    scale [1, 1, swallowWingDepth]
+    dilate: swallowWingRound
+    profile {
+      kind: "Convex"
+      vertices: swallowWingProfile(side)
+      cornerRadius: 0.05
+    }
+  }
+}
+
+// The tail: two convex blades hanging from under the rump, 15 degrees below the body's axis, each holding its half of
+// the inner feathers and its streamer in one outline (profile X out to the bird's side, Y along the tail): the inner
+// edge runs from the root along the midline to the fork's notch, where the two halves' dilations have made the inner
+// tail one plate, then the streamer's trailing edge splays out to the fine tip and the outer edge returns straight to
+// the root. Each half rolls 8 degrees about its length so the fan is a shallow V with its outer edges up.
+let swallowTailLocal = [0, -0.0035, -0.0305]
+let swallowTailDroop = 15
+let swallowTailDihedral = 8
+let swallowTailProfile = [[0, 0], [0.0012, 0.05], [0.0105, 0.1], [0.0045, 0]]
+let swallowTailDepth = 0.0001
 let swallowTailRound = 0.0013
-let swallowTailDepth = 0.0003
-let swallowTailProfile = [[0.003, 0.03], [0.0103, 0.045], [0.0074, -0.004], [0.0015, -0.004]]
-// The outer streamer's last length: a round stroke from inside the blade's outer edge to the fine tip, its radius
-// narrowing from the blade's half thickness, so it stays a point seen from any side, end-on included, where a blade of
-// even thickness ends in a square.
-let swallowStreamerFrom = [0.01, 0.035]
-let swallowStreamerTip = [0.0138, 0.078]
-let swallowStreamerTipRadius = 0.00095
+function swallowTailLocalTurn(side) = turnThen(
+  turn(swallowAxisY, 0 - side.sign * swallowTailDihedral),
+  turn(swallowAxisX, 0 - 90 - swallowTailDroop)
+)
 
 // A profile mirrored across X, its order reversed so it still winds clockwise.
 function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
@@ -69,232 +154,20 @@ function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
   i => [0 - profile[length(profile) - 1 - i][0], profile[length(profile) - 1 - i][1]]
 )
 
-let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
-
-// A point in the body's own frame (X out to the bird's left, Y up the body, Z forward along it) placed in the creation.
-function swallowOnBody(v) = [v[0], swallowBodyAt[1] + turned(swallowPitch, v)[1], swallowBodyAt[2] + turned(swallowPitch, v)[2]]
-
-// A folded wing a side is one plate bent once, since one flat blade cannot follow a flank that swells and then tapers:
-// the inner wing (the coverts and secondaries) lies along the flank from the shoulder, its front yawed into the body so
-// its rounded bend sinks under the shoulder's outline, and the flight feathers carry on from its rear at the body's
-// widest point back to the pointed tip, yawed in so the tips cross behind the rump. The two halves meet on the line
-// where their planes cross (`swallowWingCrease` along the inner wing): the flight feathers' root sits on that line, and
-// each half's edge there lies exactly on it, so their rounded edges are one and the join is a fold, never a step or a
-// lip of one blade over the other. Both are thin convex prisms grown by a dilation, their profile X running back and Y
-// up, inset by the dilation; the dilation keeps each blade two bake cells thick at the finest spacing
-// (WorldPlacementStamper.FinestDetail, at the placement's scale). A blade's pitch turns its profile's down toward the
-// bird's front, so the inner wing's lower edge leaves its rounded bend almost along X.
-let swallowWingRound = 0.0018
-let swallowWingDepth = 0.0001
-let swallowWingRoll = 24
-let swallowWingPitch = -34
-
-// A blade's turn: rolled so its upper edge leans in over the back, yawed by `yaw` (positive takes its rear in), and
-// pitched with the body by `lift` more.
-function swallowWingTurn(sign, yaw, lift) = turnThen(
-  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * swallowWingRoll)), turn(swallowAxisY, sign * yaw)),
-  turn(swallowAxisX, swallowWingPitch + lift)
-)
-
-let swallowInnerWingYaw = -3
-let swallowInnerWingLift = -2
-let swallowWingYaw = 9
-let swallowWingLift = 2
-let swallowWingCrease = 0.03
-// The wing's upper edge over the bend, and its upper and lower edges where the two halves meet: the upper edge falls a
-// little into the fold, where the flight feathers' edge turns in under the back, so the inner wing has no corner there.
-let swallowWingTop = 0.0037
-let swallowCreaseTop = 0.0025
-let swallowWingBottom = -0.0098
-
-let swallowShoulder = [0.0064, 0.0335, 0.003]
-function swallowShoulderAt(side) = [side.sign * swallowShoulder[0], swallowShoulder[1], swallowShoulder[2]]
-function swallowInnerWingTurn(side) = swallowWingTurn(side.sign, swallowInnerWingYaw, swallowInnerWingLift)
-// The right flight feathers ride a little higher, so where the tips cross they lie over the left ones.
-function swallowOuterWingTurn(side) = swallowWingTurn(
-  side.sign,
-  swallowWingYaw,
-  swallowWingLift + ((side.sign > 0) ? 0 : 4)
-)
-// The flight feathers' root: the inner wing's crease where its profile Y is zero.
-function swallowWingRootAt(side) = map(
-  range(0, 3),
-  k => swallowShoulderAt(side)[k] + turned(swallowInnerWingTurn(side), [swallowWingCrease, 0, 0])[k]
-)
-// The crease in a blade's own profile: the line through its root point (the inner wing's crease point, the flight
-// feathers' origin) where the other blade's plane cuts it, as the profile X it moves per unit of profile Y. It is the
-// other blade's normal turned into this blade's frame, n, read as -n.y / n.x.
-function swallowCreaseLean(own, other) = 0 - turned(inverseTurn(own), turned(other, swallowAxisZ))[1] /
-  turned(inverseTurn(own), turned(other, swallowAxisZ))[0]
-
-// The inner wing: its bend a rounded front (half an ellipse about `swallowBendAt`) at the shoulder, high on the flank,
-// its upper edge along the back and its lower edge falling to the crease.
-let swallowBendAt = [0.004, -0.001]
-let swallowBendRadii = [0.005, swallowWingTop + 0.001]
-function swallowInnerWingProfile(side) = concat(
-  [
-    [0.02, swallowWingTop],
-    [
-      swallowWingCrease + swallowCreaseTop * swallowCreaseLean(swallowInnerWingTurn(side), swallowOuterWingTurn(side)),
-      swallowCreaseTop
-    ],
-    [
-      swallowWingCrease + swallowWingBottom * swallowCreaseLean(swallowInnerWingTurn(side), swallowOuterWingTurn(side)),
-      swallowWingBottom
-    ],
-    [0.02, -0.0095]
-  ],
-  map(
-    range(0, 9),
-    i => [
-      swallowBendAt[0] + swallowBendRadii[0] * cosine((250 - 20 * i) * radiansPerDegree),
-      swallowBendAt[1] + swallowBendRadii[1] * sine((250 - 20 * i) * radiansPerDegree)
-    ]
-  )
-)
-
-// The flight feathers, from the crease: the upper edge along the back, the lower edge sweeping up to the tip.
-function swallowWingProfile(side) = [
-  [swallowCreaseTop * swallowCreaseLean(swallowOuterWingTurn(side), swallowInnerWingTurn(side)), swallowCreaseTop],
-  [0.03, 0.0028], [0.062, -0.0005], [0.0616, -0.0009], [0.04, -0.0062], [0.015, -0.0095],
-  [swallowWingBottom * swallowCreaseLean(swallowOuterWingTurn(side), swallowInnerWingTurn(side)), swallowWingBottom]
-]
-
-// The wing's dark feathers are painted over the plumage the blades share with the body, so their edge is drawn crisp
-// at the hit wherever the blades meet the body, never left to the bake's per-vertex material across a blend's fillet,
-// which frays into blotches. Each blade carries a paint: a convex outline in its own frame, grown past the blades'
-// rounded edges and projected through the blade (a paint's outline holds at most eight vertices,
-// SdfAppearance.PaintTableVectors). The inner wing's is its bend, rounded by the paint's own corner radius, back past
-// where the flight feathers' paint begins; the flight feathers' is their outline with its front carried forward over
-// the inner wing's rear, that part turned into their frame.
-function swallowInnerInOuter(side, v) = turned(
-  inverseTurn(swallowOuterWingTurn(side)),
-  turned(swallowInnerWingTurn(side), [v[0] - swallowWingCrease, v[1], 0])
-)
-let swallowWingFill = 0.004
-let swallowWingPaintJoin = 0.018
-let swallowWingPaintGrow = swallowWingRound + 0.0004
-let swallowWingPaintDepth = 0.005
-function swallowInnerWingOutline(side) = concat(
-  [[swallowWingPaintJoin + 0.005, swallowWingTop], [swallowWingPaintJoin + 0.005, swallowWingBottom]],
-  map(
-    range(0, 6),
-    i => [
-      swallowBendAt[0] + swallowBendRadii[0] * cosine((250 - 32 * i) * radiansPerDegree),
-      swallowBendAt[1] + swallowBendRadii[1] * sine((250 - 32 * i) * radiansPerDegree)
-    ]
-  )
-)
-function swallowOuterWingOutline(side) = concat(
-  [swallowInnerInOuter(side, [swallowWingPaintJoin, swallowWingTop])],
-  map(range(1, 5), i => swallowWingProfile(side)[i]),
-  [swallowInnerInOuter(side, [swallowWingPaintJoin, swallowWingBottom])]
-)
-
-function swallowWingPaints(side) = [
-  {
-    parent: $"innerWing{side.name}"
-    type: "Prism"
-    scale [1, 1, swallowWingPaintDepth]
-    profile {
-      kind: "Convex"
-      vertices: growOutline(swallowInnerWingOutline(side), swallowWingPaintGrow)
-      cornerRadius: 0.3
-    }
-    color: swallowSteelDeep
-  }
-  {
-    parent: $"wing{side.name}"
-    type: "Prism"
-    scale [1, 1, swallowWingPaintDepth]
-    profile {
-      kind: "Convex"
-      vertices: growOutline(swallowOuterWingOutline(side), swallowWingPaintGrow)
-    }
-    color: swallowSteelDeep
-  }
-]
-
-template swallowWing(side) {
-  shape Prism $"innerWing{side.name}" {
-    group: swallowBodyGroup
-    blend: "SmoothUnion"
-    smooth: 0.0025
-    material: swallowPlumage
-    position: swallowShoulderAt(side)
-    rotation: swallowInnerWingTurn(side)
-    scale [1, 1, swallowWingDepth]
-    dilate: swallowWingRound
-    profile {
-      kind: "Convex"
-      vertices: swallowInnerWingProfile(side)
-      cornerRadius: 0.001
-    }
-  }
-  shape Prism $"wing{side.name}" {
-    group: swallowBodyGroup
-    blend: "SmoothUnion"
-    smooth: swallowWingFill
-    material: swallowPlumage
-    position: swallowWingRootAt(side)
-    rotation: swallowOuterWingTurn(side)
-    scale [1, 1, swallowWingDepth]
-    dilate: swallowWingRound
-    profile {
-      kind: "Convex"
-      vertices: swallowWingProfile(side)
-      cornerRadius: 0.001
-    }
-  }
-}
-
-// A tail half hangs from the rump (the profile's Y turned to point back, then down 45 degrees), splayed out a little and
-// rolled 25 degrees about its length so its outer edge lifts: the closed fork is a shallow V, and a side view sees the
-// blade's narrowing face rather than its edge, so each streamer reads as one blade tapering to its point.
-let swallowTailAt = [0, 0.001, -0.031]
-function swallowTailTurn(side) = turnThen(
-  turnThen(turn(swallowAxisY, 0 - side.sign * 25), turn(swallowAxisX, -135)),
-  turn(swallowAxisZ, side.sign * 5)
-)
-// A point of a tail half's profile plane placed in the creation.
-function swallowOnTail(side, v) = map(
-  range(0, 3),
-  k => swallowTailAt[k] + turned(swallowTailTurn(side), [side.sign * v[0], v[1], 0])[k]
-)
-
 template swallowTailHalf(side) {
   shape Prism $"tail{side.name}" {
     group: swallowTailGroup
     blend: "SmoothUnion"
     smooth: 0.003
-    material: swallowTail
-    position: swallowTailAt
-    rotation: swallowTailTurn(side)
+    material: swallowFeathers
+    position: swallowOnBody(swallowTailLocal)
+    rotation: swallowBodyTurn(swallowTailLocalTurn(side))
     scale [1, 1, swallowTailDepth]
     dilate: swallowTailRound
     profile {
       kind: "Convex"
       vertices: swallowMirror(swallowTailProfile, side.sign)
-      cornerRadius: 0.001
-    }
-  }
-  shape Sweep $"streamer{side.name}" {
-    group: swallowTailGroup
-    blend: "SmoothUnion"
-    smooth: 0.0015
-    material: swallowTail
-    position: swallowOnTail(side, swallowStreamerFrom)
-    rotation: swallowTailTurn(side)
-    curve {
-      a [0, 0, 0]
-      b [
-        side.sign * (swallowStreamerTip[0] - swallowStreamerFrom[0]) / 2,
-        (swallowStreamerTip[1] - swallowStreamerFrom[1]) / 2,
-        0
-      ]
-      c [side.sign * (swallowStreamerTip[0] - swallowStreamerFrom[0]), swallowStreamerTip[1] - swallowStreamerFrom[1], 0]
-      radiusStart: swallowTailDepth + swallowTailRound
-      radiusEnd: swallowStreamerTipRadius
+      cornerRadius: 0.02
     }
   }
 }
@@ -304,8 +177,8 @@ template swallowEyeBead(side) {
   shape Sphere $"eye{side.name}" {
     group: swallowHeadGroup
     material: swallowEye
-    position [side.sign * 0.006, swallowHeadAt[1] + 0.0012, swallowHeadAt[2] + 0.006]
-    scale [0.0025, 0.0025, 0.0025]
+    position: swallowOnHead([side.sign * 0.0068, 0.0012, 0.0035])
+    scale [0.0024, 0.0024, 0.0024]
   }
 }
 
@@ -322,7 +195,10 @@ let swallowGrip = 35
 let swallowFootAt = [0.0038, -0.0085, -0.004]
 // The rail's curve under the feet in the bird's units, as (z, y) about the foot: its centre, and its radius.
 let swallowArcRadius = swallowRailRound / swallowScale
-let swallowArcCentre = [swallowFootAt[2] + swallowArcRadius * sine(swallowGrip * radiansPerDegree), swallowFootAt[1] - swallowArcRadius * cosine(swallowGrip * radiansPerDegree)]
+let swallowArcCentre = [
+  swallowFootAt[2] + swallowArcRadius * sine(swallowGrip * radiansPerDegree)
+  swallowFootAt[1] - swallowArcRadius * cosine(swallowGrip * radiansPerDegree)
+]
 
 // A point on the rail's curve `degrees` from its top toward the pool, lifted off it by `lift`, as (z, y).
 function swallowArc(degrees, lift) = [
@@ -334,11 +210,12 @@ function swallowArc(degrees, lift) = [
 // curve's middle point where the two ends' tangents meet, splayed `splay` degrees off the bird's axis. Its radius keeps
 // it two bake cells thick at the finest spacing (WorldPlacementStamper.FinestDetail), and it sinks a little into the
 // rail so it grips rather than floats.
-let swallowToeRadius = 0.0018
+let swallowToeRadius = 0.0021
 let swallowToeLift = 0.001
 
 function swallowToePoint(side, splay, degrees, lift) = [
-  side.sign * swallowFootAt[0] + side.sign * (swallowArc(degrees, lift)[0] - swallowFootAt[2]) * sine(splay * radiansPerDegree),
+  side.sign * swallowFootAt[0] +
+    side.sign * (swallowArc(degrees, lift)[0] - swallowFootAt[2]) * sine(splay * radiansPerDegree),
   swallowArc(degrees, lift)[1],
   swallowArc(degrees, lift)[0]
 ]
@@ -366,24 +243,23 @@ template swallowToe(side, name, splay, reach) {
       )
       c: swallowToeCurve(side, splay, reach, swallowToeLift)
       radiusStart: swallowToeRadius
-      radiusEnd: 0.0013
+      radiusEnd: 0.0015
     }
   }
 }
 
-// A leg a side: a short dark shank from the foot up into the belly, two front toes curled forward over the edge's crown
-// and splayed, and a hind toe curled back down over the edge toward the water.
+// A leg a side: a short dark shank from the foot up into the belly (a hard union, so the feathers' edge over the leg is
+// one crisp line and no fillet mixes the two materials into a collar), two front toes curled forward over the edge's
+// crown and splayed, and a hind toe curled back down over the edge toward the water.
 template swallowLeg(side) {
   shape Sweep $"leg{side.name}" {
     group: swallowBodyGroup
-    blend: "SmoothUnion"
-    smooth: 0.0015
     material: swallowBill
     position: swallowToePoint(side, 0, swallowGrip, swallowToeLift)
     curve {
       a [0, 0, 0]
       b [0, 0.0045, 0.0026]
-      c [0, 0.0095, 0.0035]
+      c [0, 0.0105, 0.0035]
       radiusStart: swallowToeRadius
       radiusEnd: swallowToeRadius
     }
@@ -393,21 +269,49 @@ template swallowLeg(side) {
   swallowToe(side: side, name: "hindToe", splay: 0, reach: 64)
 }
 
+// The coverts: the folded wing's inner half lies flat on the flank, so it is a paint, the dark feather drawn over the
+// body's steel from the shoulder back to where the blade leaves the flank. The outline is in the blade's own frame
+// (X along it, Y across), reaching forward past the root over the shoulder, and is projected through the flank along
+// the blade's normal; its depth keeps it to the near flank.
+let swallowCovertsForward = -0.03
+let swallowCovertsBack = 0.032
+function swallowCovertsOutline(side) = [
+  [swallowCovertsForward, 0.002],
+  [swallowCovertsForward + 0.008, swallowWingUpper - 0.001],
+  [swallowCovertsBack, swallowWingUpper],
+  [swallowCovertsBack, 0 - swallowWingLower],
+  [swallowCovertsForward + 0.01, 0 - swallowWingLower + 0.0015],
+  [swallowCovertsForward, -0.003]
+]
+function swallowCovertsPaint(side) = {
+  parent: "body"
+  type: "Prism"
+  position: swallowWingRootLocal(side)
+  rotation: swallowWingLocalTurn(side)
+  scale [1, 1, 0.012]
+  profile {
+    kind: "Convex"
+    vertices: swallowCovertsOutline(side)
+    cornerRadius: 0.2
+  }
+  color: swallowSteelDeep
+}
+
 // The white spots on a tail half's inner webs near the fork, dashes along the feathers painted through the blade so both
 // faces show them; the two halves' spots make a band across the fork.
 function swallowTailSpots(side) = [
   {
     parent: $"tail{side.name}"
     type: "Ellipsoid"
-    position [side.sign * 0.0042, 0.018, 0]
-    scale [0.0016, 0.0032, 0.003]
+    position [side.sign * 0.003, 0.042, 0]
+    scale [0.0014, 0.003, 0.003]
     color: "#FFFFFF"
   }
   {
     parent: $"tail{side.name}"
     type: "Ellipsoid"
-    position [side.sign * 0.0062, 0.026, 0]
-    scale [0.0015, 0.003, 0.003]
+    position [side.sign * 0.0062, 0.047, 0]
+    scale [0.0013, 0.0028, 0.003]
     color: "#FFFFFF"
   }
 ]
@@ -418,12 +322,11 @@ prototypes {
       name: "swallow"
       schema: "puck.creation.v1"
       palette [
-        // The plumage of the body, head and wings, held values under a soft specular, with its markings painted on in
-        // order: the gloss highlight, the buff underparts, the wings' dark feathers, then the chestnut throat and the
+        // The plumage of the body and head, held values under a soft specular, with its markings painted on in order:
+        // the gloss highlight, the buff underparts, the coverts on each flank, then the chestnut throat and the
         // forehead blaze joined to the bill. What the buff and the throat leave between them across the breast is the
         // breast band. The highlight is one stroke along the dorsal line in the body's frame, from the rump over the
-        // back (where it swells) to the crown, held just under the surface: it shows where the back and the crown round
-        // up into it and lets the nape's hollow between them go.
+        // back to the nape, held just under the surface: it shows where the back rounds up into it.
         {
           color: swallowSteel
           specular: 0.02
@@ -434,9 +337,9 @@ prototypes {
                 parent: "body"
                 type: "Sweep"
                 curve {
-                  a [0, 0.0135, -0.024]
-                  b [0, 0.0178, 0.008]
-                  c [0, 0.0128, 0.0445]
+                  a [0, 0.003, -0.028]
+                  b [0, 0.0128, -0.004]
+                  c [0, 0.0112, 0.018]
                   radiusStart: 0.0012
                   radiusEnd: 0.0018
                   bulge: 0.0012
@@ -446,32 +349,30 @@ prototypes {
               {
                 parent: "body"
                 type: "Ellipsoid"
-                position [0, -0.032, -0.01]
-                scale [0.05, 0.03, 0.055]
+                position [0, -0.02, -0.006]
+                scale [0.018, 0.019, 0.034]
                 color: swallowBuff
               }
-            ],
-            swallowWingPaints(swallowSides[0]),
-            swallowWingPaints(swallowSides[1]),
-            [
+              swallowCovertsPaint(swallowSides[0]),
+              swallowCovertsPaint(swallowSides[1]),
               {
                 parent: "head"
                 type: "Ellipsoid"
-                position [0, -0.0098, 0.0068]
-                scale [0.0062, 0.0076, 0.008]
+                position [0, -0.0062, 0.0058]
+                scale [0.0064, 0.0058, 0.0074]
                 color: swallowChestnut
               }
               {
                 parent: "head"
                 type: "Ellipsoid"
-                position [0, -0.0004, 0.0096]
-                scale [0.0048, 0.0028, 0.0042]
+                position [0, 0.0004, 0.0098]
+                scale [0.0046, 0.0028, 0.0038]
                 color: swallowChestnut
               }
             ]
           )
         }
-        // The tail, near black as the wings are, with its white spots.
+        // The flight feathers, the wings and the tail, near black, with the tail's white spots.
         {
           color: swallowSteelDeep
           specular: 0.02
@@ -483,63 +384,48 @@ prototypes {
         // The bill, legs and feet.
         { color: "#1A1513", specular: 0.01, roughness: 0.95 }
       ]
-      // One shaped body: a long near-ellipsoid along the body's axis, and the deep breast swelling under its front,
-      // blended into it. Neither is warped: on a static placement a warped shape (a flare, a shear, bumps) bakes apart
-      // from its neighbours (WorldPlacementStamper.BakesAlone), so the head's and the wings' smooth blends into it would
-      // bake as creases.
-      shape Superellipsoid "body" {
+      shape Sweep "body" {
         group: swallowBodyGroup
         material: swallowPlumage
         position: swallowBodyAt
         rotation: swallowPitch
-        scale [0.0095, 0.0155, 0.041]
-        exponent: 2.2
+        curve {
+          a: swallowChestAt
+          b [0, 0.0012, (swallowChestAt[2] + swallowRumpAt[2]) / 2]
+          c: swallowRumpAt
+          radiusStart: swallowChestRadius
+          radiusEnd: swallowRumpRadius
+          bulge: 0.0015
+        }
       }
-      shape Superellipsoid "breast" {
-        group: swallowBodyGroup
-        blend: "SmoothUnion"
-        smooth: 0.008
-        material: swallowPlumage
-        position: swallowBreastAt
-        rotation: swallowPitch
-        scale [0.0125, 0.0135, 0.016]
-        exponent: 2.2
-      }
-      // The head: a small, slightly flattened crown on the body's upper end, narrower than the chest below it.
       shape Superellipsoid "head" {
         group: swallowHeadGroup
         blend: "SmoothUnion"
-        smooth: 0.007
+        smooth: 0.006
         material: swallowPlumage
         position: swallowHeadAt
-        scale [0.0088, 0.0088, 0.0105]
-        exponent: 2.2
+        rotation: swallowHeadTurn
+        scale: swallowHeadScale
+        exponent: 2.3
+      }
+      shape Prism "bill" {
+        group: swallowHeadGroup
+        material: swallowBill
+        position: swallowOnHead(swallowBillRootLocal)
+        rotation: swallowBillTurn
+        scale [1, 1, swallowBillDepth]
+        dilate: swallowBillRound
+        profile {
+          kind: "Convex"
+          vertices: swallowBillProfile
+          cornerRadius: 0.15
+        }
       }
       for side in swallowSides {
         swallowEyeBead(side: side)
         swallowWing(side: side)
         swallowTailHalf(side: side)
         swallowLeg(side: side)
-      }
-      // The bill: a small flat dark wedge, a wide triangle seen tip-on (a trapezoid prism with a narrow top, its ridge
-      // up and its gape below), tapering (the flare) to its point forward and a little down between the forehead blaze
-      // and the throat. Its shape turns half round so the flare, which narrows toward local -Z, narrows forward. It comes
-      // last: a warped shape bakes alone and so does the one after it, and the bill meets the head in a hard union anyway.
-      shape Prism "bill" {
-        group: swallowHeadGroup
-        material: swallowBill
-        position [0, swallowHeadAt[1] - 0.0022, swallowHeadAt[2] + 0.0132]
-        rotation: turnThen(turn(swallowAxisY, 180), turn(swallowAxisX, 8))
-        scale [0.0038, 0.0019, 0.0048]
-        taper: 0.35
-        flare {
-          amount: -0.6
-          bulge: 0
-          span: 0.0096
-          top: 0.0048
-          axis: 2
-          startScale: 1
-        }
       }
     }
   }
@@ -572,8 +458,16 @@ cameras [
       name: "swallow-portrait"
       version: "puck.camera.program.v1"
       operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [swallowPerch[0] + 0.32, swallowPerch[1] + 0.12, swallowPerch[2] - 0.22]))
-        lookAt(focusDistance: 0.4, opcode: "lookAt", subject: worldPoint(point: [swallowPerch[0], swallowPerch[1] + 0.04, swallowPerch[2]]), worldAxes: false)
+        anchor(
+          opcode: "anchor",
+          subject: worldPoint(point: [swallowPerch[0] + 0.32, swallowPerch[1] + 0.12, swallowPerch[2] - 0.22])
+        )
+        lookAt(
+          focusDistance: 0.4,
+          opcode: "lookAt",
+          subject: worldPoint(point: [swallowPerch[0], swallowPerch[1] + 0.04, swallowPerch[2]]),
+          worldAxes: false
+        )
         fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
       ]
     }
@@ -586,8 +480,16 @@ cameras [
       name: "swallow-side"
       version: "puck.camera.program.v1"
       operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [swallowPerch[0] - 0.02, swallowPerch[1] + 0.02, swallowPerch[2] - 0.45]))
-        lookAt(focusDistance: 0.45, opcode: "lookAt", subject: worldPoint(point: [swallowPerch[0] - 0.02, swallowPerch[1] + 0.01, swallowPerch[2]]), worldAxes: false)
+        anchor(
+          opcode: "anchor",
+          subject: worldPoint(point: [swallowPerch[0] - 0.02, swallowPerch[1] + 0.02, swallowPerch[2] - 0.45])
+        )
+        lookAt(
+          focusDistance: 0.45,
+          opcode: "lookAt",
+          subject: worldPoint(point: [swallowPerch[0] - 0.02, swallowPerch[1] + 0.01, swallowPerch[2]]),
+          worldAxes: false
+        )
         fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
       ]
     }

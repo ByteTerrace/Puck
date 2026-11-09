@@ -221,7 +221,9 @@ cliffs (panel 4). The cycle's levers:
 A barn swallow ([`birds.puck`](birds.puck)) perches on the reservoir
 pavilion's west rail beside the pool, gripping the rail's pool-side edge with
 its tail hanging free over the water and its face toward the path. Its
-references are a perched male barn swallow: an upright stance on short dark
+reference is the [barn swallow reference](../../docs/game/art/barn-swallow-reference.md):
+cited sources, proportions in centimetres and the silhouette each view must
+show. In short, a perched male barn swallow: an upright stance on short dark
 legs whose toes curl over the edge; a glossy steel-blue back and crown;
 near-black folded wings tucked under the back's edge at the shoulder, lying
 along the flanks and crossing past the rump; a chestnut forehead

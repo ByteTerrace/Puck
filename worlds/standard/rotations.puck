@@ -15,12 +15,21 @@ function turn(axis, degrees) = [
 
 // A vector turned by a unit rotation: v + 2w(q × v) + 2q × (q × v), with q the rotation's vector part.
 function turned(rotation, v) = [
-  v[0] + 2 * rotation[3] * (rotation[1] * v[2] - rotation[2] * v[1]) +
-    2 * (rotation[1] * (rotation[0] * v[1] - rotation[1] * v[0]) - rotation[2] * (rotation[2] * v[0] - rotation[0] * v[2])),
-  v[1] + 2 * rotation[3] * (rotation[2] * v[0] - rotation[0] * v[2]) +
-    2 * (rotation[2] * (rotation[1] * v[2] - rotation[2] * v[1]) - rotation[0] * (rotation[0] * v[1] - rotation[1] * v[0])),
-  v[2] + 2 * rotation[3] * (rotation[0] * v[1] - rotation[1] * v[0]) +
-    2 * (rotation[0] * (rotation[2] * v[0] - rotation[0] * v[2]) - rotation[1] * (rotation[1] * v[2] - rotation[2] * v[1]))
+  v[0] +
+    2 * rotation[3] * (rotation[1] * v[2] - rotation[2] * v[1]) +
+    2 *
+      (rotation[1] * (rotation[0] * v[1] - rotation[1] * v[0]) -
+        rotation[2] * (rotation[2] * v[0] - rotation[0] * v[2])),
+  v[1] +
+    2 * rotation[3] * (rotation[2] * v[0] - rotation[0] * v[2]) +
+    2 *
+      (rotation[2] * (rotation[1] * v[2] - rotation[2] * v[1]) -
+        rotation[0] * (rotation[0] * v[1] - rotation[1] * v[0])),
+  v[2] +
+    2 * rotation[3] * (rotation[0] * v[1] - rotation[1] * v[0]) +
+    2 *
+      (rotation[0] * (rotation[2] * v[0] - rotation[0] * v[2]) -
+        rotation[1] * (rotation[1] * v[2] - rotation[2] * v[1]))
 ]
 
 // The turn `inner` followed by the turn `outer` (the Hamilton product outer × inner).
@@ -34,3 +43,19 @@ function turnThen(inner, outer) = [
 // The turn that undoes a unit rotation (its conjugate): turned(inverseTurn(q), v) takes a vector from the frame q turns
 // into back to the frame it was authored in.
 function inverseTurn(rotation) = [0 - rotation[0], 0 - rotation[1], 0 - rotation[2], rotation[3]]
+
+// Vectors a turn is built from: a length, a unit vector, a dot and a cross product.
+function vectorLength(v) = squareRoot(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+function unitVector(v) = [v[0] / vectorLength(v), v[1] / vectorLength(v), v[2] / vectorLength(v)]
+function dotProduct(a, b) = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+function crossProduct(a, b) = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+// The shortest turn taking the unit vector `from` onto the unit vector `to`: its vector part is their cross product and
+// its scalar part 1 + their dot product, the whole normalised (its length is the square root of twice that scalar). It
+// is undefined for opposite vectors, which have no shortest turn.
+function turnBetween(from, to) = [
+  crossProduct(from, to)[0] / squareRoot(2 * (1 + dotProduct(from, to))),
+  crossProduct(from, to)[1] / squareRoot(2 * (1 + dotProduct(from, to))),
+  crossProduct(from, to)[2] / squareRoot(2 * (1 + dotProduct(from, to))),
+  squareRoot((1 + dotProduct(from, to)) / 2)
+]
