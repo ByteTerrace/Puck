@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.Commands;
 using Puck.Physics.Motion;
@@ -56,10 +57,7 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) { return m_inputs.TryGetValue(key: owner, value: out publication); }
     }
 
-    private int[] m_pendingRows = [];
-    private bool[] m_pendingNoted = [];
-
-    private int m_pendingCount;
+    private readonly MarkedIndexSet m_pending = new();
     private bool m_pendingEverything;
     private ArenaTime? m_stateTime;
 
@@ -226,7 +224,11 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
-    private readonly bool[] m_seen = new bool[EntityCapacity];
+    // The slots the snapshot being delivered admitted, and every slot that may be active: a slot's active flag is set
+    // only by DeliverSnapshot (after adding the slot to m_seen, then m_live) and SeedRoute (which adds it to m_live),
+    // so a snapshot deactivates by visiting m_live alone. Both are used under m_snapshotWriteGate.
+    private readonly MarkedIndexSet m_seen = new();
+    private readonly MarkedIndexSet m_live = new();
     // A route seed is written by the transfer/route thread while ordinary snapshots arrive on the observer task.
     // Serialize those two writers: the seqlock below protects readers from a torn image, but by itself does not
     // prevent two writers from interleaving their odd/even sequence increments and publishing a mixture.
@@ -538,7 +540,7 @@ public sealed class WorldSessionMirror : IClientSink {
             }
 
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
-            Array.Clear(array: m_seen);
+            m_seen.Clear();
 
             foreach (ref readonly var entry in snapshot.Entries.Span) {
                 var index = entry.Index;
@@ -555,7 +557,7 @@ public sealed class WorldSessionMirror : IClientSink {
                     continue;
                 }
 
-                m_seen[index] = true;
+                _ = m_seen.Add(index: index);
                 m_bodyColor[index] = entry.BodyColor;
                 m_kit[index] = entry.Kit;
                 m_look[index] = entry.Look;
@@ -600,9 +602,9 @@ public sealed class WorldSessionMirror : IClientSink {
                 );
             }
 
-            for (var index = 0; (index < EntityCapacity); index++) {
+            foreach (var index in m_live.Members) {
                 if (
-                    !m_seen[index] &&
+                    !m_seen.Contains(index: index) &&
                     (!preserveSeed || (seeded is not { } preserved) || (index != preserved.Index))
                 ) {
                     Volatile.Write(
@@ -611,6 +613,11 @@ public sealed class WorldSessionMirror : IClientSink {
                     );
                 }
             }
+
+            // The slots that may now be active: this snapshot's, and the seed the snapshot preserved.
+            m_live.Clear();
+            foreach (var index in m_seen.Members) { _ = m_live.Add(index: index); }
+            if (preserveSeed && (seeded is { } kept)) { _ = m_live.Add(index: kept.Index); }
 
             _ = Interlocked.Exchange(
                 location1: ref m_tickBits,
@@ -674,7 +681,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 foreach (ref readonly var entry in snapshot.Entries.Span) {
                     if (
                         (((uint)entry.Index) < ((uint)EntityCapacity)) &&
-                        m_seen[entry.Index]
+                        m_seen.Contains(index: entry.Index)
                     ) {
                         m_stateView.ApplyBodyState(
                             body: entry.Index,
@@ -742,26 +749,7 @@ public sealed class WorldSessionMirror : IClientSink {
             return;
         }
 
-        if (ordinal >= m_pendingNoted.Length) {
-            var capacity = Math.Max(
-                val1: (ordinal + 1),
-                val2: (m_pendingNoted.Length * 2)
-            );
-
-            Array.Resize(
-                array: ref m_pendingNoted,
-                newSize: capacity
-            );
-            Array.Resize(
-                array: ref m_pendingRows,
-                newSize: capacity
-            );
-        }
-
-        if (!m_pendingNoted[ordinal]) {
-            m_pendingNoted[ordinal] = true;
-            m_pendingRows[m_pendingCount++] = ordinal;
-        }
+        _ = m_pending.Add(index: ordinal);
     }
 
     /// <summary>Brings this mirror's state mirror up to the latest delivery and returns it: a definition delivery
@@ -777,25 +765,22 @@ public sealed class WorldSessionMirror : IClientSink {
             ArenaTime? time;
 
             lock (m_stampGate) {
-                count = m_pendingCount;
+                count = m_pending.Count;
 
                 if (m_followedRows.Length < count) {
                     Array.Resize(
                         array: ref m_followedRows,
-                        newSize: m_pendingRows.Length
+                        newSize: Math.Max(
+                            val1: count,
+                            val2: (m_followedRows.Length * 2)
+                        )
                     );
                 }
 
-                for (var index = 0; (index < count); index++) {
-                    var ordinal = m_pendingRows[index];
-
-                    m_followedRows[index] = ordinal;
-                    m_pendingNoted[ordinal] = false;
-                }
-
+                m_pending.Members.CopyTo(destination: m_followedRows);
+                m_pending.Clear();
                 everything = m_pendingEverything;
                 time = m_stateTime;
-                m_pendingCount = 0;
                 m_pendingEverything = false;
             }
 
@@ -961,6 +946,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 location1: ref m_snapshotArrivalTimestamp,
                 value: Stopwatch.GetTimestamp()
             );
+            _ = m_live.Add(index: index);
             Volatile.Write(
                 ref m_active[index],
                 value: true
