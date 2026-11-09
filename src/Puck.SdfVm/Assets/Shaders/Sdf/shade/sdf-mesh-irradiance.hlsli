@@ -30,21 +30,25 @@ float sdfMeshIrradianceHalf(uint word, uint high) {
     return f16tof32((high != 0u) ? (word >> 16) : (word & 0xffffu));
 }
 // The ambient cube's value about a normal: each axis's face toward the normal, weighted by the normal's squared component.
-// A probe's sky visibility, then its radiance, both read from its slot's words.
-void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance) {
+// A probe's sky share, its surfaces' radiance and its sky light, all read from its slot's words.
+void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance, out float3 skyLight) {
     float3 squared = (normal * normal);
     sky = 0.0;
     radiance = 0.0;
+    skyLight = 0.0;
     [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
         uint negative = ((normal[axis] < 0.0) ? 1u : 0u);
         uint face = ((2u * axis) + negative);
-        sky += (squared[axis] * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + 1u + axis], negative));
+        sky += (squared[axis] * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_WORD + axis], negative));
         float3 value;
+        float3 open;
         [unroll] for (uint channel = 0u; (channel < 3u); channel++) {
             uint entry = ((3u * face) + channel);
-            value[channel] = sdfMeshIrradianceHalf(sdfMeshIrradiance[address + 4u + (entry >> 1)], (entry & 1u));
+            value[channel] = sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_RADIANCE_WORD + (entry >> 1)], (entry & 1u));
+            open[channel] = sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD + (entry >> 1)], (entry & 1u));
         }
         radiance += (squared[axis] * value);
+        skyLight += (squared[axis] * open);
     }
 }
 
@@ -484,16 +488,18 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     return probes;
 }
-// The sky visibility and reflected radiance the gathered probes hold, seen along `direction` (the normal for the light a
-// surface receives, the mirror direction for the light it reflects). A point with no answering probe has no measured
-// incoming light. The boundary gather extrapolates only the light its probes' surface samples permit.
-void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance) {
+// The sky visibility, reflected radiance and sky light the gathered probes hold, seen along `direction` (the normal for
+// the light a surface receives, the mirror direction for the light it reflects). A point with no answering probe has no
+// measured incoming light. The boundary gather extrapolates only the light its probes' surface samples permit.
+void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance, out float3 skyLight) {
     float sky = 0.0;
     float3 reflected = 0.0;
+    float3 open = 0.0;
     float total = 0.0;
 
     skyVisibility = 0.0;
     radiance = 0.0;
+    skyLight = 0.0;
 
     SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
 
@@ -505,9 +511,11 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
 
         float probeSky;
         float3 probeRadiance;
-        sdfMeshIrradianceProbe(address, direction, probeSky, probeRadiance);
+        float3 probeSkyLight;
+        sdfMeshIrradianceProbe(address, direction, probeSky, probeRadiance, probeSkyLight);
         sky += (probeSky * probes.weight[corner]);
         reflected += (probeRadiance * probes.weight[corner]);
+        open += (probeSkyLight * probes.weight[corner]);
         total += probes.weight[corner];
     }
     if (total <= 0.0) {
@@ -516,6 +524,7 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
 
     skyVisibility = (sky / total);
     radiance = (reflected / total);
+    skyLight = (open / total);
 }
 // The visibility of a light of the lights table at the surface (a traced point or spot light, or a shadowing directional
 // in a view with no cascade): the weight of the gathered probes read bounded by their
@@ -546,18 +555,15 @@ float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     return visible;
 }
 // The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance about
-// the normal): the live sky's irradiance over pi under the volume's sky visibility, when the sky source is
-// on, and the reflected radiance, whose sources the CPU trace already gated and scaled.
+// the normal): the sky light the probes' open rays carry and the surfaces' reflected radiance, whose sources and gains
+// the relight already applied.
 float3 sdfMeshIndirect(SdfMeshProbes probes, float3 normal) {
     float skyVisibility;
     float3 radiance;
-    sdfMeshIrradianceAt(probes, normal, skyVisibility, radiance);
+    float3 skyLight;
+    sdfMeshIrradianceAt(probes, normal, skyVisibility, radiance, skyLight);
 
-    float3 sky = 0.0;
-    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
-        sky = (sdfSkyPhysicalIrradiance(normal) * ((skyVisibility * passGroup.indirectSourceGains.w) / 3.141592653589793));
-    }
-    return (sky + radiance);
+    return (skyLight + radiance);
 }
 // The environment a surface reflects along a mirror direction, occluded by the volume: the lighting-visible sky as far as
 // the probes about the point see it open along that direction, and where they do not, the light the surfaces about them
@@ -565,7 +571,8 @@ float3 sdfMeshIndirect(SdfMeshProbes probes, float3 normal) {
 float3 sdfMeshReflection(SdfMeshProbes probes, float3 direction, float3 environment) {
     float skyVisibility;
     float3 radiance;
-    sdfMeshIrradianceAt(probes, direction, skyVisibility, radiance);
+    float3 skyLight;
+    sdfMeshIrradianceAt(probes, direction, skyVisibility, radiance, skyLight);
 
     return ((environment * skyVisibility) + radiance);
 }
