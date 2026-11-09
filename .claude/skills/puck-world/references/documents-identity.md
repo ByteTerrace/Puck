@@ -115,14 +115,14 @@ Part of [`puck.world.definition.v1`](documents.md). See
   `region`/`emission`; `deal.variants` maps a second keyed row's same-keyed
   cell text to a prototype. The per-tick `SweepPlacementDeals` pass
   (`WorldTick.Deals.cs`, right after the response sweep) lands every
-  re-dealt template's children as ordinary placement mutations in one `Batch`
-  a tick under `Principal.World` (one validation, one journal entry, no
-  edit echo):
+  re-dealt template's children through `WorldDocument.InstallPlacementProjection`
+  as derived gameplay state (one installed projection, no declaration journal entry or edit echo):
   a child keeps its offset while its cell is present, a departing cell frees
   its offset and moves no sibling, an arriving cell takes the lowest free
-  offset, and the sweep only re-deals when the row, the variant row, or the
-  template changes — so `world.undo` of a deal stays undone until the row
-  moves. The template renders and collides as nothing; an authored id
+  offset. The sweep re-deals when the row, variant row, template or placement
+  projection changes. Source membership owns child presence: undo the source
+  cell to undo its deal; a child-only removal is reconciled on that tick,
+  independently of hidden-only edits. The template renders and collides as nothing; an authored id
   spelling `/` refuses by name. Read back with `world.placements` (`dealt
   from <row> (<n> of <capacity>)` / `dealt by <template>`); `world.budget`
   counts every template's offsets. The debug world's granary board

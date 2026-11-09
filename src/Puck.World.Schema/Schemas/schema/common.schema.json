@@ -7833,6 +7833,25 @@
       "additionalProperties": false,
       "title": "WorldEffectRemoveHudPanel"
     },
+    "WorldPlacementTranslation": {
+      "description": "An opaque stored placement translation: a dealt child\u0027s displacement from its slot, otherwise an authored local offset. Geometry reads a resolved frame through WorldPlacementFrameCompilation, never this value as a position. Fixed-point writes and their JSON round trips retain every Q48.16 bit.",
+      "title": "WorldPlacementTranslation",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
     "WorldPlacementMirror": {
       "description": "A reflection plane in a placement\u0027s local frame.",
       "type": [
@@ -8760,7 +8779,7 @@
           "type": "string"
         },
         "position": {
-          "$ref": "#/$defs/DocumentVector3",
+          "$ref": "#/$defs/WorldPlacementTranslation",
           "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
         },
         "yawDegrees": {

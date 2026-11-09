@@ -135,7 +135,7 @@ public sealed class CreationEffectorLawTests {
         );
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: prototype,
@@ -182,7 +182,7 @@ public sealed class CreationEffectorLawTests {
         var client = Client(definition: Definition(creation: creation));
         var position = Vector3.Zero;
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
@@ -206,7 +206,7 @@ public sealed class CreationEffectorLawTests {
             position += step;
         }
 
-        return pool.BodyShapePose(0, (TipSlot - 1)).Position;
+        return pool.BodyShapePose(bodyIndex: 0, shapeIndex: (TipSlot - 1)).Position;
     }
     private static ShapeDocument Part(int id, string name, Vector3 position, string? parent, Vector3? pivot, Vector3? joint = null) => new(
         Id: id,
@@ -500,7 +500,7 @@ public sealed class CreationEffectorLawTests {
         var creation = Prototype(effectors: [Leg(plant: null)]);
         var client = Client(definition: Definition(creation: creation));
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
@@ -839,7 +839,7 @@ public sealed class CreationEffectorLawTests {
             var creation = Prototype(effectors: effectors);
             var client = Client(definition: Definition(creation: creation));
 
-            pool.Reconcile(
+            pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
                 bodyStamps: [new WorldCreationInstances.BodyStamp(
                         BodyIndex: 0,
                         Creation: creation,
@@ -863,7 +863,7 @@ public sealed class CreationEffectorLawTests {
                 );
             }
 
-            var start = pool.BodyShapePose(0, (TipSlot - 1)).Position;
+            var start = pool.BodyShapePose(bodyIndex: 0, shapeIndex: (TipSlot - 1)).Position;
             var travelled = Vector3.Zero;
 
             for (var frame = 0; (frame < 20); frame++) {
@@ -884,7 +884,7 @@ public sealed class CreationEffectorLawTests {
 
             return (Vector3.Distance(
                 value1: start,
-                value2: pool.BodyShapePose(0, (TipSlot - 1)).Position
+                value2: pool.BodyShapePose(bodyIndex: 0, shapeIndex: (TipSlot - 1)).Position
             ), travelled.Length());
         }
     }
@@ -1168,7 +1168,7 @@ public sealed class CreationEffectorLawTests {
             var creation = Prototype(effectors: effectors);
             var client = Client(definition: Definition(creation: creation));
 
-            pool.Reconcile(
+            pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
                 bodyStamps: [new WorldCreationInstances.BodyStamp(
                         BodyIndex: 0,
                         Creation: creation,

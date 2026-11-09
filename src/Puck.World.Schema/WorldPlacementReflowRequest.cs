@@ -1,4 +1,3 @@
-using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -9,7 +8,7 @@ namespace Puck.World;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementReflowEdit(
     string PlacementId,
-    DocumentVector3? Position = null,
+    WorldPlacementTranslation? Position = null,
     float? YawDegrees = null,
     float? Scale = null,
     IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null

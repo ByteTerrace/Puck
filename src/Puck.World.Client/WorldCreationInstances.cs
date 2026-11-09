@@ -96,6 +96,7 @@ public sealed partial class WorldCreationInstances {
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
     private sealed class Registration(CreationDocument document) {
+        public CompiledPlacementFrame StaticFrame;
         // The body-rooted stamp's population index, or null for a row-rooted registration. An ATTACHED row leaves this
         // null deliberately: FindBody keys the one-per-body creation-look registration, and an attached row rides a body
         // WITHOUT owning its look or its part namespace.
@@ -111,7 +112,9 @@ public sealed partial class WorldCreationInstances {
         public int Slots => Motion.SlotCount;
 
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[(document.Shapes?.Count ?? 0)];
+
         public DynamicTransform? PackedRoot;
+
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
         // the registration retires, so the mirror stops reading what no body wears any more.
@@ -219,15 +222,16 @@ public sealed partial class WorldCreationInstances {
         // world.rates lists the registration by, made on its first reading.
         public long RatePack = -1L;
         public int RateHertz = SdfUpdateRateTiers.EveryFrameHertz;
+
         public float RatePixelsPerMetre;
         public string? RateName;
+
         // A reducing placed creation's measured part speed relative to its root, in creation units a second (infinity
         // until measured), and each shape's root-relative pose at its last full pack, which the next one measures
         // against (WorldCreationInstances.MeasurePartSpeed).
         public float PartSpeed = float.PositiveInfinity;
         public Vector3[] PartLocalPositions = [];
         public Quaternion[] PartLocalOrientations = [];
-
         // The pack count when something outside the pack last read one of the body's parts (NotePoseRead), and the
         // farthest, in creation units, any full pack has posed one of its parts' geometry from its root.
         public long PoseReadPack = (long.MinValue / 2);
@@ -1040,11 +1044,12 @@ public sealed partial class WorldCreationInstances {
             seed: ((uint)(live.BodyIndex ?? 0))
         ));
     }
-    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new(document: creation.EngineDocument) {
+    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation, CompiledPlacementFrame frame) => new(document: creation.EngineDocument) {
         Row = row,
         Creation = creation,
         Parts = CreationPartCompiler.Compile(document: creation.Document),
-        Scale = row.Scale,
+        Scale = frame.Scale,
+        StaticFrame = frame,
         FramePoses = new Dictionary<int, FrameTransformDocument>?[((creation.Document.Frames?.Count ?? 0) + 1)],
     };
     // The root pose of a live registration: a body-rooted stamp reads the client's interpolated body pose; an ATTACHED
@@ -1078,16 +1083,7 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
-        // An ANIMATED row's own registration carries no WorldDefinition reference (KeyedReconciler's recreate/update
-        // delegates are static, capturing nothing), so a Parent-carrying animated row rides its own authored
-        // Position/YawDegrees here rather than its composed frame — the ordinary (non-animated) static-stamp path
-        // (WorldPlacementStamper.EmitStatic) is the one every Parent-carrying placement in the shipped games rides.
-        var rotation = Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitY,
-            angle: float.DegreesToRadians(degrees: row.YawDegrees)
-        );
-
-        return (row.Position, rotation, row.Scale);
+        return (live.StaticFrame.Position, live.StaticFrame.Rotation, live.StaticFrame.Scale);
     }
     private bool TryFindBody(int bodyIndex, out int poolIndex, out Registration live) {
         if (!m_bodySlotsStale) {
@@ -1277,17 +1273,18 @@ public sealed partial class WorldCreationInstances {
     /// stamps root on a population body. Diff-by-stable-key, cheap pose edits in place, release+recreate on
     /// creation-content change, symmetric release on removal. Row-rooted placements are admitted first; body stamps fill
     /// the remaining free slots.</summary>
+    /// <param name="placementFrames">The same delivery's canonical resolved frames, required for every static root.</param>
     /// <param name="placements">The delivered placement rows.</param>
     /// <param name="creations">The delivered creation rows.</param>
     /// <param name="dynamics">The delivered <c>dynamics</c> rows — resolves each body-rooted registration's root/part
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
     /// <param name="looks">The world's declared looks, whose rigid assets are compiled independently of body membership.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
+    public void Reconcile(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
         Rigid.Reconcile(bodies: bodyStamps, creations: creations, looks: looks, placements: placements);
         bodyStamps = bodyStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).ToArray();
         m_bodySlotsStale = true;
-        ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placements: placements);
+        ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placementFrames: placementFrames, placements: placements);
         IndexBodySlots();
     }
 
@@ -1316,7 +1313,7 @@ public sealed partial class WorldCreationInstances {
 
         return slots;
     }
-    private void ReconcileSlots(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+    private void ReconcileSlots(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
         // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).
@@ -1394,13 +1391,16 @@ public sealed partial class WorldCreationInstances {
                         b: entry.Creation.Hash,
                         comparisonType: StringComparison.Ordinal
                     ),
-                    recreate: static found => RegisterRow(
+                    recreate: found => RegisterRow(
+                        frame: placementFrames[found.Row.Id],
                         creation: found.Creation,
                         row: found.Row
                     ),
-                    update: static (entry, found) => {
+                    update: (entry, found) => {
                         entry.Row = found.Row;
                         entry.Creation = found.Creation;
+                        entry.StaticFrame = placementFrames[found.Row.Id];
+                        entry.Scale = entry.StaticFrame.Scale;
                     }
                 )
             );
@@ -1436,6 +1436,7 @@ public sealed partial class WorldCreationInstances {
 
 
             var registered = RegisterRow(
+                frame: placementFrames[placement.Id],
                 creation: creation,
                 row: placement
             );
@@ -1560,11 +1561,13 @@ public sealed partial class WorldCreationInstances {
         // Before the first pack there is no published animation pose; expose the authored rest/frame pose.
         if (live.PackedRoot is null) {
             var (position, rotation) = BasePose(poses: FramePoses(frameCursor: live.EffectiveCursor, live: live), shape: shapes[shapeSlot]);
-            var root = RootPose(live: live, client: client);
-            return new SdfAnchor(Position: root.Position + Vector3.Transform(position * root.Scale, root.Rotation),
-                Orientation: Quaternion.Normalize(root.Rotation * rotation));
+            var root = RootPose(client: client, live: live);
+
+            return new SdfAnchor(Position: (root.Position + Vector3.Transform(rotation: root.Rotation, value: (position * root.Scale))),
+                Orientation: Quaternion.Normalize(value: (root.Rotation * rotation)));
         }
-        var pose = PackedShapePose(live, shapeSlot);
+        var pose = PackedShapePose(live: live, shapeIndex: shapeSlot);
+
         return new SdfAnchor(Position: pose.Position, Orientation: pose.Orientation);
     }
 
@@ -1574,7 +1577,7 @@ public sealed partial class WorldCreationInstances {
 
         if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(paramName: nameof(shapeIndex)); }
         NotePoseRead(live: live);
-        return PackedShapePose(live, shapeIndex);
+        return PackedShapePose(live: live, shapeIndex: shapeIndex);
     }
 
     // Anchor and rig readers use exactly the pose the pack published, including uniform size and followers.
@@ -1586,6 +1589,7 @@ public sealed partial class WorldCreationInstances {
             Position: (pose.Position + Vector3.Transform((shape.Position.Value * pose.Scale), pose.Orientation)),
             Orientation: Quaternion.Normalize(value: (pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) { Scale = pose.Scale } : pose);
     }
+
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>

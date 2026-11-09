@@ -103,7 +103,8 @@ public static class WorldDefinitionFingerprint {
     /// <summary>Computes the canonical census for one bounded spatial read. The census includes every authored
     /// spatial volume whose conservative envelope intersects the region, plus all of those rows'
     /// parent frames. That makes a new or enlarged obstacle entering the region a negative dependency while edits
-    /// wholly outside it remain independent.</summary>
+    /// wholly outside it remain independent. The world seed is included because it positions Noise/Scatter
+    /// distributions and dealt slots even when the selected census stays equal.</summary>
     /// <param name="definition">The document being observed.</param>
     /// <param name="region">The finite fixed-point world XYZ read bounds.</param>
     public static string ComputeSpatial(WorldDefinition definition, in WorldSpatialReadRegion region) {
@@ -117,6 +118,8 @@ public static class WorldDefinitionFingerprint {
             writer.WriteNumberValue(value: region.MaxZRaw);
             writer.WriteNumberValue(value: region.MinYRaw);
             writer.WriteNumberValue(value: region.MaxYRaw);
+            // Noise/Scatter offsets (including a dealt child's slot) and distributed footprints read this input.
+            writer.WriteNumberValue(value: (definition.Generation?.WorldSeed ?? 0UL));
 
             var stateRows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -129,7 +132,7 @@ public static class WorldDefinitionFingerprint {
                     placement,
                     WorldJsonContext.Default.WorldPlacement
                 );
-                CollectPlacementStateInputs(placement, stateRows);
+                CollectPlacementStateInputs(placement: placement, rows: stateRows);
             }
             // Canonical rows retain state references. Include their source values so a bound extent changing
             // inside the same census cannot leave a spatial guard looking unchanged.
@@ -148,10 +151,10 @@ public static class WorldDefinitionFingerprint {
     /// <summary>Collects a placement's state inputs, including the membership and variants a deal reads.
     /// Spatial guards, reflow proposals and disclosure admission share this dependency vocabulary.</summary>
     public static void CollectPlacementStateInputs(WorldPlacement placement, ISet<string> rows) {
-        WorldStateDocumentValues.CollectReferencedRows(placement, rows);
+        WorldStateDocumentValues.CollectReferencedRows(graph: placement, rows: rows);
         if (placement.Deal is not { } deal) { return; }
-        rows.Add(deal.Row);
-        if (deal.Variants is { } variants) { rows.Add(variants.Row); }
+        rows.Add(item: deal.Row);
+        if (deal.Variants is { } variants) { rows.Add(item: variants.Row); }
     }
     /// <summary>Returns whether a placement can enter some spatial census on its own account: it declares a spatial
     /// volume, or it is a deal template whose children may carry facets. <see cref="SpatialRows"/> returns no other
@@ -159,7 +162,7 @@ public static class WorldDefinitionFingerprint {
     /// <param name="placement">The authored placement.</param>
     /// <returns><see langword="true"/> when some region's census can hold the placement.</returns>
     public static bool EntersSpatialCensus(WorldPlacement placement) =>
-        (placement.Spatial is { Count: > 0 }) || (placement.Deal is { Preserve: { Facets: true } });
+        ((placement.Spatial is { Count: > 0 }) || (placement.Deal is { Preserve: { Facets: true } }));
     /// <summary>Returns the authored rows observed by a bounded spatial read in document order.</summary>
     public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in WorldSpatialReadRegion region) {
         if (definition.PlacementsRaw is not { } section) { return []; }
@@ -190,8 +193,8 @@ public static class WorldDefinitionFingerprint {
         // and preserved child facets/transforms have no static exclusion bound. Include the declaration even
         // when no child exists, just as an unsupported dynamic volume is included above.
         foreach (var placement in definition.Placements) {
-            if (placement.Deal is not null && EntersSpatialCensus(placement)) {
-                Include(placement.Id);
+            if ((placement.Deal is not null) && EntersSpatialCensus(placement: placement)) {
+                Include(id: placement.Id);
             }
         }
         return selected.Where(predicate: lookup.ContainsKey).Select(selector: id => lookup[id]).OrderBy(keySelector: item => item.Ordinal).Select(selector: item => item.Row).ToArray();

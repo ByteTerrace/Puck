@@ -2041,13 +2041,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · parented frames] Two consumers read a parented placement's
-  `position` as world space instead of composing its frame
-  (`WorldPlacementFrameCompilation.Compose`): an animated placement with a
-  parent draws at its stored position (`WorldCreationInstances`, the animated
-  instance path), and `world.nudge` with a captured reference frame
-  (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
-  change and now cover dealt children too. Route both through the one resolver.
 - [medium · duplicate] Division by a reused divisor through a ceil(2^64/d)
   high multiply exists twice, both private: `SdfSampledLattice.FineDivisor`
   and `PrimeExtensions.QuotientCountWord32` (`Reciprocal`, `Divide`). Make one

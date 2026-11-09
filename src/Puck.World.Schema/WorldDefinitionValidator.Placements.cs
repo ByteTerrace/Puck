@@ -1544,8 +1544,8 @@ public static partial class WorldDefinitionValidator {
                 path: path,
                 placement: placement
             );
-            if (!WorldPlacementStamp.TryValidateSurface(definition, placement, out var surfaceReason)) {
-                errors.Add(surfaceReason);
+            if (!WorldPlacementStamp.TryValidateSurface(definition: definition, placement: placement, reason: out var surfaceReason)) {
+                errors.Add(item: surfaceReason);
             }
 
             // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
@@ -1612,7 +1612,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!VectorFunctions.IsFinite(vector: placement.Position)) {
+            if (!placement.Position.IsFinite) {
                 errors.Add(item: $"{path}.position must contain finite coordinates.");
             }
 

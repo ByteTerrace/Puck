@@ -113,13 +113,14 @@ public sealed record WorldPrototype(
 
     // The digest of a row with its palette removed, once per row; null for a row the normalizer refuses.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldPrototype, byte[]?[]> UnshadedDigests = new();
+
     private static byte[]? UnshadedDigest(WorldPrototype row) => UnshadedDigests.GetValue(key: row, createValueCallback: static row => {
         try {
             return [System.Security.Cryptography.SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(
                 jsonTypeInfo: WorldJsonContext.Default.WorldPrototype,
                 value: (row with { Document = (row.EngineDocument with { Palette = null }), HashRaw = null })
             ))];
-        } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is DocumentValidationException or InvalidOperationException)) {
             return [null];
         }
     })[0];
@@ -506,10 +507,11 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <c>$each</c> (<see cref="TryValidateId"/>).</param>
 /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
-/// <param name="Position">The stamp position — world space when <paramref name="Parent"/> is null (today's behavior,
-/// unchanged), or this row's own local frame relative to <paramref name="Parent"/>'s COMPOSED world frame otherwise
+/// <param name="Position">The opaque stored translation — a local offset when <paramref name="Parent"/> is null,
+/// or relative to <paramref name="Parent"/>'s composed frame otherwise
 /// (see <paramref name="Parent"/>). A dealt child's is its displacement from its <paramref name="DealSlot"/>'s offset
-/// in its template's region (<see cref="WorldPlacementFrameCompilation.LocalFrame"/>). Inert (still validated and stored, but read by nothing — neither the resolve nor
+/// in its template's region (<see cref="WorldPlacementFrameCompilation.LocalFrame"/>). Exact runtime writes retain
+/// Q48.16 through serialization; geometric readers require a resolved frame. Inert (still validated and stored, but read by nothing — neither the resolve nor
 /// the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved attachment, never
 /// this authored one.</param>
 /// <param name="YawDegrees">The stamp yaw about +Y, degrees — world-space when <paramref name="Parent"/> is null,
@@ -564,8 +566,9 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// for a world-space row (today's behavior, unchanged). <see cref="Position"/>/<see cref="YawDegrees"/> become this
 /// row's own LOCAL offset/heading in the parent's composed frame: the parent's resolved yaw rotates the offset before
 /// adding the parent's resolved position (the same local-offset-rotated-by-orientation convention
-/// <see cref="WorldPlacementAttach"/> already uses), and yaw adds. Resolved ONCE, statically, by
-/// <see cref="WorldPlacementFrameCompilation"/> — never per tick — into <see cref="WorldDefinition.PlacementFrames"/>,
+/// <see cref="WorldPlacementAttach"/> already uses), and yaw adds. Resolved by
+/// <see cref="WorldPlacementFrameCompilation"/> into <see cref="WorldDefinition.PlacementFrames"/>, with cached
+/// frames only for immutable inputs and fresh frames for state-bound translations or lattice steps,
 /// which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees.
 /// Validated: must name a declared placement other than itself, must not close a cycle, and that placement must
 /// carry neither a <see cref="Distribution"/> nor a <see cref="Mirror"/> (an expanded row has no single frame to
@@ -591,7 +594,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
-    DocumentVector3 Position,
+    WorldPlacementTranslation Position,
     float YawDegrees,
     float Scale,
     WorldDistribution? Distribution = null,

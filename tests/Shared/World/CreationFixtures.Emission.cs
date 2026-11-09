@@ -34,7 +34,7 @@ internal static partial class CreationFixtures {
         });
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             placements: [],
             creations: [creation],
             dynamics: [],

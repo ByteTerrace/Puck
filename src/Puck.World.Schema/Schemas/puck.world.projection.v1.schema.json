@@ -26416,7 +26416,7 @@
           },
           "position": {
             "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one.",
-            "title": "DocumentVector3",
+            "title": "WorldPlacementTranslation",
             "anyOf": [
               {
                 "type": "array",
@@ -45752,7 +45752,7 @@
                             },
                             "position": {
                               "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). A dealt child\u0027s is its displacement from its DealSlot\u0027s offset in its template\u0027s region (LocalFrame). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one.",
-                              "title": "DocumentVector3",
+                              "title": "WorldPlacementTranslation",
                               "anyOf": [
                                 {
                                   "type": "array",

@@ -9566,7 +9566,7 @@ export type WorldPlacement = {
   /**
    * The stamp position — world space when Parent is null (today's behavior, unchanged), or this row's own local frame relative to Parent's COMPOSED world frame otherwise (see Parent). A dealt child's is its displacement from its DealSlot's offset in its template's region (LocalFrame). Inert (still validated and stored, but read by nothing — neither the resolve nor the renderer) when Attach is set: the row's live position is the resolved attachment, never this authored one.
    */
-  position: DocumentVector3;
+  position: WorldPlacementTranslation;
   /**
    * The stamp yaw about +Y, degrees — world-space when Parent is null, added to the parent's own composed yaw otherwise. Same attach caveat as Position.
    */
@@ -10138,6 +10138,11 @@ export type WorldPlacementSurface = {
    */
   requireHit?: boolean;
 };
+
+/**
+ * An opaque stored placement translation: a dealt child's displacement from its slot, otherwise an authored local offset. Geometry reads a resolved frame through WorldPlacementFrameCompilation, never this value as a position. Fixed-point writes and their JSON round trips retain every Q48.16 bit.
+ */
+export type WorldPlacementTranslation = [number, number, number] | string;
 
 export type WorldPlacementsSection = {
   /**

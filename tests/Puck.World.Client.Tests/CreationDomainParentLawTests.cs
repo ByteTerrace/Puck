@@ -137,7 +137,7 @@ public sealed class CreationDomainParentLawTests {
     internal static WorldCreationInstances Pool(WorldPrototype creation, float scale = 1f) {
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(
                     BodyIndex: 0,
                     Creation: creation,
@@ -182,7 +182,7 @@ public sealed class CreationDomainParentLawTests {
     // The fold shape's emitted chain: its own slot, the placement scale, the fold, then its rest translate/rotate —
     // returned as the index of the TransformDynamic that opens it.
     private static int AssertFoldChain(SdfInstruction[] program, float scale, Vector3 engineRestPosition) {
-        var transformIndex = (Array.FindIndex(program, instruction => (instruction.Op == SdfOp.SymmetryPlane)) - 2);
+        var transformIndex = (Array.FindIndex(array: program, match: instruction => (instruction.Op == SdfOp.SymmetryPlane)) - 2);
 
         Assert.True(
             condition: (transformIndex >= 0),
@@ -345,7 +345,7 @@ public sealed class CreationDomainParentLawTests {
             );
         }
 
-        var torso = pool.BodyShapePose(0, 0);
+        var torso = pool.BodyShapePose(bodyIndex: 0, shapeIndex: 0);
         var fold = transforms[FoldSlot];
 
         Assert.True(
@@ -429,7 +429,7 @@ public sealed class CreationDomainParentLawTests {
             );
         }
 
-        var torso = pool.BodyShapePose(0, 0);
+        var torso = pool.BodyShapePose(bodyIndex: 0, shapeIndex: 0);
         var fold = transforms[FoldSlot];
         var anchor = transforms[AnchorSlot];
 

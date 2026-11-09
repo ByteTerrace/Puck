@@ -577,7 +577,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     anchor: EmitterAnchor.PlacementPoint(
                         placementId: placement.Id,
                         shapeId: null,
-                        staticPosition: placement.Position,
+                        staticPosition: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement),
                         isAttached: (placement.Attach is not null)
                     ),
                     emission: emission,
@@ -1568,11 +1568,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// fall back to the listener placement — honest, documented).</summary>
     /// <remarks>The payload is the row as its submitter wrote it. The document resolves a row's state-backed values
     /// in a private copy on the way to applying it. A missing or state-backed position has no site in this payload,
-    /// applied or refused. References in unrelated fields do not hide a literal position.</remarks>
+    /// applied or refused. A parented, attached or surface-projected placement likewise needs a document or live
+    /// frame unavailable in this payload, so it has no site here. References in unrelated fields do not hide a literal position.</remarks>
     /// <param name="mutation">The mutation the edit echo answered, or <see langword="null"/>.</param>
     public static Vector3? MutationSite(WorldMutation? mutation) => mutation switch {
         WorldMutation.UpsertScreen { Screen.Origin: { Reference: null } origin } => origin.Value,
-        WorldMutation.UpsertPlacement { Placement.Position: { Reference: null } position } => position.Value,
+        WorldMutation.UpsertPlacement { Placement: { Parent: null, Attach: null, Surface: null, Position.Reference: null } placement } =>
+            WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: placement, worldSeed: 0UL).Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed { Position: { Reference: null } position } } => position.Value,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed { Center: { Reference: null } center } } => center.Value,
         WorldMutation.UpsertCamera { Camera: { Anchor: null, Rig: { } rig } } when ((rig.OrbitOp is { } orbit)

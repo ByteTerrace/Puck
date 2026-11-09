@@ -195,6 +195,7 @@ that erase key faults) are not disclosure and stay in the
 
 | Finding | Cause today | Step |
 |---|---|---|
+| [high, RD-03] A missing dealt child reappears only after a hidden-only dealt or variant-row edit | `WorldStateDisclosure.Redeal` (`src/Puck.World.Schema/WorldStateDisclosure.cs:680`) emits existing children; the skip in `WorldTick.SweepPlacementDeals` (`src/Puck.World.Server/WorldTick.Deals.cs:233`) omitted child-only placement edits. Closed by retaining the installed placement projection as a sweep input | 4, landed: the probe removes children from restricted-membership and restricted-variant templates, then changes hidden state in only its late variant; the same fixture leaks before the fix and compares equal after it |
 | [high] Batch guards read undisclosed cells or spatial dependencies | Closed by `WorldRecipientMutations.CheckGuards` over the view, after whole-row policy admission | 3, landed |
 | [high] Transform and Generate admission tests current hidden membership | Closed by declaration-only `WorldRecipientView.Admits` | 3, landed |
 | [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions | Closed by the same policy refusal on every key; typed and addon completions carry that actual verdict | 3, landed |
@@ -612,6 +613,18 @@ on rows the engine can reason about.
 
 ### 4. The physical layout follows the hidden policy
 
+**RD-03 proposed fix, implemented at the sweep:** source-row membership owns the presence of dealt children.
+A placement-only removal or undo must be reconciled on that tick's deal sweep,
+independently of any later hidden-only edit. The single enforcing place is
+`WorldTick.SweepPlacementDeals`: its skip decision must include the installed
+placement projection, and retain only the projection its own install leaves.
+This makes every template recheck child-only edits through the existing `Deal`
+allocator and `WorldPlacementDeal.Reconcile`, including public membership with
+a restricted variant row. It adds no recipient-door repairs or second allocator.
+The probe removes a readable child from each kind of template in every variant;
+only its `late` variant then changes hidden state. `puck disclosure` must first
+distinguish the missing/recreated children, then compare equal with this change.
+
 A dealt child stands on its slot, and the authority's slot is history (the
 lowest slot free when the cell arrived). A reader shown a visible card at slot 1
 learns a hidden card holds slot 0, and a card lifted out of its slot stands
@@ -626,9 +639,17 @@ wherever that slot puts it.
   world seed, plus that displacement
   (`WorldPlacementFrameCompilation.LocalFrame`). The frame table, the spatial
   index and canonical surface frames all resolve a parent chain through that one
-  composition, so the slot's offset never passes through a float and no reader
+  composition. The row's C# `position` carrier is `WorldPlacementTranslation`,
+  an opaque value with no vector getter or outward conversion: reading its
+  components or using it as a position does not compile. Audio emission anchors,
+  slice framing, animated roots and editor nudges read resolved frames too;
+  an animated registration requires the delivery's frame table. The slot's
+  offset never passes through a float and no reader
   recovers a displacement by subtracting one. A mover writes displacement:
-  reflow's candidates go through the inverse (`StoredPosition`), and a position
+  reflow's candidates go through the inverse (`StoredPosition`) directly into
+  exact Q48.16 storage, whose JSON numbers round trip without binary32 narrowing;
+  world-space editor edits use `WithWorldPosition`, which undoes the parent and
+  slot through the same inverse. A position
   upsert writes the row's `position` member, which is the displacement.
 - **Re-dealing in the view, transforms included.** For a template whose dealt
   row the view does not read whole, the kept cells are dealt in the disclosed
@@ -695,13 +716,16 @@ the leak, and so would reconstructing the displacement by subtracting the
 slot's offset from it, since the float's rounding depends on the slot. Storing
 the displacement and composing the slot's fixed-point offset in the one frame
 resolver costs one offset lookup per dealt child per frame compilation (the
-region's offsets are derived once per distribution and seed,
+region's literal offsets are derived once per distribution and seed, while
+state-bound lattice steps bypass that cache and the caches retaining their frames,
 `WorldPlacementDeal.Offsets`), and it is the same composition every other
 parent-chain reader uses, so the view, the spatial index and the renderer
-cannot disagree about where a card stands. A new fixed-point member for the
-displacement was rejected: it would be a second representation of a
-placement's local position beside `position`, which every authored local
-transform already quantizes once at the frame boundary. A member that acts or shows at the
+cannot disagree about where a card stands. A separate displacement member beside
+`position` remains rejected: `WorldPlacementTranslation` replaces the carrier
+of that one member, preserving state references and exact runtime writes while
+making raw-vector reads unavailable. A spatial guard includes the world seed,
+which positions both Noise/Scatter distributions and dealt slots even when its
+census ids stay equal (`WorldDefinitionFingerprint.ComputeSpatial`). A member that acts or shows at the
 authority's slot is an oracle no view can close (a collider the authority
 solves against exists for every body in the room), so nothing under the
 template may author one; that is a validator refusal rather than a

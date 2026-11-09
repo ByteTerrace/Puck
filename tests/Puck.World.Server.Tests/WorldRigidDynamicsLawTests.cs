@@ -540,7 +540,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
             Placement: (floor with {
-                Position = (floor.Position - new Vector3(
+                Position = (WorldDefinitionRows.ResolvedPosition(definition: fixture.Server.Definition, placement: floor) - new Vector3(
                 x: 0f,
                 y: Drop,
                 z: 0f
@@ -556,8 +556,8 @@ public sealed class WorldRigidDynamicsLawTests {
         )!;
 
         Assert.Equal(
-            expected: (floor.Position.Y - Drop),
-            actual: lowered.Position.Y
+            expected: (WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: floor, worldSeed: 0UL).Position.Y - Drop),
+            actual: WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: lowered, worldSeed: 0UL).Position.Y
         );
 
         for (var tick = 0; (tick < 30); tick++) {

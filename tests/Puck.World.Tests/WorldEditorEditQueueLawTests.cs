@@ -101,8 +101,8 @@ public sealed class WorldEditorEditQueueLawTests {
         Assert.Equal(actual: rig.Link.PrincipalOf(index: 0), expected: Principal.Console);
         Assert.Equal(actual: rig.Link.PrincipalOf(index: 1), expected: Principal.Console);
         Assert.Equal(actual: rig.Link.PrincipalOf(index: 2), expected: Principal.Seat(slot: 0));
-        Assert.Equal(actual: ((Vector3)rig.Link.Placement(index: 1).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (2f * Step)));
-        Assert.Equal(actual: ((Vector3)rig.Link.Placement(index: 2).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (3f * Step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 1), 0UL, out _).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (2f * Step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 2), 0UL, out _).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (3f * Step)));
     }
     [Fact]
     public void AnEditThatCannotGoOutIsRefusedBeforeItQueuesAndNeverWedgesItsLine() {
@@ -138,7 +138,7 @@ public sealed class WorldEditorEditQueueLawTests {
         rig.Link.Fails = false;
         _ = rig.Submit(line: Nudge);
         Assert.Equal(actual: rig.Link.Submitted.Count, expected: 3);
-        Assert.Equal(actual: ((Vector3)rig.Link.Placement(index: 2).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (3f * Step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 2), 0UL, out _).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (3f * Step)));
     }
     [Fact]
     public void PlacesMadeBeforeAnyVerdictMintDistinctIds() {
@@ -164,7 +164,7 @@ public sealed class WorldEditorEditQueueLawTests {
         // In the console's own world: nudge x, let it apply and deliver, undo it, let that apply, then nudge z.
         using var row = EditorPlacementFixtures.Build();
         var registry = WorldEditorPlacementLawTests.BuildRegistry(row: row, seats: new WorldEditorSeats());
-        var before = ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position);
+        var before = (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).Position);
         var z = new Vector3(x: 0f, y: 0f, z: WorldEditorPlacementLawTests.Pitch);
 
         Assert.False(condition: registry.Submit(line: $"world.grid pitch {WorldEditorPlacementLawTests.Pitch}").IsError);
@@ -174,7 +174,7 @@ public sealed class WorldEditorEditQueueLawTests {
         row.Server.Advance(stepTicks: Fixtures.StepTicks);
         Assert.False(condition: registry.Submit(line: "world.nudge crate1 z 1").IsError);
         row.Server.Advance(stepTicks: Fixtures.StepTicks);
-        Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position), expected: (before + z));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).Position), expected: (before + z));
 
         // Across a seam: the away world confirms a nudge, delivers it, then delivers its undo, all before the next edit.
         using var rig = new Rig();
@@ -185,11 +185,11 @@ public sealed class WorldEditorEditQueueLawTests {
         rig.Link.Sequence++;
         rig.Deliver(crate: WorldEditorPlacementLawTests.AwayCrate);
         _ = rig.Submit(line: "world.nudge crate1 z 1");
-        Assert.Equal(actual: ((Vector3)rig.Link.Placement(index: 1).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + z));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 1), 0UL, out _).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + z));
 
         // Red leg: the undone document shows exactly the row from before the edit, so a queue ordering by value takes it
         // as a document older than the confirmation and bases the next edit on the undone move.
-        Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: rig.Endpoint.Definition.Placements)!.Position), expected: WorldEditorPlacementLawTests.AwayCrate);
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: rig.Endpoint.Definition.Placements)!, 0UL, out _).Position), expected: WorldEditorPlacementLawTests.AwayCrate);
     }
     [Fact]
     public void ACrossingOnwardAbandonsTheWorldItLeftAndNeverCarriesItsRows() {
@@ -211,8 +211,8 @@ public sealed class WorldEditorEditQueueLawTests {
         // A nudge in B bases on B's own crate1. Red leg: A's confirmed row is not B's, so a queue keyed by the endpoint's
         // name hands B the geometry of A plus the nudge.
         _ = rig.Submit(line: Nudge);
-        Assert.Equal(actual: ((Vector3)rig.Link.Placement(index: 2).Position), expected: (beyond + Step));
-        Assert.NotEqual(actual: ((Vector3)rig.Link.Placement(index: 1).Position), expected: beyond);
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 2), 0UL, out _).Position), expected: (beyond + Step));
+        Assert.NotEqual(actual: (WorldPlacementFrameCompilation.LocalFrame(null, rig.Link.Placement(index: 1), 0UL, out _).Position), expected: beyond);
 
         // A's late verdict answers nothing.
         rig.Link.Complete(index: 1, result: rig.Link.Applied());
@@ -239,19 +239,19 @@ public sealed class WorldEditorEditQueueLawTests {
             Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'boot' rolled back to 1.1,3,-1]");
 
             // Red leg: the stopped world never stepped, so the edit was answered by the stop, never applied.
-            Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: stopped.Server.Definition.Placements)!.Position).X, expected: 1.1f);
+            Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: stopped.Server.Definition.Placements)!, 0UL, out _).Position).X, expected: 1.1f);
 
             // A new 'boot', at the very tick the stopped one had reached, takes the next edit at once, from its own document:
             // neither the queue nor the console's row guard carries anything over from the world it replaced.
             current = EditorPlacementFixtures.Build();
 
-            var before = ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: current.Server.Definition.Placements)!.Position);
+            var before = (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: current.Server.Definition.Placements)!, 0UL, out _).Position);
             var nudged = registry.Submit(line: Nudge);
 
             Assert.False(condition: nudged.IsError, userMessage: nudged.Output);
             Assert.Contains(expectedSubstring: "edit=submitted", actualString: nudged.Output);
             current.Server.Advance(stepTicks: Fixtures.StepTicks);
-            Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: current.Server.Definition.Placements)!.Position).X, expected: (before.X + WorldEditorPlacementLawTests.Pitch), tolerance: 1e-5);
+            Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: current.Server.Definition.Placements)!, 0UL, out _).Position).X, expected: (before.X + WorldEditorPlacementLawTests.Pitch), tolerance: 1e-5);
         } finally {
             current.Dispose();
         }
@@ -279,7 +279,7 @@ public sealed class WorldEditorEditQueueLawTests {
         rig.Link.Complete(index: 0, result: rig.Link.Applied());
         _ = Assert.Single(collection: second.Submitted);
         Assert.Equal(actual: second.PrincipalOf(index: 0), expected: Principal.Seat(slot: 1));
-        Assert.Equal(actual: ((Vector3)second.Placement(index: 0).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (2f * Step)));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, second.Placement(index: 0), 0UL, out _).Position), expected: (WorldEditorPlacementLawTests.AwayCrate + (2f * Step)));
 
         // Red leg: seat 0's endpoint carried seat 0's edit alone, so a queue keeping the first endpoint's link would have
         // sent seat 1's through seat 0's credential.
@@ -314,7 +314,7 @@ public sealed class WorldEditorEditQueueLawTests {
         var routes = new WorldSeatAuthorityRouter();
         var registry = WorldEditorPlacementLawTests.BuildRegistry(echoes: echoes, routes: routes, row: console, seats: new WorldEditorSeats());
 
-        Vector3 CrateIn(HostRow world) => ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: world.Server.Definition.Placements)!.Position);
+        Vector3 CrateIn(HostRow world) => (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: world.Server.Definition.Placements)!, 0UL, out _).Position);
 
         echoes.Completed += result => lines.Add(item: result.Output);
         _ = routes.Publish(endpoint: endpoint, entity: endpoint.Mirror.Address(index: 0), slot: 0);
@@ -393,7 +393,7 @@ public sealed class WorldEditorEditQueueLawTests {
 
         // The queued edit, composed on the federated one, applies at the next tick; the placement applied at the first.
         row.Server.Advance(stepTicks: Fixtures.StepTicks);
-        Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position).X, expected: (1.1f + (2f * WorldEditorPlacementLawTests.Pitch)), tolerance: 1e-5);
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!, 0UL, out _).Position).X, expected: (1.1f + (2f * WorldEditorPlacementLawTests.Pitch)), tolerance: 1e-5);
         Assert.NotNull(@object: WorldDefinitionRows.FindPlacement(id: "crate2", placements: row.Server.Definition.Placements));
         seat.Dispose();
         far.Dispose();

@@ -146,11 +146,11 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     public void PrepareFrame() {
         if (m_liveSlots.Length != m_emittedEntities.Length) { m_liveSlots = new int[m_emittedEntities.Length]; }
-        Array.Fill(m_liveSlots, -1);
+        Array.Fill(array: m_liveSlots, value: -1);
         m_liveSlotCount = 0;
         var visuals = m_source.Visuals();
 
-        for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
+        for (var band = 0; (band < Math.Min(val1: visuals.Count, val2: m_bandCount)); band++) {
             SelectBand(visuals[band], m_polledEntities);
             for (var body = 0; (body < m_polledEntities.Length); body++) {
                 if (!m_polledEntities[body]) { continue; }
@@ -158,7 +158,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
             }
         }
-        PrepareStaticProjections(visuals);
+        PrepareStaticProjections(projections: visuals);
     }
 
     public int DynamicSlotCount => m_liveSlotCount;
@@ -325,8 +325,9 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // Fixed point throughout except the two float<->fixed boundary conversions (the one sanctioned rendering seam),
     // so the strip a body sees is placed by the IDENTICAL math the strip it stands on already uses.
     private static WorldPlacement MapIntoSource(WorldPlacement placement, IReadOnlyList<WorldAdjacencyFramePair> path, WorldDefinition definition) {
-        var frame = WorldDefinitionRows.ResolvedFrame(definition, placement);
-        var mapped = placement with { Position = frame.Position, YawDegrees = frame.YawDegrees, Parent = null };
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var mapped = placement with { Position = frame.FixedPosition, YawDegrees = frame.YawDegrees, Scale = frame.Scale, Parent = null };
+        var position = frame.FixedPosition;
 
         foreach (var stage in path) {
             var yaw = FixedQ4816.FromDegrees(degrees: mapped.YawDegrees);
@@ -349,12 +350,13 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 destination: stage.Source
             );
 
-            mapped = mapped with {
-                Position = WorldFrameIsometry.MapPoint(
-                point: FixedVector3.FromVector3(value: mapped.Position),
+            position = WorldFrameIsometry.MapPoint(
+                point: position,
                 source: stage.Neighbour,
                 destination: stage.Source
-            ).ToVector3(),
+            );
+            mapped = mapped with {
+                Position = position,
                 YawDegrees = ((float)double.RadiansToDegrees(radians: ((double)FixedQ4816.Atan2(
                 y: mappedForward.X,
                 x: mappedForward.Z
@@ -511,8 +513,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (mappedCount > 0) {
-                var prepared = ((!queryOnly && includeEntities) ? m_staticProjections.GetValueOrDefault(projection.Name) : null);
-                var mappedRows = (prepared?.Rows ?? m_mappedPlacements.AsSpan(0, mappedCount).ToArray());
+                var prepared = ((!queryOnly && includeEntities) ? m_staticProjections.GetValueOrDefault(key: projection.Name) : null);
+                var mappedRows = (prepared?.Rows ?? m_mappedPlacements.AsSpan(length: mappedCount, start: 0).ToArray());
                 // The mapped rows are standalone source-space frames. Looking their ids up in the neighbour's
                 // original placement table would discard the mapped positions.
                 var mappedImage = (prepared?.Image ?? (image with { PlacementRowsRaw = mappedRows }));
@@ -547,9 +549,9 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             if (includeEntities) {
                 EmitEntities(
+                    bandIndex: bandIndex,
                     builder: builder,
                     projection: projection,
-                    bandIndex: bandIndex,
                     slotBase: slotBase
                 );
             }

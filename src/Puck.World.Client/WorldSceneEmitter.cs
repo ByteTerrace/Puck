@@ -442,6 +442,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
         m_animator.Reconcile(
+            placementFrames: definition.PlacementFrames,
             looks: definition.Looks,
             placements: definition.Placements,
             creations: definition.Creations,
@@ -799,6 +800,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
         m_animator.Reconcile(
+            placementFrames: definition.PlacementFrames,
             looks: definition.Looks,
             placements: definition.Placements,
             creations: definition.Creations,

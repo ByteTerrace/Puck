@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // What the last deal read: its template, its region's slot count, arena identity, and input row versions. A tick on which none of it moved skips the template without reading its children.
+    // What the last deal read, beside the placement projection below: its template, region, arena and input rows.
     private sealed class DealMemo {
         public WorldDistribution? Distribution;
         public int Slots;
@@ -18,6 +18,11 @@ public sealed partial class WorldTick {
     private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow, string? Refused = null);
 
     private readonly Dictionary<string, DealMemo> m_dealMemos = new(comparer: StringComparer.Ordinal);
+
+    // Membership belongs to the source cells. A child-only edit invalidates every skip, independently of whether a
+    // hidden row later moves. Hold the projection our own install leaves, so a sweep does not invalidate itself.
+    private IReadOnlyList<WorldPlacement>? m_dealProjection;
+
     private readonly List<WorldPlacement> m_dealChildren = [];
     private readonly List<int> m_dealChildSlots = [];
     private readonly List<bool> m_dealChildKept = [];
@@ -27,8 +32,6 @@ public sealed partial class WorldTick {
     private readonly List<DealReport> m_dealReports = [];
     private readonly List<WorldPlacement> m_dealInstalled = [];
     private bool[] m_dealSlotTaken = [];
-
-
 
     /// <summary>Describes every placement row as one reader's disclosure deals it: its prototype, resolved transform,
     /// parent, facets, and — for a dealt template — the row it deals from with the children present against the row's
@@ -191,12 +194,13 @@ public sealed partial class WorldTick {
     }
     // Runs once per tick right after SweepPlacementResponses: the rule frame has folded, so a cell a rule wrote
     // this tick deals on this tick's sweep. Nothing here runs, and nothing allocates, on a tick where the installed
-    // document is the one the last sweep left — and a template whose dealt row, variant row, and own row are
-    // unchanged is skipped before its children are read. Every template's children are dealt against the document
-    // the sweep opened on (no two templates share a child), and the tick's whole deal applies as one mutation: one
-    // composition, one whole-document validation, one journal entry, landing or refused as a unit.
+    // placement projection is the one the last sweep left and the template's dealt row, variant row and own row are
+    // unchanged. Every template's children are dealt against the document
+    // the sweep opened on (no two templates share a child). Each template's changed children validate as a unit;
+    // the tick installs one derived projection without journalling declaration edits.
     private void SweepPlacementDeals(ulong tick) {
         var placements = Host.Document.Definition.Placements;
+        var projectionMoved = !ReferenceEquals(objA: m_dealProjection, objB: placements);
         var worldSeed = (Host.Document.Definition.Generation?.WorldSeed ?? 0UL);
         var templates = 0;
 
@@ -213,10 +217,11 @@ public sealed partial class WorldTick {
             templates++;
 
             var arena = Host.Arena;
-            var rowOrdinal = arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1;
-            var variantOrdinal = deal.Variants is { } variants && arena.Catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle) ? variantHandle.Ordinal : -1;
-            var rowVersion = rowOrdinal < 0 ? 0UL : arena.RowVersion(rowOrdinal);
-            var variantVersion = variantOrdinal < 0 ? 0UL : arena.RowVersion(variantOrdinal);
+            var rowOrdinal = (arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1);
+            var variantOrdinal = (((deal.Variants is { } variants) && arena.Catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle)) ? variantHandle.Ordinal : -1);
+            var rowVersion = ((rowOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: rowOrdinal));
+            var variantVersion = ((variantOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: variantOrdinal));
+
             if (!m_dealMemos.TryGetValue(
                 key: template.Id,
                 value: out var memo
@@ -226,13 +231,13 @@ public sealed partial class WorldTick {
             }
 
             if (
-                memo.Swept &&
+                !projectionMoved && memo.Swept &&
                 (memo.WorldSeed == worldSeed) &&
                 (ReferenceEquals(
                 objA: memo.Template,
                 objB: template
             ) || template.Equals(other: memo.Template)) &&
-                ReferenceEquals(memo.Arena, arena) && memo.RowVersion == rowVersion && memo.VariantVersion == variantVersion
+                ReferenceEquals(objA: memo.Arena, objB: arena) && (memo.RowVersion == rowVersion) && (memo.VariantVersion == variantVersion)
             ) {
                 continue;
             }
@@ -270,6 +275,7 @@ public sealed partial class WorldTick {
         }
 
         Host.Document.InstallPlacementProjection(changes: m_dealChanges);
+        m_dealProjection = Host.Document.Definition.Placements;
 
         if (Host.Output.HasNarrationSink) {
             foreach (var report in m_dealReports) {
@@ -380,7 +386,8 @@ public sealed partial class WorldTick {
 
         m_dealtKeys.Clear();
         var cursor = 0;
-        if (rowOrdinal >= 0) { while (arena.TryNextCell(rowOrdinal, ref cursor, out var cellKey)) { m_dealtKeys.Add(arena.Keys[cellKey]); } }
+
+        if (rowOrdinal >= 0) { while (arena.TryNextCell(cursor: ref cursor, key: out var cellKey, rowOrdinal: rowOrdinal)) { m_dealtKeys.Add(item: arena.Keys[cellKey]); } }
         var cells = m_dealtKeys;
         var replaced = 0;
 
@@ -420,7 +427,7 @@ public sealed partial class WorldTick {
             }
 
             replaced++;
-            m_dealChanges.Add((reconciled.Id, reconciled));
+            m_dealChanges.Add(item: (reconciled.Id, reconciled));
         }
 
         var removed = 0;
@@ -437,7 +444,7 @@ public sealed partial class WorldTick {
             }
 
             removed++;
-            m_dealChanges.Add((m_dealChildren[childIndex].Id, null));
+            m_dealChanges.Add(item: (m_dealChildren[childIndex].Id, null));
         }
 
         var added = 0;
@@ -483,7 +490,8 @@ public sealed partial class WorldTick {
                     prototype: prototype,
                     template: template
                 ));
-            m_dealChanges.Add((nextChild.Id, nextChild));
+
+            m_dealChanges.Add(item: (nextChild.Id, nextChild));
         }
 
         if (

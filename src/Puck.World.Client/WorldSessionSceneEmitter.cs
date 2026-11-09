@@ -128,6 +128,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
 
     private readonly WorldCreationInstances m_pool = new();
+
     /// <summary>The scene's body presentation registrations, shared by routed rig reads and animation reseeding.</summary>
     public WorldCreationInstances BodyStamps => m_pool;
 
@@ -297,7 +298,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!HoldsAvatar(index)) { continue; }
+            if (!HoldsAvatar(index: index)) { continue; }
             // A body the pool registered renders its creation there and parks this catalog avatar; its palette entry
             // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
@@ -468,6 +469,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : null
         );
     }
+
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(
@@ -542,8 +544,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Lights = environment.Lights,
             Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
             Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: Session?.ToonOverride),
-            ShadePrograms = Session?.ShadePrograms ?? false,
-            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade),
+            ShadePrograms = (Session?.ShadePrograms ?? false),
+            ShadeDefault = WorldRenderSettings.CompileShade(definition: (Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade)),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
@@ -607,7 +609,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     // Whether the scene draws a body's avatar: the mirror's active bodies, none in far geometry.
-    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && !m_pool.HasBodyRegistration(index) && m_mirror.IsActive(index: index));
+    private bool HoldsAvatar(int index) => ((m_onlyPrototypes is null) && !m_pool.HasBodyRegistration(bodyIndex: index) && m_mirror.IsActive(index: index));
     // The definition the scene emits: the whole of it, or, for far geometry, its placements of the named prototypes alone and
     // none of its screens.
     private WorldDefinition Scoped(WorldDefinition definition) => ((m_onlyPrototypes is null)
@@ -849,16 +851,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private void PrepareCatalog() {
         m_catalogSlotCount = 0;
-        Array.Fill(m_catalogSlots, -1);
+        Array.Fill(array: m_catalogSlots, value: -1);
         for (var body = 0; (body < m_catalogSlots.Length); body++) {
-            if (!HoldsAvatar(body)) { continue; }
+            if (!HoldsAvatar(index: body)) { continue; }
             m_catalogSlots[body] = m_catalogSlotCount;
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
-            .Select(index => (index, ((int)m_mirror.CatalogRig(index)), m_mirror.Look(index), m_bodyColor(index))).ToArray();
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(predicate: index => (m_catalogSlots[index] >= 0))
+            .Select(selector: index => (index, ((int)m_mirror.CatalogRig(index: index)), m_mirror.Look(index: index), m_bodyColor(index))).ToArray();
 
-        if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
+        if (!m_catalogImage.AsSpan().SequenceEqual(other: image)) { m_catalogImage = image; m_catalogRevision++; }
     }
 
     private int m_preparedDefinition = int.MinValue;
@@ -868,14 +870,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
-        var definition = Scoped(m_mirror.Definition);
+        var definition = Scoped(definition: m_mirror.Definition);
 
-        m_census.Refresh(m_source);
-        var articulated = ((m_onlyPrototypes is null) ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        m_census.Refresh(source: m_source);
+        var articulated = ((m_onlyPrototypes is null) ? m_census.Stamps : []).Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
-        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
-        m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
+        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
         PrepareCatalog();
     }
 

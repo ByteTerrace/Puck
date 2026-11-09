@@ -21,10 +21,9 @@ namespace Puck.World;
 /// <see cref="WorldPlacement.Position"/> is its displacement from that slot, so its local frame is the slot's
 /// fixed-point offset (<see cref="SlotOffset"/>) plus that displacement, composed by
 /// <see cref="WorldPlacementFrameCompilation"/>, and moving a child to another slot moves it with its displacement. It is
-/// written and removed through ordinary <c>UpsertPlacement</c>/<c>RemovePlacement</c> mutations under
-/// <c>Principal.World</c> by the per-tick sweep (<c>Server.WorldTick.SweepPlacementDeals</c>), so a dealt
-/// instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick
-/// re-deals lands in that tick's one mutation.
+/// installed by the per-tick sweep (<c>Server.WorldTick.SweepPlacementDeals</c>) through the shared placement
+/// projection install, which refreshes colliders and delivery. The source cells journal, undo and replay; their
+/// derived children are reprojected without adding declaration edits to the journal.
 /// </summary>
 /// <remarks>
 /// <para>A child keeps its allocated <see cref="WorldPlacement.DealSlot"/> while its cell is present. Instance-owned
@@ -34,8 +33,8 @@ namespace Puck.World;
 /// whose accounts come and go would rebuild itself on every departure. The offsets are the same ones a static
 /// distribution of the template materializes (<see cref="Offsets"/>), so a new instance starts where the copy
 /// would have. <see cref="Preserve"/> controls subsequent reconciliation with the template.</para>
-/// <para>The sweep re-deals only when the dealt row, the variant row, or the template itself changes: an undo that
-/// removes the children a sweep added stays undone until the row moves again.</para>
+/// <para>The sweep re-deals when its source rows, template or placement projection changes. Source membership owns
+/// child presence: removing or undoing a child alone is reconciled on that tick, independently of hidden edits.</para>
 /// <para>A child is a reading of the cells it was dealt from, so a reader is shown it as the deal would deal it from
 /// the rows that reader may read (<see cref="WorldStateDisclosure.Disclose"/>, the wire projection and a seat's console
 /// alike): a template whose row can withhold from the reader is re-dealt in the reader's row order, each child moved
@@ -100,8 +99,8 @@ public sealed record WorldPlacementDeal(
     /// <param name="template">The template id, when it is one.</param>
     public static bool IsPlaceholderId(string? id, out string template) {
         template = string.Empty;
-        if ((id is null) || !TrySplitChildId(id: id, template: out var parent, key: out var key) ||
-            !GeneratedName.TryStripHead(name: key, head: PlaceholderHead, rest: out _)) {
+        if ((id is null) || !TrySplitChildId(id: id, key: out var key, template: out var parent) ||
+            !GeneratedName.TryStripHead(head: PlaceholderHead, name: key, rest: out _)) {
             return false;
         }
         template = parent;
@@ -164,6 +163,7 @@ public sealed record WorldPlacementDeal(
             PrototypeId = ((Preserve?.Prototype == true) ? child.PrototypeId : prototype),
         };
     }
+
     // The placement members a template that can withhold, its dealt children and every placement authored under them
     // may carry, by JSON name: what the re-deal already discloses (the identity and parent, the prototype the disclosed
     // face selects, the child's own displacement, yaw and scale, which the re-deal carries to the re-dealt slot) and
@@ -195,6 +195,7 @@ public sealed record WorldPlacementDeal(
             if (Carries(value: read(arg: placement))) { yield return member.Name; }
         }
     }
+
     // Whether a member's value is set: absent, a zero or false scalar and an empty collection carry nothing; any other
     // value, a struct this does not know included, carries something.
     private static bool Carries(object? value) => value switch {
@@ -209,6 +210,7 @@ public sealed record WorldPlacementDeal(
         System.Collections.IEnumerable items => items.GetEnumerator().MoveNext(),
         _ => true,
     };
+
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>
@@ -257,21 +259,28 @@ public sealed record WorldPlacementDeal(
 
         return true;
     }
+
     // A distribution's offsets under one seed, derived once per distribution row (a noise region resolves its whole
-    // grid) and shared by every frame, sweep, re-deal and reflow that reads a slot.
+    // grid) and shared by every frame, sweep, re-deal and reflow that reads a slot. Bound lattice steps bypass it.
     private sealed record OffsetEntry(ulong WorldSeed, ImmutableArray<FixedVector3> Offsets);
+
     private static readonly CodeDerivedTable<WorldDistribution, OffsetEntry> OffsetCache = new();
 
     /// <summary>Returns the placement-local offsets a template's region deals, in deal order — the identical set and order a
     /// static distribution of the same row materializes (<see cref="WorldPlacementStamp.SampledFixedOffsetsFor"/> for
     /// Noise/Scatter; a Lattice's A-major, B-minor grid, matching <c>CreationStampLattice.ForEachFixedInstance</c>).
     /// Empty when the template carries no distribution or a region that materializes no fixed count. Derived once per
-    /// distribution row and seed.</summary>
+    /// literal distribution row and seed; state-bound lattice steps derive from their current values on each read.</summary>
     /// <param name="template">The template placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static ImmutableArray<FixedVector3> Offsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution is not { } distribution) {
             return [];
+        }
+        // The immutable distribution identity does not identify a live step's value.
+        if ((distribution.Region is WorldDistributionRegion.Lattice { } lattice) &&
+            ((lattice.StepA.Reference is not null) || (lattice.StepB.Reference is not null))) {
+            return DeriveOffsets(template: template, worldSeed: worldSeed);
         }
         if (OffsetCache.TryGetValue(key: distribution, value: out var held) && (held.WorldSeed == worldSeed)) {
             return held.Offsets;
@@ -291,8 +300,9 @@ public sealed record WorldPlacementDeal(
     public static FixedVector3 SlotOffset(WorldPlacement template, int? slot, ulong worldSeed) {
         var offsets = Offsets(template: template, worldSeed: worldSeed);
 
-        return ((slot is { } index) && (((uint)index) < ((uint)offsets.Length))) ? offsets[index] : FixedVector3.Zero;
+        return (((slot is { } index) && (((uint)index) < ((uint)offsets.Length))) ? offsets[index] : FixedVector3.Zero);
     }
+
     private static ImmutableArray<FixedVector3> DeriveOffsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution?.Region is WorldDistributionRegion.Lattice lattice) {
             var countA = Math.Max(
@@ -325,6 +335,7 @@ public sealed record WorldPlacementDeal(
             : []
         );
     }
+
     /// <summary>Returns the number of instances a template's region deals — <see cref="Offsets"/>' length, the exact count
     /// (seed-resolved for Noise) the dealt row's capacity is bounded by and <c>world.budget</c> folds into the
     /// placement census.</summary>
@@ -363,8 +374,8 @@ public sealed record WorldPlacementDeal(
     public string ResolvePrototype(StateArena arena, int variantOrdinal, string key, string templatePrototype) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        if ((variantOrdinal < 0) || (Variants?.Map is not { } map) || !CellName.TryParse(key, out var name, out _) ||
-            !arena.Keys.TryResolve(name, out var cell) || !arena.TryRead(variantOrdinal, cell, out var value)) {
+        if ((variantOrdinal < 0) || (Variants?.Map is not { } map) || !CellName.TryParse(candidate: key, name: out var name, reason: out _) ||
+            !arena.Keys.TryResolve(key: out var cell, name: name) || !arena.TryRead(key: cell, rowOrdinal: variantOrdinal, value: out var value)) {
             return templatePrototype;
         }
         if (value.Kind == CellKind.Text) {
