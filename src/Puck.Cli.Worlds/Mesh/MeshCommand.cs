@@ -39,7 +39,7 @@ public static class MeshCommand {
 
     private static Command AuditCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document whose meshes to audit.", Required = true };
-        var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Audit this prototype's groups, from bodies and static or animated placements." };
+        var prototypeOption = new Option<string[]>(name: "--prototype") { AllowMultipleArgumentsPerToken = true, Description = "Audit these prototypes' groups, from bodies and static or animated placements; repeat it, or name several, to audit several in one run." };
         var groupOption = new Option<string?>(name: "--group") { Description = "Audit only the groups whose label holds this text, such as a shape's name (podBand1-left) or a slot (slot 6745)." };
         var cacheOption = new Option<string?>(name: "--cache-dir") { Description = "The device-cache root the World booted with (its --cache-dir); the meshes are its meshes subdirectory. Absent reads the per-user store (%LOCALAPPDATA%/Puck/meshes on Windows)." };
         var buildOption = new Option<string?>(name: "--build") { Description = "The directory of the World build whose bake stored the meshes (its Puck.World.dll's directory); the store keys each mesh by that build's bake identity. Absent uses this tool's own build." };
@@ -71,7 +71,7 @@ public static class MeshCommand {
             Identity: parseResult.GetValue(option: identityOption),
             Images: parseResult.GetValue(option: imagesOption),
             Level: parseResult.GetValue(option: levelOption),
-            Prototype: parseResult.GetValue(option: prototypeOption),
+            Prototypes: (parseResult.GetValue(option: prototypeOption) ?? []),
             Top: parseResult.GetValue(option: topOption),
             World: parseResult.GetValue(option: worldOption)!,
             Worst: parseResult.GetValue(option: worstOption)
@@ -202,7 +202,7 @@ public static class MeshCommand {
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
 
-        return (((request.Prototype is null) || string.Equals(a: scene.Prototype(group), b: request.Prototype, comparisonType: StringComparison.Ordinal))
+        return (((request.Prototypes.Count == 0) || ((scene.Prototype(group) is { } prototype) && request.Prototypes.Contains(value: prototype, comparer: StringComparer.Ordinal)))
             && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
@@ -412,7 +412,7 @@ public static class MeshCommand {
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim);
+    private sealed record AuditRequest(string World, IReadOnlyList<string> Prototypes, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);

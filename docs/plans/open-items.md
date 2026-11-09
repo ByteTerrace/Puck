@@ -3958,6 +3958,13 @@ Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
 
+- [high] The walkthrough: the owner's scripted, controller-driven benchmark of
+  the debug world. Its first slice (gallery level 1's blend row and the Moth in
+  the studio, the `route-blend-row` and `inspect-moth-studio` tour stops) and
+  the six steps to the whole world are in [the walkthrough plan](walkthrough.md#scaling-to-the-whole-world);
+  the next is gallery level 0's four rows as segments, then coverage derived
+  from the document.
+
 - [medium] Baseline status comparisons can perpetuate a prior comparison failure
   after its metrics match. `SweepBaseline.Changes`
   (`src/Puck.Cli.Runs/Sweep/SweepReport.cs:277`) compares the stored, already

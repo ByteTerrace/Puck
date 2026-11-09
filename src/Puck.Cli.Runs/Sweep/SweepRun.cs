@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Puck.Abstractions;
 using Puck.Cli.Motion;
+using Puck.Commands;
 
 namespace Puck.Cli.Sweep;
 
@@ -25,9 +27,17 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     private const ulong WaitChunkTicks = 30UL;
     // The suffix of a failure signal read again after the tour.
     private const string RecheckSuffix = ".after-tour";
+    // The ticks before a long stop's capture tick at which the tour stops waiting and arms the capture: room for the call
+    // to arrive before the World completes the tick, which a capture pinned to a completed tick is refused for.
+    private const ulong ArrivalMargin = 90UL;
+    // The most ticks one wait toward a long stop's capture holds.
+    private const ulong RouteWaitTicks = 150UL;
 
     /// <summary>Gets what the leg noticed outside any signal.</summary>
     public List<string> Notes { get; } = [];
+    /// <summary>Gets or initializes what route stops need beyond the World, or <see langword="null"/> on a leg that plays
+    /// none: a route stop on such a leg is red.</summary>
+    public SweepRouteContext? Routes { get; init; }
 
     /// <summary>Waits until a windowed World's renderer is ready and its bakes have settled.</summary>
     /// <param name="deadline">The longest wait.</param>
@@ -198,9 +208,14 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 status = SweepStatus.Worse(left: status, right: SweepStatus.Red);
             }
 
-            var pinned = Pin(captureTick: out var captureTick, expected: out var expected, reasons: reasons, stop: stop, tour: tour);
+            var played = Played(stop: stop, tour: tour, folder: folder, reasons: reasons, route: out var route, captures: out var captures);
+            var captureTick = 0UL;
+            IReadOnlyList<(ulong Tick, string Command)> expected = [];
+            var pinned = ((played is not null) && Pin(captureTick: out captureTick, expected: out expected, reasons: reasons, stop: played, tour: tour));
 
             if (!pinned) {
+                status = SweepStatus.Red;
+            } else if (((ulong)(played!.Settle ?? tour.Settle) > (2UL * ArrivalMargin)) &&!WaitNear(reasons: reasons, tick: (captureTick - ArrivalMargin))) {
                 status = SweepStatus.Red;
             }
 
@@ -239,8 +254,16 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 }
             }
 
+            IReadOnlyDictionary<string, string>? frames = null;
+
             if (pinned) {
-                var evidence = SweepEvidence.Scheduled(world.Run("world.at --json"), expected);
+                if ((captures.Count > 0) && (world.Run(script: "world.wait captures 60", timeoutSeconds: 70) is not { Ok: true })) {
+                    reasons.Add(item: "the stop's captures did not finish within 60 seconds");
+                    status = SweepStatus.Red;
+                }
+
+                var log = world.Run("world.at --json");
+                var evidence = SweepEvidence.Scheduled(log, expected);
 
                 if (!evidence.Ok) {
                     reasons.AddRange(collection: evidence.Refusals);
@@ -257,7 +280,19 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                         reasons.Add(item: $"motion did not match '{pattern}': {pose.Output.Trim()}");
                         status = SweepStatus.Red;
                     }
+                    // A route arrives where its test says, or the segment is off course: the world moved under the program.
+                    foreach (var failure in (route?.Arrival(where: pose.Output, unjudged: out _) ?? [])) {
+                        reasons.Add(item: $"off course: the arrival {failure}");
+                        status = SweepStatus.Red;
+                    }
                 }
+                if (route is not null) {
+                    var read = world.Run(script: $"host.frames {(played!.Settle ?? tour.Settle).ToString(provider: CultureInfo.InvariantCulture)}");
+
+                    frames = (read.Ok ? SweepSignals.Read(extra: null, output: read.Output, parse: "frames") : null);
+                }
+
+                stills.AddRange(collection: Captured(captures: captures, images: images, log: log.Output, previous: previous, start: (captureTick - (ulong)(played!.Settle ?? tour.Settle)), stop: stop, tour: tour));
 
                 // The held tick's exposure: a still that differs from its baseline's in every pixel is usually this, which a
                 // meter reading that depends on the World's history moves. A World without a renderer has none to read.
@@ -281,7 +316,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             progress.WriteLine(value: $"sweep: still {stop.Name} {status}");
-            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status, Motion: motion, Exposure: exposure));
+            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status, Motion: motion, Exposure: exposure, Frames: frames));
         }
 
         return new SweepTourResult(
@@ -292,6 +327,206 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         );
     }
 
+    // The stop as the tour plays it: a route stop's steps are its test's program and its capture the test's export tick,
+    // and each capture adds a pose read and a settled still at its offset, written under the stop's folder. Null, with the
+    // reason added, when the route cannot be played or a capture falls past the stop's own.
+    private SweepStop? Played(SweepStop stop, SweepTour tour, string folder, List<string> reasons, out SweepRoute? route, out IReadOnlyList<(SweepCapture Capture, string File, string Line)> captures) {
+        route = null;
+        captures = [];
+
+        var played = stop;
+
+        if (stop.Route is { } reference) {
+            if (Routes is null) {
+                reasons.Add(item: $"the route {reference} needs a leg that plays routes");
+
+                return null;
+            }
+            if (!SweepRoute.TryLoad(error: out var why, reference: reference, repositoryRoot: Routes.RepositoryRoot, route: out route)) {
+                reasons.Add(item: why);
+
+                return null;
+            }
+
+            // The tour's frame lines run first at the start tick, then the program, whose first line poses the body.
+            played = stop with { Settle = route!.Duration, Steps = [.. route.Steps, .. (stop.Steps ?? []), new SweepStep(At: 0, Run: "host.frames reset")] };
+        }
+
+        var settle = (played.Settle ?? tour.Settle);
+        var list = new List<(SweepCapture Capture, string File, string Line)>();
+        var extra = new List<SweepStep>();
+
+        foreach (var capture in (stop.Captures ?? [])) {
+            if (capture.At > settle) {
+                reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the capture of {capture.Still} at {capture.At} falls after the stop's capture at {settle}"));
+
+                return null;
+            }
+
+            var target = Path.Combine(path1: folder, path2: stop.Name, path3: $"{capture.Still}.png");
+            // A presented burst writes <stem>-000.png onward; its first frame stands for it on the sheet.
+            var file = ((capture.Presented > 1) ? Path.Combine(path1: folder, path2: stop.Name, path3: $"{capture.Still}-000.png") : target);
+            var line = $"world.screenshot {CommandEcho.Quote(PuckPaths.Normalize(path: target))}{((capture.Presented > 0) ? $" presented {capture.Presented.ToString(provider: CultureInfo.InvariantCulture)}" : string.Empty)}";
+
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: file)!);
+            File.Delete(path: file);
+            list.Add(item: (capture, file, line));
+            extra.Add(item: new SweepStep(At: capture.At, Run: "body.where 0"));
+            extra.Add(item: new SweepStep(At: capture.At, Run: line));
+        }
+
+        captures = list;
+
+        return played with { Steps = [.. (played.Steps ?? []), .. extra] };
+    }
+    // Holds the tour until the World has completed a tick of a long stop's timeline, a bounded wait at a time, so the
+    // capture call that follows arrives before its tick. False, with the reason added, when the World did not get there.
+    private bool WaitNear(ulong tick, List<string> reasons) {
+        var read = world.Run(script: "world.at --json");
+        ulong completed;
+
+        try {
+            using var document = JsonDocument.Parse(json: read.Output);
+
+            completed = document.RootElement.GetProperty(propertyName: "tick").GetUInt64();
+        } catch (Exception exception) when ((exception is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)) {
+            reasons.Add(item: $"the stop's tick could not be read: {read.Output}");
+
+            return false;
+        }
+
+        while (completed < tick) {
+            var next = Math.Min(val1: tick, val2: (completed + RouteWaitTicks));
+            var waited = world.Run(script: $"world.wait until {next.ToString(provider: CultureInfo.InvariantCulture)}", timeoutSeconds: 115);
+
+            if (!waited.Ok) {
+                reasons.Add(item: $"the stop's timeline stalled before tick {next.ToString(provider: CultureInfo.InvariantCulture)}: {string.Join(separator: "; ", values: waited.Refusals)}");
+
+                return false;
+            }
+
+            completed = next;
+        }
+
+        return true;
+    }
+    // A stop's captures as stills: each beside its exhibit's text, the body's pose at its tick, whether the body stood at
+    // the exhibit's spawn point, and the mesh audit's topology defects for the exhibit's prototype.
+    private List<SweepStillResult> Captured(SweepStop stop, ulong start, IReadOnlyList<(SweepCapture Capture, string File, string Line)> captures, string log, Dictionary<string, MotionImage> images, Dictionary<string, MotionImage> previous, SweepTour tour) {
+        var results = new List<SweepStillResult>();
+
+        if (captures.Count == 0) {
+            return results;
+        }
+
+        var spawns = world.Run(script: "world.row spawnPoints").Output;
+        var exhibits = captures.Select(selector: entry => ((entry.Capture.Exhibit is { } id) ? SweepExhibit.Read(exhibit: id, spawns: spawns, world: world) : null)).ToArray();
+        var audit = ((Routes is null)
+            ? new Dictionary<string, SweepAuditFinding>(comparer: StringComparer.Ordinal)
+            : SweepMeshAudit.Run(
+                budget: Routes.Budget,
+                prototypes: exhibits.Select(selector: static exhibit => exhibit?.Prototype).OfType<string>().Distinct(comparer: StringComparer.Ordinal).ToArray(),
+                repositoryRoot: Routes.RepositoryRoot,
+                transcript: Path.Combine(path1: directory, path2: "tour", path3: stop.Name, path4: "mesh-audit.txt"),
+                world: Routes.World
+            ));
+
+        for (var index = 0; (index < captures.Count); index++) {
+            var (capture, file, line) = captures[index];
+            var exhibit = exhibits[index];
+            var name = $"{stop.Name}-{capture.Still}";
+            var reasons = new List<string>();
+            var status = SweepStatus.Clean;
+            var where = Ran(command: "body.where 0", log: log, tick: (start + (ulong)capture.At));
+            var shot = Ran(command: line, log: log, tick: (start + (ulong)capture.At));
+            string? relative = null;
+            double? changed = null;
+            string? summary = null;
+
+            if (File.Exists(path: file)) {
+                relative = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
+                images[name] = MotionSheets.Read(path: file);
+
+                if ((baseline?.StillFor(name: name) is { } earlier) && (MotionSheets.Read(path: earlier) is var before)) {
+                    previous[name] = before;
+                    changed = ChangedFraction(after: images[name], before: before, level: tour.LevelTolerance);
+
+                    if ((changed is null) || (changed > tour.AmberFraction)) {
+                        reasons.Add(item: ((changed is null) ? "the baseline still has another size" : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{changed:P2} of its pixels changed beyond {tour.LevelTolerance} levels")));
+                        status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
+                    }
+                }
+            } else {
+                reasons.Add(item: $"no still was written: {shot ?? "the capture line has no answer"}");
+                status = SweepStatus.Red;
+            }
+
+            if ((exhibit is not null) && (exhibit.Prototype is null)) {
+                reasons.Add(item: $"the World names no placement '{capture.Exhibit}'");
+                status = SweepStatus.Red;
+            }
+            if ((where is null) || !MotionRig.TryPoseOf(answer: where, position: out var position, yawDegrees: out _)) {
+                reasons.Add(item: "the body's pose at the capture has no answer");
+                status = SweepStatus.Red;
+            } else if (exhibit?.Spawn is { } spawn) {
+                var distance = double.Hypot(x: (position.X - spawn.X), y: (position.Z - spawn.Z));
+
+                if (distance > capture.Tolerance) {
+                    reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"off course: the body stood {distance:0.00} m from {capture.Exhibit}'s spawn point, beyond {capture.Tolerance:0.##} m"));
+                    status = SweepStatus.Red;
+                }
+            }
+            if ((exhibit?.Prototype is { } prototype) && audit.TryGetValue(key: prototype, value: out var finding)) {
+                if (!finding.Measured) {
+                    reasons.Add(item: $"the mesh audit reported no surface for {prototype}");
+                    status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
+                } else {
+                    summary = string.Create(provider: CultureInfo.InvariantCulture, handler: $"score {finding.Score:0.0}{((finding.Defects.Count == 0) ? string.Empty : $"; {string.Join(separator: ", ", values: finding.Defects)}")}");
+
+                    if (finding.Defects.Count > 0) {
+                        reasons.Add(item: $"mesh audit: {string.Join(separator: ", ", values: finding.Defects)}");
+                        status = SweepStatus.Red;
+                    }
+                }
+            }
+
+            progress.WriteLine(value: $"sweep: still {name} {status}");
+            results.Add(item: new SweepStillResult(
+                Audit: summary,
+                Capture: (shot ?? string.Empty).Trim(),
+                ChangedFraction: changed,
+                Exhibit: capture.Exhibit,
+                File: relative,
+                Group: (stop.Group ?? "tour"),
+                Motion: where?.Trim(),
+                Name: name,
+                Note: stop.Note,
+                Reasons: reasons,
+                Status: status,
+                Text: exhibit?.Text
+            ));
+        }
+
+        return results;
+    }
+    // The answer a pinned line gave, found in the world.at log by its tick and command.
+    private static string? Ran(string log, string command, ulong tick) {
+        try {
+            using var document = JsonDocument.Parse(json: log);
+
+            if (!document.RootElement.TryGetProperty(propertyName: "ran", value: out var ran) || (ran.ValueKind != JsonValueKind.Array)) {
+                return null;
+            }
+
+            return ran.EnumerateArray()
+                .Where(predicate: row => (row.TryGetProperty(propertyName: "command", value: out var text) && (text.GetString() == command)
+                    && row.TryGetProperty(propertyName: "tick", value: out var at) && at.TryGetUInt64(value: out var value) && (value == tick)))
+                .Select(selector: static row => (row.TryGetProperty(propertyName: "output", value: out var output) ? output.GetString() : null))
+                .FirstOrDefault();
+        } catch (Exception exception) when ((exception is JsonException or InvalidOperationException)) {
+            return null;
+        }
+    }
     // Arms the stop's pinned steps from a start tick a lead after the World's completed tick, and names the tick the
     // capture is pinned to. False, with the reason added, when the World's tick could not be read or the steps were refused.
     private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick, out IReadOnlyList<(ulong Tick, string Command)> expected) =>

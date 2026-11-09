@@ -234,7 +234,7 @@ public static partial class SweepCommand {
                         return CliExit.Refuse(verb: Verb, what: $"World {shown.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}", why: "it composes no renderer, so it cannot take the tour");
                     }
 
-                    var run = new SweepRun(baseline: baseline, directory: directory, plan: plan, progress: Console.Error, world: shown);
+                    var run = new SweepRun(baseline: baseline, directory: directory, plan: plan, progress: Console.Error, world: shown) { Routes = new SweepRouteContext(Budget: budget, RepositoryRoot: repositoryRoot, World: world) };
                     // Warmup and frame signals measure ordinary presentation. Only the still tour converges its clock/lighting.
                     var held = shown.Run(script: "world.rate pause\nworld.lockstep off");
 
@@ -290,6 +290,10 @@ public static partial class SweepCommand {
         // Red, and whatever the sweep could not measure, fails the run: a run that read nothing is not a clean one.
         return (report.Failed ? CliExit.Failed : CliExit.Success);
     }
+    /// <summary>Gets the entry assembly of this CLI's own build, which the sweep runs its child verbs (<c>puck test</c>,
+    /// <c>puck mesh audit</c>) through, so they are the same build as the sweep.</summary>
+    public static string CliEntry => PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll"));
+
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
     private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
     private static WorldLaunchRequest Request(string artifact, string world, string state, string? cacheDirectory, TimeSpan deadline, WorldShape shape, string repositoryRoot, IReadOnlyList<string> extra) => new(Artifact: artifact, Step: Verb) {
@@ -350,7 +354,7 @@ public static partial class SweepCommand {
         }
 
         string[] arguments = [
-            PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll")),
+            CliEntry,
             "test", file, "--jobs", "1", "--keep", Path.Combine(path1: directory, path2: "run"),
             .. ((artifact is null) ? [] : new[] { "--world-artifact", PuckPaths.Normalize(path: artifact) }),
             .. ((cacheDirectory is null) ? [] : new[] { "--cache-dir", PuckPaths.Normalize(path: cacheDirectory) }),
