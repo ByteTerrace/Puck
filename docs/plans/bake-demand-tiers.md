@@ -141,6 +141,53 @@ coarser strides). The taps are spent; the triangles are not. This is step 4
 below, with its check; until it lands the over-refinement is bounded by the
 tier like every other refinement.
 
+## What the build showed
+
+The rule found a gap before it found a cost: the pipe and groove exhibits
+(a box with a sphere blended by `PipeSubtraction` or `GrooveSubtraction`,
+`smooth: 0.04`) refined nothing at any tier, because `WorldShapeDetail.Of`
+read no blend radius; neither shape's own geometry is finer than the 27 mm
+lattice, and the 4 cm bead is the blend's. A shape with a `smooth` blend now
+declares its seam (a smooth, pipe or groove seam at `RoundCell(smooth)`, a
+chamfer at half its width, stairs at a share of `smooth` per step), which is
+the one-rule fix at the cause; the sawtooth the owner saw was the bead
+contoured on three 27 mm cells.
+
+`puck mesh audit --world worlds/debug/debug.puck --cpu` on the pipe exhibit
+(`--prototype shape-pipe-subtraction`), the same CLI copy before and after
+the term, then by tier:
+
+| Plan | Tier | Cell | Triangles | Score | Face p99 | Rough p99 | Off max |
+|---|---|---|---|---|---|---|---|
+| Before the blend term (any tier) | 7, nothing refines | 27.5 mm | 5,174 | 122.1 | 33.0 deg | 28.6 deg | 2.72 mm |
+| Finest, and `--eye` 2.6 m away | 2 (4 mm) | 6.9 mm | 43,148 | 69.4 | 10.5 deg | 4.4 deg | 0.53 mm |
+| `--eye` 40 m away | 4 (16 mm) | 13.7 mm | 15,186 | 40.8 | 15.4 deg | 11.6 deg | 0.78 mm |
+
+The groove exhibit at its finest tier: 27,004 triangles, cell 6.8 mm, score
+47.8, face p99 10.0 deg. The torus (`shape-torus`): 57,562 triangles, cell
+16.4 mm, face p99 3.0 deg, rough p99 1.5 deg, no folds. The smooth union:
+16,622 triangles at 13.4 mm; the smooth subtraction: 25,770 at 8.9 mm. The
+Moth (`--prototype moth`) at its finest tier and at a chase camera 3.5 m away
+is the same bake: 180 groups, 2,949,652 triangles, every group's demanded tier
+at or under its finest (73 groups at tier 1, 107 at tier 2), since half a
+pixel at 3.5 m on 1080 lines is 1.9 mm. Two shin blend groups hold 551,732 of
+those triangles with audit scores near 10,000 (folds, flips and turned faces
+at a 2.1 mm cell): a contouring defect the finer cell exposes, filed under
+[bake detail](open-items.md#bake-detail).
+
+The debug world windowed on Direct3D 12, from the stage spawn after
+`world.wait bakes`: `world.residency` reads `groups=7519`, `level0=83,584,416`
+triangles (1,337,350,656 bytes), by tier 32.7 M at 2 mm, 37.6 M at 4 mm,
+8.2 M at 8 mm, 4.5 M at 16 mm and 0.5 M at 32 mm, against 25,678,428 before
+the rule and 213,506,399 under the rule unbounded; 53 demand points (every
+rendered view, the gallery's filmed cameras and screens among them) set
+those tiers. Walking to the pipe exhibit started 142 retiers; the worst owed
+error over the walk was 52.4 pixels for a group that had no mesh of its own
+yet, the longest owed interval 288 frames, and `tiers-owed` read zero again
+once the bakes settled at 88,521,957 resident triangles. The pipe and groove
+beads and the Moth's helmet ring, collar and lids read round in the settled
+captures at 0.9 to 2.4 m.
+
 ## Invariants and their doors
 
 | Invariant | Enforced by | Stops at |
