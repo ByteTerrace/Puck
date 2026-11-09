@@ -1202,7 +1202,8 @@ point table (`SdfMeshBakeBatch.PointRuns`, bound at World member
 `sdfMeshBakePoints` in the slot's own World set) and `sdf-mesh-bake` samples as
 points lattices (`SdfMeshMaterialCut`). The first round samples each quad's four
 quarter centres and each vertex. A quad whose vertices agree keeps one material
-when its quarters agree too, and splits into its quarters otherwise, so a
+when its quarters agree too, and splits into its quarters otherwise (each edge's
+middle a vertex of the triangle across it as well, so no T-junction opens), so a
 feature thinner than a cell that no vertex sees, a painted iris or pupil,
 survives at half a cell. A quad whose vertices disagree is cut: each mesh edge
 of its two triangles whose ends disagree is bisected over four more rounds for
