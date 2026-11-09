@@ -3,14 +3,16 @@
 [moth-pilot.puck](moth-pilot.puck) is the woman inside the Moth's suit: the
 1.68 m pilot of the [concept pack](../../../docs/game/art/moth-concept-pack/README.md)'s
 off-suit turnaround (sheet 04), a grounded, athletic working woman, never
-sexualized. She wears a charcoal work undersuit with full sleeves and a high
-turtleneck collar, straight-cut work trousers whose hems sit on her boots, soft
-elbow pads and domed knee pads, a contact harness with an ochre plate between
-her shoulder blades, lavender patches over her shoulders, a belt with an ochre
-buckle, padded charcoal work gloves with a strap round each full cuff, four
-thick fingers and a thumb each, and ankle boots with a round toe box, a strap
-over the instep, a padded top cuff and a thick lugged sole with a heel step, as
-sheet 04 draws them.
+sexualized. She wears a mid-charcoal work undersuit with full sleeves and a
+high turtleneck collar, straight-cut work trousers whose hems blouse over her
+boots, soft elbow pads and domed knee pads strapped round the knee, a grey
+contact harness (a strap over each shoulder from the belt in front to the belt
+behind, ochre buckles, and a yoke across her shoulder blades seating an ochre
+plate), lavender patches over her shoulders, a belt with an ochre buckle,
+padded gloves with a strap round each full cuff, four thick fingers and a thumb
+each, and ankle boots with a round toe box, a strap over the instep and a thick
+lugged sole with a heel step, as sheet 04 draws them. Gloves, pads, boots and
+hair are darker than the suit, and the straps lighter.
 
 Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
 `mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed
@@ -139,11 +141,13 @@ joint: the upper arm (the sleeve's sweep, biceps and triceps), the forearm (its
 sweep and the muscle below the elbow), the glove (cuff, wrist, palm, padded
 back, thumb and fingers, webbed at their roots) and the boot (shaft, instep and
 toe box over the foot effector's tip). The joints between them are plain
-unions, which the elbow and knee pads cover; at the knee the shin is the wider
-tube, so the two do not lie on each other. The sole's lugs are one bar repeated
-along the foot. The front harness straps are thin boxes; the shoulder and back
-straps, the knee-pad straps, the glove straps, the boot straps, the strap
-buckles, the shoulder patches and the handheld's picture are paint. A paint sits in its parent shape's own frame. The palette's charcoals
+unions, which the elbow and knee pads cover. The sole's lugs are one bar repeated
+along the foot. The harness, its buckles, the shoulder patches, the knee pads'
+front straps, the glove and boot straps and the handheld's picture are paint,
+so they sit exactly on the surface; the knee pad's back strap is a band on the
+thigh that covers where the narrower shin leaves the thigh's rounded end. A
+palette slot draws at most eight paints, which is why the harness is two
+over-the-shoulder straps and one yoke. A paint sits in its parent shape's own frame. The palette's charcoals
 are authored darker than the sheet reads, since the studio's light lifts them
 as it lifts the suit's lavender. `creation stats` counts her shapes:
 

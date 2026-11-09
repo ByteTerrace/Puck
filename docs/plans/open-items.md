@@ -1620,9 +1620,13 @@ by `world.view.pick`.
   is rebuilt to sheet 04 and judged on the CPU preview only, with the
   look-critic: shaped sleeves, one rounded shoulder cap, the arms resting in a
   slight A, padded gloves, straight-cut trousers on work boots with lugged
-  soles, domed knee pads, tapered hair locks and a full-thickness braid. Not yet
-  judged in a windowed World: the paints (patches, straps), the hair against
-  sheet 04 under the world lighting, the suit toggle, a walk, and the hold pose
+  soles, domed knee pads, tapered hair locks, a full-thickness braid and sheet
+  04's value ladder (mid-charcoal suit, darker gloves, pads, boots and hair).
+  The preview omits paints, so the harness, buckles and lavender patches are
+  unseen there. Not yet judged in a windowed World: those paints, the hair
+  against sheet 04 under the world lighting, the suit toggle, a walk (the knee
+  strap rides the thigh while the shin turns under it), the front of the
+  trousers where the pelvis crosses the thighs, and the hold pose
   (the rest pose is undone by the hold's first forearm swings, so the grip is
   the one solved on the straight arm, with the gloved palm's inner face at the
   brick's side). The `eye-left` group of the shared `moth-head` library bakes

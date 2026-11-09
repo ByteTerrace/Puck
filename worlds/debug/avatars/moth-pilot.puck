@@ -32,11 +32,12 @@ let pilotSoftness = 2.2
 // unscaled frame (mothHairLock).
 let pilotHairLocks = [
   ["hairSwoop", 90, [-0.08, 1.93, 0.15], [0.12, 0.06, -0.01], [0.27, -0.07, -0.1], 0.046, 0.02]
-  ["hairCrown", 97, [0.0, 1.95, 0.11], [0.0, 0.035, -0.25], [-0.01, -0.31, -0.16], 0.062, 0.026]
-  ["hairCrown-left", 95, [0.085, 1.935, 0.08], [0.04, 0.0, -0.24], [-0.04, -0.33, -0.12], 0.058, 0.024]
-  ["hairCrown-right", 96, [-0.075, 1.93, 0.07], [-0.04, 0.0, -0.24], [0.015, -0.32, -0.11], 0.058, 0.024]
-  ["hairFall-left", 92, [0.16, 1.86, 0.085], [0.045, -0.11, -0.01], [0.02, -0.25, -0.05], 0.046, 0.016]
-  ["hairFallBack-left", 93, [0.14, 1.84, -0.02], [0.06, -0.1, -0.02], [0.03, -0.24, -0.02], 0.05, 0.018]
+  ["hairCrown", 97, [0.0, 1.92, 0.11], [0.0, 0.0, -0.25], [-0.1, -0.3, -0.15], 0.052, 0.028]
+  ["hairCrown-left", 95, [0.085, 1.915, 0.08], [0.04, 0.0, -0.24], [-0.1, -0.31, -0.15], 0.056, 0.026]
+  ["hairCrown-right", 96, [-0.075, 1.915, 0.07], [-0.06, 0.0, -0.22], [-0.085, -0.245, -0.03], 0.056, 0.03]
+  ["hairFall-left", 92, [0.16, 1.86, 0.085], [0.04, -0.1, -0.02], [-0.005, -0.2, -0.06], 0.046, 0.02]
+  ["hairFallBack-left", 93, [0.14, 1.84, -0.02], [0.03, -0.09, -0.04], [-0.03, -0.18, -0.05], 0.05, 0.025]
+  ["hairBehind-right", 91, [-0.17, 1.82, 0.04], [0.01, -0.09, 0.0], [0.04, -0.17, 0.02], 0.045, 0.032]
   ["hairSweep-right", 94, [-0.13, 1.9, 0.09], [-0.06, -0.1, -0.03], [-0.045, -0.21, -0.01], 0.042, 0.02]
 ]
 
@@ -118,7 +119,7 @@ let sole = 11 // boot soles
 let belt = 12 // the belt
 let ochre = 13 // the belt buckle, harness plate and braid tie
 let collarKnit = 14 // the undersuit's high collar
-let strap = 15 // the harness's front straps, with their ochre buckles painted
+// Slot 15 is free.
 let brickGlass = 16 // the Humble Gaming Brick's see-through atomic-orange shell, the devices' own glass
 let sleeve = 17 // the undersuit's sleeves, with the lavender shoulder patches painted
 let brickLens = 18 // the brick's dark screen lens and its picture's box
@@ -133,10 +134,10 @@ let brickLed = 26 // the red power light
 
 // Authored darker than the sheet reads: the studio's light lifts a charcoal about half again, as it lifts the suit's
 // lavender #744080 to the owner's dusty #B186B6.
-let fabric = "#1C1D21"
-let padStrap = "#151519"
-let strapGrey = "#3A3C44"
-let patchLavender = "#8C6A94"
+let fabric = "#33353C"
+let padStrap = "#1A1A1E"
+let strapGrey = "#5C5F68"
+let patchLavender = "#744080"
 let ochreTone = "#C98F35"
 
 // One shoulder: the rounded cap from her collar over the top of her arm, in the torso's group, so the trapezius, the
@@ -172,7 +173,7 @@ template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
       b [side * 0.016, -0.11, -0.008]
       c [side * 0.032, -0.25, -0.016]
       radiusStart: 0.05
-      radiusEnd: 0.043
+      radiusEnd: 0.046
     }
     swings [
       {
@@ -261,7 +262,7 @@ template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
       a [0, 0, 0]
       b [side * 0.005, -0.115, 0.008]
       c [side * 0.01, -0.21, 0.02]
-      radiusStart: 0.046
+      radiusStart: 0.0445
       radiusEnd: 0.035
       bulge: 0.003
     }
@@ -465,9 +466,9 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     curve {
       a [0, 0, 0]
       b [side * 0.009, -0.228, 0.014]
-      c [side * 0.018, -0.455, 0.016]
+      c [side * 0.016, -0.455, 0.016]
       radiusStart: 0.1
-      radiusEnd: 0.082
+      radiusEnd: 0.087
       bulge: 0.004
     }
     swings [
@@ -527,6 +528,17 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     ]
   }
 
+  // The knee pad's back strap, a flat band round the leg at the knee that rides the thigh: it covers where the
+  // narrower shin leaves the thigh's rounded end, and the shin turns under it about the knee.
+  shape Superellipsoid $"kneeStrap-{name}" {
+    id: baseId + 9
+    position [side * 0.106, 0.462, 0.008]
+    scale [0.093, 0.022, 0.095]
+    material: pad
+    parent: $"thigh-{name}"
+    exponent: 4
+  }
+
   shape Sweep $"shin-{name}" {
     id: baseId + 1
     position [side * 0.106, 0.475, 0.012]
@@ -537,8 +549,8 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
       a [0, 0, 0]
       b [side * 0.004, -0.11, -0.006]
       c [side * 0.008, -0.185, -0.012]
-      radiusStart: 0.088
-      radiusEnd: 0.09
+      radiusStart: 0.08
+      radiusEnd: 0.093
     }
     swings [
       {
@@ -669,16 +681,6 @@ template pilotLeg(name, side, baseId, shinGroup, bootGroup) {
     exponent: 2.5
   }
 
-  // The padded cuff round the shaft's top, just below the trouser's stack.
-  shape Superellipsoid $"bootCuff-{name}" {
-    id: baseId + 9
-    position [side * 0.115, 0.226, -0.012]
-    scale [0.082, 0.016, 0.089]
-    material: leather
-    parent: $"boot-{name}"
-    exponent: 3
-  }
-
   // The thick sole under the ball and toe, and the heel a step lower behind its arch.
   shape Prism $"sole-{name}" {
     id: baseId + 5
@@ -764,51 +766,42 @@ prototypes {
           specular: 0.03
           sheen: 0.25
           paints [
+            // The harness: a strap over each shoulder from the belt in front to the belt behind, an ochre buckle high on
+            // each front strap, and the yoke across her shoulder blades that joins the straps and seats the ochre plate.
             {
               parent: "torso"
               type: "Box"
-              position [0.068, 0.18, -0.027]
-              scale [0.016, 0.05, 0.07]
+              position [0.068, 0.0, 0]
+              scale [0.022, 0.21, 0.2]
               color: strapGrey
             }
             {
               parent: "torso"
               type: "Box"
-              position [-0.068, 0.18, -0.027]
-              scale [0.016, 0.05, 0.07]
+              position [-0.068, 0.0, 0]
+              scale [0.022, 0.21, 0.2]
               color: strapGrey
             }
             {
               parent: "torso"
               type: "Box"
-              position [0.045, 0.105, -0.122]
-              rotation [0, 0, -0.2588, 0.9659]
-              scale [0.016, 0.085, 0.1]
+              position [0, 0.04, -0.122]
+              scale [0.09, 0.02, 0.1]
               color: strapGrey
             }
             {
               parent: "torso"
               type: "Box"
-              position [-0.045, 0.105, -0.122]
-              rotation [0, 0, 0.2588, 0.9659]
-              scale [0.016, 0.085, 0.1]
-              color: strapGrey
+              position [0.068, 0.095, 0.08]
+              scale [0.025, 0.016, 0.06]
+              color: ochreTone
             }
             {
               parent: "torso"
               type: "Box"
-              position [0.045, -0.075, -0.112]
-              rotation [0, 0, 0.2079, 0.9781]
-              scale [0.016, 0.1, 0.1]
-              color: strapGrey
-            }
-            {
-              parent: "torso"
-              type: "Box"
-              position [-0.045, -0.075, -0.112]
-              rotation [0, 0, -0.2079, 0.9781]
-              scale [0.016, 0.1, 0.1]
-              color: strapGrey
+              position [-0.068, 0.095, 0.08]
+              scale [0.025, 0.016, 0.06]
+              color: ochreTone
             }
             {
               parent: "torso"
@@ -965,33 +958,13 @@ prototypes {
           metal: 0.2
         }
         {
-          color: "#1D1E22"
+          color: "#2A2C32"
           roughness: 0.85
           specular: 0.03
           sheen: 0.3
         }
-        // The front straps, each with its ochre buckle high on her chest.
-        {
-          color: strapGrey
-          roughness: 0.7
-          specular: 0.04
-          paints [
-            {
-              parent: "torso"
-              type: "Box"
-              position [0.068, 0.095, 0.078]
-              scale [0.02, 0.015, 0.04]
-              color: ochreTone
-            }
-            {
-              parent: "torso"
-              type: "Box"
-              position [-0.068, 0.095, 0.078]
-              scale [0.02, 0.015, 0.04]
-              color: ochreTone
-            }
-          ]
-        }
+        // Slot 15, free.
+        { color: strapGrey, roughness: 0.7, specular: 0.04 }
         // The Humble Gaming Brick's shell: the same atomic-orange acrylic glass as the device in the gallery
         // (devices.puck), so the board, cells and cartridge read through a saturated orange.
         { color: "#FF4F10", roughness: 0.06, glass { depth: 0.009, ior: 1.49 } }
@@ -1035,8 +1008,8 @@ prototypes {
       // acceleration and drops into a landing, as the suited Moth's does at her own height.
       shape Superellipsoid "pelvis" {
         id: 120
-        position [0, 0.93, -0.006]
-        scale [0.162, 0.108, 0.126]
+        position [0, 0.92, -0.006]
+        scale [0.162, 0.115, 0.12]
         material: trousers
         group: 43
         exponent: 2.4
@@ -1151,43 +1124,6 @@ prototypes {
       pilotShoulder("left", 1, 137)
       pilotShoulder("right", -1, 138)
 
-      // The harness: two flat front straps from her shoulders to her belt, each in two runs that bridge her chest.
-      shape Box "strapUpper-left" {
-        id: 129
-        position [0.068, 1.312, 0.075]
-        rotation [-0.2124, 0, 0, 0.9772]
-        scale [0.016, 0.076, 0.003]
-        material: strap
-        parent: "torso"
-      }
-
-      shape Box "strapUpper-right" {
-        id: 130
-        position [-0.068, 1.312, 0.075]
-        rotation [-0.2124, 0, 0, 0.9772]
-        scale [0.016, 0.076, 0.003]
-        material: strap
-        parent: "torso"
-      }
-
-      shape Box "strapLower-left" {
-        id: 131
-        position [0.068, 1.127, 0.103]
-        rotation [0.0399, 0, 0, 0.9992]
-        scale [0.016, 0.113, 0.003]
-        material: strap
-        parent: "torso"
-      }
-
-      shape Box "strapLower-right" {
-        id: 132
-        position [-0.068, 1.127, 0.103]
-        rotation [0.0399, 0, 0, 0.9992]
-        scale [0.016, 0.113, 0.003]
-        material: strap
-        parent: "torso"
-      }
-
       // The harness's ochre plate between her shoulder blades, where the painted back straps cross.
       shape Box "harnessPlate" {
         id: 134
@@ -1241,8 +1177,8 @@ prototypes {
       // The hair over the back of her neck, down to the collar, under the crown locks' points.
       shape Superellipsoid "hairNape" {
         id: 98
-        position: map([0, 1.68, -0.035], (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale)
-        scale: map([0.15, 0.09, 0.105], v => v * pilotHeadScale)
+        position: map([0, 1.68, -0.025], (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale)
+        scale: map([0.17, 0.09, 0.105], v => v * pilotHeadScale)
         material: hair
         blend: "SmoothUnion"
         smooth: 0.02
