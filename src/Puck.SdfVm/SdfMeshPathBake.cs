@@ -1455,8 +1455,8 @@ public sealed partial class SdfMeshPathBake {
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: RefineMinimum);
         }
     }
-    // The final lattice of a group of one instance, or of a dynamic slot: FinalSamples along its longest axis, no finer than
-    // MinimumCell. An instance that declares its own detail (SdfInstanceRange.Detail), static or riding the slot, refines
+    // The final lattice of a group of one member (SdfMeshBakeGroup.Members): FinalSamples along its longest axis, no finer
+    // than MinimumCell. An instance that declares its own detail (SdfInstanceRange.Detail), static or riding a slot, refines
     // its bound's part of the box toward that spacing wherever the surface can enter a cell, as finely as
     // MaxDetailRefinement allows.
     private static FinalLattice OwnFinal(Group group) {
@@ -1475,8 +1475,9 @@ public sealed partial class SdfMeshPathBake {
             Regions = [new SdfLatticeRegion(High: high, Low: low)],
         };
     }
-    // The final lattice of a union of static shapes (a copy's run), which keeps each shape at the resolution its own final
-    // lattice would give it: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
+    // The final lattice of a union of members (a static copy's run, a dynamic slot's several instances, or the parts a pooled
+    // group declares), which keeps each member at the resolution its own final lattice would give it, in the group's frame
+    // and alike for static and dynamic groups: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
     // UnionSamples and coarser where it does not, never coarser than the capped lattice over the union's box; a member
     // whose own spacing stays finer than that by more than RegionRatio is a region its refinement measures at its own
     // spacing (SdfSampledLattice.Refine). A member's own spacing is its bounding sphere's box at FinalSamples a side.

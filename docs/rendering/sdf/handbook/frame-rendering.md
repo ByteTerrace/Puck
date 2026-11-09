@@ -304,7 +304,12 @@ millisecond of the period is the floor holding.
 The passes scale with different things. The bake's two kernels are no pass of
 the frame: they run as the residency's background GPU work, at most
 `SdfGpuWork.GpuShare` of the GPU's time by each job's measured timestamps, and
-only while a bake is pending ([the bake](#the-bake)). The three cascades and `mesh`
+only while a bake is pending ([the bake](#the-bake)). The queue runs a background
+job whole before the frame submitted after it, so the share is also a bound per
+job: a client cuts its jobs to `SdfGpuWork.FrameShareSeconds` at its kind's
+measured rate (`SdfGpuWorkRate`), as the irradiance volume's traces and relights
+do, and `world.residency`'s `gpu-work` line counts the jobs measured past it
+(`over-frame-share`) and names the longest (`most-job`). The three cascades and `mesh`
 scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
 occlusion and shadow filter taps, and a hit pixel's lighting scales with the

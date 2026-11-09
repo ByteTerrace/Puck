@@ -742,7 +742,17 @@ Dealt placement instances carry reserved `dealSlot` identities independently of 
 `position` is its displacement from its slot: its local frame is the slot's fixed-point region offset plus that
 displacement, composed in one place (`WorldPlacementFrameCompilation.LocalFrame`, which the frame table, the spatial
 index and surface frames all resolve through); a mover writes a displacement (`StoredPosition` is the inverse
-reflow uses). A recipient is shown a template whose dealt row can withhold re-dealt in its own row order, each child
+reflow uses).
+The C# carrier is `WorldPlacementTranslation`: storage has no public vector getter or outward conversion.
+Read `WorldDefinitionRows.ResolvedFrame` (or the definition's frame table) for geometry; a world-space edit writes
+through `WorldPlacementFrameCompilation.WithWorldPosition`. Animated registrations require the delivery's resolved
+frame table. Exact runtime displacements serialize without a float round trip. State-bound lattice steps bypass
+offset and frame caches; the shared `WorldPlacementFrameCompilation.HasLiveInputs` identifies sections whose
+resolved frames cannot be retained by section identity. A spatial fingerprint includes the generation seed.
+`WorldTick.SweepPlacementDeals` retains its installed placement projection as an input beside its arena rows:
+a child-only removal invalidates the skip and is reconciled on that tick, independently of hidden-only edits.
+Undo source membership to undo a deal; removing its derived child alone cannot leave a delayed re-creation oracle.
+A recipient is shown a template whose dealt row can withhold re-dealt in its own row order, each child
 moved to its re-dealt slot with its own displacement, with `$back$<slot>` placeholders under
 `hidden: Placeholder` (`WorldStateDisclosure.DisclosedPlacements`); a hidden variant masks the face whichever row
 withholds. A template whose dealt or variant row can withhold, its children and every placement authored under them

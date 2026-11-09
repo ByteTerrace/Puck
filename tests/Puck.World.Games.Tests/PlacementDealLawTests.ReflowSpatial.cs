@@ -379,8 +379,8 @@ public sealed partial class PlacementDealLawTests {
             movedA.Placement.Id
         );
         Assert.Equal(
-            Vector3.Zero,
-            movedA.Placement.Position.Value
+            ((WorldPlacementTranslation)Vector3.Zero),
+            movedA.Placement.Position
         );
         fixture.Server.EnqueueMutation(proposal.Mutation);
         fixture.Step();

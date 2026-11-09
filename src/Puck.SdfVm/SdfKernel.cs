@@ -6,8 +6,11 @@ namespace Puck.SdfVm;
 public enum SdfKernel {
     /// <summary>The background probe trace over the uploaded static scene hierarchy.</summary>
     ProbeTrace,
-    /// <summary>Shades cached probe hits against the uploaded hierarchy and feedback volume.</summary>
+    /// <summary>Shades cached probe hits against the uploaded hierarchy and feedback volume, each probe over
+    /// <see cref="SdfMeshProbeRelight.Slices"/> groups that write partial sums.</summary>
     ProbeRelight,
+    /// <summary>Sums each relit probe's slices into its lighting output and publication record.</summary>
+    ProbeCombine,
     /// <summary>Selects probes owing geometry or lighting work from captured cache metadata.</summary>
     ProbeSelect,
     /// <summary>Compacts a relight batch into indirect dispatch arguments and a stable work list.</summary>

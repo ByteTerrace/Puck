@@ -325,8 +325,9 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // Fixed point throughout except the two float<->fixed boundary conversions (the one sanctioned rendering seam),
     // so the strip a body sees is placed by the IDENTICAL math the strip it stands on already uses.
     private static WorldPlacement MapIntoSource(WorldPlacement placement, IReadOnlyList<WorldAdjacencyFramePair> path, WorldDefinition definition) {
-        var frame = WorldDefinitionRows.ResolvedFrame(definition, placement);
-        var mapped = placement with { Position = frame.Position, YawDegrees = frame.YawDegrees, Parent = null };
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var mapped = placement with { Position = frame.FixedPosition, YawDegrees = frame.YawDegrees, Scale = frame.Scale, Parent = null };
+        var position = frame.FixedPosition;
 
         foreach (var stage in path) {
             var yaw = FixedQ4816.FromDegrees(degrees: mapped.YawDegrees);
@@ -349,12 +350,13 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 destination: stage.Source
             );
 
-            mapped = mapped with {
-                Position = WorldFrameIsometry.MapPoint(
-                point: FixedVector3.FromVector3(value: mapped.Position),
+            position = WorldFrameIsometry.MapPoint(
+                point: position,
                 source: stage.Neighbour,
                 destination: stage.Source
-            ).ToVector3(),
+            );
+            mapped = mapped with {
+                Position = position,
                 YawDegrees = ((float)double.RadiansToDegrees(radians: ((double)FixedQ4816.Atan2(
                 y: mappedForward.X,
                 x: mappedForward.Z

@@ -15,6 +15,7 @@ public sealed partial class WorldEditorCommandModule {
     public const string PlaceCommand = "world.place";
     /// <summary>The verb that turns a placement by whole angle steps.</summary>
     public const string TurnCommand = "world.turn";
+
     private static readonly CommandForms WorldNudgeForms = CommandForms.Of(verb: NudgeCommand, "[<placement>] x|y|z <steps>");
     private static readonly CommandForms WorldPlaceForms = CommandForms.Of(verb: PlaceCommand, "[<creation>] [<id>]");
     private static readonly CommandForms WorldTurnForms = CommandForms.Of(verb: TurnCommand, "[<placement>] <steps>");
@@ -94,8 +95,8 @@ public sealed partial class WorldEditorCommandModule {
         return false;
     }
     // Whether a nudge or turn may act on its base (the placement as its line holds it, against the world's newest known
-    // state): refused when there is none, and when its position is resolved through something else (a parent, an
-    // attachment, a board), which is what to move instead.
+    // state): parents compose through the frame resolver and its inverse; a live attachment, inhabitant, state
+    // binding or surface projection owns its position and cannot be moved by a static translation edit.
     private static bool TryMovable(EditWorld world, WorldDefinition definition, string id, WorldPlacement? basis, string verb, out CommandResult refusal) {
         refusal = CommandResult.None;
 
@@ -107,8 +108,7 @@ public sealed partial class WorldEditorCommandModule {
 
         if (
             (basis.Position.Reference is not null) ||
-            ((WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } delivered) &&
-            (WorldDefinitionRows.ResolvedPosition(definition: definition, placement: delivered) != ((Vector3)delivered.Position)))
+            (basis.Attach is not null) || (basis.Inhabit is not null) || (basis.Surface is not null)
         ) {
             refusal = CommandResult.Error(output: $"[{verb}: '{id}' is positioned through another row; move that instead]");
 
@@ -166,7 +166,7 @@ public sealed partial class WorldEditorCommandModule {
             change: (definition, placement) => {
                 var pitch = seats.GridOf(document: (definition.EditorRaw ?? world.Editor), slot: slot).Pitch.Value;
                 var snap = seats.SnapOf(document: (definition.EditorRaw ?? world.Editor), slot: slot);
-                var position = ((Vector3)placement.Position);
+                var position = WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement);
                 Vector3 moved;
 
                 if (ReferenceFor(definition: definition, world: world.Name, excluding: id, pitch: pitch, slot: slot) is { } reference) {
@@ -187,7 +187,7 @@ public sealed partial class WorldEditorCommandModule {
                     }
                 }
 
-                return (placement with { Position = moved });
+                return WorldPlacementFrameCompilation.WithWorldPosition(definition, placement, moved);
             },
             context: context,
             id: id,
