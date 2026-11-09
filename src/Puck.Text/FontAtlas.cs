@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Maths;
 
 namespace Puck.Text;
 
@@ -169,6 +170,7 @@ public sealed class FontAtlas {
         }
 
         m_kerningAdjustments = m_kerningPairs.ToDictionary(
+            comparer: PackedIntPairComparer.Instance,
             elementSelector: pair => pair.AdvanceAdjustment,
             keySelector: pair => ComposeKerningKey(
                 leftUnicode: pair.Unicode1,

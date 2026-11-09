@@ -10,9 +10,12 @@ namespace Puck.Vulkan.Interop;
 /// (<see cref="VulkanDeviceFault"/>) name the objects they fall in, as Direct3D 12's removal record names its
 /// allocations. The driver reports every range it binds to or unbinds from an object
 /// (<c>VK_EXT_device_address_binding_report</c>) through a debug-utils messenger of the record's own; the record keeps
-/// the ranges bound now, a bounded history of the ranges unbound and each object's name
-/// (<see cref="VulkanGpuObjectNaming"/>). Reading or writing it takes a lock; the driver reports from whichever thread
-/// binds or frees.
+/// the ranges bound now, a bounded history of the ranges unbound and the name of each object that holds a bound range
+/// (<see cref="VulkanGpuObjectNaming"/>). An object is identified by its <c>VkObjectType</c> and handle together, since
+/// Vulkan does not make non-dispatchable handle values unique across object types, and a name lives exactly as long as
+/// the object holds a bound range: the unbind that releases the last one retires it, so a recycled handle never
+/// inherits it and the record holds names for live objects only. Reading or writing it takes a lock; the driver
+/// reports from whichever thread binds or frees.
 /// </summary>
 public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     /// <summary>The optional device extension.</summary>
@@ -31,9 +34,10 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     private const int Neighbours = 2;
 
     private readonly Lock m_lock = new();
-    private readonly Dictionary<(ulong Handle, ulong Base), Binding> m_bound = [];
+    private readonly Dictionary<BindingKey, Binding> m_bound = [];
     private readonly Binding[] m_unbound = new Binding[HistoryCapacity];
-    private readonly Dictionary<ulong, string> m_names = [];
+    // One entry per object that holds at least one bound range, removed with its last one.
+    private readonly Dictionary<ObjectKey, LiveObject> m_objects = [];
     // The object types reported so far; the first report of each is announced once on standard error.
     private readonly HashSet<uint> m_typesSeen = [];
     private readonly VulkanInstanceCommands m_instance;
@@ -43,7 +47,23 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     private int m_unboundCount;
     private long m_sequence;
 
-    private readonly record struct Binding(ulong Base, ulong Size, uint ObjectType, ulong Handle, bool Internal, long Sequence, string? Name);
+    private readonly record struct ObjectKey(uint ObjectType, ulong Handle);
+
+    private readonly record struct BindingKey(uint ObjectType, ulong Handle, ulong Base);
+
+    private struct LiveObject {
+        public string? Name;
+        public int Ranges;
+    }
+
+    // Name is the object's name at the moment its range was unbound, kept with the history entry; a bound range reads its
+    // object's current name instead.
+    private readonly record struct Binding(ulong Base, ulong Size, uint ObjectType, ulong Handle, bool Internal, long Sequence, string? Name) {
+        // The range's inclusive last address, saturated at the top of the address space so no endpoint wraps; a
+        // zero-size range holds no address and never meets anything.
+        public ulong Last => ((Size == 0UL) ? Base : ((Size - 1UL) > (ulong.MaxValue - Base)) ? ulong.MaxValue : (Base + (Size - 1UL)));
+        public bool IsEmpty => (Size == 0UL);
+    }
 
     private VulkanDeviceAddressBindings(VulkanInstanceCommands instance) {
         m_instance = instance;
@@ -85,12 +105,19 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
         return bindings;
     }
 
-    /// <summary>Records the name an object was given, which a report prints beside its ranges.</summary>
+    /// <summary>Records the name an object was given, which a report prints beside its ranges. The name lasts until the
+    /// object's last bound range is unbound. An object holding no bound range has nothing a report could print it beside,
+    /// so its name is dropped; objects are named after their creation has bound their memory.</summary>
+    /// <param name="objectType">The object's <c>VkObjectType</c>.</param>
     /// <param name="handle">The object's native handle.</param>
     /// <param name="name">The name.</param>
-    public void Name(ulong handle, string name) {
+    public void Name(uint objectType, ulong handle, string name) {
         lock (m_lock) {
-            m_names[handle] = name;
+            ref var live = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_objects, key: new ObjectKey(ObjectType: objectType, Handle: handle));
+
+            if (!Unsafe.IsNullRef(ref live)) {
+                live.Name = name;
+            }
         }
     }
 
@@ -104,33 +131,35 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     public string Describe(ulong address, ulong precision) {
         var width = Math.Max(val1: precision, val2: 1UL);
         var low = (address & ~(width - 1UL));
-        var high = (low + width);
+        // The fault's possible addresses, both ends inclusive (VkDeviceFaultAddressInfoKHR): the last never wraps, where
+        // an exclusive end past the top of the address space would.
+        var last = (address | (width - 1UL));
         var report = new StringBuilder();
 
         lock (m_lock) {
-            var bound = m_bound.Values.Where(predicate: binding => Meets(binding: binding, high: high, low: low)).OrderByDescending(keySelector: static binding => binding.Sequence).ToList();
+            var bound = m_bound.Values.Where(predicate: binding => Meets(binding: binding, last: last, low: low)).OrderByDescending(keySelector: static binding => binding.Sequence).ToList();
             var unbound = new List<Binding>();
 
             for (var index = 0; (index < m_unboundCount); index++) {
                 var binding = m_unbound[(((m_unboundNext - 1 - index) + HistoryCapacity) % HistoryCapacity)];
 
-                if (Meets(binding: binding, high: high, low: low)) {
+                if (Meets(binding: binding, last: last, low: low)) {
                     unbound.Add(item: binding);
                 }
             }
 
             foreach (var binding in bound) {
-                report.Append(handler: $"\n    bound {Describe(binding: binding, names: m_names)}");
+                report.Append(handler: $"\n    bound {Describe(binding: binding, name: m_objects.GetValueOrDefault(key: new ObjectKey(ObjectType: binding.ObjectType, Handle: binding.Handle)).Name)}");
             }
             foreach (var binding in unbound) {
-                report.Append(handler: $"\n    unbound {(m_sequence - binding.Sequence)} reports ago: {Describe(binding: binding, names: m_names)}");
+                report.Append(handler: $"\n    unbound {(m_sequence - binding.Sequence)} reports ago: {Describe(binding: binding, name: binding.Name)}");
             }
             if (bound.Count == 0) {
-                foreach (var binding in m_bound.Values.Where(predicate: binding => ((binding.Base + binding.Size) <= low)).OrderByDescending(keySelector: static binding => (binding.Base + binding.Size)).Take(count: Neighbours)) {
-                    report.Append(handler: $"\n    nearest below, ending 0x{(low - (binding.Base + binding.Size)):x} bytes before: {Describe(binding: binding, names: m_names)}");
+                foreach (var binding in m_bound.Values.Where(predicate: binding => (!binding.IsEmpty && (binding.Last < low))).OrderByDescending(keySelector: static binding => binding.Last).Take(count: Neighbours)) {
+                    report.Append(handler: $"\n    nearest below, ending 0x{(low - binding.Last - 1UL):x} bytes before: {Describe(binding: binding, name: m_objects.GetValueOrDefault(key: new ObjectKey(ObjectType: binding.ObjectType, Handle: binding.Handle)).Name)}");
                 }
-                foreach (var binding in m_bound.Values.Where(predicate: binding => (binding.Base >= high)).OrderBy(keySelector: static binding => binding.Base).Take(count: Neighbours)) {
-                    report.Append(handler: $"\n    nearest above, starting 0x{(binding.Base - high):x} bytes after: {Describe(binding: binding, names: m_names)}");
+                foreach (var binding in m_bound.Values.Where(predicate: binding => (!binding.IsEmpty && (binding.Base > last))).OrderBy(keySelector: static binding => binding.Base).Take(count: Neighbours)) {
+                    report.Append(handler: $"\n    nearest above, starting 0x{(binding.Base - last - 1UL):x} bytes after: {Describe(binding: binding, name: m_objects.GetValueOrDefault(key: new ObjectKey(ObjectType: binding.ObjectType, Handle: binding.Handle)).Name)}");
                 }
             }
             if (report.Length == 0) {
@@ -154,13 +183,12 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
         m_self.Free();
     }
 
-    private static bool Meets(in Binding binding, ulong low, ulong high) =>
-        ((binding.Base < high) && (low < (binding.Base + binding.Size)));
-    private static string Describe(in Binding binding, Dictionary<ulong, string> names) {
-        var name = (binding.Name ?? names.GetValueOrDefault(key: binding.Handle) ?? "(unnamed)");
-
-        return $"{TypeName(objectType: binding.ObjectType)} 0x{binding.Handle:x} '{name}'{(binding.Internal ? " (driver-internal)" : string.Empty)} [0x{binding.Base:x16}, 0x{(binding.Base + binding.Size):x16}) {binding.Size} bytes, report {binding.Sequence}";
-    }
+    // Whether the range holds an address in the inclusive span [low, last].
+    private static bool Meets(in Binding binding, ulong low, ulong last) =>
+        (!binding.IsEmpty && (binding.Base <= last) && (low <= binding.Last));
+    // The range's end is shown exclusive, widened so the top of the address space does not wrap it to zero.
+    private static string Describe(in Binding binding, string? name) =>
+        $"{TypeName(objectType: binding.ObjectType)} 0x{binding.Handle:x} '{(name ?? "(unnamed)")}'{(binding.Internal ? " (driver-internal)" : string.Empty)} [0x{binding.Base:x16}, 0x{(((UInt128)binding.Base) + binding.Size):x16}) {binding.Size} bytes, report {binding.Sequence}";
     private static string TypeName(uint objectType) =>
         objectType switch {
             8u => "memory",
@@ -173,19 +201,37 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     private void Record(in VkDeviceAddressBindingCallbackDataExt binding, uint objectType, ulong handle) {
         lock (m_lock) {
             var sequence = ++m_sequence;
-            var key = (handle, binding.BaseAddress);
+            var objectKey = new ObjectKey(ObjectType: objectType, Handle: handle);
+            var key = new BindingKey(ObjectType: objectType, Handle: handle, Base: binding.BaseAddress);
 
             if (m_typesSeen.Add(item: objectType)) {
                 Console.Error.WriteLine(value: $"[device-fault] {ExtensionName} reporting: first range of a {TypeName(objectType: objectType)}, [0x{binding.BaseAddress:x16}, +{binding.Size}) of 0x{handle:x}");
             }
 
             if (binding.BindingType == 0u) {
-                m_bound[key] = new Binding(Base: binding.BaseAddress, Size: binding.Size, ObjectType: objectType, Handle: handle, Internal: ((binding.Flags & 1u) != 0u), Sequence: sequence, Name: null);
+                var bound = new Binding(Base: binding.BaseAddress, Size: binding.Size, ObjectType: objectType, Handle: handle, Internal: ((binding.Flags & 1u) != 0u), Sequence: sequence, Name: null);
+
+                // A range bound again at the same base replaces its entry and holds no second claim on the object.
+                if (m_bound.TryAdd(key: key, value: bound)) {
+                    CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_objects, key: objectKey, exists: out _).Ranges++;
+                } else {
+                    m_bound[key] = bound;
+                }
                 return;
             }
 
-            _ = m_bound.Remove(key: key);
-            m_unbound[m_unboundNext] = new Binding(Base: binding.BaseAddress, Size: binding.Size, ObjectType: objectType, Handle: handle, Internal: ((binding.Flags & 1u) != 0u), Sequence: sequence, Name: m_names.GetValueOrDefault(key: handle));
+            // The history entry keeps the name the object has now, or none: it never looks a name up again, so a later
+            // object that reuses the handle cannot lend its own.
+            string? name = null;
+            ref var live = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_objects, key: objectKey);
+
+            if (!Unsafe.IsNullRef(ref live)) {
+                name = live.Name;
+            }
+            if (m_bound.Remove(key: key) && !Unsafe.IsNullRef(ref live) && (--live.Ranges <= 0)) {
+                _ = m_objects.Remove(key: objectKey);
+            }
+            m_unbound[m_unboundNext] = new Binding(Base: binding.BaseAddress, Size: binding.Size, ObjectType: objectType, Handle: handle, Internal: ((binding.Flags & 1u) != 0u), Sequence: sequence, Name: name);
             m_unboundNext = ((m_unboundNext + 1) % HistoryCapacity);
             m_unboundCount = Math.Min(val1: (m_unboundCount + 1), val2: HistoryCapacity);
         }

@@ -371,7 +371,11 @@ exactness off its lowering without a GPU.
   side (`VulkanDeviceAddressBindings`, fed by
   `VK_EXT_device_address_binding_report` whenever the device supports it): a
   read just past a buffer's end shows as the nearest object below, and a read
-  of a released buffer as an unbound range. The boot log's
+  of a released buffer as an unbound range. Objects are keyed by type and handle
+  together, and a name lives only while its object holds a bound range (the
+  unbind of the last one retires it, and an unbound entry keeps the name the
+  object had then), so an object named before the driver reports its first
+  range reads `(unnamed)`. The boot log's
   `[device-fault] VK_EXT_device_address_binding_report reporting` lines name each
   object type the record receives reports for.
 - **Validation layers.** Under `--debug-layers`, any `[vulkan-debug]
