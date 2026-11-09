@@ -15,7 +15,8 @@ public static class VectorFunctions {
     /// <param name="high">The high half.</param>
     /// <returns>The low binary16 bits followed by the high bits.</returns>
     public static uint PackHalf2x16(float low, float high) =>
-        (uint)BitConverter.HalfToUInt16Bits((Half)low) | ((uint)BitConverter.HalfToUInt16Bits((Half)high) << 16);
+        ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)low))) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)high))) << 16);
+
     private const float UnormByteScale = 255f;
     private const float UnormShortScale = 65535f;
 
@@ -44,7 +45,6 @@ public static class VectorFunctions {
         y: rotation.Y,
         z: rotation.Z
     ));
-
     /// <summary>Reduces an angle onto <c>(−π, π]</c>.</summary>
     /// <typeparam name="T">The IEEE 754 floating-point type.</typeparam>
     /// <param name="radians">The angle in radians.</param>
@@ -116,7 +116,6 @@ public static class VectorFunctions {
     /// the same fraction below its floor.</returns>
     public static T Fract<T>(T x) where T : IFloatingPointIeee754<T> =>
         (x - T.Floor(x: x));
-
     /// <summary>Creates the shortest-arc rotation taking the direction of <paramref name="from"/> to the direction of
     /// <paramref name="to"/>.</summary>
     /// <param name="from">The start direction, of any non-zero length.</param>
@@ -194,7 +193,7 @@ public static class VectorFunctions {
     /// <param name="first">The first vector.</param>
     /// <param name="second">The second vector.</param>
     /// <returns>The dot product.</returns>
-    public static double DotWide(Vector3 first, Vector3 second) => ((((double)first.X * second.X) + ((double)first.Y * second.Y)) + ((double)first.Z * second.Z));
+    public static double DotWide(Vector3 first, Vector3 second) => (((((double)first.X) * second.X) + (((double)first.Y) * second.Y)) + (((double)first.Z) * second.Z));
     /// <summary>Returns a unit vector perpendicular to a direction.</summary>
     /// <param name="direction">The direction, of any non-zero length.</param>
     /// <returns>The normalized cross product of <paramref name="direction"/> with the basis axis it is least aligned
@@ -221,7 +220,6 @@ public static class VectorFunctions {
             vector2: axis
         ));
     }
-
     /// <summary>Returns the yaw of an attitude's forward under the engine's −Z-forward convention: zero facing −Z, a
     /// positive yaw turning left about +Y.</summary>
     /// <param name="attitude">The attitude.</param>
@@ -291,7 +289,6 @@ public static class VectorFunctions {
         y: MathF.Sin(x: pitch),
         z: (-MathF.Cos(x: yaw) * MathF.Cos(x: pitch))
     );
-
     /// <summary>Quantizes a unit-range value to an unsigned 8-bit normalized code.</summary>
     /// <param name="value">The value, clamped to <c>[0, 1]</c>; not-a-number codes as zero.</param>
     /// <returns><c>round(clamp(value) · 255)</c>, to nearest with ties to even, with the product formed in double
@@ -319,16 +316,16 @@ public static class VectorFunctions {
     /// <param name="rgba">The colour, each lane clamped to <c>[0, 1]</c>.</param>
     /// <returns><c>r | g &lt;&lt; 8 | b &lt;&lt; 16 | a &lt;&lt; 24</c>, each lane <see cref="ToUnorm8(float)"/>.</returns>
     public static uint PackRgba8(Vector4 rgba) =>
-        (((uint)ToUnorm8(value: rgba.X)) |
+        ((uint)ToUnorm8(value: rgba.X)) |
          (((uint)ToUnorm8(value: rgba.Y)) << 8) |
          (((uint)ToUnorm8(value: rgba.Z)) << 16) |
-         (((uint)ToUnorm8(value: rgba.W)) << 24));
+         (((uint)ToUnorm8(value: rgba.W)) << 24);
     /// <summary>Packs a texture coordinate into the unorm2x16 word <c>sdfGlyphUnpackUv</c> decodes: <c>u</c> in the
     /// low half, <c>v</c> in the high, each <c>round(clamp(x) · 65535)</c>.</summary>
     /// <param name="uv">The coordinate, each lane clamped to <c>[0, 1]</c>; not-a-number codes as zero.</param>
     /// <returns><c>u | v &lt;&lt; 16</c>, each lane rounded to nearest with ties to even.</returns>
     public static uint PackUnorm2x16(Vector2 uv) =>
-        (ToUnorm16(value: uv.X) | (ToUnorm16(value: uv.Y) << 16));
+        ToUnorm16(value: uv.X) | (ToUnorm16(value: uv.Y) << 16);
     /// <summary>Unpacks an <c>R8G8B8A8_UNORM</c> word into its four unit-range lanes.</summary>
     /// <param name="packed">The word, red in the low byte and alpha in the high.</param>
     /// <returns>Each byte divided by <c>255</c>, as <c>(r, g, b, a)</c>.</returns>

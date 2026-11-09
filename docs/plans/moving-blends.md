@@ -302,15 +302,18 @@ deleting the remaining non-rest settle mechanism and counters belongs to step 5.
 
 ### Lead verification request
 
-Start the lane checkout with `puck_world_start`, `document: "worlds/debug"`,
+Prepare the debug-based admitted source described below. Start the lane checkout with
+`puck_world_start`, `document: "<verification-source>"`,
 `windowed: true`, `holder: "moving-blends verification"`, once with `backend: "directx"`
 and once with `backend: "vulkan"`. Use the shared mesh store, not a cold cache.
-The creation is the real `swallow` at the perch, framed by:
+The creation is the real `swallow` at the perch, framed by the following pose script.
+`worlds/debug/debug.puck` does not currently import `birds.puck`, so starting the
+ordinary package alone cannot show this witness.
 
 ```text
 view.override camera look 3.3 1.22 3.62 3 1.15 4 30
 world.row.set creations swallow document.shapes[name=head].swings [{"driver":"glance","axis":[0,1,0],"amplitude":0.02,"pivot":[0,0.06,0.03],"wave":"sine","phase":0}]
-world.row.set creations swallow document.shapes[name=tailBase].swings [{"driver":"bob","axis":[1,0,0],"amplitude":0,"pivot":[0,0.026,-0.03],"wave":"sine","phase":0}]
+world.row.set creations swallow document.shapes[name=tailBase].swings []
 world.row.set creations swallow document.drivers [{"name":"glance","signal":"time","cadence":6.2831853},{"name":"bob","signal":"time","cadence":1.4}]
 world.wait bakes 120
 world.wait residency
@@ -319,22 +322,58 @@ world.wait 120
 ```
 
 This is the admitted envelope fixture, not a change to the bird's shipped look. The
-glance sweeps its entire admitted ±0.02-radian range in a second; the tail is held to
-keep the witness on one active seam. Require 60 completed capture receipts and inspect
+glance sweeps its entire admitted ±0.02-radian range in a second; the tail's motion
+owner is removed to keep the witness on two owners. A zero-amplitude swing still
+reserves an owner and can trigger the third-share fallback. Require 60 completed capture receipts and inspect
 the reported ticks: the asynchronous burst must span both extremes and the return.
 If it does not, repeat the burst while the glance keeps cycling. Inspect throat and
 wing intersections from the portrait and the reverse view, with no spike, crack or
 fold. Repeat with `world.debug-view motion`: still body parts must have zero motion,
 while the head follows the glance. Stop each process with `puck_world_stop`.
 
-The CPU counterpart is `puck mesh audit --cpu --world <debug-based admitted fixture>
---prototype swallow --pose '2=tx,ty,tz,qx,qy,qz,qw'`, with the head owner's slot offset
-confirmed from its motion plan. Pose about the engine-frame pivot: `t = pivot − R pivot`,
-not a rotation about the origin. Run both envelope extremes and the rest pose. The
-fixture and exact numeric recipes are retained in the lane's verification evidence.
+The CPU counterpart uses `worlds/debug/birds.puck` prefixed with
+`schema: "puck.world.definition.v1"` and `basis: "../../worlds/debug/debug"`, written
+to a temporary source two directories below the repository root (`<verification-source>`
+below). Set the head amplitude to `0.02`,
+remove the tail's `swings` block, and set the glance cadence to `6.2831853`.
+The head then owns slot offset 1. Pose about the engine-frame pivot [0, 0.06, −0.03]:
+`t = pivot − R pivot`, not a rotation about the origin. Run:
+
+```text
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0 --pose '1=0.0005999600008,0,-0.0000059998,0,0.0099998333,0,0.9999500004'
+puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0 --pose '1=-0.0005999600008,0,-0.0000059998,0,-0.0099998333,0,0.9999500004'
+```
+
+All three runs produced 26,862 triangles, 18,873 vertices, 2,834 blend-zone vertices,
+zero split-tuple places, zero open or non-manifold edges and zero uncovered crossings.
+The rest geometry key was the same in all three runs. Maximum vertex/centroid/midpoint
+field errors were 1.11/0.66/0.85 mm at all three poses, below the head/body D bound
+of 1.19234 mm (θ = 1.14592°). These include the rest contour's error, not only skin error.
+The audit reports 40/42/40 folds and 32/32/31 flipped faces at rest/positive/negative;
+the GPU inspection must check the throat and distinguish these rest contour defects
+from a moving seam. The CPU audit alone does not establish the visual bar.
 
 The rendering skill gained a capability eval, `moving-blend-crease-copies`. Its regression
 and capability runs belong to the lead's eval window; this lane did not run model sessions.
+
+### Lane verification
+
+On the merged lane head, Release builds of `Puck.World` with
+`-p:PuckShaderSpirvEnabled=true`, the CLI and the four touched test projects
+completed with zero warnings and errors. The focused laws passed 15 cases: five
+influence/pose laws, one planar law, four rest/envelope cases, one engraving case,
+three motion diagnostics and one shared packing law. The debug document validated;
+its four PUCK122 warnings identify the Moth and pilot eyelid intersections that crease.
+The headless debug package started through `puck_world_start` and stopped through
+`puck_world_stop` with exit code 0. Presented GPU evidence is still requested above.
+The draft swallow also validated over the debug basis, printing each pair's bounds
+and crease decision: head/body θ = 31.5127°, D = 0.0323783 versus 0.007;
+tail/body θ = 10.3132°, D = 0.00821369 versus 0.003. This confirms that the
+original large glance is outside the envelope; the admitted fixture intentionally
+reduces it rather than claiming that the original pose can skin.
+`puck shaders generate --check` passed with generated files staged. `puck docs links`
+passed after repairing the two citations displaced by the implementation documentation.
 
 1. **Rest-pose bake and the envelope.** `SdfMeshGeometryBuilder` keys a skinned
    group at rest. `CreationMotion` computes θ and D per moving blend, and
@@ -406,3 +445,27 @@ walks no field ([rendering decisions](../decisions/rendering.md)).
 `experimental/` holds no skinned-seam or pose-bank prior art. A history search
 for "skin", "settle" and "seam" found the settle rebake and the skin members as
 the only prior work.
+
+The duplicate scan (`puck scan --only duplicates --against lead/velocity`) was read
+in full: 81 neighbours and four helper flags on the final implementation. Actual
+overlap was removed: the CPU contour sampler moved from the CLI into `SdfMeshCpuField`,
+and pair packing moved into Maths' `VectorFunctions.PackHalf2x16`, now shared by skin,
+irradiance and contact appearance. Searches and their relevant results:
+
+```text
+rg -n 'HalfToUInt16Bits|PackHalf2x16' src/Puck.Maths src/Puck.SdfVm/SdfMeshInfluence.cs src/Puck.SdfVm/SdfMeshIrradiance.cs src/Puck.SignedDistance/SdfAppearance.cs
+VectorFunctions.PackHalf2x16; SdfMeshInfluence.GradientXY; five irradiance pairs; contact reach/coverage pair
+rg -n 'FixedRigidTransform|ContourLevel|MemberFields' src/Puck.SdfVm -g 'SdfMeshSkin*.cs'
+SdfMeshSkin.Pose: FromRotationTranslation, FromDualQuaternion
+SdfMeshSkin.Split: SdfMeshAudit.MemberFields, SdfMeshPathBake.ContourLevel
+```
+
+The CPU pose witness therefore reuses the existing dual-quaternion carrier, while
+the shader supplies its presentation-float execution. The new envelope composes
+existing motion bounds and shape boxes; it is not another animation evaluator.
+Influences are an optional reading of the existing point interpreter, not a new
+field walker. The scanner's presentation hash helpers already call `Fnv1aHash`;
+their per-type `Add` overloads serialize different record layouts. Irradiance's
+`RefreshLighting` uses BCL `HashCode.Combine` for a local cache key. Neither is a
+private hash algorithm. Other neighbours compare unrelated record/cell layouts,
+or the two interfaces' sampling attribution wrappers, rather than duplicate kernels.

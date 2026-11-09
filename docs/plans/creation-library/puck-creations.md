@@ -297,7 +297,7 @@ puts or gets a creation outside a projection **[inference]** from that search.
 
 The mesh bake keys each group by its geometry, a 128-bit hash that ignores where
 the program places the group **[opened]**
-(`docs/rendering/sdf/handbook/frame-rendering.md:1349-1351`):
+(`docs/rendering/sdf/handbook/frame-rendering.md:1357-1359`):
 
 ```text
 and the old buffer is disposed once that upload has completed. The bake keys each group by its
