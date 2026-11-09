@@ -225,32 +225,6 @@ public static class MotionSheets {
             }
         }
     }
-    private static void DrawText(MotionImage image, string text, int left, int top, int scale, byte[] color) {
-        var advance = (BitmapFont.GlyphSize * scale);
-
-        for (var index = 0; (index < text.Length); index++) {
-            var glyph = BitmapFont.Glyph(value: text[index]);
-
-            for (var gy = 0; (gy < BitmapFont.GlyphSize); gy++) {
-                for (var gx = 0; (gx < BitmapFont.GlyphSize); gx++) {
-                    if (!BitmapFont.IsSet(column: gx, glyph: glyph, row: gy)) {
-                        continue;
-                    }
-
-                    for (var sy = 0; (sy < scale); sy++) {
-                        for (var sx = 0; (sx < scale); sx++) {
-                            var x = (((left + (index * advance)) + (gx * scale)) + sx);
-                            var y = ((top + (gy * scale)) + sy);
-
-                            if ((x < 0) || (y < 0) || (x >= image.Width) || (y >= image.Height)) {
-                                continue;
-                            }
-
-                            Buffer.BlockCopy(count: 4, dst: image.Rgba, dstOffset: (((y * image.Width) + x) * 4), src: color, srcOffset: 0);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    private static void DrawText(MotionImage image, string text, int left, int top, int scale, byte[] color) =>
+        BitmapFont.Draw(color: color, height: image.Height, left: left, rgba: image.Rgba, scale: scale, text: text, top: top, width: image.Width);
 }

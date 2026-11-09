@@ -27,10 +27,11 @@ public static class MeshCommand {
     private const float HistoryReach = 0.001f;
     private const int HistorySamples = 512;
 
-    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c>, <c>scene</c> and <c>identity</c> subverbs.</summary>
+    /// <summary>Creates the <c>mesh</c> verb and its <c>audit</c>, <c>preview</c>, <c>scene</c> and <c>identity</c> subverbs.</summary>
     /// <returns>The verb.</returns>
     public static Command Create() => new(description: "Inspect the meshes the baked-mesh path stores.", name: "mesh") {
         AuditCommand(),
+        MeshPreviewCommand.Create(),
         MeshSceneCommand.Create(),
         MeshIdentityCommand.Create(),
     };
@@ -104,19 +105,12 @@ public static class MeshCommand {
 
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
-        var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: scene.Program, transforms: scene.Transforms);
+        var groups = scene.Plan(farDistance: farDistance);
         var store = new SdfMeshStore(directory: meshes);
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
-        var baked = (request.Cpu
-            ? MeshCpuBake.Bake(
-                fields: selected
-                    .Where(predicate: group => SdfMeshAudit.TryEvaluator(field: out _, program: SdfMeshAudit.Field(group: group, program: scene.Program), refusal: out _))
-                    .ToDictionary(keySelector: static group => group.Selector, elementSelector: group => SdfMeshAudit.Field(group: group, program: scene.Program)),
-                frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance }
-            )
-            : null);
+        var baked = (request.Cpu ? MeshCpuBake.Bake(farDistance: farDistance, groups: selected, scene: scene) : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
