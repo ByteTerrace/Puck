@@ -3506,17 +3506,16 @@ measurement.
   activating in the shared root reaches every session's tools, so it cannot be
   the measurement. The placement swap needs no more work.
 
-- [high] The operator's worker dies under concurrent lanes: `puck_world_start`
-  and `puck_exec` fail with "activating the current release's worker failed,
-  so the call reached no worker: The server shut down unexpectedly" (the
-  message `OperatorMcpFront` builds), `puck_worlds` with "Initialization timed
-  out", and lockstep Worlds drop attachments ("Host disconnected; dispatched
-  outcome is unknown") while converging. Five look and rendering lanes in one
-  session hit it, one blocked outright from starting its windowed batch; the
-  server came back on its own each time. Find why the worker exits (its log,
-  the release activation, a crash under concurrent sessions or a memory
-  limit), fix it at the cause, and make an unknown outcome name what to
-  inspect.
+- [medium] Lockstep Worlds drop an attachment mid-call while converging: the
+  call answers "Host disconnected" (`LocalControlClient.ExecuteAsync` reading
+  end of stream), meaning the World's `LocalControlServer.ServeAsync` closed
+  the connection before the client's own deadline fired. Its causes there are
+  the World's deadline for the request (the same `timeoutMs`, started later than
+  the client's), a session operation throwing a connection-class exception
+  (`IsConnectionError` includes `OperationCanceledException`), or the World
+  exiting. Unconfirmed: reproduce with a lockstep windowed World and a capture
+  or `world.wait` near its `timeoutMs`, read `host.log` for the close, and fix
+  the side that closes early. The error now names what to inspect.
 - [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout. Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`.
 
 - [medium] Investigate a GPU lease held by an older operator worker while no

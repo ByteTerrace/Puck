@@ -48,7 +48,9 @@ public static class OperatorMcpFront {
                         DiscoverProbeTimeout = Timeout.InfiniteTimeSpan,
                     }, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception error) {
-                var exited = process.HasExited;
+                // A dying worker's output can end before its exit is observed; the code is read before StopWorker disposes it.
+                _ = await Task.WhenAny(process.WaitForExitAsync(cancellationToken: CancellationToken.None), Task.Delay(delay: ExitGrace, cancellationToken: CancellationToken.None)).ConfigureAwait(continueOnCapturedContext: false);
+                int? exitCode = (process.HasExited ? process.ExitCode : null);
 
                 await StopWorker(client: null, errors: errors, process: process).ConfigureAwait(continueOnCapturedContext: false);
                 if ((error is OperationCanceledException) && token.IsCancellationRequested) { throw; }
@@ -57,7 +59,7 @@ public static class OperatorMcpFront {
                 string said;
 
                 lock (recent) { said = string.Join(separator: " | ", values: recent); }
-                throw new IOException(message: $"{error.Message.TrimEnd('.')}. The worker {(exited ? $"exited with code {process.ExitCode}" : "did not answer and was stopped")}; " +
+                throw new IOException(message: $"{error.Message.TrimEnd('.')}. The worker {((exitCode is { } code) ? $"exited with code {code}" : "did not answer and was stopped")}; " +
                     ((said.Length == 0) ? "it wrote nothing to standard error." : $"its last standard error: {said}"), innerException: error);
             }
             return (client, () => StopWorker(client: client, errors: errors, process: process), process.WaitForExitAsync());
