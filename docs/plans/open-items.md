@@ -1350,6 +1350,14 @@ Owner: delivery lane · medium · Next: the production deploy below, then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high] The Azure release of `main` fails at three causes, so nothing deploys:
+  the world-silo build image lacks `xz`, so `tar -xJf` cannot unpack the LLVM
+  tarball (its checksum passes); PUCKARCH009 refuses
+  `src/Puck.Azure.Resources/bootstrap.cs` (a file-based app holding Azure SDK
+  references outside a `<PuckProvider>` project); and the WebAssembly publish's
+  trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
+  (`Activator.CreateInstance` on an unannotated type).
+
 - [high] Production deploy fails at "Publish containers and apply application
   configuration", leaving production on its previous release.
   - Error: `az acr repository list` returns "authentication required".
