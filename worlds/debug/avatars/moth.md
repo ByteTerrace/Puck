@@ -258,7 +258,8 @@ The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
 lavender hexagon, with a lavender rib plate down each flank under the arms
 (`flank-left`, `flank-right`), above the segmented charcoal waist and the ochre
 belt; the ochre collar stands above it at the neck. A lavender plate
-(`pelvicShield`) narrows below the belt. The slab and flanks inherit the
+(`pelvicShield`) narrows below the belt, and its twin behind (`seatShield`)
+covers her seat between the pods' lips. The slab and flanks inherit the
 torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
 flight pack is the `flightPod` template, once a side: a charcoal core riding
 the torso, five plates and the nozzle parented to it in one union group, and

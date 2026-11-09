@@ -2204,6 +2204,20 @@ prototypes {
         }
       }
 
+      // Its twin behind (sheet 01's back): a lavender plate over the seat between the pods' lips.
+      shape Prism "seatShield" {
+        id: 8
+        position [0, 0.985, -0.15]
+        scale [0.15, 0.115, 0.035]
+        material: violet
+        parent: "pelvis"
+        profile {
+          kind: "Convex"
+          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
+          cornerRadius: 0.1
+        }
+      }
+
       shape Superellipsoid "belt" {
         id: 10
         position [0, 1.118, 0]
@@ -2959,9 +2973,9 @@ prototypes {
       // The knee piston, behind the knee: a cylinder on the thigh and a rod on the shin, both aimed at the hinge.
       shape Cylinder "kneeCylinder-left" {
         id: 177
-        position [0.171, 0.865, -0.069]
+        position [0.1751, 0.8416, -0.0554]
         rotation [0.9286, 0, -0.2563, 0.2684]
-        scale [0.021, 0.0923, 0.021]
+        scale [0.021, 0.065, 0.021]
         material: pistonSteel
         parent: "thigh-left"
         rounding: 0.006
@@ -4212,9 +4226,9 @@ prototypes {
 
       shape Cylinder "kneeCylinder-right" {
         id: 225
-        position [-0.171, 0.865, -0.069]
+        position [-0.1751, 0.8416, -0.0554]
         rotation [0.9286, 0, 0.2563, 0.2684]
-        scale [0.021, 0.0923, 0.021]
+        scale [0.021, 0.065, 0.021]
         material: pistonSteel
         parent: "thigh-right"
         rounding: 0.006

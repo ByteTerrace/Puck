@@ -1604,11 +1604,12 @@ by `world.view.pick`.
   (`puck mesh preview`) from every side: the flight pack (`flightPod`) is two
   shingled shields at sheet 01's size, the shoulder slabs, gauntlets and chest
   slab are flat-faced plates, the greaves flat-faced, the knee guards
-  octagonal chamfered slabs, and the nose bakes in the face's group. The
-  shoulder stack lowered to her chin, the ear discs stood proud and all of the
-  above wait on a windowed capture: by day from every side and at the chase
-  camera, the off-suit form, the hover and walk bursts, dusk and night, and a
-  Vulkan set. The shoulder slabs still read soft in profile (exponent-6
+  octagonal chamfered slabs, and the nose bakes in the face's group. Judged on
+  Direct3D 12 (front, back, side, three-quarter above, rear below, hover,
+  off-suit, a walk at four phases, dusk with `world.toon` off and on, night)
+  and a Vulkan three-quarter and back, under the world lighting before the
+  toon-2 and gi-cast changes; a lavender seat plate behind and shorter knee
+  pistons followed on the CPU preview only. The shoulder slabs still read soft in profile (exponent-6
   superellipsoids under a quadratic shear), and the boots' heel housings,
   ankle hubs and cheeks are the old construction. The owner's walkthrough also found
   nothing separating her from the background (no rim light or outline) and no
@@ -1646,8 +1647,8 @@ by `world.view.pick`.
   box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
   one factor) would let one rule serve both; the static path also lacks the round
   section term, so its small spheres facet at 15 mm.
-- [medium] The Moth's pooled bake is 899,445 triangles (levels 276,545 and
-  152,939) over 156 groups
+- [medium] The Moth's pooled bake is 900,419 triangles (levels 276,793 and
+  153,009) over 157 groups
   (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`),
   down from 1,145,385 when blend groups first took the static union's lattice.
   What remains is small parts baking on fine lattices: the eyes (25,800 each
