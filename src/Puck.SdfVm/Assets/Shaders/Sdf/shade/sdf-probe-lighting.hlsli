@@ -1,25 +1,15 @@
 #ifndef SDF_PROBE_LIGHTING_HLSLI
 #define SDF_PROBE_LIGHTING_HLSLI
 #include "sdf-probe-trace.hlsli"
-#include "sdf-sky-environment.hlsli"
 struct ProbePass {
     uint meshIrradianceVolume;
     float4 meshIrradianceLevels[3];
     float4 meshIrradianceSpacings[3];
-    uint indirectSources;
-    float4 indirectSourceGains;
 };
 static ProbePass passGroup;
-float3 sdfSkyPhysicalIrradiance(float3 normal) {
-    float3 coefficients[9];
-    [unroll] for (uint k = 0; k < 9; k++) { coefficients[k] = sdfProbeLighting[11 + k].xyz; }
-    return sdfSkyEnvironmentIrradiance(normal, coefficients);
-}
 #include "sdf-mesh-irradiance.hlsli"
 void sdfProbeLightingSetup() {
     passGroup.meshIrradianceVolume = 1;
-    passGroup.indirectSources = sdfProbeLighting[1].w != 0 ? SDF_INDIRECT_SOURCES_SKY : 0;
-    passGroup.indirectSourceGains = sdfProbeLighting[2];
     [unroll] for (uint level = 0; level < 3; level++) {
         passGroup.meshIrradianceLevels[level] = sdfProbeLighting[3 + 2 * level];
         passGroup.meshIrradianceSpacings[level] = sdfProbeLighting[4 + 2 * level];
