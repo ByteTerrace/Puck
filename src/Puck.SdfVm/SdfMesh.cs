@@ -896,7 +896,7 @@ public static class SdfMeshRegion {
         var perVertex = skin[(1 + (members.Length * SdfMeshRecord.MemberWords))..];
 
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            var influence = (mesh.Influences.IsEmpty ? default : mesh.Influences.Span[vertex]);
+            var influence = (mesh.Influences.IsEmpty ? new SdfMeshInfluence(SdfMesh.NoMember, 0, 0) : mesh.Influences.Span[vertex]);
             perVertex[4 * vertex] = vertexMembers[vertex];
             perVertex[(4 * vertex) + 1] = influence.Blend;
             perVertex[(4 * vertex) + 2] = influence.GradientXY;

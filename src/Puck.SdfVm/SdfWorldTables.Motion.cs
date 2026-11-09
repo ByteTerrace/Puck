@@ -96,6 +96,7 @@ public sealed partial class SdfWorldTables {
             // Members may contain unused entries. Only a member named by a vertex can affect this draw's history.
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatMemberBytesChecked, draw.Mesh.VertexMembers.Length);
             if (draw.Mesh.VertexMembers.Span.Contains((byte)index)) { return true; }
+            foreach (var influence in draw.Mesh.Influences.Span) { if ((influence.Share > 0) && (influence.Second == index)) { return true; } }
         }
         return false;
     }

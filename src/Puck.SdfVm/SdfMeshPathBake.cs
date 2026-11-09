@@ -888,9 +888,7 @@ public sealed partial class SdfMeshPathBake {
         var materials = answer.Materials.GetSpan();
 
         if (!request.Points.IsEmpty) {
-            if (group.Skin is not null) {
-                AnswerPoints(group: group, kind: 7, materials: answer.Slots.GetSpan(), request: in request);
-            } else if (group.Final is { } final) {
+            if (group.Final is { } final) {
                 AnswerFinal(final: final, gradients: answer.Gradients.GetSpan(), group: group, materials: materials, request: in request, values: values);
             } else if (group.Creases is not null) {
                 AnswerCreases(gradients: answer.Gradients.GetSpan(), group: group, request: in request, values: values);
@@ -1973,7 +1971,7 @@ public sealed partial class SdfMeshPathBake {
 
             group.Next = null;
             group.Contouring = true;
-            Schedule(group: group, work: ((group.Skin is null) ? () => Advance(group: group) : () => Land(group: group, mesh: Skinned(group: group))));
+            Schedule(group: group, work: () => Advance(group: group));
         }
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
@@ -2021,51 +2019,14 @@ public sealed partial class SdfMeshPathBake {
         var skinned = ((mesh is not null) && group.Dynamic && group.Geometry.Poses.Keys.Any(predicate: slot => (slot != group.Slot)));
 
         if (skinned) {
-            var positions = mesh!.Positions.Span;
-            var normals = mesh.Normals.Span;
-
-            group.Points.Resize(positions.Length, clear: false, preserve: false);
-            for (var vertex = 0; (vertex < positions.Length); vertex++) {
-                group.Points[vertex] = new Vector4(value: (positions[vertex] + (normals.IsEmpty ? Vector3.Zero : (normals[vertex] * SkinLift))), w: 0f);
-            }
-            group.PointMaterials.Resize(positions.Length, clear: false, preserve: false);
-            group.PointsAnswered = 0;
-            group.Skin = mesh;
-        }
-        lock (m_gate) {
-            m_accounts.CutEdges += edges;
-            if (skinned) {
-                group.Contouring = false;
-                if (m_groups.Contains(item: group)) { group.Next = PointChunk(group: group); }
-                return;
+            mesh = SdfMeshSkin.Build(mesh!, m_program!, group, out var refusal);
+            if (mesh is null) {
+                SdfMeshBakeReport.Refused(selector: group.Selector, refusal: $"moving blend splits: {refusal}");
+                mesh = SdfMeshSkin.Split(m_program!, group);
             }
         }
+        lock (m_gate) { m_accounts.CutEdges += edges; }
         Land(group: group, mesh: mesh);
-    }
-    // The skin round's answer: the group's mesh with each vertex riding the member slot that won at it, or the mesh as it
-    // is when every vertex's winner is the group's own slot.
-    private static SdfMesh Skinned(Group group) {
-        var mesh = group.Skin!;
-        var slots = group.PointMaterials;
-        var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).ToArray();
-
-        if (others.Length > SdfMesh.MaxMembers) {
-            throw new InvalidOperationException(message: $"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
-        }
-        var vertexMembers = new byte[slots.Length];
-        var any = false;
-
-        for (var vertex = 0; (vertex < slots.Length); vertex++) {
-            var member = Array.FindIndex(array: others, match: pose => (pose.Key == slots[vertex]));
-
-            vertexMembers[vertex] = ((member < 0) ? SdfMesh.NoMember : (byte)member);
-            any |= (member >= 0);
-        }
-        if (!any) { return mesh; }
-
-        var members = others.Select(selector: pose => new SdfMeshMember(Orientation: pose.Value.Orientation, Position: pose.Value.Position, SlotOffset: (pose.Key - group.Slot))).ToArray();
-
-        return new SdfMesh(indices: mesh.Indices, members: members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: mesh.TriangleMaterials, vertexMembers: vertexMembers);
     }
     // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge) and its
     // coarser levels collapsed from those (SdfMeshCollapse): in the library, which keeps it for another program or
@@ -2094,7 +2055,7 @@ public sealed partial class SdfMeshPathBake {
             group.Done = true;
             Draw(group: group, mesh: mesh);
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
-            group.Skin = null;
+
             group.Points.Resize(0);
             group.PointMaterials.Resize(0);
             Finish();
@@ -2154,10 +2115,6 @@ public sealed partial class SdfMeshPathBake {
     // slope, and the value over that length puts the surface many cells off. A field that is no true distance reads well
     // under its slope in places (a fifth of the distance on the Moth's shins), whose vertices still move.
     private const float KinkGradient = 0.1f;
-    // How far off the surface, along its normal, a vertex's skin point lies, where a hit reads the shape whose surface the
-    // vertex lies on: the material cut's lift.
-    private const float SkinLift = 0.0005f;
-
     // The contour's initial triangle facings and vertex-to-triangle rows, retained only during field projection.
     // A triangle's area normal is affine in one moving vertex, so its dot with this fixed reference clips a proposed
     // displacement exactly before the triangle reverses. Fixed references preserve orientation across all sequential
@@ -2280,7 +2237,7 @@ public sealed partial class SdfMeshPathBake {
     // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
     private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
         // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
-        public SdfMesh? Skin { get; set; }
+        
         public bool Contouring { get; set; }
 
         private bool m_done;
@@ -2386,7 +2343,7 @@ public sealed partial class SdfMeshPathBake {
                     Final?.Dispose(); Final = null;
                     m_points?.Dispose();
                     m_pointMaterials?.Dispose();
-                    Contour = null; Cut = null; Skin = null; Creases = null; Projection = null;
+                    Contour = null; Cut = null; Creases = null; Projection = null;
                     Next = null; Deferred = null;
                     Memory.Dispose();
                 }

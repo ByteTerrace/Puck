@@ -194,6 +194,8 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         hash.Add((uint)mesh.TriangleMaterials.Length); foreach (var value in mesh.TriangleMaterials.Span) { hash.Add(value); }
         hash.Add((uint)mesh.Members.Length); foreach (var member in mesh.Members.Span) { hash.Add((long)member.SlotOffset); Add(ref hash, member.Position); Add(ref hash, member.Orientation); }
         hash.Add((uint)mesh.VertexMembers.Length); hash.Add(mesh.VertexMembers.Span);
+        hash.Add((uint)mesh.Influences.Length);
+        foreach (var influence in mesh.Influences.Span) { hash.Add(influence.Blend); hash.Add(influence.GradientXY); hash.Add(influence.GradientZ); }
         Add(ref hash, mesh.BakeCell); hash.Add((byte)(mesh.Encloses ? 1 : 0));
         hash.Add((uint)mesh.Levels.Count);
         foreach (var level in mesh.Levels) {

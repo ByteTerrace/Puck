@@ -5,7 +5,6 @@ using System.Text;
 using Puck.Cli.Host;
 using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.Cli.Mesh;
 
@@ -40,14 +39,14 @@ internal static class MeshFieldLevels {
         if (!(cell > 0f) || !SdfMeshAudit.TryEvaluator(field: out var auditField, program: program, refusal: out _)) { return null; }
 
         var work = new Work();
-        using var union = new Field(program: program, work: work);
+        using var union = new Field(program, work);
         var members = SdfMeshAudit.MemberFields(group: group, program: scene.Program);
         var pieceFields = new List<Field>();
         var pieces = new List<(ISdfMeshLevelField Field, byte Member)>();
 
         if (members.Count > 1) {
             for (var index = 0; (index < members.Count); index++) {
-                var piece = new Field(program: members[index].Field, work: work);
+                var piece = new Field(members[index].Field, work);
 
                 pieceFields.Add(item: piece);
                 pieces.Add(item: (piece, ((index == 0) ? SdfMesh.NoMember : (byte)(index - 1))));
@@ -329,66 +328,22 @@ internal static class MeshFieldLevels {
         }
     }
 
-    // A group's field (or a member's) answered through the bake's CPU stand-in (MeshCpuBake), one evaluator a thread.
-    private sealed class Field : ISdfMeshLevelField, IDisposable {
-        private const int Serial = 256;
-
-        private readonly ThreadLocal<(SdfFieldEvaluator Field, Func<Vector3, float> Read)> m_evaluators;
-        private readonly Work m_work;
-
-        public Field(SdfProgram program, Work work) {
-            m_work = work;
-            m_evaluators = new(valueFactory: () => MeshCpuBake.Tapped(field: new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render)));
-            StepScale = (float)(double)m_evaluators.Value.Field.StepScale;
-        }
-
-        public float StepScale { get; }
-
-        public void Dispose() => m_evaluators.Dispose();
-
-        public void Values(ReadOnlySpan<Vector3> points, Span<float> values, Span<int> materials, SdfMeshLevelWork work) {
+    // CLI-only attribution around the engine's shared CPU sampler.
+    private sealed class Field(SdfProgram program, Work work) : ISdfMeshLevelField, IDisposable {
+        private readonly SdfMeshCpuField m_field = new(program);
+        public float StepScale => m_field.StepScale;
+        public void Dispose() => m_field.Dispose();
+        public void Values(ReadOnlySpan<Vector3> points, Span<float> values, Span<int> materials, SdfMeshLevelWork kind) {
             var started = ThreadCycles.Now();
-            var at = points.ToArray();
-            var answers = new float[at.Length];
-            var found = new int[at.Length];
-
-            void One(int index) {
-                answers[index] = MeshCpuBake.Sample(field: m_evaluators.Value.Field, material: out found[index], point: at[index]);
-            }
-
-            if (at.Length < Serial) {
-                for (var index = 0; (index < at.Length); index++) { One(index: index); }
-            } else {
-                _ = Parallel.For(fromInclusive: 0, toExclusive: at.Length, body: One);
-            }
-            answers.CopyTo(destination: values);
-            found.CopyTo(destination: materials);
-            m_work.Count(cycles: (ThreadCycles.Now() - started), evaluations: at.Length, work: work);
+            m_field.Values(points, values, materials, kind);
+            work.Count(kind, points.Length, ThreadCycles.Now() - started);
         }
-
-        public void Gradients(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<Vector3> gradients, SdfMeshLevelWork work) {
+        public void Gradients(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<Vector3> gradients, SdfMeshLevelWork kind) {
             var started = ThreadCycles.Now();
-            var at = points.ToArray();
-            var answers = new float[at.Length];
-            var slopes = new Vector3[at.Length];
-            var step = MathF.Max(x: MeshCpuBake.MinimumSpacing, y: spacing);
-
-            void One(int index) {
-                var (field, read) = m_evaluators.Value;
-
-                answers[index] = MeshCpuBake.Sample(field: field, material: out _, point: at[index]);
-                slopes[index] = SdfMeshBakeTaps.Gradient(field: read, point: at[index], spacing: step);
-            }
-
-            if (at.Length < Serial) {
-                for (var index = 0; (index < at.Length); index++) { One(index: index); }
-            } else {
-                _ = Parallel.For(fromInclusive: 0, toExclusive: at.Length, body: One);
-            }
-            answers.CopyTo(destination: values);
-            slopes.CopyTo(destination: gradients);
-            // A gradient sample is its value and four taps, as the bake counts a gradient lattice's taps.
-            m_work.Count(cycles: (ThreadCycles.Now() - started), evaluations: (5L * at.Length), work: work);
+            m_field.Gradients(points, spacing, values, gradients, kind);
+            work.Count(kind, 5L * points.Length, ThreadCycles.Now() - started);
         }
     }
+
+
 }

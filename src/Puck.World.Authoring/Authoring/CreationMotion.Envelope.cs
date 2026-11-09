@@ -22,6 +22,7 @@ public static partial class CreationMotion {
 
         if (blend.Blend is not (SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction)) { return Refuse("blend has no continuous share"); }
         if (!(k > 0f)) { return Refuse("smooth radius is zero"); }
+        if (shapes.Any(s => (s.Group == blend.Group) && (s.Profile is { Kind: SdfPrismProfileKind.Polygon }))) { return Refuse("CPU field does not read regular polygons"); }
         var parents = new int[shapes.Count];
         ResolveParents(shapes, parents);
         var first = new HashSet<int>();
@@ -45,7 +46,8 @@ public static partial class CreationMotion {
         if ((a is null) || (b is null)) { return Refuse("seam has no finite part box"); }
         var low = Vector3.Max(a.Value.Low, b.Value.Low) - new Vector3(k);
         var high = Vector3.Min(a.Value.High, b.Value.High) + new Vector3(k);
-        if (Vector3.Min(high - low, Vector3.Zero) != Vector3.Zero) { return Refuse("part boxes do not meet"); }
+        // Disjoint inflated boxes have no seam to skin. Their shapes may share a group without joining here.
+        if (Vector3.Min(high - low, Vector3.Zero) != Vector3.Zero) { return new(0f, 0f, k, null); }
         var theta = 0f;
         var slides = 0f;
         var radius = 0f;

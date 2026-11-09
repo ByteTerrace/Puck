@@ -42,29 +42,29 @@ public sealed partial class SdfFieldEvaluator {
         public void Push() => Array.Clear(m_vectors[++m_depth]);
         public void Leaf(in CompiledInstruction instruction, FixedQ4816 current, FixedQ4816 candidate, int owner) {
             if ((owner < 0) || (owner >= count)) { Valid = false; return; }
-            var share = Share(instruction.Blend, instruction.Data1X, current, candidate);
             var vector = m_vectors[m_depth];
+            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, !vector.Where((value, at) => (value != FixedQ4816.Zero) && (at != owner)).Any());
             for (var at = 0; at < count; at++) {
                 vector[at] = FixedQ4816.Lerp(vector[at], ((at == owner) ? FixedQ4816.One : FixedQ4816.Zero), share);
             }
         }
         public void Pop(in CompiledInstruction instruction, FixedQ4816 current, FixedQ4816 candidate) {
             if (instruction.ScopeScale > 0L) { candidate = ScaleScope(candidate, instruction.ScopeScale); }
-            var share = Share(instruction.Blend, instruction.Data1X, current, candidate);
             var child = m_vectors[m_depth--];
             var parent = m_vectors[m_depth];
+            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, parent.SequenceEqual(child) || parent.All(v => v == FixedQ4816.Zero));
             for (var at = 0; at < count; at++) { parent[at] = FixedQ4816.Lerp(parent[at], child[at], share); }
         }
-        private FixedQ4816 Share(uint blend, FixedQ4816 smooth, FixedQ4816 current, FixedQ4816 candidate) {
+        private FixedQ4816 Share(uint blend, FixedQ4816 smooth, FixedQ4816 current, FixedQ4816 candidate, bool sameOwner) {
             if ((smooth > FixedQ4816.Zero) && (blend is (uint)SdfBlendOp.SmoothUnion or (uint)SdfBlendOp.SmoothIntersection or (uint)SdfBlendOp.SmoothSubtraction)) {
                 var difference = (blend switch {
                     (uint)SdfBlendOp.SmoothUnion => current - candidate,
                     (uint)SdfBlendOp.SmoothIntersection => candidate - current,
                     _ => -candidate - current,
                 });
-                return FixedQ4816.Clamp(value: Half + (Half * (difference / smooth)), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+                return FixedQ4816.Clamp(value: Half + ((Half * difference) / smooth), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
             }
-            if (blend is not ((uint)SdfBlendOp.Union or (uint)SdfBlendOp.Intersection or (uint)SdfBlendOp.Subtraction or (uint)SdfBlendOp.SmoothUnion or (uint)SdfBlendOp.SmoothIntersection or (uint)SdfBlendOp.SmoothSubtraction)) { Valid = false; }
+            if (!sameOwner && blend is not ((uint)SdfBlendOp.Union or (uint)SdfBlendOp.Intersection or (uint)SdfBlendOp.Subtraction or (uint)SdfBlendOp.SmoothUnion or (uint)SdfBlendOp.SmoothIntersection or (uint)SdfBlendOp.SmoothSubtraction)) { Valid = false; }
             return (ResolveWinner(current, candidate, blend) ? FixedQ4816.One : FixedQ4816.Zero);
         }
     }

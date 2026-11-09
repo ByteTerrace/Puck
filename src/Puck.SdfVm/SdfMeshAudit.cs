@@ -182,6 +182,7 @@ public static class SdfMeshAudit {
         var positions = new List<Vector3>();
         var normals = new List<Vector3>();
         var members = new List<byte>();
+        var influences = new List<SdfMeshInfluence>();
         var compact = new uint[indices.Length];
         for (var at = 0; (at < indices.Length); at++) {
             var vertex = ((int)indices[at]);
@@ -191,12 +192,13 @@ public static class SdfMeshAudit {
                 positions.Add(item: mesh.Positions.Span[vertex]);
                 if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[vertex]); }
                 if (!mesh.VertexMembers.IsEmpty) { members.Add(item: mesh.VertexMembers.Span[vertex]); }
+                if (!mesh.Influences.IsEmpty) { influences.Add(mesh.Influences.Span[vertex]); }
             }
             compact[at] = ((uint)remap[vertex]);
         }
         sources = [.. kept];
         return new SdfMesh(positions: positions.ToArray(), indices: compact, normals: normals.ToArray(), triangleMaterials: materials,
-            members: mesh.Members, vertexMembers: members.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
+            members: mesh.Members, vertexMembers: members.ToArray(), influences: influences.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
     /// <summary>Returns a triangle's unit face normal by its winding, or zero for a degenerate triangle (a height under a
     /// five-hundredth of its longest edge), whose corners are collinear to rounding and whose facing is noise.</summary>
@@ -261,11 +263,12 @@ public static class SdfMeshAudit {
     /// <returns>The group's field.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="group"/> is
     /// <see langword="null"/>.</exception>
-    public static SdfProgram Field(SdfProgram program, SdfMeshBakeGroup group) {
+    /// <param name="poses">Optional current poses by slot offset for a posed skin audit, in the group's frame.</param>
+    public static SdfProgram Field(SdfProgram program, SdfMeshBakeGroup group, IReadOnlyDictionary<int, DynamicTransform>? poses = null) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: group);
 
-        return program.Excerpt(indices: group.InstructionIndices(program: program), rewrite: (_, instruction) => Posed(group: group, instruction: instruction));
+        return program.Excerpt(indices: group.InstructionIndices(program: program), rewrite: (_, instruction) => Posed(group: group, instruction: instruction, poses: poses));
     }
     /// <summary>Returns each shape of a bake group alone: for every shape instruction, the point transforms of its chain
     /// since the chain's reset, posed as <see cref="Field"/> poses them, then the shape as a union and the field edits that
@@ -589,10 +592,11 @@ public static class SdfMeshAudit {
     }
 
     // A dynamic transform as the translation and rotation the group posed its slot at; a shape as itself, detail or not.
-    private static IEnumerable<SdfInstruction> Posed(SdfMeshBakeGroup group, SdfInstruction instruction) {
+    private static IEnumerable<SdfInstruction> Posed(SdfMeshBakeGroup group, SdfInstruction instruction, IReadOnlyDictionary<int, DynamicTransform>? poses = null) {
         if (instruction.Op == SdfOp.ShapeBlend) { return [instruction with { Detail = false }]; }
         if (instruction.Op != SdfOp.TransformDynamic) { return [instruction]; }
         if (!group.Geometry.Poses.TryGetValue(key: (int)instruction.Data0.X, value: out var pose)) { return []; }
+        if ((poses is not null) && poses.TryGetValue((int)instruction.Data0.X - group.Slot, out var current)) { pose = current; }
 
         var turn = Quaternion.Normalize(value: pose.Orientation);
 

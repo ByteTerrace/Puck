@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
 
-using Puck.Maths;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -22,7 +21,7 @@ namespace Puck.Cli.Mesh;
 /// </summary>
 public static class MeshCpuBake {
     /// <summary>The narrowest spacing, in metres, of a gradient tap from its sample.</summary>
-    public const float MinimumSpacing = 0.0005f;
+    public const float MinimumSpacing = SdfMeshCpuField.MinimumSpacing;
 
     // The value a group not selected answers at every sample: far outside any surface.
     private const float Empty = 1_000f;
@@ -106,7 +105,7 @@ public static class MeshCpuBake {
     public static float Sample(SdfFieldEvaluator field, Vector3 point, out int material) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        return (field.TryDistance(distance: out var distance, material: out material, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))) ? (float)((double)distance) : Empty);
+        return SdfMeshCpuField.Sample(field, point, out material);
     }
     /// <summary>Pairs an evaluator with the value reader its gradient taps take (<see cref="SdfMeshBakeTaps.Gradient"/>),
     /// made once a thread.</summary>
@@ -116,7 +115,7 @@ public static class MeshCpuBake {
     public static (SdfFieldEvaluator Field, Func<Vector3, float> Read) Tapped(SdfFieldEvaluator field) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        return (field, point => Sample(field: field, material: out _, point: point));
+        return SdfMeshCpuField.Tapped(field);
     }
 
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points.

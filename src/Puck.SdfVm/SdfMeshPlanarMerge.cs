@@ -328,6 +328,7 @@ public static class SdfMeshPlanarMerge {
                     Same(first: normals[a], second: normals[c]) &&
                     (normals[a] != Vector3.Zero) &&
                     (members.IsEmpty || ((members[a] == members[b]) && (members[a] == members[c]))) &&
+                    (m_mesh.Influences.IsEmpty || ((m_mesh.Influences.Span[a] == m_mesh.Influences.Span[b]) && (m_mesh.Influences.Span[a] == m_mesh.Influences.Span[c]))) &&
                     (Orient(a: a, b: b, c: c) > 0)
                 );
             }
@@ -363,6 +364,7 @@ public static class SdfMeshPlanarMerge {
                             (m_regionOf[other] >= 0) ||
                             ((materials.IsEmpty ? 0u : materials[other]) != material) ||
                             (!members.IsEmpty && (members[m_corners[(3 * other)]] != member)) ||
+                            (!m_mesh.Influences.IsEmpty && (m_mesh.Influences.Span[m_corners[3 * other]] != m_mesh.Influences.Span[m_corners[3 * seed]])) ||
                             !Same(first: normals[m_corners[(3 * other)]], second: normal) ||
                             !OnPlane(plane: plane, positions: positions, triangle: other)
                         ) { continue; }
@@ -409,7 +411,7 @@ public static class SdfMeshPlanarMerge {
                 }
             }
             for (var site = 0; (site < vertices); site++) {
-                if (named[site] >= 0) { candidates.Add(item: (unchecked((uint)named[site] * 2654435761u), named[site])); }
+                if ((named[site] >= 0) && (m_mesh.Influences.IsEmpty || !m_mesh.Influences.Span[named[site]].Blended)) { candidates.Add(item: (unchecked((uint)named[site] * 2654435761u), named[site])); }
             }
 
             return candidates;
@@ -662,18 +664,20 @@ public static class SdfMeshPlanarMerge {
             var keptPositions = new Vector3[kept];
             var keptNormals = new Vector3[kept];
             var keptMembers = (members.IsEmpty ? [] : new byte[kept]);
+            var keptInfluences = (m_mesh.Influences.IsEmpty ? [] : new SdfMeshInfluence[kept]);
 
             for (var vertex = 0; (vertex < remap.Length); vertex++) {
                 if (remap[vertex] < 0) { continue; }
                 keptPositions[remap[vertex]] = positions[vertex];
                 keptNormals[remap[vertex]] = normals[vertex];
                 if (!members.IsEmpty) { keptMembers[remap[vertex]] = members[vertex]; }
+                if (keptInfluences.Length > 0) { keptInfluences[remap[vertex]] = m_mesh.Influences.Span[vertex]; }
             }
             for (var index = 0; (index < indices.Length); index++) {
                 indices[index] = (uint)remap[(int)indices[index]];
             }
 
-            return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers) { BakeCell = m_mesh.BakeCell };
+            return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers, influences: keptInfluences) { BakeCell = m_mesh.BakeCell };
         }
 
         private int Orient(int a, int b, int c) => SdfMeshPlanarMerge.Orient(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c]);

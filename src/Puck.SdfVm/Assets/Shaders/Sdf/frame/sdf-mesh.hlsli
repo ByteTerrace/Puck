@@ -61,9 +61,21 @@ uint sdfMeshMemberEntry(uint record, uint vertex) {
     }
 
     uint skin = sdfMeshRegion[(record + SDF_MESH_SKIN_WORD)];
-    uint member = sdfMeshRegion[(((skin + 1u) + (SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin])) + vertex)];
+    uint member = sdfMeshRegion[(((skin + 1u) + (SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin])) + 4u * vertex)];
 
-    return ((member == 0xFFFFFFFFu) ? 0u : ((skin + 1u) + (SDF_MESH_MEMBER_WORDS * member)));
+    return ((member == 255u) ? 0u : ((skin + 1u) + (SDF_MESH_MEMBER_WORDS * member)));
+}
+// Four words per vertex: first member, second member/share, gradient XY, gradient Z.
+uint sdfMeshInfluenceWord(uint record, uint vertex) {
+    uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
+    return skin + 1u + SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin] + 4u * vertex;
+}
+uint sdfMeshSecondEntry(uint record, uint vertex) {
+    uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
+    uint packed = sdfMeshRegion[sdfMeshInfluenceWord(record, vertex) + 1u];
+    if (((packed >> 8u) & 65535u) == 0u) { return 0u; }
+    uint member = packed & 255u;
+    return member == 255u ? 0u : skin + 1u + SDF_MESH_MEMBER_WORDS * member;
 }
 // The slot a member rides: the draw's frame slot plus the member's offset.
 uint sdfMeshMemberSlot(uint record, uint entry) {
@@ -207,21 +219,15 @@ float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 norma
 
     return p;
 }
+#include "sdf-mesh-skin.hlsli"
 // Its world position: displaced by a height field's heights (sdfMeshDisplaced), then under the draw's row-vector matrix,
 // whose fourth row carries translation, or, for a vertex riding a member, under that member's slot in this frame; then
 // under the draw's carry.
+void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal);
 float3 sdfMeshWorldPosition(uint record, uint k) {
-    float3 unused = float3(0.0, 1.0, 0.0);
-    float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, unused);
-    uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
-
-    if (entry != 0u) {
-        uint slot = sdfMeshMemberSlot(record, entry);
-
-        return sdfMeshCarryPoint(record, (rotatePointByQuaternion((sdfMeshMemberLocal(entry, object, true) * sdfMeshDrawScale(record)), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz));
-    }
-
-    return sdfMeshCarryPoint(record, (sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u)));
+    float3 position, normal;
+    sdfMeshWorldVertex(record, k, position, normal);
+    return position;
 }
 // An object-space normal under a draw's normal matrix (the inverse transpose of its matrix, so a nonuniform scale keeps
 // the normal perpendicular to the surface).
@@ -237,17 +243,18 @@ float3 sdfMeshNormalToWorld(uint record, float3 n) {
 // The world normal of a draw's index `k`: the normal the vertex it names carries, carried through a height field's
 // displacement (sdfMeshDisplaced), under the draw's normal matrix, or turned with its member's slot for a vertex riding
 // one. Meaningful only for a mesh that carries normals.
+void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
+    uint word = sdfMeshVertexAt(record, k) + 3u;
+    normal = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u]));
+    float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
+    object = sdfMeshSkinCurrent(record, k, object, normal);
+    position = sdfMeshCarryPoint(record, sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u));
+    normal = sdfMeshCarryDirection(record, sdfMeshNormalToWorld(record, normal));
+}
 float3 sdfMeshWorldNormal(uint record, uint k) {
-    uint word = (sdfMeshVertexAt(record, k) + 3u);
-    float3 normal = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
-    sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
-    uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
-
-    if (entry != 0u) {
-        return sdfMeshCarryDirection(record, rotatePointByQuaternion(sdfMeshMemberLocal(entry, normal, false), sdfDynamicTransforms[((3u * sdfMeshMemberSlot(record, entry)) + 1u)]));
-    }
-
-    return sdfMeshCarryDirection(record, sdfMeshNormalToWorld(record, normal));
+    float3 position, normal;
+    sdfMeshWorldVertex(record, k, position, normal);
+    return normal;
 }
 // The barycentric weights of a point on the triangle (a, b, c), in that order, or false for a triangle with no area.
 bool sdfMeshBarycentric(float3 a, float3 b, float3 c, float3 p, out float3 weights) {
@@ -330,9 +337,10 @@ float sdfMeshMeanCurvature(float3 a, float3 b, float3 c, float3 na, float3 nb, f
 float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature, out int frameSlot) {
     uint record = sdfMeshRecord(draw);
     uint first = (3u * triangleIndex);
-    float3 a = sdfMeshWorldPosition(record, first);
-    float3 b = sdfMeshWorldPosition(record, (first + 1u));
-    float3 c = sdfMeshWorldPosition(record, (first + 2u));
+    float3 a, b, c, na, nb, nc;
+    sdfMeshWorldVertex(record, first, a, na);
+    sdfMeshWorldVertex(record, first + 1u, b, nb);
+    sdfMeshWorldVertex(record, first + 2u, c, nc);
     float3 face = cross((b - a), (c - a));
     float3 normal = face;
     float3 weights;
@@ -360,9 +368,9 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 
     if (((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_NORMALS_FLAG) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
-        float3 na = sdfMeshWorldNormal(record, first);
-        float3 nb = sdfMeshWorldNormal(record, first + 1u);
-        float3 nc = sdfMeshWorldNormal(record, first + 2u);
+
+
+
         float3 interpolated = weights.x * na + weights.y * nb + weights.z * nc;
 
         if (dot(interpolated, interpolated) > 1.0e-20) {

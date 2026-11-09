@@ -11,7 +11,7 @@ namespace Puck.SdfVm;
 // Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
 internal static unsafe class SdfMeshStoreCodec {
-    internal const ulong Magic = 0x3948534D4B435550ul; // PUCKMSH9
+    internal const ulong Magic = 0x4148534D4B435550ul; // PUCKMSHA
     internal const int HeaderBytes = 28;
 
     private const int ChecksumBytes = 16;
@@ -156,6 +156,9 @@ internal static unsafe class SdfMeshStoreCodec {
         }
         writer.Write(value: mesh.VertexMembers.Length);
         writer.Write(buffer: mesh.VertexMembers.Span);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(i => i.Blend).ToArray(), 4);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(i => i.GradientXY).ToArray(), 4);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(i => i.GradientZ).ToArray(), 4);
         writer.Write(value: mesh.Levels.Count);
         foreach (var level in mesh.Levels) {
             writer.Write(value: level.Error);
@@ -201,6 +204,12 @@ internal static unsafe class SdfMeshStoreCodec {
             members[index] = new SdfMeshMember(slot, position, new Quaternion(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()));
         }
         var vertexMembers = reader.ReadBytes(count: Count(itemBytes: 1, reader: reader));
+        var blends = ReadPlane(reader);
+        var xy = ReadPlane(reader);
+        var z = ReadPlane(reader);
+        if ((blends.Length != xy.Length) || (blends.Length != z.Length)) { throw new InvalidDataException("Invalid influence planes."); }
+        var influences = new SdfMeshInfluence[blends.Length];
+        for (var index = 0; index < influences.Length; index++) { influences[index] = new(blends[index], xy[index], z[index]); }
         var levels = new SdfMeshLevel[Count(itemBytes: 14, reader: reader)];
 
         for (var index = 0; (index < levels.Length); index++) {
@@ -208,7 +217,7 @@ internal static unsafe class SdfMeshStoreCodec {
 
             levels[index] = new SdfMeshLevel(ReadPlane(reader: reader), ReadPlane(reader: reader), error);
         }
-        return new SdfMesh(indices: indices, members: members, normals: normals, positions: positions, triangleMaterials: materials, vertexMembers: vertexMembers) { BakeCell = cell, Levels = levels };
+        return new SdfMesh(indices: indices, members: members, normals: normals, positions: positions, triangleMaterials: materials, vertexMembers: vertexMembers, influences: influences) { BakeCell = cell, Levels = levels };
     }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static Vector3[] ReadVectors(BinaryReader reader, int width, Vector3 low, Vector3 high) {

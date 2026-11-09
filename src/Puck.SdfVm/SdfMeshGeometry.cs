@@ -245,6 +245,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         var range = program.Instances[instance];
         m_restPoseSkin = range.RestPoseSkin;
         RestPoseSkin |= range.RestPoseSkin;
+        if (range.RestPoseSkin) { Hash(fact: Fact.RestPoseSkin, source: [1]); }
         var bound = (range.IsDynamic ? new Vector4(x: 0f, y: 0f, z: 0f, w: range.Radius) : new Vector4(value: range.Center, w: range.Radius));
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
@@ -445,6 +446,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
     // What each fact appended to the geometry hash is; its tag leads its payload (AppendFact).
     private enum Fact : byte {
+        RestPoseSkin = 255,
         Snap = 1,
         Bound,
         Count,
