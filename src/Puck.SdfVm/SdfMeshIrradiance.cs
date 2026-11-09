@@ -875,18 +875,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         ? m_levels[level].Published
         : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
-    // renders, the first view's taken at its anchor ahead of it (WindowAnchor), when that box fits in the window's
-    // middle, and on the first view's anchor alone when it does not, so each level follows every view as far as its
-    // reach allows and a coarser level covers views a finer one cannot. It recentres only once a point it centres on
-    // leaves its middle, an eighth of the window short of each face, so a camera that moves back and forth across a cell
-    // (a body falling through a floor painting and out of the ceiling's) or turns a little keeps one window rather than
-    // moving it, refilling it and tracing its new probes every frame.
+    // renders, the first view's taken at its anchor ahead of it (WindowAnchor), and on the first view's anchor alone when
+    // that box and the first camera do not fit in the window's middle together, so each level follows every view as far
+    // as its reach allows and a coarser level covers views a finer one cannot. The first camera itself is always kept
+    // in the middle, an eighth of the window short of each face: the window keeps its place only while every point it
+    // keeps (the first camera, its anchor and the views that fit) stands in the current middle, and a recentred window
+    // is shifted, where the centre leaves one out, until all stand in its middle. So a camera that moves back and forth
+    // across a cell (a body falling through a floor painting and out of the ceiling's), or turns, keeps one window as
+    // long as its anchor stays in the middle (a turn in place never moves the camera), and a camera walking backward
+    // recentres before it nears the back face. The anchor and the camera always fit together: the anchor stands a
+    // quarter of the horizontal extent ahead, inside the middle's three quarters.
     private (int X, int Y, int Z) WindowLow(SdfFrame frame, int level, Layout layout, (int X, int Y, int Z) current, bool resizing) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
-        var first = CellOf(position: WindowAnchor(frame: frame, layout: layout, level: level), spacing: spacing);
-        var low = first;
-        var high = first;
+        var anchor = CellOf(position: WindowAnchor(frame: frame, layout: layout, level: level), spacing: spacing);
+        var camera = CellOf(position: m_camera, spacing: spacing);
+        // The box the window centres on, and the box it keeps in its middle: the same with the first camera.
+        var low = anchor;
+        var high = anchor;
+        var keptLow = Min(a: anchor, b: camera);
+        var keptHigh = Max(a: anchor, b: camera);
 
         for (var index = 1; (index < frame.Views.Count); index++) {
             var view = frame.Views[index];
@@ -896,23 +904,41 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             var cell = CellOf(position: position, spacing: spacing);
 
-            low = (Math.Min(val1: low.X, val2: cell.X), Math.Min(val1: low.Y, val2: cell.Y), Math.Min(val1: low.Z, val2: cell.Z));
-            high = (Math.Max(val1: high.X, val2: cell.X), Math.Max(val1: high.Y, val2: cell.Y), Math.Max(val1: high.Z, val2: cell.Z));
+            low = Min(a: low, b: cell);
+            high = Max(a: high, b: cell);
         }
-        if (!Fits(dims: dims.X, high: high.X, low: low.X) || !Fits(dims: dims.Y, high: high.Y, low: low.Y) || !Fits(dims: dims.Z, high: high.Z, low: low.Z)) {
-            low = first;
-            high = first;
+        if (Fits(dims: dims.X, high: Math.Max(val1: high.X, val2: keptHigh.X), low: Math.Min(val1: low.X, val2: keptLow.X)) &&
+            Fits(dims: dims.Y, high: Math.Max(val1: high.Y, val2: keptHigh.Y), low: Math.Min(val1: low.Y, val2: keptLow.Y)) &&
+            Fits(dims: dims.Z, high: Math.Max(val1: high.Z, val2: keptHigh.Z), low: Math.Min(val1: low.Z, val2: keptLow.Z))) {
+            keptLow = Min(a: keptLow, b: low);
+            keptHigh = Max(a: keptHigh, b: high);
+        } else {
+            low = anchor;
+            high = anchor;
         }
-        if (!resizing && InMiddle(cell: low, dims: dims, low: current) && InMiddle(cell: high, dims: dims, low: current)) {
+        if (!resizing && InMiddle(cell: keptLow, dims: dims, low: current) && InMiddle(cell: keptHigh, dims: dims, low: current)) {
             return current;
         }
 
-        return ((((low.X + high.X) >> 1) - (dims.X / 2)), (((low.Y + high.Y) >> 1) - (dims.Y / 2)), (((low.Z + high.Z) >> 1) - (dims.Z / 2)));
+        return (Centre(low: low.X, high: high.X, keptLow: keptLow.X, keptHigh: keptHigh.X, dims: dims.X),
+            Centre(low: low.Y, high: high.Y, keptLow: keptLow.Y, keptHigh: keptHigh.Y, dims: dims.Y),
+            Centre(low: low.Z, high: high.Z, keptLow: keptLow.Z, keptHigh: keptHigh.Z, dims: dims.Z));
     }
+    // A window's first cell along one axis centred on cells low to high, then shifted the least that puts keptLow to
+    // keptHigh in its middle (Middle); a kept box that fits (Fits) always has such a place, so the window then stands.
+    private static int Centre(int low, int high, int keptLow, int keptHigh, int dims) {
+        var margin = MarginOf(dims: dims);
+
+        return Math.Min(val1: Math.Max(val1: (((low + high) >> 1) - (dims / 2)), val2: ((keptHigh - dims) + margin + 1)), val2: (keptLow - margin));
+    }
+    private static (int X, int Y, int Z) Min((int X, int Y, int Z) a, (int X, int Y, int Z) b) =>
+        (Math.Min(val1: a.X, val2: b.X), Math.Min(val1: a.Y, val2: b.Y), Math.Min(val1: a.Z, val2: b.Z));
+    private static (int X, int Y, int Z) Max((int X, int Y, int Z) a, (int X, int Y, int Z) b) =>
+        (Math.Max(val1: a.X, val2: b.X), Math.Max(val1: a.Y, val2: b.Y), Math.Max(val1: a.Z, val2: b.Z));
     private static (int X, int Y, int Z) CellOf(Vector3 position, Vector3 spacing) =>
         (((int)MathF.Floor(x: (position.X / spacing.X))), ((int)MathF.Floor(x: (position.Y / spacing.Y))), ((int)MathF.Floor(x: (position.Z / spacing.Z))));
     // Whether cells from low to high fit in a window's middle along one axis.
-    private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * Math.Max(val1: 1, val2: (dims / 8)))));
+    private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * MarginOf(dims: dims))));
 
     /// <summary>Reads the volume as a center-weighted reflected-light meter at a camera: the luminance the probes about
     /// the camera see along each of their six axes, as last relit, the light the surfaces about it reflect and emit under
