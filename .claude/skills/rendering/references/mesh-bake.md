@@ -386,7 +386,12 @@ laws exercise that boundary.
   smallest half extent, since a lattice sized by its length or its copies'
   span steps clean over the sheet. A shell declares a quarter of its
   thickness, a warped shape a thirty-second of its smallest half extent and
-  cellular relief a thirty-second of its wavelength. The finest applies, at
+  cellular relief a thirty-second of its wavelength. A blend's seam is a
+  feature neither shape's bound measures, so a shape with a `smooth` blend
+  declares it: a smooth, pipe or groove seam turns at `smooth` (`RoundCell`),
+  a chamfer's bevel is a face `smooth` wide (half of it), stairs are `steps`
+  turns each; the pipe and groove exhibits refined nothing before this term
+  and contoured their 4 cm bead on 27 mm cells. The finest applies, at
   placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`); a
   part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
   declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
@@ -405,6 +410,33 @@ laws exercise that boundary.
   from. Convex rounding reads the scaled polygon's inradius and extrusion
   clamp; extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
   an offset and may be zero while its radial extent remains positive.
+- **A declaration is bounded by what a view resolves: the group's tier.**
+  `SdfMeshTier` is one ladder of cells (1 mm times two to the tier). A group's
+  tier floors every spacing its refinement aims for (`OwnFinal`, `UnionFinal`
+  and `FactorOf` take `SdfMeshTier.Cell(group.Tier)` as the floor of a member's
+  detail, `FineCell` and `MemberCell`), and is a fact of the sealed geometry
+  (`SdfMeshBakeGroup.Seal` appends it, `Fact.Tier`), so each tier of a
+  geometry is its own library and store entry. A residency's bake plans each
+  group at the coarsest tier whose cell stays under half a display pixel at
+  the group's box from the nearest demand point (`SdfMeshDemand.PixelAt`,
+  `SdfMeshTier.Of`; at 1080 lines and a 60-degree field, 2 mm within 3.7 m,
+  4 mm to 7.5 m, 8 mm to 15 m, 16 mm to 30 m), held between the rungs that
+  change its mesh (`FinestTier`, the finest spacing any member asks;
+  `CoarsestTier`, the planned final cell, past which nothing refines). With
+  no demand point a group plans at its coarsest; an offline bake
+  (`MeshCpuBake`, `puck mesh audit --cpu`) sets `SdfMeshPathBake.PlannedTier`
+  and takes each group's finest unless `--tier` or `--eye` says otherwise. A
+  landed group whose demanded tier has been finer than its own for
+  `SdfMeshTier.HoldFrames` frames is planned again at the finer tier and placed
+  as a replacement (`SdfMeshPathBake.Retier`, the settle rebake's `Replaces`
+  path, at most `MaxInFlight` at once, the finest demand first): the coarser
+  mesh draws until the finer lands (`FinishReplacements`, one step for settles
+  and tiers). A coarser tier demanded leaves the finer mesh until the library
+  evicts it; the restart that follows plans at the current demand.
+  `world.residency` reports `tiers-owed`, `owed-error` (the worst owing
+  group's resident cell in display pixels), `owed-frames`, the worst of each
+  since the bake started, `retiers` and the resident triangles by tier
+  ([the memo](../../../../docs/plans/bake-demand-tiers.md)).
 - **A region refines only where its surface turns, and each region at its own
   factor.** `SdfSampledLattice.Refine` takes a factor per region
   (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own

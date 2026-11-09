@@ -346,8 +346,14 @@ What a first swallow taught, in the order it went wrong:
   box at their own factor, and only where the surface turns, so grouping a part
   to borrow a neighbour's detail is never needed (`puck mesh audit --prototype
   <id> --cpu` prints each group's cell and triangles). A section thinner than
-  the 2 mm floor declares the floor. Each declaration costs triangles: a rounding of 5 mm or more refines
-  its shape's turning cells to its radius, so round edges where they read.
+  the 2 mm floor declares the floor, and a `smooth` blend declares its seam's
+  radius. Each declaration costs triangles: a rounding of 5 mm or more refines
+  its shape's turning cells to its radius, so round edges where they read. What
+  a declaration costs in a running World is bounded by what its views resolve
+  (`SdfMeshTier`: a group bakes at the coarsest cell under half a display pixel
+  at the nearest camera, so a 2 mm declaration is paid within about 4 m and
+  halves each doubling of distance); `puck mesh audit --cpu --eye x,y,z`
+  prints what one eye there would bake.
 - **Animating a creation changes its bake.** Drivers make the creation
   animated and its shapes pooled: `group: 0` is ungrouped there, and each
   ungrouped shape bakes alone, so a `SmoothUnion` on it draws as a hard union

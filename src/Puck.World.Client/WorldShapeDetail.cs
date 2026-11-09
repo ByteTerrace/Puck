@@ -59,6 +59,25 @@ internal static class WorldShapeDetail {
         // crease on any lattice a part bakes alone on, and declares nothing.
         if ((shape.Rounding ?? 0f) * scale >= (SdfMeshPathBake.MinimumCell / 3f)) { Take(spacing: shape.Rounding!.Value); }
         Take(spacing: plate);
+        // A blend's seam is a feature of the blend's own radius, which neither shape's bound measures: a smooth seam's
+        // fillet, a pipe's bead and a groove's channel turn at `smooth`; a chamfer's bevel is a face `smooth` wide, kept
+        // as a face by a cell per half width; stairs are `steps` turns of a share of `smooth` each.
+        if ((shape.Smooth is > 0f and var smooth) && (shape.Blend is { } blend)) {
+            switch (blend) {
+                case SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction
+                    or SdfBlendOp.GrooveUnion or SdfBlendOp.GrooveSubtraction or SdfBlendOp.PipeUnion or SdfBlendOp.PipeSubtraction:
+                    Take(spacing: RoundCell(radius: smooth, scale: scale));
+                    break;
+                case SdfBlendOp.ChamferUnion or SdfBlendOp.ChamferIntersection or SdfBlendOp.ChamferSubtraction:
+                    Take(spacing: (smooth / 2f));
+                    break;
+                case SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction:
+                    Take(spacing: RoundCell(radius: (smooth / Math.Max(val1: 1, val2: (shape.Steps ?? ShapeScope.DefaultSteps))), scale: scale));
+                    break;
+                default:
+                    break;
+            }
+        }
         if (shape.Onion is > 0f) { Take(spacing: (shape.Onion.Value / 4f)); }
         if (shape.Cells is { } cells) { Take(spacing: (1f / (32f * cells.Frequency))); }
         // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document reads it

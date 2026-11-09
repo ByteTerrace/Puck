@@ -685,11 +685,13 @@ existing stale-result policy, and on V2b. The frame-bar packet's CPU item owns
 
 ### D7. The detail budget
 
-**What must be decided.** What bounds the bake's detail: today the finest cell
-is derived from authored geometry alone (one rule for every shape,
-`WorldShapeDetail.Of`, its round sections at `SdfSampledLattice.RoundCell`; floored at
-`WorldShapeDetail.FinestDetail` unless the part is thinner **[opened]**), so the nose bakes
-at its own spacing whether a view can resolve it, and nothing reads the screen.
+**What must be decided.** What bounds the bake's detail: with authored geometry
+alone deciding the finest cell (one rule for every shape, `WorldShapeDetail.Of`,
+its round sections at `SdfSampledLattice.RoundCell`, floored at
+`WorldShapeDetail.FinestDetail` **[opened]**), the nose bakes at its own spacing
+whether a view can resolve it, and nothing reads the screen. Built as
+[bake detail bounded by demand](bake-demand-tiers.md): `SdfMeshTier`, the tier
+fact in the key, `SdfMeshPathBake.Retier` and the `world.residency` columns.
 
 **Options.**
 

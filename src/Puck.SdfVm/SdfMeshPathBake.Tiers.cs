@@ -27,7 +27,14 @@ public sealed partial class SdfMeshPathBake {
     /// (<see cref="Retier(SdfFrame)"/>).</summary>
     /// <param name="transforms">The dynamic transforms the plan is made at.</param>
     /// <returns>The function a plan asks each group's tier of.</returns>
-    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms) => group => SdfMeshTier.Of(pixel: Demand.PixelAt(group: group, transforms: transforms));
+    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms) =>
+        (PlannedTier ?? (group => SdfMeshTier.Of(pixel: Demand.PixelAt(group: group, transforms: transforms))));
+
+    /// <summary>Gets the tier every plan of this bake asks for each group in place of the one its demand points ask
+    /// (<see cref="SdfMeshTier"/>), held to the rungs that change the group's mesh; <see langword="null"/>, a residency's
+    /// bake, plans by demand. An offline bake with no view (the mesh audit) sets it, since no demand point would plan
+    /// every group at its coarsest tier.</summary>
+    public Func<SdfMeshBakeGroup, int>? PlannedTier { get; init; }
 
     // Whether a planned group's tier differs from the one the demand now asks of it.
     private static bool Retiered(SdfMeshBakeGroup group, Func<SdfMeshBakeGroup, int> tiers) =>

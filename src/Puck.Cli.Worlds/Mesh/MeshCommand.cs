@@ -134,13 +134,14 @@ public static class MeshCommand {
 
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
-        var groups = scene.Plan(farDistance: farDistance, tier: TierPlan(eye: eye, scene: scene, tier: request.Tier, viewHeight: request.ViewHeight));
+        var tier = TierPlan(eye: eye, scene: scene, tier: request.Tier, viewHeight: request.ViewHeight);
+        var groups = scene.Plan(farDistance: farDistance, tier: tier);
         var store = new SdfMeshStore(directory: meshes);
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var evaluations = new Dictionary<int, long>();
-        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene) : null);
+        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene, tier: tier) : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];

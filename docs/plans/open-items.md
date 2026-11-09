@@ -52,9 +52,9 @@ A. Engine limits on authoring [high], in the plan's
    [section 1](modeling-authoring.md#1-the-engine-limits-authors-met) order:
    - twist and bend are silently dropped on static placements
      ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
-   - per-part bake detail: small round parts facet, thin parts shatter, and a
-     folded shape takes its repeat extent's cell. One detail rule is built on
-     `lane/part-detail` but blocked on a cost bound (see
+   - per-part bake detail is landed: one detail rule, bounded by what each
+     view resolves ([the memo](bake-demand-tiers.md)); what remains is the
+     Moth's shin blend group and the crease merge (see
      [Bake detail](#bake-detail));
    - blends between moving parts tear: steps 1 to 3 are built on
      `lane/moving-blends`, unlanded behind two high review findings (see
@@ -333,11 +333,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- The cost bound for one bake detail rule (`lane/part-detail`, see
-  [Bake detail](#bake-detail)): the rule rounds small parts but multiplies the
-  debug world's triangles about 8x through grass; D7's demand budget, a floor
-  relative to a creation's size, or round sections only where a turn is visible
-  at the creation's scale.
 - The Moth's and the swallow's look, in a pair session with the owner (both
   stopped by the owner's ruling); within it, gloves or bare hands on the
   off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
@@ -3220,26 +3215,31 @@ reproduce worker for what remains.
 ### Bake detail
 
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
-· Next: the owner's cost bound for `lane/part-detail`, then the moving blends
-fix pass on `lane/moving-blends`.
+· Next: the Moth's shin blend group, then the moving blends fix pass on
+`lane/moving-blends`.
 
-- [high] `lane/part-detail` holds one detail rule (WorldShapeDetail.Of on the branch)
-  replacing the static, blend-group, ungrouped and coupled declarations, with
-  a refinement factor per region (SdfLatticeRegion.Factor), refinement only
-  where coarse samples show a turn (CurvedSplit), round sections for
-  cylinders and cones (SdfSampledLattice.RoundCell), and a folded shape
-  declaring its copies' smallest half extent. On the suited Moth it rounds the
-  lenses and seat plate and bakes the lids whole (817,280 to 1,698,672
-  triangles). On the whole debug world it multiplies triangles from 25,678,428
-  to 213,506,399, all of it foliage: meadow, lawn and forest grass blades that
-  refined nothing before now refine every blade. It cannot land without a cost
-  bound, and the bound is a look-against-budget call: (a) the visibility plan's
-  D7 demand budget supplies `SilhouetteError` and `FinestDetail` per tier (the
-  rule's chord term is already "the cell whose error stays under half a pixel
-  at the nearest camera"); (b) a floor relative to the creation's size; (c)
-  round sections only where a turn is visible at the creation's own scale. Its
-  curvature gate also refines sharp creases (toes, soles about 2x), since
-  sample values cannot tell a crease from a turn.
+- [high] The Moth's shin blend groups (`shin-*/shinCavity-*/archBand-*/
+  archBandHollow-*/archBandBack-*/sidePanel-*`) contour badly at their
+  declared detail: `puck mesh audit --world worlds/debug/debug.puck
+  --prototype moth --cpu` prints 276,690 triangles at a 2.1 mm cell with
+  1,437 folds, 1,383 flipped triangles, 5,469 turned faces and two
+  non-manifold edges on the left shin (audit score 10,144; the right shin
+  alike), a tenth of the Moth's 2,949,652 triangles in two groups. The
+  helmet (81,268 triangles, 301 folds, 135 flipped) and the nozzle lips are
+  the next worst. Read the shin's carve and blends against the lattice's
+  sheet and crease handling before touching the rule: the one detail rule
+  exposes the defect, it does not cause it.
+- [medium] The curvature gate refines sharp creases as turns (toes and soles
+  about 2x): the lattice's samples cannot tell a crease from a fillet narrower
+  than a cell, and a declared rounding must refine. The fix is after
+  measuring: a measured cell whose fine samples are two affine faces takes
+  its split as its contour stride, so its fine vertices merge per face
+  ([the memo's step 4](bake-demand-tiers.md#steps-and-checks), with its check).
+- [low] A tier between a group's narrowed final cell and its planned one is a
+  second key for one mesh (`SdfMeshBakeGroup.CoarsestTier` reads the planned
+  box): one extra bake and store entry for a group whose box narrows much,
+  reached only by a far view. Measure how many such entries a tour of the
+  places writes before tightening the clamp.
 - [high] `lane/moving-blends` holds
   [moving blends](moving-blends.md) steps 1 to 3 (rest-pose bake and
   envelope, propagated influences, dual-quaternion skinning on current,
