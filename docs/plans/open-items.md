@@ -1600,7 +1600,12 @@ by `world.view.pick`.
   rules she "isn't sacred and would be vastly improved". Her current sculpt,
   palette, rig and bake cost carry no weight; the pack's turnaround and
   construction sheets are the standard, and the items below are parts of it.
-  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  Her remaining modeling (suit, off-suit pilot and the shared head) waits for
+  a pair session with the owner (the owner's ruling: the agent rebuild
+  "deviated a bit from our intended look on her"); no lane models her until
+  then. The suit and pilot lanes' work is kept on their branches for that
+  session, unlanded. Engine defects her rebuild surfaced (per-part bake detail,
+  blends between moving parts) proceed on their own. The anim-bake change took her pooled bake from 464,018 to 1,145,385
   triangles at parity with static detail; the rebuild sets her budget at the
   cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
