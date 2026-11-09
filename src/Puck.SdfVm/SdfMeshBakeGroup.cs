@@ -50,9 +50,12 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// for a group drawn as it was baked. A height field's instance bakes alone: no instance bakes with it.</summary>
     public SdfMeshDisplacement? Displacement { get; private set; }
 
-    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, the finest
-    /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice, and the box that refinement
-    /// covers: the sphere's cube, narrowed to the instance's own box where it declares one (<see cref="SdfInstanceRange.Box"/>).</summary>
+    /// <summary>Gets each member of the group's union, in the group's frame: a static instance, a dynamic instance, or each
+    /// part a dynamic instance declares (<see cref="SdfInstanceRange.Parts"/>). Each carries its bounding sphere, which a
+    /// union of several sizes its lattice by, the finest feature it declares (<see cref="SdfInstanceRange.Detail"/>),
+    /// which refines its lattice, and the box that refinement covers: the sphere's cube, narrowed to a static instance's
+    /// own box where it declares one (<see cref="SdfInstanceRange.Box"/>), or a part's box. A group of more than one
+    /// member bakes on a union's final lattice, static or dynamic alike.</summary>
     public List<(Vector3 Center, float Radius, float Detail, Vector3 Low, Vector3 High)> Members { get; } = [];
 
     /// <summary>Gets the finest feature, in world units, any of the group's instances declares
@@ -373,6 +376,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             group.Clamped |= (radius != instance.Radius);
             group.m_instances.Add(item: index);
             group.Geometry.AppendInstance(instance: index, program: program, sampled: sampled, transforms: transforms);
+            if (instance.IsDynamic) {
+                AddDynamicMembers(center: center, group: group, instance: instance, radius: radius);
+            }
         }
 
         foreach (var group in groups) {
@@ -381,6 +387,33 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         }
 
         return groups;
+    }
+    // A dynamic instance's members of its group's union lattice, in the group's frame: each part it declares, its box
+    // carried from its own slot's frame through the pose the geometry hashed for that slot (so the members are a function
+    // of the geometry, snapped poses included), or else the instance's own bound sphere. A part on a slot the frame held
+    // no transform for, which the geometry keeps no pose of, adds nothing.
+    private static void AddDynamicMembers(SdfMeshBakeGroup group, SdfInstanceRange instance, Vector3 center, float radius) {
+        if (instance.Parts.Count == 0) {
+            group.Members.Add(item: (center, radius, instance.Detail, (center - new Vector3(value: radius)), (center + new Vector3(value: radius))));
+
+            return;
+        }
+
+        var poses = group.Geometry.Poses;
+
+        foreach (var part in instance.Parts) {
+            if (!poses.TryGetValue(key: part.Slot, value: out var pose)) { continue; }
+
+            var box = SdfMeshBox.Turned(
+                center: (0.5f * (part.Low + part.High)),
+                half: (0.5f * (part.High - part.Low)),
+                offset: pose.Position,
+                turn: ((pose.Orientation == default) ? Quaternion.Identity : pose.Orientation)
+            );
+            var reach = box.AxisHalf;
+
+            group.Members.Add(item: (box.Center, reach.Length(), part.Detail, (box.Center - reach), (box.Center + reach)));
+        }
     }
     // Puts a whole plan's groups, listed at their first instances, in the order the bake takes them, and adds the world
     // group.
