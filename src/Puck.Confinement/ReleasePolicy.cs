@@ -61,7 +61,7 @@ public sealed record ReleasePolicy(
     /// <summary>Reports whether a payload identity is rejected.</summary>
     /// <param name="payloadPin">The payload identity.</param>
     /// <returns><see langword="true"/> when it exhausted its startup attempts.</returns>
-    public bool IsRejected(string payloadPin) => RejectedPayloads.Any(predicate: rejected => string.Equals(a: rejected.PayloadPin, b: payloadPin, comparisonType: StringComparison.Ordinal));
+    public bool IsRejected(string payloadPin) => (Rejection(payloadPin: payloadPin) is not null);
     /// <summary>Returns the stub launches counted for a payload identity.</summary>
     /// <param name="payloadPin">The payload identity.</param>
     /// <returns>The count, zero when none is recorded.</returns>
@@ -79,7 +79,7 @@ public sealed record ReleasePolicy(
         ArgumentNullException.ThrowIfNull(argument: payloadPins);
         if (IsRevoked(version: version)) { return $"version '{version}' is revoked"; }
         foreach (var pin in payloadPins) {
-            if (RejectedPayloads.FirstOrDefault(predicate: rejected => string.Equals(a: rejected.PayloadPin, b: pin, comparisonType: StringComparison.Ordinal)) is { } rejected) {
+            if (Rejection(payloadPin: pin) is { } rejected) {
                 return $"payload {pin} was rejected after failing startup as version '{rejected.Version}'";
             }
         }
@@ -103,6 +103,8 @@ public sealed record ReleasePolicy(
         }
     }
 
+    private RejectedPayload? Rejection(string payloadPin) =>
+        RejectedPayloads.FirstOrDefault(predicate: rejected => string.Equals(a: rejected.PayloadPin, b: payloadPin, comparisonType: StringComparison.Ordinal));
     internal static ReleasePolicy Read(ConfinedDirectory root) {
         using var state = root.Child(name: InstallLayout.StateDirectoryName);
         using var stream = state?.OpenFile(name: InstallLayout.ReleasePolicyFileName);

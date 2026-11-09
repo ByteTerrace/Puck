@@ -288,7 +288,7 @@ public sealed class InstallTransaction : IDisposable {
         var policy = Policy;
 
         if (!string.Equals(a: policy.Current, b: version, comparisonType: StringComparison.Ordinal) || (ReadRecord(version: version) is not { } record)) { return false; }
-        var next = (policy with { LaunchAttempts = [.. policy.LaunchAttempts.Where(predicate: entry => !string.Equals(a: entry.PayloadPin, b: record.PayloadPin, comparisonType: StringComparison.Ordinal))] });
+        var next = WithoutAttempts(payloadPin: record.PayloadPin, policy: policy);
 
         if (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: version) is null) {
             next = RaiseFloor(policy: next, stateGeneration: record.StateGeneration);
@@ -331,8 +331,11 @@ public sealed class InstallTransaction : IDisposable {
         string.Equals(a: proof.PayloadPin, b: record.PayloadPin, comparisonType: StringComparison.Ordinal));
     private static ReleasePolicy RaiseFloor(ReleasePolicy policy, int stateGeneration) =>
         ((stateGeneration > policy.StateGenerationFloor) ? (policy with { StateGenerationFloor = stateGeneration }) : policy);
-    private static ReleasePolicy Reject(ReleasePolicy policy, string payloadPin, string version) => (policy with {
+    // A payload's attempts end when it is proven or rejected.
+    private static ReleasePolicy WithoutAttempts(ReleasePolicy policy, string payloadPin) => (policy with {
         LaunchAttempts = [.. policy.LaunchAttempts.Where(predicate: entry => !string.Equals(a: entry.PayloadPin, b: payloadPin, comparisonType: StringComparison.Ordinal))],
+    });
+    private static ReleasePolicy Reject(ReleasePolicy policy, string payloadPin, string version) => (WithoutAttempts(payloadPin: payloadPin, policy: policy) with {
         RejectedPayloads = (policy.IsRejected(payloadPin: payloadPin) ? policy.RejectedPayloads : [.. policy.RejectedPayloads, new RejectedPayload(PayloadPin: payloadPin, Version: version)]),
     });
     private static LaunchCount[] Count(IReadOnlyList<LaunchCount> attempts, string payloadPin) {

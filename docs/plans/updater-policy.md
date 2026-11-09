@@ -32,18 +32,17 @@ registration the launch-policy door every installed entry point already passes.
 From [open items](open-items.md#security-review):
 
 1. **Rejected payload selection (verified finding 2.1).** The stub's rollback
-   (`StubInstall.RevertToLastGood`) records no durable rejection of the failed
-   payload, the fallback launch's `StubHealth.IncrementAndFlush` overwrites the
-   single `state/health.json` slot, `AttestationReleaseVerifier.Verify` admits a
-   fresh higher-sequence manifest carrying the identical payload (a rollout
-   advanced from 10% to 50%, or a re-signed release with a new version label),
-   and `InstallPruner.Act` ranks inactive versions by install order alone.
-2. **Revoked rollback candidate (verified finding 2.2).**
-   `AttestationReleaseVerifier.Verify` refuses a manifest that revokes itself
-   but persists none of its other revocations; `FileUpdateApplier.Apply`
-   promotes the outgoing version to `last-good` whenever `state/health.json` is
-   absent, revoked or not; `StubDecisionTable.Decide` checks only attempts and
-   generations.
+   to its `last-good` pointer recorded no durable rejection of the failed
+   payload, the fallback launch overwrote the single `state/health.json`
+   attempt slot, verification admitted a fresh higher-sequence manifest
+   carrying the identical payload (a rollout advanced from 10% to 50%, or a
+   re-signed release with a new version label), and the pruner ranked inactive
+   versions by install order alone.
+2. **Revoked rollback candidate (verified finding 2.2).** Verification refused a
+   manifest that revoked itself but persisted none of its other revocations;
+   the applier promoted the outgoing version to `last-good` whenever
+   `state/health.json` was absent, revoked or not; the stub's decision table
+   checked only attempts and generations.
 
 ## The record
 
@@ -338,8 +337,8 @@ Under the stub's transaction:
 
 The stub then holds the version directory, checks the executable, releases the
 lock and starts the process, which registers ([U03](#u03--revocation-racing-process-creation)).
-`StubDecisionTable`, `StubAction.LaunchCurrentAnyway`,
-`StubInstall.RevertToLastGood` and `StubHealth` are deleted.
+The stub's decision table, its launch-anyway branch, its pointer revert and its
+health-file writer are deleted.
 
 The stub no longer cancels a pending install intent: a recovering apply passes
 `ReserveInstall`, whose admission (`ReleasePolicy.Refusal`) refuses a revoked or rejected
@@ -577,7 +576,7 @@ interruption anywhere leaves either the old record or the new one:
 
 | Option | Closes | Cost or failure |
 |---|---|---|
-| Keep `LaunchCurrentAnyway` | A refusal on a first install's failure | **Violates both findings**: launches a known-broken or revoked payload. |
+| Keep launching the failed current version anyway | A refusal on a first install's failure | **Violates both findings**: launches a known-broken or revoked payload. |
 | **Refuse by name, exit 2 (chosen)** | No revoked, rejected or incompatible payload ever starts | An install whose every local candidate is broken or revoked needs a fresh release or a reinstall, the intended posture. |
 
 ### Where the launched process is checked (U03, U11)
@@ -603,7 +602,7 @@ interruption anywhere leaves either the old record or the new one:
    `last-good`, `state/health.json` or `state-generation` remains
    (`puck search`).
 3. **`Puck.Launcher.Stub`**: `Program` calls `SelectLaunch` only. Check:
-   `StubDecisionTable` and `StubAction.LaunchCurrentAnyway` no longer exist, so
+   the stub's decision table and its launch-anyway branch no longer exist, so
    a caller bypassing the transaction does not compile.
 4. **Laws** in `tests/Puck.Launcher.Tests/Release`: schedules 1 and 2, the U01
    race, U02's lower-generation update, the higher-generation rollback's floor,

@@ -25,7 +25,7 @@ the launcher stub and updater, without an engine dependency. Unlike
 `state/release-policy.json`: the current version, startup attempts per payload
 identity, proofs of health by exact install (version, sequence and payload
 identity), rejected payloads, accepted revocations and the state generation
-floor. `InstallRecord` is a version's `install-record.json`. Both live here
+floor. `InstallRecord` is a version's `versions/<version>/install-record.json`. Both live here
 because the stub, every installed entry point's registration and the launcher
 must share them. `InstallTransaction` holds `update.lock` and is the only writer
 of either: `SelectLaunch` for the stub, `CommitApply` and `MergeRevocations`

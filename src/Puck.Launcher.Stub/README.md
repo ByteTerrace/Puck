@@ -9,7 +9,7 @@ which also holds the release record and supplies `AtomicFile` to the updater.
 ## Usage
 
 The installation root is the stub executable's own directory. Configuration
-beside the stub (`stub.json`) selects the application executable and the
+beside the stub (`StubInstall.StubConfigFileName`) selects the application executable and the
 startup attempts a payload may use; command-line arguments are forwarded to the
 selected application rather than used to redirect the installation root.
 

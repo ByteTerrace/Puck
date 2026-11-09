@@ -645,22 +645,18 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         updateCacheRoot = (updateConfig.CacheRoot ?? updateCacheRoot);
         updateChannel = (updateConfig.Channel ?? updateChannel);
     }
-    // The stub reads its own selected version from `<cacheRoot>/current` (FileUpdateApplier's own contract: cacheRoot
-    // IS the stub's install root). Reporting that same value back as InstalledVersion is what makes version-monotonicity
-    // verification mean something beyond "this build's fixed assembly version" once staging is real; a cacheRoot with no
-    // stub-managed install (no `current` file yet) falls back to the compiled assembly version.
-    var updateCurrentPointerPath = Path.Combine(
-        path1: updateCacheRoot,
-        path2: "current"
-    );
-    var updateInstalledVersion = (File.Exists(path: updateCurrentPointerPath)
-        ? File.ReadAllText(path: updateCurrentPointerPath).Trim()
-        : string.Empty
-    );
+    // The stub launches the release record's current version (cacheRoot IS the stub's install root). Reporting that same
+    // value back as InstalledVersion is what makes version-monotonicity verification mean something beyond "this build's
+    // fixed assembly version"; a cacheRoot with no release record yet, or one that does not read (updates then refuse
+    // under the install's transaction anyway), falls back to the compiled assembly version.
+    string? updateInstalledVersion;
 
-    if (updateInstalledVersion.Length == 0) {
-        updateInstalledVersion = (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0");
+    try {
+        updateInstalledVersion = Puck.Confinement.ReleasePolicy.ReadUnlocked(installRoot: updateCacheRoot).Current;
+    } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or InvalidDataException)) {
+        updateInstalledVersion = null;
     }
+    updateInstalledVersion ??= (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0");
     services.AddSelfUpdate(
         options: new Puck.Launcher.Release.UpdateOptions(
             App: "puck.world",
