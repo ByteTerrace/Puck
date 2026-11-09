@@ -2353,9 +2353,9 @@ prototypes {
 
       shape Cylinder "earMount-left" {
         id: 51
-        position [0.27544, 1.7295, -0.01575]
+        position [0.296, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.09592, 0.01452, 0.09592]
+        scale [0.098, 0.022, 0.098]
         material: skin
         parent: "helmet"
         rounding: 0.002
@@ -2363,9 +2363,9 @@ prototypes {
 
       shape Cylinder "earCover-left" {
         id: 52
-        position [0.29568, 1.7295, -0.01575]
+        position [0.324, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.06996, 0.00484, 0.06996]
+        scale [0.074, 0.012, 0.074]
         material: violet
         parent: "helmet"
         rounding: 0.002
@@ -2373,9 +2373,9 @@ prototypes {
 
       shape Cylinder "earRing-left" {
         id: 53
-        position [0.30624, 1.7295, -0.01575]
+        position [0.337, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.044, 0.00264, 0.044]
+        scale [0.046, 0.004, 0.046]
         material: brass
         parent: "helmet"
         rounding: 0.0012
@@ -2383,9 +2383,9 @@ prototypes {
 
       shape Cylinder "earButton-left" {
         id: 54
-        position [0.31152, 1.7295, -0.01575]
+        position [0.341, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.033, 0.00264, 0.033]
+        scale [0.034, 0.004, 0.034]
         material: violet
         parent: "helmet"
         rounding: 0.0012
@@ -2393,9 +2393,9 @@ prototypes {
 
       shape Cylinder "earMount-right" {
         id: 67
-        position [-0.27544, 1.7295, -0.01575]
+        position [-0.296, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.09592, 0.01452, 0.09592]
+        scale [0.098, 0.022, 0.098]
         material: skin
         parent: "helmet"
         rounding: 0.002
@@ -2403,9 +2403,9 @@ prototypes {
 
       shape Cylinder "earCover-right" {
         id: 68
-        position [-0.29568, 1.7295, -0.01575]
+        position [-0.324, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.06996, 0.00484, 0.06996]
+        scale [0.074, 0.012, 0.074]
         material: violet
         parent: "helmet"
         rounding: 0.002
@@ -2413,9 +2413,9 @@ prototypes {
 
       shape Cylinder "earRing-right" {
         id: 69
-        position [-0.30624, 1.7295, -0.01575]
+        position [-0.337, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.044, 0.00264, 0.044]
+        scale [0.046, 0.004, 0.046]
         material: brass
         parent: "helmet"
         rounding: 0.0012
@@ -2423,9 +2423,9 @@ prototypes {
 
       shape Cylinder "earButton-right" {
         id: 70
-        position [-0.31152, 1.7295, -0.01575]
+        position [-0.341, 1.7295, -0.01575]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.033, 0.00264, 0.033]
+        scale [0.034, 0.004, 0.034]
         material: violet
         parent: "helmet"
         rounding: 0.0012
@@ -2583,7 +2583,7 @@ prototypes {
 
       shape Superellipsoid "shoulderSlab-left" {
         id: 151
-        position [0.4, 1.52, -0.005]
+        position [0.4, 1.48, -0.005]
         rotation [0, 0, -0.1305, 0.9914]
         scale [0.15, 0.06, 0.19]
         material: violetBandLeft
@@ -2600,7 +2600,7 @@ prototypes {
 
       shape Superellipsoid "shoulderSlabLower-left" {
         id: 152
-        position [0.425, 1.41, 0]
+        position [0.425, 1.37, 0]
         rotation [0, 0, -0.0698, 0.9976]
         scale [0.16, 0.08, 0.2]
         material: violetBandLeft
@@ -3853,7 +3853,7 @@ prototypes {
 
       shape Superellipsoid "shoulderSlab-right" {
         id: 219
-        position [-0.4, 1.52, -0.005]
+        position [-0.4, 1.48, -0.005]
         rotation [0, 0, 0.1305, 0.9914]
         scale [0.15, 0.06, 0.19]
         material: violetBandRight
@@ -3870,7 +3870,7 @@ prototypes {
 
       shape Superellipsoid "shoulderSlabLower-right" {
         id: 220
-        position [-0.425, 1.41, 0]
+        position [-0.425, 1.37, 0]
         rotation [0, 0, 0.0698, 0.9976]
         scale [0.16, 0.08, 0.2]
         material: violetBandRight

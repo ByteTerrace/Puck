@@ -1584,12 +1584,13 @@ by `world.view.pick`.
   side), flush to her back; the shoulder slabs, gauntlets and chest slab are
   flat-faced plates at the sheet's sizes, with lavender flank plates under the
   arms; the spine is one prism. Judged on Direct3D 12 by day from the front,
-  right, back, three-quarter above and the chase camera. Still to meet: the
-  shoulder stack sits at the hood's rim where the sheet's sits at the chin;
-  the hip guards, knee guards and boots keep the old pillowy exponent; the
-  face is flat in profile; the ear discs barely show; and no capture yet
-  judges the off-suit form, the hover and walk bursts, dusk and night, the
-  three-quarter below, or a Vulkan set. The owner's walkthrough also found
+  right, back, three-quarter above and the chase camera; the pods were then
+  enlarged to the sheet's width, the shoulder stack lowered to her chin and
+  the ear discs stood proud of the hood, unverified by a capture. Still to
+  meet: the hip guards, knee guards and boots keep the old pillowy exponent;
+  the face is flat in profile; and no capture yet judges the off-suit form,
+  the hover and walk bursts, dusk and night, the three-quarter below, or a
+  Vulkan set. The owner's walkthrough also found
   nothing separating her from the background (no rim light or outline) and no
   readable shadow under a hovering Moth: both are treatment and lighting
   questions the toon lane's defaults and the night item decide, not her
