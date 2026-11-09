@@ -336,10 +336,11 @@ limit.
    `puck mesh audit` scores.
 3. **Field-derived coarse levels** are decided and ordered in
    [the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail): an
-   unbounded chain contoured from the field for closed groups first, with a
-   dilated variant where a thin part would vanish, and a field-contoured parent
-   above a chunked union in place of transition cells at its seams. Its G1 and
-   G2 replace this plan's V3c.
+   unbounded chain contoured from the field for closed groups first, each level
+   offset outward by its budget so joints never open and thin parts survive,
+   skinned groups contoured per member, and a field-contoured parent above a
+   chunked union in place of transition cells at its seams. Its G1 and G2
+   replace this plan's V3c.
 
 **Why:** fewer triangles cut bake time and GPU geometry together, and the
 coarsest level already keeps 6 % of the stored triangles
