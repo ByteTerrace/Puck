@@ -229,8 +229,9 @@ The palette is the concept pack's: lavender plates authored `lavenderPlate`, a
 light greyed lavender chosen so the studio's lighting lands it near the owner's
 dusty `#B186B6` rather than a plum, and warm ivory plates authored `ivoryPlate`. The colour-conversion path and the studio's light
 brighten and cool both, so judge a palette change from a capture, sampled
-against the sheet, never from the hex alone. The plates carry no wear: every
-plate's weathering floor is `plateWear`, 0, and lane 0 is constant.
+against the sheet, never from the hex alone. The plates are pristine, as on the
+sheets: her palette carries no weathering, so no wear or deposit, and lane 0 is
+constant.
 
 Her head is the [`moth-head`](moth-head.puck) library's `mothHead` template,
 placed by `headAt` and scaled by `headScale` (0.7, about 0.27 m crown to chin)
