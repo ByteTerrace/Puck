@@ -15,6 +15,27 @@ world ([the world model](docs/architecture/worlds.md#the-idea-in-plain-terms)),
 and records what it settled in [the MMO foundations memo](docs/plans/mmo-foundations/synthesis.md)'s
 manner: options, evidence, the attacks each closes, and the ruling it rests on.
 
+The debug world is the sandbox that proves it (the owner's ruling).
+If exploring this small world is "truly inspiring and fun for players", a real
+world built on it gains tenfold. The valley pulls a player toward what lies
+beyond. The gallery is "a sort of subtle but very simple/nuanced tutorial":
+crossing a portal teaches worlds "without exposition of any kind". The moons
+are places to explore, federated worlds of their own. Puck's aim is "NEVER
+replication, but true evolution from experience/observation", and the whole
+counts more than any part, so feel (input, camera, motion) is weighed as
+heavily as looks. Three things follow for every agent:
+
+- **A creation built to push the engine is a probe, not the deliverable.** When
+  it meets an engine limit, stop sculpting around it and fix the limit, or hand
+  it back. Lanes modeling the Moth and the swallow polished nitpicks for rounds
+  while the engine limits behind them went unfixed.
+- **The gallery is the engine's self-test.** "Every single item in the gallery
+  is meant to ensure that the engine is operating correctly". A change to a
+  shared system is judged by whether the exhibits it reaches still read as
+  their plaques say.
+- **Do things right.** The owner's ruling: size and timeline are not the
+  owner's concerns; "doing things right" is.
+
 ## Puck is pre-release
 
 Nothing has shipped, and nothing outside this repository depends on Puck. Every
