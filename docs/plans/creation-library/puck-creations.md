@@ -438,7 +438,7 @@ lists and levels, and the same lines print further levels
 ## 5. Scale and units
 
 The metre is the unit by ruling, and true size is the convention **[opened]**
-(`docs/decisions/engine-design.md:285-287`):
+(`docs/decisions/engine-design.md:319-321`):
 
 ```text
 A world's length unit is the metre, and content is authored at the size the
