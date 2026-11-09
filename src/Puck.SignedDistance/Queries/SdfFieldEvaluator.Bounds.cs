@@ -911,7 +911,7 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Torus => TorusBounds(p: p, majorRadius: Point(value: instruction.Data0X), minorRadius: Point(value: instruction.Data0Y)),
             SdfShapeType.Plane => PlaneBounds(p: p, normal: Interval(value: Vector(instruction: instruction)), offset: Point(value: instruction.Data0W)),
             SdfShapeType.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
-            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W, inverseLengthSquared: instruction.Data1Y),
+            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W),
             SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
             SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
             SdfShapeType.RoundedRectangle or SdfShapeType.Ellipse => (LiftedBounds(
@@ -965,14 +965,22 @@ public sealed partial class SdfFieldEvaluator {
 
         return ((outside + inside) - cornerRadius);
     }
-    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) =>
-        CapsuleBounds(p: p, endpoint: Interval(value: endpoint), radius: Point(value: radius), inverseLengthSquared: Point(value: inverseLengthSquared));
-    private static FixedInterval CapsuleBounds(IntervalVector3 p, IntervalVector3 endpoint, FixedInterval radius, FixedInterval inverseLengthSquared) {
-        var h = FixedInterval.Clamp(
-            value: ((((p.X * endpoint.X) + (p.Y * endpoint.Y)) + (p.Z * endpoint.Z)) * inverseLengthSquared),
-            minimum: FixedQ4816.Zero,
-            maximum: FixedQ4816.One
-        );
+    // The point side's parameter is the exact quotient rounded once (FixedVector3.SegmentParameter), inside the
+    // outward-rounded quotient of the enclosed numerator and squared length.
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
+        var segment = Interval(value: endpoint);
+        var lengthSquared = ((FixedInterval.Square(value: segment.X) + FixedInterval.Square(value: segment.Y)) + FixedInterval.Square(value: segment.Z));
+
+        return CapsuleBounds(p: p, endpoint: segment, radius: Point(value: radius), lengthSquared: lengthSquared);
+    }
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, IntervalVector3 endpoint, FixedInterval radius, FixedInterval lengthSquared) {
+        var h = ((lengthSquared.Upper <= FixedQ4816.Zero)
+            ? Point(value: FixedQ4816.Zero)
+            : FixedInterval.Clamp(
+                value: ((((p.X * endpoint.X) + (p.Y * endpoint.Y)) + (p.Z * endpoint.Z)) / lengthSquared),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            ));
 
         return (new IntervalVector3(
             X: (p.X - (endpoint.X * h)),
@@ -1018,26 +1026,15 @@ public sealed partial class SdfFieldEvaluator {
 
         return joined!.Value;
     }
-    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box, each step's rounding enclosed: the product-first form where
-    // every magnitude the box holds takes it, and both forms joined where the box reaches the divide-first side.
+    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box: the point side's one rounding is non-decreasing in the
+    // magnitude, so its values at the box's two ends enclose every value the box holds, exactly.
     private static IntervalVector3 SuperellipsoidScaledRatioBounds(IntervalVector3 absolute, FixedVector3 radii, FixedQ4816 minimumRadius) {
-        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) {
-            if (magnitude.IsUnbounded) {
-                return FixedInterval.Entire;
-            }
-
-            var productFirst = ((magnitude * Point(value: minimumRadius)) / Point(value: radius));
-
-            if ((magnitude.Upper.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit)) {
-                return productFirst;
-            }
-
-            var divideFirst = ((magnitude / Point(value: radius)) * Point(value: minimumRadius));
-
-            return (((magnitude.Lower.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit))
-                ? FixedInterval.Union(first: productFirst, second: divideFirst)
-                : divideFirst);
-        }
+        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) => (magnitude.IsUnbounded
+            ? FixedInterval.Entire
+            : new FixedInterval(
+                lower: SuperellipsoidScaledRatio(magnitude: magnitude.Lower, minRadius: minimumRadius, radius: radius),
+                upper: SuperellipsoidScaledRatio(magnitude: magnitude.Upper, minRadius: minimumRadius, radius: radius)
+            ));
 
         return new(X: Axis(magnitude: absolute.X, radius: radii.X), Y: Axis(magnitude: absolute.Y, radius: radii.Y), Z: Axis(magnitude: absolute.Z, radius: radii.Z));
     }
@@ -1203,12 +1200,14 @@ public sealed partial class SdfFieldEvaluator {
 
         return FixedInterval.Max(first: box, second: bevel);
     }
+    // The point side's projection is the exact quotient rounded once (FixedVector2.SegmentParameter), inside the
+    // outward-rounded quotient of the enclosed numerator and squared length.
     private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedQ4816 r1, FixedQ4816 r2, FixedQ4816 halfHeight) {
-        var k2 = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
+        var slant = new IntervalVector2(X: Point(value: (r2 - r1)), Y: Point(value: (Two * halfHeight)));
 
         return Trapezoid2DBounds(p: p, r1: Point(value: r1), r2: Point(value: r2), halfHeight: Point(value: halfHeight),
-            slant: new IntervalVector2(X: Point(value: k2.X), Y: Point(value: k2.Y)),
-            slantLengthSquared: Point(value: FixedVector2.Dot(left: k2, right: k2)));
+            slant: slant,
+            slantLengthSquared: (FixedInterval.Square(value: slant.X) + FixedInterval.Square(value: slant.Y)));
     }
     private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedInterval r1, FixedInterval r2, FixedInterval halfHeight,
         IntervalVector2 slant, FixedInterval slantLengthSquared) {

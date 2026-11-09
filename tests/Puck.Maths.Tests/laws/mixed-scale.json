@@ -173,5 +173,43 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "mixed-scale.multiply-divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "MultiplyDivide" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.MultiplyDivide — the raw of x·y/z rounded once to nearest, ties to even, wrapped to the signed 64-bit carrier, over the full raw range of all three operands with a non-zero divisor",
+        "Against": "Oracles.RoundRationalTiesToEven over the exact BigInteger product and divisor, then Oracles.WrapToRaw. The subject forms the product in sign plus UInt128 and divides through DivideProductSumCore's restoring division against the divisor carried at 2^16 more",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.segment-parameter-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "ClampedUnitQuotient" },
+      { "Type": "Puck.Maths.FixedVector2", "Name": "SegmentParameter" },
+      { "Type": "Puck.Maths.FixedVector3", "Name": "SegmentParameter" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.ClampedUnitQuotient over the exact Int128 dot and squared length, and FixedVector2.SegmentParameter and FixedVector3.SegmentParameter over the same raws: the projection parameter clamped to [0, 1] and rounded once. ENVELOPE: raws are folded below 2^62 so the Int128 face's two-product sums stay in range",
+        "Against": "Oracles.ClampedUnitQuotient — the BigInteger dot and squared length, clamped by comparison and divided through RoundRationalTiesToEven, which compares 2r against d; the subjects accumulate sign plus UInt128 and compare r against d-r",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

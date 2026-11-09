@@ -67,13 +67,15 @@ public sealed partial class SdfFieldEvaluator {
             var (a, b) = edges[index];
             var e = (b - a);
             var w = (p - a);
-            var t = FixedQ4816.FromRawBits(value: EdgeParameterRaw(along: Along(wx: w.X.Value, wy: w.Y.Value, e: e), square: Square(e: e)));
+            var t = FixedVector2.SegmentParameter(point: w, segment: e);
 
             d = FixedQ4816.Min(x: d, y: (w - (e * t)).Length);
 
             var c1 = (p.Y >= a.Y);
             var c2 = (p.Y < b.Y);
-            var c3 = (((e.X * w.Y) - (e.Y * w.X)) > FixedQ4816.Zero);
+            // The side of the edge's line, from the exact cross product: its carrier rounding is a raw of e × w, which
+            // for a centimetre edge is a millimetre of distance from the line, enough to flip the parity there.
+            var c3 = (((((Int128)e.X.Value) * w.Y.Value) - (((Int128)e.Y.Value) * w.X.Value)) > Int128.Zero);
 
             if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) {
                 negate = !negate;
@@ -82,33 +84,11 @@ public sealed partial class SdfFieldEvaluator {
 
         return (negate ? -d : d);
     }
-    // The parameter of a point's projection onto an edge, clamped to [0, 1], in raws: the quotient of the exact sums w·e
-    // and e·e (each product of two raws, so at the squared scale and never rounded), rounded once to nearest. Rounding
-    // either sum to the grid first would make e·e zero for an edge shorter than about three thousandths of a unit and
-    // coarsen the parameter of every short edge. An edge of no length projects onto its start.
-    private static long EdgeParameterRaw(Int128 along, Int128 square) {
-        if ((along <= Int128.Zero) || (square <= Int128.Zero)) {
-            return 0L;
-        }
-        if (along >= square) {
-            return FixedQ4816.One.Value;
-        }
-
-        // 0 < along < square: both shift alike until along·2¹⁷ has room in the carrier.
-        var shift = Math.Max(val1: 0, val2: (((int)(128 - Int128.LeadingZeroCount(value: square))) - 109));
-
-        along >>= shift;
-        square >>= shift;
-
-        return ((long)FixedDirectedRounding.FloorQuotient(denominator: (square << 1), numerator: ((along << 17) + square)));
-    }
-    // w·e at the squared scale of the raws.
-    private static Int128 Along(long wx, long wy, FixedVector2 e) => ((((Int128)wx) * e.X.Value) + (((Int128)wy) * e.Y.Value));
     // e·e at the squared scale of the raws.
     private static Int128 Square(FixedVector2 e) => ((((Int128)e.X.Value) * e.X.Value) + (((Int128)e.Y.Value) * e.Y.Value));
-    // EdgeParameterRaw over a box: monotone in w·e, which is linear in the box's coordinates, so its ends are the
-    // parameters at the least and greatest w·e, each the sum of the per-axis extreme products. Unbounded coordinates
-    // leave the whole clamp range.
+    // FixedVector2.SegmentParameter (the point side's edge parameter) over a box: the one rounding of the exact w·e / e·e
+    // is monotone in w·e, which is linear in the box's coordinates, so its ends are the parameters at the least and
+    // greatest w·e, each the sum of the per-axis extreme products. Unbounded coordinates leave the whole clamp range.
     private static FixedInterval EdgeParameterBounds(FixedInterval wx, FixedInterval wy, FixedVector2 e) {
         if (wx.IsUnbounded || wy.IsUnbounded) {
             return new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One);
@@ -119,8 +99,8 @@ public sealed partial class SdfFieldEvaluator {
         var (yLow, yHigh) = Extremes(lower: wy.Lower.Value, upper: wy.Upper.Value, factor: e.Y.Value);
 
         return new FixedInterval(
-            lower: FixedQ4816.FromRawBits(value: EdgeParameterRaw(along: (xLow + yLow), square: square)),
-            upper: FixedQ4816.FromRawBits(value: EdgeParameterRaw(along: (xHigh + yHigh), square: square))
+            lower: FusedArithmetic.ClampedUnitQuotient(denominator: square, numerator: (xLow + yLow)),
+            upper: FusedArithmetic.ClampedUnitQuotient(denominator: square, numerator: (xHigh + yHigh))
         );
 
         static (Int128 Low, Int128 High) Extremes(long lower, long upper, long factor) {

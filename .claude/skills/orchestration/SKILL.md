@@ -403,7 +403,12 @@ of the owner: at the close of every session that touched a place, and at least
 once per milestone across the debug world's places, it publishes current
 captures beside their reference panels with the critic's verdicts, and queues
 a look lane for the worst place. Look work is scheduled as fundamentals are,
-never left until the owner walks past it. Every batch window also takes a few
+never left until the owner walks past it. A builder's own judgement is not enough: a Moth lane handed
+back judging her as meeting her sheets, and the critic failed her on every heading. So a look lane judges each view
+side by side with the sheet it should match, gets geometry right on `puck mesh preview` (seconds, no GPU) first,
+and the lead sends the preview sheet to the critic before the lane takes a windowed slot, which then serves
+lamps, palette, motion and lighting only. A creation whose parts live in separate documents (a suit and its
+pilot) is split into lanes by document. Every batch window also takes a few
 captures focused on something chosen at random (a creation, a room, a surface
 up close), because the owner's observation is that any such capture shows
 flaws at once; each flaw seen is filed in the visual bar packet or sent to a

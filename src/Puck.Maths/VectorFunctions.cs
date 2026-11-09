@@ -183,6 +183,12 @@ public static class VectorFunctions {
 
         return (((length > shortest) && float.IsFinite(f: length)) ? (value / length) : fallback);
     }
+    /// <summary>Returns the dot product of two vectors in double precision, each component product taken in doubles
+    /// before the sum, so a plane test on float coordinates loses nothing to the products' rounding.</summary>
+    /// <param name="first">The first vector.</param>
+    /// <param name="second">The second vector.</param>
+    /// <returns>The dot product.</returns>
+    public static double DotWide(Vector3 first, Vector3 second) => ((((double)first.X * second.X) + ((double)first.Y * second.Y)) + ((double)first.Z * second.Z));
     /// <summary>Returns a unit vector perpendicular to a direction.</summary>
     /// <param name="direction">The direction, of any non-zero length.</param>
     /// <returns>The normalized cross product of <paramref name="direction"/> with the basis axis it is least aligned

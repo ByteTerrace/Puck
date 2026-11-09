@@ -271,16 +271,14 @@ turned box in an axis-aligned one), and bounds the interval's width.
 The superellipsoid has a **point-only field certificate**. It is not a
 Euclidean distance-to-enclosing-sphere bound. Let F be raw One, s the smallest
 positive compiled radius raw and rmax the largest. Each scaled-ratio coordinate
-q differs from its ideal raw value by at most E:
-
-- Product-first nearest rounding loses at most F/(2r)+1/2 raw. Its greatest
-  outward integer bound is `ceil((F+s)/(2s))`, attained at the smallest radius.
-- Divide-first loses at most s/(2F)+1/2 raw, bounded by `ceil((s+F)/(2F))`.
-
-The certificate takes the greater bound when either branch can occur, and only
-the divide-first bound when s forces that branch. The ceilings use Int128.
-No arbitrary dimension ceiling is imposed; nonpositive compiled radii or an
-unrepresentable certificate simply leave the primitive walked.
+q is the exact |p|·s/r rounded once to nearest (`FusedArithmetic.MultiplyDivide`),
+so it differs from its ideal raw value by at most half a raw, and the
+certificate's outward E is one raw at every radius. Rounding the product
+|p|·s to the carrier first would cost F/(2r) raws, a millimetre at a
+centimetre radius, and make the field read further from its own surface than
+the true distance. No arbitrary dimension ceiling is imposed; nonpositive
+compiled radii or an unrepresentable certificate simply leave the primitive
+walked.
 
 For the admitted exponent interval, the maximum q/m is exactly One and its
 power is exactly One. Component powers stay in [0,One]; their sum is in

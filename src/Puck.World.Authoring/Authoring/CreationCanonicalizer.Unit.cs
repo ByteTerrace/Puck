@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 
 namespace Puck.World.Authoring;
 
@@ -10,7 +11,7 @@ public static partial class CreationCanonicalizer {
     // which leaves the squared length within 2^-22 of 1: well inside the band, so the result is canonical.
     private const double UnitBand = (1.0 / (1 << 20));
 
-    private static double LengthSquared(Vector3 value) => (((((double)value.X) * value.X) + (((double)value.Y) * value.Y)) + (((double)value.Z) * value.Z));
+    private static double LengthSquared(Vector3 value) => VectorFunctions.DotWide(first: value, second: value);
     private static double LengthSquared(Quaternion value) => (((((double)value.X) * value.X) + (((double)value.Y) * value.Y)) + ((((double)value.Z) * value.Z) + (((double)value.W) * value.W)));
     // A non-finite/zero-length direction has no fold plane to normalize to, so it floors to the retired Mirror:
     // true flag's exact plane (UnitX) rather than reaching SdfProgramBuilder.SymmetryPlane's own throwing guard.

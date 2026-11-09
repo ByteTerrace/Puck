@@ -220,9 +220,9 @@ milestone. The owner requested its baseline and implementation plan, which
 5. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)); beside it,
-   [virtual geometry](virtual-geometry.md#the-build-order)'s G1 (the offline
-   field-levels audit mode) and G3 (member boxes), which share no files with
-   V1 and V2.
+   [virtual geometry](virtual-geometry.md#the-build-order)'s ruling on G1b
+   (field levels below the collapse fail their floor on carved parts) before
+   G2, and G3 (member boxes), which shares no files with V1 and V2.
 6. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
 7. [Bake proportional to change](#bake-proportional-to-change) [high, the
@@ -2127,7 +2127,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 [plan](valley-and-moons.md#phase-1-the-valley-as-built).
 
 - Valley review findings (Codex review of the valley merge):
-  - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.
   - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.SdfVm/SdfMeshPathBake.cs:1290`).
   - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
 - At `valley-slope` on Vulkan (a fresh World, bakes still pending at the

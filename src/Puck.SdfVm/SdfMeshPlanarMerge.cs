@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -39,6 +40,152 @@ public static class SdfMeshPlanarMerge {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
         return (((mesh.Normals.Length == 0) || (mesh.TriangleCount < 2)) ? mesh : new Merger(mesh: mesh).Run());
+    }
+    /// <summary>
+    /// Makes a mesh's near-coplanar regions coplanar so <see cref="Merge"/> merges them: a region is a connected run of
+    /// triangles, across edges two triangles share by index, of one material and one member, whose face normals and vertex
+    /// normals turn by at most <paramref name="degrees"/> from its first triangle's face normal and whose vertices lie within
+    /// <paramref name="distance"/> of that triangle's plane. Each vertex of a region of two or more triangles moves onto
+    /// the region's plane and takes its normal; a vertex belongs to one region at most. Unlike <see cref="Merge"/> this
+    /// moves surface and changes shading, so it serves a coarser level whose error is measured after it, never level
+    /// zero: a field level's gradient normals differ in their last bits across a flat face, which <see cref="Merge"/>
+    /// reads as different faces. A pure function of the mesh, deterministic in triangle order.
+    /// </summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <param name="distance">The farthest a vertex moves onto its region's plane, in metres; zero or less moves
+    /// none.</param>
+    /// <param name="degrees">The most a region's face or vertex normal turns from its plane's, in degrees.</param>
+    /// <returns>The flattened mesh, with the same cell, members and enclosure; <paramref name="mesh"/> itself when it
+    /// carries no vertex normals or no region holds two triangles.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static SdfMesh Flatten(SdfMesh mesh, float distance, float degrees) {
+        ArgumentNullException.ThrowIfNull(argument: mesh);
+
+        var triangles = mesh.TriangleCount;
+
+        if ((mesh.Normals.Length == 0) || (triangles < 2) || !(distance > 0f)) { return mesh; }
+
+        var positions = mesh.Positions.ToArray();
+        var normals = mesh.Normals.ToArray();
+        var indices = mesh.Indices.ToArray();
+        var materials = mesh.TriangleMaterials.ToArray();
+        var members = mesh.VertexMembers.ToArray();
+        var cosine = MathF.Cos(x: float.DegreesToRadians(degrees: degrees));
+        var faces = new Vector3[triangles];
+        var edges = new Dictionary<(int, int), (int First, int Second, int Count)>();
+
+        for (var triangle = 0; (triangle < triangles); triangle++) {
+            var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+
+            faces[triangle] = SdfMeshAudit.FaceNormal(a: positions[a], b: positions[b], c: positions[c]);
+            foreach (var (first, second) in (ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)]) {
+                var key = ((first < second) ? (first, second) : (second, first));
+
+                edges[key] = (edges.TryGetValue(key: key, value: out var held) ? (held.First, triangle, (held.Count + 1)) : (triangle, -1, 1));
+            }
+        }
+
+        // A position belongs to one region at most, all its vertices (a crease's copies) moving together, so no edge the
+        // vertices at one position share opens.
+        var site = new int[positions.Length];
+        var placed = new Dictionary<Vector3, int>(capacity: positions.Length);
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) { site[vertex] = (placed.TryAdd(key: positions[vertex], value: vertex) ? vertex : placed[positions[vertex]]); }
+
+        var regionOf = new int[triangles];
+        var siteRegion = new int[positions.Length];
+        var planes = new List<(Vector3 Normal, double Offset)>();
+        var claimedSites = new List<int>();
+        var queue = new Queue<int>();
+
+        Array.Fill(array: regionOf, value: -1);
+        Array.Fill(array: siteRegion, value: -1);
+
+        // A triangle joins a region when its face and each vertex face along the plane, each vertex lies near it, and no
+        // vertex's position belongs to another region.
+        bool Fits(int triangle, int region, Vector3 normal, double offset, uint material, byte member) {
+            if ((regionOf[triangle] >= 0) || (Vector3.Dot(vector1: faces[triangle], vector2: normal) < cosine) || (((materials.Length == 0) ? 0u : materials[triangle]) != material)) { return false; }
+            for (var corner = 0; (corner < 3); corner++) {
+                var vertex = (int)indices[((3 * triangle) + corner)];
+                var point = positions[vertex];
+
+                if (((siteRegion[site[vertex]] >= 0) && (siteRegion[site[vertex]] != region)) ||
+                    ((members.Length != 0) && (members[vertex] != member)) ||
+                    (Vector3.Dot(vector1: normals[vertex], vector2: normal) < cosine) ||
+                    !(Math.Abs(value: (VectorFunctions.DotWide(first: normal, second: point) - offset)) <= distance)) { return false; }
+            }
+
+            return true;
+        }
+
+        for (var seed = 0; (seed < triangles); seed++) {
+            if ((regionOf[seed] >= 0) || (faces[seed] == Vector3.Zero)) { continue; }
+
+            var region = planes.Count;
+            var normal = faces[seed];
+            var (sa, sb, sc) = (positions[(int)indices[(3 * seed)]], positions[(int)indices[((3 * seed) + 1)]], positions[(int)indices[((3 * seed) + 2)]]);
+            var offset = (((VectorFunctions.DotWide(first: normal, second: sa) + VectorFunctions.DotWide(first: normal, second: sb)) + VectorFunctions.DotWide(first: normal, second: sc)) / 3.0);
+            var material = ((materials.Length == 0) ? 0u : materials[seed]);
+            var member = ((members.Length == 0) ? SdfMesh.NoMember : members[(int)indices[(3 * seed)]]);
+
+            if (!Fits(material: material, member: member, normal: normal, offset: offset, region: region, triangle: seed)) { continue; }
+
+            var held = new List<int>();
+            var siteMark = claimedSites.Count;
+
+            void Take(int triangle) {
+                regionOf[triangle] = region;
+                held.Add(item: triangle);
+                queue.Enqueue(item: triangle);
+                for (var corner = 0; (corner < 3); corner++) {
+                    var vertex = (int)indices[((3 * triangle) + corner)];
+
+                    if (siteRegion[site[vertex]] < 0) {
+                        siteRegion[site[vertex]] = region;
+                        claimedSites.Add(item: site[vertex]);
+                    }
+                }
+            }
+
+            Take(triangle: seed);
+            while (queue.TryDequeue(result: out var triangle)) {
+                var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+
+                foreach (var (first, second) in (ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)]) {
+                    var edge = edges[((first < second) ? (first, second) : (second, first))];
+                    var other = ((edge.First == triangle) ? edge.Second : edge.First);
+
+                    if ((edge.Count == 2) && (other >= 0) && Fits(material: material, member: member, normal: normal, offset: offset, region: region, triangle: other)) { Take(triangle: other); }
+                }
+            }
+            // A lone triangle merges with nothing: it keeps its own vertices and leaves them to another region.
+            if (held.Count < 2) {
+                regionOf[seed] = -2;
+                for (var at = siteMark; (at < claimedSites.Count); at++) { siteRegion[claimedSites[at]] = -1; }
+                claimedSites.RemoveRange(index: siteMark, count: (claimedSites.Count - siteMark));
+                continue;
+            }
+            planes.Add(item: (normal, offset));
+        }
+        if (planes.Count == 0) { return mesh; }
+
+        var moved = (Vector3[])positions.Clone();
+        var turned = (Vector3[])normals.Clone();
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            if (siteRegion[site[vertex]] < 0) { continue; }
+
+            var (normal, offset) = planes[siteRegion[site[vertex]]];
+            var point = positions[vertex];
+            var off = (VectorFunctions.DotWide(first: normal, second: point) - offset);
+
+            moved[vertex] = new Vector3(x: (float)(point.X - (off * normal.X)), y: (float)(point.Y - (off * normal.Y)), z: (float)(point.Z - (off * normal.Z)));
+        }
+        for (var at = 0; (at < indices.Length); at++) {
+            if (regionOf[(at / 3)] >= 0) { turned[indices[at]] = planes[regionOf[(at / 3)]].Normal; }
+        }
+
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: turned, positions: moved, triangleMaterials: mesh.TriangleMaterials, vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
 
     // One merge's state: the triangles as a pool of three half-edges each (half-edge h runs from corner h to the next corner
@@ -191,7 +338,7 @@ public static class SdfMeshPlanarMerge {
 
                 var anchor = positions[m_corners[(3 * seed)]];
                 var normal = normals[m_corners[(3 * seed)]];
-                var plane = new Plane3(Normal: normal, Offset: ((((double)normal.X * anchor.X) + ((double)normal.Y * anchor.Y)) + ((double)normal.Z * anchor.Z)), Scale: Math.Max(val1: 1.0, val2: Largest(point: anchor)));
+                var plane = new Plane3(Normal: normal, Offset: VectorFunctions.DotWide(first: normal, second: anchor), Scale: Math.Max(val1: 1.0, val2: Largest(point: anchor)));
 
                 if (!OnPlane(plane: plane, positions: positions, triangle: seed)) { continue; }
 
@@ -229,11 +376,9 @@ public static class SdfMeshPlanarMerge {
             return any;
         }
         private bool OnPlane(Plane3 plane, ReadOnlySpan<Vector3> positions, int triangle) {
-            var (nx, ny, nz) = ((double)plane.Normal.X, (double)plane.Normal.Y, (double)plane.Normal.Z);
-
             for (var corner = 0; (corner < 3); corner++) {
                 var point = positions[m_corners[((3 * triangle) + corner)]];
-                var distance = ((((nx * point.X) + (ny * point.Y)) + (nz * point.Z)) - plane.Offset);
+                var distance = (VectorFunctions.DotWide(first: plane.Normal, second: point) - plane.Offset);
 
                 if (!(Math.Abs(value: distance) <= (PlaneTolerance * Math.Max(val1: plane.Scale, val2: Largest(point: point))))) { return false; }
             }
