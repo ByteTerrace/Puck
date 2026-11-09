@@ -3539,6 +3539,13 @@ never writes the store, so it reads a store a running World owns.
   default), clamped to each chunk's last available level. Only referenced
   vertices count. The error threshold and coverage lattice retain level zero's
   cell and bounds, so simplifying cannot make the audit more lenient.
+- `--pose '1=tx,ty,tz,qx,qy,qz,qw;2=...'` poses a skin in its group's frame,
+  with member slot offsets naming rigid delta frames. Unnamed slots hold rest.
+  The audit measures it against the field at the same poses; geometry keys,
+  blend-zone vertex counts and positions with inconsistent influence tuples
+  are printed. Use either stored meshes or `--cpu`, without `--history` or
+  `--field-levels`. This is a presentation audit, with the Maths rigid carrier
+  as the CPU counterpart of the float shader blend.
 - `--top <n>` clusters a group reports, `--worst <n>` clusters the closing list
   reports across every group, and `--images <dir>` writes a PNG of each of
   those: the mesh around the cluster's worst sample from three sides, shading

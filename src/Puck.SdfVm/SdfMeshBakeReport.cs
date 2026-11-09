@@ -32,14 +32,12 @@ internal static class SdfMeshBakeReport {
         Land,
         Store,
     }
-
     /// <summary>One group a restart, resample or promotion began, as the start line names it.</summary>
     /// <param name="Selector">The group's selector.</param>
     /// <param name="Dynamic">Whether the group is a dynamic one.</param>
     /// <param name="Place">The dynamic group's slot, or a static group's instance count.</param>
     /// <param name="Loading">Whether the group began as a load from the store rather than a bake.</param>
     public readonly record struct Begun(int Selector, bool Dynamic, int Place, bool Loading);
-
     /// <summary>The numbers a slow stage reports beside its group; each stage reads the ones it measured.</summary>
     /// <param name="Dims">The final lattice's samples along each axis.</param>
     /// <param name="Factor">The lattice's refinement.</param>
@@ -47,13 +45,11 @@ internal static class SdfMeshBakeReport {
     /// <param name="Count">The points, quads or triangles the stage handled.</param>
     /// <param name="Kept">The triangles a landing kept.</param>
     public readonly record struct Detail((int X, int Y, int Z)? Dims = null, int? Factor = null, int? Measured = null, int? Count = null, int? Kept = null);
-
     /// <summary>One group of a finished bake: what the done line counts and names of it.</summary>
     /// <param name="Selector">The group's selector.</param>
     /// <param name="Mesh">The mesh it drew, or <see langword="null"/>.</param>
     /// <param name="Outcome">Why it holds no mesh, when it does not.</param>
     public readonly record struct Finished(int Selector, SdfMesh? Mesh, string? Outcome);
-
     /// <summary>The counters the done line reports. A bake clears them as a new bake starts; the threads that count
     /// into them each own a field, or add through <see cref="Interlocked"/> (the stage ticks).</summary>
     public sealed class Accounts {
@@ -63,6 +59,7 @@ internal static class SdfMeshBakeReport {
         public readonly long[] KindSamples = new long[8];
         /// <summary>Stopwatch ticks each stage spent, summed over the threads that ran it.</summary>
         public readonly long[] StageTicks = new long[Enum.GetValues<Stage>().Length];
+
         public long Batches;
         public long Discarded;
         public long Dispatches;
@@ -113,6 +110,7 @@ internal static class SdfMeshBakeReport {
 
             return ticks;
         }
+
         // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
         internal string Describe(Func<string>? dispatches) {
             var stages = string.Join(separator: ",", values: Enum.GetValues<Stage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref StageTicks[((int)stage)]) / ((double)Stopwatch.Frequency)):0.0}")));
@@ -216,6 +214,8 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
     public static void Refused(int selector, string refusal) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
+    /// <summary>Names a rest skin that fell back to rigid owner contours.</summary>
+    public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

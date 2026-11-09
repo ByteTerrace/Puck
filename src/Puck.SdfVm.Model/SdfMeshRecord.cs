@@ -58,6 +58,8 @@ public static class SdfMeshRecord {
     public const int VertexWords = 6;
     /// <summary>The words of one member in a mesh's members: its slot offset, its position and its orientation.</summary>
     public const int MemberWords = 8;
+    /// <summary>The words of one skinned vertex: first member, second member and share, and three half gradients with padding.</summary>
+    public const int SkinVertexWords = 4;
     /// <summary>The flag a record carries when its mesh has a normal a vertex.</summary>
     public const uint NormalsFlag = 1u;
     /// <summary>The flag a record carries when its mesh has a palette entry a triangle.</summary>

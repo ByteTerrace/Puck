@@ -379,6 +379,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_NORMAL_MATRIX_WORD", value: SdfMeshRecord.NormalMatrixWord);
         declarations.Count(name: "SDF_MESH_FRAME_SLOT_WORD", value: SdfMeshRecord.FrameSlotWord);
         declarations.Count(name: "SDF_MESH_SKIN_WORD", value: SdfMeshRecord.SkinWord);
+        declarations.Count(name: "SDF_MESH_SKIN_VERTEX_WORDS", value: SdfMeshRecord.SkinVertexWords);
         declarations.Count(name: "SDF_MESH_CARRY_ROTATION_WORD", value: SdfMeshRecord.CarryRotationWord);
         declarations.Count(name: "SDF_MESH_CARRY_TRANSLATION_WORD", value: SdfMeshRecord.CarryTranslationWord);
         declarations.Count(name: "SDF_MESH_CARRY_SCALE_WORD", value: SdfMeshRecord.CarryScaleWord);

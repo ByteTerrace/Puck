@@ -40,7 +40,14 @@ public sealed partial record SdfMesh {
     /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or member pose is not finite,
     /// an attribute is neither empty nor one per vertex (one per triangle for <paramref name="triangleMaterials"/>), the
     /// mesh has more than <see cref="MaxMembers"/> members, or a vertex names no member.</exception>
-    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default) {
+    /// <param name="influences">One second-owner tuple per skinned vertex, or empty for rigid members.</param>
+    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default, ReadOnlyMemory<SdfMeshInfluence> influences = default) {
+        if (!influences.IsEmpty && ((influences.Length != positions.Length) || (vertexMembers.Length != positions.Length))) { throw new ArgumentException(message: "Influences require one complete member tuple per vertex.", paramName: nameof(influences)); }
+        foreach (var influence in influences.Span) {
+            if ((influence.Second != NoMember) && (influence.Second >= members.Length)) { throw new ArgumentException(message: "An influence names no member.", paramName: nameof(influences)); }
+            if (!float.IsFinite(f: influence.Gradient.LengthSquared())) { throw new ArgumentException(message: "An influence gradient must be finite.", paramName: nameof(influences)); }
+        }
+        Influences = influences;
         if (
             indices.IsEmpty ||
             ((indices.Length % 3) != 0)
@@ -174,6 +181,8 @@ public sealed partial record SdfMesh {
     /// <summary>Gets each vertex's index in <see cref="Members"/>, or <see cref="NoMember"/> for a vertex that rides its
     /// draw; none when every vertex rides its draw.</summary>
     public ReadOnlyMemory<byte> VertexMembers { get; }
+    /// <summary>Gets the second-owner tuple per skinned vertex; empty for rigid skinning.</summary>
+    public ReadOnlyMemory<SdfMeshInfluence> Influences { get; }
     /// <summary>Gets the mesh's coarser levels of detail, finest first, each a triangle list over this mesh's own vertices
     /// (<see cref="SdfMeshCollapse"/>); none for a mesh drawn at its own triangles alone. The mesh's own triangles are
     /// its level zero, which the irradiance trace and every query read.</summary>
@@ -230,7 +239,8 @@ public sealed partial record SdfMesh {
         var chosen = Math.Min(val1: level, val2: levels.Count);
         var first = 0;
         var count = TriangleCount;
-        for (var at = 0; at < chosen; at++) {
+
+        for (var at = 0; (at < chosen); at++) {
             first += count;
             count = levels[at].TriangleCount;
         }
@@ -315,10 +325,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>
     public int? FrameSlot { get; init; }
+
     /// <summary>Gets whether materials use the root/member frame. False keeps material coordinates in world space,
     /// independently of the root slot used by skinning and portal membership.</summary>
     public bool UsesRootMaterialFrame { get; init; } = true;
-
     /// <summary>Gets the rotation of the carry every world position and normal the draw resolves goes through last,
     /// after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn for the
     /// copy of a body drawn through the pair.</summary>
@@ -340,6 +350,7 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <summary>Gets the heights the draw's mesh, a height field's baked reference, is displaced by as it is drawn, or
     /// <see langword="null"/> for a draw drawn as its mesh was baked.</summary>
     public SdfMeshDisplacement? Displacement { get; init; }
+
     /// <summary>Returns whether two draws stage the same GPU record, bounds, picking identity and motion interpretation,
     /// including the exact bits of each floating-point field.</summary>
     /// <param name="other">The draw to compare.</param>
@@ -392,7 +403,6 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// <param name="SelectionComputed">Whether the world-space selection box was derived.</param>
 /// <param name="ChangedWords">One bit per word that changed in the retained record.</param>
 public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalComputed, bool SelectionComputed, ulong ChangedWords);
-
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
 /// backend reads the same word offsets: first one record a draw (<see cref="SdfMeshRecord.DrawWords"/> words), then each distinct
@@ -416,7 +426,7 @@ public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalCom
 /// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
 /// vertex without a normal holds zeros there, and the flags say which a mesh has. Word 32 is the word a mesh with
 /// members (<see cref="SdfMeshRecord.SkinFlag"/>) keeps them at, past its indices: their count, then <see cref="SdfMeshRecord.MemberWords"/> words a
-/// member (its slot offset, then its position and orientation), then one word a vertex naming its member. Words 33 to 40
+/// member (its slot offset, then its position and orientation), then SkinVertexWords per vertex carrying its owners, share and gradient. Words 33 to 40
 /// are the draw's carry (<see cref="SdfMeshDraw.CarryRotation"/> as x, y, z, w, then
 /// <see cref="SdfMeshDraw.CarryTranslation"/> and <see cref="SdfMeshDraw.CarryScale"/>), which every world position and
 /// normal the draw resolves goes through last, words 41 to 44 its clip plane (<see cref="SdfMeshDraw.ClipPlane"/>), and
@@ -430,11 +440,11 @@ public static class SdfMeshRegion {
     /// <param name="record">The retained draw's words.</param>
     /// <returns>The placement used to pack the draw.</returns>
     public static SdfMeshRegionMesh ReadPlacement(ReadOnlySpan<uint> record) => new(
-        IndexWord: (int)record[SdfMeshRecord.IndexWord],
-        IndexCount: (int)record[SdfMeshRecord.IndexCountWord],
-        VertexWord: (int)record[SdfMeshRecord.VertexWord],
-        MaterialWord: (int)record[SdfMeshRecord.TriangleMaterialWord],
-        SkinWord: (int)record[SdfMeshRecord.SkinWord]);
+        IndexWord: ((int)record[SdfMeshRecord.IndexWord]),
+        IndexCount: ((int)record[SdfMeshRecord.IndexCountWord]),
+        VertexWord: ((int)record[SdfMeshRecord.VertexWord]),
+        MaterialWord: ((int)record[SdfMeshRecord.TriangleMaterialWord]),
+        SkinWord: ((int)record[SdfMeshRecord.SkinWord]));
 
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));
@@ -559,14 +569,14 @@ public static class SdfMeshRegion {
         return (mesh.TriangleMaterials.IsEmpty ? 0 : mesh.LevelledTriangleCount);
     }
     /// <summary>The words a mesh's members take: none for a mesh without them, otherwise their count, each member's
-    /// <see cref="SdfMeshRecord.MemberWords"/> words and one word a vertex.</summary>
+    /// <see cref="SdfMeshRecord.MemberWords"/> words and SkinVertexWords per vertex.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns>Its members' words.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     public static int SkinWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return (mesh.VertexMembers.IsEmpty ? 0 : checked(((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + mesh.VertexMembers.Length)));
+        return (mesh.VertexMembers.IsEmpty ? 0 : checked(((1 + (mesh.Members.Length * SdfMeshRecord.MemberWords)) + (SdfMeshRecord.SkinVertexWords * mesh.VertexMembers.Length))));
     }
     /// <summary>Writes a list of draws into the region's words as <paramref name="layout"/> places them.</summary>
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
@@ -634,9 +644,8 @@ public static class SdfMeshRegion {
     public static void WriteDraw(in SdfMeshDraw draw, SdfMeshRegionMesh placement, uint generation, Span<uint> record) {
         var previous = default(SdfMeshDraw);
 
-        _ = WriteDrawCore(draw: in draw, previous: in previous, placement: placement, generation: generation, record: record, retained: false);
+        _ = WriteDrawCore(draw: in draw, generation: generation, placement: placement, previous: in previous, record: record, retained: false);
     }
-
     /// <summary>Updates a retained packed draw, deriving only fields whose inputs changed. The record must still
     /// contain the full packing of <paramref name="previous"/>; changed placement addresses are compared directly
     /// with its words. Identity changes alone do not rewrite GPU data.</summary>
@@ -647,7 +656,7 @@ public static class SdfMeshRegion {
     /// <param name="record">The retained record, updated in place.</param>
     /// <returns>The CPU words assigned and the expensive field derivations performed, independently of upload deltas.</returns>
     public static SdfMeshDrawPacking WriteDrawIncremental(in SdfMeshDraw draw, in SdfMeshDraw previous, SdfMeshRegionMesh placement, uint generation, Span<uint> record) =>
-        WriteDrawCore(draw: in draw, previous: in previous, placement: placement, generation: generation, record: record, retained: true);
+        WriteDrawCore(draw: in draw, generation: generation, placement: placement, previous: in previous, record: record, retained: true);
 
     // Full and retained packing share every field writer. Exact input bits are the dependency key: numeric equality
     // would forget signed zero and NaN payload changes that the packed record preserves.
@@ -671,7 +680,7 @@ public static class SdfMeshRegion {
         var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
         var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !SameDrawBits(left: in carry, right: in previousCarry) ||
             !SameDrawBits(left: in shift, right: in previousShift) ||
-            (BitConverter.SingleToUInt32Bits(draw.CarryScale) != BitConverter.SingleToUInt32Bits(previous.CarryScale)));
+            (BitConverter.SingleToUInt32Bits(value: draw.CarryScale) != BitConverter.SingleToUInt32Bits(value: previous.CarryScale)));
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], retained);
 
         if (matrixChanged) { WriteDrawMatrix(matrix: in matrix, record: ref writer); }
@@ -686,20 +695,20 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
         writer[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(draw.FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
         writer[SdfMeshRecord.SkinWord] = ((uint)placement.SkinWord);
-        writer[SdfMeshRecord.CarryRotationWord] = BitConverter.SingleToUInt32Bits(carry.X);
-        writer[SdfMeshRecord.CarryRotationWord + 1] = BitConverter.SingleToUInt32Bits(carry.Y);
-        writer[SdfMeshRecord.CarryRotationWord + 2] = BitConverter.SingleToUInt32Bits(carry.Z);
-        writer[SdfMeshRecord.CarryRotationWord + 3] = BitConverter.SingleToUInt32Bits(carry.W);
-        writer[SdfMeshRecord.CarryTranslationWord] = BitConverter.SingleToUInt32Bits(shift.X);
-        writer[SdfMeshRecord.CarryTranslationWord + 1] = BitConverter.SingleToUInt32Bits(shift.Y);
-        writer[SdfMeshRecord.CarryTranslationWord + 2] = BitConverter.SingleToUInt32Bits(shift.Z);
-        writer[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(draw.CarryScale);
-        writer[SdfMeshRecord.ClipPlaneWord] = BitConverter.SingleToUInt32Bits(clip.X);
-        writer[SdfMeshRecord.ClipPlaneWord + 1] = BitConverter.SingleToUInt32Bits(clip.Y);
-        writer[SdfMeshRecord.ClipPlaneWord + 2] = BitConverter.SingleToUInt32Bits(clip.Z);
-        writer[SdfMeshRecord.ClipPlaneWord + 3] = BitConverter.SingleToUInt32Bits(clip.W);
+        writer[SdfMeshRecord.CarryRotationWord] = BitConverter.SingleToUInt32Bits(value: carry.X);
+        writer[(SdfMeshRecord.CarryRotationWord + 1)] = BitConverter.SingleToUInt32Bits(value: carry.Y);
+        writer[(SdfMeshRecord.CarryRotationWord + 2)] = BitConverter.SingleToUInt32Bits(value: carry.Z);
+        writer[(SdfMeshRecord.CarryRotationWord + 3)] = BitConverter.SingleToUInt32Bits(value: carry.W);
+        writer[SdfMeshRecord.CarryTranslationWord] = BitConverter.SingleToUInt32Bits(value: shift.X);
+        writer[(SdfMeshRecord.CarryTranslationWord + 1)] = BitConverter.SingleToUInt32Bits(value: shift.Y);
+        writer[(SdfMeshRecord.CarryTranslationWord + 2)] = BitConverter.SingleToUInt32Bits(value: shift.Z);
+        writer[SdfMeshRecord.CarryScaleWord] = BitConverter.SingleToUInt32Bits(value: draw.CarryScale);
+        writer[SdfMeshRecord.ClipPlaneWord] = BitConverter.SingleToUInt32Bits(value: clip.X);
+        writer[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
+        writer[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);
+        writer[(SdfMeshRecord.ClipPlaneWord + 3)] = BitConverter.SingleToUInt32Bits(value: clip.W);
         writer[SdfMeshRecord.LevelTableWord] = ((uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount)));
-        writer[SdfMeshRecord.LevelTableWord + 1] = ((uint)mesh.Levels.Count);
+        writer[(SdfMeshRecord.LevelTableWord + 1)] = ((uint)mesh.Levels.Count);
         writer[SdfMeshRecord.DisplacementWord] = ((draw.Displacement is { } displacement) ? ((uint)displacement.Handle) : SdfFrameSampled.None);
 
         var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
@@ -707,27 +716,29 @@ public static class SdfMeshRegion {
 
         if (boxChanged) {
             boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
-            WriteSelectionVector(words: ref writer, offset: SdfMeshRecord.SelectionWord + 0, value: box.Center);
-            WriteSelectionVector(words: ref writer, offset: SdfMeshRecord.SelectionWord + 4, value: box.HalfX);
-            writer[SdfMeshRecord.SelectionWord + 7] = BitConverter.SingleToUInt32Bits(value: box.Stretch);
-            WriteSelectionVector(words: ref writer, offset: SdfMeshRecord.SelectionWord + 8, value: box.HalfY);
-            WriteSelectionVector(words: ref writer, offset: SdfMeshRecord.SelectionWord + 12, value: box.HalfZ);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 0), value: box.Center);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 4), value: box.HalfX);
+            writer[(SdfMeshRecord.SelectionWord + 7)] = BitConverter.SingleToUInt32Bits(value: box.Stretch);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 8), value: box.HalfY);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 12), value: box.HalfZ);
         }
 
         var enclosed = ((!meshChanged && !normalChanged && SameDrawBits(left: in clip, right: in previousClip))
             ? ((selection[3] & 4u) != 0u)
             : draw.EnclosesSolid);
-        writer[SdfMeshRecord.SelectionWord + 3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u);
-        writer[SdfMeshRecord.SelectionWord + 11] = generation;
-        writer[SdfMeshRecord.SelectionWord + 15] = ((uint)mesh.Levels.Count);
 
-        return new(PackedWords: writer.PackedWords, NormalComputed: normalChanged, SelectionComputed: boxChanged, ChangedWords: writer.ChangedWords);
+        writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u);
+        writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
+        writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
+
+        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
     }
 
     // Every packed write passes this door: a changed-word mask cannot miss an assigned field.
     private ref struct DrawRecordWriter {
         private readonly Span<uint> m_words;
         private readonly bool m_retained;
+
         public int PackedWords;
         public ulong ChangedWords;
 
@@ -736,11 +747,12 @@ public static class SdfMeshRegion {
             m_words = words;
             m_retained = retained;
         }
+
         public uint this[int index] {
             set {
-                if (m_retained && m_words[index] == value) { return; }
+                if (m_retained && (m_words[index] == value)) { return; }
                 m_words[index] = value;
-                ChangedWords |= 1UL << index;
+                ChangedWords |= (1UL << index);
                 PackedWords++;
             }
         }
@@ -748,20 +760,17 @@ public static class SdfMeshRegion {
 
     private static bool SameDrawBits<T>(in T left, in T right) where T : unmanaged =>
         MemoryMarshal.AsBytes(span: new ReadOnlySpan<T>(reference: in left)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<T>(reference: in right)));
-
     private static bool SameNormalBasis(in Matrix4x4 left, in Matrix4x4 right) {
         var before = MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in left));
         var after = MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in right));
 
-        return before[..12].SequenceEqual(other: after[..12]) &&
-            before.Slice(start: 16, length: 12).SequenceEqual(other: after.Slice(start: 16, length: 12)) &&
-            before.Slice(start: 32, length: 12).SequenceEqual(other: after.Slice(start: 32, length: 12));
+        return (before[..12].SequenceEqual(other: after[..12]) &&
+            before.Slice(length: 12, start: 16).SequenceEqual(other: after.Slice(length: 12, start: 16)) &&
+            before.Slice(length: 12, start: 32).SequenceEqual(other: after.Slice(length: 12, start: 32)));
     }
-
     private static bool SameDrawTranslation(in Matrix4x4 left, in Matrix4x4 right) =>
-        MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in left)).Slice(start: 48, length: 12)
-            .SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in right)).Slice(start: 48, length: 12));
-
+        MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in left)).Slice(length: 12, start: 48)
+            .SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in right)).Slice(length: 12, start: 48));
     private static void WriteDrawMatrix(in Matrix4x4 matrix, ref DrawRecordWriter record) {
         record[0] = BitConverter.SingleToUInt32Bits(value: matrix.M11);
         record[1] = BitConverter.SingleToUInt32Bits(value: matrix.M12);
@@ -780,11 +789,10 @@ public static class SdfMeshRegion {
         record[14] = BitConverter.SingleToUInt32Bits(value: matrix.M43);
         record[15] = BitConverter.SingleToUInt32Bits(value: matrix.M44);
     }
-
     private static void WriteSelectionVector(ref DrawRecordWriter words, int offset, Vector3 value) {
-        words[offset + 0] = BitConverter.SingleToUInt32Bits(value: value.X);
-        words[offset + 1] = BitConverter.SingleToUInt32Bits(value: value.Y);
-        words[offset + 2] = BitConverter.SingleToUInt32Bits(value: value.Z);
+        words[(offset + 0)] = BitConverter.SingleToUInt32Bits(value: value.X);
+        words[(offset + 1)] = BitConverter.SingleToUInt32Bits(value: value.Y);
+        words[(offset + 2)] = BitConverter.SingleToUInt32Bits(value: value.Z);
     }
 
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
@@ -887,7 +895,12 @@ public static class SdfMeshRegion {
         var perVertex = skin[(1 + (members.Length * SdfMeshRecord.MemberWords))..];
 
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            perVertex[vertex] = ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]);
+            var influence = (mesh.Influences.IsEmpty ? new SdfMeshInfluence(Blend: SdfMesh.NoMember, GradientXY: 0, GradientZ: 0) : mesh.Influences.Span[vertex]);
+
+            perVertex[(SdfMeshRecord.SkinVertexWords * vertex)] = vertexMembers[vertex];
+            perVertex[((SdfMeshRecord.SkinVertexWords * vertex) + 1)] = influence.Blend;
+            perVertex[((SdfMeshRecord.SkinVertexWords * vertex) + 2)] = influence.GradientXY;
+            perVertex[((SdfMeshRecord.SkinVertexWords * vertex) + 3)] = influence.GradientZ;
         }
     }
 
@@ -912,15 +925,15 @@ public static class SdfMeshRegion {
             ? Matrix4x4.Transpose(matrix: inverse)
             : upper);
 
-        record[SdfMeshRecord.NormalMatrixWord + 0] = BitConverter.SingleToUInt32Bits(value: normal.M11);
-        record[SdfMeshRecord.NormalMatrixWord + 1] = BitConverter.SingleToUInt32Bits(value: normal.M12);
-        record[SdfMeshRecord.NormalMatrixWord + 2] = BitConverter.SingleToUInt32Bits(value: normal.M13);
-        record[SdfMeshRecord.NormalMatrixWord + 3] = BitConverter.SingleToUInt32Bits(value: normal.M21);
-        record[SdfMeshRecord.NormalMatrixWord + 4] = BitConverter.SingleToUInt32Bits(value: normal.M22);
-        record[SdfMeshRecord.NormalMatrixWord + 5] = BitConverter.SingleToUInt32Bits(value: normal.M23);
-        record[SdfMeshRecord.NormalMatrixWord + 6] = BitConverter.SingleToUInt32Bits(value: normal.M31);
-        record[SdfMeshRecord.NormalMatrixWord + 7] = BitConverter.SingleToUInt32Bits(value: normal.M32);
-        record[SdfMeshRecord.NormalMatrixWord + 8] = BitConverter.SingleToUInt32Bits(value: normal.M33);
+        record[(SdfMeshRecord.NormalMatrixWord + 0)] = BitConverter.SingleToUInt32Bits(value: normal.M11);
+        record[(SdfMeshRecord.NormalMatrixWord + 1)] = BitConverter.SingleToUInt32Bits(value: normal.M12);
+        record[(SdfMeshRecord.NormalMatrixWord + 2)] = BitConverter.SingleToUInt32Bits(value: normal.M13);
+        record[(SdfMeshRecord.NormalMatrixWord + 3)] = BitConverter.SingleToUInt32Bits(value: normal.M21);
+        record[(SdfMeshRecord.NormalMatrixWord + 4)] = BitConverter.SingleToUInt32Bits(value: normal.M22);
+        record[(SdfMeshRecord.NormalMatrixWord + 5)] = BitConverter.SingleToUInt32Bits(value: normal.M23);
+        record[(SdfMeshRecord.NormalMatrixWord + 6)] = BitConverter.SingleToUInt32Bits(value: normal.M31);
+        record[(SdfMeshRecord.NormalMatrixWord + 7)] = BitConverter.SingleToUInt32Bits(value: normal.M32);
+        record[(SdfMeshRecord.NormalMatrixWord + 8)] = BitConverter.SingleToUInt32Bits(value: normal.M33);
     }
 }
 /// <summary>Where one distinct mesh sits in the mesh region, in the words a draw's record names it by, counted from the

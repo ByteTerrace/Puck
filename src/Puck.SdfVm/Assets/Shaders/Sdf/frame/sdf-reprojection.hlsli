@@ -41,12 +41,21 @@ float3 sdfMeshPreviousRow(uint record, uint row) {
 float3 sdfMeshPreviousPosition(uint record, uint k) {
     float3 unused = float3(0.0, 1.0, 0.0);
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), true, unused);
-    uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
-
-    if (entry != 0u) {
-        uint slot = sdfMeshMemberSlot(record, entry);
-
-        return sdfMeshCarryPoint(record, (rotatePointByQuaternion((sdfMeshMemberLocal(entry, object, true) * length(sdfMeshPreviousRow(record, 0u))), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz));
+    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_SKIN_FLAG) != 0u) {
+        uint vertex = sdfMeshIndexAt(record, k);
+        uint first = sdfMeshMemberEntry(record, vertex);
+        uint second = sdfMeshSecondEntry(record, vertex);
+        uint root = asuint(asint(sdfMeshRegion[record + SDF_MESH_FRAME_SLOT_WORD]));
+        float3 rp = sdfPreviousDynamicTransforms[3u * root].xyz;
+        float4 rq = sdfPreviousDynamicTransforms[3u * root + 1u];
+        uint s0 = first == 0u ? root : sdfMeshMemberSlot(record, first);
+        uint s1 = second == 0u ? root : sdfMeshMemberSlot(record, second);
+        float4 q0, q1;
+        float3 t0, t1;
+        float scale = length(sdfMeshPreviousRow(record, 0u));
+        sdfMeshMemberDelta(first, rp, rq, scale, sdfPreviousDynamicTransforms[3u * s0].xyz, sdfPreviousDynamicTransforms[3u * s0 + 1u], q0, t0);
+        sdfMeshMemberDelta(second, rp, rq, scale, sdfPreviousDynamicTransforms[3u * s1].xyz, sdfPreviousDynamicTransforms[3u * s1 + 1u], q1, t1);
+        object = sdfMeshBlendPose(record, vertex, object, unused, q0, t0, q1, t1);
     }
 
     return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +

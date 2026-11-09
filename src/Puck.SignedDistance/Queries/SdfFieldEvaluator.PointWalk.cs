@@ -118,7 +118,7 @@ public sealed partial class SdfFieldEvaluator {
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,
     // the primer, whose answer then joins where that instance stands in the stream. Without reaches it walks every
     // instance in the range, as the primer's own walk does.
-    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork) {
+    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork, InfluenceWalk? influence = null) {
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var visited = 0L;
@@ -203,7 +203,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if ((segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
+                        if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
                             index = (skipped - 1);
                         }
 
@@ -284,6 +284,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.PushField: {
+                        influence?.Push();
                         scopes[scopeDepth++] = (resultDistance, resultMaterial);
                         resultDistance = FarDistance;
                         resultMaterial = 0;
@@ -291,6 +292,7 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfOp.PopField: {
                         var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
+                        influence?.Pop(candidate: resultDistance, current: savedFieldDistance, instruction: instruction);
 
                         (resultDistance, resultMaterial) = PopScope(
                             candidateDistance: resultDistance,
@@ -302,6 +304,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.ShapeBlend: {
+                        var leaf = (influence?.NextLeaf() ?? -1);
                         // A pending LaneErode is consumed first, so it never reaches a later shape: a skipped shape is
                         // absent, and an eroded one's candidate grows by the erosion after its distance scale.
                         var erosion = laneErodeAmount;
@@ -325,6 +328,8 @@ public sealed partial class SdfFieldEvaluator {
                         var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
                             ? (instruction.Material + materialDelta)
                             : instruction.Material);
+
+                        influence?.Leaf(candidate: candidateDistance, current: resultDistance, instruction: instruction, owner: leaf);
 
                         // A union is Compose's strict less-than and its minimum, taken here without the blend switch.
                         if (instruction.Blend == ((uint)SdfBlendOp.Union)) {

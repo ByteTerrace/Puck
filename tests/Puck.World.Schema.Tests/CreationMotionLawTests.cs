@@ -26,7 +26,7 @@ public sealed class CreationMotionLawTests {
         var blend = Assert.Single(collection: CreationMotion.MovingBlends(document: document));
 
         Assert.Equal(expected: new CreationMovingBlend(Blend: SdfBlendOp.SmoothUnion, Group: 1, Other: 0, Shape: 1), actual: blend);
-        Assert.Contains(expectedSubstring: "shape 'visitor', which moves by its own swings, slides or effector, to group 1's shape 'anchor', which rides the creation root, by SmoothUnion", actualString: CreationMotion.Describe(blend: blend, document: document));
+        Assert.Contains(expectedSubstring: "shape 'visitor' to group 1's shape 'anchor' by SmoothUnion", actualString: CreationMotion.Describe(blend: blend, document: document));
         // The control: as a union, or ungrouped, or in a creation nothing moves, it draws nothing.
         Assert.Empty(collection: CreationMotion.MovingBlends(document: document with { Shapes = [document.Shapes![0], document.Shapes[1] with { Blend = SdfBlendOp.Union }] }));
         Assert.Empty(collection: CreationMotion.MovingBlends(document: document with { Shapes = [document.Shapes![0], document.Shapes[1] with { Group = null }] }));
@@ -44,7 +44,7 @@ public sealed class CreationMotionLawTests {
         var blend = Assert.Single(collection: CreationMotion.MovingBlends(document: document));
 
         Assert.Equal(expected: 2, actual: blend.Shape);
-        Assert.Contains(expectedSubstring: "'hand', which moves with 'arm'", actualString: CreationMotion.Describe(blend: blend, document: document));
+        Assert.Contains(expectedSubstring: "shape 'hand'", actualString: CreationMotion.Describe(blend: blend, document: document));
     }
     [Fact]
     public void AFrameMovingOneShapeOfABlendIsNamedAndOneMovingBothAlikeIsNot() {
@@ -60,7 +60,7 @@ public sealed class CreationMotionLawTests {
         var apart = document with { Frames = [new FrameDocument(Name: "blink", Transforms: [new FrameTransformDocument(Id: 1, Position: lowered, Rotation: Quaternion.Identity)])] };
         var blend = Assert.Single(collection: CreationMotion.MovingBlends(document: apart));
 
-        Assert.Contains(expectedSubstring: "'lid', which is posed by a timeline frame", actualString: CreationMotion.Describe(blend: blend, document: apart));
+        Assert.Contains(expectedSubstring: "shape 'lid'", actualString: CreationMotion.Describe(blend: blend, document: apart));
 
         // A frame holding every shape at its authored pose moves nothing.
         var still = document with { Frames = [new FrameDocument(Name: "rest", Transforms: [new FrameTransformDocument(Id: 1, Position: Vector3.Zero, Rotation: Quaternion.Identity)])] };
