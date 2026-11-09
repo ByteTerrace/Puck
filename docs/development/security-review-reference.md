@@ -117,7 +117,7 @@ and `FederationTransferLawTests.PublicReplicaObservationEndsWhenItsAdmissionTier
 exercise the public wire paths. Invalidation itself remains observable; the
 [disclosure plan](../plans/disclosure.md) owns that separate information-flow work.
 
-`UpdateService.ApplyUnderLeaseAsync` retires terminally refused intents without
+`UpdateService.ApplyAsync` retires terminally refused intents without
 rewinding replay marks, while staging and I/O failures retain resumable work.
 `UpdateInstallTransactionTests` covers subsequent signed releases and a bridge
 release after rollback. Launch attempts, proofs of health and the current version

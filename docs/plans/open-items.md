@@ -1356,7 +1356,8 @@ retirement.
   `../../standard/camera` and `../standard/standard`. Carry the packages a
   package imports, as the published World's `compile --tree worlds` now does.
 - [low] The launcher's version pruning (the owner's ruling: keep `current`,
-  `last-good` and the newest N, delete the rest) is rebuilt by handle:
+  `last-good`, which the release record's rollback target now is, and the newest N,
+  delete the rest) is rebuilt by handle:
   `Puck.Confinement`'s `ConfinedDirectory` and `InstallRegistration`, and
   `InstallPruner`, with the invariants in the
   [launcher README](../../src/Puck.Launcher/README.md#pruning-past-versions) and

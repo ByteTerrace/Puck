@@ -4,8 +4,8 @@ using Puck.Confinement;
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// The one cross-platform <see cref="IUpdateApplier"/>: it verifies every staged file against the manifest, flushes the
-/// staged files and (on Linux) the version's directories to stable storage, computes the payload's identity
+/// The one cross-platform <see cref="IUpdateApplier"/>: it verifies every staged file against the manifest (the stager
+/// flushed each as it wrote it), flushes the version's directory entries (on Linux), computes the payload's identity
 /// (<see cref="ReleasePayloadIdentity"/>), and hands the install to <see cref="InstallTransaction.CommitApply"/>, which writes
 /// the version's install record durably and then commits the release record naming it current. A power loss therefore
 /// never leaves the record selecting a version whose files or install record are not on disk.
@@ -33,8 +33,8 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             return UpdateApplyResult.Refuse(reason: $"'{versionDirectory}' is not staged — stage before applying");
         }
         var previousVersion = transaction.Policy.Current;
-        // A version that is already current may be running: its files are rehashed but never opened for writing.
-        var alreadyCurrent = (recoverInterruptedApply && string.Equals(a: previousVersion, b: manifest.Version, comparisonType: StringComparison.Ordinal));
+        // A version that is already current may be running: its files are rehashed, and nothing about it is written.
+        var alreadyCurrent = (recoverInterruptedApply && string.Equals(a: previousVersion, b: manifest.Version, comparisonType: InstallLayout.NameComparison));
 
         foreach (var file in payload.Files) {
             var filePath = Path.Combine(path1: versionDirectory, path2: file.Path);
@@ -42,34 +42,28 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             if (!File.Exists(path: filePath)) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' is missing from '{versionDirectory}' — refused rather than applied");
             }
-            var actualHash = (alreadyCurrent ? ContentPin.OfFile(path: filePath) : HashAndFlush(path: filePath)).ToString();
+            var actualHash = ContentPin.OfFile(path: filePath).ToString();
 
             if (!string.Equals(a: actualHash, b: file.Hash, comparisonType: StringComparison.Ordinal)) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' hash {actualHash} does not match the manifest's {file.Hash} — refused rather than applied");
             }
         }
         if (!alreadyCurrent) {
+            // The stager flushed each file as it wrote it; on Linux every directory entry on the way to them is made
+            // durable too (the version's tree, its entry in versions/ and versions/' entry in the root) before the commit.
             using var versions = transaction.Root.Child(name: InstallLayout.VersionsDirectoryName);
             using var staged = versions?.Child(name: manifest.Version);
 
             staged?.FlushTree();
+            versions?.Flush();
+            transaction.Root.Flush();
         }
         var refusal = transaction.CommitApply(files: [.. payload.Files.Select(selector: static file => file.Hash)], payloadPin: ReleasePayloadIdentity.Of(payload: payload,
-            stateGeneration: manifest.StateGeneration), precedence: ReleaseVersion.Compare, record: out _, recovering: recoverInterruptedApply, rid: rid,
+            stateGeneration: manifest.StateGeneration), precedence: ReleaseVersion.TryCompare, record: out _, recovering: recoverInterruptedApply, rid: rid,
             stateGeneration: manifest.StateGeneration, version: manifest.Version);
 
         return ((refusal is not null)
             ? UpdateApplyResult.Refuse(reason: refusal)
             : new UpdateApplyResult(Applied: true, PreviousVersion: (alreadyCurrent ? transaction.RollbackTarget() : previousVersion), RefusalReason: null));
-    }
-
-    // The stager wrote the file with ordinary writes; the hash proves its content and the flush makes it durable before the
-    // release record can select it.
-    private static ContentPin HashAndFlush(string path) {
-        using var stream = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: path, share: FileShare.Read);
-        var pin = ContentPin.Compute(content: stream);
-
-        stream.Flush(flushToDisk: true);
-        return pin;
     }
 }
