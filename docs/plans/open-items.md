@@ -59,22 +59,43 @@ A. Engine limits on authoring [high], in the plan's
      landed; step 4, paints and lanes across a blended seam, is next (see
      [Bake detail](#bake-detail)).
 
-   The owner's gallery walkthrough added two remaining engine defects that every
-   indoor exhibit shows:
-   - auto-exposure drifted while a player runs through an evenly lit room; the
-     exposure now meters each view's own image with an authored dead band
-     (`SdfExposure.Meter`, `SdfViewExposures`), awaiting the owner's walk;
-   - indoor indirect light draws straight-edged triangular patches on floors and
-     box faces, and concave carvings read flat; `world.indirect off` removes the
-     patches but floods the roofed hall near-white, which is a defect of its own.
-A2. The scripted walkthrough
-   ([decision](../decisions/engine-design.md#the-scripted-walkthrough),
-   [plan](walkthrough.md)): the slice is built (the blend row and level 0's
-   primitives row as `walkthrough-tests.puck` segments, the sweep's route stops,
-   one avatar-studio inspection stop) and arrives and reproduces headless; its
-   windowed tour has not yet run to the end on a quiet GPU, which is what shows
-   it catches the defects above unaided. Then the plan's steps to every place,
-   exhibit, interaction and creation.
+   The owner's gallery walkthrough's three engine defects have landed fixes,
+   each awaiting the windowed check below: auto-exposure meters each view's own
+   image with an authored dead band (`SdfExposure.Meter`, `SdfViewExposures`);
+   indoor indirect light closes the finest probe level's visibility smoothly
+   (`SdfMeshIrradianceProbe.DepthFinestCoverageStart`), and `world.indirect off`
+   keeps the volume's occlusion and applies none of its light; plaque text wraps
+   at word boundaries within its face.
+A1. **Owed first after the restart: one batched windowed window** on the
+   integration head, Direct3D 12 then Vulkan, in this order, each lane's recipe
+   in its merge commit's hand-back (scratch copies under the main checkout's
+   `.claude/scratch/`):
+   - the walkthrough slice's tour (`w1-bench-plan.py` writes the route-only
+     plan): first person on every still, pipe and groove red, no off-course;
+     also whether first person drops in a windowed World;
+   - exposure: the slow, arrival and fast walks along gallery level 0 and the
+     hall-to-lawn change, with no Vulkan validation lines; the owner's eye on
+     its calibration (compensation 2 settles the hall at about EV 8.3 to 9.9);
+   - indirect: the before and after pairs at the three spots its hand-back
+     names (base build `2ef814b84c`), and the `off` flood gone;
+   - bake detail: the Vulkan captures of the pipe and groove exhibits and the
+     Moth's head, `world.residency` within a few percent of Direct3D 12
+     (83,584,416 triangles at the stage spawn);
+   - moving-blend exhibits: full-cycle presented bursts of `motion-nod`,
+     `motion-three` and `motion-seam-paint` on both backends, and
+     `motion-smooth-blend` and `motion-carve` on Vulkan;
+   - the limits fixes: the device stands, the hex clips and a body on a twisted
+     static solid.
+   Then the frame bar at the standard stops: bake detail raised the resident
+   world from 25.7 M to 83.6 M triangles at the spawn, and D7's levers (the
+   pixel share, which views demand) are the answer if the bar suffers.
+A3. Adversarial reviews owed on landed invariant work, findings-only, each by
+   another family than its author: the demand tiers' cache identity and
+   publication (`bake-demand-tiers.md`); the exposure readback's slot lifetime
+   (`RenderGraphSlotResults` to `SdfViewExposures.Publish`); the indirect
+   lane's pass-block layout change (one uint removed). Also queued: three cold
+   bakes per backend from an empty `--cache-dir` with `paused` and `lockstep`,
+   to show whether a late retier changes which tiers are stored.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
    answered; its windowed recipe is recorded on the
    [virtual geometry plan](virtual-geometry.md)'s G5 row.
@@ -91,7 +112,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
@@ -2230,6 +2250,13 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · readback copy] `SdfGpuWork.CopyToReadback` (`src/Puck.SdfVm/SdfGpuWork.cs`)
+  and `GpuKernelCounters`' handle-based copy repeat `GpuReadbackCopy`; fold
+  them in with the next change that moves the bake identity anyway, since the
+  bake closure reaches the first. The GPU camera-sample kernel and its fields
+  still say "meter" (`sdf-probe-meter.comp.hlsl`, `ScheduleGpuMeters`,
+  `GpuMeterNanoseconds`, `MeterOutputWords`) now that the image meter owns
+  that word.
 - [low · volume emission] `WorldPlacementStamper.AppendStaticVolumes` and
   `WorldCreationInstances.AppendVolumes` repeat enabled-volume admission,
   capacity refusal, parent lookup and isolation filtering. Share that walk
@@ -2839,6 +2866,16 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [medium] A concave carving does not read as a hollow (`shape-blend-subtraction`'s
+  bowl): its upward faces read the probes' bright +Y face, 2 m probes cannot
+  resolve a 0.6 m cavity, and screen-space AO at 0.75 m darkens it only mildly.
+  The fix is a cavity term (baked AO or bent normals), not the volume. Soft
+  wedges also remain behind furnishing edges where a point probe is truly
+  blocked (`world.probe` names `reference-clear=0`); a finite-extent probe is
+  the measured design to try (`mesh-gi.md`).
+- [low] `SdfSkyEnvironmentDeviceLawTests.Live.cs` and
+  `WorldRoutedPresentationLawTests.cs` still set `IndirectTier = Off`, which now
+  runs the volume and applies none of its light; update or delete them.
 - [high] Emissive faces light the world only where a probe's 144 fixed rays
   happen to meet them. The gallery hall is lit mostly by its 0.4 m ceiling
   strips (`hallStrips`, 4000 nits, "lit through the irradiance volume"), which
@@ -3228,6 +3265,13 @@ reproduce worker for what remains.
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 · Next: the Moth's shin blend group, then moving blends step 4.
 
+- [high] The walkthrough slice's CPU audit turns six more blend exhibits red
+  with flipped triangles beside their folds: `shape-blend-xor` 88 (110 folds),
+  `shape-blend-subtraction` 83 (48 folds), `shape-groove-union` 22 (73 folds),
+  `shape-blend-intersection` 4, `shape-chamfer-intersection` 2,
+  `shape-chamfer-subtraction` 1 (`puck mesh audit --cpu --prototype <id>`).
+  The smooth blends, union, pipe union and the primitives have none. Same class
+  as the shin groups: contouring across a hard blend's crease.
 - [high] The Moth's shin blend groups (`shin-*/shinCavity-*/archBand-*/
   archBandHollow-*/archBandBack-*/sidePanel-*`) contour badly at their
   declared detail: `puck mesh audit --world worlds/debug/debug.puck
@@ -3940,6 +3984,13 @@ Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
 
+- [medium] A loaded machine starves a windowed sweep: probe-lighting
+  convergence held frames for minutes (`[render-graph] not rendered for 3417
+  attempts`), a prelude line missed its 120 s answer and the attachment
+  dropped. The walkthrough tour runs on a quiet GPU until convergence yields.
+- [low] Editing `worlds/` while a World build waits for the build lease
+  discards that build ("the checkout's sources changed while waiting to
+  build"); a lane sequences its world edits around its own queued builds.
 - [medium] Baseline status comparisons can perpetuate a prior comparison failure
   after its metrics match. `SweepBaseline.Changes`
   (`src/Puck.Cli.Runs/Sweep/SweepReport.cs:277`) compares the stored, already
@@ -4132,6 +4183,10 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [low] A `Capsule` scaled `[0.05, 0.18, 0.05]` stopped about 9 cm short of
+  where an author expected (`motion-nod`'s first neck); check what a Capsule's
+  half-length means under scale and say so in the sdf-authoring shapes
+  reference.
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
   no code puts or gets a creation document outside a projection
