@@ -124,11 +124,12 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             );
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destinationPath)!);
-            await File.WriteAllBytesAsync(
-                bytes: bytes,
-                cancellationToken: cancellationToken,
-                path: destinationPath
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            // Flushed as it is written, while this writer still holds the only handle: the applier then only reads the file
+            // to verify it, and the release record never selects a version whose bytes could be lost to a power failure.
+            await using (var stream = new FileStream(access: FileAccess.Write, mode: FileMode.Create, path: destinationPath, share: FileShare.None)) {
+                await stream.WriteAsync(buffer: bytes, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                stream.Flush(flushToDisk: true);
+            }
         }
 
         return new UpdateStageResult(

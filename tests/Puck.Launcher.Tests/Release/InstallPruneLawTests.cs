@@ -106,7 +106,7 @@ public sealed class InstallPruneLawTests : IDisposable {
     // replaced at all and the registration completes; on Linux the move succeeds and the registration fails the launch.
     [Fact]
     public async Task RegistrationWaitsForTheUpdateLeaseAndRefusesAVersionRemovedOrReplacedMeanwhile() {
-        _ = Install(version: "1.0.0");
+        _ = Install(healthy: true, version: "1.0.0");
         _ = Install(version: "1.0.1");
         using var removed = new MappedImage(path: Image(version: "1.0.0"));
         using var replaced = new MappedImage(path: Image(version: "1.0.1"));
@@ -238,9 +238,12 @@ public sealed class InstallPruneLawTests : IDisposable {
     }
     [Fact]
     public void AVersionAProcessHoldsIsKeptUntilItsHolderReleasesIt() {
+        // A process runs only from the current install or a proven one; 1.0.2 is the rollback target, so 1.0.0 and 1.0.1 are
+        // proven installs nothing else keeps.
         foreach (var version in new[] { "1.0.0", "1.0.1", "1.0.2" }) {
-            _ = Install(version: version);
+            _ = Install(healthy: true, version: version);
         }
+        _ = Install(version: "1.0.3");
         // The stub's hold and a process's own registration. Neither opens the version's files, as on a file system
         // that lets open files be deleted; only the held directory protects it.
         using (var anchor = ConfinedDirectory.OpenAnchor(create: false, path: Root)!)
@@ -251,12 +254,12 @@ public sealed class InstallPruneLawTests : IDisposable {
             var pass = Prune(keepVersions: 0);
 
             Assert.Equal(expected: ["1.0.1", "1.0.0"], actual: pass.RunningVersions);
-            Assert.Equal(expected: ["1.0.2", "1.0.1", "1.0.0"], actual: pass.KeptVersions);
+            Assert.Equal(expected: ["1.0.2", "1.0.1", "1.0.0", "1.0.3"], actual: pass.KeptVersions);
             // Staging over a held version is refused, as a pass refuses it.
             Assert.Throws<IOException>(testCode: () => InstallPruner.RemoveVersion(installRoot: Root, version: "1.0.0"));
         }
         Assert.Equal(expected: ["1.0.1", "1.0.0"], actual: Prune(keepVersions: 0).DeletedVersions);
-        Assert.Equal(expected: ["1.0.2"], actual: VersionNames());
+        Assert.Equal(expected: ["1.0.2", "1.0.3"], actual: VersionNames());
         // A process outside the install registers as nothing and holds nothing.
         Directory.CreateDirectory(path: Outside);
         File.WriteAllText(path: Path.Combine(path1: Outside, path2: "app.dll"), contents: "elsewhere");
@@ -488,7 +491,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         File.WriteAllText(path: policy, contents: valid.Replace(oldValue: "\"current\": \"1.0.1\"", newValue: "\"current\": \"1.0.9\"", comparisonType: StringComparison.Ordinal));
         Assert.Contains(expectedSubstring: "is not a version directory", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         File.Delete(path: policy);
-        Assert.Contains(expectedSubstring: "names no current version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        // Its install records prove the record existed, so its absence fails closed too.
+        Assert.Contains(expectedSubstring: "is missing", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
     }
     // A record that does not validate gives its version no rank, so the version is kept rather than ranked below older
