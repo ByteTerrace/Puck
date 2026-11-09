@@ -87,6 +87,8 @@ public static class WorldScheduleCommands {
             "body.release",
             "body.state-load",
             "body.stop",
+            // A seat's own view: which eye composes its stick and look input into intent, as a player chooses it.
+            "player.camera.view",
             "player.identity",
             "player.join",
             "player.leave",

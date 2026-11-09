@@ -2401,6 +2401,27 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   stops cover every area indoors and out, a jump, flight and noclip, and the
   owner's walkthrough findings at their poses. `--stop` runs only the named
   stops, which suits tuning a pose on a World left running.
+- **Route stops** play a route segment: a stop's `route` names a `test` block
+  (`<source>#<test name>`, the debug world's in `worlds/debug/walkthrough-tests.puck`),
+  whose `when` lines (seat 1's `player.signal` stick samples and button presses,
+  its poses and its view) become the stop's pinned steps from its start tick, and
+  whose export tick is the stop's capture. The same block, run by `puck test
+  --reproduce` in the scenarios, shows the segment arrives and reproduces
+  headless; the tour judges the windowed run's arrival by the block's own body
+  position and grounded expectations, and reports a miss as `off course`. A stop's
+  `captures` (`{ "at", "exhibit" | "name", "tolerance", "presented" }`) are stills
+  pinned inside its timeline, written under `tour/<stop>/` and reported as stills
+  of their own: one framed on an exhibit carries the text its creation authors
+  (a plinth's label and plaque, read from the live World with `world.row`), the
+  body's pose at its tick, `off course` when the body stood further than
+  `tolerance` (0.5 m) from the spawn point named after the exhibit, and the
+  mesh audit of its prototype (`puck mesh audit --cpu`, one run per stop, its
+  transcript beside the stills), its metrics (`score`, `folds`, `flipped`,
+  `slivers`, `open`, `nonmanifold`, `uncovered`) coloured by the tour's `audit`
+  rules, written as signal rules are; a tour without them audits nothing.
+  `presented` frames take a presented
+  burst instead of a settled still. A route stop also reports `host.frames` over
+  its timeline, which lockstep and the held captures make no frame-time reading.
 - **Scenarios** run the plan's `scenarios` paths or file patterns (the default
   is `worlds/debug/*-tests.puck`), one source at a time through this CLI's
   `puck test … --jobs 1` with compatible boots reused within each source.
@@ -3532,7 +3553,8 @@ never writes the store, so it reads a store a running World owns.
   `--backend directx|vulkan` names the backend whose kernels baked them.
 - `--cache-dir <dir>` is the World's own `--cache-dir`; absent, the per-user
   store.
-- `--prototype <id>` keeps the groups of bodies wearing that creation;
+- `--prototype <id>...` keeps the groups of bodies wearing those creations
+  (repeat it, or name several);
   `--group <text>` keeps the groups whose label holds the text, such as a
   shape's name.
 - `--level <n>` audits the surface that forced render level draws (zero by

@@ -763,7 +763,12 @@ check the flag: the owner may be holding the pad.
   and the capture tour (each still pinned to a named tick, lockstep on,
   framing and reseeding pinned beside the motion with `world.at`, and every
   eventual answer checked), and a new signal or tour stop is a row of
-  `worlds/debug/sweep.json`. `--cache-dir` lets fresh owned Worlds share a
+  `worlds/debug/sweep.json`. The walkthrough is route stops: a stop's `route`
+  plays a `test` block of `worlds/debug/walkthrough-tests.puck` (seat 1's
+  controller program, in first person, from a spawn point to an arrival box)
+  and its `captures` take a still at each exhibit beside its plaque and its
+  prototype's mesh audit; `puck test --reproduce` plays the same block headless
+  ([the plan](../../../docs/plans/walkthrough.md)). `--cache-dir` lets fresh owned Worlds share a
   writable lane scratch cache; omitted, it uses the per-user cache. Cache work
   counts are recorded, while exact boot comparisons select cache-independent
   counters. Whatever it could not measure

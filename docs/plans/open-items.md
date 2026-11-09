@@ -69,10 +69,13 @@ A. Engine limits on authoring [high], in the plan's
      box faces, and concave carvings read flat; `world.indirect off` removes the
      patches but floods the roofed hall near-white, which is a defect of its own.
 A2. The scripted walkthrough
-   ([decision](../decisions/engine-design.md#the-scripted-walkthrough)): first a
-   slice over gallery level 1's blend row and one avatar-studio inspection stop,
-   which must catch the defects above unaided; then every place, exhibit,
-   interaction and creation.
+   ([decision](../decisions/engine-design.md#the-scripted-walkthrough),
+   [plan](walkthrough.md)): the slice is built (the blend row and level 0's
+   primitives row as `walkthrough-tests.puck` segments, the sweep's route stops,
+   one avatar-studio inspection stop) and arrives and reproduces headless; its
+   windowed tour has not yet run to the end on a quiet GPU, which is what shows
+   it catches the defects above unaided. Then the plan's steps to every place,
+   exhibit, interaction and creation.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
    answered; its windowed recipe is recorded on the
    [virtual geometry plan](virtual-geometry.md)'s G5 row.

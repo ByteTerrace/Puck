@@ -33,7 +33,12 @@ test "the watchdog records the tick a body is first under the floor" {
 
 This is `worlds/debug/addons-tests.puck`: a file that imports the debug world's
 basis, then one `test` block. The `when` block poses body 0 under the floor and
-runs ten ticks; each `expect` line must hold at the end. Run it:
+runs ten ticks; each `expect` line must hold at the end. A `when` block may
+repeat its steps: `for item in <array> { … }` substitutes each element for
+`{item}` in the lines it holds, and `repeat <count> { … }` runs them a whole number of times,
+its count read with any enclosing `for`'s name bound, so a controller program
+holds a stick for a different number of ticks on each pass
+(`worlds/debug/walkthrough-tests.puck`). Run it:
 
 ```bash
 puck test worlds/debug/addons-tests.puck

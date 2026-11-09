@@ -105,6 +105,14 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
             }
         }
 
+        foreach (var rule in ((plan.Tour.Audit is { } audit) ? audit.RedRules.Concat(second: audit.AmberRules) : [])) {
+            if (!SweepRule.TryParse(rule: out var parsed, text: rule) || !SweepMeshAudit.Metrics.Contains(value: parsed.Metric)) {
+                error = $"the tour's audit rule '{rule}' is not '<metric> <op> <value>' over {string.Join(separator: ", ", values: SweepMeshAudit.Metrics)}";
+
+                return false;
+            }
+        }
+
         names.Clear();
 
         foreach (var stop in plan.Tour.Stops) {
@@ -133,8 +141,34 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
 
                     return false;
                 }
-                if (step.At > (stop.Settle ?? plan.Tour.Settle)) {
+                if ((stop.Route is null) && (step.At > (stop.Settle ?? plan.Tour.Settle))) {
                     error = $"the tour stop '{stop.Name}' pins a step after its capture";
+
+                    return false;
+                }
+            }
+
+            if ((stop.Route is { } route) && ((route.IndexOf(value: '#', comparisonType: StringComparison.Ordinal) is <= 0) || route.EndsWith(value: '#') || (stop.Settle is not null))) {
+                error = $"the tour stop '{stop.Name}' names the route '{route}': a route is <source>#<test name>, and its test's export tick is the stop's capture, so the stop names no settle";
+
+                return false;
+            }
+
+            var exhibits = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var capture in (stop.Captures ?? [])) {
+                if ((capture.At < 0) || string.IsNullOrWhiteSpace(value: capture.Still) || (capture.Still.IndexOfAny(anyOf: Path.GetInvalidFileNameChars()) >= 0) || capture.Still.Contains(value: ' ') || ((capture.Exhibit is { } exhibit) && exhibit.Contains(value: ' ')) || !(capture.Tolerance > 0) || (capture.Presented is < 0 or > 120)) {
+                    error = $"the tour stop '{stop.Name}' has a capture that names no still (a name or an exhibit id, a file name without spaces), or is not at a tick offset of zero or more with a positive tolerance and 0..120 presented frames";
+
+                    return false;
+                }
+                if (!exhibits.Add(item: capture.Still)) {
+                    error = $"the tour stop '{stop.Name}' captures '{capture.Still}' twice";
+
+                    return false;
+                }
+                if ((stop.Route is null) && (capture.At > (stop.Settle ?? plan.Tour.Settle))) {
+                    error = $"the tour stop '{stop.Name}' captures '{capture.Still}' after its own capture";
 
                     return false;
                 }
@@ -224,9 +258,23 @@ public sealed record SweepSignal(
 /// <param name="CellWidth">The width a still is scaled to on a contact sheet.</param>
 /// <param name="Stops">The stops, in order.</param>
 /// <param name="Note">The tour's explanatory note.</param>
-public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops, string? Note = null) {
+/// <param name="Audit">The rules a capture's exhibit is judged by over its prototype's mesh audit
+/// (<see cref="SweepMeshAudit.Metrics"/>), or <see langword="null"/> to audit nothing.</param>
+public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops, string? Note = null, SweepAuditRules? Audit = null) {
     /// <summary>A tour with no stops.</summary>
     public static SweepTour Empty { get; } = new(AmberFraction: 0.02, CellWidth: 480, Columns: 4, Frame: [], LevelTolerance: 16, Prelude: [], Reset: [], Settle: 45, Stops: []);
+}
+/// <summary>The rules an exhibit's mesh audit is coloured by, each <c>&lt;metric&gt; &lt;op&gt; &lt;value&gt;</c> over
+/// <see cref="SweepMeshAudit.Metrics"/>.</summary>
+/// <param name="Red">Rules any one of which makes the capture red.</param>
+/// <param name="Amber">Rules any one of which makes the capture amber.</param>
+public sealed record SweepAuditRules(IReadOnlyList<string>? Red = null, IReadOnlyList<string>? Amber = null) {
+    /// <summary>Gets the red rules, empty when the plan names none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> RedRules => (Red ?? []);
+    /// <summary>Gets the amber rules, empty when the plan names none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> AmberRules => (Amber ?? []);
 }
 /// <summary>One stop of the tour: lines that pose the body and camera, then a settled capture.</summary>
 /// <param name="Name">The still's name and file name.</param>
@@ -239,8 +287,29 @@ public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<str
 /// lead after the tick at which the stop's own lines and the bakes have settled, so the same stop captures the same
 /// motion tick whatever the bakes cost.</param>
 /// <param name="ExpectedMotion">An optional regular expression the held pose and rig must match.</param>
-public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null, string? ExpectedMotion = null);
+/// <param name="Route">A route segment the stop plays, <c>&lt;source&gt;#&lt;test name&gt;</c>: the test block's
+/// <c>when</c> lines become the stop's steps from its start tick, its export tick the stop's capture, and its body
+/// position and grounded expectations the arrival the stop is judged by (<see cref="SweepRoute"/>).</param>
+/// <param name="Captures">Settled stills taken inside the stop's timeline, each beside the exhibit it frames.</param>
+public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null, string? ExpectedMotion = null, string? Route = null, IReadOnlyList<SweepCapture>? Captures = null);
 /// <summary>One console line pinned to a tick of a stop.</summary>
 /// <param name="At">The ticks after the stop's start tick.</param>
 /// <param name="Run">The console line; never a <c>world.wait</c>.</param>
 public sealed record SweepStep(int At, string Run);
+/// <summary>A still inside a stop's timeline, beside the body's pose at its tick. One framed on an exhibit is also kept
+/// beside the text the exhibit's creation carries (a plinth's label and plaque, which say what to look for), whether the
+/// body stood within <see cref="Tolerance"/> of the spawn point named after the exhibit, and the mesh audit's topology
+/// defects for the exhibit's prototype.</summary>
+/// <param name="At">The ticks after the stop's start tick.</param>
+/// <param name="Exhibit">The placement the still frames, the id <c>world.row placements</c> reads, or
+/// <see langword="null"/> for a still of no exhibit.</param>
+/// <param name="Name">The still's file name, or <see langword="null"/> to take the exhibit's.</param>
+/// <param name="Tolerance">The planar metres the body may stand from the exhibit's spawn point before the still is off
+/// course.</param>
+/// <param name="Presented">Zero for a settled still; otherwise the frames a presented burst reads as the display
+/// showed them (<c>world.screenshot &lt;path&gt; presented &lt;frames&gt;</c>), jitter and temporal history included.</param>
+public sealed record SweepCapture(int At, string? Exhibit = null, string? Name = null, double Tolerance = 0.5, int Presented = 0) {
+    /// <summary>Gets the still's file name: its own, or the exhibit's.</summary>
+    [JsonIgnore]
+    public string Still => (Name ?? Exhibit ?? string.Empty);
+}

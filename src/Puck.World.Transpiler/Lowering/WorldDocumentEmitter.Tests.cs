@@ -962,7 +962,7 @@ public static partial class WorldDocumentEmitter {
 
                     break;
                 case TestWhenLoopNode { IsRepeat: true } loop:
-                    for (var count = RepeatCount(loop: loop, scope: scope); (count > 0); count--) {
+                    for (var count = RepeatCount(bound: bound, loop: loop, scope: scope); (count > 0); count--) {
                         scope.Budget.Spend(count: 1, span: loop.Span);
                         foreach (var line in WhenLines(bound: bound, scope: scope, steps: loop.Body, world: world)) {
                             yield return line;
@@ -1001,9 +1001,7 @@ public static partial class WorldDocumentEmitter {
     }
     // The names each iteration of a test's `for` binds, over the enclosing loop's.
     private static IEnumerable<Dictionary<string, JsonNode?>> LoopBindings(string item, string? index, ExpressionNode sequence, SourceSpan span, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
-        var evaluationScope = ((bound is null) ? scope : scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: scope.Locals)));
-
-        if (DocumentLowering.EvaluateValue(expr: sequence, scope: evaluationScope) is not JsonArray elements) {
+        if (DocumentLowering.EvaluateValue(expr: sequence, scope: Evaluating(bound: bound, scope: scope)) is not JsonArray elements) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ForSequenceRefused,
                 message: "a 'for' in a test walks an array known at compile time",
@@ -1026,8 +1024,12 @@ public static partial class WorldDocumentEmitter {
             yield return iteration;
         }
     }
-    private static long RepeatCount(TestWhenLoopNode loop, DocumentScope scope) {
-        if ((DocumentLowering.EvaluateValue(expr: loop.Sequence, scope: scope) is JsonValue value) && value.TryGetValue(value: out long count) && (count >= 0L)) {
+    // A loop's count or sequence is read with the enclosing loops' names bound, as a step's command line is.
+    private static DocumentScope Evaluating(DocumentScope scope, Dictionary<string, JsonNode?>? bound) => ((bound is null)
+        ? scope
+        : scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: scope.Locals)));
+    private static long RepeatCount(TestWhenLoopNode loop, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        if ((DocumentLowering.EvaluateValue(expr: loop.Sequence, scope: Evaluating(bound: bound, scope: scope)) is JsonValue value) && value.TryGetValue(value: out long count) && (count >= 0L)) {
             return count;
         }
 

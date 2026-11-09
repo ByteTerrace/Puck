@@ -403,6 +403,12 @@ with X ≠ Y, for example. `view.override camera look <x> <f + 2.3> <z - 4.4> <x
 <f + 1> <z>` frames three exhibits of a row at once. `view.override camera auto` returns the
 seat's view.
 
+The walkthrough walks a row in first person under a controller program and
+takes a still square in front of each exhibit, beside its plaque and its
+prototype's mesh audit: `walkthrough-tests.puck` holds the programs and the
+sweep's route stops play them
+([the walkthrough plan](../../docs/plans/walkthrough.md)).
+
 Every inspection the debug world offers works on an exhibit:
 
 - `world.debug-view normals` shows the baked mesh's shading normals, where a

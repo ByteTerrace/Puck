@@ -1,0 +1,103 @@
+// The walkthrough's route segments, each a controller program played as a player plays: stick deflections and button
+// presses on exact ticks through seat 1's own bindings (`player.signal`, the path a pad's samples take), in first person,
+// from a declared spawn point to an arrival box. `puck test worlds/debug/walkthrough-tests.puck --reproduce` shows each
+// segment arrives and reproduces; `puck sweep --tour` plays the same program in a windowed World and captures each
+// exhibit it passes (the plan's route stops, worlds/debug/sweep.json), so a world edit that moves the walker breaks one
+// segment, named off course, rather than the run.
+//
+// The program's ticks are the route's clock: the sweep's capture offsets count from the first `when` line and fall on
+// the program's rests, so a change to a segment's timing moves its captures in the plan too.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "walkthrough-tests"
+import "stopped-machines"
+
+// The ticks the left stick is held at full deflection to strafe from one exhibit of a gallery row to the next. On the
+// gallery's floors a held deflection carries her 2.51 m in 18 ticks and 2.65 m in 19, so the pattern 19, 19, 18 keeps
+// every rest within 0.13 m of its exhibit's spawn point against a row's 2.6 m spacing. A row of n exhibits takes the
+// first n - 1 holds.
+let rowHolds = [19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19]
+let blendRowHolds = filter(rowHolds, (hold, index) => (index < 13))
+let primitivesRowHolds = filter(rowHolds, (hold, index) => (index < 9))
+
+// Gallery level 1's blend row (shapes.puck's blendExhibits): from the UNION spawn point, strafe along +X past every
+// blend, resting 26 ticks square in front of each one. Facing +Z, the stick's left strafes toward +X.
+test "gallery level 1 blend row" {
+  when {
+    seat1: body.pose spawn:shape-blend-union 0
+    ticks 1
+    seat1: player.camera.view first
+    ticks 9
+    // Recenter: the View page (left trigger) and its North face button.
+    seat1: player.signal gamepad.leftTrigger 1
+    seat1: player.signal gamepad.buttonNorth press
+    ticks 2
+    seat1: player.signal gamepad.buttonNorth release
+    seat1: player.signal gamepad.leftTrigger 0
+    ticks 2
+    // Look down, the right stick held two ticks, so each plinth's plaque stands in frame below its exhibit; three
+    // ticks tilt the eye far enough to cut the exhibit off at the top of the frame.
+    seat1: player.signal gamepad.rightStick 0 -1
+    ticks 2
+    seat1: player.signal gamepad.rightStick 0 0
+    ticks 26
+    for hold in blendRowHolds {
+      seat1: player.signal gamepad.leftStick -1 0
+      repeat hold {
+        ticks 1
+      }
+      seat1: player.signal gamepad.leftStick 0 0
+      ticks 26
+    }
+  }
+  expect {
+    // Arrival: within half a metre of PIPE SUBTRACT's spawn point (56.8, 4.55, 22.2), standing.
+    bodyPosition(body, 0, x) > 56.3
+    bodyPosition(body, 0, x) < 57.3
+    bodyPosition(body, 0, z) > 21.7
+    bodyPosition(body, 0, z) < 22.7
+    bodyPosition(body, 0, y) > 4.5
+    bodyPosition(body, 0, y) < 4.7
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+// Gallery level 0's primitives row (shapes.puck's uniformRow): from the SPHERE spawn point, strafe along +X past each
+// primitive at a uniform scale, resting 26 ticks square in front of each one, as the blend row does.
+test "gallery level 0 primitives row" {
+  when {
+    seat1: body.pose spawn:shape-sphere 0
+    ticks 1
+    seat1: player.camera.view first
+    ticks 9
+    seat1: player.signal gamepad.leftTrigger 1
+    seat1: player.signal gamepad.buttonNorth press
+    ticks 2
+    seat1: player.signal gamepad.buttonNorth release
+    seat1: player.signal gamepad.leftTrigger 0
+    ticks 2
+    seat1: player.signal gamepad.rightStick 0 -1
+    ticks 2
+    seat1: player.signal gamepad.rightStick 0 0
+    ticks 26
+    for hold in primitivesRowHolds {
+      seat1: player.signal gamepad.leftStick -1 0
+      repeat hold {
+        ticks 1
+      }
+      seat1: player.signal gamepad.leftStick 0 0
+      ticks 26
+    }
+  }
+  expect {
+    // Arrival: within half a metre of PLANE's spawn point (46.4, 0.05, 13.2), standing.
+    bodyPosition(body, 0, x) > 45.9
+    bodyPosition(body, 0, x) < 46.9
+    bodyPosition(body, 0, z) > 12.7
+    bodyPosition(body, 0, z) < 13.7
+    bodyPosition(body, 0, y) > 0
+    bodyPosition(body, 0, y) < 0.2
+    fact(body, 0, Grounded) == 1
+  }
+}

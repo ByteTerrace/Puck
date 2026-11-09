@@ -43,9 +43,20 @@ public static class SweepEvidence {
                 reasons.Add(item: $"unmeasured: the answer lacks {name}");
             }
         }
-        var status = ((reasons.Count == 0) ? SweepStatus.Clean : SweepStatus.Unknown);
+        var status = Judge(amber: signal.AmberRules, metrics: metrics, reasons: reasons, red: signal.RedRules, status: ((reasons.Count == 0) ? SweepStatus.Clean : SweepStatus.Unknown));
 
-        foreach (var (rules, when) in new[] { (signal.AmberRules, SweepStatus.Amber), (signal.RedRules, SweepStatus.Red) }) {
+        return (status, reasons, metrics);
+    }
+    /// <summary>Colours metrics by a plan's rules: amber or red for each rule that holds, unmeasured for a rule whose
+    /// metric the metrics lack, each with its reason added.</summary>
+    /// <param name="metrics">The metrics, by name.</param>
+    /// <param name="amber">The rules any one of which makes the reading amber.</param>
+    /// <param name="red">The rules any one of which makes the reading red.</param>
+    /// <param name="reasons">The reasons, which each rule that holds or cannot be read is added to.</param>
+    /// <param name="status">The colour before the rules are read.</param>
+    /// <returns>The worse of <paramref name="status"/> and every rule's colour.</returns>
+    public static string Judge(IReadOnlyDictionary<string, string> metrics, IReadOnlyList<string> amber, IReadOnlyList<string> red, List<string> reasons, string status) {
+        foreach (var (rules, when) in new[] { (amber, SweepStatus.Amber), (red, SweepStatus.Red) }) {
             foreach (var text in rules) {
                 if (!SweepRule.TryParse(rule: out var rule, text: text) || (rule.Holds(metrics: metrics) is not { } holds)) {
                     reasons.Add(item: $"unmeasured: cannot read rule '{text}'");
@@ -56,7 +67,8 @@ public static class SweepEvidence {
                 }
             }
         }
-        return (status, reasons, metrics);
+
+        return status;
     }
     /// <summary>Accounts for every submitted script line, including intermediate answers and transport truncation.</summary>
     public static SweepAnswer FromResponse(string script, ControlResponse response) {

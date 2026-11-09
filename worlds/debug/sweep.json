@@ -88,6 +88,10 @@
     "amberFraction": 0.02,
     "columns": 4,
     "cellWidth": 480,
+    "audit": {
+      "red": ["flipped > 0", "open > 0", "nonmanifold > 0", "uncovered > 0"],
+      "amber": ["folds > 0"]
+    },
     "stops": [
       { "name": "finding-wall-slivers", "group": "findings", "note": "White slivers along the Moth's wall-side silhouette (walkthrough: indirect light).", "lines": ["body.pose 10.67 2.32 39.33 156 0 0"] },
       { "name": "finding-wall-slivers-indirect", "group": "findings", "note": "The same pose in the indirect view.", "lines": ["body.pose 10.67 2.32 39.33 156 0 0", "world.debug-view indirect"] },
@@ -163,6 +167,68 @@
       { "name": "valley-floor-from-rim", "group": "valley", "note": "The floor from the north rim: the gallery hall, studio, camera course and rate range on one flat disc that runs into every wall's foot with no slab edge, the combat yard's site north of the hall and the climate wing's east of it clear.", "lines": ["body.pose 0 386 470 0 0 0", "view.override camera look 0 400 480 20 0 20"] },
       { "name": "valley-wall-foot", "group": "valley", "note": "The Moth on the floor at the east wall's foot, facing it: the floor meets the rock in one crease with no gap, overlap shimmer or floating mesh, and the wall rises 300 m close in front of her.", "lines": ["body.pose 205 0.05 0 270 0 0", "world.wait 30"] },
       { "name": "valley-draw-distance", "group": "valley", "note": "The whole caldera from 3 km south and 1.2 km up, inside the 6000 m draw distance: all eight sectors and the overlook draw whole (no wall clipped at a bake reach or far plane), the floor disc ends inside the walls' outer feet, and the fog fades the far rim toward the sky.", "lines": ["view.override camera look 0 1200 -3000 0 150 0"] },
+      {
+        "name": "route-blend-row",
+        "group": "route-blends",
+        "note": "Gallery level 1's blend row walked in first person by its controller program (walkthrough-tests.puck, 'gallery level 1 blend row'): one settled still square in front of each exhibit, beside its plaque. The capture offsets are the program's rest ticks, one before each strafe begins; the stop's own still is the arrival.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#gallery level 1 blend row",
+        "captures": [
+          { "at": 41, "exhibit": "shape-blend-union" },
+          { "at": 86, "exhibit": "shape-blend-subtraction" },
+          { "at": 131, "exhibit": "shape-blend-intersection" },
+          { "at": 175, "exhibit": "shape-blend-xor" },
+          { "at": 220, "exhibit": "shape-smooth-union" },
+          { "at": 265, "exhibit": "shape-smooth-subtraction" },
+          { "at": 309, "exhibit": "shape-smooth-intersection" },
+          { "at": 354, "exhibit": "shape-chamfer-union" },
+          { "at": 399, "exhibit": "shape-chamfer-subtraction" },
+          { "at": 443, "exhibit": "shape-chamfer-intersection" },
+          { "at": 488, "exhibit": "shape-groove-union" },
+          { "at": 533, "exhibit": "shape-pipe-union" },
+          { "at": 577, "exhibit": "shape-groove-subtraction" },
+          { "at": 622, "exhibit": "shape-pipe-subtraction" }
+        ],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "route-primitives-row",
+        "group": "route-primitives",
+        "note": "Gallery level 0's primitives row walked in first person by its controller program (walkthrough-tests.puck, 'gallery level 0 primitives row'), one still at each rest beside the exhibit's plaque.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#gallery level 0 primitives row",
+        "captures": [
+          { "at": 41, "exhibit": "shape-sphere" },
+          { "at": 86, "exhibit": "shape-box" },
+          { "at": 131, "exhibit": "shape-torus" },
+          { "at": 175, "exhibit": "shape-cylinder" },
+          { "at": 220, "exhibit": "shape-capsule" },
+          { "at": 265, "exhibit": "shape-ellipsoid" },
+          { "at": 309, "exhibit": "shape-round-cone" },
+          { "at": 354, "exhibit": "shape-cone" },
+          { "at": 399, "exhibit": "shape-superellipsoid" },
+          { "at": 443, "exhibit": "shape-plane" }
+        ],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "inspect-moth-studio",
+        "group": "inspection",
+        "note": "The Moth on the avatar studio's platform through the studio-boots layout (front, side, low rear and front quarter), idle and then walking off the platform's edge at half deflection of the left stick: settled stills of each, and an eight-frame presented burst mid-stride for flicker, ghosting and trails a settled still hides.",
+        "lines": ["body.pose 48 0.33 -48 0 0 0 0", "view.override layout studio-boots"],
+        "steps": [
+          { "at": 60, "run": "player.signal gamepad.leftStick 0 0.5" },
+          { "at": 110, "run": "player.signal gamepad.leftStick 0 0" }
+        ],
+        "settle": 150,
+        "captures": [
+          { "at": 20, "name": "idle" },
+          { "at": 55, "name": "idle-late" },
+          { "at": 80, "name": "walk" },
+          { "at": 90, "name": "walk-burst", "presented": 8 },
+          { "at": 100, "name": "walk-edge" }
+        ]
+      },
       { "name": "garden", "group": "outdoor", "note": "Cross toward +Z, then walk fully into the garden, clear of its return plane at z=-8. The motion must prove both the destination and z<=-10.", "lines": ["debug.go portal-garden", "world.wait 2", "view.recenter 1", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0", "view.recenter 1", "body.fly 1 0 0 0 0 0 2", "world.wait 90", "body.stop 0"], "expectedMotion": "pos=\\([^)]*, -[0-9]{2,}\\.[0-9]+\\).*instance:[^\\s]*~garden\\b" },
       { "name": "night-field", "group": "outdoor", "note": "Return from the garden, cross the night painting toward +Z and walk clear of its return plane at z=-6. Prove the destination and z<=-10.", "lines": ["debug.go portal-night", "world.wait 2", "view.recenter 1", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0", "view.recenter 1", "body.fly 1 0 0 0 0 0 2", "world.wait 90", "body.stop 0"], "expectedMotion": "pos=\\([^)]*, -[0-9]{2,}\\.[0-9]+\\).*instance:[^\\s]*~night\\b" }
     ]
