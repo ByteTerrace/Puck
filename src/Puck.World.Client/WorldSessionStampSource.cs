@@ -61,24 +61,8 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
         current: m_mirror.CurrentPosition(index: index)
     );
     /// <inheritdoc/>
-    public bool TryInhabitantBody(string placementId, out int index) {
-        for (var candidate = 0; (candidate < WorldBodiesLimits.CapacityCeiling); candidate++) {
-            if (
-                m_mirror.IsActive(index: candidate) &&
-                string.Equals(
-                a: m_mirror.PlacementId(index: candidate),
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                index = candidate;
-
-                return true;
-            }
-        }
-
-        index = -1;
-
-        return false;
-    }
+    public bool TryInhabitantBody(string placementId, out int index) => m_mirror.TryInhabitantBody(
+        index: out index,
+        placementId: placementId
+    );
 }
