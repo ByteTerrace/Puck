@@ -4678,6 +4678,17 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [high] The gallery's plaques break lines inside words ("the rim s / tays
+  sharp" on `shape-blend-subtraction`): a text run's `maxWidth` wraps greedily
+  glyph by glyph (`TextLayout.LayoutRunes` asks `ShouldWrapGlyph` before every
+  glyph; `TextLayoutOptions.MaxLineWidth` says "glyph-granular"), so any
+  wrapped text, a HUD panel's included, splits a word at the width. Wrap at the
+  last break opportunity (a space) before the glyph that overflows, falling back
+  to the glyph only for a word wider than the line. The owner also saw a
+  plaque's first glyph missing ("he sphere"), which the wrap does not explain:
+  read it from a walkthrough still (`route-blend-row`) once the wrap is fixed.
+  Check: the blend row's stills show every plaque whole, word-broken nowhere.
+
 - [low] The rate range's "lane of open ground" (`worlds/debug/range.puck`,
   `laneX = -100`, `laneHead = 118`) spawns 0.83 m from the river's centreline
   in a channel about 3 m half-wide, and `range-walker-10`'s loop crosses the

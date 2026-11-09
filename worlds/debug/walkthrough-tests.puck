@@ -36,11 +36,12 @@ test "gallery level 1 blend row" {
     seat1: player.signal gamepad.buttonNorth release
     seat1: player.signal gamepad.leftTrigger 0
     ticks 2
-    // Look down about 20 degrees, so each plinth's plaque stands in frame below its exhibit.
+    // Look down, the right stick held two ticks, so each plinth's plaque stands in frame below its exhibit; three
+    // ticks tilt the eye far enough to cut the exhibit off at the top of the frame.
     seat1: player.signal gamepad.rightStick 0 -1
-    ticks 3
+    ticks 2
     seat1: player.signal gamepad.rightStick 0 0
-    ticks 25
+    ticks 26
     for hold in blendRowHolds {
       seat1: player.signal gamepad.leftStick -1 0
       repeat hold {
@@ -77,9 +78,9 @@ test "gallery level 0 primitives row" {
     seat1: player.signal gamepad.leftTrigger 0
     ticks 2
     seat1: player.signal gamepad.rightStick 0 -1
-    ticks 3
+    ticks 2
     seat1: player.signal gamepad.rightStick 0 0
-    ticks 25
+    ticks 26
     for hold in primitivesRowHolds {
       seat1: player.signal gamepad.leftStick -1 0
       repeat hold {
