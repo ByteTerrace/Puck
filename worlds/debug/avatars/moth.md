@@ -250,7 +250,7 @@ thick fringe swept from the parting on her left across her forehead to her right
 temple, a shorter one back to her left temple, and a lock down each side of her
 face. The fringe locks root inside the scalp, so nothing stands up from her
 crown on either form. The hood is a wide dome, wider than it is tall, with a
-thick, rolled ivory bezel (`helmetRim`) leaning a little forward round a
+thick, rolled ivory bezel (`helmetRim`) leaning 14 degrees forward round a
 horseshoe opening that is open over the collar, its front plane ahead of her
 face. Its charcoal interior is its own cut (the cutter's
 material), rounded where it meets the face opening, which is itself a rounded
@@ -270,23 +270,26 @@ torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
 flight pack is the `flightPod` template, once a side: a charcoal mount riding
 the torso, with the shell, the two bands and the nozzle parented to it, and its
 hinge on the torso under the hood; the narrow spine between the pods is one
-chamfered prism. Each pod is about 0.33 m wide from 0.98 to 1.64 m, standing
+chamfered prism. Each pod is about 0.33 m wide from 0.95 to 1.65 m, standing
 past her sides: its rear
 outline (`podOutline`) extruded and domed by an ellipsoid into one convex
-lavender shell with the cap's small opening cut into its back. Each ivory band is
+lavender shell with the cap's small opening cut into its back; an elliptic
+cylinder across the pod sets its side profile, thickest at the second band and
+thinning to the cap and down the long lip. Each ivory band is
 the same shell a finger proud of it between two planes that slope down to the
 outer side, in its own group, so its edges show its depth without a seam in the
 shell. The lip sweeps down and out; the nozzle, a large charcoal barrel set
 square in the lip's underside on its inner end, is aimed in, down and a little
 back, its cyan lens softly lit at rest.
 
-Each shoulder is a pauldron of three thick plates fanned round the shoulder
-joint: a lavender plate sloping down and out over the top, an ivory band, and a
-lavender plate hanging down the outside of the upper arm, each flat-faced with
-chamfered edges and drooping at front and back so the stack wraps the arm. A
-charcoal pivot disc with a raised boss sits in front of the joint under the top
-plate. All ride the upper arm, and the top plate's inner end stays outboard of
-the hood through the gait and the flight splay. Each hip carries an ivory guard, a large
+Each shoulder stack is one solid convex lavender shell from collar height to the
+bottom of the chest, wrapping the top and outside of the upper arm: its front
+outline (`shoulderOutline`) slopes down and out, and an ellipsoid domes its front
+and back. A lavender cap plate and an ivory band below it are the same shell a
+finger proud between planes that slope down and out, so the stack reads as plates
+on plates. A charcoal pivot disc with a raised boss shows in front of the joint
+at the shell's inner edge. All ride the upper arm, and the shell's inner top
+stays outboard of the hood through the gait and the flight splay. Each hip carries an ivory guard, a large
 charcoal disc and a raised boss at the pelvis's front corner, faced out and
 forward so the disc reads round from the front and the side; the thighs are bare
 charcoal and swing behind them.
