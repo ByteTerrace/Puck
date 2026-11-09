@@ -334,6 +334,32 @@ Find the existing mechanism before adding one: `puck references`,
 `puck declarations` and `puck search -M 0` (the `symbol-analysis` and
 `content-search` skills).
 
+## What already does it
+
+The map above answers "where is symbol X". A duplicate is written when the
+question is "what does X" and no index answers it, so this table is by
+capability. When your capability is in it, read the home before writing a line;
+when it is not, search by what the code does, not by the name you expect, and
+add the row you found.
+
+| You need to | Existing mechanism | Home |
+|---|---|---|
+| Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
+| Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
+| Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level a subset of the mesh's own vertices), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
+| Skip drawing what a view, a cascade or the previous frame hides | `SdfMeshBox` and `SdfMeshCull` (host boxes), `SdfMeshOcclusion` (the depth pyramid test) | `src/Puck.SdfVm`; [the dispatch bullets](#which-dispatch-owns-the-code) |
+| Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's shapes) | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
+| Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
+| Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork` | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
+| Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
+| Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
+| Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
+| Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
+| Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
+| Divide by a fixed divisor, mix or hash packed keys, or compare keys, inside bake or presentation code | not rendering: the `Puck.Maths` primitives, which `maths-usage`'s Choose table lists | [`maths-usage`](../maths-usage/SKILL.md#choose); `puck scan --only duplicates --against <base>` before landing |
+
 ## Which dispatch owns the code
 
 A view is a chain of separate dispatches: `mesh` (graphics, in two occlusion

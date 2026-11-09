@@ -4735,9 +4735,11 @@ Monitor hook check remain supporting work alongside the landscape priority.
 - [medium] Capability indexes in the area skills. A skill's map answers "where
   is symbol X"; a duplicate is written when an agent asks "what does X" and no
   index answers. Give each area skill a capability table (`maths-usage`'s
-  Choose table is the model), starting with the areas where copies were found:
-  rendering (frame and placement resolution, CPU twins of kernels), the world
-  deal and placement code, and collections and comparers.
+  Choose table is the model; the rendering skill's "What already does it" is
+  the first), starting with the areas where copies were found: the world deal
+  and placement code, and collections and comparers. Rendering's table lists
+  what each mechanism does; extend it with the rows the next duplicate shows
+  it lacks.
 
 - [low] Five new area skills (state, physics, media, platform, dashboard) have
   ten capability eval cases that have not run, and seven sibling skills gained
