@@ -202,7 +202,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Medium
 - **Memo section:** `§3.1` ([`docs/plans/author-shaders.md:382-385`](../../../docs/plans/author-shaders.md)), `§3.8` ([`docs/plans/author-shaders.md:613-625`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2213-2215`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2213-L2215):
+  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2185-2187`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2185-L2187):
     ```csharp
     private (Vector3 Varying, Vector3 Local) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene) {
         var surface = lighting.MaterialAt(index: material);
@@ -210,7 +210,7 @@ checked, which does not establish the surrounding claims.
     ```
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-probe-lighting.hlsli:22-30`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-probe-lighting.hlsli#L22-L30):
 - **Failing case:**
-  1. **GI probe relight mismatch:** Both CPU probe relight (`SdfMeshIrradiance.Shade`, line 2147) and GPU probe relight (`sdfProbeShade`, `sdf-probe-lighting.hlsli:22-30`) read only rows 0–3 of the material (`albedo`, `emissive`, `metal`, `wrap`, `bleed`, `emissiveLane`). When an author writes a `shade` program that computes the surface's primary color or emission procedurally (or heavily alters `albedo` via `weathered`/`paint`), the scalar `SdfMaterial.Albedo` / `Emissive` in row 0 may be a placeholder or base undercoat, causing GI bounce and the exposure meter (`TryMeter`) to reflect the wrong color or zero emission.
+  1. **GI probe relight mismatch:** Both CPU probe relight (`SdfMeshIrradiance.Shade`, line 2147) and GPU probe relight (`sdfProbeShade`, `sdf-probe-lighting.hlsli:22-30`) read only rows 0–3 of the material (`albedo`, `emissive`, `metal`, `wrap`, `bleed`, `emissiveLane`). When an author writes a `shade` program that computes the surface's primary color or emission procedurally (or heavily alters `albedo` via `weathered`/`paint`), the scalar `SdfMaterial.Albedo` / `Emissive` in row 0 may be a placeholder or base undercoat, causing GI bounce and the camera sample (`TrySampleCamera`) to reflect the wrong color or zero emission.
   2. **No spatial debug view for `shade` cost/tier:** Memo §3.8 adds `world.budget` lines and per-frame GPU counters, and [`sdf-debug-views.hlsli:101-106`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/debug/sdf-debug-views.hlsli#L101-L106) already has `SDF_DEBUG_VIEW_SKY_COST` (`world.debug-view sky-cost`) to show per-pixel sky layer cost as a heatmap, but the memo adds no `world.debug-view shade-cost` (or tier indicator) to see which pixels in a view are hitting high-cost programs or still running on Tier 1.
 - **Fix:**
   1. Require every material with a `shade` program to keep representative scalar `albedo`, `metal`, `emissive` (or derive average `albedo`/`emissive` at compile time when the program is constant-foldable or mixes known `SdfSurface` stages, supplemented by `bleed`) in rows 0–3 for `sdfProbeShade` / `SdfMeshIrradiance.Shade`, and document that contract explicitly in §3.1/§3.2.

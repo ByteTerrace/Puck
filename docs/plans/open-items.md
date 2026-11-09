@@ -69,10 +69,9 @@ A. Engine limits on authoring [high], in the plan's
 
    The owner's gallery walkthrough added three engine defects that every
    indoor exhibit shows:
-   - auto-exposure drifts while a player runs through an evenly lit room: the
-     meter reads light at the camera's position (`SdfMeshIrradiance.TryMeter`),
-     re-read at intervals, so walking gallery level 0 stepped it from 402 to
-     110 nits and moved EV100 by about one stop; pinning exposure steadied it;
+   - auto-exposure drifted while a player runs through an evenly lit room; the
+     exposure now meters each view's own image with an authored dead band
+     (`SdfExposure.Meter`, `SdfViewExposures`), awaiting the owner's walk;
    - indoor indirect light draws straight-edged triangular patches on floors and
      box faces, and concave carvings read flat; `world.indirect off` removes the
      patches but floods the roofed hall near-white, which is a defect of its own;
