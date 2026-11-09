@@ -14,10 +14,21 @@ stub can use it without the rest of the engine.
 share delete access with concurrent publication. It is the shared writer for
 the launcher stub and updater, without an engine dependency. Unlike
 `ConfinedDirectory`, it operates on trusted paths rather than held directories.
-`AtomicFile.WriteAllBytesDurably` makes the rename itself durable: on Windows
-`MoveFileExW` with `MOVEFILE_WRITE_THROUGH`, on Linux `rename` followed by an
-`fsync` of the directory (`ConfinedDirectory.Flush`), and it never falls back to
-`ReplaceFile`, so a failure leaves the old file whole under its own name.
+`AtomicFile.WriteAllBytesDurably` makes the rename itself durable by ending in
+`ConfinedDirectory.Publish`, the one durable replacement (the blob store in
+`Puck.Storage` publishes through the same call): on Windows
+[`MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+with `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`, whose documentation
+says it "does not return until the file is actually moved on the disk", after the
+temporary is checked through the held handle (not a link, not hard-linked); on
+Linux [`renameat`](https://man7.org/linux/man-pages/man2/rename.2.html) relative
+to the held descriptor followed by an `fsync` of the directory, which
+[fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html) requires to persist
+the entry. It never falls back to `ReplaceFile`, so a failure leaves the old file
+whole under its own name. The Windows move takes paths, so `Publish` is the one
+operation that names its entries by the held directory's path, which stays valid
+because a held directory cannot be renamed or deleted. Neither platform's
+guarantee has been verified against a power cut on hardware.
 
 ## The release record
 
