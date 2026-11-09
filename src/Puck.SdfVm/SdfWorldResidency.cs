@@ -514,7 +514,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // A frame that stands as it was packs nothing, so a trim the account asked for is serviced here, every frame.
         tables.ServiceMemoryTrim();
-        if ((IndirectTierOverride is { } tier) && (frame.IndirectTier != tier)) { frame = frame with { IndirectTier = tier }; }
 
         ApplyPendingShaderReload();
         ReconcileGlyphAtlas(tables: tables);
@@ -594,7 +593,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // Latch readiness for this whole frame. A worker finishing after preparation cannot make an image whose
         // exposure was held stand for converged lighting. The next preparation publishes and meters that result.
-        LightingPending = m_frame!.ConvergesLighting && IndirectTier != SdfIndirectTier.Off && MeshIrradiance.Settling;
+        LightingPending = m_frame!.ConvergesLighting && MeshIrradiance.Settling;
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if ((!m_frame.TickLocked || !MeshPathBake.Pending) && !LightingPending) {
             Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));

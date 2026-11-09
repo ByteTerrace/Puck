@@ -100,10 +100,10 @@ float sdfGlassContact(SdfMaterialData material, float behind) {
 // The light arriving at the glass's surface as a white surface there would show it, the radiance the medium scatters and
 // a revealed surface reflects, and in `highlights` the lights' highlights on the glass: every light through the one
 // interface (sdfLightResponse) at an unoccluded surface the cascades do not reach, so a shadowing light's visibility is
-// the probes' (`probes`, `probed` while the irradiance volume is on), the sky's ambient where the volume's sky does not
-// replace it, and the volume's indirect light as a surface receives it. `incoming` is that light's luminance before the
-// indirect gains, what the local adaptation meters (sdfLocalAdaptationGain).
-float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection, bool probed, SdfMeshProbes probes,
+// the probes' (`probes`), the sky's ambient where the volume's sky source is disabled, and the volume's indirect light as
+// a surface receives it. `incoming` is that light's luminance before the indirect gains, what the local adaptation meters
+// (sdfLocalAdaptationGain).
+float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal, float3 rayDirection, SdfMeshProbes probes,
     SdfShadeBinding shadeBinding, SdfShadeStamp shadeStamp, out float3 highlights, out float incoming,
     out float3 radiance, out float3 indirect, out float3 rim, out float attenuation) {
     SdfShadeSurface surface;
@@ -117,10 +117,10 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     surface.shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
     surface.shadowMeasured = float4(1.0, 1.0, 1.0, 1.0);
     surface.cascaded = false;
-    surface.probed = (probed && sdfMeshAnswers(probes));
+    surface.probed = sdfMeshAnswers(probes);
     surface.probes = probes;
 
-    bool indirectSky = (probed && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
+    bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
     radiance = (indirectSky ? float3(0.0, 0.0, 0.0) : worldSkyIrradiance(normal));
     SdfLightWalk walk = sdfLightWalkStart();
     SdfLightSource light;
@@ -137,7 +137,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
         if (sdfShadeBound(shadeBinding)) { rim += response.rim; attenuation *= response.attenuation; }
     }
 
-    indirect = (probed ? sdfMeshIndirectSeen(probes, normal) : float3(0.0, 0.0, 0.0));
+    indirect = sdfMeshIndirectSeen(probes, normal);
 
     incoming = dot((radiance + indirect), SDF_LUMINANCE);
 
@@ -329,7 +329,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 material.roughness = roughness;
             }
 
-            bool probed = sdfMeshIrradianceEnabled();
             SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
             float3 highlights;
             float incoming;
@@ -338,14 +337,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 rim;
             float attenuation;
             sdfShadeSurfaceInputs(shadeStamp, material, normal, revealed);
-            float3 received = sdfGlassReceived(material, surfacePoint, normal, rayDirection, probed, probes, shadeBinding, shadeStamp, highlights, incoming,
+            float3 received = sdfGlassReceived(material, surfacePoint, normal, rayDirection, probes, shadeBinding, shadeStamp, highlights, incoming,
                 radiance, indirect, rim, attenuation);
             float3 reflectDirection = reflect(rayDirection, normal);
-            float3 environment = worldEnvironmentReflection(reflectDirection, roughness);
-
-            if (probed) {
-                environment = sdfMeshReflectionSeen(probes, reflectDirection, environment);
-            }
+            float3 environment = sdfMeshReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, roughness));
 
             // The surface's local adaptation (sdfLocalAdaptationGain) scales all it reflects and scatters, as it scales an
             // opaque surface's whole shade; the light through it was adapted at the opaque surface behind.

@@ -564,7 +564,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 cut: frame.Views[view].CutRevision);
         }
 
-        SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters, measuring: (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off));
+        SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
 
         var boundTexels = BoundCascadeTexels(recording: in recording);
         // The far cascade may draw one layer of a split refresh; asking stages the camera each drawn layer is drawn from,

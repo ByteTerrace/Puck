@@ -110,11 +110,15 @@ lower tier casts softer, blunter shadows over the same reach.
 
 World boots at `render.indirect.tier`, Medium when absent; `off` and `high` are
 explicit authored choices. `world.indirect` moves the live tier and `world.save`
-retains it. The shared `quality.puck` presets select Off, Medium and High for
-Low, Medium and High respectively. A preset's `indirect` member overrides that
-mapping; applying a preset does not change the source gains or receiver controls.
-The tier sizes the irradiance volume (below); Off reads no volume, and views
-light with the authored fill instead.
+retains it. The shared `quality.puck` presets select Medium for Low and Medium
+and High for High. A preset's `indirect` member overrides that mapping; applying
+a preset does not change the source gains or receiver controls. The tier sizes
+the irradiance volume (below), which measures at every tier: its probes are what
+occlude the traced point and spot lights, the reflected sky and, in a view with
+no cascade, the sun, so no tier can do without them. Off measures the Medium
+volume and applies none of its light (`SdfFrameBlock` writes the `apply`
+intensity zero), and views add the authored fill in its place: turning indirect
+light off only ever darkens a surface.
 
 `render.indirect.bounces` zero switches reflected bounce off; any other value (or
 none) leaves it on, and bounce converges over successive relights of the

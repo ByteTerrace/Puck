@@ -169,29 +169,31 @@
 #define SDF_SIGHT_COUNT_BASE              5u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS                244u
-#define SDF_MESH_IRRADIANCE_LEVELS                     3u
-#define SDF_MESH_IRRADIANCE_SKY_WORD                   1u
-#define SDF_MESH_IRRADIANCE_RADIANCE_WORD              4u
-#define SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD             19u
-#define SDF_MESH_IRRADIANCE_LIGHTS_WORD                13u
-#define SDF_MESH_IRRADIANCE_LIGHT_WORDS                4u
-#define SDF_MESH_IRRADIANCE_DEPTH_WORD                 28u
-#define SDF_MESH_IRRADIANCE_DEPTH_SIZE                 12u
-#define SDF_MESH_IRRADIANCE_OFFSET_WORD                17u
-#define SDF_MESH_IRRADIANCE_WRITTEN                    0x40000000u
-#define SDF_MESH_IRRADIANCE_INVALID                    0x80000000u
-#define SDF_MESH_IRRADIANCE_NORMAL_BIAS                0.05
-#define SDF_MESH_IRRADIANCE_BEHIND_SHARE               0.05
-#define SDF_MESH_IRRADIANCE_SURFACE_REACH              1.5
-#define SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START   0.5
-#define SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE         127.0
-#define SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE         0.02
-#define SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP     0.04
-#define SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START       0.5
-#define SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE       4.0
-#define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_START 0.0
-#define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_SCALE 8.0
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS                 244u
+#define SDF_MESH_IRRADIANCE_LEVELS                      3u
+#define SDF_MESH_IRRADIANCE_SKY_WORD                    1u
+#define SDF_MESH_IRRADIANCE_RADIANCE_WORD               4u
+#define SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD              19u
+#define SDF_MESH_IRRADIANCE_LIGHTS_WORD                 13u
+#define SDF_MESH_IRRADIANCE_LIGHT_WORDS                 4u
+#define SDF_MESH_IRRADIANCE_DEPTH_WORD                  28u
+#define SDF_MESH_IRRADIANCE_DEPTH_SIZE                  12u
+#define SDF_MESH_IRRADIANCE_OFFSET_WORD                 17u
+#define SDF_MESH_IRRADIANCE_WRITTEN                     0x40000000u
+#define SDF_MESH_IRRADIANCE_INVALID                     0x80000000u
+#define SDF_MESH_IRRADIANCE_NORMAL_BIAS                 0.05
+#define SDF_MESH_IRRADIANCE_BEHIND_SHARE                0.05
+#define SDF_MESH_IRRADIANCE_SURFACE_REACH               1.5
+#define SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START    0.5
+#define SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE          127.0
+#define SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE          0.02
+#define SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP      0.04
+#define SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START        0.5
+#define SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE        4.0
+#define SDF_MESH_IRRADIANCE_DEPTH_FINEST_COVERAGE_START 0.0
+#define SDF_MESH_IRRADIANCE_DEPTH_FINEST_COVERAGE_SCALE 1.0
+#define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_START  0.0
+#define SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_SCALE  8.0
 
 // The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
 #define SDF_HISTORY_SURFACE_WORDS      47u

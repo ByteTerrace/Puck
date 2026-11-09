@@ -506,7 +506,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// the probes that landed into the tables' volume table.</summary>
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tables">The residency's tables.</param>
-    /// <param name="tier">The indirect tier the views asked for; Off reads no volume.</param>
+    /// <param name="tier">The indirect tier the views asked for: High measures the fine volume, Medium and Off the coarse
+    /// one (Off applies none of its light, <see cref="SdfIndirectTier.Off"/>).</param>
     /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes: a lighting-converged frame then builds no
     /// scene, and any other frame builds one from the meshes landed so far at most every few seconds.</param>
     /// <returns>The parameters the views pass reads.</returns>
@@ -537,7 +538,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Advances the volume for a frame as <see cref="Stage(SdfFrame, SdfWorldTables, SdfIndirectTier, bool)"/>
     /// does, writing the volume table through a delegate rather than a residency's tables.</summary>
     /// <param name="frame">The frame, its baked draws dressed in.</param>
-    /// <param name="tier">The indirect tier the views asked for; Off reads no volume.</param>
+    /// <param name="tier">The indirect tier the views asked for: High measures the fine volume, Medium and Off the coarse
+    /// one (Off applies none of its light, <see cref="SdfIndirectTier.Off"/>).</param>
     /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes.</param>
     /// <param name="write">Receives the volume's probe slots, <see cref="SdfMeshIrradianceProbe.ProbeWords"/> words each,
     /// every level's after the finer level's, whenever a frame publishes a change to them.</param>
@@ -548,7 +550,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: write);
 
-        if ((tier == SdfIndirectTier.Off) || (frame.Views.Count == 0)) { return default; }
+        if (frame.Views.Count == 0) { return default; }
 
         lock (m_gate) {
             if (m_gpuReattach) {
@@ -2620,7 +2622,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var fade = ((ahead * ahead) * (3f - (2f * ahead)));
             var facing = float.Lerp(amount: outside, value1: MathF.Max(x: fade, y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
-            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, surfaces: probe.Depth, toward: (pushed - probePoint)));
+            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, finest: (level == 0), surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
 
             front += (trilinear * float.Lerp(amount: outside, value1: fade, value2: 1f));

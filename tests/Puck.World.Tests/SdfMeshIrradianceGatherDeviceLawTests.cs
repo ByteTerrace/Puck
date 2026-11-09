@@ -241,14 +241,12 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
     private static Vector4[] Run(GpuDeviceServices services, string extension, SdfMeshIrradianceParameters parameters, Receiver[] receivers, uint[] words) {
         var block = new byte[SdfFrameBlock.SizeBytes];
 
-        SdfFrameBlock.WriteMeshIrradiance(block: block, measuring: true, volume: in parameters);
+        SdfFrameBlock.WriteMeshIrradiance(block: block, volume: in parameters);
 
-        var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));
         var spacingsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceSpacings));
         var packed = new uint[(4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))];
 
-        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: sizeof(uint), start: volumeOffset)).CopyTo(destination: packed);
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: levelsOffset)).CopyTo(destination: packed.AsSpan(start: 4));
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: spacingsOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + SdfMeshIrradianceProbe.Levels))));
 
