@@ -75,10 +75,10 @@ public sealed partial class SdfProgramBuilder {
             // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
             // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
             // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/field/sdf-shapes.hlsli).
-            derived1: (1f / MathF.Max(
-                x: dotEndpoint,
-                y: 0.0001f
-            )),
+            // Keep the true reciprocal below a centimetre too. The former 0.0001 floor shortened h for every small
+            // capsule. Zero is a sphere; reciprocals beyond float's range (sub-10^-19 endpoints) cap at its finite
+            // maximum, keeping the shader's product finite at zero and the geometry below the query grid.
+            derived1: ((dotEndpoint == 0f) ? 0f : ((float)Math.Min(val1: (1.0 / dotEndpoint), val2: float.MaxValue))),
             dimensions: new Vector4(
                 value: endpoint,
                 w: radius
@@ -325,6 +325,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
+
     // The sampled instruction SampledValues binds to its field: the lanes Data0 = boxMin.xyz + cellSize, Data1 = smooth +
     // packedDims + handle (written by the program, SdfProgram.BindSampledFields) + boundaryFloor. KEEP IN SYNC with
     // sdfSampledRegion in Assets/Shaders/Sdf/field/sdf-shapes.hlsli.
@@ -425,6 +426,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: 0f             // Data1.x = smooth: a sampled field composes hard
         );
     }
+
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         // A screen slab IS a rounded box (sdfBox decodes both shape types), so it carries Box's argument contract.
         RequireNonNegative(
@@ -572,6 +574,7 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
+
     // The surface half of a sampled screen: its frame, refused unless finite, unit-normalizable and orthogonal, and its
     // index, refused outside the screen table or past its capacity.
     private void AddScreenSurface(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int screenIndex) {
@@ -626,6 +629,7 @@ public sealed partial class SdfProgramBuilder {
             Up: Vector3.Normalize(value: worldUp)
         ));
     }
+
     /// <summary>Adds a <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>
     /// screen slab that derives the screen's world-space right/up axes from the slab's static orientation.</summary>
     /// <param name="halfExtents">The slab's local half-extents.</param>
