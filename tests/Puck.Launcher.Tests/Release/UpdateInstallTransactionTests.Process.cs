@@ -4,6 +4,7 @@ using System.Text.Json;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Attestation;
+using Puck.Confinement;
 using Puck.Launcher.Release;
 using Xunit;
 
@@ -21,8 +22,7 @@ public sealed partial class UpdateInstallTransactionTests {
         var manifest = Manifest();
 
         Publish(manifest: manifest);
-        Directory.CreateDirectory(path: Install);
-        File.WriteAllText(path: Current, contents: "1.0.0");
+        _ = InstallSeed.Install(installRoot: Install, version: "1.0.0");
         var fixture = new ProcessFixture(Root: m_root.RootPath, Anchor: m_fixture.TrustAnchor,
             Boundary: boundary, Pipe: $"puck-release-{Guid.NewGuid():N}");
         using var signal = new NamedPipeServerStream(pipeName: fixture.Pipe, direction: PipeDirection.InOut,
@@ -89,18 +89,18 @@ public sealed partial class UpdateInstallTransactionTests {
             var fresh = await Service().ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.True(condition: fresh.Applied, userMessage: fresh.Detail);
-            Assert.Equal(expected: "1.0.2", actual: File.ReadAllText(path: Current));
+            Assert.Equal(expected: "1.0.2", actual: Current);
             return;
         }
         var recovered = await Service(installedVersion: ((boundary == "after-pointer") ? "1.0.1" : "1.0.0"))
             .ApplyAsync(now: Now.AddHours(hours: 2), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: recovered.Applied, userMessage: recovered.Detail);
-        Assert.Equal(expected: "1.0.1", actual: File.ReadAllText(path: Current));
-        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: Install, path2: "last-good")));
+        Assert.Equal(expected: "1.0.1", actual: Current);
+        Assert.Equal(expected: "1.0.0", actual: InstallSeed.RollbackTarget(installRoot: Install));
         Assert.Equal(expected: Payload, actual: File.ReadAllBytes(path: PayloadPath));
         Assert.False(condition: File.Exists(path: Intent));
-        Assert.False(condition: Verifier().Verify(manifest: manifest, now: Now, installedVersion: "1.0.0", advanceSequence: false).Accepted);
+        Assert.False(condition: Verify(manifest: manifest).Accepted);
     }
     // Only the parent above runs this helper; its process is deliberately killed without executing finally blocks.
     [Fact(Explicit = true)]
@@ -136,11 +136,11 @@ public sealed partial class UpdateInstallTransactionTests {
     }
 
     private sealed class ProcessPausedVerifier(IReleaseVerifier inner, ProcessFixture fixture) : IReleaseVerifier {
-        public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence) =>
-            inner.Verify(advanceSequence: advanceSequence, installedVersion: installedVersion, manifest: manifest, now: now);
-        public ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion) {
+        public ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence, InstallTransaction transaction) =>
+            inner.Verify(advanceSequence: advanceSequence, installedVersion: installedVersion, manifest: manifest, now: now, transaction: transaction);
+        public ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion, InstallTransaction transaction) {
             PauseProcess(boundary: "before-reservation", fixture: fixture);
-            var result = inner.ReserveInstall(installedVersion: installedVersion, manifest: manifest, verifiedAt: verifiedAt);
+            var result = inner.ReserveInstall(installedVersion: installedVersion, manifest: manifest, verifiedAt: verifiedAt, transaction: transaction);
 
             Assert.True(condition: result.Accepted, userMessage: result.RefusalReason);
             PauseProcess(boundary: "after-reservation", fixture: fixture);
@@ -148,9 +148,9 @@ public sealed partial class UpdateInstallTransactionTests {
         }
     }
     private sealed class ProcessPausedApplier(ProcessFixture fixture) : IUpdateApplier {
-        public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot, bool recoverInterruptedApply = false) {
+        public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, InstallTransaction transaction, bool recoverInterruptedApply = false) {
             PauseProcess(boundary: "before-pointer", fixture: fixture);
-            var result = new FileUpdateApplier().Apply(cacheRoot: cacheRoot, manifest: manifest, recoverInterruptedApply: recoverInterruptedApply, rid: rid);
+            var result = new FileUpdateApplier().Apply(manifest: manifest, recoverInterruptedApply: recoverInterruptedApply, rid: rid, transaction: transaction);
 
             Assert.True(condition: result.Applied, userMessage: result.RefusalReason);
             PauseProcess(boundary: "after-pointer", fixture: fixture);

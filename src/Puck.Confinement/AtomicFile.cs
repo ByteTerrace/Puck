@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 
@@ -24,7 +26,7 @@ namespace Puck.Confinement;
 /// (a secret written owner-only). On Windows, the replacement is a new file that takes its directory's inherited
 /// access control.</para>
 /// </summary>
-public static class AtomicFile {
+public static partial class AtomicFile {
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
 
     [UnsupportedOSPlatform(platformName: "windows")]
@@ -177,6 +179,35 @@ public static class AtomicFile {
                 if ((backup is not null) && File.Exists(path: backup)) { ReleaseBackup(backup: backup, destination: m_destination); }
             }
         }
+        /// <summary>Publishes the complete file durably, replacing an existing destination: the rename itself reaches
+        /// stable storage before this returns. On Windows it is <c>MoveFileExW</c> with <c>MOVEFILE_REPLACE_EXISTING</c>
+        /// and <c>MOVEFILE_WRITE_THROUGH</c>, which does not return until the move is on the disk; on Linux it is
+        /// <c>rename</c> followed by an <c>fsync</c> of the containing directory, which fsync(2) requires to persist the
+        /// entry. Unlike <see cref="Commit"/> it never falls back to <c>ReplaceFile</c>: a refused rename leaves the
+        /// destination as it was, deletes the temporary and throws, so no state exists in which the old file sits under a
+        /// backup name.</summary>
+        /// <exception cref="IOException">The rename or the directory flush failed; the destination is unchanged when the
+        /// rename failed.</exception>
+        public void CommitDurably() {
+            ObjectDisposedException.ThrowIf(condition: m_finished, instance: this);
+            try {
+                if (OperatingSystem.IsWindows()) {
+                    if (!MoveFileEx(existingFileName: m_temporary, flags: (MoveFileReplaceExisting | MoveFileWriteThrough), newFileName: m_destination)) {
+                        var code = Marshal.GetLastPInvokeError();
+
+                        throw new IOException(message: $"Cannot replace '{m_destination}' durably.", innerException: new Win32Exception(error: code));
+                    }
+                } else {
+                    File.Move(destFileName: m_destination, overwrite: true, sourceFileName: m_temporary);
+                    using var directory = (ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: m_destination)!)
+                        ?? throw new DirectoryNotFoundException(message: $"The directory of '{m_destination}' vanished."));
+
+                    directory.Flush();
+                }
+            } finally {
+                Dispose();
+            }
+        }
         /// <summary>Discards an unpublished temporary. Cleanup never hides a publication or staging failure.</summary>
         public void Dispose() {
             if (m_finished) { return; }
@@ -192,6 +223,20 @@ public static class AtomicFile {
     /// <returns>The unpublished write.</returns>
     public static PendingWrite StageAllBytes(string path, ReadOnlySpan<byte> bytes) =>
         Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+    /// <summary>Atomically and durably replaces <paramref name="path"/> with <paramref name="bytes"/>: the content is
+    /// flushed to stable storage, then renamed over the destination with <see cref="PendingWrite.CommitDurably"/>. When
+    /// this returns, a power loss leaves the new file; when it throws, the destination is the old file. A killed writer
+    /// leaves at most a sibling <c>&lt;file name&gt;.&lt;random&gt;.tmp</c>, never a displaced destination.</summary>
+    /// <param name="path">The destination file; a missing parent directory is created.</param>
+    /// <param name="bytes">The complete new content.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
+    /// <exception cref="IOException">The temporary could not be written or flushed, or the durable rename failed.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary or replace the destination.</exception>
+    public static void WriteAllBytesDurably(string path, ReadOnlySpan<byte> bytes) {
+        using var pending = Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+
+        pending.CommitDurably();
+    }
     /// <summary>Stages UTF-8 text without a byte order mark.</summary>
     /// <param name="path">The destination.</param>
     /// <param name="contents">The complete text.</param>
@@ -292,4 +337,10 @@ public static class AtomicFile {
             unixCreateMode: unixCreateMode
         );
     }
+
+    private const uint MoveFileReplaceExisting = 0x1, MoveFileWriteThrough = 0x8;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "MoveFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool MoveFileEx(string existingFileName, string newFileName, uint flags);
 }

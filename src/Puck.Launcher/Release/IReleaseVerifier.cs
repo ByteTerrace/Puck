@@ -1,3 +1,5 @@
+using Puck.Confinement;
+
 namespace Puck.Launcher.Release;
 
 /// <summary>A release authorization or replay-write decision. Only terminal refusals retire durable intents.</summary>
@@ -32,18 +34,21 @@ public sealed record ReleaseVerifyOutcome(ReleaseDecision Decision, string? Refu
 /// <summary>
 /// Decides whether a fetched <see cref="ReleaseManifest"/> may be staged: its signature verifies against a pinned
 /// trust anchor, its sequence exceeds the durable replay high-water mark, its content hash matches what was
-/// actually signed, it names no revocation, it respects <see cref="ReleaseManifest.MinimumSupported"/>, and its
+/// actually signed, the install's release record admits it (revocations, rejected payloads, the state generation floor),
+/// it respects <see cref="ReleaseManifest.MinimumSupported"/>, and its
 /// version strictly exceeds what is already installed.
 /// </summary>
 public interface IReleaseVerifier {
     /// <summary>Verifies and durably reserves the exact manifest for an install intent. Unlike ordinary
     /// verification, this can resume its own reservation, but cannot resume another manifest or an older mark.
-    /// Call only while holding the install-root writer lease. Persist a new intent only after reservation succeeds.</summary>
+    /// Persist a new intent only after reservation succeeds.</summary>
     /// <param name="manifest">The signed manifest pinned by the local intent.</param>
     /// <param name="verifiedAt">The instant at which this local intent was originally authorized. Recovery
     /// checks the currently configured trust policy at that instant; expiry does not cancel already-authorized work.</param>
     /// <param name="installedVersion">The running version when the intent was authorized.</param>
-    ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion);
+    /// <param name="transaction">The caller's transaction on the install root, which the verifier reads and writes the
+    /// release record through and never ends.</param>
+    ReleaseVerifyOutcome ReserveInstall(ReleaseManifest manifest, DateTimeOffset verifiedAt, string installedVersion, InstallTransaction transaction);
     /// <summary>Verifies <paramref name="manifest"/>. The replay-refusal check (does this sequence already fall at
     /// or below the stored mark) always runs regardless of <paramref name="advanceSequence"/> — a manifest is never
     /// accepted twice under the same sequence merely because an earlier call declined to commit it. Only the
@@ -56,5 +61,7 @@ public interface IReleaseVerifier {
     /// <param name="advanceSequence">Whether an otherwise-accepted manifest's sequence should be durably committed
     /// as the new high-water mark. <see langword="false"/> for a read-only check; <see langword="true"/> for the
     /// one verification an apply actually acts on.</param>
-    ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence);
+    /// <param name="transaction">The caller's transaction on the install root: an authentic manifest's revocations are
+    /// merged into the release record through it before the manifest's own eligibility is judged, whatever the outcome.</param>
+    ReleaseVerifyOutcome Verify(ReleaseManifest manifest, DateTimeOffset now, string installedVersion, bool advanceSequence, InstallTransaction transaction);
 }

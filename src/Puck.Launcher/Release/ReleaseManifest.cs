@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets;
 using Puck.Assets.Documents;
+using Puck.Confinement;
 
 namespace Puck.Launcher.Release;
 
@@ -129,22 +130,26 @@ public static class ReleaseCanonicalizer {
 
         return true;
     }
+    /// <summary>Reports whether <paramref name="version"/> is a name a release's <see cref="ReleaseManifest.Version"/> may
+    /// carry: one portable directory name. A revoked entry that fails this can name no install.</summary>
+    /// <param name="version">The candidate version name.</param>
+    /// <returns><see langword="true"/> when the name could be a release version's directory.</returns>
+    public static bool IsVersionName(string? version) => IsPortablePath(value: version, allowDirectories: false);
     private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile? file, string path, HashSet<string>? seenPaths) {
         if (file is null) {
             errors.Add(item: new(Message: "a file is required.", Path: path));
             return;
         }
 
-        // The applier writes these two files into every version directory beside its payload, so neither may be a payload
-        // file or the directory a payload file sits in. A path a deserialized document omits is null, which
+        // The applier writes the install record into every version directory beside its payload, so it may be neither a
+        // payload file nor the directory a payload file sits in. A path a deserialized document omits is null, which
         // IsPortablePath refuses.
         var first = (file.Path ?? "").Split(separator: '/')[0];
 
         if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
-            first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "state-generation") ||
             first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: InstallRecord.FileName)) {
             errors.Add(item: new(
-                Message: $"a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' or '{InstallRecord.FileName}' name as its first segment, and no device names or alternate streams.",
+                Message: $"a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved '{InstallRecord.FileName}' name as its first segment, and no device names or alternate streams.",
                 Path: $"{path}.path"
             ));
         } else if (
@@ -314,7 +319,7 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (!IsPortablePath(value: document.Version, allowDirectories: false)) {
+        if (!IsVersionName(version: document.Version)) {
             errors.Add(item: new(
                 Message: "a version must be a single portable directory name.",
                 Path: "version"
