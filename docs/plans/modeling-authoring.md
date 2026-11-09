@@ -85,7 +85,7 @@ part through `PartDetail` (`src/Puck.World.Client/WorldCreationInstances.Emit.cs
 whose `SectionDetail` is a round section's radius over `CellsPerRadius`,
 "zero for none, or for one no finer than the bake's own lattice already is".
 A dynamic group then merges every member's detail into one box
-(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:379-381`):
+(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:397-399`):
 
 ```csharp
                 group.DetailLow = (first ? low : Vector3.Min(value1: group.DetailLow, value2: low));
