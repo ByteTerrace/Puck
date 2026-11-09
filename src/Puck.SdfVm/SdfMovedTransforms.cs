@@ -11,7 +11,7 @@ namespace Puck.SdfVm;
 /// last <see cref="History"/> frames so every engine that consumes the table — the primary view, and each offscreen
 /// view that renders only some frames — stages exactly the rows that changed since the frame it last consumed.
 /// <para>
-/// A frame is either incremental, owing only the ranges its emitters reported through <see cref="Commit"/>, owes
+/// A frame is either incremental, owing only the ranges its emitters reported through <see cref="Commit(int, int, bool, bool)"/>, owes
 /// everything (the first frame, a park-position change), or repacks the whole table and owes the rows the repack
 /// changed (a program rebuild, <see cref="BeginRepack"/>); emitters pack every owner in the last two
 /// (<see cref="Everything"/>). An engine
@@ -20,14 +20,16 @@ namespace Puck.SdfVm;
 /// </para>
 /// <para>
 /// Emitters pack an owner's slots (an avatar's leaf range, a stamp registration's root and shapes) only while it is
-/// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing and whose
+/// restless, and either hand <see cref="Commit(ReadOnlySpan{DynamicTransform}, int, ReadOnlySpan{DynamicTransform}, bool)"/>
+/// the slots' prior contents or write each slot through <see cref="Write"/> and settle with what it reported
+/// (<see cref="Commit(int, int, bool, bool)"/>): an owner whose repack changed nothing and whose
 /// history holds has come to rest and owes nothing. A still frame packs no rows, compares no bytes and owes nothing; a frame
 /// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>. These totals
 /// have <see cref="WorkClass.Pacing"/> because presentation may interpolate several produced frames per simulation
 /// tick, and each frame packs the pose it actually presents.
 /// </para>
 /// <para>
-/// A range whose slots changed owner or cut their pose is reseated (<see cref="Commit"/>'s <c>reseat</c>), even if
+/// A range whose slots changed owner or cut their pose is reseated (<see cref="Commit(int, int, bool, bool)"/>'s <c>reseat</c>), even if
 /// their new poses equal the old ones: a consumer seeds that range's previous transforms and dependent mesh history,
 /// so a new owner never reads its predecessor's pose as motion. A consumer owed everything seeds every previous row.
 /// </para>
@@ -156,13 +158,14 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// range, a body index reused, a pose that jumped): the range is reseated even when its pose is unchanged, so each
     /// consumer seeds its previous poses rather than reading the departed pose as motion.</param>
     /// <returns><see langword="true"/> when the repack moved any slot, so the owner stays restless.</returns>
+    /// <remarks>An owner whose pack writes its slots through <see cref="Write"/> knows whether it moved one and settles
+    /// with <see cref="Commit(int, int, bool, bool)"/> instead, keeping no copy of the slots it rewrites.</remarks>
     public bool Commit(ReadOnlySpan<DynamicTransform> slots, int start, ReadOnlySpan<DynamicTransform> previous, bool reseat) {
         var packed = slots.Slice(
             length: previous.Length,
             start: start
         );
 
-        m_packedRows.Add(amount: packed.Length);
         m_comparedBytes.Add(amount: (((long)packed.Length) * PackedSlotBytes));
 
         var moved = false;
@@ -175,15 +178,46 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
             }
         }
 
+        return Commit(count: packed.Length, moved: moved, reseat: reseat, start: start);
+    }
+    /// <summary>Settles one owner's repacked slots whose pack already knows whether it moved one, having written each
+    /// through <see cref="Write"/>: counts the rows packed, and owes the range when a slot moved or a history cut is
+    /// requested, including cuts with unchanged poses.</summary>
+    /// <param name="start">The owner's first slot.</param>
+    /// <param name="count">The owner's slot count.</param>
+    /// <param name="moved">Whether the repack changed any of the owner's slots.</param>
+    /// <param name="reseat">Whether the slots hold another owner than they held when last packed (see
+    /// <see cref="Commit(ReadOnlySpan{DynamicTransform}, int, ReadOnlySpan{DynamicTransform}, bool)"/>).</param>
+    /// <returns><paramref name="moved"/>, so the owner stays restless while it moves.</returns>
+    public bool Commit(int start, int count, bool moved, bool reseat) {
+        m_packedRows.Add(amount: count);
+
         // A cut changes ownership/history even when the new owner has exactly the departed pose. Keep the return
         // value about actual movement so an unchanged owner can settle without dropping that cut from the journal.
         if (reseat) {
-            Reseat(count: packed.Length, start: start);
+            Reseat(count: count, start: start);
         } else if (moved) {
-            Owe(count: packed.Length, start: start);
+            Owe(count: count, start: start);
         }
 
         return moved;
+    }
+    /// <summary>Writes one slot of an owner's repack, comparing as it writes, so the pack keeps no copy of the slots it
+    /// rewrites to learn whether it moved one.</summary>
+    /// <param name="table">The whole shared table.</param>
+    /// <param name="slot">The slot to write.</param>
+    /// <param name="value">The slot's new transform.</param>
+    /// <returns><see langword="true"/> when the slot held another transform.</returns>
+    public static bool Write(Span<DynamicTransform> table, int slot, in DynamicTransform value) {
+        ref var held = ref table[slot];
+
+        if (held.Equals(other: value)) {
+            return false;
+        }
+
+        held = value;
+
+        return true;
     }
     /// <summary>Owes a range the current frame rewrote without a compare — an owner that vacated its slots, or one
     /// a caller already knows moved.</summary>

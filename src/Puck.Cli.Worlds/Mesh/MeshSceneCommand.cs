@@ -63,7 +63,7 @@ public static class MeshSceneCommand {
 
         var meshes = CliWorldDocuments.MeshStore(cacheRoot: cacheRoot);
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
-        var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms);
+        var groups = scene.Plan(farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render));
         var store = new SdfMeshStore(directory: meshes);
         var draws = new List<SdfMeshDraw>();
         var labels = new List<string>();

@@ -218,7 +218,7 @@ public sealed class WorldDisclosureImages {
     }
     // Adds the authored rows whose image the changed rows can move (each row and the rows whose policies read it) to
     // affected, unordered.
-    internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, HashSet<int> affected) {
+    internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, Puck.Abstractions.Collections.MarkedIndexSet affected) {
         Prepare(view);
         var authored = view.Source.AuthoredState.Count;
         foreach (var row in rows) {

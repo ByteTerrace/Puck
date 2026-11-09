@@ -174,7 +174,9 @@ owner ruled the second (a style per material, not one look per world).
 ## A raster pass draws only what it can show
 
 Every raster pass skips the mesh draws it cannot show any of, by a world box per
-draw tested on the host (`SdfMeshBox`, `SdfMeshCull`): a view's mesh and glass
+draw tested on the GPU by the selection kernel (`SdfMeshOcclusion`,
+`sdf-mesh-selection.hlsli`, with `SdfMeshBox` and `SdfMeshCull` as the host-side
+twin that glass visibility and update rates still use): a view's mesh and glass
 passes against the view's frustum before the frame's far distance, a shadow
 cascade against its light's box and, swept along the light, against the
 receivers the view shows. A skipped draw lies wholly outside what the pass's

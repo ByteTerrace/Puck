@@ -104,23 +104,51 @@ milestone. The owner requested its baseline and implementation plan, which
      long after arrival. A per-light visibility the probe shares across its
      texels, or culling lights by each hit's distance before the trace, would
      cut it at the cause.
-   - The frame thread is CPU-bound at both stops: sampled thread time finds it
-     running almost the whole of every iteration. The tick (`WorldTick.StepCore`:
-     `WorldPopulation.AdvanceSimulated`, `WorldRuleHost.EvaluateWorldRules`,
-     `WorldTick.EmitSnapshot`) runs on the frame thread (`HostLoop.Run`) and takes
-     the largest share; then the frame's capture (`SdfWorldResidency.Capture`:
-     `WorldFramePresenter.CaptureFrame`, and `SdfCompositionFrameSource.PackTransforms`
-     through `WorldCreationInstances.PackRegistration`), table packing and screen
-     binding (`SdfWorldResidency.PrepareOnce`), and the upload's fence wait
-     (`SdfWorldTables.SubmitUpload`). Zero-fill and copies are a visible slice:
-     `HashSet<int>.Clear` in `WorldDeliveryRows.Advance`,
-     `WorldBody.CaptureIntegrationResidue` (beside the scoped replay's
-     `WorldScopedReplayRuntime.AfterTick`, whose `WorldPopulation.AppendContinuationHash`
-     encodes each scope body's checkpoint every tick the scope runs) and
-     `WorldInputOwner.TryAdmit`. Garbage collection
-     was not a factor in the traced windows. Rated work still lands on frames
-     without a step, so both kinds of frame sit near the budget and any jitter
-     misses it.
+   - The frame thread's CPU work at both stops, read with `dotnet-trace` sampled
+     thread time, largest first:
+     - The tick runs on the frame thread (`HostLoop.Run` through
+       `FixedStepPump.Step`), so a frame that steps carries a whole tick: the
+       rules (`RuleEvaluator.EvaluateDue`), the bodies (`WorldPopulation.AdvanceSimulated`:
+       `WorldBody.ResolveProgramContacts`, the refusal snapshot), snapshot delivery
+       (`WorldTick.EmitSnapshot`), and the session instances
+       (`WorldInstanceHost.StepInstances`). Its full scans: `WorldRuleHost.DeriveFacts`
+       visits every population slot and `WorldDisclosureImages.Current` every
+       authored row on each pass. The scoped replay's
+       `WorldScopedReplayRuntime.AfterTick` encodes each scope body's checkpoint
+       every tick the scope runs (`WorldPopulation.AppendContinuationHash`). The
+       move off the frame thread is the presentation view's last cut
+       ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+     - The creations' effector surface probes (`WorldCreationInstances.ApplyEffectors`):
+       a probe whose inputs moved marches again (`WorldSurfaceQuery.Covers`
+       reuses bit-identical inputs only), and two thirds of its cost is the hit's
+       gradient, six exact walks (`SdfFieldEvaluator.TryFieldGradient`). A
+       four-tap tetrahedral difference, the GPU interpreter's form, would cut
+       every gradient consumer by a third; it moves contact normals, so it is a
+       measured change of the deterministic query, not a probe-local one.
+     - Mesh draw staging (`SdfWorldTables.StageChangedDraws`, through
+       `SdfWorldTables.StageMeshDraw`) and dressing (`SdfMeshDresser.Dress`),
+       already proportional to the draws that changed (`sdf.instances`'
+       `records.changed` is almost all of `records.compared`). What changes is
+       the posing the rates allow: a creation may hold only while no camera's
+       frustum and no cascade keeps its sphere (`WorldCreationInstances.Shown`),
+       and occlusion is not consulted, so at flight B, a view inside the
+       stairwell, the motion gallery's exhibits pose every frame (`world.rates`
+       lists them at 60 Hz); whether the stairwell hides them is for
+       `world.view.pick` to confirm. The mesh pass's occlusion result, which
+       `SdfPortalSight` already reads for session views, is the evidence that
+       would let them hold.
+     - View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
+       binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
+       `WorldScreenBinder.TryRippleOf`), each frame for every screen.
+     - The upload's fence wait (`SdfWorldTables.SubmitUpload` waits the previous
+       upload, `SdfWorldTables.FrameRingSize` slots) is GPU back-pressure, not
+       CPU work: it counts in `produce-fence`.
+
+     A zero-fill or copy share under a native call (`SpanHelpers.ZeroMemoryNative`,
+     `MemmoveNative`) can be the sampler's safe-point skid; read the caller's
+     loop and its counts before cutting one. Garbage collection was not a factor
+     in the traced windows. Rated work still lands on frames without a step, so
+     both kinds of frame sit near the budget and any jitter misses it.
 
    `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
@@ -191,7 +219,10 @@ milestone. The owner requested its baseline and implementation plan, which
    while each boundary still needs the same full convergence.
 5. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
-   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
+   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)); beside it,
+   [virtual geometry](virtual-geometry.md#the-build-order)'s G1 (the offline
+   field-levels audit mode) and G3 (member boxes), which share no files with
+   V1 and V2.
 6. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
 7. [Bake proportional to change](#bake-proportional-to-change) [high, the
@@ -1605,21 +1636,46 @@ by `world.view.pick`.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
-- [high] The hall's interiors read near black at noon. The exposure floor
-  (`worlds/debug/hall.puck`, `exposure.minimum`, EV 7 from dawn to dusk) holds
-  view 0 at EV 7 in the devices room, where the probes meter 9 to 15 nits and
-  the metered exposure with the authored compensation is about EV 4.5: about
-  two and a half stops under, so the walls, floor and devices read as murk.
-  The floor exists so the moonlit valley reads at night; a daytime floor that
-  clamps every dim interior is the wrong lever. Decide the interiors' look
-  (lamps, fill, or an exposure that meters them) against the gallery's
-  references, then judge every room.
 - [medium] The Humble Gaming Brick's atomic-orange glass shell
-  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as an
-  opaque deep red even at a pinned exposure that shows the room (EV 4.5): the
-  board, chips and cells behind it do not show through. On Direct3D 12 the
-  probe gather leaks no sky light into it under the roof (it reads as dim as
-  its surroundings, neither glowing nor black).
+  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as a deep
+  red rather than a clear orange acrylic in the lit Wonderland room: its
+  picture, buttons and speaker show through, but the board is a dark brown.
+  The shell is a solid prism, so a view ray crosses 13 mm or more of tint
+  (`depth: 0.009`) where a real hollow shell's two walls are about 4 mm; a
+  depth sized to the real walls is the likely fix, judged at the brick's
+  framing line in `devices.md`.
+- [medium] Sunlight leaks along the top of Wonderland's west wall under its
+  roof (`worlds/debug/wonderland.puck`, `wonderland-room`): a stepped,
+  few-pixel sunlit band where the wall meets the roof, seen from the room's
+  north-east corner (`view.override camera look 8.8 1.6 33.5 1.4 0.9 28`). It
+  goes with `world.shadows off`, so it is the cascades' test at the
+  wall-roof junction, not the probes.
+- [high] Lit interiors still show two of the irradiance volume's artifacts at
+  noon. Level 1's far-ceiling streaks, its south-wall smear and the stairwell's
+  green tint were the storey level answering past a camera-centred finest
+  window and are gone with the window ahead of the view
+  (`SdfMeshIrradiance.WindowAnchor`). What remains: faint wavy stains on the
+  stairwell's treads (`view.override camera look 12.6 3.8 39.3 13 4.9 35`) and
+  the floors' row blotches under the strips, which are the emitter sampling
+  item in the [Lighting and GI](#lighting-and-gi) packet; read `world.probe` on
+  a stain before attributing it.
+- [high] The debug world's whites take a yellow-green cast at noon because of
+  what it authors, not the volume (`world.probe`'s `indirect-sky` and
+  `indirect-bounce` at the gi-corner's back wall read 1.6, 2.6, 3.5 and 6881,
+  7640, 3739 nits; at its shaded outer face 387, 613, 831 and 9297, 10301, 5364,
+  with the GPU relight within 0.2% of the CPU reference). The caldera's sunlit
+  walls (`valley-<sector>`, 300 to 430 m high at 215 to 300 m, so a probe on
+  the floor sees the sky over about a sixth of its directions) and the lawn
+  (`lawnTurf` `#6C8A33`, about twice a real lawn's visible reflectance, its
+  blue a tenth of its green) outshine the clear-day sky (`dayCycle`, 10,000
+  nits with a 1,000-nit zenith, about half a real clear sky's diffuse light)
+  fifteen to one on a shaded wall. The devices room is teal walls
+  (`wonderWall` `#6FA6A8`) over a beige floor under warm strips, which bounces
+  green. A look call for the lead: darker, less saturated turf, a brighter day
+  sky, or both (in a CPU harness of a white wall on a lawn, turf `#4F6B2E` with
+  an 18,000-nit sky moved the wall from mint to a cool sky tint), judged with
+  `world.toon` both off and on, since the cel default tints the indirect light
+  by its shadow band.
 - [low] `world.indirect off` leaves auto exposure metering the probes (view 0
   read 15.272 nits before and after the toggle) while the frame turns white at
   EV 4.5 in the devices room: the lever's fallback ambient lights an interior
@@ -2677,6 +2733,22 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [high] Emissive faces light the world only where a probe's 144 fixed rays
+  happen to meet them. The gallery hall is lit mostly by its 0.4 m ceiling
+  strips (`hallStrips`, 4000 nits, "lit through the irradiance volume"), which
+  subtend about 6 degrees from a probe 3.7 m below against texels of 15 to 17,
+  so neighbouring probes catch a strip or miss it by where they stand: in a CPU
+  harness of level 1 (a slab, a ceiling, four strips, Medium), the probes at
+  (29, 5, 19) and (29, 5, 21) read 96 and 194 nits, and the floor's indirect
+  light shows rows of dark and bright blotches. Point lights in the strips'
+  places light the same floor smoothly. A surface beside a strip is not lit by
+  it either, except through those sampled probes. The fix is an emitter's light
+  integrated over its solid angle: static emissive faces as area sources in the
+  relight's local part (a polygon form factor per probe axis under a visibility
+  test, a texel that meets an emitter then taking only its reflection) and, for
+  their near field, in the views pass. Design lane with review; it owns the
+  interiors' floor blotches and the stair treads' stains if `world.probe` there
+  names an emitter. Owner: lighting batch.
 - [medium] Probe scene capacity retains its high-water allocation:
   `GpuArena.Allocate` (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:147`)
   never lowers `Words`, and `RecordSceneUpload`
@@ -2721,7 +2793,11 @@ the fixed poses and the approaches already rejected.
   - **The jump to night is wrong.** Forcing midnight
     (`world.state.cell.set day $value 0.0`) leaves the scene near-black for
     seconds while the tree canopies glow green from inside. Daytime bounce
-    stays in the probes while exposure adapts.
+    stays in the probes while exposure adapts. From the overlook
+    (`debug.go overlook`) after a jump from noon the valley floor still
+    reads blown white at the EV 2 floor after a minute, while
+    `[sdf.mesh-gi] behind` reports a relight shortfall; a layout reset
+    (`world.indirect high`, then `medium`) brings the moonlit deep blue at once.
   - **The settled night reads as a dim overcast day.** Greens stay
     saturated, the deep-blue moon barely tints anything, and the EV 2
     exposure floor lifts the scene to dusk brightness. The night look is an
@@ -2884,8 +2960,8 @@ the fixed poses and the approaches already rejected.
     `(8, 2, 8)` m over 32×48×32 alternative keeps the 8 m band outdoors at 60 %
     more probes; the overlook's mid-field showed no change under the default
     table, so it was not taken.
-  - Left open by the memo: a sparse finest level and a forward window offset
-    (options 9 and 10) once the trace is on the GPU, an authored `indirect`
+  - Left open by the memo: a sparse finest level (option 9) now that the
+    trace is on the GPU, an authored `indirect`
     region (option 5) if a world asks for one, higher angular resolution for
     coarse surface maps (option 7) if an atrium taller than its probe planes
     still seams, and the per-probe visibility lattice (option 8) as the coarse

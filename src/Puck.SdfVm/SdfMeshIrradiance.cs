@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Cameras;
 using Puck.Maths;
@@ -315,7 +316,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_restoreCells = [];
     private uint[] m_restoreWords = [];
     private uint[] m_volume = [];
-    private readonly bool[] m_dirtySlots = new bool[MaxProbes];
     private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
     private readonly Stopwatch m_sceneClock = new();
@@ -548,7 +548,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_gpuMeter = null;
                 m_gpuMeterAskedOf = null;
                 m_changedSlots.Clear();
-                Array.Clear(m_dirtySlots);
                 foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
                 m_published = default;
                 // The new tables hold no table and the new service no feedback. The volume's words still hold every
@@ -595,7 +594,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (resizing) {
                 m_volume = new uint[(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)];
-                Array.Clear(array: m_dirtySlots);
                 m_changedSlots.Clear();
                 foreach (var level in m_levels) {
                     level.Cache.Clear();
@@ -833,7 +831,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (m_republishOwed || (level.Unwritten > 0) || ((level.Changed.Count == 0) && (level.Published == window))) { continue; }
             m_geometryWrote |= (m_tracedLanded || (level.Published != window));
-            m_changedSlots.AddRange(collection: level.Changed);
+            m_changedSlots.AddRange(source: level.Changed.Members);
             level.Changed.Clear();
             level.Published = window;
             m_wrote = true;
@@ -841,7 +839,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (m_changedSlots.Count > 0) {
             m_tracedLanded = false;
             write(obj: m_volume.AsMemory(length: (layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords), start: 0));
-            foreach (var slot in m_changedSlots) { m_dirtySlots[slot] = false; }
             m_changedSlots.Clear();
         }
 
@@ -852,21 +849,41 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_published = new SdfMeshIrradianceParameters(Enabled: enabled, Far: PublishedOf(layout: layout, level: 2), Finest: PublishedOf(layout: layout, level: 0),
             Middle: PublishedOf(layout: layout, level: 1));
     }
+    // Where a level's window centres for the first view. The finest level's anchor is its camera moved ahead along its
+    // horizontal forward by a quarter of the window's horizontal extent, so the finest probes cover what the view looks
+    // across rather than as much behind it, and the camera stays a quarter of the window inside its back face; a view
+    // looking straight up or down keeps its camera. A coarser level centres on the camera: its window already reaches
+    // past the finest one's on every side.
+    private Vector3 WindowAnchor(SdfFrame frame, Layout layout, int level) {
+        var camera = frame.Views[0].Camera;
+
+        if ((level != 0) || frame.Views[0].Elsewhere) { return m_camera; }
+
+        var ahead = new Vector3(x: camera.Forward.X, y: 0f, z: camera.Forward.Z);
+        var length = ahead.Length();
+
+        if (!(length > 1e-3f) || !float.IsFinite(f: length)) { return m_camera; }
+
+        var extent = (layout.SpacingOf(level: level) * new Vector3(x: layout.DimsOf(level: level).X, y: 0f, z: layout.DimsOf(level: level).Z));
+
+        return (m_camera + ((ahead / length) * (0.25f * MathF.Min(x: extent.X, y: extent.Z))));
+    }
     // A level's published window; one not yet published carries its probe counts at zero spacing, so the views pass skips
     // it yet places the coarser levels' slots after its own.
     private SdfMeshIrradianceWindow PublishedOf(Layout layout, int level) => (m_levels[level].Published.Present
         ? m_levels[level].Published
         : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
-    // renders when that box fits in the window's middle, and on the first view's camera alone when it does not, so each
-    // level follows every view as far as its reach allows and a coarser level covers views a finer one cannot. It
-    // recentres only once a camera it centres on leaves its middle, an eighth of the window short of each face, so a
-    // camera that moves back and forth across a cell (a body falling through a floor painting and out of the ceiling's)
-    // keeps one window rather than moving it, refilling it and tracing its new probes every frame.
+    // renders, the first view's taken at its anchor ahead of it (WindowAnchor), when that box fits in the window's
+    // middle, and on the first view's anchor alone when it does not, so each level follows every view as far as its
+    // reach allows and a coarser level covers views a finer one cannot. It recentres only once a point it centres on
+    // leaves its middle, an eighth of the window short of each face, so a camera that moves back and forth across a cell
+    // (a body falling through a floor painting and out of the ceiling's) or turns a little keeps one window rather than
+    // moving it, refilling it and tracing its new probes every frame.
     private (int X, int Y, int Z) WindowLow(SdfFrame frame, int level, Layout layout, (int X, int Y, int Z) current, bool resizing) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
-        var first = CellOf(position: m_camera, spacing: spacing);
+        var first = CellOf(position: WindowAnchor(frame: frame, layout: layout, level: level), spacing: spacing);
         var low = first;
         var high = first;
 
@@ -958,11 +975,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 var sky = probe.Sky;
                 var radiance = probe.Radiance;
+                var skyLight = probe.SkyLight;
 
                 for (var axis = 0; (axis < 6); axis++) {
-                    var skyLight = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
-
-                    axes[axis] += (SdfPhotometry.LuminanceOf(color: (radiance[axis] + skyLight)) * weight);
+                    axes[axis] += (SdfPhotometry.LuminanceOf(color: (radiance[axis] + skyLight[axis])) * weight);
                     open += ((sky[axis] * weight) / 6f);
                 }
                 total += weight;
@@ -975,9 +991,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 if (sampleAtCamera.Invalid) { return false; }
                 for (var axis = 0; (axis < 6); axis++) {
-                    var skyLight = (lighting.Sky ? (lighting.SkyIrradiance(normal: Axes[axis]) * (sampleAtCamera.Sky[axis] * lighting.Gains.Sky)) : Vector3.Zero);
-
-                    axes[axis] = SdfPhotometry.LuminanceOf(color: (sampleAtCamera.Radiance[axis] + skyLight));
+                    axes[axis] = SdfPhotometry.LuminanceOf(color: (sampleAtCamera.Radiance[axis] + sampleAtCamera.SkyLight[axis]));
                     open += (sampleAtCamera.Sky[axis] / 6f);
                 }
                 total = 1f;
@@ -1027,7 +1041,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 // The hits were traced from the sample's own origin, so it is relit there, however far within its cell the
                 // camera now stands.
                 Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: sample.Hits, layout: m_layout, lighting: lighting, lights: default, local: sample.Local,
-                    lows: lows, origin: sample.Position, radiance: sample.Radiance, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), scene: scene);
+                    lows: lows, origin: sample.Position, radiance: sample.Radiance, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), scene: scene, sky: sample.SkyLight);
                 sample.Lighting = lighting.Version;
                 sample.LocalVersion = lighting.LocalVersion;
                 sample.Settled = !m_owed;
@@ -1042,7 +1056,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         traced.Invalid = !valid;
         if (valid) {
             Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: traced.Hits, layout: m_layout, lighting: lighting, lights: default, local: traced.Local,
-                lows: lows, origin: position, radiance: traced.Radiance, reuseLocal: false, scene: scene);
+                lows: lows, origin: position, radiance: traced.Radiance, reuseLocal: false, scene: scene, sky: traced.SkyLight);
         }
         traced.Lighting = lighting.Version;
         traced.LocalVersion = lighting.LocalVersion;
@@ -1488,12 +1502,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A level's cell's slot words in the volume, marked changed for the level's next publication.
     private Span<uint> SlotWords(int level, (int X, int Y, int Z) cell, bool gpuWritten = false) {
         var slot = VolumeSlot(cell: cell, level: level);
-        if (GpuTrace is not null && !gpuWritten) { m_gpuDirty.Add(slot); }
+        if (GpuTrace is not null && !gpuWritten) { _ = m_gpuDirty.Add(index: slot); }
 
-        if (!m_dirtySlots[slot]) {
-            m_dirtySlots[slot] = true;
-            m_levels[level].Changed.Add(item: slot);
-        }
+        _ = m_levels[level].Changed.Add(index: slot);
         return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
     }
     // Composes a level's cached cell's slot words from its own sky shares, relit cubes, surface map and light visibility;
@@ -1508,13 +1519,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         var sky = probe.Sky;
         var radiance = probe.Radiance;
+        var skyLight = probe.SkyLight;
 
         words[0] = (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag) | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u);
         for (var pair = 0; (pair < 3); pair++) {
-            words[(1 + pair)] = Pack(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
+            words[(SdfMeshIrradianceProbe.SkyWord + pair)] = Pack(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
         }
         for (var pair = 0; (pair < 9); pair++) {
-            words[(4 + pair)] = Pack(low: Channel(cube: radiance, index: (2 * pair)), high: Channel(cube: radiance, index: ((2 * pair) + 1)));
+            words[(SdfMeshIrradianceProbe.RadianceWord + pair)] = Pack(low: Channel(cube: radiance, index: (2 * pair)), high: Channel(cube: radiance, index: ((2 * pair) + 1)));
+            words[(SdfMeshIrradianceProbe.SkyLightWord + pair)] = Pack(low: Channel(cube: skyLight, index: (2 * pair)), high: Channel(cube: skyLight, index: ((2 * pair) + 1)));
         }
         probe.Lights.CopyTo(destination: words.Slice(length: SdfMeshIrradianceProbe.LightWords, start: SdfMeshIrradianceProbe.LightsWord));
         // KEEP IN SYNC with sdfMeshProbeOffset.
@@ -2021,7 +2034,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 previous.Lights.CopyTo(destination: lights.Lights(index: index));
             }
             Relight(feedback: feedback, hits: probe.HitWords, layout: layout, lighting: lighting, lights: lights.Lights(index: index), local: lights.Local(index: index),
-                lows: lows, origin: origin, radiance: lights.Radiance(index: index), reuseLocal: reuseLocal, scene: scene);
+                lows: lows, origin: origin, radiance: lights.Radiance(index: index), reuseLocal: reuseLocal, scene: scene, sky: lights.SkyLight(index: index));
             // A probe that moved past the convergence bound keeps the bounce iteration going (Work, Drain).
             probe = (probe with { Moved = (candidate.Trace || (previous.Shading is null) || !Settled(after: lights.Radiance(index: index), before: previous.Radiance)) });
         }
@@ -2085,17 +2098,24 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // spot lights and emission send (`local`) depends only on the lighting's local version, so a relight whose probe
     // holds that cube for the current local version (`reuseLocal`) reads it and traces no shadow ray toward a point
     // light; otherwise it shades it into `local` and, when `lights` is not empty, marks which traced lights its origin
-    // sees. The directional lights and the bounce are shaded every relight. The same quadrature weighs the cubes as
-    // weighed its sky shares.
+    // sees. The directional lights and the bounce are shaded every relight, and every ray that misses carries the sky's
+    // radiance about it into `sky`. The same quadrature weighs the cubes as weighed its sky shares.
     private void Relight(Vector3 origin, ReadOnlySpan<uint> hits, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene,
-        bool feedback, Span<Vector3> radiance, Span<Vector3> local, bool reuseLocal, Span<uint> lights) {
+        bool feedback, Span<Vector3> radiance, Span<Vector3> local, Span<Vector3> sky, bool reuseLocal, Span<uint> lights) {
         var directions = SdfMeshProbeDepth.RayDirections;
         var weights = SdfMeshProbeDepth.RayWeights;
 
         radiance.Clear();
+        sky.Clear();
         if (!reuseLocal) { local.Clear(); }
         for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
-            if (!SdfMeshProbeDepth.TryHit(backFace: out var back, distance: out var distance, hits: hits, material: out var material, normal: out var normal, texel: texel) || back) { continue; }
+            if (!SdfMeshProbeDepth.TryHit(backFace: out var back, distance: out var distance, hits: hits, material: out var material, normal: out var normal, texel: texel)) {
+                for (var axis = 0; (axis < 6); axis++) {
+                    sky[axis] += (lighting.SkyTexels[texel] * (weights[texel] * MathF.Max(x: 0f, y: Vector3.Dot(vector1: directions[texel], vector2: Axes[axis]))));
+                }
+                continue;
+            }
+            if (back) { continue; }
 
             var direction = directions[texel];
             var (varying, fixedLight) = Shade(feedback: feedback, layout: layout, lighting: lighting, local: !reuseLocal, lows: lows, material: material, normal: normal,
@@ -2113,6 +2133,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var axis = 0; (axis < 6); axis++) {
             if (!reuseLocal) { local[axis] /= AxisTotals[axis]; }
             radiance[axis] = ((radiance[axis] / AxisTotals[axis]) + local[axis]);
+            sky[axis] /= AxisTotals[axis];
         }
         if (lights.IsEmpty) { return; }
         if (!reuseLocal) {
@@ -2193,7 +2214,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             fixedLight += (((surface.Albedo * surface.Emissive) * (surface.Bleed ?? Vector3.One)) * lighting.Gains.Emission);
         }
         if (feedback && (reflected != Vector3.Zero)) {
-            varying += ((reflected * Incoming(layout: layout, lighting: lighting, lows: lows, normal: normal, point: point)) * lighting.Gains.Feedback);
+            varying += ((reflected * Incoming(layout: layout, lows: lows, normal: normal, point: point)) * lighting.Gains.Feedback);
         }
 
         return (varying, fixedLight);
@@ -2201,16 +2222,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The light a surface receives from the cached probes about it, as the views pass reads the volume
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the probes Select chooses, each weighted as Gather weighs it.
     // It reads each probe's own cubes, exactly as the published volume does.
-    private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
+    private Vector3 Incoming(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
+        var (sky, bounce) = IncomingParts(layout: layout, lows: lows, normal: normal, point: point);
+
+        return (sky + bounce);
+    }
+    // Incoming's two terms apart: the sky light and the surfaces' radiance the probes' cubes hold.
+    private (Vector3 Sky, Vector3 Bounce) IncomingParts(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
         var squared = (normal * normal);
-        var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
         Span<float> cornerWeights = stackalloc float[GatherSlots];
         Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[GatherSlots];
         var cornerProbes = new Corners();
 
         _ = Select(cells: cornerCells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, layout: layout, lows: lows, normal: normal, point: point);
 
-        var sky = 0f;
+        var sky = Vector3.Zero;
         var bounce = Vector3.Zero;
         var total = 0f;
 
@@ -2219,16 +2245,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             var probe = cornerProbes[corner];
 
-            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * cornerWeights[corner]);
+            sky += (Cube(cube: probe.SkyLight, normal: normal, squared: squared) * cornerWeights[corner]);
             bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * cornerWeights[corner]);
             total += cornerWeights[corner];
         }
 
         if (total <= 0f) {
-            return Vector3.Zero;
+            return (Vector3.Zero, Vector3.Zero);
         }
 
-        return ((skyIrradiance * (sky / total)) + (bounce / total));
+        return ((sky / total), (bounce / total));
     }
 
     /// <summary>Reads the probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): the chosen
@@ -2336,9 +2362,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 }
             }
             var level = selection.Level;
+            var (sky, bounce) = IncomingParts(layout: layout, lows: Lows(), normal: normal, point: point);
 
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
-                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
+                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)} indirect-sky=({sky.X:0.#}, {sky.Y:0.#}, {sky.Z:0.#}) indirect-bounce=({bounce.X:0.#}, {bounce.Y:0.#}, {bounce.Z:0.#})]"));
             lines.Add(item: Describe());
             for (var slot = 0; (slot < ((selection.RemainderLevel >= 0) ? GatherSlots : 8)); slot++) {
                 var report = reports[slot];
@@ -2614,7 +2641,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map
-    // in a trace batch's ProbeBlock), and its light (its radiance cube and traced-light visibility in a relight batch's
+    // in a trace batch's ProbeBlock), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
     // version, the sweep it was last relit in and whether that relight moved it past the convergence bound). A batch
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
@@ -2627,6 +2654,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public ReadOnlySpan<Vector3> Radiance => Shading!.Radiance(index: LightIndex);
         public ReadOnlySpan<Vector3> Local => Shading!.Local(index: LightIndex);
         public ReadOnlySpan<uint> Lights => Shading!.Lights(index: LightIndex);
+        public ReadOnlySpan<Vector3> SkyLight => Shading!.SkyLight(index: LightIndex);
     }
     // A block's words, zeroed, on the pinned heap. The probe cache's table, a large object that only a gen2 collects,
     // names the blocks for as long as their probes stand, so words allocated young would be marked through its cards and
@@ -2651,9 +2679,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public Span<uint> Hits(int index) => (m_hits ?? throw new InvalidOperationException("Runtime hit words are resident on the GPU.")).AsSpan(index * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords);
     }
     // The light words of one relight batch's probes, each probe's at its index: the radiance cube (18 floats), the part of
-    // it the point and spot lights and emission send (18 floats), then its traced-light visibility words.
+    // it the point and spot lights and emission send (18 floats), its traced-light visibility words, then its sky-light
+    // cube (18 floats).
     private sealed class LightBlock(int count) {
-        public const int FloatsPerProbe = (36 + SdfMeshIrradianceProbe.LightWords);
+        public const int FloatsPerProbe = (54 + SdfMeshIrradianceProbe.LightWords);
 
         private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
 
@@ -2662,6 +2691,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (index * FloatsPerProbe)));
         public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 18)));
         public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
+        public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 36 + SdfMeshIrradianceProbe.LightWords)));
     }
 
     // The probes by cell: an open-addressed table of entries, so a probe the worker lands costs no allocation and the walk
@@ -2850,7 +2880,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class Level(int index) {
         public int Index { get; } = index;
         public ProbeCache Cache { get; } = new();
-        public List<int> Changed { get; } = [];
+        public MarkedIndexSet Changed { get; } = new();
 
         public (int X, int Y, int Z) Low;
         public int Unwritten;
@@ -2867,6 +2897,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public float[] Sky { get; } = new float[6];
         public Vector3[] Radiance { get; } = new Vector3[6];
         public Vector3[] Local { get; } = new Vector3[6];
+        public Vector3[] SkyLight { get; } = new Vector3[6];
         public bool Invalid { get; set; }
         public int Lighting { get; set; }
         public int LocalVersion { get; set; }
@@ -2937,6 +2968,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public required TracedLight[] Points { get; init; }
         public bool Sky { get; init; }
         public required Vector3[] SkyCoefficients { get; init; }
+        // The sky's radiance about each hit texel's ray, gain applied (SdfMeshProbeDepth.SkyRadiance), zero with the sky
+        // source off: what a probe's open ray carries.
+        public required Vector3[] SkyTexels { get; init; }
         public float SkyPeak { get; init; }
 
         public SdfMaterial MaterialAt(int index) =>
@@ -2963,8 +2997,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             return true;
         }
-        // The sky's cosine-weighted mean radiance about a normal: its irradiance over pi, the views pass's unit.
-        public Vector3 SkyIrradiance(Vector3 normal) => (SdfSkyEnvironment.Irradiance(coefficients: SkyCoefficients, normal: normal) / MathF.PI);
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
         public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch) {
@@ -2988,6 +3020,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var coefficients = new Vector3[SdfSkyEnvironment.CoefficientCount];
+            var skyTexels = new Vector3[SdfMeshProbeDepth.HitCount];
             var sources = frame.IndirectSources;
             var skyPeak = 0f;
 
@@ -2998,6 +3031,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 frame.Sky.Pack(captureLights, frame.FarDistance, scratch.Details, out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
                 SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
+                SdfMeshProbeDepth.SkyRadiance(map: map, texels: skyTexels);
+                for (var texel = 0; (texel < skyTexels.Length); texel++) { skyTexels[texel] *= frame.IndirectGains.Sky; }
                 foreach (var texel in map) {
                     skyPeak = MathF.Max(x: skyPeak, y: SdfPhotometry.LuminanceOf(color: texel));
                 }
@@ -3021,6 +3056,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Points = [.. points],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
                 SkyCoefficients = coefficients,
+                SkyTexels = skyTexels,
             };
         }
     }

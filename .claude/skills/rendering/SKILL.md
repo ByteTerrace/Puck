@@ -1179,6 +1179,12 @@ by its fence share is GPU back-pressure, not CPU work.
   finished scene, use `world.wait bakes <seconds>` and require its settled
   result, then check for `[sdf.mesh-gi] done` in the log. A tick wait or
   `world.wait ready` alone does not establish that all meshes are present.
+  The debug world's full probe convergence takes minutes after the bakes
+  settle, and before it a view shows the sky-only ambient: whites and shadowed
+  faces read blue-grey where the converged lawn bounce reads warm green-yellow.
+  A backend pair captured without lockstep at different convergence states
+  looks like a colour divergence between backends; it is not one (`world.indirect off`
+  reproduces the unconverged look). Compare backends under lockstep, which waits for the trace.
   A byte comparison sets `world.lockstep on` before the first tick in both legs,
   then waits for bake settlement before requesting the still. An ordinary settled screenshot converges temporal views
   but does not request `SdfFrame.ConvergesLighting`; it can capture before a background GI

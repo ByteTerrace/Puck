@@ -122,7 +122,7 @@ half of these rules on every command, with no exemptions.
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`, and starting and stopping Worlds of its own with `puck_world_start` and `puck_world_stop`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck measure`](#puck-measurequeued-measurement-windows) | queue frozen before/after builds and timing questions with `request`, inspect them with `list`, and drain them under one priority quiet lease with `run`, reporting median, IQR and paired differences from the existing bench or sweep reports. |
-| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh preview` bakes a creation on the CPU and draws it from many views with no device; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
@@ -3573,6 +3573,45 @@ name. The group of segments no instance owns matches a
 stored mesh only when nothing but the scene emits into the program. Exit codes:
 0 every selected group reported; 1 the world failed to load, or no selected
 group had a stored mesh (with how to store them); 2 a usage error.
+
+`puck mesh preview --world <path> --prototype <id> --output <dir> [--views
+<list>] [--size WxH] [--shading smooth|flat] [--open-edges false]` draws a
+creation from many sides with no device and no lease, so a sculpting lane sees a
+change before a windowed batch. It composes the rest scene and plans the
+groups as `mesh audit` does, keeps the groups of the first body or placement
+that stands the prototype, bakes them on the CPU (`MeshCpuBake`, the bake
+`mesh audit --cpu` measures), and joins their meshes in the creation's author
+frame (+Z the front, +X the subject's own left): a body's groups through the
+body, a placement's through its first pooled group's slot, a static
+placement's kept as placed. `Puck.Cli.Mesh.MeshRaster` scan-converts each view
+(the rasteriser `--images` also uses) and `Puck.Assets.PngEncoder` writes it.
+It writes one PNG per view, `<prototype>-<view>.png`, and
+`<prototype>-sheet.png`, a grid of them all; each image carries a caption strip
+naming the view, its span and what the image leaves out. A prototype no look,
+body or placement of the world stands has no geometry to bake and is refused.
+
+- `--views` takes the standard names (`front`, `back`, `left`, `right`,
+  `front-left`, `front-right`, `back-left`, `back-right`, `top`, `below`; `all`
+  and the default are every one) and named views, `name=azimuth,elevation` in
+  degrees about the author frame (azimuth 0 the front, +90 the subject's own
+  left, elevation 90 from above), with `,x,y,z,halfWidth` a close window of
+  that half width in metres about an author-frame point. The three-quarter views
+  stand 18 degrees above the horizon. Each view frames the whole mesh, so
+  its span is printed; a named close window fixes its own.
+- Lighting is one light fixed in the camera's frame, so every view is lit
+  alike. A triangle shows its material's palette albedo, which the render path
+  writes unconverted (`HexColor`); paints, insets, wear and every other layer
+  are omitted, an animated creation is drawn at its pooled rest pose, and each
+  image's caption says so. `--shading flat` lights each triangle by its own face
+  normal, which shows the tessellation.
+- Magenta is a triangle seen from behind (the mesh's inside showing, which a
+  closed surface never does); red is a triangle holding an open edge
+  (`--open-edges false` drops it); a darker line is a depth step, which parts
+  overlapping shapes of one colour.
+- It prints the triangles, groups, open and non-manifold edges (the groups
+  holding the most), the extents in the author frame and the program material
+  ids by triangle count. Exit codes: 0 written; 2 the world failed to load, a
+  usage error, or the prototype baked no surface.
 
 `puck mesh scene --world <path> [--change <label text>]` times the irradiance
 volume's CPU trace scene (`SdfMeshIrradianceScene`) over the static meshes the

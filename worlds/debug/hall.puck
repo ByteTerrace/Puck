@@ -58,7 +58,9 @@ let hallPalette = [
   { color: "#D4D4D4", roughness: 0.85, specular: 0.04 }
   { color: "#9A9A9A", roughness: 0.7, specular: 0.08 }
   { color: "#3E3F42", roughness: 0.6, specular: 0.15 }
-  { color: "#FFFFFF", roughness: 0.5, emissive: 3000nit }
+  // The strips' diffuser, a linear LED fixture's luminance, enough that a lit level meters above the darkest daytime
+  // exposure (the `exposure` section below).
+  { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit }
   { color: "#EEEEEB", roughness: 0.6 }
   { color: "#E8E8E8", roughness: 0.9, specular: 0.02 }
   // The lift car's luminous ceiling: the car's light spread over nearly its whole ceiling, dim enough to read as a
@@ -156,8 +158,8 @@ let fallSlab = [
 // spans, beside its skylights).
 let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6, 30.6]]
 
-// The ceiling light strips under a ceiling at `top`: one over each viewing aisle and two over the landing, 6 cm deep and
-// sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own, so a level's lit and dark
+// The ceiling light strips under a ceiling at `top`: one over each viewing aisle and three over the landing (the third
+// over the lift lobby), 6 cm deep and sunk 1 cm into the slab. They are part of the slab above them, not a creation of their own, so a level's lit and dark
 // looks stay one geometry (the strips' slot alone differs) and the slab's bake keeps its trim at the slab's detail.
 template hallStrips(top, aisles) {
   for z in aisles {
@@ -172,7 +174,7 @@ template hallStrips(top, aisles) {
       slot: hallLight
     )
   }
-  for z in [18, 26] {
+  for z in [18, 26, 32] {
     boundsBox(
       label: $"landing-light-{z}",
       x0: 11.5,
@@ -241,8 +243,7 @@ let carPads = map(
 let carPanelY = 1.25
 let carPanelZ = (liftZ + 1.395)
 
-// The room lights. `hallLights` holds each level's state, Off or On: level 0 (the lobby, where the gaming devices'
-// screens light the room) starts Off and the levels above On. Off swaps the slab or roof above that level for its dark
+// The room lights. `hallLights` holds each level's state, Off or On, and every level starts On. Off swaps the slab or roof above that level for its dark
 // variant, so its ceiling strips stop glowing, and darkens the fixtures that level owns (`hallLamps`); the lift
 // car's lamp rides the car whatever its level. A level's switch stands on the west wall at z = switchZ, 1.1 to 1.46 m
 // over the floor, south of the stairs and clear of the device row's engage radius; the context button (`interact`,
@@ -371,8 +372,8 @@ let hallLampLevels = concat(
 )
 // Each level's ceiling, under the slab above it (the roof over level 3), where its strips and downlights hang.
 let hallCeilings = [4.25, 8.75, 13.25, 17.75]
-// The downlights: one every 12 m along each viewing aisle's strip, and two along each landing strip, 10 cm under the
-// ceiling, each a neutral spot casting down in a 50-degree cone. Level 3's strips hang only beside its skylights, so
+// The downlights: one every 12 m along each viewing aisle's strip, and two along each of the first two landing strips,
+// 10 cm under the ceiling, each a neutral spot casting down in a 50-degree cone. Level 3's strips hang only beside its skylights, so
 // with the skylights' blinds down its downlights also run in three rows across the skylights' frames, over its
 // rows. Level 0's columns stop short of the painting wing's partition at x 51 (paintings.puck), which would swallow a
 // fixture on it; the wing hangs its own. Level 2's stop short of the board game room's partition at x 51 too
@@ -765,6 +766,18 @@ prototypes {
           z0: landingSouth,
           z1: 39.7,
           slot: hallFloor
+        )
+        // The half landing's light: a luminous panel on the north wall over it, in the strips' diffuser and on no
+        // switch, as a stair's egress light is always lit; with the pendant it lights the flights either side.
+        boundsBox(
+          label: $"stair-light-{k}",
+          x0: 10.6,
+          x1: 13.8,
+          y0: ((storey * k) + 4),
+          y1: ((storey * k) + 4.3),
+          z0: 39.64,
+          z1: 39.71,
+          slot: hallLight
         )
         for j in range(1, 8) {
           boundsBox(
@@ -1376,7 +1389,8 @@ placements {
 
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
-// car's body under its ceiling, the painting wing's downlights and washes and Wonderland's lamp next door. A level's
+// car's body under its ceiling, and the painting wing's downlights and washes (Wonderland next door is lit by its own
+// ceiling strips, wonderland.puck). A level's
 // fixture reads its power from the level's `hallLamps` cell, so it follows that level's switch; the wing's stay lit
 // whatever the lobby's switch says.
 // A point or spot light reaches only as far as its light still shows at the darkest exposure the world takes, and each
@@ -1444,8 +1458,6 @@ render {
           temperature: 6500K,
           power: 6000lm
         )
-        // Wonderland's one lamp (wonderland.puck), dim enough that its device screens glow under the roof.
-        point(name: "wonderland-lamp", position: [5.2, 4.3, 29], temperature: 2700K, power: 300lm)
       ],
       map(
         range(0, length(hallDownlights)),
@@ -1496,7 +1508,10 @@ render {
     reflection: 1
   }
   // The exposure's floor follows the day (day.puck's `day` clock): EV 7 from dawn to dusk, the hall's lit rooms
-  // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black.
+  // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black. A
+  // lit room meters above the floor (its fixtures are sized for it, shapes.md), so the floor holds only an unlit room
+  // dark. Two stops over the meter keep the world's pale look while a white gallery wall stays short of the tonemap's
+  // shoulder: at the basis's two and a half, a lit level's walls and white exhibits clipped to a flat white.
   exposure {
     mode: Auto
     minimum {
@@ -1510,7 +1525,7 @@ render {
       ]
     }
     maximum: 16
-    compensation: 2.5
+    compensation: 2
     adaptation: 0.75
     local: 0.5
     hold: "state.galleryFill.hold"
@@ -1586,7 +1601,7 @@ state {
 
   world {
     table hallLights: HallLight {
-      level0 = Off
+      level0 = On
       level1 = On
       level2 = On
       level3 = On
@@ -1612,7 +1627,7 @@ state {
     }
     // Each fixture's luminous power, in lumens, by the level that owns it: zero while its level is Off.
     table hallLamps {
-      level0 = 0.0
+      level0 = 5000
       level1 = 5000
       level2 = 5000
       level3 = 5000

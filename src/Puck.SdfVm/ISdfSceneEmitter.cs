@@ -67,7 +67,7 @@ public interface ISdfSceneEmitter {
     /// When <see cref="SdfMovedTransforms.Everything"/> holds, the host has parked the whole table at
     /// <see cref="SdfEmitContext.ParkPosition"/> and the emitter packs every slot it uses. Otherwise the emitter packs
     /// only the owners (an avatar's leaf range, a stamp's root and shapes) whose inputs moved or that are still
-    /// settling, settles each through <see cref="SdfMovedTransforms.Commit"/> with the slots' prior contents, and owes a
+    /// settling, settles each through <see cref="SdfMovedTransforms.Commit(int, int, bool, bool)"/> (writing its slots through <see cref="SdfMovedTransforms.Write"/>, or handing over their prior contents), and owes a
     /// vacated owner's parked range through <see cref="SdfMovedTransforms.Owe"/>. Every slot an owner leaves unused
     /// holds <see cref="SdfEmitContext.ParkPosition"/>, never a stale or zero transform: a parked slot must read as
     /// hidden, not as identity-posed geometry at the origin.

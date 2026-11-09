@@ -36,7 +36,7 @@ public sealed class MeshCommandTests {
         var definition = admission!.Definition;
         var scene = RestScene.Compose(definition: definition, sourcePath: world);
 
-        return (scene, SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms));
+        return (scene, scene.Plan(farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render)));
     }
     // The world with two boxes placed beside the Moth: a plain one, a static group (the shared template its placement
     // copies, labelled by its prototype) whose shapes have no slot to be named by, and a hexagonal prism, whose regular polygon lowers to the convex polygon of its vertices.

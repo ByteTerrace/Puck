@@ -304,6 +304,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_SELECT_GROUP_SIZE", value: SdfMeshProbeRelight.SelectGroupSize);
         declarations.Count(name: "SDF_PROBE_RELIGHT_SLICES", value: SdfMeshProbeRelight.Slices);
         declarations.Count(name: "SDF_PROBE_RELIGHT_PARTIAL_WORDS", value: SdfMeshProbeRelight.PartialWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD", value: SdfMeshProbeRelight.PartialSkyWord);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD", value: SdfMeshProbeRelight.SkyOutputWord);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_SKY_ROW", value: SdfMeshProbeRelight.SkyRow);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_INSIDE_SHARE", value: SdfMeshIrradianceProbe.InsideShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE", value: SdfMeshIrradianceProbe.OpenGroundShare);
@@ -410,6 +413,9 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LEVELS", value: SdfMeshIrradianceProbe.Levels);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_SKY_WORD", value: SdfMeshIrradianceProbe.SkyWord);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_RADIANCE_WORD", value: SdfMeshIrradianceProbe.RadianceWord);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD", value: SdfMeshIrradianceProbe.SkyLightWord);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHTS_WORD", value: SdfMeshIrradianceProbe.LightsWord);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LIGHT_WORDS", value: SdfMeshIrradianceProbe.LightWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_DEPTH_WORD", value: SdfMeshIrradianceProbe.DepthWord);

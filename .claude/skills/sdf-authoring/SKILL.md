@@ -408,9 +408,17 @@ Source first, then structure, then pixels:
    uncertified, whether the fixed-point evaluator takes it, and what contact
    makes of it. `world.slice <placement> <x|y|z> <path.png>` draws the field's
    distance bands live.
-4. Run the game and look: a claim about how something reads is not verified
+4. Preview on the CPU before a windowed batch:
+   `puck mesh preview --world <file>.puck --prototype <id> --output <dir>` bakes
+   the creation with the engine's own CPU bake (no GPU lease, no World boot) and draws front, back, both sides, four three-quarter views, top and
+   below as palette-coloured PNGs and one contact sheet. Look at the sheet from
+   every side, as a missing part, a torn seam or a mirrored limb shows there
+   (magenta is a surface seen from behind, red a triangle on an open edge), and
+   name a close window (`head=30,10,0,0.07,0.05,0.04`) for a detail. It omits
+   paints, insets and wear, so it cannot judge a look, only form.
+5. Run the game and look: a claim about how something reads is not verified
    until you have looked at a capture (`references/loop.md`).
-5. Audit what the boot baked:
+6. Audit what the boot baked:
    `puck mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>`
    names the shapes at each group's worst clusters, in the author frame, and
    says which way the mesh faces against the field's gradient at the worst

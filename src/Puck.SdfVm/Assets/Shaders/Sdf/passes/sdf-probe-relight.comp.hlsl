@@ -4,10 +4,12 @@
 
 groupshared float3 probeVarying[6 * SDF_PROBE_GROUP_SIZE];
 groupshared float3 probeLocal[6 * SDF_PROBE_GROUP_SIZE];
+groupshared float3 probeSky[6 * SDF_PROBE_GROUP_SIZE];
 groupshared uint probeSet[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
 groupshared uint probeCleared[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
 // KEEP IN SYNC with SdfMeshIrradiance.Shade and Relight. CPU is the diagnostic/reference path.
-// One group is one slice of one listed probe: its SDF_PROBE_GROUP_SIZE hit texels, one a lane, and every
+// One group is one slice of one listed probe: its SDF_PROBE_GROUP_SIZE hit texels, one a lane (a hit shaded, a miss the
+// sky's radiance about its ray), and every
 // SDF_PROBE_RELIGHT_SLICES-th group of its light visibility rays. The slice writes its partial sums behind the batch's
 // results and fault word; sdf-probe-combine sums a probe's slices into its output and record.
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]
@@ -27,6 +29,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     [unroll] for (uint axis = 0; axis < 6; axis++) {
         probeVarying[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
         probeLocal[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
+        probeSky[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
     }
     for (uint w = lane; w < SDF_MESH_IRRADIANCE_LIGHT_WORDS; w += SDF_PROBE_GROUP_SIZE) {
         probeSet[w] = 0;
@@ -45,6 +48,14 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             float cosine = max(0, ray[axis / 2] * ((axis & 1) == 0 ? 1 : -1));
             probeVarying[axis * SDF_PROBE_GROUP_SIZE + lane] = varying * (ray.w * cosine);
             probeLocal[axis * SDF_PROBE_GROUP_SIZE + lane] = local * (ray.w * cosine);
+        }
+    } else if (valid && texel < SDF_PROBE_HIT_COUNT && distance > 0) {
+        // A miss carries the sky's radiance about its own ray.
+        float4 ray = sdfProbeDirections[texel];
+        float3 sky = sdfProbeLighting[SDF_PROBE_RELIGHT_SKY_ROW + texel].xyz;
+        [unroll] for (uint axis = 0; axis < 6; axis++) {
+            float cosine = max(0, ray[axis / 2] * ((axis & 1) == 0 ? 1 : -1));
+            probeSky[axis * SDF_PROBE_GROUP_SIZE + lane] = sky * (ray.w * cosine);
         }
     }
     for (uint light = slice * SDF_PROBE_GROUP_SIZE + lane; valid && light < lightCount; light += SDF_PROBE_RELIGHT_SLICES * SDF_PROBE_GROUP_SIZE) {
@@ -73,14 +84,16 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     sdfProbeOrigins.GetDimensions(count, stride);
     uint partial = count * SDF_PROBE_RELIGHT_RESULT_WORDS + 1 + (probe * SDF_PROBE_RELIGHT_SLICES + slice) * SDF_PROBE_RELIGHT_PARTIAL_WORDS;
     if (lane < 6) {
-        float3 varying = 0, local = 0;
+        float3 varying = 0, local = 0, sky = 0;
         for (uint i = 0; i < SDF_PROBE_GROUP_SIZE; i++) {
             varying += probeVarying[lane * SDF_PROBE_GROUP_SIZE + i];
             local += probeLocal[lane * SDF_PROBE_GROUP_SIZE + i];
+            sky += probeSky[lane * SDF_PROBE_GROUP_SIZE + i];
         }
         [unroll] for (uint c = 0; c < 3; c++) {
             sdfProbeHitsRW[partial + 3 * lane + c] = asuint(varying[c]);
             sdfProbeHitsRW[partial + 18 + 3 * lane + c] = asuint(local[c]);
+            sdfProbeHitsRW[partial + SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD + 3 * lane + c] = asuint(sky[c]);
         }
     }
     for (uint v = lane; v < SDF_MESH_IRRADIANCE_LIGHT_WORDS; v += SDF_PROBE_GROUP_SIZE) {

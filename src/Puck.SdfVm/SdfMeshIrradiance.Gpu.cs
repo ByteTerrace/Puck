@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
 
@@ -8,31 +9,34 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshIrradiance {
     // An explicit world.probe read checks the runtime's cached output against one further CPU-reference relight.
-    // The local term and visibility must agree to float precision; the varying term also includes the convergence
-    // residual (ConvergedShare). This diagnostic does no work during presentation.
+    // The local term, the sky light and visibility must agree to float precision; the varying term also includes the
+    // convergence residual (ConvergedShare). This diagnostic does no work during presentation.
     private string DescribeRelightReference(ProbeData probe, Vector3 origin, SdfMeshIrradianceScene scene) {
         Span<Vector3> radiance = stackalloc Vector3[6];
         Span<Vector3> local = stackalloc Vector3[6];
+        Span<Vector3> sky = stackalloc Vector3[6];
         Span<uint> visibility = stackalloc uint[SdfMeshIrradianceProbe.LightWords];
         Span<uint> hits = stackalloc uint[SdfMeshProbeDepth.HitWords];
         SdfMeshProbeDepth.TraceHits(scene, origin, m_layout.Reach, hits, out _);
         Relight(origin, hits, m_layout, m_lighting!, Lows(), scene, m_lighting!.Feedback && m_layout.Bounce,
-            radiance, local, false, visibility);
+            radiance, local, sky, false, visibility);
         var localError = 0f;
         var relightError = 0f;
+        var skyError = 0f;
         var bits = 0;
         for (var i = 0; i < 6; i++) {
             for (var c = 0; c < 3; c++) {
                 localError = MathF.Max(localError, MathF.Abs(local[i][c] - probe.Local[i][c]) / MathF.Max(1, MathF.Abs(local[i][c])));
                 relightError = MathF.Max(relightError, MathF.Abs(radiance[i][c] - probe.Radiance[i][c]) / MathF.Max(1, MathF.Abs(radiance[i][c])));
+                skyError = MathF.Max(skyError, MathF.Abs(sky[i][c] - probe.SkyLight[i][c]) / MathF.Max(1, MathF.Abs(sky[i][c])));
             }
         }
         for (var i = 0; i < visibility.Length; i++) { bits += BitOperations.PopCount(visibility[i] ^ probe.Lights[i]); }
-        return FormattableString.Invariant($" reference-local-error={localError:G5} reference-relight-error={relightError:G5} reference-visibility-errors={bits}");
+        return FormattableString.Invariant($" reference-local-error={localError:G5} reference-relight-error={relightError:G5} reference-sky-error={skyError:G5} reference-visibility-errors={bits}");
     }
     // SlotWords is the sole mutation door. A job consumes these deltas under the volume gate, then owns them until
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
-    private readonly HashSet<int> m_gpuDirty = [];
+    private readonly MarkedIndexSet m_gpuDirty = new();
     private uint[]? m_gpuVolume;
     // The worker's GPU scratch, grown and kept across its batches. Only the worker task's body touches it, and a worker
     // starts only once the last one completed, so it takes no gate; a job reads the origins, input and updates before
@@ -57,11 +61,7 @@ public sealed partial class SdfMeshIrradiance {
         m_republishOwed = false;
         for (var level = 0; level < m_levels.Length; level++) {
             var first = m_layout.OffsetOf(level: level);
-            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) {
-                if (m_dirtySlots[slot]) { continue; }
-                m_dirtySlots[slot] = true;
-                m_levels[level].Changed.Add(item: slot);
-            }
+            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) { _ = m_levels[level].Changed.Add(index: slot); }
         }
     }
 
@@ -226,7 +226,7 @@ public sealed partial class SdfMeshIrradiance {
         }
         rows[9] = new(AxisTotals[0], AxisTotals[1], AxisTotals[2], AxisTotals[3]);
         rows[10] = new(AxisTotals[4], AxisTotals[5], 0, 0);
-        for (var i = 0; i < lighting.SkyCoefficients.Length; i++) { rows[11 + i] = new(lighting.SkyCoefficients[i], 0); }
+        for (var i = 0; i < lighting.SkyTexels.Length; i++) { rows[SdfMeshProbeRelight.SkyRow + i] = new(lighting.SkyTexels[i], 0); }
         var cursor = SdfMeshProbeRelight.HeaderRows;
         for (var i = 0; i <= lighting.Materials.Length; i++) {
             var material = lighting.MaterialAt(i);
@@ -304,7 +304,7 @@ public sealed partial class SdfMeshIrradiance {
                 row[0] |= 2;
                 reuses = true;
                 MemoryMarshal.Cast<Vector3, uint>(previous.Local).CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 18)..]);
-                previous.Lights.CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 36)..]);
+                previous.Lights.CopyTo(row.Slice(SdfMeshProbeRelight.PreviousWord + 36, SdfMeshIrradianceProbe.LightWords));
             }
             if (!probe.Invalid) { m_gpuRelightRays[i] = RelightRays(lighting: lighting, origin: new Vector3(origins[i].X, origins[i].Y, origins[i].Z), reuses: reuses); }
         }
@@ -351,7 +351,7 @@ public sealed partial class SdfMeshIrradiance {
                 GrowScratch(array: ref m_gpuUpdateAt, length: dirty);
                 GrowScratch(array: ref m_gpuUpdateData, length: (dirty * SdfMeshIrradianceProbe.ProbeWords));
                 var i = 0;
-                foreach (var slot in m_gpuDirty) {
+                foreach (var slot in m_gpuDirty.Members) {
                     var word = slot * SdfMeshIrradianceProbe.ProbeWords;
                     m_gpuUpdateAt[i] = word;
                     m_volume.AsSpan(word, SdfMeshIrradianceProbe.ProbeWords).CopyTo(m_gpuUpdateData.AsSpan(i * SdfMeshIrradianceProbe.ProbeWords, SdfMeshIrradianceProbe.ProbeWords));
@@ -385,7 +385,8 @@ public sealed partial class SdfMeshIrradiance {
                 var row = output.Words.AsSpan(j * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
                 MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
                 MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
-                row[36..].CopyTo(lights.Lights(i));
+                row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));
+                MemoryMarshal.Cast<uint, Vector3>(row.Slice(SdfMeshProbeRelight.SkyOutputWord, 18)).CopyTo(lights.SkyLight(i));
                 var candidate = candidates[first + i];
                 probes[i] = probe with { Moved = candidate.Trace || !m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ||
                     previous.Shading is null || !Settled(lights.Radiance(i), previous.Radiance) };
