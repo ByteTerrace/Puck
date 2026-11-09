@@ -4010,7 +4010,10 @@ hang, then the pre-`main` language findings.
   world, agents authoring from prompts) hit walls or reach for clumsy forms".
   The walls sit in the language plan's S11 audit, this section and the
   sdf-authoring skill's evals. Start the one page under `docs/plans/` those
-  three link to, and move the walls recorded here into it. Owner: lead.
+  three link to, and move the walls recorded here into it; the modeling walls
+  are already listed in
+  [modeling authoring](modeling-authoring.md#1-the-engine-limits-authors-met),
+  the page's first section. Owner: lead.
 - [medium] A record-like table of fixed fields states its room by counting
   them. Work pricing reads declarations only, so a table a rule folds or a
   search keys on is priced at the engine's cell ceiling until it declares a
@@ -5245,6 +5248,11 @@ read one. The plans that keep open items:
 - [UI](ui.md#open-items): step 1's remainder, then steps 3 to 6 behind the
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.
+- [Modeling authoring](modeling-authoring.md#5-implementation-slices): the
+  engine limits authors met with their owners and steps (a static placement's
+  dropped `twist`, Convex rounding, the paint outline cap, a fold's detail),
+  the `mirror` block, rotation builtins and `relativeTo` placement as slices
+  S1 to S3, the preview compare and named anchors after them.
 - [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the unbuilt
   refusal arrangements and the crossing and restore variants, dormant while
   test requirements are suspended.

@@ -87,6 +87,10 @@ Durable GPU fixtures, per-pass work counters, general graphics attachments, shar
 
 The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a gallery wing of the debug world laid out, lit and debugged in build mode without typing a coordinate.
 
+## [Modeling authoring](modeling-authoring.md)
+
+The design round over why agent modeling passes go poorly: the engine limits authors met, verified in the code, ordered by the defects each caused and handed to the lane that owns it or given a step with a check (a static placement's dropped `twist` and `bend`, a Convex prism's refused rounding, the paint outline's cap, a fold's missing detail); and the authoring constructs that make the common mistakes impossible or obvious, each lowered to the plain rows the compiler writes at no cost: a `mirror` block through the engine's one frame classification, rotation builtins folded to the canonical quaternion with a frame readout, `relativeTo` placement with a proving migration, and what the live World adds. An outside edge-and-face editor's interaction ideas are weighed against the SDF document model. The first three slices have headless finish lines. The owner reviews it.
+
 ## [Milestone 1 acceptance laws](acceptance-laws.md)
 
 The cross-system invariants that prove the pipeline foundation holds together, and the scenarios still unbuilt: refusal arrangements and the crossing and restore variants. Dormant while test requirements are suspended.
