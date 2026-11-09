@@ -171,6 +171,18 @@ public static class VectorFunctions {
             z: axis.Z
         ));
     }
+    /// <summary>Returns a vector scaled to unit length, or a fallback where it is too short or not finite to have a
+    /// direction.</summary>
+    /// <param name="value">The vector.</param>
+    /// <param name="fallback">The vector returned where <paramref name="value"/> has no direction.</param>
+    /// <param name="shortest">The shortest length that still has a direction; at least zero, and a zero-length vector
+    /// never has one.</param>
+    /// <returns><paramref name="value"/> over its length, or <paramref name="fallback"/>.</returns>
+    public static Vector3 NormalizeOr(Vector3 value, Vector3 fallback, float shortest = 0f) {
+        var length = value.Length();
+
+        return (((length > shortest) && float.IsFinite(f: length)) ? (value / length) : fallback);
+    }
     /// <summary>Returns a unit vector perpendicular to a direction.</summary>
     /// <param name="direction">The direction, of any non-zero length.</param>
     /// <returns>The normalized cross product of <paramref name="direction"/> with the basis axis it is least aligned
