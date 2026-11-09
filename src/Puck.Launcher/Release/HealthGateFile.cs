@@ -74,9 +74,8 @@ public static class HealthGateFile {
     /// <exception cref="ArgumentNullException"><paramref name="registration"/> is <see langword="null"/>.</exception>
     public static HealthClearResult ClearHealthy(string cacheRoot, string version, InstallRegistration registration, int keepVersions = AddSelfUpdateDefaults.KeepVersions) {
         ArgumentNullException.ThrowIfNull(argument: registration);
-        var comparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-        if (!string.Equals(a: registration.Version, b: version, comparisonType: comparison)) {
+        if (!string.Equals(a: registration.Version, b: version, comparisonType: InstallLayout.NameComparison)) {
             return new HealthClearResult(Cleared: false, Pruned: null);
         }
         try {

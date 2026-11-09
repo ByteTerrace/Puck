@@ -43,8 +43,8 @@ public sealed record ReleasePolicy(
     public const string Schema = "puck.release.policy.v1";
     /// <summary>The most revocations the record holds; a merge past it is refused.</summary>
     public const int MaximumRevokedVersions = 4096;
-    /// <summary>The most rejected payloads and attempt counts the record holds together before an install is refused;
-    /// the stub may add the one payload it launches beyond it.</summary>
+    /// <summary>The most rejected payloads and attempt counts the record holds together. An install is admitted only while
+    /// the history holds fewer, and only that unproven install's launches add an entry, so the bound is never passed.</summary>
     public const int MaximumPayloadHistory = 4096;
     /// <summary>The most proven installs the record holds.</summary>
     public const int MaximumProvenInstalls = 4096;
@@ -109,12 +109,28 @@ public sealed record ReleasePolicy(
         using var state = root.Child(name: InstallLayout.StateDirectoryName);
         using var stream = state?.OpenFile(name: InstallLayout.ReleasePolicyFileName);
 
-        if (stream is null) { return Empty; }
+        if (stream is null) { return Absent(root: root); }
         if (stream.Length > MaximumBytes) { throw new InvalidDataException(message: $"'{InstallLayout.ReleasePolicyFileName}' exceeds {MaximumBytes} bytes."); }
         var bytes = new byte[stream.Length];
 
         stream.ReadExactly(buffer: bytes);
         return Parse(bytes: bytes);
+    }
+    // The record is absent only before the first commit, and before it the one install record that can exist is the first
+    // apply's own, uncommitted, with sequence 1. A valid install record with a later sequence proves a record was
+    // committed and is gone: that is no empty install, so the read fails closed rather than open every door.
+    private static ReleasePolicy Absent(ConfinedDirectory root) {
+        using var versions = root.Child(name: InstallLayout.VersionsDirectoryName);
+
+        foreach (var entry in (versions?.Entries() ?? [])) {
+            if ((entry.Kind != ConfinedEntryKind.Directory) || !InstallLayout.IsPlainName(name: entry.Name)) { continue; }
+            using var version = versions!.Child(name: entry.Name);
+
+            if ((version is not null) && (InstallRecord.TryRead(version: version) is { Sequence: > 1 } record)) {
+                throw new InvalidDataException(message: $"'{InstallLayout.ReleasePolicyFileName}' is missing, but versions/{entry.Name} records install {record.Sequence}; the record was lost, and nothing may run or install until the root is repaired or reinstalled.");
+            }
+        }
+        return Empty;
     }
     internal static ReleasePolicy Parse(byte[] bytes) {
         Document? document;
@@ -152,7 +168,7 @@ public sealed record ReleasePolicy(
         Require(condition: (LastSequence >= 0), message: "holds a negative install sequence");
         Require(condition: (StateGenerationFloor >= 0), message: "holds a negative state generation floor");
         Require(condition: (RevokedVersions.Count <= MaximumRevokedVersions), message: "holds more revocations than it may");
-        Require(condition: ((RejectedPayloads.Count + LaunchAttempts.Count) <= (MaximumPayloadHistory + 1)), message: "holds more payload history than it may");
+        Require(condition: ((RejectedPayloads.Count + LaunchAttempts.Count) <= MaximumPayloadHistory), message: "holds more payload history than it may");
         Require(condition: (ProvenInstalls.Count <= MaximumProvenInstalls), message: "holds more proven installs than it may");
         Require(condition: RevokedVersions.All(predicate: static version => InstallLayout.IsPlainName(name: version)), message: "revokes a name that is not a plain directory name");
         Require(condition: (RevokedVersions.Distinct(comparer: StringComparer.OrdinalIgnoreCase).Count() == RevokedVersions.Count), message: "revokes a version twice");

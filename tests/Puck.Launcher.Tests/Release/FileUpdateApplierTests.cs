@@ -84,7 +84,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
         _ = InstallSeed.Install(installRoot: Root, version: "1.0.0");
         _ = InstallSeed.Install(installRoot: Root, version: "1.1.0");
         using (var transaction = InstallTransaction.TryBegin(installRoot: Root)!) {
-            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.Compare, revoked: ["1.1.0"]));
+            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["1.1.0"]));
         }
         Assert.True(condition: Apply(file: Stage(version: "1.2.0", content: "v12"u8.ToArray()), version: "1.2.0").Applied);
         Assert.Equal(expected: "1.0.0", actual: InstallSeed.RollbackTarget(installRoot: Root));

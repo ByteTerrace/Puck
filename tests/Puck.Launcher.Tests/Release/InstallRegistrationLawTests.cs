@@ -85,7 +85,7 @@ public sealed class InstallRegistrationLawTests : IDisposable {
         _ = InstallSeed.Install(installRoot: Root, proven: false, version: "1.2.0");
         _ = InstallSeed.Install(installRoot: Root, proven: false, stateGeneration: 3, version: "1.3.0");
         using (var transaction = InstallTransaction.TryBegin(installRoot: Root)!) {
-            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.Compare, revoked: ["1.0.0"]));
+            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["1.0.0"]));
         }
 
         Assert.Contains(expectedSubstring: "revoked", actualString: Assert.Throws<InstallRegistrationException>(testCode: () => Register(image: revoked, version: "1.0.0")).Message);

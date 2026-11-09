@@ -107,6 +107,12 @@ public static class AtomicFile {
             options.UnixCreateMode = mode;
         }
 
+        // The directories this write creates, deepest first: a durable commit also makes each one's entry in its parent durable.
+        var created = new List<string>();
+
+        for (var missing = directory; ((missing is not null) && !Directory.Exists(path: missing)); missing = Path.GetDirectoryName(path: missing)) {
+            created.Add(item: missing);
+        }
         _ = Directory.CreateDirectory(path: directory);
         PendingWrite? pending = null;
 
@@ -115,7 +121,7 @@ public static class AtomicFile {
                 options: options,
                 path: temporary
             )) {
-                pending = new PendingWrite(destination: destination, temporary: temporary);
+                pending = new PendingWrite(created: created, destination: destination, temporary: temporary);
                 if (
                     (unixCreateMode is null) &&
                     !OperatingSystem.IsWindows()
@@ -148,12 +154,14 @@ public static class AtomicFile {
     /// <summary>A fully flushed sibling temporary. Publish it once, or dispose it to discard it. The temporary path
     /// is private so publication and cleanup always use the same atomic-file mechanism.</summary>
     public sealed class PendingWrite : IDisposable {
+        private readonly IReadOnlyList<string> m_created;
         private readonly string m_temporary;
         private readonly string m_destination;
 
         private bool m_finished;
 
-        internal PendingWrite(string temporary, string destination) {
+        internal PendingWrite(string temporary, string destination, IReadOnlyList<string> created) {
+            m_created = created;
             m_temporary = temporary;
             m_destination = destination;
         }
@@ -194,6 +202,12 @@ public static class AtomicFile {
                     ?? throw new DirectoryNotFoundException(message: $"The directory of '{m_destination}' vanished."));
 
                 directory.Publish(name: Path.GetFileName(path: m_destination), temporary: Path.GetFileName(path: m_temporary));
+                // A directory this write created exists durably only once its entry in its own parent is flushed too.
+                foreach (var created in m_created) {
+                    using var parent = ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: created)!);
+
+                    parent?.Flush();
+                }
             } finally {
                 Dispose();
             }

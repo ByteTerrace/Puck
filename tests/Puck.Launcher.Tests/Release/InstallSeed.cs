@@ -17,7 +17,7 @@ internal static class InstallSeed {
     public static InstallRecord Install(string installRoot, string version, int stateGeneration = 1, string? payloadPin = null, bool proven = true) {
         Directory.CreateDirectory(path: Path.Combine(path1: installRoot, path2: InstallLayout.VersionsDirectoryName, path3: version));
         using var transaction = InstallTransaction.TryBegin(installRoot: installRoot)!;
-        var refusal = transaction.CommitApply(files: [Pin(label: $"file:{version}")], payloadPin: (payloadPin ?? Pin(label: version)), precedence: ReleaseVersion.Compare,
+        var refusal = transaction.CommitApply(files: [Pin(label: $"file:{version}")], payloadPin: (payloadPin ?? Pin(label: version)), precedence: ReleaseVersion.TryCompare,
             record: out var record, recovering: false, rid: UpdateService.CurrentRid(), stateGeneration: stateGeneration, version: version);
 
         Assert.Null(@object: refusal);

@@ -57,7 +57,6 @@ public static class InstallPruner {
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = InstallLayout.VersionsDirectoryName;
 
-    private static StringComparer NameComparer => (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     /// <summary>Prunes <paramref name="installRoot"/> once, under both install leases. It never throws: whatever stops
     /// it is reported as <see cref="InstallPruneResult.Skipped"/>.</summary>
@@ -107,7 +106,7 @@ public static class InstallPruner {
         using var root = ConfinedDirectory.OpenAnchor(create: false, path: installRoot);
         using var versions = root?.Child(name: VersionsDirectoryName);
 
-        if ((versions is null) || !versions.Entries().Any(predicate: entry => NameComparer.Equals(x: entry.Name, y: version))) { return false; }
+        if ((versions is null) || !versions.Entries().Any(predicate: entry => InstallLayout.NameComparer.Equals(x: entry.Name, y: version))) { return false; }
         using var trash = root!.Child(create: true, name: TrashDirectoryName)!;
         var refused = new List<string>();
 
@@ -140,7 +139,7 @@ public static class InstallPruner {
             var policy = transaction.Policy;
             using var versions = root.Child(name: VersionsDirectoryName);
             var found = new List<Version>();
-            var names = new HashSet<string>(comparer: NameComparer);
+            var names = new HashSet<string>(comparer: InstallLayout.NameComparer);
 
             foreach (var entry in (versions?.Entries() ?? [])) {
                 if (entry.Kind == ConfinedEntryKind.Link) { return Failed(reason: $"{VersionsDirectoryName}/{entry.Name} is a link"); }
@@ -149,7 +148,10 @@ public static class InstallPruner {
                 // A record whose file pins are not all well formed names nothing reliable; its version then counts as one
                 // without a record: kept, with the content pins of the files it holds.
                 var record = ((InstallRecord.TryRead(version: version) is { } read) && read.Files.All(predicate: static file => ContentPin.TryParse(pin: out _, text: file))) ? read : null;
-                var disqualified = ((record is not null) && (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: entry.Name) is not null));
+                // A record past the release record's install order was left by an apply whose commit never happened: it
+                // names no install, so like a refused one it takes no allowance (a pending intent still protects it).
+                var disqualified = ((record is not null) && ((record.Sequence > policy.LastSequence) ||
+                    (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: entry.Name) is not null)));
 
                 _ = names.Add(item: entry.Name);
                 found.Add(item: new Version(
@@ -160,7 +162,7 @@ public static class InstallPruner {
                     Sequence: record?.Sequence
                 ));
             }
-            var protectedNames = new HashSet<string>(comparer: NameComparer);
+            var protectedNames = new HashSet<string>(comparer: InstallLayout.NameComparer);
 
             if (policy.Current is not { } current) { return Failed(reason: "the release record names no current version"); }
             if (!names.Contains(item: current)) { return Failed(reason: $"the release record's current version '{current}' is not a version directory"); }

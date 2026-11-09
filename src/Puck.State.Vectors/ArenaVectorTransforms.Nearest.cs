@@ -87,32 +87,7 @@ public static partial class ArenaVectorTransforms {
         using var matchesLease = arena.Scratch.Rent<VectorTransforms.NearestMatch>(length: request.K);
 
         var candidates = candidatesLease.Span;
-        var gathered = 0;
-
-        var cursor = 0;
-
-        while (arena.TryNextCell(
-            cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: from.RowOrdinal
-        )) {
-            if (
-                from.TryReadMemory(
-                components: out var components,
-                key: key
-            )
-            ) {
-                candidates[gathered++] = new NearestCandidate(
-                    Admitted: Admits(
-                        arena: arena,
-                        key: key,
-                        whereRowOrdinal: request.WhereRowOrdinal
-                    ),
-                    Components: components,
-                    Key: arena.Keys[key: key]
-                );
-            }
-        }
+        var gathered = GatherCandidates(from: in from, candidates: candidates, whereRowOrdinal: request.WhereRowOrdinal);
 
         var matches = matchesLease.Span;
         var matched = VectorTransforms.SelectNearest(

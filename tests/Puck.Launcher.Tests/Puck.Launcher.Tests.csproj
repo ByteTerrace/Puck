@@ -19,7 +19,7 @@
         <ProjectReference Include="../../src/Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../../src/Puck.Launcher/Puck.Launcher.csproj" />
         <ProjectReference Include="../../src/Puck.Overlays/Puck.Overlays.csproj" />
-        <!-- StubDecisionTableTests exercises the stub's pure selection policy directly — a Test-kind project may
+        <!-- The prune laws hold a version through the stub's own StubInstall.HoldVersion — a Test-kind project may
              reference any ranked project regardless of row, and the stub's own closure stays empty. -->
         <ProjectReference Include="../../src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <!-- ReleaseChainFixture mints its throwaway signing chain through AttestationTestSupport's shared
