@@ -1589,21 +1589,20 @@ by `world.view.pick`.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
-- [high] The hall's interiors read near black at noon. The exposure floor
-  (`worlds/debug/hall.puck`, `exposure.minimum`, EV 7 from dawn to dusk) holds
-  view 0 at EV 7 in the devices room, where the probes meter 9 to 15 nits and
-  the metered exposure with the authored compensation is about EV 4.5: about
-  two and a half stops under, so the walls, floor and devices read as murk.
-  The floor exists so the moonlit valley reads at night; a daytime floor that
-  clamps every dim interior is the wrong lever. Decide the interiors' look
-  (lamps, fill, or an exposure that meters them) against the gallery's
-  references, then judge every room.
 - [medium] The Humble Gaming Brick's atomic-orange glass shell
-  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as an
-  opaque deep red even at a pinned exposure that shows the room (EV 4.5): the
-  board, chips and cells behind it do not show through. On Direct3D 12 the
-  probe gather leaks no sky light into it under the roof (it reads as dim as
-  its surroundings, neither glowing nor black).
+  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as a deep
+  red rather than a clear orange acrylic in the lit Wonderland room: its
+  picture, buttons and speaker show through, but the board is a dark brown.
+  The shell is a solid prism, so a view ray crosses 13 mm or more of tint
+  (`depth: 0.009`) where a real hollow shell's two walls are about 4 mm; a
+  depth sized to the real walls is the likely fix, judged at the brick's
+  framing line in `devices.md`.
+- [medium] Sunlight leaks along the top of Wonderland's west wall under its
+  roof (`worlds/debug/wonderland.puck`, `wonderland-room`): a stepped,
+  few-pixel sunlit band where the wall meets the roof, seen from the room's
+  north-east corner (`view.override camera look 8.8 1.6 33.5 1.4 0.9 28`). It
+  goes with `world.shadows off`, so it is the cascades' test at the
+  wall-roof junction, not the probes.
 - [low] `world.indirect off` leaves auto exposure metering the probes (view 0
   read 15.272 nits before and after the toggle) while the frame turns white at
   EV 4.5 in the devices room: the lever's fallback ambient lights an interior
@@ -2668,7 +2667,11 @@ the fixed poses and the approaches already rejected.
   - **The jump to night is wrong.** Forcing midnight
     (`world.state.cell.set day $value 0.0`) leaves the scene near-black for
     seconds while the tree canopies glow green from inside. Daytime bounce
-    stays in the probes while exposure adapts.
+    stays in the probes while exposure adapts. From the overlook
+    (`debug.go overlook`) after a jump from noon the valley floor still
+    reads blown white at the EV 2 floor after a minute, while
+    `[sdf.mesh-gi] behind` reports a relight shortfall; a layout reset
+    (`world.indirect high`, then `medium`) brings the moonlit deep blue at once.
   - **The settled night reads as a dim overcast day.** Greens stay
     saturated, the deep-blue moon barely tints anything, and the EV 2
     exposure floor lifts the scene to dusk brightness. The night look is an
