@@ -225,7 +225,7 @@ and tail; a chestnut forehead and throat closed off by a dark blue breast band
 from cream underparts; long pointed wings crossing over the rump; and a deeply
 forked tail whose streamers reach past the wingtips, with white spots on their
 inner webs. It reads in the art direction's treatment as one shaped body in
-flat values with crisp painted markings, at 1.3 times a real bird's size so it
+flat values with crisp painted markings, at 1.5 times a real bird's size so it
 reads from the pool's path.
 
 ## Going places

@@ -1621,6 +1621,25 @@ by `world.view.pick`.
   slot once the creation is animated. Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
+- [high] On a static placement, a shape with a warp (`flare`, `shear`,
+  `bumps`, `erode`, `cells`, `warp`, `displace`) bakes alone, and so does the
+  shape after it (`WorldPlacementStamper.BakesAlone`, the per-shape
+  instances' `bakesWithPrevious`), so every smooth blend into or out of the
+  warped shape bakes as a crease where two meshes cross: the swallow's flared
+  body tore a hard ring at its neck and stair-stepped contours along its
+  wings, and its smooth radii did nothing until the body lost its warp. The
+  split guards against a scoped warp's divided field sagging under an exact
+  neighbour's union. Bake a warped shape with its blended neighbours without
+  that sag (a per-member bound in the union, or the warp's own scope closed
+  before the blend), so the shaping vocabulary keeps its blends on static
+  placements; until then, `creation stats` reporting more than one static
+  bake group for a creation that blends across them is the sign.
+- [medium] The pool's water meets the reservoir pavilion's west terrace and
+  the pool steps in a saw-tooth edge: stair-stepped jaggies along the deck's
+  waterline, seen from the pool's path (`debug.go pool`, looking south-west
+  along x -46 between z -24 and -12). Find whether the water's surface
+  lattice (half-metre cells, `waterViews` in `pool.puck`) or the basin's
+  contour draws the steps.
 
 ### Water
 

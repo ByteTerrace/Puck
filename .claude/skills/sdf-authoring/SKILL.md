@@ -345,6 +345,14 @@ What a first swallow taught, in the order it went wrong:
   swallow's flared wingtips frayed); a thin convex `Prism` grown by `dilate`
   rounds every edge and keeps even its tip twice the dilation thick, which is
   how the swallow's wings and streamers are made.
+- **On a static placement a warp splits the bake.** A shape with a `flare`,
+  `shear`, `bumps` or another warp bakes alone and so does the shape after it
+  (`WorldPlacementStamper.BakesAlone`), so smooth blends into it bake as
+  creases: the swallow's flared body ringed its neck with a crease until the
+  body became two unwarped superellipsoids (a body and a breast) blended
+  together. `creation stats` prints the static bake groups; one group is what
+  keeps the blends. Once they are real, size the smooth radii again: a radius
+  that did nothing across groups can swallow a head (open items).
 - **A static creation's markings are parented paints.** They ride the
   creation's frame on a static copy as on an animated one
   ([surface](references/surface.md#paints), Frames); an unparented paint is in
