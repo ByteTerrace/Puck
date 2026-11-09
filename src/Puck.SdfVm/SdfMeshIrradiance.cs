@@ -815,7 +815,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             return false;
         }
 
-        var extent = ((Vector3.Abs(value: oriented.HalfX) + Vector3.Abs(value: oriented.HalfY)) + Vector3.Abs(value: oriented.HalfZ));
+        var extent = oriented.AxisHalf;
 
         box = new Box(High: ((oriented.Center + extent) + new Vector3(value: SdfMeshIrradianceProbe.BoxMargin)), Low: ((oriented.Center - extent) - new Vector3(value: SdfMeshIrradianceProbe.BoxMargin)));
         return true;

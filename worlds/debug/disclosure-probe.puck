@@ -91,6 +91,28 @@ prototypes {
 }
 
 placements {
+  // Public membership with a restricted variant row exercises the same missing-child reconciliation boundary.
+  placement "probe-faces" {
+    prototype: "probeCard"
+    position [1, 0.8, 4]
+    distribution {
+      fill {
+        name: "none"
+        offset: 0
+        step: 0
+      }
+      region: lattice(stepA: [0.15, 0, 0], countA: 8, stepB: [0, 0, 0.2], countB: 1)
+    }
+    deal {
+      row: "pile"
+      variants {
+        row: "hand"
+        map {
+          "3": "probeCard"
+        }
+      }
+    }
+  }
   placement "probe-hand" {
     prototype: "probeCard"
     position [0, 0.8, 4]

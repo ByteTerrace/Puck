@@ -274,7 +274,7 @@ public sealed class WorldRowFieldEditLawTests {
             edited.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: Principal.Console, Row: ArmLift(text: "[5,6,7]")));
             Step(row: edited);
         }
-        Assert.Equal(expected: 0L, actual: (value.Read(kind: WorldBootWork.FullInstalls) + value.Read(kind: WorldBootWork.PresentationInstalls) + value.Read(kind: WorldBootWork.ValueInstalls)));
+        Assert.Equal(expected: 0L, actual: ((value.Read(kind: WorldBootWork.FullInstalls) + value.Read(kind: WorldBootWork.PresentationInstalls)) + value.Read(kind: WorldBootWork.ValueInstalls)));
         Assert.Same(expected: arenaBefore, actual: edited.Server.Arena);
         Assert.Equal(expected: "[5,6,7]", actual: edited.Server.ExportDefinition().State.Single().Cells!.Single().Value.AsText);
     }
@@ -678,7 +678,7 @@ public sealed class WorldRowFieldEditLawTests {
                 y: 3f,
                 z: 4f
             ),
-            actual: placement.Position.Value
+            actual: WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: placement, worldSeed: 0UL).Position
         );
 
         // Control: the identical field addressed with a plain literal drops the reference.
@@ -700,7 +700,7 @@ public sealed class WorldRowFieldEditLawTests {
                 y: 2f,
                 z: 3f
             ),
-            actual: literal.Position.Value
+            actual: WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: literal, worldSeed: 0UL).Position
         );
     }
     [Fact]

@@ -274,7 +274,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
         _ = sent.Of(settlement: apart.Settle(applied: false, id: "a", token: seat.Token, version: world.Version));
         Assert.False(condition: Offer(principal: Principal.Console, queue: apart, sent: sent, row: (read with { Position = new Vector3(x: 2f, y: 0f, z: 0f) }), source: source).Queued);
-        Assert.Equal(actual: sent.Submissions[^1].Edit.Row.Position.X, expected: 2f);
+        Assert.Equal(actual: WorldPlacementFrameCompilation.LocalFrame(null, sent.Submissions[^1].Edit.Row, 0UL, out _).Position.X, expected: 2f);
     }
     [Fact]
     public void AnEndpointThatLagsIsBasedOnTheNewestStateAnyEndpointDelivered() {

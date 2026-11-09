@@ -5,6 +5,7 @@ namespace Puck.SignedDistance;
 public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBakesSeparately;
     private bool m_openInstanceBoundInSlotFrame;
+    private SdfInstancePart[] m_openInstanceParts = [];
 
     /// <summary>Reads a registered material while composing local material frames.</summary>
     public SdfMaterial MaterialAt(int index) => m_materials[index];
@@ -193,7 +194,10 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
     /// <param name="separateBake">Keep this geometry's lattice separate from other instances on its motion slot.</param>
     /// <param name="boundInSlotFrame">Rotate the bound offset with its slot, for geometry authored in that slot's frame.</param>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false) {
+    /// <param name="parts">The shapes the instance holds, each its box in its own slot's frame and its detail
+    /// (<see cref="SdfInstanceRange.Parts"/>); <see langword="null"/> or empty for none. A part that is not valid
+    /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -210,6 +214,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
         m_openInstanceBakesSeparately = separateBake;
         m_openInstanceBoundInSlotFrame = boundInSlotFrame;
+        m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => part.IsValid)] : []);
 
         return this;
     }
@@ -289,7 +294,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField, Parts = m_openInstanceParts });
 
         ResetOpenInstance();
 
@@ -330,6 +335,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceHeightField = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
+        m_openInstanceParts = [];
     }
     /// <summary>Declares a static per-object instance with balanced begin/end handling around <paramref name="emit"/>.
     /// If <paramref name="emit"/> throws, the builder is left with the instance open and partial state — discard it

@@ -9564,9 +9564,9 @@ export type WorldPlacement = {
    */
   prototypeId: string;
   /**
-   * The stamp position — world space when Parent is null (today's behavior, unchanged), or this row's own local frame relative to Parent's COMPOSED world frame otherwise (see Parent). A dealt child's is its displacement from its DealSlot's offset in its template's region (LocalFrame). Inert (still validated and stored, but read by nothing — neither the resolve nor the renderer) when Attach is set: the row's live position is the resolved attachment, never this authored one.
+   * The opaque stored translation — a local offset when Parent is null, or relative to Parent's composed frame otherwise (see Parent). A dealt child's is its displacement from its DealSlot's offset in its template's region (LocalFrame). Exact runtime writes retain Q48.16 through serialization; geometric readers require a resolved frame. Inert (still validated and stored, but read by nothing — neither the resolve nor the renderer) when Attach is set: the row's live position is the resolved attachment, never this authored one.
    */
-  position: DocumentVector3;
+  position: WorldPlacementTranslation;
   /**
    * The stamp yaw about +Y, degrees — world-space when Parent is null, added to the parent's own composed yaw otherwise. Same attach caveat as Position.
    */
@@ -9624,7 +9624,7 @@ export type WorldPlacement = {
    */
   board?: WorldPlacementBoard | null;
   /**
-   * Another placement's Id this row's frame composes over, or null for a world-space row (today's behavior, unchanged). Position/YawDegrees become this row's own LOCAL offset/heading in the parent's composed frame: the parent's resolved yaw rotates the offset before adding the parent's resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation — never per tick — into PlacementFrames, which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child's local offset and resolved scale.
+   * Another placement's Id this row's frame composes over, or null for a world-space row (today's behavior, unchanged). Position/YawDegrees become this row's own LOCAL offset/heading in the parent's composed frame: the parent's resolved yaw rotates the offset before adding the parent's resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved by WorldPlacementFrameCompilation into PlacementFrames, with cached frames only for immutable inputs and fresh frames for state-bound translations or lattice steps, which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child's local offset and resolved scale.
    */
   parent?: string | null;
   /**
@@ -9740,7 +9740,7 @@ export type WorldPlacementContribution = {
 };
 
 /**
- * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region's offsets are metres in the template's frame, never scaled by it. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot's fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick's one mutation.
+ * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region's offsets are metres in the template's frame, never scaled by it. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and DealSlot its slot. Its Position is its displacement from that slot, so its local frame is the slot's fixed-point offset (SlotOffset) plus that displacement, composed by WorldPlacementFrameCompilation, and moving a child to another slot moves it with its displacement. It is installed by the per-tick sweep (Server.WorldTick.SweepPlacementDeals) through the shared placement projection install, which refreshes colliders and delivery. The source cells journal, undo and replay; their derived children are reprojected without adding declaration edits to the journal.
  */
 export type WorldPlacementDeal = {
   /**
@@ -10138,6 +10138,11 @@ export type WorldPlacementSurface = {
    */
   requireHit?: boolean;
 };
+
+/**
+ * An opaque stored placement translation: a dealt child's displacement from its slot, otherwise an authored local offset. Geometry reads a resolved frame through WorldPlacementFrameCompilation, never this value as a position. Fixed-point writes and their JSON round trips retain every Q48.16 bit.
+ */
+export type WorldPlacementTranslation = [number, number, number] | string;
 
 export type WorldPlacementsSection = {
   /**

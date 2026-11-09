@@ -21,11 +21,11 @@ public sealed class InPlaceCarryPresentationLawTests {
     public void AStillSnapshotPoseDoesNotMoveWithThePresentationFraction() {
         var client = ClientFixtures.Client(definition: Fixtures.BuildDocument());
         var position = new Vector3(x: 15.9f, y: 15.75f, z: 38.05f);
-        var orientation = Quaternion.CreateFromYawPitchRoll(yaw: 0.6f, pitch: 0.2f, roll: 0.4f);
+        var orientation = Quaternion.CreateFromYawPitchRoll(pitch: 0.2f, roll: 0.4f, yaw: 0.6f);
 
         Deliver(client: client, continuity: EntityContinuity.Continuous, position: position, orientation: orientation, tick: 1);
         Deliver(client: client, continuity: EntityContinuity.Continuous, position: position, orientation: orientation, tick: 2);
-        for (var fraction = 0; fraction <= 10000; fraction++) {
+        for (var fraction = 0; (fraction <= 10000); fraction++) {
             client.UpdateRenderPoses(alpha: (fraction / 10000f));
             Assert.Equal(expected: position, actual: client.Position(index: 0));
             Assert.Equal(expected: Quaternion.Normalize(value: orientation), actual: client.Orientation(index: 0));
@@ -171,7 +171,7 @@ public sealed class InPlaceCarryPresentationLawTests {
         var client = ClientFixtures.Client(definition: (shaft ? Shaft(definition: definition) : definition));
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],

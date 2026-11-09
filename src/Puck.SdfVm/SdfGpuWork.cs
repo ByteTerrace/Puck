@@ -182,7 +182,10 @@ public readonly ref struct SdfGpuWorkRecording {
 /// (its timestamps, or its client's estimate on a queue without them), stages at most <see cref="UploadBytesPerSecond"/>
 /// of host payload, records for at most <see cref="HostShare"/> of the wall time between pumps, and keeps at most
 /// <see cref="SlotCount"/> jobs in flight. Every budget is a rate of wall time, never a count a pump, so work such as
-/// landing a mesh region takes as many seconds whatever the frame rate.</para>
+/// landing a mesh region takes as many seconds whatever the frame rate. The GPU budget banks at most
+/// <see cref="FrameShareSeconds"/>, and a client cuts its jobs to that share at its kind's measured rate
+/// (<see cref="SdfGpuWorkRate"/>): the queue runs a job whole before the frame submitted after it, so a job longer than
+/// the share delays that frame by its length whatever the average share.</para>
 /// </summary>
 public sealed class SdfGpuWork : IDisposable {
     /// <summary>The jobs in flight at most.</summary>
@@ -212,6 +215,10 @@ public sealed class SdfGpuWork : IDisposable {
     /// line: a twentieth of a second, a fortieth of the two seconds after which Windows resets a device whose submission
     /// has not finished (TDR).</summary>
     public const double SlowJobSeconds = 0.05;
+    /// <summary>Background work's share of one frame's GPU time at the 60 Hz frame bar, in seconds: a job measured
+    /// longer delays the frame queued behind it by more than the share <see cref="GpuShare"/> grants, whatever the
+    /// budget's average says.</summary>
+    public const double FrameShareSeconds = (GpuShare / 60.0);
 
     /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
     /// estimated to take (<see cref="UploadCopyBytesPerSecond"/>).</summary>
@@ -222,8 +229,9 @@ public sealed class SdfGpuWork : IDisposable {
     public static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
     /// <summary>The recording time one pump spends at most, however long since the last.</summary>
     public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(16);
-    // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than this at once.
-    private const double MostCreditSeconds = 0.02;
+    // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than one frame's share at once, so
+    // a frame after an idle spell carries no more background work than any other.
+    private const double MostCreditSeconds = FrameShareSeconds;
     // The host payload bytes an idle service may bank: a full slot ring of the largest jobs.
     private const double MostUploadCreditBytes = (SlotCount * (double)MostUploadJobBytes);
 
@@ -254,6 +262,10 @@ public sealed class SdfGpuWork : IDisposable {
     private long m_pumps;
     private long m_unbound;
     private long m_budgetHolds;
+    // Since the first job: the jobs measured past FrameShareSeconds, and the longest measured job with what it was.
+    private long m_overFrameShare;
+    private double m_mostJobSeconds;
+    private string m_mostJob = "none";
 
     /// <summary>Initializes a new instance of the <see cref="SdfGpuWork"/> class: a slot's command buffer, fence and
     /// timestamp readback each, created on <paramref name="device"/>.</summary>
@@ -335,7 +347,7 @@ public sealed class SdfGpuWork : IDisposable {
     public string Describe() {
         var busy = (m_busyTicks + ((m_inFlight > 0) ? (Stopwatch.GetTimestamp() - m_busySince) : 0L)) / ((double)Stopwatch.Frequency);
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},unbound:{m_unbound},budget-holds:{m_budgetHolds},timestamps:{(m_timestamps is not null ? "measured" : "estimated")}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},unbound:{m_unbound},budget-holds:{m_budgetHolds},over-frame-share:{m_overFrameShare},timestamps:{(m_timestamps is not null ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
     }
 
     /// <summary>Describes the buffers the work holds for <c>world.residency</c>: its slots' readbacks and its clients'
@@ -398,8 +410,15 @@ public sealed class SdfGpuWork : IDisposable {
 
             var seconds = Settle(slot: slot);
 
-            if ((m_timestamps is not null) && (seconds >= SlowJobSeconds)) {
-                Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.gpu-work] slow {m_name} slot={index} {client.Category} {client.Describe(job: job)} gpu={(seconds * 1000.0):0.0}ms estimate={(slot.Estimate * 1000.0):0.0}ms"));
+            if (m_timestamps is not null) {
+                if (seconds > FrameShareSeconds) { m_overFrameShare++; }
+                if (seconds > m_mostJobSeconds) {
+                    m_mostJobSeconds = seconds;
+                    m_mostJob = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{client.Category} {client.Describe(job: job)} estimate={(slot.Estimate * 1000.0):0.00}ms");
+                }
+                if (seconds >= SlowJobSeconds) {
+                    Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.gpu-work] slow {m_name} slot={index} {client.Category} {client.Describe(job: job)} gpu={(seconds * 1000.0):0.0}ms estimate={(slot.Estimate * 1000.0):0.0}ms"));
+                }
             }
             var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes, gpuSeconds: m_timestamps is null ? null : seconds);
             slot.Lease = readback;

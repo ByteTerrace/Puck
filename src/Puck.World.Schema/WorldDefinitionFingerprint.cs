@@ -103,7 +103,8 @@ public static class WorldDefinitionFingerprint {
     /// <summary>Computes the canonical census for one bounded spatial read. The census includes every authored
     /// spatial volume whose conservative envelope intersects the region, plus all of those rows'
     /// parent frames. That makes a new or enlarged obstacle entering the region a negative dependency while edits
-    /// wholly outside it remain independent.</summary>
+    /// wholly outside it remain independent. The world seed is included because it positions Noise/Scatter
+    /// distributions and dealt slots even when the selected census stays equal.</summary>
     /// <param name="definition">The document being observed.</param>
     /// <param name="region">The finite fixed-point world XYZ read bounds.</param>
     public static string ComputeSpatial(WorldDefinition definition, in WorldSpatialReadRegion region) {
@@ -117,6 +118,8 @@ public static class WorldDefinitionFingerprint {
             writer.WriteNumberValue(value: region.MaxZRaw);
             writer.WriteNumberValue(value: region.MinYRaw);
             writer.WriteNumberValue(value: region.MaxYRaw);
+            // Noise/Scatter offsets (including a dealt child's slot) and distributed footprints read this input.
+            writer.WriteNumberValue(value: (definition.Generation?.WorldSeed ?? 0UL));
 
             var stateRows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -129,7 +132,7 @@ public static class WorldDefinitionFingerprint {
                     placement,
                     WorldJsonContext.Default.WorldPlacement
                 );
-                CollectPlacementStateInputs(placement, stateRows);
+                CollectPlacementStateInputs(placement: placement, rows: stateRows);
             }
             // Canonical rows retain state references. Include their source values so a bound extent changing
             // inside the same census cannot leave a spatial guard looking unchanged.

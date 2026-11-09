@@ -128,6 +128,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
 
     private readonly WorldCreationInstances m_pool = new();
+
     /// <summary>The scene's body presentation registrations, shared by routed rig reads and animation reseeding.</summary>
     public WorldCreationInstances BodyStamps => m_pool;
 
@@ -875,7 +876,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
-        m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
+        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
         PrepareCatalog();
     }
 
