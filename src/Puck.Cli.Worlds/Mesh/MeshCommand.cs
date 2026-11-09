@@ -54,15 +54,19 @@ public static class MeshCommand {
         var fieldLevelsOption = new Option<bool>(name: "--field-levels") { Description = "With --cpu, also contour each group's field levels (cells of twice the previous, offset outward by half a cell, per member where its shapes ride several slots, to an empty level) and measure them and the collapse's levels by the error contract: both geometric directions, enclosure, material and normal runs, vanished parts, open edges, flips and missing crossings, field evaluations and each path's own processor work." };
         var aimOption = new Option<string>(name: "--field-aim") { DefaultValueFactory = static _ => "local", Description = "How --field-levels converts a level's offset to field units to aim its contour: local, by each sample's own slope, or lattice, by the lattice's median slope. The oracle measures where either landed." };
         aimOption.AcceptOnlyFromAmong("local", "lattice");
+        var tierOption = CliOptions.Count(defaultValue: 0, description: $"The detail tier to plan every group at (SdfMeshTier: tier t's cell is {(1000f * SdfMeshTier.BaseCell):0.###} mm times two to the t), held to the rungs that change each group's mesh; zero is each group's finest, the geometry's own detail. With --cpu it bakes at that tier; without, it selects the stored tier.", minimum: 0, name: "--tier");
+        var eyeOption = new Option<string?>(name: "--eye") { Description = "Plan every group at the tier one eye here demands, x,y,z in world units (the coarsest tier whose cell stays under half a display pixel at the group's box), as a residency's bake plans it; in place of --tier." };
+        var viewHeightOption = CliOptions.Count(defaultValue: 1080, description: "The display lines of the view at --eye, with a 60-degree vertical field.", minimum: 1, name: "--view-height");
         var command = new Command(
             description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, smooth vertices' shading normals against the gradient at the vertex (rough), folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
-        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption, fieldLevelsOption, aimOption };
+        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption, fieldLevelsOption, aimOption, tierOption, eyeOption, viewHeightOption };
 
         command.SetAction(action: parseResult => Run(request: new AuditRequest(
             Backend: parseResult.GetValue(option: backendOption)!,
             Build: parseResult.GetValue(option: buildOption),
             Cpu: parseResult.GetValue(option: cpuOption),
+            Eye: parseResult.GetValue(option: eyeOption),
             FieldLevels: parseResult.GetValue(option: fieldLevelsOption),
             LocalAim: (parseResult.GetValue(option: aimOption) == "local"),
             CacheRoot: parseResult.GetValue(option: cacheOption),
@@ -72,7 +76,9 @@ public static class MeshCommand {
             Images: parseResult.GetValue(option: imagesOption),
             Level: parseResult.GetValue(option: levelOption),
             Prototype: parseResult.GetValue(option: prototypeOption),
+            Tier: parseResult.GetValue(option: tierOption),
             Top: parseResult.GetValue(option: topOption),
+            ViewHeight: parseResult.GetValue(option: viewHeightOption),
             World: parseResult.GetValue(option: worldOption)!,
             Worst: parseResult.GetValue(option: worstOption)
         )));
@@ -103,6 +109,18 @@ public static class MeshCommand {
             return 2;
         }
 
+        Vector3? eye = null;
+
+        if (request.Eye is { } spelled) {
+            var parts = spelled.Split(separator: ',');
+
+            if ((request.Tier > 0) || (parts.Length != 3) || !float.TryParse(s: parts[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var x) || !float.TryParse(s: parts[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var y) || !float.TryParse(s: parts[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var z)) {
+                Console.Error.WriteLine(value: $"{Verb}: --eye takes x,y,z in world units and plans each group's tier from that eye, in place of --tier.");
+                return 2;
+            }
+            eye = new Vector3(x: x, y: y, z: z);
+        }
+
         if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: request.World, verb: Verb)) {
             return CliExit.Refused;
         }
@@ -116,7 +134,7 @@ public static class MeshCommand {
 
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
         var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
-        var groups = scene.Plan(farDistance: farDistance);
+        var groups = scene.Plan(farDistance: farDistance, tier: TierPlan(eye: eye, scene: scene, tier: request.Tier, viewHeight: request.ViewHeight));
         var store = new SdfMeshStore(directory: meshes);
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
@@ -411,8 +429,19 @@ public static class MeshCommand {
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
-    // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim);
+    // The tier each group is planned at: one rung for every group, or the rung one eye demands at each group's box, as a
+    // residency's bake plans it (SdfMeshPathBake) with a 60-degree view of the given height; the plan holds either to the
+    // rungs that change the group's mesh.
+    private static Func<SdfMeshBakeGroup, int> TierPlan(RestScene scene, int tier, Vector3? eye, int viewHeight) {
+        if (eye is not { } at) { return _ => tier; }
+
+        var demand = new SdfMeshDemand();
+
+        demand.Place(eye: at, height: (uint)viewHeight, tanHalfFieldOfView: MathF.Tan(x: (MathF.PI / 6f)));
+        return group => SdfMeshTier.Of(pixel: demand.PixelAt(group: group, transforms: scene.Transforms));
+    }
+    // What the verb was asked: the world, which groups, which store and identity, which tier, and what to report.
+    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim, int Tier, string? Eye, int ViewHeight);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);
