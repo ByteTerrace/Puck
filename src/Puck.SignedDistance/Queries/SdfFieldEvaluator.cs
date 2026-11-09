@@ -1086,22 +1086,24 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ) * FixedQ4816.FromInteger(value: 2L));
     // Sample 9 fixed candidates, then 5 rounds of halving-step compass probes either side of the running best —
     // deterministic, no trigonometry, converges toward the closest parameter on the centerline. See the KEEP-IN-SYNC
-    // remark above for why this evaluator does not mirror the shader's closed-form cubic solve.
+    // remark above for why this evaluator does not mirror the shader's closed-form cubic solve. Candidates are compared
+    // on their exact sums of squares (CompareLengthTo), never a Q16 LengthSquared, which rounds every gap under a few
+    // millimetres to the same raw steps.
     private static FixedQ4816 SdfSweepClosestT(FixedVector3 p, FixedVector3 a, FixedVector3 b, FixedVector3 c) {
         var bestT = FixedQ4816.Zero;
-        var bestDistanceSquared = (p - a).LengthSquared;
+        var bestGap = (p - a);
 
         for (var index = 0; (index < SweepSampleFractions.Length); index++) {
             var t = SweepSampleFractions[index];
-            var distanceSquared = (p - SdfBezierPoint(
+            var gap = (p - SdfBezierPoint(
                 a: a,
                 b: b,
                 c: c,
                 t: t
-            )).LengthSquared;
+            ));
 
-            if (distanceSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceSquared;
+            if (gap.CompareLengthTo(other: bestGap) < 0) {
+                bestGap = gap;
                 bestT = t;
             }
         }
@@ -1113,15 +1115,15 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 x: FixedQ4816.One,
                 y: (bestT + step)
             );
-            var distancePlusSquared = (p - SdfBezierPoint(
+            var gapPlus = (p - SdfBezierPoint(
                 a: a,
                 b: b,
                 c: c,
                 t: tPlus
-            )).LengthSquared;
+            ));
 
-            if (distancePlusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distancePlusSquared;
+            if (gapPlus.CompareLengthTo(other: bestGap) < 0) {
+                bestGap = gapPlus;
                 bestT = tPlus;
             }
 
@@ -1129,15 +1131,15 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 x: FixedQ4816.Zero,
                 y: (bestT - step)
             );
-            var distanceMinusSquared = (p - SdfBezierPoint(
+            var gapMinus = (p - SdfBezierPoint(
                 a: a,
                 b: b,
                 c: c,
                 t: tMinus
-            )).LengthSquared;
+            ));
 
-            if (distanceMinusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceMinusSquared;
+            if (gapMinus.CompareLengthTo(other: bestGap) < 0) {
+                bestGap = gapMinus;
                 bestT = tMinus;
             }
 

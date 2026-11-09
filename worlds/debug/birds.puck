@@ -11,8 +11,8 @@
 // the valley-and-gallery treatment (docs/game/art/README.md, the visual bar): one shaped body, flat values, crisp
 // painted markings and a painted sky-coloured gloss band along the back and crown.
 //
-// It is sculpted at a real bird's size, in metres, with its feet at the origin on the rail's top, and placed at 1.5
-// times that, so it reads at the distances the pool's path shows it from. Its parts are grouped for the idle rig (open
+// It is sculpted at a real bird's size, in metres, its feet just below the origin gripping the rail's rounded edge, and
+// placed at 1.5 times that, so it reads at the distances the pool's path shows it from. Its parts are grouped for the idle rig (open
 // items, the visual bar packet): the body, wings and legs in one group, the head with its bill and eyes in another, the
 // tail in a third.
 import "../standard/rotations"
@@ -52,9 +52,11 @@ let swallowBuff = "#D6A266"
 // fine enough to draw it.
 
 // One half of the forked tail, inset by its dilation: the inner edge runs from the fork's notch out to the streamer's
-// fine tip, the outer edge from the root straight back to it. Profile X runs out to the bird's side and Y back.
-let swallowTailRound = 0.0009
-let swallowTailProfile = [[0.003, 0.03], [0.0135, 0.076], [0.0138, 0.0756], [0.0072, -0.004], [0.0015, -0.004]]
+// tip, the outer edge from the root straight back to it, so the streamer narrows evenly to a single vertex the dilation
+// rounds to a point. Profile X runs out to the bird's side and Y back. The blade is barely thicker than its dilation, so
+// seen edge-on the streamer is a line, not a slab.
+let swallowTailRound = 0.0007
+let swallowTailProfile = [[0.003, 0.03], [0.0136, 0.0765], [0.0074, -0.004], [0.0015, -0.004]]
 
 // A profile mirrored across X, its order reversed so it still winds clockwise.
 function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
@@ -64,20 +66,27 @@ function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
 
 let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 
-// One folded wing a side as the side view sees it, inset by its dilation: its leading edge starts behind the shoulder at the origin,
-// the upper edge along the back and the lower edge sweeping up to the pointed tip 9.5 cm behind. Profile X runs back and
-// Y up.
+// One folded wing a side as the side view sees it, inset by its dilation: the bend is its rounded front at the origin, set
+// at the shoulder high on the flank under the back's edge; the upper edge runs along the back and the lower edge rakes
+// back from the bend, then sweeps up to the pointed tip 9.5 cm behind. Profile X runs back and Y up. The wing's pitch
+// turns the profile's down toward the bird's front, so a low point near the bend would sit forward of the shoulder: the
+// lower edge leaves the bend almost along X.
 let swallowWingRound = 0.0008
 let swallowWingProfile = [
-  [0.004, -0.007], [0.012, 0.004], [0.06, 0.001], [0.095, -0.0024], [0.0946, -0.0028], [0.064, -0.0075], [0.03, -0.0125],
-  [0.008, -0.0118]
+  [0.0, 0.0015], [0.004, 0.0035], [0.03, 0.004], [0.06, 0.002], [0.095, -0.0024], [0.0946, -0.0028], [0.07, -0.0075],
+  [0.045, -0.0105], [0.02, -0.0095], [0.006, -0.0045], [0.0005, -0.001]
 ]
+// The bend's place: the upper flank at the base of the neck, with the blade's outer face a little proud of the body so it
+// reads along its whole length; its upper edge lies just over the back and meets it in a narrow blend, a rounded ledge
+// rather than a wide flat fillet.
+let swallowShoulder = [0.0099, 0.0335, 0.003]
+let swallowWingRoll = 10
 
-// The wing lies along the body's flank (the profile's X turned to point back), rolled a little so its upper edge lies over
+// The wing lies along the body's flank (the profile's X turned to point back), rolled so its upper edge leans in over
 // the back, yawed so the tips cross behind the rump, and pitched with the body so the tips ride above the hanging tail;
 // the right wing rides a little higher, so where the tips cross it lies over the left one rather than blending into it.
 function swallowWingTurn(sign) = turnThen(
-  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * 12)), turn(swallowAxisY, sign * 5)),
+  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * swallowWingRoll)), turn(swallowAxisY, sign * 5)),
   turn(swallowAxisX, (sign > 0) ? -36 : -32)
 )
 
@@ -85,9 +94,9 @@ template swallowWing(side) {
   shape Prism $"wing{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.004
+    smooth: 0.0015
     material: swallowFlight
-    position [side.sign * 0.0098, 0.029, 0.006]
+    position [side.sign * swallowShoulder[0], swallowShoulder[1], swallowShoulder[2]]
     rotation: swallowWingTurn(side.sign)
     scale [1, 1, 0.0009]
     dilate: swallowWingRound
@@ -99,8 +108,9 @@ template swallowWing(side) {
   }
 }
 
-// A tail half hangs from the rump (the profile's Y turned to point back, then down 45 degrees), its outer edge lifted a
-// little.
+// A tail half hangs from the rump (the profile's Y turned to point back, then down 45 degrees), splayed out a little and
+// rolled 25 degrees about its length so its outer edge lifts: the closed fork is a shallow V, and a side view sees the
+// blade's narrowing face rather than its edge, so each streamer reads as one blade tapering to its point.
 template swallowTailHalf(side) {
   shape Prism $"tail{side.name}" {
     group: swallowTailGroup
@@ -108,8 +118,8 @@ template swallowTailHalf(side) {
     smooth: 0.003
     material: swallowTail
     position [0, 0.001, -0.031]
-    rotation: turnThen(turn(swallowAxisX, -135), turn(swallowAxisZ, side.sign * 5))
-    scale [1, 1, 0.0009]
+    rotation: turnThen(turnThen(turn(swallowAxisY, 0 - side.sign * 25), turn(swallowAxisX, -135)), turn(swallowAxisZ, side.sign * 5))
+    scale [1, 1, 0.0003]
     dilate: swallowTailRound
     profile {
       kind: "Convex"
@@ -129,37 +139,88 @@ template swallowEyeBead(side) {
   }
 }
 
-// A leg a side under the body's centre: a short dark tarsus from the belly to the rail, two thin front toes splayed along
-// the rail's top and a hind toe reaching back over the rail's rounded pool-side edge.
-let swallowFootAt = [0.0038, 0.0011, -0.004]
+// The perch: the feet grip the rail's rounded pool-side edge `swallowGrip` degrees down its curve from the top, so the
+// body stands over the edge and the tail hangs over the water. The curve's centre and radius are the rail's
+// (water-scenery.puck's `reservoir-pavilion`: the west rail's top at 1.22 m, its edge rounded 35 mm), in world metres;
+// the rest is in the bird's own units, a real bird's metres, placed at `swallowScale`.
+let swallowScale = 1.5
+let swallowRailEdge = [-45.885, 1.185]
+let swallowRailRound = 0.035
+let swallowGrip = 35
+// Where each foot meets the rail (its toes' root), under the body a little behind its centre; the shank rises from it
+// into the belly.
+let swallowFootAt = [0.0038, -0.0085, -0.004]
+// The rail's curve under the feet in the bird's units, as (z, y) about the foot: its centre, and its radius.
+let swallowArcRadius = swallowRailRound / swallowScale
+let swallowArcCentre = [swallowFootAt[2] + swallowArcRadius * sine(swallowGrip * radiansPerDegree), swallowFootAt[1] - swallowArcRadius * cosine(swallowGrip * radiansPerDegree)]
 
-template swallowLeg(side) {
-  shape Capsule $"leg{side.name}" {
-    group: swallowBodyGroup
-    material: swallowBill
-    position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
-    scale [0.0011, 0.018, 0.0011]
-  }
-  for (splay, k) in [-14, 14] {
-    shape Capsule $"toe{side.name}{k}" {
-      group: swallowBodyGroup
-      blend: "SmoothUnion"
-      smooth: 0.001
-      material: swallowBill
-      position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
-      rotation: turnThen(turn(swallowAxisX, 90), turn(swallowAxisY, side.sign * splay))
-      scale [0.0009, 0.016, 0.0009]
-    }
-  }
-  shape Capsule $"hindToe{side.name}" {
+// A point on the rail's curve `degrees` from its top toward the pool, lifted off it by `lift`, as (z, y).
+function swallowArc(degrees, lift) = [
+  swallowArcCentre[0] - (swallowArcRadius + lift) * sine(degrees * radiansPerDegree),
+  swallowArcCentre[1] + (swallowArcRadius + lift) * cosine(degrees * radiansPerDegree)
+]
+
+// A toe: a tapered stroke lying on the rail's curve from the foot at `swallowGrip` to `reach` degrees, its quadratic
+// curve's middle point where the two ends' tangents meet, splayed `splay` degrees off the bird's axis. Its radius keeps
+// it two bake cells thick at the finest spacing (WorldPlacementStamper.FinestDetail), and it sinks a little into the
+// rail so it grips rather than floats.
+let swallowToeRadius = 0.00135
+let swallowToeLift = 0.0006
+
+function swallowToePoint(side, splay, degrees, lift) = [
+  side.sign * swallowFootAt[0] + side.sign * (swallowArc(degrees, lift)[0] - swallowFootAt[2]) * sine(splay * radiansPerDegree),
+  swallowArc(degrees, lift)[1],
+  swallowArc(degrees, lift)[0]
+]
+
+// The same point relative to the toe's root, the frame its curve is written in.
+function swallowToeCurve(side, splay, degrees, lift) = map(
+  range(0, 3),
+  k => swallowToePoint(side, splay, degrees, lift)[k] - swallowToePoint(side, splay, swallowGrip, swallowToeLift)[k]
+)
+
+template swallowToe(side, name, splay, reach) {
+  shape Sweep $"{name}{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.001
+    smooth: 0.0012
     material: swallowBill
-    position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
-    rotation: turn(swallowAxisX, -100)
-    scale [0.0009, 0.012, 0.0009]
+    position: swallowToePoint(side, splay, swallowGrip, swallowToeLift)
+    curve {
+      a [0, 0, 0]
+      b: swallowToeCurve(
+        side,
+        splay,
+        (swallowGrip + reach) / 2,
+        (swallowArcRadius + swallowToeLift) / cosine((reach - swallowGrip) / 2 * radiansPerDegree) - swallowArcRadius
+      )
+      c: swallowToeCurve(side, splay, reach, swallowToeLift)
+      radiusStart: swallowToeRadius
+      radiusEnd: 0.001
+    }
   }
+}
+
+// A leg a side: a short dark shank from the foot up into the belly, two front toes curled forward over the edge's crown
+// and splayed, and a hind toe curled back down over the edge toward the water.
+template swallowLeg(side) {
+  shape Sweep $"leg{side.name}" {
+    group: swallowBodyGroup
+    blend: "SmoothUnion"
+    smooth: 0.0015
+    material: swallowBill
+    position: swallowToePoint(side, 0, swallowGrip, swallowToeLift)
+    curve {
+      a [0, 0, 0]
+      b [0, 0.0045, 0.0026]
+      c [0, 0.0095, 0.0035]
+      radiusStart: swallowToeRadius
+      radiusEnd: swallowToeRadius
+    }
+  }
+  swallowToe(side: side, name: "toeInner", splay: -12, reach: 8)
+  swallowToe(side: side, name: "toeOuter", splay: 16, reach: 10)
+  swallowToe(side: side, name: "hindToe", splay: 0, reach: 64)
 }
 
 // The white spots on a tail half's inner webs near the fork, dashes along the feathers painted through the blade so both
@@ -323,17 +384,21 @@ prototypes {
   }
 }
 
-// On the reservoir pavilion's west rail (water-scenery.puck's `reservoir-pavilion`, its top at 1.22 m and its pool-side
-// edge at x -45.92), the feet where its rounded top flattens with the hind toes over the curve, facing east along the
-// path, the tail hanging over the pool.
-let swallowPerch = [-45.882, 1.22, -14.5]
+// On the reservoir pavilion's west rail, facing east along the path with the tail hanging over the pool: the bird's +Z
+// turns to world +X, so the feet land on the rail's edge at `swallowGrip` (the origin sits `swallowScale` times the
+// foot's offset away from that point).
+let swallowPerch = [
+  swallowRailEdge[0] - swallowRailRound * sine(swallowGrip * radiansPerDegree) - swallowScale * swallowFootAt[2],
+  swallowRailEdge[1] + swallowRailRound * cosine(swallowGrip * radiansPerDegree) - swallowScale * swallowFootAt[1],
+  -14.5
+]
 
 placements {
   placement "swallow" {
     prototype: "swallow"
     position: swallowPerch
     yawDegrees: -90
-    scale: 1.5
+    scale: swallowScale
   }
 }
 

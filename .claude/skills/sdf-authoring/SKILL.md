@@ -349,7 +349,18 @@ What a first swallow taught, in the order it went wrong:
   thins a pointed tip below the cell (the swallow's flared wingtips frayed); a
   thin convex `Prism` grown by `dilate` rounds every edge and keeps even its tip
   twice the dilation thick, which is how the swallow's wings and streamers are
-  made.
+  made. A short capsule (under eight times as long as thick) declares no detail
+  (`WorldPlacementStamper.ShapeDetail`) and bakes at the coarse spacing, so the
+  swallow's capsule legs and toes baked as pellets; a `Sweep` declares a
+  fraction of its radius, so a leg or toe is a `Sweep` at least two finest cells
+  (`FinestDetail`) thick, curved along what it grips.
+- **A blade's thickness is what an edge-on view sees.** A streamer slab thicker
+  than its width reads from the side as a rod ending in a squared knob, since
+  its taper runs across the view: keep a blade barely thicker than its dilation
+  and roll it about its length so a side view sees it narrow. A flat blade laid
+  on a curved body in a wide smooth blend grows a flat fillet plane along its
+  edge; keep that blend narrow. A pitched blade turns its profile's down toward
+  the front, so a low profile point near the leading end lands forward of it.
 - **On a static placement a warp splits the bake.** A shape with a `flare`,
   `shear`, `bumps` or another warp bakes alone and so does the shape after it
   (`WorldPlacementStamper.BakesAlone`), so smooth blends into it bake as
