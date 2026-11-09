@@ -522,7 +522,7 @@ public sealed class WorldSessionMirror : IClientSink {
         if (m_unread) { return; }
         lock (m_snapshotWriteGate) {
             m_inputs.Clear();
-            foreach (var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
+            foreach (ref readonly var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
             var seeded = m_seededRouteEntity;
             var containsSeed = ((seeded is { } address) && SnapshotContains(
                 entity: in address,

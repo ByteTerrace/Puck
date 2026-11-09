@@ -11,7 +11,7 @@ public sealed partial class WorldAddonRuntime {
     // only the budget step. A missing budget entry is unreachable by construction for either capability — TryGrant's
     // Conflicts gate refuses an untrusted Observe/Drive hold with no matching budget before it can be added — so
     // this refuses (NoHold) rather than dispatching unmetered, the same as an exhausted one (QuotaExhausted).
-    private bool TryChargeDispatch(MountedAddon addon, WorldCapability capability, GrantSubject subject, int[] dispatchCounts, int ordinal, ref MountedAddon.DispatchLatches latches, out AddonVerdict verdict) {
+    private bool TryChargeDispatch(MountedAddon addon, WorldCapability capability, GrantSubject subject, Puck.Abstractions.Collections.MarkedIndexCounts dispatchCounts, int ordinal, ref MountedAddon.DispatchLatches latches, out AddonVerdict verdict) {
         if (m_server.Grants.TryGetBudget(
             principal: addon.Principal,
             capability: capability,

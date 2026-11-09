@@ -583,6 +583,9 @@ public sealed partial class WorldBody {
     public void ClearPendingContinuum() => m_pendingContinuum = null;
     /// <summary>Captures this body's integration residue — see <see cref="WorldBodyIntegrationResidue"/>. Read live, right
     /// now, never cached.</summary>
+    /// <remarks>Every step captures it (<see cref="CaptureMotion"/>), and the record holds kilobytes of intent images; the
+    /// constructor writes every field of the temporaries it builds, so the frame skips the zero fill.</remarks>
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     public WorldBodyIntegrationResidue CaptureIntegrationResidue() => new(
         PreviousPosition: m_previousPosition,
         PositionRemainderX: m_positionAccumulator.XRemainder,

@@ -105,7 +105,7 @@ public sealed partial class WorldAddonRuntime {
         addon.ContributionCount = 0;
         // Per-tick Drive dispatch meter reset — the same shape as StageBatch's DispatchCounts clear for Observe,
         // just reset here because FoldActs (pump point 2) runs before StageBatch (pump point 3) within one tick.
-        Array.Clear(array: addon.DriveDispatchCounts);
+        addon.DriveDispatchCounts.Clear();
         // Set the moment any subject exhausts its drive budget THIS tick — read by the edge-trigger reset in the
         // finally below. The method body is wrapped in try/finally so an unexpected throw partway through still
         // runs the reset decision, rather than leaving the latch stuck armed.
@@ -391,7 +391,7 @@ public sealed partial class WorldAddonRuntime {
         addon.PendingCount = 0;
         // Per-tick dispatch meter reset, beside the other per-tick scratch above — a fresh tick owes each budgeted
         // row its full allowance again.
-        Array.Clear(array: addon.DispatchCounts);
+        addon.DispatchCounts.Clear();
         addon.EventCounts.Clear();
         addon.QueryCounts.Clear();
         addon.StateReadCounts.Clear();

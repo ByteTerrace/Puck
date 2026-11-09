@@ -45,11 +45,9 @@ public sealed partial class WorldBody {
     // re-derived from the pose after a discontinuous restore, which a refused step is not: the pose itself, the contact
     // count, the obstruction witness and the medium facts. The residue restores exact pending input after the
     // transfer state seeds its arrival-held image.
-    internal readonly record struct MotionSnapshot(
+    internal readonly record struct MotionFacts(
         FixedVector3 Position,
         FixedQ4816 Yaw,
-        WorldBodyTransferState Transfer,
-        WorldBodyIntegrationResidue Residue,
         int LastContactCount,
         FixedVector3 ObstructionWitness,
         ulong ObstructionWitnessGraceTicks,
@@ -61,16 +59,25 @@ public sealed partial class WorldBody {
     /// read only until that step ends. It belongs to whoever runs the steps, not to a body: a population steps its
     /// bodies one at a time and owns one, which each step it runs takes. A capture writes into the buffers the last one
     /// left, so steady state allocates nothing.</summary>
+    /// <remarks>The two records and the facts are separate fields, each assigned whole: a capture runs for every body on
+    /// every tick, and one composite record built around the residue's kilobytes of intent images would be zeroed,
+    /// assembled and copied again into this heap object on each.</remarks>
     internal sealed class StepScratch {
         internal CaptureBuffers Buffers { get; } = new();
 
-        internal MotionSnapshot Snapshot;
+        internal WorldBodyIntegrationResidue Residue;
+        internal WorldBodyTransferState Transfer;
+        internal MotionFacts Facts;
     }
 
-    // Captures this body into the scratch, overwriting whatever the last step left there.
+    // Captures this body into the scratch, overwriting whatever the last step left there. Every local is written before
+    // it is read, so the frame skips the zero fill.
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     internal void CaptureMotion(StepScratch scratch) {
         scratch.Buffers.Reset();
-        scratch.Snapshot = new(
+        scratch.Residue = CaptureIntegrationResidue();
+        scratch.Transfer = CaptureTransferStateInto(buffers: scratch.Buffers);
+        scratch.Facts = new(
             AtMediumBand: m_atMediumBand,
             InMedium: m_inMedium,
             LastContactCount: m_lastContactCount,
@@ -78,8 +85,6 @@ public sealed partial class WorldBody {
             ObstructionWitnessGraceTicks: m_obstructionWitnessGraceTicks,
             ObstructionWitnessPosition: m_obstructionWitnessPosition,
             Position: m_position,
-            Residue: CaptureIntegrationResidue(),
-            Transfer: CaptureTransferStateInto(buffers: scratch.Buffers),
             Yaw: m_yaw
         );
     }
@@ -87,10 +92,10 @@ public sealed partial class WorldBody {
     // state's own wake and latch writes), then the pose and the re-derived facts, which a program switch inside
     // ApplyTransferState may have re-pinned.
     internal void RestoreMotion(StepScratch scratch) {
-        ref readonly var motion = ref scratch.Snapshot;
+        ref readonly var motion = ref scratch.Facts;
 
-        ApplyTransferState(state: motion.Transfer);
-        ApplyIntegrationResidue(residue: motion.Residue);
+        ApplyTransferState(state: scratch.Transfer);
+        ApplyIntegrationResidue(residue: scratch.Residue);
         m_atMediumBand = motion.AtMediumBand;
         m_inMedium = motion.InMedium;
         m_lastContactCount = motion.LastContactCount;

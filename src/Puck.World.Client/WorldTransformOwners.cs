@@ -74,7 +74,7 @@ public sealed class WorldTransformOwners {
     }
     /// <summary>Returns whether the owner's latest <see cref="Wake"/> found its slots under another owner than they held
     /// when last packed: the owner was not resident (a first pack, or a spawn into a vacated range) or its pose jumped.
-    /// The caller commits its repack with <c>reseat</c> set (<see cref="SdfMovedTransforms.Commit"/>).</summary>
+    /// The caller commits its repack with <c>reseat</c> set (<see cref="SdfMovedTransforms.Commit(int, int, bool, bool)"/>).</summary>
     /// <param name="owner">The owner's index in the band.</param>
     /// <returns><see langword="true"/> when the repack reseats the owner's slots.</returns>
     public bool Reseats(int owner) => m_reseated[owner];
