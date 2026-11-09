@@ -14,6 +14,32 @@ charcoal soles carry the silhouette. Exactly two curved flight pods carry two
 ivory bands and a recessed nozzle each. The plates are pristine, as on the
 sheets: a modest clear coat and studio reflections, and no wear.
 
+## Look intent
+
+The references, in the pack's reading order: the suited turnaround (sheet 01)
+for silhouette, proportion and plate layout; the isolated wing jetpack (07) for
+the back; the construction details (02) for each joint; the off-suit
+turnaround (04) for the pilot. The traits a capture is judged on, from any
+side and at the chase camera:
+
+- **Mass before detail.** A heavy suit of plates sitting on plates, each plate
+  flat-faced with a chamfered edge that shows its thickness, over charcoal
+  joints that leave room to bend. Soft, pillowy or sausage-shaped plates fail:
+  a plate is a superellipsoid of exponent 4 to 6 or a chamfered prism, never
+  the body's exponent 2.1.
+- **The back is a flight pack flush to her back**, two pods beside a narrow
+  spine, each a stack of five stepped plates (lavender, ivory, lavender with a
+  grey inset, ivory, the long lavender skirt) with one recessed nozzle under the
+  skirt's lip, the hanger under the hood behind the shoulder slabs and the lip
+  at the upper pelvis. A pod deeper than it is wide, or hanging to the thighs,
+  reads as a beach ball and fails.
+- **Lavender and ivory dominate**, dusty and warm (the owner source's
+  `#b186b6` and a peach-cream, never white), with a small ochre collar and
+  belt and restrained cyan lights; a light that blows out to a white disc at
+  night fails as surely as one that vanishes by day.
+- **Her face is the charm**: her real head inside the hood, the braid rooted
+  by her right cheek and leaving through the hood's front opening.
+
 ## Open the studio
 
 Run from the repository root:
@@ -228,10 +254,15 @@ tapering sweep that becomes the plait below her jaw and leaves through the
 hood's front opening.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
-lavender hexagon, above the segmented charcoal waist and the ochre belt; the
-ochre collar stands above it at the neck. A lavender plate (`pelvicShield`)
-narrows below the belt. The slab inherits the torso's breathing and lean; the
-belt and pelvic plate inherit the pelvis.
+lavender hexagon, with a lavender rib plate down each flank under the arms
+(`flank-left`, `flank-right`), above the segmented charcoal waist and the ochre
+belt; the ochre collar stands above it at the neck. A lavender plate
+(`pelvicShield`) narrows below the belt. The slab and flanks inherit the
+torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
+flight pack is the `flightPod` template, once a side: a charcoal core riding
+the torso, five stepped plates and the nozzle parented to it in one union
+group, and its hinge on the torso under the hood; the narrow spine between the
+pods is one chamfered prism.
 
 Each shoulder is a stack of two thick slabs on a charcoal superellipsoid pivot,
 all riding the upper arm: flat-faced, round-edged superellipsoids (exponent 4)
@@ -309,11 +340,17 @@ and pelvis displacement as the body settles after impact.
 
 ## Verify edits
 
-Check document admission and the stamp budget (312 of 367):
+Check document admission, the clamps and the bake she will cost:
 
 ```powershell
 dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world worlds/debug/avatars/moth.puck --prototype moth
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu
 ```
+
+The audit's `triangles=` line is her pooled bake with its levels, and each
+`group` line names the shapes that cost the most and the cell they baked at; a
+small round section (a stud, a rod, a sphere under 4.5 cm) in a group drives
+that group's cell fine, so a part that need not be round is a prism or a box.
 
 Then compare the live suit with the turnaround at the sheet's framing, standing
 at the stage spawn: `view.override camera orbit 0 1.03 0 7.5 <yaw> 0 19`, yaw
