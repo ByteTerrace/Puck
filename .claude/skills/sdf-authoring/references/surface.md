@@ -143,7 +143,7 @@ Use the controls according to their actual masks:
 
 Compare a close view and a moving, ordinary-distance view at pinned exposure and
 local adaptation. Keep the seed and material frame stable. Static unparented layers
-use world coordinates; do not assume a parented paint will render on static copies.
+use world coordinates; a parented paint renders on a static copy only as [paints](#paints) (Frames) says.
 Unresolved lattice variation fades toward its mean using the conservative pixel
 footprint in pattern space. This is an approximation rather than an exact integral
 of the thresholded mask. Check moving captures as well as stills; anisotropy can
@@ -252,9 +252,16 @@ with a domain fold: its parent's delta frame), grouped or not (each baked vertex
 rides its own shape's slot), or world space for static geometry. On an
 animated or body placement, the lengths of each (a paint's placement and size,
 an inset's origin, depth and stop radii, weathering's `reach` and the inverse
-of its `scale`) follow the placement scale. A static placement shares one palette across its
-placements and draws no parented paint. To find a frame, paint a test stripe and
-look before trusting the numbers.
+of its `scale`) follow the placement scale. A static placement drawn as a copy of
+its creation's shared template (`WorldRigidAssets.ReconcileStatic` admits it:
+rigid, no state reference, mirror, text, authored mesh or glass) draws a
+parented paint at its parent's rest pose in the creation's frame, riding the
+copy's draw frame (`SdfPaint.DrawFrame`), so a static creation's markings move,
+turn and scale with its placement; any other static placement shares one
+palette across its placements and draws no parented paint. So a static
+creation's markings are parented paints, and its unparented paints, inset and
+weathering stay in world space. To find a frame, paint a test stripe and look
+before trusting the numbers.
 
 ## Flow
 

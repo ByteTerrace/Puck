@@ -1683,20 +1683,35 @@ by `world.view.pick`.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
-- [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
-  world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
-  around the beak, teal breast band, cream belly, wings past a forked tail)
-  from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
-  drivers) then tore the throat, faceted the eyes and fragmented the tail on
-  the animated path (its blend group now bakes on its static stamp's lattice;
-  the tear is the moving-blend item above). Rebuild it per the authoring skill's
-  "Making it read": references named first, one shaped body (`flare`,
-  `shear`), inset eyes, painted markings, detail two bake cells wide; meet the
-  bar static from every side; then the idle rig with each moving part in its
-  own group, frame-checked, until the moving-blend design lands. Iterate live with
+- [high] The swallow's idle rig (`worlds/debug/birds.puck`, on the reservoir
+  pavilion's rail by the pool, static): a head glance and a tail bob. Its
+  moving parts already sit in their own groups (body, breast, wings and legs;
+  head with bill and eyes; tail); the head's `SmoothUnion` into the breast
+  crosses two groups, so the glance takes one motion owner or a crease
+  (PUCK122) until the moving-blend design above lands, and the extreme poses
+  are frame-checked. Its markings are parented paints, which ride the
+  parent's slot once the creation is animated. Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
+- [high] On a static placement, a shape with a warp (`flare`, `shear`,
+  `bumps`, `erode`, `cells`, `warp`, `displace`) bakes alone, and so does the
+  shape after it (`WorldPlacementStamper.BakesAlone`, the per-shape
+  instances' `bakesWithPrevious`), so every smooth blend into or out of the
+  warped shape bakes as a crease where two meshes cross: the swallow's flared
+  body tore a hard ring at its neck and stair-stepped contours along its
+  wings, and its smooth radii did nothing until the body lost its warp. The
+  split guards against a scoped warp's divided field sagging under an exact
+  neighbour's union. Bake a warped shape with its blended neighbours without
+  that sag (a per-member bound in the union, or the warp's own scope closed
+  before the blend), so the shaping vocabulary keeps its blends on static
+  placements; until then, `creation stats` reporting more than one static
+  bake group for a creation that blends across them is the sign.
+- [medium] The pool's water meets the reservoir pavilion's west terrace and
+  the pool steps in a saw-tooth edge: stair-stepped jaggies along the deck's
+  waterline, seen from the pool's path (`debug.go pool`, looking south-west
+  along x -46 between z -24 and -12). Find whether the water's surface
+  lattice (half-metre cells, `waterViews` in `pool.puck`) or the basin's
+  contour draws the steps.
 
 ### Water
 

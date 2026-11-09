@@ -109,7 +109,7 @@ public sealed partial class WorldRigidAssets {
             if ((hidden is not null) && (Array.IndexOf(hidden, false) < 0)) { continue; }
             var length = WorldPlacementStamper.PaletteLength(document);
             if (scratch.Palette.Length != length) { scratch.Palette = new int[length]; }
-            WorldPlacementStamper.FillPalette(builder, colors, document, null, scratch.Palette, hidden: hidden);
+            WorldPlacementStamper.FillPalette(builder, colors, document, null, scratch.Palette, hidden: hidden, templateScale: asset.BakeScale);
             picks.Materials(creation.Id, scratch.Palette);
             if ((scratch.Emission is { } held) && (scratch.BakeScale == asset.BakeScale) && ReferenceEquals(scratch.Hidden, hidden) && builder.CanAppendEmission(held)) {
                 builder.AppendEmission(held);

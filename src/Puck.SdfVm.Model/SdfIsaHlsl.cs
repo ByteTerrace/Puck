@@ -324,6 +324,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PAINT_VECTORS_PER_ENTRY", value: SdfAppearance.PaintVectorsPerEntry);
         declarations.Count(name: "SDF_MAX_PAINTS_PER_MATERIAL", value: SdfAppearance.MaxPaintsPerMaterial);
         declarations.Bits(name: "SDF_PAINT_WINNING_FRAME", value: SdfAppearance.PaintWinningFrame);
+        declarations.Bits(name: "SDF_PAINT_DRAW_FRAME", value: SdfAppearance.PaintDrawFrame);
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");
         declarations.Count(
             name: "SDF_MAX_SCREEN_SURFACES",

@@ -108,11 +108,16 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
 /// <param name="Rotation">The shape frame's rotation in the paint's frame; any nonzero length.</param>
 /// <param name="Stroke">Zero to fill the shape; otherwise the half-width of the band painted about its surface.</param>
 /// <param name="Color">The paint's linear-RGB albedo.</param>
-/// <param name="Slot">The dynamic transform slot whose frame the paint rides, or <see cref="WinningFrame"/> for the
-/// frame of the slot that owns the hit (world space for static geometry), as an inset's.</param>
+/// <param name="Slot">The dynamic transform slot whose frame the paint rides, <see cref="WinningFrame"/> for the frame
+/// of the slot that owns the hit (world space for static geometry), as an inset's, or <see cref="DrawFrame"/> for the
+/// object frame of the mesh draw that holds the hit.</param>
 public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame) {
     /// <summary>The <see cref="Slot"/> of a paint in the frame of the slot that owns the hit.</summary>
     public const int WinningFrame = -1;
+    /// <summary>The <see cref="Slot"/> of a paint in the object frame of the mesh draw that holds the hit: a static
+    /// copy's shared template space, which the draw's matrix and carry take to the world. A static copy owns no dynamic
+    /// slot, so this is how a paint rides the copy wherever it is placed.</summary>
+    public const int DrawFrame = -2;
 
     /// <summary>Returns whether a paint can cover a packed shape: every primitive the shape dispatch evaluates from its
     /// data and a side table of at most <see cref="SdfAppearance.PaintTableVectors"/> vectors. A path, a glyph, a sampled
@@ -138,6 +143,6 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         float.IsFinite(f: paint.Stroke) && (paint.Stroke >= 0f) &&
         VectorFunctions.IsFinite(vector: paint.Color) &&
         (paint.Color.X >= 0f) && (paint.Color.Y >= 0f) && (paint.Color.Z >= 0f) &&
-        (paint.Slot >= WinningFrame)
+        (paint.Slot >= DrawFrame)
     );
 }

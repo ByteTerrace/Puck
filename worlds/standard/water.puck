@@ -437,10 +437,33 @@ template reservoirPavilion(id, half = [5, 6], palette = gaugePalette) {
             scale [0.22, 2.2, 0.22]
           }
         }
+        // The rail: a chunky teal bar, its edges rounded, on posts that stand on the terrace's top (0.4) up to the rail's
+        // underside (0.98), each with a cream foot and a cream cap under the bar.
         shape Box $"rail-{side}" {
           material: 0
           position [side * (half[0] + 1.8), 1.1, 0]
-          scale [0.12, 0.12, half[1]]
+          scale [0.12, 0.12, half[1] + 0.12]
+          rounding: 0.035
+        }
+        for k in range(0, 7) {
+          shape Box $"rail-post-{side}-{k}" {
+            material: 0
+            position [side * (half[0] + 1.8), 0.69, (k - 3) * half[1] / 3]
+            scale [0.06, 0.29, 0.06]
+            rounding: 0.015
+          }
+          shape Box $"rail-post-foot-{side}-{k}" {
+            material: 1
+            position [side * (half[0] + 1.8), 0.43, (k - 3) * half[1] / 3]
+            scale [0.09, 0.03, 0.09]
+            rounding: 0.012
+          }
+          shape Box $"rail-post-cap-{side}-{k}" {
+            material: 1
+            position [side * (half[0] + 1.8), 0.955, (k - 3) * half[1] / 3]
+            scale [0.085, 0.025, 0.085]
+            rounding: 0.012
+          }
         }
       }
       shape Box "canopy" {

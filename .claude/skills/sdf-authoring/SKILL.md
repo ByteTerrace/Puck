@@ -334,7 +334,8 @@ What a first swallow taught, in the order it went wrong:
   place's guide first. Guessing numbers from memory took ten passes to reach a
   bird that still failed.
 - **Sculpt with the shaping vocabulary, not primitive soup.** A body is one
-  shaped mass (`Superellipsoid` with `flare` and `shear` for a teardrop), not
+  shaped mass (`Superellipsoid` with `flare` and `shear` for a teardrop, or on a
+  static placement unwarped masses blended together, below), not
   stacked ellipsoids; an eye is a palette `inset` under a cornea
   ([surface](references/surface.md#inset)), never a dark sphere, which reads
   as a chrome or faceted bead; markings are `paints`, not proud ellipsoids,
@@ -344,7 +345,34 @@ What a first swallow taught, in the order it went wrong:
   bakes on the same union lattice a static stamp of its shapes does, each shape
   refined over its own box (`puck mesh audit --prototype <id> --cpu` prints the
   cell), but a cone or plate declares no detail of its own there. Make a thin
-  part a flat blade, wider in one axis, or leave it out.
+  part a flat blade, wider in one axis, or leave it out. A tapering `flare`
+  thins a pointed tip below the cell (the swallow's flared wingtips frayed); a
+  thin convex `Prism` grown by `dilate` rounds every edge and keeps even its tip
+  twice the dilation thick, which is how the swallow's wings and streamers are
+  made. A short capsule (under eight times as long as thick) declares no detail
+  (`WorldPlacementStamper.ShapeDetail`) and bakes at the coarse spacing, so the
+  swallow's capsule legs and toes baked as pellets; a `Sweep` declares a
+  fraction of its radius, so a leg or toe is a `Sweep` at least two finest cells
+  (`FinestDetail`) thick, curved along what it grips.
+- **A blade's thickness is what an edge-on view sees.** A streamer slab thicker
+  than its width reads from the side as a rod ending in a squared knob, since
+  its taper runs across the view: keep a blade barely thicker than its dilation
+  and roll it about its length so a side view sees it narrow. A flat blade laid
+  on a curved body in a wide smooth blend grows a flat fillet plane along its
+  edge; keep that blend narrow. A pitched blade turns its profile's down toward
+  the front, so a low profile point near the leading end lands forward of it.
+- **On a static placement a warp splits the bake.** A shape with a `flare`,
+  `shear`, `bumps` or another warp bakes alone and so does the shape after it
+  (`WorldPlacementStamper.BakesAlone`), so smooth blends into it bake as
+  creases: the swallow's flared body ringed its neck with a crease until the
+  body became two unwarped superellipsoids (a body and a breast) blended
+  together. `creation stats` prints the static bake groups; one group is what
+  keeps the blends. Once they are real, size the smooth radii again: a radius
+  that did nothing across groups can swallow a head (open items).
+- **A static creation's markings are parented paints.** They ride the
+  creation's frame on a static copy as on an animated one
+  ([surface](references/surface.md#paints), Frames); an unparented paint is in
+  world space there.
 - **Animating a creation changes its bake.** Drivers make the creation
   animated and its shapes pooled: `group: 0` is ungrouped there, and each
   ungrouped shape bakes alone, so a `SmoothUnion` on it draws as a hard union

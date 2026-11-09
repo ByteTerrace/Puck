@@ -28,6 +28,9 @@ public sealed class SdfAppearance {
     /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
     /// (<c>SDF_PAINT_WINNING_FRAME</c>).</summary>
     public const uint PaintWinningFrame = uint.MaxValue;
+    /// <summary>The dynamic slot word of a paint in the object frame of the mesh draw that holds the hit
+    /// (<c>SDF_PAINT_DRAW_FRAME</c>).</summary>
+    public const uint PaintDrawFrame = (uint.MaxValue - 1u);
     /// <summary>The bits of a flow's control word (material row 30.w) holding its lane plus one, zero for a constant flow
     /// (<c>SDF_FLOW_LANE_MASK</c>).</summary>
     public const uint FlowLaneMask = 0xFFu;
@@ -494,7 +497,11 @@ public sealed class SdfAppearance {
         Row(row: 4, value: shape.Data1);
         Row(row: 5, value: new(value: paint.Color, w: paint.Stroke));
         Row(row: 6, value: new(
-            x: BitConverter.UInt32BitsToSingle(value: ((paint.Slot == SdfPaint.WinningFrame) ? PaintWinningFrame : (uint)paint.Slot)),
+            x: BitConverter.UInt32BitsToSingle(value: (paint.Slot switch {
+                SdfPaint.WinningFrame => PaintWinningFrame,
+                SdfPaint.DrawFrame => PaintDrawFrame,
+                _ => (uint)paint.Slot,
+            })),
             y: shape.Bound.Center.X,
             z: shape.Bound.Center.Y,
             w: shape.Bound.Center.Z

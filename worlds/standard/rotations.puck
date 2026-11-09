@@ -1,0 +1,32 @@
+// Rotations as the quaternions a shape row spells, [x, y, z, w]: a turn about an axis, and two turns composed. A shape
+// sculpted from several turns (a wing pitched, yawed and rolled) names each turn and composes them, rather than
+// expanding the product by hand.
+
+// One degree in radians.
+let radiansPerDegree = 3.141592653589793 / 180
+
+// A right-handed turn of `degrees` about `axis`, a unit vector in the frame the rotation is authored in.
+function turn(axis, degrees) = [
+  axis[0] * sine(degrees * radiansPerDegree / 2),
+  axis[1] * sine(degrees * radiansPerDegree / 2),
+  axis[2] * sine(degrees * radiansPerDegree / 2),
+  cosine(degrees * radiansPerDegree / 2)
+]
+
+// A vector turned by a unit rotation: v + 2w(q × v) + 2q × (q × v), with q the rotation's vector part.
+function turned(rotation, v) = [
+  v[0] + 2 * rotation[3] * (rotation[1] * v[2] - rotation[2] * v[1]) +
+    2 * (rotation[1] * (rotation[0] * v[1] - rotation[1] * v[0]) - rotation[2] * (rotation[2] * v[0] - rotation[0] * v[2])),
+  v[1] + 2 * rotation[3] * (rotation[2] * v[0] - rotation[0] * v[2]) +
+    2 * (rotation[2] * (rotation[1] * v[2] - rotation[2] * v[1]) - rotation[0] * (rotation[0] * v[1] - rotation[1] * v[0])),
+  v[2] + 2 * rotation[3] * (rotation[0] * v[1] - rotation[1] * v[0]) +
+    2 * (rotation[0] * (rotation[2] * v[0] - rotation[0] * v[2]) - rotation[1] * (rotation[1] * v[2] - rotation[2] * v[1]))
+]
+
+// The turn `inner` followed by the turn `outer` (the Hamilton product outer × inner).
+function turnThen(inner, outer) = [
+  outer[3] * inner[0] + outer[0] * inner[3] + outer[1] * inner[2] - outer[2] * inner[1],
+  outer[3] * inner[1] - outer[0] * inner[2] + outer[1] * inner[3] + outer[2] * inner[0],
+  outer[3] * inner[2] + outer[0] * inner[1] - outer[1] * inner[0] + outer[2] * inner[3],
+  outer[3] * inner[3] - outer[0] * inner[0] - outer[1] * inner[1] - outer[2] * inner[2]
+]
