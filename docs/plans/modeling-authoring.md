@@ -54,7 +54,7 @@ and a check here.
 |---|---|---|---|---|
 | 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | The brief names lane part-detail; no branch of that name exists at this tree, so the lead confirms the owner |
 | 2 | Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
-| 3 | A smooth blend between parts that move apart tears | PUCK122 warns; the skinned seam inside an admitted envelope is designed | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | `lane/moving-blends`, three commits at this tree |
+| 3 | A smooth blend between parts that move apart tears | A blend inside its admitted envelope skins; one past it creases, and PUCK122 names it | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | Steps 1 to 3 landed; the gallery's moving-blend exhibits (`motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint`) keep them checked; step 4 is next |
 | 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | Delivered by w1-limits; section 1.3 |
 | 5 | A material crease left T-junctions | The material cut's quartered edges | The swallow's painted feathers | Landed on the integration tip (two material-cut commits); closed pending the look lanes' captures |
 | 6 | A `Convex` prism refuses any `rounding` | `MaxRounding` returns 0 for Convex and Path, so the door says "no room to round" | A rounded convex blade faked with superellipsoids ([language and authoring](open-items.md#language-and-authoring)) | Delivered by w1-limits; section 1.4 |
@@ -119,10 +119,8 @@ brief names. The step it hands that lane beyond its brief:
 
 **[record]** [Moving blends](moving-blends.md) holds the design (an admitted
 motion envelope, dual-quaternion skinning of two owners a vertex, the settle
-rebake retired) and `lane/moving-blends` has landed three of its commits at
-this tree (`git log lead/velocity..lane/moving-blends`: "stage rest pose
-admission and influence storage", "wire propagated influences through dual
-quaternion skinning", "keep share gradients with the evaluator reading").
+rebake retired); its steps 1 to 3 have landed on the integration branch, and
+step 4 (paints and lanes across a blended seam) is next.
 The material cut has landed on the integration tip in two commits ("the
 material cut shares each quartered edge's middle, so a crease leaves no
 T-junction" and "the material cut finds a quartered edge's whole holders by

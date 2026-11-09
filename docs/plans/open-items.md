@@ -90,7 +90,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | landing with the w1 moving-blends fix pass, which merged it |
 | `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |

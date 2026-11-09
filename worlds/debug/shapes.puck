@@ -2047,11 +2047,11 @@ template motionPrototypes() {
   prototype "motion-nod" {
     document {
       clockDriver(key: "nod", cadence: 1.1)
-      shape Capsule "neck" {
+      shape Cylinder "neck" {
         group: 1
         material: exhibitMaterial
-        position [0, 1.1, 0]
-        scale [0.05, 0.18, 0.05]
+        position [0, 1.12, 0]
+        scale [0.05, 0.2, 0.05]
       }
       shape Sphere "head" {
         blend: SmoothUnion
