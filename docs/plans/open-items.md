@@ -831,7 +831,7 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   retained original vertices witness themselves, and rejected distances skip
   normal interpolation. Planar merging precedes spatial splitting so artificial
   seams do not keep flat contour rows through every level. The lattice divides
-  fine keys by multiplication (`SdfSampledLattice.FineDivisor`). A further
+  fine keys by multiplication (`ReciprocalDivisor32`). A further
   halving of the collapse needs fewer or cheaper acceptance checks per
   collapse (about five attempts a collapse, half refused by `Measure` at the
   removed vertex's own samples), not lower overhead.
@@ -2048,16 +2048,6 @@ certified-contact packet and step 8 closes. The measured state is in the
   instance path), and `world.nudge` with a captured reference frame
   (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
   change and now cover dealt children too. Route both through the one resolver.
-- [medium · duplicate] Division by a reused divisor through a ceil(2^64/d)
-  high multiply exists twice, both private: `SdfSampledLattice.FineDivisor`
-  and `PrimeExtensions.QuotientCountWord32` (`Reciprocal`, `Divide`). Make one
-  public reciprocal divisor in `Puck.Maths` and move both callers onto it. Its
-  neighbour `SdfMeshCollapse.Collapser.MixedKey` is a private comparer for packed
-  `long` place pairs, whose default hash folds the halves together; any other
-  dictionary keyed by a packed pair collides the same way, so the comparer
-  belongs beside `InvertibleBitMix` where every such dictionary can share it.
-  The bake-collapse lane searched for a divisor and missed the prime kernel's
-  under its other name.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.

@@ -218,7 +218,7 @@ public sealed partial class StateArena {
                     reason = $"undo checkpoint group '{group.Name}' contains a null entry list";
                     return false;
                 }
-                var positions = new HashSet<long>();
+                var positions = new HashSet<long>(comparer: PackedIntPairComparer.Instance);
 
                 foreach (var entry in segment.Entries) {
                     if (entry is null) {
@@ -245,7 +245,7 @@ public sealed partial class StateArena {
                         reason = $"undo checkpoint group '{group.Name}' carries vector components for a non-vector column";
                         return false;
                     }
-                    var payloads = (((entry.Text is null) ? 0 : 1) + ((entry.Visibility is null) ? 0 : 1) + ((entry.Observation is null) ? 0 : 1));
+                    var payloads = ((((entry.Text is null) ? 0 : 1) + ((entry.Visibility is null) ? 0 : 1)) + ((entry.Observation is null) ? 0 : 1));
 
                     if (payloads > 1) {
                         reason = $"undo checkpoint group '{group.Name}' carries a payload incompatible with its column";
@@ -280,7 +280,7 @@ public sealed partial class StateArena {
     }
 
     private bool ValidateUndoChain(ArenaUndoGroup configured, ArenaUndoGroupSnapshot snapshot, out string reason) {
-        var projected = new Dictionary<long, ArenaUndoEntrySnapshot>();
+        var projected = new Dictionary<long, ArenaUndoEntrySnapshot>(comparer: PackedIntPairComparer.Instance);
         var segments = ((snapshot.Pending is null) ? snapshot.Segments.ToArray() : snapshot.Segments.Append(element: snapshot.Pending).ToArray());
 
         for (var segmentIndex = (segments.Length - 1); (segmentIndex >= 0); segmentIndex--) {
@@ -391,7 +391,7 @@ public sealed partial class StateArena {
             return false;
         }
         // The caller admitted at most one payload; the image admission refuses it unless it is this column's kind.
-        var reference = ((object?)entry.Text ?? ((object?)entry.Visibility ?? entry.Observation));
+        var reference = (((object?)entry.Text) ?? (((object?)entry.Visibility) ?? entry.Observation));
 
         if (!TryAdmitImagePosition(layout: m_layout, column: entry.Column, row: row, number: ((entry.Column == ArenaColumn.MemberKey) ? memberOrdinal : entry.Number), reference: reference, reason: out reason)) {
             return false;
@@ -419,7 +419,7 @@ public sealed partial class StateArena {
         for (var index = mark; (index < m_journal.Length); index++) {
             var entry = m_journal[index];
 
-            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[(int)entry.Column]![entry.Index]);
+            RetainWrite(entry, ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default), differs: m_changeDiffers[((int)entry.Column)]![entry.Index]);
         }
     }
 
@@ -508,14 +508,15 @@ public sealed partial class StateArena {
         var rows = plan.Rows.Distinct().Order().ToArray();
         var entries = 0L;
         var components = 0L;
-        ArenaRowLayout At(int row) => (((room is not null) && layout.HasColumn(row: row, column: ArenaColumn.CellCapacity))
-            ? (layout[row] with { CellCapacity = (int)Math.Min(val1: StateCapacity.MaxCellsPerRow, val2: room.RowCapacity(rowOrdinal: row)) })
+
+        ArenaRowLayout At(int row) => (((room is not null) && layout.HasColumn(column: ArenaColumn.CellCapacity, row: row))
+            ? (layout[row] with { CellCapacity = ((int)Math.Min(val1: StateCapacity.MaxCellsPerRow, val2: room.RowCapacity(rowOrdinal: row))) })
             : layout[row]);
 
         foreach (var row in rows) {
             var rowLayout = At(row: row);
 
-            components = checked((components + ((long)rowLayout.CellCapacity * rowLayout.Dimensions)));
+            components = checked((components + (((long)rowLayout.CellCapacity) * rowLayout.Dimensions)));
         }
         foreach (var row in rows) {
             // The reservation keeps every document row's clock lanes, but only a traited row's live write rebases
@@ -647,6 +648,7 @@ public sealed partial class StateArena {
         for (var index = (segment.Count - 1); (index >= 0); index--) {
             var retained = segment[index];
             var entry = retained.Entry;
+
             segment.RestoreLimit = index;
 
             // A retained member-key entry carries its key's ledger ordinal: the ledger only ever sheds keys a rewound
@@ -706,7 +708,7 @@ public sealed partial class StateArena {
             Rows = rows;
             Depth = depth;
             m_segments = new ArenaUndoSegment[(depth + 1)];
-            m_seen = new Dictionary<long, int>(capacity: entryCapacity);
+            m_seen = new Dictionary<long, int>(capacity: entryCapacity, comparer: PackedIntPairComparer.Instance);
             for (var index = 0; (index < m_segments.Length); index++) {
                 m_segments[index] = new ArenaUndoSegment(componentCapacity: componentCapacity, entryCapacity: entryCapacity);
             }
@@ -826,12 +828,13 @@ public sealed partial class StateArena {
             Pending?.AddTo(hash: ref hash);
         }
         public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
-            foreach (var segment in m_segments) { segment.RemapLayout(previous: previous, next: next, entryCapacity: entryCapacity, componentCapacity: componentCapacity); }
+            foreach (var segment in m_segments) { segment.RemapLayout(componentCapacity: componentCapacity, entryCapacity: entryCapacity, next: next, previous: previous); }
             m_seen.Clear();
             if (Pending is { } pending) {
-                for (var index = 0; index < pending.Count; index++) {
+                for (var index = 0; (index < pending.Count); index++) {
                     var entry = pending[index].Entry;
-                    m_seen.Add(key: ((long)(byte)entry.Column << 32) | (uint)entry.Index, value: index);
+
+                    m_seen.Add(key: (((long)((byte)entry.Column)) << 32) | ((uint)entry.Index), value: index);
                 }
             }
         }
@@ -839,9 +842,9 @@ public sealed partial class StateArena {
     private sealed class ArenaUndoSegment {
         private sbyte[] m_components;
         private ArenaUndoEntry[] m_entries;
-
         private int m_componentCount;
         private int m_count;
+
         public int RestoreLimit { get; set; } = -1;
 
         public ArenaUndoSegment(int entryCapacity, int componentCapacity) {
@@ -855,12 +858,12 @@ public sealed partial class StateArena {
         public ArenaUndoEntry this[int index] => m_entries[index];
 
         public void RemapLayout(ArenaLayout previous, ArenaLayout next, int entryCapacity, int componentCapacity) {
-            var count = RestoreLimit >= 0 ? RestoreLimit : m_count;
-            for (var index = 0; index < count; index++) { m_entries[index] = m_entries[index] with { Entry = previous.Remap(entry: m_entries[index].Entry, next: next) }; }
+            var count = ((RestoreLimit >= 0) ? RestoreLimit : m_count);
+
+            for (var index = 0; (index < count); index++) { m_entries[index] = m_entries[index] with { Entry = previous.Remap(entry: m_entries[index].Entry, next: next) }; }
             Array.Resize(array: ref m_entries, newSize: Math.Max(val1: m_count, val2: entryCapacity));
             Array.Resize(array: ref m_components, newSize: Math.Max(val1: m_componentCount, val2: componentCapacity));
         }
-
         public ReadOnlySpan<sbyte> Components(ArenaUndoEntry entry) => m_components.AsSpan(entry.ComponentOffset, entry.ComponentLength);
         public void Reset(bool rewindable) {
             RestoreLimit = -1;

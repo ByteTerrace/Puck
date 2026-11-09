@@ -1,0 +1,38 @@
+[
+  {
+    "Id": "integer.reciprocal-divisor32-vs-division",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.ReciprocalDivisor32", "Name": ".ctor" },
+      { "Type": "Puck.Maths.ReciprocalDivisor32", "Name": "Divide" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "ReciprocalDivisor32.Divide: ceil(2^64/d) high multiply for uint dividends and nonzero uint divisors",
+        "Against": "Oracles.ReciprocalDivision: BigInteger /; every divisor 1..65535, powers of two and neighbours through 2^31, uint.MaxValue, and full-width sampled operands; each divisor probes d-1, d, d+1 and the last uint multiple and its lower neighbour",
+        "Shared": "", "Citation": "", "Absolute": ""
+      },
+      {
+        "Kind": "Structural", "Flavor": "None",
+        "Subject": "Zero construction refuses; the default value divides by one at zero, one, the signed boundary and uint.MaxValue. uint input types enforce the exact operand envelope.",
+        "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.packed-int-pair-hash",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PackedIntPairComparer", "Name": "Instance" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "PackedIntPairComparer: full-word equality and wrapped Fibonacci product's upper word",
+        "Against": "Oracles.PackedPairHash: unbounded BigInteger multiplication with an explicit modulo mask and decimal multiplier; equality checked against long ==, including reflexivity",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  }
+]
