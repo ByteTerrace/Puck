@@ -61,7 +61,7 @@ public readonly struct SdfMeshDetail {
     /// <param name="texels">The texels across a side of the cascade's depth.</param>
     /// <returns>The choice.</returns>
     public static SdfMeshDetail Of(in SdfMeshShadowCamera cascade, int texels) =>
-        new(camera: default, forced: 0, kind: 2, pixels: 0f, texel: ((2f * cascade.HalfHeight) / Math.Max(val1: texels, val2: 1)));
+        new(camera: default, forced: 0, kind: 2, pixels: 0f, texel: cascade.TexelOf(texels: texels));
     /// <summary>Returns the choice that draws every mesh at one level, or its coarsest where it has fewer.</summary>
     /// <param name="level">The level; zero is each mesh's own triangles.</param>
     /// <returns>The choice.</returns>

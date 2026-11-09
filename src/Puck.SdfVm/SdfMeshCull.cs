@@ -87,7 +87,7 @@ public readonly struct SdfMeshCull {
     /// <param name="cascade">The cascade's light camera.</param>
     /// <param name="texels">The texels across a side of the cascade's depth.</param>
     /// <returns>The reach, in world units.</returns>
-    public static float ReachOf(in SdfMeshShadowCamera cascade, int texels) => (ShadowFilterTexels * ((2f * cascade.HalfHeight) / Math.Max(val1: texels, val2: 1)));
+    public static float ReachOf(in SdfMeshShadowCamera cascade, int texels) => (ShadowFilterTexels * cascade.TexelOf(texels: texels));
 
     /// <summary>Returns whether the pass draws a draw of a given box.</summary>
     /// <param name="box">The draw's box, or <see langword="null"/> for a draw no host box bounds.</param>

@@ -349,6 +349,7 @@ add the row you found.
 | Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level a subset of the mesh's own vertices), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
 | Contour a group's field again at a coarser cell, or measure any level's error against the field (bracketed both ways, enclosure, material and normal runs) | `SdfMeshPathBake.ContourLevel`, `SdfMeshFieldLevels` (offline, `puck mesh audit --cpu --field-levels`) | `src/Puck.SdfVm`; [mesh bake](references/mesh-bake.md) |
 | Skip drawing what a view, a cascade or the previous frame hides | `SdfMeshBox` and `SdfMeshCull` (host boxes), `SdfMeshOcclusion` (the depth pyramid test) | `src/Puck.SdfVm`; [the dispatch bullets](#which-dispatch-owns-the-code) |
+| Ask the host whether a view hides a box (a portal slab, a body, its shadow's receivers) | `SdfPortalSight` through `ISdfViewSight` (the mesh pass's pyramid, read back per slot) | `src/Puck.SdfVm`; `WorldCreationInstances.SightOf` |
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's shapes) | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
@@ -1124,10 +1125,19 @@ by its fence share is GPU back-pressure, not CPU work.
   names each instance's demand (`root` for a filmed root), and `world.rates` lists held views as
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's
   levers off. `SdfPortalSight` supplies completed per-consumer slab tests from the mesh pass's existing
-  farthest-depth pyramid. `SdfMeshOcclusion` dispatches one additional workgroup through `sdfOcclusionMaySee`
+  farthest-depth pyramid. `SdfMeshOcclusion` dispatches one invocation a query through `sdfOcclusionMaySee`
   and reads its result only once its node proves the frame slot complete. A changed camera or slab, unknown result, or replaced
   view/program retains demand. Occlusion is presentation evidence from an earlier completed frame;
   moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
+- **One sight rates a hidden body.** The same `SdfPortalSight` holds keyed groups of boxes beside the
+  slabs (`ISdfViewSight`, `SdfWorldPasses.Hidden`); its query list grows with them, its count in the
+  sight header row (`SdfKernelInterfaces.MeshSightRow`). `WorldCreationInstances.SightOf` asks each
+  view two groups per rated creation, its swept reach box and the receivers its shadow can reach in each
+  keeping cascade (`SdfMeshBox.ShadowReach`, tested against the camera pyramid, since receivers are the
+  view's own samples), and `RateOf` takes `SdfUpdateRateTiers.OccludedHertz` when every view hides both,
+  never a hold. A group answers only for the version and exact camera it was captured for; a mesh
+  recording with occlusion off lapses every answer (`SdfPortalSight.Lapse`). `world.rates` prints
+  `(occluded,latency=Nf)` beside such a body.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

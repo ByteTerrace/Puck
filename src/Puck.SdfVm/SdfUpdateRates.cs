@@ -94,7 +94,7 @@ public static class SdfUpdateRateTiers {
     /// <param name="texels">The texels along each side of its depth.</param>
     /// <returns>The turn, in radians.</returns>
     public static float ShadowFarLightTurnRadians(in SdfMeshShadowCamera camera, int texels) =>
-        (((2f * camera.HalfHeight) / Math.Max(val1: texels, val2: 1)) / Math.Max(val1: camera.Far, val2: 1f));
+        (camera.TexelOf(texels: texels) / Math.Max(val1: camera.Far, val2: 1f));
 
     /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
     /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at

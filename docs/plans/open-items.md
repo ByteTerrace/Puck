@@ -131,12 +131,12 @@ milestone. The owner requested its baseline and implementation plan, which
        `records.changed` is almost all of `records.compared`). What changes is
        the posing the rates allow: a creation may hold only while no camera's
        frustum and no cascade keeps its sphere (`WorldCreationInstances.Shown`),
-       and occlusion is not consulted, so at flight B, a view inside the
-       stairwell, the motion gallery's exhibits pose every frame (`world.rates`
-       lists them at 60 Hz); whether the stairwell hides them is for
-       `world.view.pick` to confirm. The mesh pass's occlusion result, which
-       `SdfPortalSight` already reads for session views, is the evidence that
-       would let them hold.
+       and one every view's sight hides, with its shadow's receivers, poses at
+       `SdfUpdateRateTiers.OccludedHertz` (`WorldCreationInstances.SightOf`, G5
+       in [virtual geometry](virtual-geometry.md#the-build-order)). Without that
+       evidence the motion gallery's exhibits posed every frame at flight B, a
+       view inside the stairwell (`world.rates` listed them at 60 Hz); G5's
+       windowed reading there is pending and replaces this one.
      - View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
        binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
        `WorldScreenBinder.TryRippleOf`), each frame for every screen.

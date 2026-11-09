@@ -13,7 +13,12 @@ namespace Puck.SdfVm;
 /// <param name="HalfHeight">The plane's half extent along each axis, in world units.</param>
 /// <param name="Near">The nearest depth along <paramref name="Forward"/> the target holds, in world units.</param>
 /// <param name="Far">The farthest depth along <paramref name="Forward"/> the target holds, in world units.</param>
-public readonly record struct SdfMeshShadowCamera(Vector3 Position, Vector3 Right, Vector3 Up, Vector3 Forward, float HalfHeight, float Near, float Far);
+public readonly record struct SdfMeshShadowCamera(Vector3 Position, Vector3 Right, Vector3 Up, Vector3 Forward, float HalfHeight, float Near, float Far) {
+    /// <summary>Returns the width, in world units, of one texel of a cascade depth this camera is drawn into.</summary>
+    /// <param name="texels">The texels across a side of the depth; a value below one counts as one.</param>
+    /// <returns>The texel's width.</returns>
+    public float TexelOf(int texels) => ((2f * HalfHeight) / Math.Max(val1: texels, val2: 1));
+}
 /// <summary>
 /// The baked-mesh path's shadow cascades for one view: two orthographic cameras along the key light (the light in the
 /// frame's first shadow slot), each enclosing a slice of the view's frustum that starts at its eye, the near cascade the
