@@ -44,10 +44,11 @@ public sealed class InstallPruneLawTests : IDisposable {
     }
     private ContentPin Install(string version, bool healthy = false) {
         var pin = Stage(version: version);
-        var applied = m_applier.Apply(cacheRoot: Root, manifest: ManifestFor(version: version), rid: "win-x64");
+        using var transaction = InstallTransaction.TryBegin(installRoot: Root)!;
+        var applied = m_applier.Apply(manifest: ManifestFor(version: version), rid: "win-x64", transaction: transaction);
 
         Assert.True(condition: applied.Applied, userMessage: applied.RefusalReason);
-        if (healthy) { File.Delete(path: Path.Combine(path1: Root, path2: "state", path3: "health.json")); }
+        if (healthy) { Assert.True(condition: transaction.RecordHealthy(version: version)); }
         return pin;
     }
     private InstallPruneResult Prune(int keepVersions) {
@@ -182,7 +183,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         WriteOutside();
         DirectoryLinks.Create(link: Path.Combine(path1: Version(version: "1.0.0"), path2: "escape"), target: Outside);
         File.Delete(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName));
-        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: Root, path2: "last-good")));
+        // Its proof of health no longer matches an install record, so it is no rollback target either.
+        Assert.Null(@object: InstallSeed.RollbackTarget(installRoot: Root));
 
         var pass = Prune(keepVersions: 0);
 
@@ -241,7 +243,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         }
         // The stub's hold and a process's own registration. Neither opens the version's files, as on a file system
         // that lets open files be deleted; only the held directory protects it.
-        using (var stub = StubInstall.HoldVersion(installRoot: Root, version: "1.0.0"))
+        using (var anchor = ConfinedDirectory.OpenAnchor(create: false, path: Root)!)
+        using (var stub = StubInstall.HoldVersion(root: anchor, version: "1.0.0"))
         using (var image = new MappedImage(path: Image(version: "1.0.1")))
         using (var application = image.Register(installRoot: Root)) {
             Assert.Equal(expected: "1.0.1", actual: application.Version);
@@ -283,8 +286,10 @@ public sealed class InstallPruneLawTests : IDisposable {
     public void RetentionRanksByInstallOrderNotVersionPrecedence() {
         _ = Install(healthy: true, version: "0.0.0-local.1");
         _ = Install(version: "0.0.0-local.9");
-        // local.9 never proves healthy: the stub returns to last-good, and later builds install over it.
-        StubInstall.RevertToLastGood(failedVersion: "0.0.0-local.9", installRoot: Root, lastGoodVersion: "0.0.0-local.1");
+        // local.9 never proves healthy: the stub rejects its payload and rolls back to local.1, and later builds install
+        // over it. The rejected install takes none of the allowance's places.
+        Assert.Equal(expected: "0.0.0-local.9", actual: InstallSeed.Launch(installRoot: Root, maxAttempts: 1).Version);
+        Assert.Equal(expected: "0.0.0-local.1", actual: InstallSeed.Launch(installRoot: Root, maxAttempts: 1).Version);
         var newest = Install(version: "0.0.0-local.10");
 
         _ = Install(version: "0.0.0-local.2");
@@ -392,7 +397,9 @@ public sealed class InstallPruneLawTests : IDisposable {
 
         var readable = Prune(keepVersions: 0);
 
-        Assert.Equal(expected: ["0.9.0"], actual: readable.DeletedVersions);
+        // 1.0.0's proof no longer matches a valid record, so proven 0.9.0 is the rollback target and stays.
+        Assert.Empty(collection: readable.DeletedVersions);
+        Assert.True(condition: Objects.Contains(pin: older));
         Assert.True(condition: Objects.Contains(pin: lastGood), userMessage: "a record with an invalid pin lost its version's object");
         Assert.True(condition: Objects.Contains(pin: current));
         Assert.False(condition: Objects.Contains(pin: orphan));
@@ -407,8 +414,9 @@ public sealed class InstallPruneLawTests : IDisposable {
         _ = Install(healthy: true, version: "1.0.1");
         _ = Install(healthy: true, version: "1.0.2");
         _ = Install(version: "1.0.3");
-        Assert.Equal(expected: "1.0.2", actual: File.ReadAllText(path: Path.Combine(path1: Root, path2: "last-good")));
-        using (StubInstall.HoldVersion(installRoot: Root, version: "1.0.1")) {
+        Assert.Equal(expected: "1.0.2", actual: InstallSeed.RollbackTarget(installRoot: Root));
+        using (var anchor = ConfinedDirectory.OpenAnchor(create: false, path: Root)!)
+        using (StubInstall.HoldVersion(root: anchor, version: "1.0.1")) {
             var pass = Prune(keepVersions: 1);
 
             Assert.Equal(expected: ["1.0.1"], actual: pass.RunningVersions);
@@ -463,50 +471,24 @@ public sealed class InstallPruneLawTests : IDisposable {
 
         Assert.True(condition: cleanup.DeleteChild(name: "d"));
     }
-    // A pointer that is not the plain name of an existing version skips the whole pass before anything, a trash/
-    // leftover included, is deleted.
+    // A release record that does not validate, names no current version, or names one that is not a version directory
+    // skips the whole pass before anything, a trash/ leftover included, is deleted.
     [Fact]
-    public void APointerThatIsNotAVersionNameSkipsTheWholePass() {
+    public void AReleaseRecordThatCannotBeTrustedSkipsTheWholePass() {
         _ = Install(version: "1.0.0");
         _ = Install(version: "1.0.1");
         Directory.CreateDirectory(path: Path.Combine(path1: Trash, path2: "leftover"));
-        File.WriteAllText(path: Path.Combine(path1: Root, path2: "current"), contents: "../1.0.1");
+        var policy = Path.Combine(path1: Root, path2: InstallLayout.StateDirectoryName, path3: InstallLayout.ReleasePolicyFileName);
+        var valid = File.ReadAllText(path: policy);
 
-        Assert.Contains(expectedSubstring: "is not a version directory", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        File.WriteAllText(path: policy, contents: valid.Replace(oldValue: "\"current\": \"1.0.1\"", newValue: "\"current\": \"../1.0.1\"", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(expectedSubstring: "nothing was deleted", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
         Assert.True(condition: Directory.Exists(path: Path.Combine(path1: Trash, path2: "leftover")), userMessage: "a skipped pass deleted a trash/ entry");
-        File.WriteAllText(path: Path.Combine(path1: Root, path2: "current"), contents: "1.0.9");
+        File.WriteAllText(path: policy, contents: valid.Replace(oldValue: "\"current\": \"1.0.1\"", newValue: "\"current\": \"1.0.9\"", comparisonType: StringComparison.Ordinal));
         Assert.Contains(expectedSubstring: "is not a version directory", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
-        File.Delete(path: Path.Combine(path1: Root, path2: "current"));
-        Assert.Contains(expectedSubstring: "names no version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
-        Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
-    }
-    // Only a missing pointer is absent. A last-good that is present but empty, blank, not a version name, or unreadable
-    // might have protected any version, so it skips the whole pass.
-    [InlineData("")]
-    [InlineData("  \n")]
-    [InlineData("../1.0.0")]
-    [InlineData(null)]
-    [Theory]
-    public void APresentPointerThatNamesNoVersionSkipsTheWholePass(string? lastGood) {
-        _ = Install(version: "1.0.0");
-        _ = Install(version: "1.0.1");
-        var path = Path.Combine(path1: Root, path2: "last-good");
-        string? skipped;
-
-        File.WriteAllText(contents: (lastGood ?? "1.0.0"), path: path);
-        if (lastGood is not null) {
-            skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
-        } else if (OperatingSystem.IsWindows()) {
-            using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.None)) {
-                skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
-            }
-        } else {
-            File.SetUnixFileMode(mode: UnixFileMode.None, path: path);
-            skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
-            File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: path);
-        }
-        Assert.Contains(actualString: skipped, expectedSubstring: "nothing was deleted");
+        File.Delete(path: policy);
+        Assert.Contains(expectedSubstring: "names no current version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
     }
     // A record that does not validate gives its version no rank, so the version is kept rather than ranked below older

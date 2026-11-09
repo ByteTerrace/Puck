@@ -7,7 +7,8 @@ namespace Puck.Confinement;
 /// A directory held open by handle. Every name it resolves is looked up relative to that handle, one component at a
 /// time, and a link (a symbolic link, junction or other reparse point) is refused rather than followed, so what it
 /// reads, writes, renames and deletes stays below the held directory whatever is renamed or replaced on the paths
-/// around it. Renames and removals act on handles, never on paths.
+/// around it. Renames and removals act on handles, never on paths; the one exception is <see cref="Publish"/> on Windows,
+/// which names its two entries by the held directory's path because the documented durable move takes paths.
 /// <para>On Windows a held directory is open without <c>FILE_SHARE_DELETE</c>, so no other open can rename or delete
 /// it while it is held, and an open that asks for removal fails while anyone else holds it. On Linux a held directory
 /// is a descriptor: <see cref="TryHoldShared"/> takes a shared <c>flock</c> on it, and a removal's exclusive lock
@@ -264,22 +265,70 @@ public sealed partial class ConfinedDirectory : IDisposable {
             foreach (var level in levels) { level.Directory?.Dispose(); }
         }
     }
-    /// <summary>Atomically replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both directly in
-    /// this directory, and makes the replacement durable.</summary>
-    /// <param name="temporary">The replacing file's name.</param>
-    /// <param name="name">The replaced file's name.</param>
-    /// <exception cref="IOException">Either name is a link, or the replacement fails.</exception>
+    /// <summary>Atomically and durably replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both
+    /// directly in this directory: when it returns, a power loss leaves the replacement; when it throws the replaced file
+    /// is as it was. The temporary's content must already be flushed by its writer (<see cref="FileStream.Flush(bool)"/>
+    /// with <c>flushToDisk: true</c>); this call makes the rename itself durable. This is the one durable replacement
+    /// every caller uses: <see cref="AtomicFile.WriteAllBytesDurably"/> and the blob store both end here.
+    /// <para>On Windows the temporary is first opened through the held handle without following a link, and refused when
+    /// it is a link, hard-linked or not a regular file; it is then moved with <c>MoveFileExW</c>
+    /// (<c>MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH</c>), whose documentation states that it does not return
+    /// until the move is on the disk (Microsoft Learn, <c>MoveFileExW</c>, winbase.h). That call takes paths, so this
+    /// directory's <see cref="Path"/> reaches it: the held directory, and every ancestor <see cref="Open"/> holds, are open
+    /// without <c>FILE_SHARE_DELETE</c>, so none can be renamed or deleted, and the path cannot name another directory,
+    /// while this object lives. A directory from <see cref="OpenAnchor"/> holds only itself, and its own path is the
+    /// host's. On Linux it is <c>renameat</c> relative to the held directory followed by <see cref="Flush"/>, the
+    /// <c>fsync</c> of the directory that fsync(2) requires to persist the entry, and the rename is atomic per
+    /// rename(2).</para></summary>
+    /// <param name="temporary">The replacing file's name: one component, never a path.</param>
+    /// <param name="name">The replaced file's name: one component, never a path.</param>
+    /// <exception cref="ArgumentException">Either name is not a single component.</exception>
+    /// <exception cref="IOException">The temporary does not exist, or on Windows is a link, hard-linked or not a regular
+    /// file, or the replacement or the directory flush fails.</exception>
     public void Publish(string temporary, string name) {
         RequireName(name: temporary);
         RequireName(name: name);
         if (OperatingSystem.IsWindows()) {
-            using var source = (Windows.Open(access: Windows.Delete | Windows.GenericWrite, busyIsNull: false, create: false, directory: false,
-                name: temporary, newFile: false, parent: Handle, share: 0) ?? throw new FileNotFoundException(message: $"'{temporary}' does not exist."));
+            // Verified here, held across the move: the share mode lets the move open the same file for its own rename.
+            using var source = (Windows.Open(access: Windows.ReadAttributes, busyIsNull: false, create: false, directory: false, name: temporary, newFile: false,
+                parent: Handle, share: (Windows.ShareRead | Windows.ShareWrite | Windows.ShareDelete)) ?? throw new FileNotFoundException(message: $"'{temporary}' does not exist."));
 
-            Windows.Rename(destination: Handle, handle: source, name: name, replace: true);
-            if (!FlushFileBuffers(handle: source)) { throw new IOException(message: "Cannot flush the published file."); }
+            Windows.MoveDurably(destination: System.IO.Path.Combine(path1: m_path, path2: name), source: System.IO.Path.Combine(path1: m_path, path2: temporary));
         } else {
-            Linux.ReplaceFile(destinationName: name, parent: Handle, sourceName: temporary);
+            Linux.RenameReplace(parent: Handle, sourceName: temporary, destinationName: name);
+            Linux.Flush(directory: Handle);
+        }
+    }
+    /// <summary>Makes this directory's entries durable: on Linux an <c>fsync</c> of the directory, which persists a rename
+    /// into it or a file created in it (fsync(2) requires this beside the file's own flush). On Windows it does nothing:
+    /// a file's own <c>FlushFileBuffers</c> and a write-through move (<see cref="Publish"/>) are the documented durability
+    /// operations there, and a directory opened for listing cannot be flushed.</summary>
+    /// <exception cref="IOException">The directory cannot be flushed.</exception>
+    public void Flush() {
+        if (!OperatingSystem.IsWindows()) { Linux.Flush(directory: Handle); }
+    }
+    /// <summary>Makes every directory below this one, and this one, durable (<see cref="Flush"/>), through handles and
+    /// without recursion; a link is never followed.</summary>
+    /// <exception cref="IOException">A directory cannot be opened or flushed.</exception>
+    public void FlushTree() {
+        if (OperatingSystem.IsWindows()) { return; }
+        var pending = new Stack<ConfinedDirectory>();
+
+        try {
+            Flush();
+            foreach (var entry in Entries()) {
+                if ((entry.Kind == ConfinedEntryKind.Directory) && (Child(name: entry.Name) is { } child)) { pending.Push(item: child); }
+            }
+            while (pending.TryPop(result: out var directory)) {
+                using (directory) {
+                    directory.Flush();
+                    foreach (var entry in directory.Entries()) {
+                        if ((entry.Kind == ConfinedEntryKind.Directory) && (directory.Child(name: entry.Name) is { } child)) { pending.Push(item: child); }
+                    }
+                }
+            }
+        } finally {
+            foreach (var directory in pending) { directory.Dispose(); }
         }
     }
     /// <summary>Removes the file or directory tree <paramref name="name"/> directly in this directory, through handles:
@@ -311,7 +360,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         RequireName(name: newName);
         RequireRemovable();
         if (OperatingSystem.IsWindows()) {
-            Windows.Rename(destination: destination.Handle, handle: Handle, name: newName, replace: false);
+            Windows.Rename(destination: destination.Handle, handle: Handle, name: newName);
         } else {
             Linux.Rename(destinationName: newName, destinationParent: destination.Handle, sourceName: name, sourceParent: parent.Handle);
         }
@@ -560,7 +609,4 @@ public sealed partial class ConfinedDirectory : IDisposable {
         }
         return existed;
     }
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool FlushFileBuffers(SafeFileHandle handle);
 }

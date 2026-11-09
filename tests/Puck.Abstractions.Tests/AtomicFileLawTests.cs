@@ -25,6 +25,24 @@ public sealed class AtomicFileLawTests : IDisposable {
         Assert.Equal(expected: new[] { "staged" }, actual: Entries());
     }
     [Fact]
+    public void ADurableWriteCreatesAndReplacesLeavingNoTemporaryAndPublishNeedsItsTemporary() {
+        var path = PathOf(name: "durable");
+
+        AtomicFile.WriteAllBytesDurably(bytes: [1, 2], path: path);
+        AtomicFile.WriteAllBytesDurably(bytes: [3, 4, 5], path: path);
+        Assert.Equal(expected: new byte[] { 3, 4, 5 }, actual: File.ReadAllBytes(path: path));
+        Assert.Equal(expected: new[] { "durable" }, actual: Entries());
+
+        File.WriteAllBytes(bytes: [9], path: PathOf(name: "temporary.tmp"));
+        using (var directory = ConfinedDirectory.OpenAnchor(create: false, path: m_directory.RootPath)!) {
+            Assert.ThrowsAny<IOException>(testCode: () => directory.Publish(name: "durable", temporary: "absent.tmp"));
+            Assert.Equal(expected: new byte[] { 3, 4, 5 }, actual: File.ReadAllBytes(path: path));
+            directory.Publish(name: "durable", temporary: "temporary.tmp");
+        }
+        Assert.Equal(expected: new byte[] { 9 }, actual: File.ReadAllBytes(path: path));
+        Assert.Equal(expected: new[] { "durable" }, actual: Entries());
+    }
+    [Fact]
     public void CreateOnlyCommitKeepsAConcurrentWinnersBytes() {
         var path = PathOf(name: "winner");
         using var pending = AtomicFile.StageAllText(contents: "loser", path: path);

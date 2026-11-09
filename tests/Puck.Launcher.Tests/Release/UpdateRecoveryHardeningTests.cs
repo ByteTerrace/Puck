@@ -1,21 +1,16 @@
-using Puck.Assets;
+using Puck.Confinement;
 using Puck.Launcher.Release;
-using Puck.Launcher.Stub;
 using Xunit;
 
 namespace Puck.Launcher.Tests.Release;
 
 public sealed class UpdateRecoveryHardeningTests : IDisposable {
     [Fact]
-    public async Task PermanentHealthMarkerFailureDoesNotRetry() {
-        Directory.CreateDirectory(path: Version(version: "1.0.1"));
-        var path = Path.Combine(Version(version: "1.0.1"), "app.dll");
-        File.WriteAllText(path: path, contents: "selected");
-        PendingHealth();
-        File.Delete(path: Marker);
-        Directory.CreateDirectory(path: Marker);
-        using var image = new MappedImage(path: path);
+    public async Task AnInvalidReleaseRecordFailsHealthClosedWithoutRetrying() {
+        using var image = Installed(version: "1.0.1");
         using var registration = image.Register(installRoot: m_root.RootPath);
+
+        File.WriteAllText(path: PolicyPath, contents: "{ truncated");
         var clearing = HealthGateFile.ClearHealthyAsync(cacheRoot: m_root.RootPath, version: "1.0.1",
             registration: registration, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(condition: clearing.IsCompleted);
@@ -23,142 +18,72 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
         Assert.False(condition: result.Cleared);
         Assert.False(condition: result.Retryable);
     }
-
-    [Fact]
-    public void InterruptedPublicationPreservesTheStillSelectedVersionsAttempts() {
-        Directory.CreateDirectory(path: m_root.RootPath);
-        File.WriteAllText(path: Current, contents: "1.0.1");
-        StubHealth.Write(installRoot: m_root.RootPath, record: new(Attempts: 2, Version: "1.0.1"));
-        // Stop at the real applier's last health mutation, before its current-pointer publication.
-        HealthGateFile.MarkPending(cacheRoot: m_root.RootPath, version: "1.0.2");
-        StubHealth.IncrementAndFlush(installRoot: m_root.RootPath, version: File.ReadAllText(path: Current));
-        Assert.Equal(expected: 3, actual: StubHealth.AttemptsFor(record: StubHealth.Read(installRoot: m_root.RootPath), version: "1.0.1"));
-        File.WriteAllText(path: Current, contents: "1.0.2");
-        StubHealth.IncrementAndFlush(installRoot: m_root.RootPath, version: "1.0.2");
-        Assert.Equal(expected: 1, actual: StubHealth.AttemptsFor(record: StubHealth.Read(installRoot: m_root.RootPath), version: "1.0.2"));
-    }
     [Fact]
     public async Task HealthyStartupRetriesAfterInstallLeaseContention() {
-        Directory.CreateDirectory(path: Version(version: "1.0.1"));
-        var path = Path.Combine(path1: Version(version: "1.0.1"), path2: "app.dll");
-
-        File.WriteAllText(contents: "selected", path: path);
-        PendingHealth();
-        using var image = new MappedImage(path: path);
+        using var image = Installed(version: "1.0.1");
         using var registration = image.Register(installRoot: m_root.RootPath);
         Task<HealthClearResult> clearing;
 
-        using (StubInstall.AcquireUpdateLease(installRoot: m_root.RootPath)) {
+        using (InstallTransaction.TryBegin(installRoot: m_root.RootPath)) {
             clearing = HealthGateFile.ClearHealthyAsync(cacheRoot: m_root.RootPath, version: "1.0.1",
                 registration: registration, cancellationToken: TestContext.Current.CancellationToken);
             Assert.False(condition: clearing.IsCompleted);
-            Assert.True(condition: File.Exists(path: Marker));
+            Assert.Empty(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls);
         }
         Assert.True(condition: (await clearing).Cleared);
-        Assert.False(condition: File.Exists(path: Marker));
+        Assert.Single(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls);
     }
-
-    private readonly TempStagingRoot m_root = new();
-
-    private string Current => Path.Combine(path1: m_root.RootPath, path2: "current");
-    private string Marker => Path.Combine(path1: m_root.RootPath, path2: "state", path3: "health.json");
-
-    private string Version(string version) => Path.Combine(path1: m_root.RootPath, path2: "versions", path3: version);
-    private void PendingHealth(string version = "1.0.1") {
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: Marker)!);
-        File.WriteAllText(path: Marker, contents: "pending");
-        File.WriteAllText(path: Current, contents: version);
-    }
-
     [Fact]
-    public void HealthClearingRequiresTheSelectedExecutableAndTheInstallLease() {
-        foreach (var version in new[] { "1.0.0", "1.0.1" }) {
-            Directory.CreateDirectory(path: Version(version: version));
-            File.WriteAllText(path: Path.Combine(path1: Version(version: version), path2: "app.dll"), contents: version);
-        }
-        PendingHealth();
-        using var oldImage = new MappedImage(path: Path.Combine(path1: Version(version: "1.0.0"), path2: "app.dll"));
-        using var newImage = new MappedImage(path: Path.Combine(path1: Version(version: "1.0.1"), path2: "app.dll"));
+    public void HealthRecordingRequiresTheSelectedExecutableAndTheInstallLease() {
+        using var oldImage = Installed(version: "1.0.0");
+        using var newImage = Installed(version: "1.0.1");
         using var old = oldImage.Register(installRoot: m_root.RootPath);
         using var selected = newImage.Register(installRoot: m_root.RootPath);
 
         Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: old, version: "1.0.0").Cleared);
-        Assert.True(condition: File.Exists(path: Marker));
-        // Reading the new pointer must not let an old executable report the new version healthy.
+        // The current version's name must not let an old executable report the new version healthy.
         Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: old, version: "1.0.1").Cleared);
-        Assert.True(condition: File.Exists(path: Marker));
-        using (StubInstall.AcquireUpdateLease(installRoot: m_root.RootPath)) {
+        using (InstallTransaction.TryBegin(installRoot: m_root.RootPath)) {
             Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: selected, version: "1.0.1").Cleared);
-            Assert.True(condition: File.Exists(path: Marker));
         }
+        Assert.Empty(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls);
         var cleared = HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, keepVersions: 0, registration: selected, version: "1.0.1");
 
         Assert.True(condition: cleared.Cleared);
-        Assert.False(condition: File.Exists(path: Marker));
-        // The pass that follows keeps both: current, and the old version, which no install record ranks.
+        Assert.Equal(expected: "1.0.1", actual: Assert.Single(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls).Version);
+        // The pass that follows keeps both: current, and the old version, which its live process holds.
         Assert.Equal(expected: ["1.0.1", "1.0.0"], actual: cleared.Pruned!.KeptVersions);
+        Assert.Equal(expected: ["1.0.0"], actual: cleared.Pruned.RunningVersions);
     }
+    // A current version whose install record is missing or invalid has no known generation; the stub refuses to launch
+    // it by name rather than guess, and rolls back when a proven install qualifies.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void ApplyingOverAnUnprovenCurrentPreservesLastGood(bool hasLastGood) {
-        PendingHealth();
-        var lastGood = Path.Combine(path1: m_root.RootPath, path2: "last-good");
+    public void UnknownGenerationRefusesLaunchOrRollsBack(bool provenFallback) {
+        if (provenFallback) { _ = InstallSeed.Install(installRoot: m_root.RootPath, version: "1.0.0"); }
+        _ = InstallSeed.Install(installRoot: m_root.RootPath, proven: false, version: "1.0.1");
+        File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.1"), path2: InstallRecord.FileName), contents: "{\"sequence\": 2}");
+        var decision = InstallSeed.Launch(installRoot: m_root.RootPath, maxAttempts: 3);
 
-        if (hasLastGood) { File.WriteAllText(contents: "1.0.0", path: lastGood); }
-        var content = "new binary"u8.ToArray();
-
-        Directory.CreateDirectory(path: Version(version: "1.0.2"));
-        File.WriteAllBytes(path: Path.Combine(path1: Version(version: "1.0.2"), path2: "app.dll"), bytes: content);
-        var manifest = new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null,
-            Payloads: [new ReleasePayload(Rid: "win-x64", Files: [new ReleasePayloadFile(Path: "app.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length)])],
-            Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema,
-            Signature: null, StateGeneration: 1, Version: "1.0.2");
-        var result = new FileUpdateApplier().Apply(manifest: manifest, rid: "win-x64", cacheRoot: m_root.RootPath);
-
-        Assert.True(condition: result.Applied, userMessage: result.RefusalReason);
-        Assert.Equal(expected: "1.0.2", actual: File.ReadAllText(path: Current));
-        Assert.Equal(expected: hasLastGood, actual: File.Exists(path: lastGood));
-        if (hasLastGood) { Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: lastGood)); }
+        Assert.Equal(expected: (provenFallback ? "1.0.0" : null), actual: decision.Version);
+        if (!provenFallback) { Assert.Contains(expectedSubstring: "no valid install record", actualString: decision.Refusal); }
     }
-    [Fact]
-    public void ConsecutiveUpdatesBeforeLaunchingNeverPromoteAnUnstartedVersion() {
-        Directory.CreateDirectory(path: m_root.RootPath);
-        File.WriteAllText(path: Current, contents: "1.0.0");
-        var content = "new binary"u8.ToArray();
 
-        foreach (var version in new[] { "1.0.1", "1.0.2" }) {
-            Directory.CreateDirectory(path: Version(version: version));
-            File.WriteAllBytes(path: Path.Combine(path1: Version(version: version), path2: "app.dll"), bytes: content);
-            var manifest = new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null,
-                Payloads: [new ReleasePayload(Rid: "win-x64", Files: [new ReleasePayloadFile(Path: "app.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length)])],
-                Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema,
-                Signature: null, StateGeneration: 1, Version: version);
-            var result = new FileUpdateApplier().Apply(manifest: manifest, rid: "win-x64", cacheRoot: m_root.RootPath);
+    private readonly TempStagingRoot m_root = new();
 
-            Assert.True(condition: result.Applied, userMessage: result.RefusalReason);
-            Assert.True(condition: File.Exists(path: Marker));
-            Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
-        }
+    private string PolicyPath => Path.Combine(path1: m_root.RootPath, path2: InstallLayout.StateDirectoryName, path3: InstallLayout.ReleasePolicyFileName);
+
+    private string Version(string version) => Path.Combine(path1: m_root.RootPath, path2: "versions", path3: version);
+    // An installed, current, unproven version with an image file a test process maps as if it had been loaded from it.
+    private MappedImage Installed(string version) {
+        Directory.CreateDirectory(path: Version(version: version));
+        var path = Path.Combine(path1: Version(version: version), path2: "app.dll");
+
+        File.WriteAllText(contents: version, path: path);
+        _ = InstallSeed.Install(installRoot: m_root.RootPath, proven: false, version: version);
+        return new MappedImage(path: path);
     }
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("-1")]
-    [InlineData("garbage")]
-    [InlineData("2147483648")]
-    [Theory]
-    public void UnknownGenerationCannotAuthorizeRollback(string? text) {
-        Directory.CreateDirectory(path: Version(version: "1.0.0"));
-        if (text is not null) { File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.0"), path2: "state-generation"), contents: text); }
-        Assert.ThrowsAny<IOException>(testCode: () => StubInstall.ReadGeneration(installRoot: m_root.RootPath, version: "1.0.0"));
-    }
-    [InlineData(0)]
-    [InlineData(3)]
-    [Theory]
-    public void KnownGenerationIsReadExactly(int generation) {
-        Directory.CreateDirectory(path: Version(version: "1.0.0"));
-        File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.0"), path2: "state-generation"), contents: generation.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
-        Assert.Equal(expected: generation, actual: StubInstall.ReadGeneration(installRoot: m_root.RootPath, version: "1.0.0"));
-    }
+
     public void Dispose() => m_root.Dispose();
 }
