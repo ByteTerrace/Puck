@@ -129,10 +129,10 @@ public static class MonotonicPartitioner {
         var donorBucket = (jumpAtBucketCount - 1);
         var priorDivMod = divModByBucketCount[donorBucket];
         var jumpDivMod = divModByBucketCount[jumpAtBucketCount];
-        var priorQuotient = ((int)(priorDivMod >> 32));
-        var priorRemainder = unchecked((int)priorDivMod);
-        var jumpQuotient = ((int)(jumpDivMod >> 32));
-        var jumpRemainder = unchecked((int)jumpDivMod);
+        var priorQuotient = unchecked((int)PackedIntPair.High(value: priorDivMod));
+        var priorRemainder = unchecked((int)PackedIntPair.Low(value: priorDivMod));
+        var jumpQuotient = unchecked((int)PackedIntPair.High(value: jumpDivMod));
+        var jumpRemainder = unchecked((int)PackedIntPair.Low(value: jumpDivMod));
         var priorDonationTotal = (
             ((currentBucket * (priorQuotient - jumpQuotient)) +
             Math.Min(
@@ -192,10 +192,10 @@ public static class MonotonicPartitioner {
         divModByBucketCount = new ulong[(MaxBucketCount + 1)];
 
         for (var n = 1; (n <= MaxBucketCount); ++n) {
-            var quotient = ((ulong)(MaxValueCount / n));
-            var remainder = ((ulong)(MaxValueCount % n));
+            var quotient = ((uint)(MaxValueCount / n));
+            var remainder = ((uint)(MaxValueCount % n));
 
-            divModByBucketCount[n] = (quotient << 32) | remainder;
+            divModByBucketCount[n] = PackedIntPair.Pack(high: quotient, low: remainder);
         }
 
         var checkpoints = new List<OwnershipCheckpoint>(capacity: 2048);
@@ -513,10 +513,10 @@ public static class MonotonicPartitioner {
                 var donorBucket = (jumpAtBucketCount - 1U);
                 var priorDivMod = divModByBucketCount[((int)donorBucket)];
                 var jumpDivMod = divModByBucketCount[((int)jumpAtBucketCount)];
-                var priorQuotient = ((uint)(priorDivMod >> 32));
-                var priorRemainder = ((uint)priorDivMod);
-                var jumpQuotient = ((uint)(jumpDivMod >> 32));
-                var jumpRemainder = ((uint)jumpDivMod);
+                var priorQuotient = PackedIntPair.High(value: priorDivMod);
+                var priorRemainder = PackedIntPair.Low(value: priorDivMod);
+                var jumpQuotient = PackedIntPair.High(value: jumpDivMod);
+                var jumpRemainder = PackedIntPair.Low(value: jumpDivMod);
                 var diffPrior = ((int)(currentBucket - priorRemainder));
                 var minPrior = (priorRemainder + ((currentBucket - priorRemainder) & ((uint)(diffPrior >> 31))));
                 var diffJump = ((int)(currentBucket - jumpRemainder));

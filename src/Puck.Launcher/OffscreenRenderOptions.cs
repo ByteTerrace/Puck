@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Launcher;
 
 /// <summary>The target extent <see cref="OffscreenTickHostedService"/> produces frames at. There is no window to query a
@@ -22,7 +24,7 @@ public sealed class OffscreenRenderOptions {
         get {
             var extent = Volatile.Read(location: ref m_extent);
 
-            return (((uint)(extent >> 32)), ((uint)extent));
+            return (PackedIntPair.High(value: extent), PackedIntPair.Low(value: extent));
         }
     }
 
@@ -36,7 +38,7 @@ public sealed class OffscreenRenderOptions {
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
         Volatile.Write(
             location: ref m_extent,
-            value: (((ulong)width) << 32) | height
+            value: PackedIntPair.Pack(high: width, low: height)
         );
     }
 }

@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -160,8 +161,8 @@ public sealed partial class SdfMeshIrradiance {
                         row[7] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
                         row[8] = probe.GpuSlot;
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
-                        row[9] = (uint)token;
-                        row[10] = (uint)(token >> 32);
+                        row[9] = PackedIntPair.Low(value: token);
+                        row[10] = PackedIntPair.High(value: token);
                         var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
                         row[11] = BitConverter.SingleToUInt32Bits(age);
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
@@ -292,8 +293,8 @@ public sealed partial class SdfMeshIrradiance {
                 probes[i] = probe;
                 row[0] |= 4;
             }
-            row[1] = (uint)probe.GpuToken;
-            row[2] = (uint)(probe.GpuToken >> 32);
+            row[1] = PackedIntPair.Low(value: probe.GpuToken);
+            row[2] = PackedIntPair.High(value: probe.GpuToken);
             row[3] = probe.GpuSlot;
             Compose(in probe, candidate.Cell, row[SdfMeshProbeRelight.RecordInputWord..]);
             var reuses = false;

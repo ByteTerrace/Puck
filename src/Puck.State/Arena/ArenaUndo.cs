@@ -230,7 +230,7 @@ public sealed partial class StateArena {
                         return false;
                     }
                     var row = m_layout.RowOf(column: entry.Column, index: entry.Index);
-                    var identity = (((long)((byte)entry.Column)) << 32) | ((uint)entry.Index);
+                    var identity = EntryIdentity(column: entry.Column, index: entry.Index);
 
                     if ((row < 0) || !configured.Contains(row: row) || !positions.Add(item: identity)) {
                         reason = $"undo checkpoint group '{group.Name}' carries an undeclared or duplicate journal position";
@@ -285,7 +285,7 @@ public sealed partial class StateArena {
 
         for (var segmentIndex = (segments.Length - 1); (segmentIndex >= 0); segmentIndex--) {
             foreach (var entry in segments[segmentIndex].Entries) {
-                projected[(((long)((byte)entry.Column)) << 32) | ((uint)entry.Index)] = entry;
+                projected[EntryIdentity(column: entry.Column, index: entry.Index)] = entry;
             }
             foreach (var row in configured.Rows) {
                 ref readonly var layout = ref m_layout[row];
@@ -354,11 +354,13 @@ public sealed partial class StateArena {
         reason = string.Empty;
         return true;
     }
-    private long ProjectedNumber(ArenaColumn column, int index, IReadOnlyDictionary<long, ArenaUndoEntrySnapshot> projected) => (projected.TryGetValue(key: (((long)((byte)column)) << 32) | ((uint)index), value: out var entry)
+    // A cell's identity within one journal: its column over its position, hashed by PackedIntPairComparer.
+    private static long EntryIdentity(ArenaColumn column, int index) => PackedIntPair.Pack(high: ((byte)column), low: index);
+    private long ProjectedNumber(ArenaColumn column, int index, IReadOnlyDictionary<long, ArenaUndoEntrySnapshot> projected) => (projected.TryGetValue(key: EntryIdentity(column: column, index: index), value: out var entry)
         ? entry.Number
         : ReadNumberRaw(column: column, index: index));
     private string? ProjectedMemberName(IReadOnlyDictionary<long, ArenaUndoEntrySnapshot> projected, int slot) {
-        if (projected.TryGetValue(key: (((long)((byte)ArenaColumn.MemberKey)) << 32) | ((uint)slot), value: out var entry)) {
+        if (projected.TryGetValue(key: EntryIdentity(column: ArenaColumn.MemberKey, index: slot), value: out var entry)) {
             return entry.MemberKey;
         }
         var ordinal = ReadNumberRaw(column: ArenaColumn.MemberKey, index: slot);
@@ -727,7 +729,7 @@ public sealed partial class StateArena {
             m_pending = true;
         }
         public void Add(ArenaJournalEntry entry, ReadOnlySpan<sbyte> components, string? memberKey) {
-            var identity = (((long)((byte)entry.Column)) << 32) | ((uint)entry.Index);
+            var identity = EntryIdentity(column: entry.Column, index: entry.Index);
 
             if (m_seen.ContainsKey(key: identity)) {
                 return;
@@ -807,7 +809,7 @@ public sealed partial class StateArena {
                 for (var index = 0; (index < m_segments[Depth].Count); index++) {
                     var entry = m_segments[Depth][index].Entry;
 
-                    m_seen.Add(key: (((long)((byte)entry.Column)) << 32) | ((uint)entry.Index), value: index);
+                    m_seen.Add(key: EntryIdentity(column: entry.Column, index: entry.Index), value: index);
                 }
             } else {
                 m_seen.Clear();
@@ -834,7 +836,7 @@ public sealed partial class StateArena {
                 for (var index = 0; (index < pending.Count); index++) {
                     var entry = pending[index].Entry;
 
-                    m_seen.Add(key: (((long)((byte)entry.Column)) << 32) | ((uint)entry.Index), value: index);
+                    m_seen.Add(key: EntryIdentity(column: entry.Column, index: entry.Index), value: index);
                 }
             }
         }

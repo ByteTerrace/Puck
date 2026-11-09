@@ -420,7 +420,7 @@ public static class SdfMeshCollapse {
                     }
                     // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
                     // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
-                    m_rejected[Directed(from: place, to: target)] = Directed(from: m_revisions[place], to: outcome switch {
+                    m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
                         Outcome.RefusedLinks => m_revisions[target],
                         Outcome.RefusedMeasure => MeasuredAt(budget: m_budget),
                         _ => AnyRevision,
@@ -431,9 +431,9 @@ public static class SdfMeshCollapse {
             return taken;
         }
         private bool Refused(int from, int to) {
-            if (!m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) || (((int)(rejected >> 32)) != m_revisions[from])) { return false; }
+            if (!m_rejected.TryGetValue(key: PackedIntPair.Pack(high: from, low: to), value: out var rejected) || (PackedIntPair.High(value: rejected) != m_revisions[from])) { return false; }
 
-            var low = ((int)rejected);
+            var low = PackedIntPair.Low(value: rejected);
 
             return ((low == AnyRevision) || (low == m_revisions[to]) || (low == MeasuredAt(budget: m_budget)));
         }
@@ -445,7 +445,6 @@ public static class SdfMeshCollapse {
 
         private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure }
 
-        private static long Directed(int from, int to) => (((long)from) << 32) | ((uint)to);
         // Lists a place's alive triangles: the pass's list less those a collapse this pass removed.
         private List<int> Alive(int place, List<int> fan) {
             fan.Clear();
@@ -904,7 +903,7 @@ public static class SdfMeshCollapse {
                 into.Add(item: m_ringNext[at]);
             }
         }
-        private static long Key(int a, int b) => (((long)Math.Min(val1: a, val2: b)) << 32) | ((uint)Math.Max(val1: a, val2: b));
+        private static long Key(int a, int b) => PackedIntPair.Pack(high: Math.Min(val1: a, val2: b), low: Math.Max(val1: a, val2: b));
         private void AddLine(int a, int b, double x, double y, double z) {
             var sample = m_lineX.Count;
 

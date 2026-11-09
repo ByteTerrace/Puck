@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Puck.Maths;
 
 namespace Puck.Hosting.Jobs;
 
@@ -93,14 +94,14 @@ public sealed class JobPool : IDisposable {
         }
 
         try {
-            var generation = ((m_state >> 32) + 1L);
+            var generation = unchecked(PackedIntPair.High(value: m_state) + 1);
 
-            _ = Interlocked.Exchange(location1: ref m_state, value: ((generation << 32) | Closed));
+            _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: unchecked(((int)Closed))));
             m_body = body;
             m_count = partitions;
             m_fault = default;
             Volatile.Write(location: ref m_remaining, value: partitions);
-            _ = Interlocked.Exchange(location1: ref m_state, value: (generation << 32));
+            _ = Interlocked.Exchange(location1: ref m_state, value: PackedIntPair.Pack(high: generation, low: 0));
             Wake(wanted: (partitions - 1));
 
             if (!Drain()) {
@@ -158,7 +159,7 @@ public sealed class JobPool : IDisposable {
     private bool TryTake(out IJobPartitions body, out int partition) {
         while (true) {
             var state = Volatile.Read(location: ref m_state);
-            var next = (uint)state;
+            var next = PackedIntPair.Low(value: ((ulong)state));
             var candidate = Volatile.Read(location: ref m_body);
             var count = Volatile.Read(location: ref m_count);
 

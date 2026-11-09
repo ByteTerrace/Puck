@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Maths;
 using Puck.Platform.Probes;
 using static Puck.Platform.Windows.MfInterop;
 
@@ -381,8 +382,8 @@ internal abstract class Win32SourceReaderCameraGraph<TStream> : Win32CameraGraph
                 punValue: out var packedSize
             ));
 
-            var width = ((int)(packedSize >> 32));
-            var height = ((int)(packedSize & 0xffffffff));
+            var width = ((int)PackedIntPair.High(value: packedSize));
+            var height = ((int)PackedIntPair.Low(value: packedSize));
 
             if (
                 (width <= 0) ||
@@ -972,8 +973,8 @@ internal static class Win32CameraModeNegotiation {
                     continue;
                 }
 
-                var width = ((long)(packedSize >> 32));
-                var height = ((long)(packedSize & 0xffffffff));
+                var width = ((long)PackedIntPair.High(value: packedSize));
+                var height = ((long)PackedIntPair.Low(value: packedSize));
 
                 if (
                     (width <= 0) ||
@@ -1063,8 +1064,8 @@ internal static class Win32CameraModeNegotiation {
         return (((mediaType.GetUINT64(
             guidKey: ref frameRateKey,
             punValue: out var packedRate
-        ) >= 0) && ((packedRate & 0xffffffff) != 0))
-            ? (((double)(packedRate >> 32)) / (packedRate & 0xffffffff))
+        ) >= 0) && (PackedIntPair.Low(value: packedRate) != 0))
+            ? (((double)PackedIntPair.High(value: packedRate)) / PackedIntPair.Low(value: packedRate))
             : 0.0
         );
     }
