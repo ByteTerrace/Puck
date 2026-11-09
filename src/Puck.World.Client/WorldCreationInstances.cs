@@ -404,99 +404,10 @@ public sealed partial class WorldCreationInstances {
                 chain = chain.TransformDynamic(slot: slot).Translate(offset: (shapePosition * placementScale)).Rotate(rotation: ((shapeRotation == default) ? Quaternion.Identity : shapeRotation));
             }
 
-            if (
-                probeWorstCase ||
-                (twist != 0f)
-            ) {
-                chain = chain.TwistY(rate: (probeWorstCase
-                    ? 1f
-                    : twist));
-            }
-
-            if (
-                probeWorstCase ||
-                (bend != 0f)
-            ) {
-                chain = chain.BendY(rate: (probeWorstCase
-                    ? 1f
-                    : bend));
-            }
-
-            if (
-                probeWorstCase ||
-                (flare is not null)
-            ) {
-                // Top/Span are creation-unit lengths. A domain-bearing chain already carries the placement scale as
-                // its own Scale op (above), so they pass through in creation units there, exactly as on
-                // CreationStampEmitter.EmitShapeChain's chain; every other chain has no Scale op, so — like the
-                // rounding/chamfer the caller bakes — they take placementScale by hand. Amount/Bulge are
-                // dimensionless ratios and pass through unscaled on both.
-                var lengthScale = (chainCarriesScale ? 1f : placementScale);
-
-                chain = chain.AxialProfile(
-                    amount: (probeWorstCase ? ShapeFlareDocument.MaxAmount : flare!.Amount),
-                    bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
-                    top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
-                    span: (probeWorstCase ? 1f : (flare!.Span * lengthScale)),
-                    axis: (probeWorstCase ? SdfAxis.Y : (SdfAxis)flare!.Axis),
-                    startScale: (probeWorstCase ? ShapeFlareDocument.MaxStartScale : flare!.StartScale)
-                );
-            }
-
-            if (
-                probeWorstCase ||
-                (shear is not null)
-            ) {
-                // Linear is a dimensionless slope (like Flare's Amount/Bulge) and passes through unscaled; Quadratic
-                // carries units of 1/length (quadratic*y*y must resolve to a length), so it takes the INVERSE of the
-                // length conversion Top/Span above take — dividing by lengthScale keeps the same real-world shear
-                // whichever unit space this chain's point sits in when Shear evaluates it.
-                var lengthScale = (chainCarriesScale ? 1f : placementScale);
-
-                chain = chain.Shear(
-                    linear: (probeWorstCase ? ShapeDocument.MaxShear : shear!.Linear),
-                    quadratic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Quadratic / lengthScale)),
-                    cubic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Cubic / (lengthScale * lengthScale))),
-                    target: (probeWorstCase ? SdfAxis.X : (SdfAxis)shear!.Target),
-                    driver: (probeWorstCase ? SdfAxis.Y : (SdfAxis)shear!.Driver)
-                );
-            }
-
-            if (probeWorstCase) {
-                // Worst-case reserves the widest declared bump list; every entry is otherwise identical for capacity
-                // purposes (each costs the same single instruction) — Push length feeds the reach probe below,
-                // not the instruction count.
-                for (var i = 0; (i < ShapeBumpDocument.MaxBumps); i++) {
-                    chain = chain.GaussianPush(center: Vector3.Zero, radii: Vector3.One, push: new Vector3(value: ShapeBumpDocument.MaxPushMagnitude));
-                }
-            } else {
-                foreach (var bump in (bumps ?? [])) {
-                    var lengthScale = (chainCarriesScale ? 1f : placementScale);
-
-                    chain = chain.GaussianPush(
-                        center: (bump.Center.Value * lengthScale),
-                        radii: (bump.Radii.Value * lengthScale),
-                        push: (bump.Push.Value * lengthScale)
-                    );
-                }
-            }
-
-            // The warp and the elongation read creation units on a domain-bearing chain and world units otherwise, like
-            // the flare's lengths (KEEP IN SYNC with CreationStampEmitter.EmitShapeChain's prefix).
-            if (probeWorstCase || (warp is not null)) {
-                var lengthScale = (chainCarriesScale ? 1f : placementScale);
-
-                chain = chain.DomainWarp(
-                    amplitude: (probeWorstCase ? ShapeWarpDocument.MaxAmplitude : (warp!.Amplitude * lengthScale)),
-                    frequency: (probeWorstCase ? new Vector3(value: ShapeWarpDocument.MaxFrequency) : (warp!.Frequency.Value / lengthScale))
-                );
-            }
-
-            if (probeWorstCase || (elongate is not null)) {
-                var lengthScale = (chainCarriesScale ? 1f : placementScale);
-
-                chain = chain.Elongate(extents: (probeWorstCase ? new Vector3(value: ShapeDocument.MaxElongate) : (elongate!.Value * lengthScale)));
-            }
+            chain = ShapePointOps.Apply(chain: chain,
+                lengthScale: (chainCarriesScale ? 1f : placementScale), twist: twist, bend: bend,
+                flare: flare, shear: shear, bumps: bumps, warp: warp, elongate: elongate,
+                probeWorstCase: probeWorstCase);
 
             if (probeWorstCase || (erode is not null)) {
                 // KEEP IN SYNC with CreationStampEmitter.EmitShapeChain's mirrored erode prefix. reach is this

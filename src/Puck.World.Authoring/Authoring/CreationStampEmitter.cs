@@ -208,55 +208,16 @@ public static partial class CreationStampEmitter {
                 .Translate(offset: shape.Position)
                 .Rotate(rotation: shape.Rotation);
 
-            // Creation-unit lengths, like the rest of this chain past the Scale(stamp scale) op above — no
-            // explicit placement-scale multiply needed here (unlike WorldCreationInstances.EmitShape's twist/bend/flare
-            // prefix, which has no such chain-level Scale and so must bake placementScale in by hand).
-            var flared = ((shape.Flare is { } flare)
-                ? prefix.AxialProfile(
-                    amount: flare.Amount,
-                    bulge: flare.Bulge,
-                    top: (flare.Top ?? 0f),
-                    span: flare.Span,
-                    axis: ((SdfAxis)flare.Axis),
-                    startScale: flare.StartScale
-                )
-                : prefix
-            );
-            var sheared = ((shape.Shear is { } shear)
-                ? flared.Shear(
-                    linear: shear.Linear,
-                    quadratic: shear.Quadratic,
-                    cubic: shear.Cubic,
-                    target: ((SdfAxis)shear.Target),
-                    driver: ((SdfAxis)shear.Driver)
-                )
-                : flared
-            );
-
-            foreach (var bump in (shape.Bumps ?? [])) {
-                sheared = sheared.GaussianPush(
-                    center: bump.Center,
-                    radii: bump.Radii,
-                    push: bump.Push
-                );
-            }
-
-            // The warp and the elongation read creation units like the rest of this chain (KEEP IN SYNC with
-            // WorldCreationInstances.EmitShape, whose chain without a Scale op converts them by hand).
-            if (shape.Warp is { } warp) {
-                sheared = sheared.DomainWarp(amplitude: warp.Amplitude, frequency: warp.Frequency);
-            }
-            if (shape.Elongate is { } elongate) {
-                sheared = sheared.Elongate(extents: elongate);
-            }
-
-            return sheared;
+            // StampPrefix already converted the point to creation units. Both emitters share this
+            // ordering and unit conversion, including twist and bend before flare.
+            return ShapePointOps.Apply(chain: prefix, twist: (shape.Twist ?? 0f), bend: (shape.Bend ?? 0f),
+                flare: shape.Flare, shear: shape.Shear, bumps: shape.Bumps, warp: shape.Warp,
+                elongate: shape.Elongate);
         }
 
         var chain = BuildTransformChain();
         // Per-shape lane-driven erosion (KEEP IN SYNC with WorldCreationInstances.EmitShape's mirrored prefix): the reach is
-        // this shape's own SdfSolidGeometry.Reach, taken in WORLD units like the rest of this chain past the Scale
-        // op above. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
+        // this shape's own SdfSolidGeometry.Reach, converted to WORLD units for the field operation. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
         // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
         var erodeReach = ((shape.Erode is not null)
             ? (SdfSolidGeometry.Reach(

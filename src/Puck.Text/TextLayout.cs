@@ -116,90 +116,96 @@ public sealed class TextLayout {
             : (lineStartIndex, 0.0f, 0.0f)
         );
 
+        // Buffer only one word, preserving enrichment on each scalar. Measure with the same glyph
+        // metrics and kerning used for placement, then choose the line before emitting any of it.
+        var word = new List<(TextEffectRune Rune, FontAtlasGlyph Glyph, float X)>();
+        var wordAdvance = 0f;
+        var wordRight = 0f;
+        var wordLeft = 0f;
+        int? wordPrevious = null;
+        var pendingSpace = 0f;
+
+        void Place(TextEffectRune enriched, FontAtlasGlyph glyph, bool splitLongWord) {
+            if (splitLongWord && ShouldWrapGlyph(glyph, cursorX, lineHasContent, scale, maxLineWidth)) {
+                StartNewLine();
+            }
+            if (glyph.PlaneBounds is FontAtlasBounds planeBounds && glyph.AtlasBounds is FontAtlasBounds atlasBounds) {
+                var bounds = new FontAtlasBounds(Bottom: baselineY + planeBounds.Bottom * scale,
+                    Left: cursorX + planeBounds.Left * scale, Right: cursorX + planeBounds.Right * scale,
+                    Top: baselineY + planeBounds.Top * scale);
+                placements.Add(new TextGlyphPlacement(Atlas: atlas, AtlasBounds: atlasBounds,
+                    BaselineOrigin: new Vector2(cursorX, baselineY), Effect: enriched.Effect,
+                    Glyph: glyph, PlaneBounds: bounds, Unicode: enriched.Rune.Value));
+                lineVisualLeft = MathF.Min(lineVisualLeft, bounds.Left);
+                lineVisualRight = MathF.Max(lineVisualRight, bounds.Right);
+                maxRight = MathF.Max(maxRight, bounds.Right);
+            }
+            cursorX += glyph.Advance * scale + tracking;
+            maxRight = MathF.Max(maxRight, cursorX);
+            lineHasContent = true;
+        }
+        void FlushWord() {
+            if (word.Count == 0) { return; }
+            var start = cursorX + pendingSpace;
+            var left = MathF.Min(lineVisualLeft, start + wordLeft);
+            if (maxLineWidth is float width && lineHasContent && start + wordRight - left > width) {
+                StartNewLine();
+                start = 0f;
+            }
+            // A single word wider than the whole line uses glyph breaks as a last resort.
+            var split = maxLineWidth is float limit && wordRight - wordLeft > limit;
+            cursorX = start;
+            foreach (var (enriched, glyph, x) in word) {
+                if (!split) { cursorX = start + x; }
+                else if (previousUnicode is int previous) {
+                    cursorX += atlas.GetKerningAdjustment(previous, enriched.Rune.Value) * scale;
+                }
+                Place(enriched, glyph, split);
+                previousUnicode = enriched.Rune.Value;
+            }
+            if (!split) { cursorX = start + wordAdvance; }
+            word.Clear();
+            wordAdvance = wordRight = wordLeft = pendingSpace = 0f;
+            wordPrevious = null;
+            previousUnicode = null;
+        }
         try {
             while (runes.MoveNext()) {
                 var enriched = runes.Current;
                 var unicode = enriched.Rune.Value;
-
-                if (unicode == '\r') {
-                    continue;
-                }
-
+                if (unicode == '\r') { continue; }
                 if (unicode == '\n') {
+                    FlushWord();
+                    pendingSpace = 0f;
                     StartNewLine();
                     continue;
                 }
-
-                if (!atlas.TryGetGlyph(
-                    glyph: out var glyph,
-                    unicode: unicode
-                )) {
-                    previousUnicode = null;
+                if (maxLineWidth is null) {
+                    if (!atlas.TryGetGlyph(unicode, out var unwrapped)) { previousUnicode = null; continue; }
+                    if (previousUnicode is int previousUnwrapped) { cursorX += atlas.GetKerningAdjustment(previousUnwrapped, unicode) * scale; }
+                    Place(enriched, unwrapped, false);
+                    previousUnicode = unicode;
                     continue;
                 }
-
-                if (previousUnicode is int previous) {
-                    cursorX += (atlas.GetKerningAdjustment(
-                        leftUnicode: previous,
-                        rightUnicode: unicode
-                    ) * scale);
+                if (Rune.IsWhiteSpace(enriched.Rune) && unicode is not (0xA0 or 0x202F)) {
+                    FlushWord();
+                    if (atlas.TryGetGlyph(unicode, out var space) && (lineHasContent || maxLineWidth is null)) {
+                        pendingSpace += space.Advance * scale + tracking;
+                    }
+                    continue;
                 }
-
-                if (ShouldWrapGlyph(
-                    cursorX: cursorX,
-                    glyph: glyph,
-                    lineHasContent: lineHasContent,
-                    maxLineWidth: maxLineWidth,
-                    scale: scale
-                )) {
-                    StartNewLine();
+                if (!atlas.TryGetGlyph(unicode, out var glyph)) { wordPrevious = null; continue; }
+                if (wordPrevious is int previous) { wordAdvance += atlas.GetKerningAdjustment(previous, unicode) * scale; }
+                word.Add((enriched, glyph, wordAdvance));
+                if (glyph.PlaneBounds is FontAtlasBounds bounds) {
+                    wordLeft = MathF.Min(wordLeft, wordAdvance + bounds.Left * scale);
+                    wordRight = MathF.Max(wordRight, wordAdvance + bounds.Right * scale);
                 }
-
-                if (
-                    (glyph.PlaneBounds is FontAtlasBounds planeBounds) &&
-                    (glyph.AtlasBounds is FontAtlasBounds atlasBounds)
-                ) {
-                    var transformedPlaneBounds = new FontAtlasBounds(
-                        Bottom: (baselineY + (planeBounds.Bottom * scale)),
-                        Left: (cursorX + (planeBounds.Left * scale)),
-                        Right: (cursorX + (planeBounds.Right * scale)),
-                        Top: (baselineY + (planeBounds.Top * scale))
-                    );
-
-                    placements.Add(item: new TextGlyphPlacement(
-                        Atlas: atlas,
-                        AtlasBounds: atlasBounds,
-                        BaselineOrigin: new Vector2(
-                            x: cursorX,
-                            y: baselineY
-                        ),
-                        Effect: enriched.Effect,
-                        Glyph: glyph,
-                        PlaneBounds: transformedPlaneBounds,
-                        Unicode: unicode
-                    ));
-                    maxRight = MathF.Max(
-                        x: maxRight,
-                        y: transformedPlaneBounds.Right
-                    );
-                    lineVisualLeft = MathF.Min(
-                        x: lineVisualLeft,
-                        y: transformedPlaneBounds.Left
-                    );
-                    lineVisualRight = MathF.Max(
-                        x: lineVisualRight,
-                        y: transformedPlaneBounds.Right
-                    );
-                }
-
-                cursorX += ((glyph.Advance * scale) + tracking);
-                maxRight = MathF.Max(
-                    x: maxRight,
-                    y: cursorX
-                );
-                lineHasContent = true;
-                previousUnicode = unicode;
+                wordAdvance += glyph.Advance * scale + tracking;
+                wordRight = MathF.Max(wordRight, wordAdvance - tracking);
+                wordPrevious = unicode;
             }
+            FlushWord();
         } finally {
             runes.Dispose();
         }
@@ -305,8 +311,8 @@ public sealed class TextLayout {
     /// <remarks>
     /// The result is in a y-up coordinate space: the first line's baseline sits at <c>y = 0</c> and each
     /// subsequent line steps the baseline down by <see cref="FontAtlasMetrics.LineHeight"/> (more negative
-    /// <c>y</c>). Wrapping is greedy and operates at glyph granularity — it breaks before the glyph that
-    /// would exceed <paramref name="maxLineWidth"/> rather than at word boundaries. Glyphs without plane
+    /// <c>y</c>). Wrapping is greedy at whitespace word boundaries; only a word wider than
+    /// <paramref name="maxLineWidth"/> uses glyph breaks. Wrapped lines omit their leading whitespace. Glyphs without plane
     /// bounds (such as spaces) advance the pen without contributing a placement.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
@@ -366,7 +372,7 @@ public sealed class TextLayout {
     /// <param name="atlas">The atlas providing glyph geometry, metrics, and kerning.</param>
     /// <param name="runes">The enriched runes, in order (from <see cref="TextEnrichmentTags.EnumerateRichTextRunes"/> or <see cref="BbCodeTextMarkup.EnrichRunes"/>). Line feeds (<c>\n</c>) break lines and carriage returns are ignored, exactly as the string overload.</param>
     /// <param name="scale">The multiplier applied to every em-space measurement. Must be greater than zero. Defaults to <c>1.0</c>.</param>
-    /// <param name="maxLineWidth">An optional maximum line width for greedy glyph-level wrapping; must be greater than zero when provided.</param>
+    /// <param name="maxLineWidth">An optional maximum line width for greedy word wrapping; must be greater than zero when provided.</param>
     /// <returns>A <see cref="TextLayoutResult"/> whose placements carry their <see cref="TextGlyphPlacement.Effect"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="runes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not greater than zero, or <paramref name="maxLineWidth"/> is supplied and is not greater than zero.</exception>

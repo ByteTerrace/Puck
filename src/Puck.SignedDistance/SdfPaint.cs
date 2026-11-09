@@ -115,7 +115,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
     public const int WinningFrame = -1;
 
     /// <summary>Returns whether a paint can cover a packed shape: every primitive the shape dispatch evaluates from its
-    /// data and a side table of at most <see cref="SdfAppearance.PaintTableVectors"/> vectors. A path, a glyph, a sampled
+    /// data and a variable side table. A path, a glyph, a sampled
     /// region and a screen slab are refused.</summary>
     /// <param name="type">The packed shape.</param>
     /// <returns><see langword="true"/> when a paint can carry it.</returns>
@@ -127,7 +127,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         (paint is { Shape: { } shape }) &&
         Admits(type: shape.Type) &&
         Enum.IsDefined(value: shape.Type) &&
-        (shape.Table is { Count: <= (SdfAppearance.PaintTableVectors * 4) }) &&
+        (shape.Table is not null) &&
         VectorFunctions.IsFinite(vector: shape.Scale) &&
         float.IsFinite(shape.Rotation.LengthSquared()) && shape.Rotation.LengthSquared() >= 1e-12f &&
         (shape.Scale.X > 0f) && (shape.Scale.Y > 0f) && (shape.Scale.Z > 0f) &&

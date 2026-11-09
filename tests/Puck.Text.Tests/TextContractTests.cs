@@ -568,6 +568,34 @@ public sealed class TextContractTests {
             placement.PlaneBounds.Right
         );
     }
+    [Theory]
+    [InlineData("the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp")]
+    [InlineData("min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface")]
+    public void LayoutKeepsWordsInsideTheAuthoredFace(string text) {
+        var atlas = new ManagedFontAtlasGenerator().Generate(new FontAtlasGenerationRequest {
+            FontBytes = File.ReadAllBytes(RepositoryPaths.Resolve("src/Puck.Text/Assets/Fonts/source/Inter-Regular.ttf")),
+            FontIdentifier = "test://word-wrap",
+            Options = new FontAtlasGenerationOptions { AllowedCodePointRanges = ["U+0020-U+007E"] },
+        });
+        var layout = new TextLayout().Layout(atlas, text,
+            new TextLayoutOptions(MaxLineWidth: 1.12f, Alignment: TextAlignment.Center, LineHeightScale: 1.15f),
+            scale: 0.03f);
+        Assert.All(layout.Placements, placement => {
+            Assert.InRange(placement.PlaneBounds.Left, -0.56f, 0.56f);
+            Assert.InRange(placement.PlaneBounds.Right, -0.56f, 0.56f);
+            Assert.InRange(0.085f + placement.PlaneBounds.Bottom, 0f, 0.15f);
+            Assert.InRange(0.085f + placement.PlaneBounds.Top, 0f, 0.15f);
+        });
+        var index = 0;
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries)) {
+            var glyphs = layout.Placements.Skip(index).Take(word.Length).ToArray();
+            Assert.Equal(word, string.Concat(glyphs.Select(glyph => char.ConvertFromUtf32(glyph.Unicode))));
+            Assert.Single(glyphs.Select(glyph => glyph.BaselineOrigin.Y).Distinct());
+            index += word.Length;
+        }
+        Assert.Equal(index, layout.Placements.Count);
+    }
+
     [Fact]
     public void LayoutCenterAlignmentCentersShorterLines() {
         var layout = new TextLayout().Layout(

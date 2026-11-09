@@ -337,7 +337,7 @@ public sealed record CreationNoiseDocument(
 /// <param name="Mode"><c>engrave</c> (Subtraction — a carved recess) or <c>emboss</c> (Union — proud relief); null = emboss.</param>
 /// <param name="Material">The palette slot the letters shade with (null = 0).</param>
 /// <param name="Font">The world text catalog font name; null selects that catalog's default font.</param>
-/// <param name="MaxWidth">The greedy glyph-level wrap width, in the creation's own units (null = only explicit line
+/// <param name="MaxWidth">The greedy word wrap width, in the creation's own units (null = only explicit line
 /// feeds break lines). Must be positive when present.</param>
 /// <param name="Align"><c>left</c>, <c>center</c>, or <c>right</c> — how lines position against the block's widest
 /// line (null = left).</param>

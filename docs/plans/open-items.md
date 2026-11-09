@@ -50,8 +50,6 @@ evidence, citations and steps.
 
 A. Engine limits on authoring [high], in the plan's
    [section 1](modeling-authoring.md#1-the-engine-limits-authors-met) order:
-   - twist and bend are silently dropped on static placements
-     ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
    - per-part bake detail: small round parts facet, thin parts shatter, and a
      folded shape takes its repeat extent's cell. One detail rule is built on
      `lane/part-detail` but blocked on a cost bound (see
@@ -59,11 +57,6 @@ A. Engine limits on authoring [high], in the plan's
    - blends between moving parts tear: steps 1 to 3 are built on
      `lane/moving-blends`, unlanded behind two high review findings (see
      [Bake detail](#bake-detail));
-   - a `Convex` prism refuses any rounding
-     ([1.4](modeling-authoring.md#14-convex-rounding-limit-6));
-   - paint outlines cap at eight vertices behind a generic message, and
-     compile does not check paint emission
-     ([1.5](modeling-authoring.md#15-paint-outlines-limit-7)).
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
    answered; its windowed recipe is recorded on the
    [virtual geometry plan](virtual-geometry.md)'s G5 row.
@@ -4149,16 +4142,6 @@ still changes a fraction of a percent of pixels, not exactly zero.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
-
-- [medium] Paint and profile limits authors meet without a named refusal: a
-  convex paint outline holds at most 8 vertices (`SdfAppearance.PaintTableVectors`)
-  and over that the validator says only "Invalid inset, weathering, paint or
-  flow" (`CreationCanonicalizer.Wear`); `puck compile --validate` accepts a paint
-  profile that `puck creation stats` then refuses, so paint emission is not
-  checked at compile; a Convex paint profile with no `cornerRadius` is stored
-  with 0.15; and a `Convex` prism profile refuses any `rounding` ("no room to
-  round", `SdfSolidGeometry`), so a rounded convex prism has to be faked with
-  superellipsoids.
 
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:

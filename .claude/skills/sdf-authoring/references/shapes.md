@@ -309,3 +309,9 @@ as `scale authors <reason>` at `shapes[i].scale`. Common ones worth recognizing:
 - `scale has a negative component; emission reads scale magnitudes, so the sign mirrors nothing — author a mirror as a symmetry domain op.`
 - `a non-uniform scale on a Sweep, whose control points already carry creation-unit dimensions directly`
 - `a cone whose radial scale … under the 0.003 the deterministic fixed-point field evaluator can distinguish from a point`
+
+Convex profiles admit separate `rounding` after their `cornerRadius` fillet;
+`SdfSolidGeometry.MaxRounding` gives the remaining inset and lift ceiling.
+Profiles default to sharp corners (`cornerRadius: 0`). Static and pooled
+placements share `ShapePointOps.Apply`: twist, bend, flare, shear, bumps, warp,
+then elongation, in creation units.

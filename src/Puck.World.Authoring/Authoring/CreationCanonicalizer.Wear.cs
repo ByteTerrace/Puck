@@ -51,6 +51,10 @@ public static partial class CreationCanonicalizer {
 
                 return null;
             }
+            if (paint.Profile is { Kind: SdfPrismProfileKind.Convex, Vertices: { } vertices } &&
+                vertices.Count > SdfPrismProfile.MaxConvexVertices) {
+                Refuse(field: "profile.vertices", message: $"paint profile has {vertices.Count} vertices; the packed convex profile cap is {SdfPrismProfile.MaxConvexVertices}.");
+            }
             if (paint.Profile is { Kind: SdfPrismProfileKind.Path }) {
                 Refuse(field: "profile", message: "a paint cannot cover a path profile.");
             }
