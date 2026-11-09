@@ -24,6 +24,13 @@ public static class InstallLayout {
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = "versions";
 
+    /// <summary>Gets how two version directory names are compared: ignoring case on Windows, where such names name one
+    /// directory, and ordinally on Linux. Every comparison of a version name with another (a registration, the release
+    /// record's current version, a proof of health, a pruner entry) uses it.</summary>
+    public static StringComparison NameComparison => (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    /// <summary>Gets the comparer form of <see cref="NameComparison"/>.</summary>
+    public static StringComparer NameComparer => (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     /// <summary>Reports whether <paramref name="name"/> can name a version directory: one non-empty component that is
     /// not <c>.</c> or <c>..</c> and holds no separator, drive colon or NUL.</summary>
     /// <param name="name">The candidate name.</param>
@@ -48,7 +55,8 @@ public sealed class InstallRegistrationException(string message) : IOException(m
 /// loaded from: the loaded image's file must be the very file that names it there now. Whether the process runs from the
 /// install at all is decided by the identity of the image's parent directory, never by the spelling of a path. Under the same
 /// lease the version must then pass the release record's admission (<see cref="InstallTransaction.AdmitProcess"/>): a version
-/// revoked, rejected or below the state generation floor refuses to start, whoever started it.</para>
+/// that is not a committed current or proven install, or is revoked, rejected or below the state generation floor, refuses
+/// to start, whoever started it.</para>
 /// </summary>
 public sealed class InstallRegistration : IDisposable {
     private static readonly Lock ProcessGate = new();

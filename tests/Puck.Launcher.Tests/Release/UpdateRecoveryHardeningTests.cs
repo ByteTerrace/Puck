@@ -35,7 +35,7 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
     }
     [Fact]
     public void HealthRecordingRequiresTheSelectedExecutableAndTheInstallLease() {
-        using var oldImage = Installed(version: "1.0.0");
+        using var oldImage = Installed(proven: true, version: "1.0.0");
         using var newImage = Installed(version: "1.0.1");
         using var old = oldImage.Register(installRoot: m_root.RootPath);
         using var selected = newImage.Register(installRoot: m_root.RootPath);
@@ -46,14 +46,14 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
         using (InstallTransaction.TryBegin(installRoot: m_root.RootPath)) {
             Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: selected, version: "1.0.1").Cleared);
         }
-        Assert.Empty(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls);
+        Assert.Equal(expected: "1.0.0", actual: Assert.Single(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls).Version);
         var cleared = HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, keepVersions: 0, registration: selected, version: "1.0.1");
 
         Assert.True(condition: cleared.Cleared);
-        Assert.Equal(expected: "1.0.1", actual: Assert.Single(collection: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls).Version);
-        // The pass that follows keeps both: current, and the old version, which its live process holds.
+        Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: InstallSeed.Policy(installRoot: m_root.RootPath).ProvenInstalls.Select(selector: static proof => proof.Version));
+        // The pass that follows keeps both: current, and the old proven version, now the rollback target.
         Assert.Equal(expected: ["1.0.1", "1.0.0"], actual: cleared.Pruned!.KeptVersions);
-        Assert.Equal(expected: ["1.0.0"], actual: cleared.Pruned.RunningVersions);
+        Assert.Empty(collection: cleared.Pruned.RunningVersions);
     }
     // A current version whose install record is missing or invalid has no known generation; the stub refuses to launch
     // it by name rather than guess, and rolls back when a proven install qualifies.
@@ -76,12 +76,12 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
 
     private string Version(string version) => Path.Combine(path1: m_root.RootPath, path2: "versions", path3: version);
     // An installed, current, unproven version with an image file a test process maps as if it had been loaded from it.
-    private MappedImage Installed(string version) {
+    private MappedImage Installed(string version, bool proven = false) {
         Directory.CreateDirectory(path: Version(version: version));
         var path = Path.Combine(path1: Version(version: version), path2: "app.dll");
 
         File.WriteAllText(contents: version, path: path);
-        _ = InstallSeed.Install(installRoot: m_root.RootPath, proven: false, version: version);
+        _ = InstallSeed.Install(installRoot: m_root.RootPath, proven: proven, version: version);
         return new MappedImage(path: path);
     }
 

@@ -82,10 +82,14 @@ under `InstallLayout.StateDirectoryName`), holds every fact selection depends on
   attempts, with the version it failed as (for messages).
 - `provenInstalls` holds each install that reached startup health, by its
   complete installed identity: version, install sequence and payload pin.
-- `launchAttempts` counts stub launches per payload identity since that payload
-  last proved healthy. It replaces `state/health.json`, and is keyed by payload,
-  never by version, so an update carrying the same payload under another version
-  inherits the count (U06).
+- `launchAttempts` counts stub launches of an unproven install, per payload
+  identity, until that payload proves healthy or is rejected. It replaces
+  `state/health.json`, and is keyed by payload, never by version, so an update
+  carrying the same payload under another version inherits the count (U06). A
+  proven install's launches are not counted (R06): it already started on this
+  machine, so a run of closed or interrupted launches never rejects it, and the
+  only rollback targets are proven installs, which no failure of theirs could
+  improve on.
 
 Each version directory keeps one immutable record, `versions/<v>/install-record.json`
 (`InstallRecord`, moved to `Puck.Confinement`), written once by the apply that
@@ -98,6 +102,10 @@ installs it, before that apply's record commit:
 It replaces `versions/<v>/state-generation`, which said the same generation a
 second time. A record lacking any field is invalid: its version has no known
 identity, so it is never selected, admitted at registration or ranked as proven.
+A record whose sequence is above the release record's `lastSequence` is
+uncommitted (R01): an apply wrote it and was interrupted before its commit.
+`InstallTransaction.ReadRecord`, the one reader every selection, admission and
+retirement uses, returns no record for it, and the pruner gives it no allowance.
 
 ### Payload identity (`PayloadPin`)
 
@@ -122,15 +130,17 @@ the policy compares pins alone.
 
 ### Reading the record
 
-- An absent `state/release-policy.json` is the empty record: no current, floor
-  0, empty sets. That is a new install root's state, and (see
-  [durability](#durable-publication-u04-u05)) a crash cannot produce it once the
-  record exists, because the record is only ever replaced, never deleted. A
-  deleted record is the install root's own user acting outside the launcher,
-  which [the releases decision](../decisions/runtime-and-delivery.md#releases)
-  leaves outside the threat model. (The first revision failed closed on absence
-  when `current` existed; with `current` inside the record that rule has nothing
-  left to test.)
+- The record is absent only before the first commit (R01). Before it, the one
+  install record that can exist is the first apply's own, uncommitted, with
+  sequence 1. So an absent record reads as the empty record (no current, floor 0,
+  empty sets) only when no valid install record has a sequence above 1; a valid
+  record with a later sequence proves a commit happened, and the read throws
+  `InvalidDataException`, failing closed everywhere. Durable publication means a
+  crash cannot remove the record once it exists; a deletion is the install
+  root's own user acting outside the launcher
+  ([the releases decision](../decisions/runtime-and-delivery.md#releases)), and
+  even then it reads as broken, never as an open door. An empty record admits no
+  process (none is committed) and launches nothing (no current).
 - A present record that does not parse, names another schema, holds a negative
   number, a version that is not a plain directory name, an empty pin, a
   duplicate entry or more entries than [the bounds](#bounds-u08) allow throws
@@ -148,8 +158,8 @@ the policy compares pins alone.
 | **I4. Generation compatibility (U02)** | No version whose state generation is below `stateGenerationFloor` is admitted as an update, selected by the stub (current included) or registered as a running process; the floor is raised to the final launch choice's generation in the selection commit, before the stub starts the process (the lead's U03 ruling), and again at registration for a process not started by the stub. | `Refusal` for the check; one private `RaiseFloor` used by `SelectLaunch` and `AdmitProcess`. |
 | **I5. Proof bound to identity (U07, U10)** | An install is proven only when the process registered from it reached `ApplicationStarted`; the proof is its exact `(version, sequence, payloadPin)`, and a proof counts at selection only while the version's on-disk record has that exact sequence and pin. Proving clears that pin's attempt count in the same replacement. | `InstallTransaction.RecordHealthy`; `RollbackCandidates` for the match. |
 | **I6. Proven rollback or named refusal** | When `current` is disqualified, the stub selects the highest-sequence proven install that matches its record, is unrevoked, not rejected and meets the floor, or refuses by name (exit 2). It never launches a failed, revoked or incompatible version. | `InstallTransaction.SelectLaunch`. |
-| **I7. Update-only `MinimumSupported`** | Checked only when admitting an update (`AttestationReleaseVerifier.VerifyCore`, `UpdateService.ApplyUnderLeaseAsync`); never persisted. | Those two checks; the record has no such field. |
-| **I8. Durable order** | A version's payload files and install record are durable before the record commit that makes it current; a record commit is durable before the transaction returns. | `AtomicFile.WriteAllBytesDurably` for every record write; `FileUpdateApplier`'s verification pass flushes each staged file and directory. |
+| **I7. Update-only `MinimumSupported`** | Checked only when admitting an update (`AttestationReleaseVerifier.VerifyCore`, `UpdateService.ApplyAsync`); never persisted. | Those two checks; the record has no such field. |
+| **I8. Durable order** | A version's payload files and install record are durable before the record commit that makes it current; a record commit is durable before the transaction returns. | `AtomicFile.WriteAllBytesDurably` for every record write; the stager flushes each staged file as it writes it, and `FileUpdateApplier` flushes the version's directory entries. |
 
 ### Where the guarantee stops
 
@@ -180,11 +190,20 @@ already serialized by that lock: the stub, the updater, health clearing,
 registration and pruning all held it. A separate policy lock would need an order
 with `update.lock` at every site that touches both; one lock has no order.
 
-- **Acquisition.** `InstallTransaction.TryBegin` (no wait: the updater's apply,
-  health clearing and pruning, which already gave up on contention) and
-  `InstallTransaction.Begin` (a bounded wait: a check, the stub) and the
+- **Acquisition.** `InstallTransaction.TryBegin` (no wait: health clearing and
+  pruning, which already gave up on contention), `InstallTransaction.Begin` (a
+  bounded wait: a check, each of an apply's short decisions, the stub) and the
   registration's unbounded wait. The lock is an exclusive open on Windows and an
   exclusive `flock` on Linux; neither is reentrant, even within a process.
+- **Apply (R05).** An apply holds `publication.lock` from start to end, which
+  excludes other appliers and pruning, and takes the transaction only for short
+  decisions, never across the network fetch or the payload download: a decision
+  before staging (an intent's reservation check, or the fetched manifest's
+  verification, then the current-version checks), staging under the publication
+  lease alone, and a final transaction that judges everything again (replay
+  reservation, revocations, admission, the current-version checks) before it
+  writes the intent and commits. The stub, registration and health recording
+  therefore never wait on a download.
 - **Ownership.** Whoever begins a transaction owns it and disposes it. Nothing
   that receives one begins another: `IReleaseVerifier.Verify` and
   `IReleaseVerifier.ReserveInstall` take the caller's transaction as a
@@ -239,12 +258,23 @@ Every write of `release-policy.json`, of an install record, of the replay mark
    the transition did not happen. A killed process leaves at most a stray
    `*.tmp`, which no reader opens.
 
-Payload files: the stager writes them with ordinary writes. Before the record
-commit that makes a version current, `FileUpdateApplier` re-reads every staged
-file to verify its pin (it already did) and now opens each for writing and
-flushes it to stable storage, and on Linux `fsync`s every directory of the
-version tree (`ConfinedDirectory.Flush`). The install record is then written
-with the durable primitive, and only then is the record committed.
+Payload files: the stager flushes each file to stable storage as it writes it,
+while it holds the only handle (R09: the applier then never opens a staged file
+for writing, so a concurrent reader such as a virus scanner cannot fail the
+apply). Before the record commit that makes a version current,
+`FileUpdateApplier` re-reads every staged file to verify its pin and, on Linux,
+`fsync`s every directory of the version tree, `versions/` and the install root
+(`ConfinedDirectory.Flush`), so every entry on the way to the files is durable
+(R04). The install record is then written with the durable primitive, and only
+then is the record committed.
+
+Directory entries (R04): a durable write that creates its destination's
+directory (`state/` on the first commit) also flushes each created directory's
+entry in its parent. Retiring or completing an install intent unlinks it and
+then flushes the install root, so a power loss cannot bring back an intent the
+apply already finished. The replay mark keeps the install's reservation after
+the apply: it is the high-water mark, and a later manifest needs a greater
+sequence whether the mark is a reservation or a committed advance.
 
 Supported file systems are those whose rename replaces atomically and whose
 flush calls above are honoured: ext4, XFS and Btrfs on Linux, and NTFS on
@@ -280,7 +310,7 @@ Under the caller's transaction, in order:
 1. Signature chain, subject, replay comparison (or the matching reservation
    for `ReserveInstall`) and canonical hash: nothing in the manifest is trusted
    before these pass.
-2. `MergeRevocations(manifest.Revoked, ReleaseVersion.Compare)`: entries that
+2. `MergeRevocations(manifest.Revoked, ReleaseVersion.TryCompare)`: entries that
    are not a valid version directory name (`ReleaseCanonicalizer.IsVersionName`)
    cannot name any install and are dropped before anything is written (U09);
    the rest are unioned, retired entries are removed ([bounds](#bounds-u08)),
@@ -299,7 +329,8 @@ sequence is consumed.
 ### Apply (`CommitApply`, from `FileUpdateApplier`)
 
 `FileUpdateApplier.Apply(manifest, rid, transaction, recover)` validates the
-manifest, verifies and flushes every staged file, computes the pin, and calls
+manifest, verifies every staged file, flushes the version's directory entries,
+computes the pin, and calls
 `CommitApply(version, rid, stateGeneration, payloadPin, files, versionPrecedence)`:
 
 1. `Refusal` for the new version; the downgrade and case-insensitive collision
@@ -322,8 +353,8 @@ Under the stub's transaction:
 
 1. Read `current`; refuse by name when there is none, or when its install
    record is missing or invalid (its generation is unknown).
-2. If `launchAttempts[current pin] >= MaxAttempts`, add the pin to
-   `rejectedPayloads` and drop its attempt entry.
+2. If current is unproven and `launchAttempts[current pin] >= MaxAttempts`, add
+   the pin to `rejectedPayloads` and drop its attempt entry.
 3. Current is disqualified when it is revoked, its pin is rejected, or its
    generation is below the floor (`Refusal`).
 4. If disqualified, choose the rollback candidate: the highest-sequence proven
@@ -332,7 +363,7 @@ Under the stub's transaction:
    record (step 2's rejection is durable) and return `Refuse`, naming current's
    disqualification and each candidate's.
 5. Raise the floor to the chosen version's generation, count one attempt under
-   its pin, set `current` to it, and commit once.
+   its pin unless it is proven (R06), set `current` to it, and commit once.
 6. Return `Launch(version)` with what happened (`RolledBack` from which
    version and why).
 
@@ -350,9 +381,14 @@ updater writes except the record.
 
 Registration already waits for `update.lock` and holds the process's own
 version directory. Under that same lock it now begins the transaction and calls
-`AdmitProcess(version)`: the version's install record must be valid, and
-`Refusal` must pass (not revoked, not rejected, generation not below the
-floor); then the floor is raised to its generation and committed if it rose.
+`AdmitProcess(version)`: the version's install record must be valid and
+committed (R01), `Refusal` must pass (not revoked, not rejected, generation not
+below the floor), and the version must be the current install or a proven one;
+then the floor is raised to its generation and committed if it rose. A staged
+directory, one an interrupted apply left uncommitted, or one superseded before
+it proved healthy runs nothing and raises no floor, so it cannot lock out the
+proven current version. Registration and health recording compare version names
+with one rule, `InstallLayout.NameComparison` (ignoring case on Windows, R08).
 A refusal throws `InstallRegistrationException`, and the entry point refuses to
 start, as it already does for an unconfirmed directory.
 
@@ -362,7 +398,10 @@ Under the transaction, when the registration's root identity matches and
 `current` names the registered version: read that version's record, add
 `(version, sequence, pin)` to `provenInstalls` unless it is revoked or rejected,
 raise the floor to its generation, remove the pin's attempt entry, and commit
-once. Proof and the clearing of its attempts are one replacement (U07).
+once. Proof and the clearing of its attempts are one replacement (U07). The
+version recorded is the process's own registration (R07): `Puck.World` reports
+`InstallRegistration.Process.Version` as its installed version, never a read of
+the record, so the proof names exactly the install that started.
 
 ### Pruning (`InstallPruner`)
 
@@ -380,25 +419,29 @@ Every list is bounded, and no retirement can readmit a rejected payload or a
 revoked version:
 
 - **`provenInstalls`**: an entry is retired at every commit once its version
-  directory no longer holds a record with its exact sequence and pin. That is
-  safe because such a proof can never match again (sequences are never reused),
-  so it is bounded by the installed versions.
-- **`revokedVersions`**: a revoked version `V` is retired when no version
-  directory is named `V` and `V`'s precedence is at or below that of every
-  version that could become current: `current` and every installed version.
-  Proof that it cannot return: admission requires a version strictly above the
-  current one, rollback selects only installed versions, and every later install
-  is above some later current, so every future current is at or above today's
-  minimum; `V` can never again be admitted or selected. Precedence is
-  `ReleaseVersion.Compare`, the same order admission uses, passed in by the
-  launcher. After retirement, a merge that would hold more than 4096 entries
-  refuses its manifest and writes nothing.
-- **`rejectedPayloads` and `launchAttempts`**: never retired by time or
-  directory (a rejected payload can return under any label). Each new entry
-  needs an applied install and a stub launch of it, so `CommitApply` refuses a
-  new install while the two lists together hold 4096 entries; the stub can then
-  add at most the one pin it is launching. An attempt entry is removed when its
-  pin is proven or rejected.
+  directory no longer holds a committed record with its exact sequence and pin.
+  That is safe because such a proof can never match again (sequences are never
+  reused). At 4096 proofs the oldest gives way to a new one, which only loses a
+  rollback target.
+- **`revokedVersions`** (R02): a revoked version `V` is retired only when no
+  version directory is named `V` and `V`'s precedence is strictly below that of
+  every version that could become current: `current` and every committed
+  install. A staged or uncommitted directory is no anchor, and before the first
+  commit nothing is retired. Proof that a retired `V` cannot return: admission
+  requires a version strictly above the current one, rollback selects only
+  committed installs, and every later install is above some later current, so
+  every future current is at or above today's lowest anchor. Precedence is
+  `ReleaseVersion.TryCompare`, which gives no order for a name whose core
+  segments are not all numbers (such a name, and one of equal precedence to an
+  anchor, is kept). After retirement, a merge that would hold more than 4096
+  entries refuses its manifest and writes nothing.
+- **`rejectedPayloads` and `launchAttempts`** (R03): never retired by time or
+  directory (a rejected payload can return under any label). `CommitApply`
+  admits an install only while the two lists together hold fewer than 4096
+  entries, only that unproven install's launches add an entry (rollback targets
+  are proven and uncounted), and a rejection turns an attempt entry into a
+  rejection, so the lists never pass 4096 and the reader refuses more. An attempt
+  entry is removed when its pin is proven or rejected.
 
 A full history is reported by name; the remedy is a reinstall. At these bounds
 the file stays under a megabyte, and the reader refuses a larger one.
@@ -506,6 +549,39 @@ started it. Startup attempts are counted only for stub launches: a direct
 launch is not health-gated, so it cannot exhaust a payload's budget or prove it
 unless `current` names it.
 
+## The implementation review's findings answered
+
+- **R01** (uncommitted or policy-less admission): `ReadRecord` returns only
+  committed records; `AdmitProcess` requires the current install or a proven
+  one; an absent record with a committed install fails closed
+  ([reading the record](#reading-the-record)). Laws:
+  `AnUncommittedOrNeverProvenInstallRunsNothingAndRaisesNoFloor`,
+  `AMissingReleaseRecordWithCommittedInstallsFailsClosed`.
+- **R02** (retirement dropped needed revocations): anchors are committed installs
+  only, nothing retires before the first commit, equal precedence and unordered
+  names are kept ([bounds](#bounds-u08)). Law: `RetirementKeepsEveryRevocationThatCouldStillMatter`.
+- **R03** (history past its bound): proven launches are uncounted, so the bound
+  holds by construction; proofs past their bound drop the oldest. Law:
+  `RollbacksNearTheHistoryBoundNeverPassIt`.
+- **R04** (directory entries not durable): created directories' parents,
+  `versions/` and the root are flushed, and intent unlinks are flushed
+  ([durable publication](#durable-publication-u04-u05)).
+- **R05** (update lease held across downloads): the apply holds the publication
+  lease and takes the update lease only for short decisions, judging everything
+  again before it commits ([the transaction](#the-transaction-u01)). Law:
+  `SeparateServices_CannotWriteOneInstallRootConcurrently` (the stub begins a
+  transaction while a download is in progress).
+- **R06** (proven installs rejected by attempts): a proven install's launches are
+  not counted ([the record](#the-record)). Law: `AProvenInstallsUnobservedLaunchesNeverRejectIt`.
+- **R07** (`Puck.World` reported the record's version): it reports its
+  registration's version; a check also refuses a release that does not follow
+  the record's current version.
+- **R08** (case comparison): one `InstallLayout.NameComparison`.
+- **R09** (write-access reopen of staged files): the stager flushes as it
+  writes; the applier only reads.
+- **R10** (stale references): swept, and the dashboard's generated schema
+  regenerated.
+
 ## Failure schedules
 
 ### Schedule 1: signed release, failed startup, rollout progression, changed payload
@@ -550,7 +626,7 @@ interruption anywhere leaves either the old record or the new one:
 | Apply, after the payload flush or the install record, before the commit | A version directory with a record no proof matches; `current` unchanged; intent present | The recovering apply re-verifies the intent, rewrites the record (the version is not current) and commits; a stub run meanwhile launches the old current. |
 | Apply, after the commit, before deleting the intent | `current` is the new version; intent present | The recovering apply finds it already current, checks its record and deletes the intent. |
 | Stub, before its commit | The old record | The next run computes the same choice. |
-| Stub, after its commit, before starting the child | Rejection, floor, attempt and `current` durable | The next run counts one more attempt for the chosen version, which is correct: an unobserved launch counts. |
+| Stub, after its commit, before starting the child | Rejection, floor, attempt and `current` durable | The next run counts one more attempt for the chosen version if it is unproven, which is correct: an unobserved launch of an unproven install counts. |
 | Health clear, before or after its commit | Either unproven with the attempt, or proven without it | Never both: no proven payload is rejected for the attempts its proof cleared (U07). |
 | Registration, after raising the floor | Floor durable | A process that then dies has still been admitted at that generation; the floor stays raised, which is the conservative direction. |
 

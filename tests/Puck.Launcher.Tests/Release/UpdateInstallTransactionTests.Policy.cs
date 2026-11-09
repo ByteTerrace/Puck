@@ -162,7 +162,7 @@ public sealed partial class UpdateInstallTransactionTests {
         Assert.Equal(expected: "1.1.1", actual: decision.RolledBackFrom);
     }
     // U07: a payload that succeeds on its last allowed attempt is proven and its attempts cleared in one commit, so the
-    // next launch counts afresh instead of rejecting it.
+    // next launch is not rejected for the attempts its proof cleared.
     [Fact]
     public void ProofOnTheLastAllowedAttemptClearsItsAttemptsInTheSameCommit() {
         var record = InstallSeed.Install(installRoot: Install, proven: false, version: "1.0.0");
@@ -176,7 +176,8 @@ public sealed partial class UpdateInstallTransactionTests {
         Assert.Equal(expected: 0, actual: policy.AttemptsFor(payloadPin: record.PayloadPin));
         Assert.Equal(expected: record.Sequence, actual: Assert.Single(collection: policy.ProvenInstalls).Sequence);
         Assert.Equal(expected: "1.0.0", actual: InstallSeed.Launch(installRoot: Install, maxAttempts: 3).Version);
-        Assert.Equal(expected: 1, actual: InstallSeed.Policy(installRoot: Install).AttemptsFor(payloadPin: record.PayloadPin));
+        // Once proven, its launches are no longer counted (R06).
+        Assert.Equal(expected: 0, actual: InstallSeed.Policy(installRoot: Install).AttemptsFor(payloadPin: record.PayloadPin));
     }
     // U10: a proof of health names its exact install. Once a proven version's directory is gone, a reinstall under the same
     // name is a new install with a new sequence, and inherits nothing: it is never a rollback target until it proves itself.
@@ -204,12 +205,103 @@ public sealed partial class UpdateInstallTransactionTests {
     public void AnInvalidReleaseRecordFailsClosed() {
         _ = InstallSeed.Install(installRoot: Install, version: "1.0.0");
         using (var transaction = InstallTransaction.TryBegin(installRoot: Install)!) {
-            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.Compare, revoked: ["../escape", "a/b", ""]));
+            Assert.Null(@object: transaction.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["../escape", "a/b", ""]));
             Assert.Empty(collection: transaction.Policy.RevokedVersions);
         }
         File.WriteAllText(path: Path.Combine(Install, InstallLayout.StateDirectoryName, InstallLayout.ReleasePolicyFileName), contents: "{\"schema\":\"puck.release.policy.v0\"}");
         using var stub = InstallTransaction.TryBegin(installRoot: Install)!;
 
         Assert.Throws<InvalidDataException>(testCode: () => stub.SelectLaunch(maxAttempts: 3));
+    }
+    // R01: an apply killed between its install record and its commit leaves a record the install order does not cover. A
+    // process started from it is refused and raises no floor, so the proven current version keeps launching; a version
+    // superseded before it ever proved healthy is refused too.
+    [Fact]
+    public void AnUncommittedOrNeverProvenInstallRunsNothingAndRaisesNoFloor() {
+        _ = InstallSeed.Install(installRoot: Install, stateGeneration: 1, version: "1.0.0");
+        Directory.CreateDirectory(path: Path.Combine(Install, "versions", "2.0.0"));
+        File.WriteAllText(path: Path.Combine(Install, "versions", "2.0.0", InstallRecord.FileName),
+            contents: $"{{\"sequence\":2,\"rid\":\"{UpdateService.CurrentRid()}\",\"stateGeneration\":2,\"payloadPin\":\"{InstallSeed.Pin(label: "2.0.0")}\",\"files\":[\"{InstallSeed.Pin(label: "file")}\"]}}");
+        using (var registration = InstallTransaction.TryBegin(installRoot: Install)!) {
+            Assert.Contains(expectedSubstring: "committed", actualString: registration.AdmitProcess(version: "2.0.0"));
+            Assert.Null(@object: registration.ReadRecord(version: "2.0.0"));
+        }
+        Assert.Equal(expected: 1, actual: InstallSeed.Policy(installRoot: Install).StateGenerationFloor);
+        Assert.Equal(expected: "1.0.0", actual: InstallSeed.Launch(installRoot: Install, maxAttempts: 3).Version);
+
+        _ = InstallSeed.Install(installRoot: Install, proven: false, version: "1.1.0");
+        _ = InstallSeed.Install(installRoot: Install, proven: false, version: "1.2.0");
+        using var superseded = InstallTransaction.TryBegin(installRoot: Install)!;
+
+        Assert.Contains(expectedSubstring: "neither the current install nor a proven one", actualString: superseded.AdmitProcess(version: "1.1.0"));
+        Assert.Null(@object: superseded.AdmitProcess(version: "1.0.0"));
+    }
+    // R01: the release record is absent only before the first commit. Install records past the first one prove it existed,
+    // so its absence fails closed instead of reading as an empty install that admits anything.
+    [Fact]
+    public void AMissingReleaseRecordWithCommittedInstallsFailsClosed() {
+        _ = InstallSeed.Install(installRoot: Install, version: "1.0.0");
+        _ = InstallSeed.Install(installRoot: Install, version: "1.1.0");
+        File.Delete(path: Path.Combine(Install, InstallLayout.StateDirectoryName, InstallLayout.ReleasePolicyFileName));
+        using var stub = InstallTransaction.TryBegin(installRoot: Install)!;
+
+        Assert.Throws<InvalidDataException>(testCode: () => stub.SelectLaunch(maxAttempts: 3));
+        Assert.Throws<InvalidDataException>(testCode: () => stub.AdmitProcess(version: "1.1.0"));
+    }
+    // R02: a revocation is retired only when it is strictly below the current version and every committed install. Before
+    // the first commit nothing is retired, whatever a staging directory holds; a name of equal precedence to an anchor or
+    // one the order cannot place is kept; a strictly lower one is retired.
+    [Fact]
+    public void RetirementKeepsEveryRevocationThatCouldStillMatter() {
+        Directory.CreateDirectory(path: Path.Combine(Install, "versions", "2.0.0"));
+        using (var fresh = InstallTransaction.TryBegin(installRoot: Install)!) {
+            Assert.Null(@object: fresh.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["1.5.0"]));
+            Assert.Equal(expected: ["1.5.0"], actual: fresh.Policy.RevokedVersions);
+        }
+        _ = InstallSeed.Install(installRoot: Install, version: "1.0.0");
+        using var installed = InstallTransaction.TryBegin(installRoot: Install)!;
+
+        Assert.Null(@object: installed.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: ["1.0.0+hotfix", "v1.0.0", "canary", "0.9.0"]));
+        Assert.Equal(expected: ["1.5.0", "1.0.0+hotfix", "v1.0.0", "canary"], actual: installed.Policy.RevokedVersions);
+    }
+    // R03: rolling back from revoked unproven versions to proven ones counts no launch of the proven ones, so the payload
+    // history never passes its bound and selection never fails on its own record.
+    [Fact]
+    public void RollbacksNearTheHistoryBoundNeverPassIt() {
+        _ = InstallSeed.Install(installRoot: Install, version: "1.0.0");
+        _ = InstallSeed.Install(installRoot: Install, version: "1.1.0");
+        var path = Path.Combine(Install, InstallLayout.StateDirectoryName, InstallLayout.ReleasePolicyFileName);
+        var record = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: path))!;
+        var rejected = record["rejectedPayloads"]!.AsArray();
+
+        for (var index = 0; (index < (ReleasePolicy.MaximumPayloadHistory - 1)); index++) {
+            rejected.Add(item: new System.Text.Json.Nodes.JsonObject { ["payloadPin"] = InstallSeed.Pin(label: $"old{index}"), ["version"] = "0.0.1" });
+        }
+        File.WriteAllText(path: path, contents: record.ToJsonString());
+        _ = InstallSeed.Install(installRoot: Install, proven: false, version: "1.2.0");
+        Assert.Equal(expected: "1.2.0", actual: InstallSeed.Launch(installRoot: Install, maxAttempts: 3).Version);
+        foreach (var (revoked, expected) in new[] { ("1.2.0", "1.1.0"), ("1.1.0", "1.0.0") }) {
+            using (var check = InstallTransaction.TryBegin(installRoot: Install)!) {
+                Assert.Null(@object: check.MergeRevocations(precedence: ReleaseVersion.TryCompare, revoked: [revoked]));
+            }
+            Assert.Equal(expected: expected, actual: InstallSeed.Launch(installRoot: Install, maxAttempts: 3).Version);
+        }
+        var policy = InstallSeed.Policy(installRoot: Install);
+
+        Assert.Equal(expected: ReleasePolicy.MaximumPayloadHistory, actual: (policy.RejectedPayloads.Count + policy.LaunchAttempts.Count));
+    }
+    // R06: a proven install already started on this machine; however many of its launches end before health is recorded,
+    // it is never rejected and keeps launching.
+    [Fact]
+    public void AProvenInstallsUnobservedLaunchesNeverRejectIt() {
+        var record = InstallSeed.Install(installRoot: Install, version: "1.0.0");
+
+        for (var launch = 0; (launch < 5); launch++) {
+            Assert.Equal(expected: "1.0.0", actual: InstallSeed.Launch(installRoot: Install, maxAttempts: 3).Version);
+        }
+        var policy = InstallSeed.Policy(installRoot: Install);
+
+        Assert.Empty(collection: policy.RejectedPayloads);
+        Assert.Equal(expected: 0, actual: policy.AttemptsFor(payloadPin: record.PayloadPin));
     }
 }

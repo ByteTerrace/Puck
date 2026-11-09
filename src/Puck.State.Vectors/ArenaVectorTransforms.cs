@@ -20,6 +20,24 @@ namespace Puck.State;
 /// a compile-time and document-load check.</para>
 /// </remarks>
 public static partial class ArenaVectorTransforms {
+    // Nearest and remember read the same live, ordered candidates. The spans alias the column until the caller
+    // writes, so each caller gathers and consumes them before opening its write scope.
+    private static int GatherCandidates(in VectorColumn from, Span<NearestCandidate> candidates, int whereRowOrdinal = -1) {
+        var arena = from.Arena;
+        var gathered = 0;
+        var cursor = 0;
+
+        while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: from.RowOrdinal)) {
+            if (from.TryReadMemory(components: out var components, key: key)) {
+                candidates[gathered++] = new NearestCandidate(
+                    Admitted: Admits(arena: arena, key: key, whereRowOrdinal: whereRowOrdinal),
+                    Components: components,
+                    Key: arena.Keys[key: key]
+                );
+            }
+        }
+        return gathered;
+    }
     private static bool Admits(StateArena arena, int whereRowOrdinal, CellKey key) => (
         (whereRowOrdinal < 0) ||
         (

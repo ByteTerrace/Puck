@@ -120,7 +120,7 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
         // The manifest is authentic and unreplayed from here on. Its revocations are durable before its own eligibility is
         // judged and before its sequence can advance, so a refused or read-only verification still records them. An entry
         // that cannot be a version name can name no install, and is dropped before anything is written.
-        if (transaction.MergeRevocations(precedence: ReleaseVersion.Compare,
+        if (transaction.MergeRevocations(precedence: ReleaseVersion.TryCompare,
             revoked: (manifest.Revoked ?? []).Where(predicate: static version => ReleaseCanonicalizer.IsVersionName(version: version))) is { } historyFull) {
             return ReleaseVerifyOutcome.Refuse(reason: historyFull);
         }
