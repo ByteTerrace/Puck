@@ -1597,17 +1597,37 @@ by `world.view.pick`.
   EV 2 floor, so the terrain is lit like dusk under it.
 - [high] The Moth (`worlds/debug/avatars/moth.puck`) is rebuilt to the bar
   from [her concept pack](../game/art/moth-concept-pack/README.md): the owner
-  rules she "isn't sacred and would be vastly improved". Her current sculpt,
-  palette, rig and bake cost carry no weight; the pack's turnaround and
-  construction sheets are the standard, and the items below are parts of it.
-  The anim-bake change took her pooled bake from 464,018 to 1,145,385
-  triangles at parity with static detail; the rebuild sets her budget at the
-  cause (base spacing, level budget) against the frame bar.
-- [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
-  under night lighting her purple and cream read as pink and mustard; nothing
-  separates her from the background (no rim light or outline), and a hovering
-  Moth casts no readable shadow. A small floating yellow sprite beside her has
-  no context.
+  rules she "isn't sacred and would be vastly improved"; her sculpt, palette,
+  rig and bake cost carry no weight, and the guide's
+  [look intent](../../worlds/debug/avatars/moth.md#look-intent) names the
+  traits. Built in documents and judged on the CPU preview
+  (`puck mesh preview`) from every side: the flight pack (`flightPod`) is two
+  shingled shields at sheet 01's size, the shoulder slabs, gauntlets and chest
+  slab are flat-faced plates, the greaves flat-faced, the knee guards
+  octagonal chamfered slabs, and the nose bakes in the face's group. Judged on
+  Direct3D 12 (front, back, side, three-quarter above, rear below, hover,
+  off-suit, a walk at four phases, dusk with `world.toon` off and on, night)
+  and a Vulkan three-quarter and back, under the world lighting before the
+  toon-2 and gi-cast changes; a lavender seat plate behind and shorter knee
+  pistons followed on the CPU preview only. The shoulder slabs still read soft in profile (exponent-6
+  superellipsoids under a quadratic shear), and the boots' heel housings,
+  ankle hubs and cheeks are the old construction. The owner's walkthrough also found
+  nothing separating her from the background (no rim light or outline) and no
+  readable shadow under a hovering Moth: both are treatment and lighting
+  questions the toon lane's defaults and the night item decide, not her
+  sculpt.
+- [medium] The Moth's lights across the day: the pod nozzles' emissive
+  (`thrusterGlow`, `thrusterCyan`) and the heel pilot lights (`bootCyan`,
+  `bootGlow`) are fixed nits under an exposure that spans twelve stops, so a
+  value that reads by day blows out to a white disc at night (the owner's
+  walkthrough) and one that holds at night vanishes by day; the heel jets'
+  flow volumes were a further 330,000 at the air jump. The nits are lowered
+  and the heel flow set to the pods' order, unverified at night. The fix at
+  the cause is a world lane bound to the day cycle that dims every lamp's
+  `emissiveLane` toward night, which `emissiveLane`'s one lane a slot cannot
+  combine with the pods' flight lane today. Under night lighting her purple
+  and cream read as pink and mustard (the night item above). A small floating
+  yellow sprite beside her has no context.
 - [medium] The binding-bar overlay sits over the Moth's legs at the centre
   bottom of the screen in third person.
 - [high] A blend across parts that move apart tears in motion (PUCK122): the
@@ -1627,12 +1647,19 @@ by `world.view.pick`.
   box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
   one factor) would let one rule serve both; the static path also lacks the round
   section term, so its small spheres facet at 15 mm.
-- [medium] The Moth's pooled bake rose from 464,018 to 1,145,385 triangles
-  (levels 393,043 and 238,235) when blend groups took the static union's lattice
-  (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`).
-  Measure her frame cost on the bar devices; if it misses the bar, coarsen at
-  the cause (the union's base spacing for a body, or the level budget), never by
-  returning blend groups to the 15 mm floor.
+- [medium] The Moth's pooled bake is 900,419 triangles (levels 276,793 and
+  153,009) over 157 groups
+  (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`),
+  down from 1,145,385 when blend groups first took the static union's lattice.
+  What remains is small parts baking on fine lattices: the eyes (25,800 each
+  at 1.2 mm), the bracers (30,900 each at 5.5 mm), the heel housings (29,400
+  each at 3.8 mm) and the ankle hubs (21,000 each at 2.5 mm). The cause is
+  unnamed: `WorldCreationInstances.PartDetail` declares no detail for a
+  cylinder and `SdfMeshPathBake.Lattice` keeps a final lattice at
+  `MinimumCell` (15 mm) or coarser, yet the cylinder groups refine to 2.5 to
+  3.8 mm. Measure her frame cost on the bar devices; if it
+  misses the bar, coarsen at the cause (the union's base spacing for a body, or
+  the level budget), never by returning blend groups to the 15 mm floor.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
