@@ -53,8 +53,8 @@ public sealed partial class SdfMeshPathBake {
     /// <see cref="SdfSampledLattice.SurfaceSlope"/>, or each sample's own with <paramref name="localAim"/>, converts it
     /// to field units only to aim the contour; the oracle measures where it landed), then the bake's
     /// own stages after the lattice: crossings bracketed on their edges, gradients, the contour, the field check of the
-    /// vertices no crossing pins, the crease split, the material cut and the planar merge, with no coarser level of its
-    /// own. A sample whose nearest sample in <paramref name="coarser"/> certifies its side of the offset surface by the
+    /// vertices no crossing pins, the crease split, the material cut, and the planar merge after its near-coplanar faces
+    /// are flattened (<paramref name="flatten"/>), with no coarser level of its own. A sample whose nearest sample in <paramref name="coarser"/> certifies its side of the offset surface by the
     /// field's Lipschitz bound (<see cref="ISdfMeshLevelField.StepScale"/>) takes the certified value without an answer.
     /// The one contouring (<see cref="SdfSampledLattice"/>, <see cref="SdfDualContouring"/>), on a coarser lattice at
     /// another iso-value: no second mesher. Offline: nothing here reaches a residency or the store.
@@ -70,6 +70,10 @@ public sealed partial class SdfMeshPathBake {
     /// changes by several times more or less than a metre a metre from place to place.</param>
     /// <param name="coarser">The next coarser level's samples, or <see langword="null"/> to answer every sample.</param>
     /// <param name="mostSamples">The most samples the lattice may hold.</param>
+    /// <param name="flatten">How far, in metres, a vertex of a near-coplanar region may move onto the region's plane
+    /// before the planar merge (<see cref="SdfMeshPlanarMerge.Flatten"/>, within the collapse's finest angle), so a flat
+    /// face whose gradient normals differ in their last bits merges; zero merges only what is coplanar already, and a
+    /// group holding glyphs is never flattened.</param>
     /// <param name="samples">The lattice's samples, raw values, for the next finer level; <see langword="null"/> when the
     /// lattice would hold more than <paramref name="mostSamples"/>.</param>
     /// <returns>The level's mesh, its bake cell the level's cell; <see langword="null"/> when the contour finds no surface
@@ -77,7 +81,7 @@ public sealed partial class SdfMeshPathBake {
     /// <exception cref="ArgumentNullException"><paramref name="field"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="cell"/> is not positive or
     /// <paramref name="offset"/> is negative.</exception>
-    public static SdfMesh? ContourLevel(ISdfMeshLevelField field, Vector3 low, Vector3 high, float cell, float offset, bool preserveFeatures, bool localAim, SdfMeshLevelSamples? coarser, long mostSamples, out SdfMeshLevelSamples? samples) {
+    public static SdfMesh? ContourLevel(ISdfMeshLevelField field, Vector3 low, Vector3 high, float cell, float offset, bool preserveFeatures, bool localAim, SdfMeshLevelSamples? coarser, long mostSamples, float flatten, out SdfMeshLevelSamples? samples) {
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: cell);
         ArgumentOutOfRangeException.ThrowIfNegative(value: offset);
@@ -201,7 +205,7 @@ public sealed partial class SdfMeshPathBake {
             return null;
         }
 
-        return ((mesh is null) ? null : SdfMeshChunks.Merge(levels: false, mesh: (mesh with { BakeCell = lattice.ContourCell }), preserveFeatures: preserveFeatures));
+        return ((mesh is null) ? null : SdfMeshChunks.Merge(levels: false, mesh: SdfMeshPlanarMerge.Flatten(degrees: SdfMeshCollapse.NormalDegrees[0], distance: (preserveFeatures ? 0f : flatten), mesh: (mesh with { BakeCell = lattice.ContourCell })), preserveFeatures: preserveFeatures));
     }
 
     // How far a sample's local slope may stray from the lattice's median before it is clamped: a field that is no true
