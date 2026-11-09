@@ -130,15 +130,11 @@ corrected both from the code, and this memo reopened each fact below.
   `bool was = unboxed || state.x != 0u;`, `visible = kept && (unboxed ||
   sdfOcclusionMaySee(...))`, and `sdfSelectionLevel` returns 0 for it. Every
   such draw is drawn at level 0 in the early phase of every view and every
-  cascade. Each vertex rides exactly one member or the root
-  (`SdfMeshPathBake.Skinned` writes `vertexMembers[vertex]` as one member index
-  or `SdfMesh.NoMember` **[opened]**), and the vertex resolver carries it
-  through that slot's live transform **[opened]** (`frame/sdf-mesh.hlsli`,
-  `sdfMeshWorldPosition`):
-
-  ```hlsl
-          return sdfMeshCarryPoint(record, (rotatePointByQuaternion((sdfMeshMemberLocal(entry, object, true) * sdfMeshDrawScale(record)), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz));
-  ```
+  cascade. Moving-blends steps 1–3 supersede the original one-member premise:
+  `SdfMeshSkin.Build` supplies two-owner influences, and `sdfMeshWorldVertex`
+  resolves their group-relative dual quaternion and corrected normal. Rigid
+  one-member vertices retain the fast path. A future bound must cover the
+  admitted blend's envelope, not just the union of member rest boxes.
 
 - **The host's remaining per-draw cost is the record, not the test.** A draw's
   record is `DrawWords = 64` words holding the matrix, the normal matrix, the
@@ -467,7 +463,7 @@ bound on the matrix's largest singular value (`SdfMeshBox.Stretch` **[opened]**)
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 2a. Member rest boxes under live transforms: the bake records each member's local box over the vertices that ride it and the root's over the rest; the box is the union of each member's box carried through its slot's current position and orientation and the draw's scale, then the carry; computed where the kernel runs, from the slot table it already binds, or on the host for the rate twin | Exact for rigid per-vertex skinning, which is Puck's only skinning (Argon and Claude **[record]**, `SdfMeshPathBake.Skinned` **[opened]**); `O(members)` per draw, at most `SdfMesh.MaxMembers` | Per-member boxes in the mesh and the record's members table; the kernel's selection rows become derived from slots rather than staged | A vertex on a member bent far from rest is still inside its member's box, so no failure for rigid skinning; a future blended skin would need a refit |
+| 2a. Member rest boxes under live transforms: the bake records each member's local box over the vertices that ride it and the root's over the rest; the box is the union of each member's box carried through its slot's current position and orientation and the draw's scale, then the carry; computed where the kernel runs, from the slot table it already binds, or on the host for the rate twin | Exact only for rigid per-vertex skinning; `SdfMeshSkin.Build` now also produces blended influences (moving-blends steps 1–3); `O(members)` per draw, at most `SdfMesh.MaxMembers` | Per-member boxes in the mesh and the record's members table; the kernel's selection rows become derived from slots rather than staged | A vertex on a member bent far from rest is still inside its member's box, so no failure for rigid skinning; a future blended skin would need a refit |
 | 2b. Refit from posed vertices each frame | Tightest | A pass over every skinned vertex per frame | Pays per vertex what 2a pays per member |
 | 2c. Bounds over a finite animation bank in a dominant bone's space (NanoMesh, Codex **[record]**, opened) | Avoids a refit | Looser; the guarantee ends at the covered animations | Puck's authored motion, IK and effectors are not a bank |
 

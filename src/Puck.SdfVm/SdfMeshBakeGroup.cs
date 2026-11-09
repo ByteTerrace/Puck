@@ -71,6 +71,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
     public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
 
+    /// <summary>Gets the program ordinals of the instances the group holds, in program order; none for the world
+    /// group.</summary>
+    public IReadOnlyList<int> InstanceIndices => m_instances;
+
+    /// <summary>Gets what a skinned group's influences and rigid fallback read (<see cref="SdfMeshSkinSource"/>), taken
+    /// from the program the group was planned from when it was sealed; <see langword="null"/> for a group whose geometry
+    /// reads no slot besides its own.</summary>
+    public SdfMeshSkinSource? Skin { get; private set; }
+
     /// <summary>Gets the geometry the group was sealed with, which keys its mesh.</summary>
     public SdfMeshGeometry Sealed { get; private set; }
     /// <summary>Gets the form the group was sealed with (<see cref="SdfMeshGeometryBuilder.Form"/>): its geometry without
@@ -267,7 +276,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         }
 
         if (replanned.Clamped) { replanned.Geometry.AppendReach(reach: reach); }
-        replanned.Seal(tier: tier);
+        replanned.Seal(program: program, tier: tier);
 
         return replanned;
     }
@@ -401,7 +410,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         foreach (var group in groups) {
             if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
-            group.Seal(tier: tier);
+            group.Seal(program: program, tier: tier);
         }
 
         return groups;
@@ -482,13 +491,17 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         return indices;
     }
 
-    // Seals the group: its tier, its geometry, its materials, the pose rows its lattices read and the snapshots they
-    // sample. The tier is asked of the planner here, with the box and members set, and held to the rungs that change the
-    // mesh; every sealed geometry holds one.
-    private void Seal(Func<SdfMeshBakeGroup, int>? tier) {
-        if (Dynamic && (Geometry.Poses.Keys.Count(slot => (slot != Slot)) is var members) && (members > SdfMesh.MaxMembers)) {
+    // Seals the group: its tier, its geometry, its materials, the pose rows its lattices read, the snapshots they sample
+    // and, for a skinned group, the instructions its CPU readings read, taken from the program it was planned from. The
+    // tier is asked of the planner here, with the box and members set, and held to the rungs that change the mesh; every
+    // sealed geometry holds one.
+    private void Seal(SdfProgram program, Func<SdfMeshBakeGroup, int>? tier) {
+        var members = (Dynamic ? Geometry.Poses.Keys.Count(slot => (slot != Slot)) : 0);
+
+        if (members > SdfMesh.MaxMembers) {
             throw new InvalidOperationException($"Mesh group at instance {FirstInstance} needs {members} skin members; the representation holds {SdfMesh.MaxMembers}.");
         }
+        Skin = ((members > 0) ? new SdfMeshSkinSource(group: this, program: program) : null);
         // A glass group lands whole and uncollapsed, so its mesh differs from the same shapes' opaque mesh.
         if (Glass) { Geometry.AppendGlass(); }
 
@@ -571,7 +584,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         world.Geometry.AppendReach(reach: reach);
         world.High = new Vector3(value: reach);
         world.Low = new Vector3(value: -reach);
-        world.Seal(tier: tier);
+        world.Seal(program: program, tier: tier);
 
         return world;
     }

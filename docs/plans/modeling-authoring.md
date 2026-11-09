@@ -55,10 +55,10 @@ and a check here.
 | 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | Landed: one detail rule (`WorldShapeDetail.Of`) bounded by each view's demand ([bake detail bounded by demand](bake-demand-tiers.md)) |
 | 2 | Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
 | 3 | A smooth blend between parts that move apart tears | PUCK122 warns; the skinned seam inside an admitted envelope is designed | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | `lane/moving-blends`, three commits at this tree |
-| 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | None: step 1.4 |
+| 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | Delivered by w1-limits; section 1.3 |
 | 5 | A material crease left T-junctions | The material cut's quartered edges | The swallow's painted feathers | Landed on the integration tip (two material-cut commits); closed pending the look lanes' captures |
-| 6 | A `Convex` prism refuses any `rounding` | `MaxRounding` returns 0 for Convex and Path, so the door says "no room to round" | A rounded convex blade faked with superellipsoids ([language and authoring](open-items.md#language-and-authoring)) | None: step 1.6 |
-| 7 | A paint outline holds at most eight vertices, behind a message that names every cause but the count | `SdfPaint.IsValid` admits a side table of 16 floats | Painted markings redrawn as proud shapes | None: step 1.7 |
+| 6 | A `Convex` prism refuses any `rounding` | `MaxRounding` returns 0 for Convex and Path, so the door says "no room to round" | A rounded convex blade faked with superellipsoids ([language and authoring](open-items.md#language-and-authoring)) | Delivered by w1-limits; section 1.4 |
+| 7 | A paint outline holds at most eight vertices, behind a message that names every cause but the count | `SdfPaint.IsValid` admits a side table of 16 floats | Painted markings redrawn as proud shapes | Delivered by w1-limits; section 1.5 |
 | 8 | A folded shape declares no detail of its own | `ShapeDetail` reads no `Domain`, so a fold's member cell is its whole repeat extent over 64 samples, floored at 15 mm | Folded ribs and plates baked coarse ([bake detail](open-items.md#bake-detail), the lanes' 12 to 14.5 mm reading) | Step 1.8, beside limit 1 |
 | 9 | A tip thinner than about 1.5 cells does not bake | A needle point stops short of its authored end | The swallow's streamers ([bake detail](open-items.md#bake-detail), low) | Limit 1's owner |
 | 10 | A primitive under a non-uniform scale is a distance bound, not a distance | `puck creation shape` prints `bound gain` for it; a cutter so scaled frays the surface it cuts | Stretched ellipsoid cutters | [The editor plan's open decision](editor.md#open-items) |
@@ -131,93 +131,103 @@ limit needs a step from this memo; the lead lands the moving-blends branch.
 
 ### 1.3 Twist and bend on a static placement (limit 4)
 
-**[opened]** The static emitter's chain, `CreationStampEmitter.EmitShapeChain`
-(`src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs:195-250`), applies
-`AxialProfile` (flare), `Shear`, `GaussianPush` (bumps), `DomainWarp` and
-`Elongate`, and the file contains no call to `TwistY` or `BendZ` (a search for
-either in it returns nothing). Its own comment at `:260` says otherwise:
+Delivered by w1-limits. Static and pooled emission share
+`ShapePointOps.Apply`: twist (`TwistY`), bend (`BendY`), flare, shear,
+bumps, warp, elongation. The stamp prefix already puts points in creation
+units; pooled callers provide their length conversion, with inverse-length
+rates converted reciprocally. The previous static chain omitted both rotations.
+The existing fixed contact emitter still omits these render deformations.
 
-```csharp
-        // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
-```
-
-The pooled emitter does apply them: `WorldCreationInstances.EmitShape`
-(`src/Puck.World.Client/WorldCreationInstances.cs:378`) takes
-`float twist = 0f, float bend = 0f` and calls `chain = chain.TwistY(rate: …)`
-at `:411`; `WorldCreationInstances.Emit.cs:233` passes
-`twist: (shape.Twist ?? 0f)`. Meanwhile the static emitter's rigid-leaf test
-(`CreationStampEmitter.cs:1495`) demotes a shape for a nonzero twist or bend,
-so a static twisted shape pays the general chain's cost and still bakes
-untwisted. `ShapeDocument` documents `Twist` as "The shape's local twist rate"
-with no path restriction (`CreationDocument.cs:64`).
-
-- **Step 1.4.** `BuildTransformChain` applies `TwistY(shape.Twist)` and
-  `BendZ(shape.Bend)` in the same order the pooled emitter does (twist, then
-  bend, then flare, as `CreationDocument.cs:123` states), in creation units like
-  the rest of that chain; the `:260` comment is corrected. Check: a fixture
-  with one static placement of a `twist: 1` blade and one body wearing the
-  same creation; `puck creation shape --world <fixture> --prototype <id>`
-  prints the same `lowered=` instruction list for both, including the twist's
-  plane rotation; `puck mesh preview` of the static placement draws a twisted
-  blade where today it draws a straight one. The bake identity moves (the
-  closure reaches the emitter), which the step records in its commit.
+Check: a static Box blade with `twist: 1`, `bend: 0.3` reports
+`lowered=RotatePlane·RotatePlane·Box` through `creation shape`.
+Its CPU mesh preview shows both deformations and zero open edges. The emission
+closure changes, so derived bake identities change. The shared method enforces
+the deformation order for both emitters; their placement prefixes remain distinct.
 
 ### 1.4 Convex rounding (limit 6)
 
-**[opened]** `src/Puck.SignedDistance/SdfSolidGeometry.cs:1260-1263`:
+Delivered by w1-limits. `SdfSolidGeometry.MaxRounding` now admits the room
+remaining after the profile corner fillet, bounded by the scaled profile
+inradius and, on an extrude, its half-depth. `ConvexProfile` already added
+separate rounding to corner rounding, and `SdfProgramBuilder.ConvexPolygon`
+already inset the polygon and lift before emitting the fillet; those existing
+mechanisms are reused. A radius past the ceiling refuses with its value.
 
-```csharp
-                        // Convex's CornerRadius IS the corner rounding (SdfProgramBuilder.ConvexPolygon), so the
-                        // separate rounding field has no independent room left — zero here, like Polygon's own baked
-                        // constant leaves it none.
-                        SdfPrismProfileKind.Convex or SdfPrismProfileKind.Path => 0f,
-```
-
-and the door's message at `:1539` is `an edge-rounding radius {rounding} on a
-shape with no room to round`. A Convex profile's `cornerRadius` rounds the
-outline's corners in the profile plane; `rounding` on every other prism insets
-"the profile (and, for an extruded prism, its half-depth)"
-(`CreationDocument.cs`, the `Rounding` parameter), which is what fillets the
-cap edges along the extrusion. A convex blade therefore keeps sharp cap edges,
-and the open item records the workaround (superellipsoids). **[opened]** The
-detail code already prices the combination the door refuses:
-`WorldShapeDetail.ProfileCorner` computes
-`SdfProgramBuilder.ClampRounding(rounding: ((profile.CornerRadius * inradius) + (shape.Rounding ?? 0f)), …)`
-for a Convex profile, so the bake expects a Convex prism to carry both.
-
-- **Step 1.6.** `MaxRounding` gives Convex the ceiling the detail code assumes,
-  the already-rounded profile's inradius (`ConvexPolygonInradius` less the
-  corner fillet) and, for an extrude, its half-depth, and `ConvexPolygon`
-  emits the fillet; a refusal past the ceiling names it ("past the … this
-  shape can carry"), the existing message for a positive ceiling. Check: a
-  fixture convex blade with `cornerRadius: 0.1` and `rounding: 0.002` passes
-  `puck compile --validate`, `puck creation shape` prints `distance=exact`,
-  and `puck mesh audit --cpu` reports no open edges on it; `rounding: 1`
-  refuses naming the ceiling.
+Check: a Convex blade at scale [0.2, 0.6, 0.04], `cornerRadius: 0.1`,
+`rounding: 0.002` passes compile validation, reports `distance=exact`,
+and its CPU mesh audit reports zero open/non-manifold edges and zero uncovered
+crossings. `rounding: 1` refuses naming the 0.019999998 ceiling for that shape.
 
 ### 1.5 Paint outlines (limit 7)
 
-**[opened]** `src/Puck.SignedDistance/SdfAppearance.cs:25` sets
-`public const int PaintTableVectors = 4;` and `SdfPaint.IsValid`
-(`src/Puck.SignedDistance/SdfPaint.cs:130`) admits
-`(shape.Table is { Count: <= (SdfAppearance.PaintTableVectors * 4) })`: 16
-floats, which **[inference]** is eight profile vertices of two floats. The
-refusal an author reads comes from
-`CreationCanonicalizer.Wear.cs:113`, which lists frames, stops, surfaces,
-ranges, lanes, rotation, scale, stroke and the flow's fields, and not the
-vertex count. **[record]** The open item also says `puck compile --validate`
-accepts a paint profile `puck creation stats` refuses, and that a Convex paint
-profile with no `cornerRadius` is stored with 0.15; this memo did not reproduce
-either.
+Delivered by w1-limits. Eight vertices was an arbitrary packing restriction:
+`SdfAppearance` reserved four inline side-table vectors per paint, while the
+primitive's packed vertex count supports 32. Fixed paint entries now occupy
+nine vectors, with individually sized side tables after all entries and before
+shade programs. `VectorsOf` and `Pack` use the same side-table size function;
+`SdfPaintShape.Data0At` relocates each reference into that table region. The
+shader reads the generated stride and its existing absolute table references.
+There is no extra paint-specific vertex cap.
 
-- **Step 1.7.** `ResolvePaint` refuses a profile whose table exceeds the cap by
-  name, with the count and the cap in the message, before `IsValid` ever sees
-  it; the step reproduces the compile-against-stats gap and closes it in the
-  same place (the canonicalizer runs at compile, so whatever `stats` refuses
-  the canonicalizer refuses first). Check: a fixture palette paint with nine
-  convex vertices is refused by `puck compile --validate` with a message
-  naming nine and eight; one with eight passes both `compile --validate` and
-  `creation stats`.
+`CreationCanonicalizer.ValidatePaletteLayers` already resolves paints through
+`ToPaint`, the same primitive emission stats uses. Its `ResolvePaint` now
+names both the count and 32-vertex packed-profile cap before primitive emission.
+Profiles default to sharp corners (`cornerRadius: 0`), including paints;
+rounding is authored explicitly. Compile validation and stats admit 8, 9 and
+32 vertices and refuse 33 by the canonicalizer's named refusal.
+
+### 1.6 Plaque layout
+
+`Puck.Text.TextLayout` wraps at breakable whitespace before placing a word,
+using the atlas's glyph bounds, advances, tracking and kerning. Enriched text
+and plain strings share that path. Only a word wider than the entire available
+line falls back to glyph breaks. Nonbreaking spaces stay within their word;
+wrapped lines omit leading breakable spaces. Unwrapped text keeps its original
+scalar layout. Creation `maxWidth` uses this shared layout in both static and
+pooled text emission, rather than a gallery-specific text implementation.
+
+Headless check: `TextContractTests.LayoutKeepsWordsInsideTheAuthoredFace` uses
+the gallery's Inter font and both subtraction/union note strings at em 0.03,
+width 1.12, spacing 1.15 and baseline 0.085. It verifies each word stays on one
+baseline, no glyph is lost, X stays within [-0.56, 0.56], and Y stays within
+[0, 0.15] of the plinth. The 14 focused layout cases pass. The short MCP
+windowed request expired waiting for another holder's GPU; no World launched.
+
+### 1.7 Non-uniform scale (limit 10): recommendation for the lead
+
+**Recommendation, not a settled product decision:** preserve the author's
+scaled zero set and replace distance bounds with exact primitive-distance
+lowerings, using a bounded closest-point solve where a direct lowering is not
+available. Keep the current conservative bound as a broad-phase/pruning answer;
+use the distance answer where offsets, blends and cutter quality depend on it.
+Do not silently change the zero set, and do not remove non-uniform scale from
+the authoring language. Those alternatives respectively change the requested
+shape or force authors back to shape assemblies.
+
+The mechanisms considered are `SdfSolidGeometry.AppendScaledPrimitive`
+(native box extents, an elliptical cylinder, and a torus with equal X/Z scale),
+`AppendProfile` (every regular polygon scales its vertices into the exact
+ConvexPolygon), the superellipsoid gauge, the generic Scale fallback, and
+`CreationShapeLaws`' gain/certification readback. In particular, the
+editor plan's Polygon12 example was stale: running
+`creation shape --world worlds/debug/debug.puck --prototype shape-polygon-12-xy`
+reports `lowered=ConvexPolygon distance=exact` and admitted contact.
+
+The invariant for that follow-up is the authored zero set plus a certified
+signed distance within an explicit solver tolerance, with deterministic contact
+using the same lowering. Enforcement belongs in the primitive builder and its
+shared evaluator contract, not a gallery exception. A fixed iteration count
+alone does not certify convergence: the solve needs an enclosing interval and
+a residual/error bound, including interior points and axis/centre degeneracies.
+No such solver is claimed to exist here. The lead owns that design slice and
+its CPU/GPU agreement check; no limit-10 engine code changes in this lane.
+
+Mechanical check for that slice: read all stretched gallery primitives through
+`creation shape`; audit their actual fields against closest-surface distances
+on both sides and at degeneracies, then audit a subtraction and smooth blend
+using each as a cutter. Report distance error, certification, field work and
+mesh defects; take settled captures in the debug gallery. The lead measures
+the added bake cost in a quiet window before choosing which solves to admit.
 
 ## 2. Authoring ergonomics
 

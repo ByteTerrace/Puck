@@ -74,11 +74,17 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private SortedDictionary<int, DynamicTransform>? m_poses;
     // Made by the first sampled instruction: each handle the group reads, with the snapshot its geometry hashed.
     private SortedDictionary<int, SdfSampledSnapshot>? m_sampled;
-    private static readonly IReadOnlyDictionary<int, SdfSampledSnapshot> NoSampled = new Dictionary<int, SdfSampledSnapshot>();
 
+    private static readonly IReadOnlyDictionary<int, SdfSampledSnapshot> NoSampled = new Dictionary<int, SdfSampledSnapshot>();
     private static readonly IReadOnlyDictionary<int, DynamicTransform> NoPoses = new Dictionary<int, DynamicTransform>();
     // The slot the chain being appended rides, whose lanes a lane erosion reads; -1 under none.
     private int m_chainSlot = -1;
+
+    private bool m_restPoseSkin;
+
+    /// <summary>Gets whether this group freezes its delta-frame slots at authored rest.</summary>
+    public bool RestPoseSkin { get; private set; }
+
     // The steps another slot's pose rounds to: PositionSteps and OrientationSteps unless Snap coarsened them.
     private float m_positionSteps = PositionSteps;
     private float m_orientationSteps = OrientationSteps;
@@ -239,6 +245,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         ArgumentNullException.ThrowIfNull(argument: sampled);
 
         var range = program.Instances[instance];
+
+        m_restPoseSkin = range.RestPoseSkin;
+        RestPoseSkin |= range.RestPoseSkin;
+        if (range.RestPoseSkin) { Hash(fact: Fact.RestPoseSkin, source: [1]); }
         var bound = (range.IsDynamic ? new Vector4(x: 0f, y: 0f, z: 0f, w: range.Radius) : new Vector4(value: range.Center, w: range.Radius));
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
@@ -262,7 +272,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         // So do the parts a dynamic instance declares, each by its slot's offset from the instance's own so one creation's
         // shapes key alike on every body that wears it.
         foreach (var part in range.Parts) {
-            var words = new PartWords(part: part, ownSlot: ownSlot);
+            var words = new PartWords(ownSlot: ownSlot, part: part);
 
             Hash(fact: Fact.Part, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<PartWords>(reference: in words)));
         }
@@ -338,7 +348,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
                         Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
                     } else {
-                        var pose = RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms);
+                        var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: m_orientationSteps, ownSlot: ownSlot, positionSteps: m_positionSteps, slot: slot, transforms: transforms));
                         var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                         instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
@@ -358,8 +368,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                 break;
         }
 
-        if ((instruction.Op == SdfOp.ShapeBlend) && ((SdfShapeType)instruction.Shape == SdfShapeType.SampledRegion)) {
-            var handle = (int)BitConverter.SingleToUInt32Bits(value: instruction.Data1.Z);
+        if ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.SampledRegion)) {
+            var handle = ((int)BitConverter.SingleToUInt32Bits(value: instruction.Data1.Z));
             var snapshot = sampled[handle];
             var count = snapshot.Count;
 
@@ -420,6 +430,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         var (framePosition, frameOrientation) = ((ownSlot < 0) ? (Vector3.Zero, Quaternion.Identity) : PoseOf(transform: transforms[ownSlot]));
         var frameScale = ((ownSlot < 0) ? 1f : UnitsOf(transform: transforms[ownSlot]));
+
         var (position, orientation) = PoseOf(transform: transforms[slot]);
         var inverse = Quaternion.Inverse(value: frameOrientation);
         var relative = Quaternion.Normalize(value: (inverse * orientation));
@@ -432,9 +443,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Position: new Rounded4(steps: positionSteps, value: new Vector4(value: (Vector3.Transform(rotation: inverse, value: (position - framePosition)) / frameScale), w: 0f))
         );
     }
+
     // A transform's position and orientation, an unset orientation read as the identity, as the bake reads it.
     internal static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
         (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
+
     /// <summary>Returns the world units one unit of a slot's own geometry spans (<see cref="DynamicTransform.Scale"/>),
     /// one for a scale that is not finite and positive: what the bake divides another slot's offset from a group's slot
     /// by, and what the group's draws scale its mesh by.</summary>
@@ -444,6 +457,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
     // What each fact appended to the geometry hash is; its tag leads its payload (AppendFact).
     private enum Fact : byte {
+        RestPoseSkin = 255,
         Snap = 1,
         Bound,
         Count,

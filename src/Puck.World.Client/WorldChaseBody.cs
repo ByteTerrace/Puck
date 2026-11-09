@@ -71,10 +71,7 @@ public readonly struct WorldChaseBody {
         for (var index = 0; (index < shapes.Count); index++) {
             var blend = (shapes[index].Blend ?? SdfBlendOp.Union);
 
-            if (
-                SdfBoundAlgebra.IsIntersection(blend: blend) ||
-                SdfBoundAlgebra.IsSubtraction(blend: blend)
-            ) {
+            if (SdfBoundAlgebra.Carves(blend: blend)) {
                 continue;
             }
 

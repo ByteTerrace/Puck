@@ -50,20 +50,29 @@ evidence, citations and steps.
 
 A. Engine limits on authoring [high], in the plan's
    [section 1](modeling-authoring.md#1-the-engine-limits-authors-met) order:
-   - twist and bend are silently dropped on static placements
-     ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
    - per-part bake detail is landed: one detail rule, bounded by what each
-     view resolves ([the memo](bake-demand-tiers.md)); what remains is the
+     view resolves ([the memo](bake-demand-tiers.md)); the gallery's pipe and
+     groove exhibits refine their 4 cm rim features, and what remains is the
      Moth's shin blend group and the crease merge (see
      [Bake detail](#bake-detail));
-   - blends between moving parts tear: steps 1 to 3 are built on
-     `lane/moving-blends`, unlanded behind two high review findings (see
-     [Bake detail](#bake-detail));
-   - a `Convex` prism refuses any rounding
-     ([1.4](modeling-authoring.md#14-convex-rounding-limit-6));
-   - paint outlines cap at eight vertices behind a generic message, and
-     compile does not check paint emission
-     ([1.5](modeling-authoring.md#15-paint-outlines-limit-7)).
+   - blends between moving parts: steps 1 to 3 and their review fixes have
+     landed; step 4, paints and lanes across a blended seam, is next (see
+     [Bake detail](#bake-detail)).
+
+   The owner's gallery walkthrough added two remaining engine defects that every
+   indoor exhibit shows:
+   - auto-exposure drifts while a player runs through an evenly lit room: the
+     meter reads light at the camera's position (`SdfMeshIrradiance.TryMeter`),
+     re-read at intervals, so walking gallery level 0 stepped it from 402 to
+     110 nits and moved EV100 by about one stop; pinning exposure steadied it;
+   - indoor indirect light draws straight-edged triangular patches on floors and
+     box faces, and concave carvings read flat; `world.indirect off` removes the
+     patches but floods the roofed hall near-white, which is a defect of its own.
+A2. The scripted walkthrough
+   ([decision](../decisions/engine-design.md#the-scripted-walkthrough)): first a
+   slice over gallery level 1's blend row and one avatar-studio inspection stop,
+   which must catch the defects above unaided; then every place, exhibit,
+   interaction and creation.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
    answered; its windowed recipe is recorded on the
    [virtual geometry plan](virtual-geometry.md)'s G5 row.
@@ -80,8 +89,8 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | a fix pass on MB-1 and MB-2 |
-| `lane/part-detail` | one bake detail rule for every path | the owner's cost bound |
+| `lane/moving-blends` | moving blends steps 1 to 3 | landing with the w1 moving-blends fix pass, which merged it |
+| `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
@@ -333,6 +342,10 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
+- Whether the cold-bake bar (one minute per backend) counts detail tiers baked
+  on demand as a camera approaches, now that bake detail is bounded by D7's
+  demand budget (the owner's choice of cost bound for `lane/part-detail`;
+  [virtual geometry](virtual-geometry.md#d7-the-detail-budget)).
 - The Moth's and the swallow's look, in a pair session with the owner (both
   stopped by the owner's ruling); within it, gloves or bare hands on the
   off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
@@ -3215,8 +3228,7 @@ reproduce worker for what remains.
 ### Bake detail
 
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
-· Next: the Moth's shin blend group, then the moving blends fix pass on
-`lane/moving-blends`.
+· Next: the Moth's shin blend group, then moving blends step 4.
 
 - [high] The Moth's shin blend groups (`shin-*/shinCavity-*/archBand-*/
   archBandHollow-*/archBandBack-*/sidePanel-*`) contour badly at their
@@ -3240,26 +3252,16 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
   box): one extra bake and store entry for a group whose box narrows much,
   reached only by a far view. Measure how many such entries a tour of the
   places writes before tightening the clamp.
-- [high] `lane/moving-blends` holds
-  [moving blends](moving-blends.md) steps 1 to 3 (rest-pose bake and
-  envelope, propagated influences, dual-quaternion skinning on current,
-  previous and shadow positions; CPU pose error 1.11 mm under a 1.19 mm bound).
-  Its adversarial review found the C#/HLSL skin layout and the blend math right
-  and these to fix before landing: MB-1 (high, `SdfMeshSkin`) every vertex of a
-  moving part stores the root as its first member, so paints, insets and lanes
-  swim on every moving part and those vertices miss the rigid fast path; MB-2
-  (high, `SdfMeshPathBake`) skin `Build` and `Split` read the current program on
-  the bake pool, so a group kept across a restart reads another instance's
-  instructions and the mesh is no longer a function of its geometry; MB-3
-  (CreationMotion.Driven on the branch) shapes one frame moves together are flagged as
-  moving apart; MB-4 (`CreationMotionPlan`) a carve or clip one owner applies to
-  another is lost in both fallbacks, so the Moth's eye whites lose their clip;
-  MB-5 the envelope adds absolute frame shift instead of relative motion; MB-6
-  the third-owner CPU fallback contours with no sample cap; low: engraved runs
-  emitted per owner, the rotation bound under different pivots, the influence
-  stencil at millimetre radii, LINQ in the influence reading, a dead
-  `sdfMeshMemberLocal`, and docs that disagree with the code. A 60-frame
-  presented glance on both backends follows the fixes.
+- [high] [Moving blends](moving-blends.md) steps 4 and 5 remain: paints,
+  insets and lanes across a blended seam (a vertex wholly one owner's already
+  shades in that owner's frame), then retiring the settle rebake for the
+  dynamic groups that are not rest skins and the quiet-window cost measurement
+  of a skinned close-up and crowd on both backends.
+- [medium] A carve that moves against the surface it cuts keeps its rest cut in
+  both fallbacks (`CreationMotionPlan.Borrows`, the third-owner split): an
+  author who wants a moving carve gets no diagnostic saying so. PUCK122 could
+  name a cross-owner carve in a partitioned group the way it names a creased
+  blend.
 
 - [medium] A flare's field bound is loose: `SdfProgramBuilder.AxialProfile`
   builds in `1/maxS` and `SdfProgram.FlareOperatorNorm` bounds the shear term
@@ -4131,16 +4133,6 @@ still changes a fraction of a percent of pixels, not exactly zero.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
-
-- [medium] Paint and profile limits authors meet without a named refusal: a
-  convex paint outline holds at most 8 vertices (`SdfAppearance.PaintTableVectors`)
-  and over that the validator says only "Invalid inset, weathering, paint or
-  flow" (`CreationCanonicalizer.Wear`); `puck compile --validate` accepts a paint
-  profile that `puck creation stats` then refuses, so paint emission is not
-  checked at compile; a Convex paint profile with no `cornerRadius` is stored
-  with 0.15; and a `Convex` prism profile refuses any `rounding` ("no room to
-  round", `SdfSolidGeometry`), so a rounded convex prism has to be faked with
-  superellipsoids.
 
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
@@ -5325,6 +5317,20 @@ runs until the owner calls for qualification; then each is a packet.
 Ideas discussed with the owner and not yet queued. None starts until the owner
 reviews it and says so (the owner's ruling).
 
+- **A portal placed on a moon.** The owner's idea: take inspiration from
+  Portal's moon shot, but let a player put one portal on the ground and its pair
+  on the moon "and totally run with that instead of simply making it a set
+  piece". In Puck the moon in the sky is the moon one visits (its source world
+  shown as a `View` layer, [valley and moons](valley-and-moons.md)), so the
+  mechanic needs a portal pair opened at runtime by a player's action as an
+  authored rule, aim at a surface rendered at astronomical distance, and a
+  crossing between worlds with different gravity. Whether the moon admits a
+  visitor's portal is the moon's own grant, and whether a portal end needs the
+  surface reached by flight first is the author's rule.
+- **Authored exposure per place or world.** Raised in the gallery walkthrough
+  beside the metering fix: each place or world authors its exposure and the
+  engine blends at seams (a doorway, a portal), so adaptation into a dark room
+  is designed rather than accidental.
 - **Tonemapping.** One curve exists (`render.tonemap` `Filmic`: Uchimura's Gran
   Turismo fit, per RGB channel, SDR peak 1.0, in `place.comp.hlsl`), and the
   debug world authors none, so its sky, sun and emissives clip at white.

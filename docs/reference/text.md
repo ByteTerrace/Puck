@@ -113,7 +113,7 @@ TextLayoutResult layout = new TextLayout().Layout(
     atlas: atlas,
     text: "Hello,\nPuck!",
     scale: 1.0f,
-    maxLineWidth: null   // or a width in scaled units for greedy glyph-level wrapping
+    maxLineWidth: null   // or a width in scaled units for greedy word wrapping
 );
 
 Console.WriteLine(value: $"{layout.Width} x {layout.Height}, {layout.Placements.Count} glyphs");
@@ -128,8 +128,10 @@ foreach (TextGlyphPlacement p in layout.Placements) {
 Layout walks one Unicode scalar at a time, advances the pen by each glyph's
 `Advance`, applies kerning between consecutive glyphs, ignores `\r`, breaks
 lines on `\n`, and skips code points the atlas doesn't contain. Wrapping is
-**greedy and glyph-granular** (it breaks before the overflowing glyph, not at
-word boundaries). The `TextLayoutOptions` overload adds block alignment
+**greedy at word boundaries**. A word moves intact to the next line; only a word
+that exceeds the whole width falls back to glyph breaks. Wrapped lines discard
+leading breakable whitespace; nonbreaking spaces stay within their word.
+The `TextLayoutOptions` overload adds block alignment
 (`Left`, `Center`, or `Right`), tracking in em units, and a line-height
 multiplier while preserving the option-free overload's defaults.
 

@@ -97,10 +97,6 @@ public sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Determi
 
         return null;
     }
-    private static string Hex(ulong value) => value.ToString(
-        format: "x16",
-        provider: CultureInfo.InvariantCulture
-    );
     private static bool IsToken(string text) => (
         (text.Length > 0) &&
         !text.Any(predicate: static character => (char.IsWhiteSpace(c: character) || char.IsControl(c: character)))
@@ -125,7 +121,7 @@ public sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Determi
                 builder.Append(value: "tick ").Append(value: (tick + 1).ToString(provider: CultureInfo.InvariantCulture));
 
                 foreach (var hash in scenario.Ticks[tick]) {
-                    builder.Append(value: ' ').Append(value: Hex(value: hash));
+                    builder.Append(value: ' ').Append(value: hash.ToString(format: "x16", provider: CultureInfo.InvariantCulture));
                 }
 
                 builder.Append(value: '\n');

@@ -168,6 +168,48 @@ to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
 and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds
 one bake program, not a per-world render budget.
 
+## Moving blends
+
+`CreationMotion.Envelope` bounds each cross-owner smooth seam; `CreationMotionPlan.RenderDocument`
+is the pooled emitter's partition. A rejected seam partitions its authored group by actual motion owner.
+PUCK122 prints the rotation and displacement bounds and whether it skins or creases. A regular-polygon
+field, an unbounded waveform, an effector or state-bound rest cannot enter an admitted skin.
+Driver weights, including `weightBy`, are clamped by `WorldGaitDrivers`.
+Engraved moving creations use `WorldCreationInstances.EmitEngravedOwners`: the shared group and text
+emitters carve each rigid owner's rest surface, and the lettering rides that surface. A glyph therefore
+never enters a cross-owner influence reading. Followers and their descendants inherit the actual slot
+partition and cannot enter a finite-envelope blend.
+
+The pool marks its rigid delta-frame instances `SdfInstanceRange.RestPoseSkin`.
+`SdfMeshGeometryBuilder` freezes those slots at identity, includes the opt-in in geometry and form,
+and `SdfMeshPathBake.Settle` excludes them. Do not freeze arbitrary dynamic slots: those may carry
+absolute poses. `MovingBlendRestLawTests` exercises swing, slide and timeline owners through the real packer.
+
+`SdfFieldEvaluator.ReadInfluences` shares the point interpreter with culling disabled, carrying owner
+vectors through every composition and scope. `ReadInfluenceGradient` takes fixed central differences
+of the renormalized pair. `SdfMeshSkin.Build` samples exact positions once and copies tuples to every
+crease/material vertex there. A third share above 1/64 falls back to rigid owner contours, through
+`SdfMeshSkin.Split`, `SdfMeshAudit.MemberFields` and `SdfMeshPathBake.ContourLevel`; the bake report names it.
+`SdfMeshCpuField` is the shared CPU sampler for that contour and the CLI's offline tools.
+
+`SdfMesh.Influences` carries the second member, unorm16 share and three binary16 gradient components
+in twelve bytes beside `VertexMembers`. Keep both through native copies, material renumbering,
+subsets, planar compaction, codec and uploads. Planar merge compares full tuples and removes no
+blend-zone vertex. Motion reseats must consider either used member.
+
+`frame/sdf-mesh-skin.hlsli` owns group-relative dual-quaternion blending, the first-owner hemisphere
+rule and the Jacobian normal correction. Current, previous and shadow positions share it.
+`sdfMeshWorldVertex` returns position and corrected normal together; `sdfMeshSurfaceNormal` resolves
+each triangle's vertices once. The CPU audit reuses Maths' `FixedRigidTransform` carrier; posed GPU
+arithmetic remains presentation float and cross-backend bit identity is not claimed.
+
+`puck mesh audit --cpu --world <source> --prototype <id>` prints blend-zone vertices, split-tuple
+places (must be zero), and geometry keys. `--pose '1=0,0,0,0,0.05,0,0.9987492'` applies a current
+delta by member slot offset in the group frame and audits against the posed field. Compare both
+envelope extremes. A build cannot prove motion: request a 60-frame presented burst on both backends,
+with motion diagnostics on still parts, as the [moving-blends memo](../../../docs/plans/moving-blends.md) specifies.
+Material rest coordinates remain step 4; settle deletion and the quiet cost window remain step 5.
+
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses
 are picking metadata; `SdfMeshDraw.MotionIdentity` names the stable body/surface

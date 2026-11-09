@@ -49,11 +49,12 @@ its radius expands the authored profile rather than cutting a flat chamfer.
 An optional `profile` selects `RoundedRectangle` (`cornerRadius` is a fraction
 of the smaller half-extent), `Polygon` (`sides`, 3–32), `Ellipse`,
 `ChamferedRectangle` (`cornerRadius` maps to a 45-degree bevel radius instead
-of a fillet), or `Convex` (`vertices`, 3–8 clockwise points in local XY
+of a fillet), or `Convex` (`vertices`, 3–32 clockwise points in local XY
 inside the unit square—each coordinate in [-1, 1], the frame every profile
 is scaled from and the frame the prism's cull reach covers—convex and
 non-degenerate; `cornerRadius` is a fraction of the raw vertices' own
-inradius, the profile's one rounding control). Omission uses `Trapezoid`.
+inradius; omission is sharp). Separate `rounding` adds an edge fillet within
+the remaining inradius and extrusion half-depth. Omission uses `Trapezoid`.
 `Path` adds bounded curved contours and variable-width strokes; see
 [curved path profiles](../../docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles)
 for the segment vocabulary, error tolerance, budgets, and contact limitation.

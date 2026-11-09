@@ -254,6 +254,40 @@ typed input are the pattern, and a diegetic keyboard is planned. Changes are
 isolated only where attribution is the point: a benchmark measured against a
 baseline, a determinism or fixed-point change, and a regression hunt.
 
+### The scripted walkthrough
+
+The walkthrough is a scripted benchmark of finite length (the owner's ruling):
+"a 'scripted walkthrough' that 'flexes' all of our components in a
+deterministic/finite timeframe". Fixed poses and level-wide stills do not meet
+it: four gallery stops left most exhibits unseen while visible defects were
+the norm.
+
+- **It is played as a player.** An authored controller-input program (stick
+  deflection and button presses on exact ticks) drives the body through the
+  same input path a pad uses: "'Real' input in the sense that a controller
+  drives the player through things instead of it being a simplistic character
+  camera". The route is seen in first person, which keeps the avatar's own
+  defects out of every other capture.
+- **It visits everything.** The route is split into segments, each starting
+  from a declared spawn point and ending with an arrival check, so a world edit
+  breaks one segment and reports it off course. Coverage is derived from the
+  document: an exhibit, place or interaction is either visited or reported as
+  unvisited by name.
+- **Each exhibit is judged against its plaque.** A close capture of each
+  exhibit sits beside the plaque's description of what to look for, together
+  with the exhibit's mechanical signals (mesh audit, bake refusals, rule
+  failures). The judgement is against intent, never against an older capture.
+- **One run answers several questions:** frame times per segment, the captures
+  and signals above, and an end-state hash that two runs must share.
+- **Creations get an inspection pass.** The owner asked for "some way of
+  'walking through' the moth model and other things": each authored creation is
+  put through its real motion in the avatar studio's fixed multi-view layouts,
+  with stills and presented bursts, and a creation the pass does not cover is
+  reported by name.
+
+The route is authored `.puck` data in `worlds/debug`, run through the sweep;
+it adds no standalone runner.
+
 ## A portal is a plane a body passes through
 
 A door fires when the body's origin passes through its glass, from the side the

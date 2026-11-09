@@ -208,55 +208,16 @@ public static partial class CreationStampEmitter {
                 .Translate(offset: shape.Position)
                 .Rotate(rotation: shape.Rotation);
 
-            // Creation-unit lengths, like the rest of this chain past the Scale(stamp scale) op above — no
-            // explicit placement-scale multiply needed here (unlike WorldCreationInstances.EmitShape's twist/bend/flare
-            // prefix, which has no such chain-level Scale and so must bake placementScale in by hand).
-            var flared = ((shape.Flare is { } flare)
-                ? prefix.AxialProfile(
-                    amount: flare.Amount,
-                    bulge: flare.Bulge,
-                    top: (flare.Top ?? 0f),
-                    span: flare.Span,
-                    axis: ((SdfAxis)flare.Axis),
-                    startScale: flare.StartScale
-                )
-                : prefix
-            );
-            var sheared = ((shape.Shear is { } shear)
-                ? flared.Shear(
-                    linear: shear.Linear,
-                    quadratic: shear.Quadratic,
-                    cubic: shear.Cubic,
-                    target: ((SdfAxis)shear.Target),
-                    driver: ((SdfAxis)shear.Driver)
-                )
-                : flared
-            );
-
-            foreach (var bump in (shape.Bumps ?? [])) {
-                sheared = sheared.GaussianPush(
-                    center: bump.Center,
-                    radii: bump.Radii,
-                    push: bump.Push
-                );
-            }
-
-            // The warp and the elongation read creation units like the rest of this chain (KEEP IN SYNC with
-            // WorldCreationInstances.EmitShape, whose chain without a Scale op converts them by hand).
-            if (shape.Warp is { } warp) {
-                sheared = sheared.DomainWarp(amplitude: warp.Amplitude, frequency: warp.Frequency);
-            }
-            if (shape.Elongate is { } elongate) {
-                sheared = sheared.Elongate(extents: elongate);
-            }
-
-            return sheared;
+            // StampPrefix already converted the point to creation units. Both emitters share this
+            // ordering and unit conversion, including twist and bend before flare.
+            return ShapePointOps.Apply(chain: prefix, twist: (shape.Twist ?? 0f), bend: (shape.Bend ?? 0f),
+                flare: shape.Flare, shear: shape.Shear, bumps: shape.Bumps, warp: shape.Warp,
+                elongate: shape.Elongate);
         }
 
         var chain = BuildTransformChain();
         // Per-shape lane-driven erosion (KEEP IN SYNC with WorldCreationInstances.EmitShape's mirrored prefix): the reach is
-        // this shape's own SdfSolidGeometry.Reach, taken in WORLD units like the rest of this chain past the Scale
-        // op above. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
+        // this shape's own SdfSolidGeometry.Reach, converted to WORLD units for the field operation. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
         // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
         var erodeReach = ((shape.Erode is not null)
             ? (SdfSolidGeometry.Reach(
@@ -560,7 +521,7 @@ public static partial class CreationStampEmitter {
     private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, in StampFrame frame) {
         var chain = builder.ResetPoint();
 
-        if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot); }
+        if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot: slot); }
         chain = chain
             .Translate(offset: frame.Origin.ToVector3())
             .Rotate(rotation: frame.Rotation)
@@ -892,6 +853,7 @@ public static partial class CreationStampEmitter {
 
         EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
     }
+
     private static void EmitNoise(SdfProgramBuilder builder, in StampFrame frame, CreationNoiseDocument noise) {
         _ = StampPrefix(
             builder: builder,
@@ -906,6 +868,7 @@ public static partial class CreationStampEmitter {
             seed: (noise.Seed ?? 0u)
         );
     }
+
     /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
     /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound
     /// (<see cref="ShapeStampBound"/>) instead of one whole-creation instance.</summary>
@@ -1064,8 +1027,10 @@ public static partial class CreationStampEmitter {
     /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
     /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) — indexed like
     /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
-    /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
-    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
+    /// <see langword="null"/> lays every run out fresh.</param>
+    /// <param name="includes">Whether the run at an index of <see cref="CreationDocument.TextRuns"/> is emitted;
+    /// <see langword="null"/> emits every run.</param>
+    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null, Func<int, bool>? includes = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontFor);
@@ -1074,6 +1039,7 @@ public static partial class CreationStampEmitter {
         var runs = (document.TextRuns ?? []);
 
         for (var index = 0; (index < runs.Count); index++) {
+            if ((includes is not null) && !includes(arg: index)) { continue; }
             var run = runs[index];
 
             var (position, rotation) = RunFrame(
@@ -1503,6 +1469,7 @@ public static partial class CreationStampEmitter {
         }
 
         var frame = StampFrame.Of(transform: transform);
+
         var (position, rotation) = ReflectedShapeTransformFixed(normal: frame.ReflectionNormal, shape: shape);
         var turn = (frame.Rotation * rotation).Normalize().ToQuaternion();
         var axisX = Vector3.Transform(value: (Vector3.UnitX * transform.Scale), rotation: turn);
@@ -1511,7 +1478,7 @@ public static partial class CreationStampEmitter {
         var center = (StampedPosition(frame: frame, local: position).ToVector3() + (((axisX * bounds.Center.X) + (axisY * bounds.Center.Y)) + (axisZ * bounds.Center.Z)));
         var raise = ((shape.Panel is { Depth: < 0f } panel) ? -panel.Depth : 0f);
         var widen = (((raise + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale);
-        var half = (((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen);
+        var half = ((((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen));
 
         return ((center - half), (center + half));
     }

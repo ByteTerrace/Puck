@@ -256,6 +256,17 @@ brief:
   section in the hand-back: the capability searched, the decision registers,
   references and skills read, the candidates found with citations, and why the
   chosen one owns it. The lead reads it before merging;
+- for a lane building a creation to push the engine (a probe, AGENTS.md "Puck's
+  purpose"), the stop rule in its own words: when a defect is an engine limit,
+  the lane stops sculpting that part and hands back the limit with its
+  evidence. A probe lane's hand-back leads with what the engine could not do.
+  At most two look-critic rounds per creation per wave; a third failure changes
+  the approach or goes to the owner;
+- for a lane changing a shared system (the field, bake, lighting, materials,
+  input), a finish line that names the gallery exhibits and walkthrough
+  segments it reaches, judged against their plaques
+  ([the scripted walkthrough](../../../docs/decisions/engine-design.md#the-scripted-walkthrough)),
+  not only the creation that prompted it;
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
@@ -986,7 +997,7 @@ holds only what they leave out:
 | `implementer` | Sonnet 5.5 | high | own | `delegate` |
 | `reviewer` | Opus 5.5 | high | none | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
 | `specialist` | Opus 5.5 | high | own | `delegate` |
-| `principal` | Fable 5.1 | high | own | `delegate` |
+| `principal` | Fable 5.2 | high | own | `delegate` |
 
 Route each brief to the role that fits it, and say why in the brief: a brief
 with a known cause or a specified result goes to `implementer` even when it is

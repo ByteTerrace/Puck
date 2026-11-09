@@ -567,7 +567,7 @@ puck evals compare <with-without>/aggregate-result.json <after>/aggregate-result
   | `implementer` | `claude-sonnet-5-5` | `delegate`, and the area skills its briefs name |
   | `specialist` | `claude-opus-5-5` | `delegate`, and the area skills its briefs name |
   | `reviewer` | `claude-opus-5-5` | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
-  | `principal` | `claude-fable-5-1` | `delegate`, and the area skills its design touches |
+  | `principal` | `claude-fable-5-2` | `delegate`, and the area skills its design touches |
   | The lead | Opus | `orchestration` |
 
 - **Load and cost:** `run` defaults to `--jobs 4` and a $20 `--max-cost-usd`
