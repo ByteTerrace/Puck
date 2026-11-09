@@ -22,7 +22,8 @@ public sealed partial class WorldCreationInstances {
             var slot = (rootSlot + owner);
 
             _ = builder.BeginInstanceDynamic(slot, Vector3.Zero, radius, separateBake: true, boundInSlotFrame: true, restPoseSkin: true,
-                detail: SharedDetail(partsDocument, hidden, placementScale, (glass ? 0f : WorldPlacementStamper.TextDetail(creation: document, scale: placementScale)))).PushField(compose: SdfBlendOp.Union);
+                // Each part declares its own spacing (WorldShapeDetail.Of, through EmitGroup); the instance declares the text's.
+                detail: (glass ? 0f : WorldPlacementStamper.TextDetail(creation: document, scale: placementScale))).PushField(compose: SdfBlendOp.Union);
             foreach (var group in Enumerable.Range(0, shapes.Length).Where(predicate: Own).Select(selector: index => shapes[index].Group!.Value).Distinct()) {
                 EmitGroup(builder, partsDocument, shapes, group, 0, rootSlot, paletteIds, placementScale, materialScale, false, slot, radius, false, hidden, motion, Vector3.Zero);
             }

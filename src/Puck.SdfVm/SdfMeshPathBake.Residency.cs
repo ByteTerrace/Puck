@@ -307,9 +307,10 @@ public sealed partial class SdfMeshPathBake {
         var matrix = ((Matrix4x4.CreateScale(units) * Matrix4x4.CreateFromQuaternion(orientation)) * Matrix4x4.CreateTranslation(transform.Position));
         return TransformDemandBox(group, matrix);
     }
-    private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) {
-        var half = group.DemandHalf;
-        return (Vector3.Transform(group.DemandCenter, matrix), new Vector3(
+    private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) => TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
+    // The world-axis box about a box carried through a matrix.
+    private static (Vector3 Center, Vector3 Half) TransformBox(Vector3 center, Vector3 half, Matrix4x4 matrix) {
+        return (Vector3.Transform(center, matrix), new Vector3(
             ((MathF.Abs(matrix.M11) * half.X) + (MathF.Abs(matrix.M21) * half.Y) + (MathF.Abs(matrix.M31) * half.Z)),
             ((MathF.Abs(matrix.M12) * half.X) + (MathF.Abs(matrix.M22) * half.Y) + (MathF.Abs(matrix.M32) * half.Z)),
             ((MathF.Abs(matrix.M13) * half.X) + (MathF.Abs(matrix.M23) * half.Y) + (MathF.Abs(matrix.M33) * half.Z))));
@@ -389,6 +390,7 @@ public sealed partial class SdfMeshPathBake {
             var vertexBytes = 0L;
             Span<long> levelBytes = stackalloc long[3];
             Span<long> levelTriangles = stackalloc long[3];
+            Span<long> tierTriangles = stackalloc long[(SdfMeshTier.Last + 1)];
             var nearStamps = new List<long>();
             Group? lastNear = null;
 
@@ -396,6 +398,7 @@ public sealed partial class SdfMeshPathBake {
                 var isNear = (group.HasDemandBox && (Demand.Count > 0) && (MeasureDemand(group, priority: false) <= radius));
 
                 near += (isNear ? 1 : 0);
+                if (group.Mesh is { } tiered) { tierTriangles[(group.Replaces ?? group).Tier] += tiered.TriangleCount; }
                 if (group.LandedAt != 0) {
                     landed++;
                     lastLanded = Math.Max(val1: lastLanded, val2: group.LandedAt);
@@ -452,6 +455,13 @@ public sealed partial class SdfMeshPathBake {
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
+            // The detail budget's debt (SdfMeshTier): the groups drawing a coarser tier than their demand asks, the worst
+            // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers
+            // landed, and the resident triangles by the tier they were baked at.
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tiers-owed={m_tiersOwed} owed-error={m_owedError:0.00}px owed-frames={m_owedFrames} worst-owed-error={m_worstOwedError:0.00}px worst-owed-frames={m_worstOwedFrames} retiers={m_retiers} retiers-reused={m_retiersReused}");
+            for (var tier = 0; (tier < tierTriangles.Length); tier++) {
+                if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }
+            }
 
             return line.ToString();
         }

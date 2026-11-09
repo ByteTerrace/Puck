@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -55,6 +56,65 @@ public sealed class SdfMeshDemand {
             count++;
         }
         Count = count;
+    }
+    /// <summary>Adds a demand point after those the latest frame named (or after a <see cref="Clear"/>): an eye with its
+    /// pixels a metre one metre in front of it, for a plan made with no frame (an offline audit at a chosen eye).</summary>
+    /// <param name="eye">The eye's position, in world space.</param>
+    /// <param name="height">The view's height in display pixels; at least one.</param>
+    /// <param name="tanHalfFieldOfView">The tangent of half the view's vertical field of view; positive.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tanHalfFieldOfView"/> is not positive.</exception>
+    public void Place(Vector3 eye, uint height, float tanHalfFieldOfView) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: tanHalfFieldOfView);
+
+        if (Count == m_points.Length) {
+            Array.Resize(array: ref m_points, newSize: (2 * m_points.Length));
+            Array.Resize(array: ref m_focal, newSize: (2 * m_focal.Length));
+        }
+        m_points[Count] = eye;
+        m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
+        Count++;
+    }
+    /// <summary>Forgets every demand point.</summary>
+    public void Clear() => Count = 0;
+    /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
+    /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
+    /// a tier's cell is measured against (<see cref="SdfMeshTier.Of"/>).</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
+    public float PixelAt(Vector3 center, Vector3 half) {
+        var finest = float.PositiveInfinity;
+
+        for (var index = 0; (index < Count); index++) {
+            finest = MathF.Min(x: finest, y: (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]));
+        }
+
+        return finest;
+    }
+    /// <summary>Returns the metres one display pixel covers at a planned group's box (<see cref="PixelAt(Vector3, Vector3)"/>),
+    /// in the group's own units: a dynamic group's box is carried into world space by its slot's transform among
+    /// <paramref name="transforms"/>, and its pixel read in the slot's units (<see cref="SdfMeshGeometryBuilder.UnitsOf"/>),
+    /// since its lattice is in that frame. What a plan asks each group's tier of (<see cref="SdfMeshTier.Of"/>).</summary>
+    /// <param name="group">The group, its box set.</param>
+    /// <param name="transforms">The dynamic transforms the plan is made at.</param>
+    /// <returns>The pixel's size in the group's units; infinity with no demand point.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="group"/> or <paramref name="transforms"/> is
+    /// <see langword="null"/>.</exception>
+    public float PixelAt(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: group);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        var center = ((group.Low + group.High) * 0.5f);
+        var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
+
+        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return PixelAt(center: center, half: half); }
+
+        var transform = transforms[group.Slot];
+        var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
+        var (position, orientation) = SdfMeshGeometryBuilder.PoseOf(transform: transform);
+        var box = SdfMeshBox.Turned(center: (center * units), half: (half * units), offset: position, turn: orientation);
+
+        return (PixelAt(center: box.Center, half: box.AxisHalf) / units);
     }
     /// <summary>Returns a box's priority at the demand point that ranks it highest. A box whose diagonal projects past a
     /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a

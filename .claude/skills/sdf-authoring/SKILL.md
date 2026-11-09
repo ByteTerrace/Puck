@@ -230,8 +230,8 @@ fill, `weathering` for chips and scratches over a revealed `under` substrate,
 radial paint ramp of pupil, iris, limbus and sclera stops under a cornea, not a
 dark sphere), and `paints` for detail that is colour rather than form: stripes,
 trims, panel outlines, a mouth line. A paint is drawn crisp at the hit; relief
-finer than the bake's cell (5 mm refined, 15 mm on smooth parts, 2 to 15 mm on a
-body's round sections) frays into
+finer than the bake's cell (15 mm on flat faces, refined toward each shape's own
+round sections, roundings and thickness, down to 2 mm) frays into
 jagged steps, so never sculpt a millimetre-proud stripe. Painted metal and
 clearcoat read only against something to reflect: the world's sky `panel`
 highlights. Ranges, defaults and examples are in `references/surface.md`.
@@ -341,12 +341,21 @@ What a first swallow taught, in the order it went wrong:
   ([surface](references/surface.md#inset)), never a dark sphere, which reads
   as a chrome or faceted bead; markings are `paints`, not proud ellipsoids,
   which read as stickers or an open mouth from the front.
-- **Detail at least two bake cells wide.** A 3 mm leg vanishes from a static
-  bake (5 mm refined cell) and a 4 mm streamer fragments. A pooled blend group
-  bakes on the same union lattice a static stamp of its shapes does, each shape
-  refined over its own box (`puck mesh audit --prototype <id> --cpu` prints the
-  cell), but a cone or plate declares no detail of its own there. Make a thin
-  part a flat blade, wider in one axis, or leave it out.
+- **Every shape declares its detail by one rule** (`WorldShapeDetail.Of`), on
+  a static stamp, in a pooled blend group or alone: its round sections (a
+  cylinder's and a cone's included), its rounding, its thickness when it is a
+  plate or folded, and its warps. A blend group's shapes each refine their own
+  box at their own factor, and only where the surface turns, so grouping a part
+  to borrow a neighbour's detail is never needed (`puck mesh audit --prototype
+  <id> --cpu` prints each group's cell and triangles). A section thinner than
+  the 2 mm floor declares the floor, and a `smooth` blend declares its seam's
+  radius. Each declaration costs triangles: a rounding of 5 mm or more refines
+  its shape's turning cells to its radius, so round edges where they read. What
+  a declaration costs in a running World is bounded by what its views resolve
+  (`SdfMeshTier`: a group bakes at the coarsest cell under half a display pixel
+  at the nearest camera, so a 2 mm declaration is paid within about 4 m and
+  halves each doubling of distance); `puck mesh audit --cpu --eye x,y,z`
+  prints what one eye there would bake.
 - **Animating a creation changes its bake.** Drivers make the creation
   animated and its shapes pooled: `group: 0` is ungrouped there, and each
   ungrouped shape bakes alone, so a `SmoothUnion` on it draws as a hard union

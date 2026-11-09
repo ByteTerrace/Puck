@@ -3560,6 +3560,15 @@ never writes the store, so it reads a store a running World owns.
   tetrahedral gradient a sample, with taps at least half a millimetre out since
   the evaluator answers in steps of 2⁻¹⁶ m. A bake change is measured this way
   with no device; a group whose field the evaluator refuses is named as such.
+- `--tier <n>` plans every group at that detail tier (`SdfMeshTier`: tier
+  `n`'s cell is 1 mm times two to the `n`), held to the rungs that change each
+  group's mesh; zero, the default, is each group's finest, the geometry's own
+  detail. With `--cpu` the bake refines no finer than the tier's cell;
+  without, the tier selects the stored mesh, since the tier is part of its
+  geometry. `--eye <x,y,z>` plans each group at the tier one eye there demands
+  (the coarsest whose cell stays under half a display pixel at the group's
+  box), as a residency's bake plans it, with `--view-height <lines>` (1080 by
+  default) at a 60-degree vertical field; it replaces `--tier`.
 - `--field-levels` (with `--cpu`) also contours the field levels that follow
   each audited group's coarsest collapse level (`SdfMeshFieldLevels.Contour`,
   `SdfMeshPathBake.ContourLevel`): lattices of twice the previous cell, offset

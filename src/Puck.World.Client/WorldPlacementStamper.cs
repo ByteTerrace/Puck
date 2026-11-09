@@ -86,15 +86,6 @@ public static class WorldPlacementStamper {
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
     private const float PlacementBoundMargin = 0.4f;
-    // How much longer than thick a shape is before the bake contours it at its half thickness (ShapeDetail).
-    private const float ThinRatio = 8f;
-
-    // The finest spacing, in metres, a shape declares (ShapeDetail, and a pooled shape's round section in
-    // WorldCreationInstances): at the closest the chase and studio cameras come, about 0.4 m, a cell this size spans a
-    // pixel or two, so a finer request buys triangles no view resolves. A feature that asks finer (a rounded profile's
-    // quarter corner radius, a thin shell) bakes at this spacing.
-    internal const float FinestDetail = 0.002f;
-
     // Probe instances are spaced far apart so the program's segment-merge pass can never collapse consecutive probe
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
     private const float ProbeSpread = 100f;
@@ -585,73 +576,6 @@ public static class WorldPlacementStamper {
     // A warped field stays separate from its neighbours under the existing static bake partition.
     internal static bool BakesAlone(ShapeDocument shape) => ShapePointOps.NeedsScope(shape: shape);
 
-    // A bound measures a shape's reach, not its smallest curved feature. Thin strands, shells and warped edges
-    // need their own spacing even when the unwarped primitive or the containing creation has a large bound. A request finer
-    // than FinestDetail bakes at FinestDetail.
-    private static float ShapeDetail(ShapeDocument shape, float scale) {
-        var detail = float.PositiveInfinity;
-        Vector3 size = (shape.Scale ?? Vector3.One);
-
-        if (shape.Cells is { } cells) {
-            detail = MathF.Min(x: detail, y: (1f / (32f * cells.Frequency)));
-        }
-        if (shape.Curve is { } curve) {
-            detail = MathF.Min(x: detail, y: ((MathF.Min(x: curve.RadiusStart, y: curve.RadiusEnd) * size.X) / 8f));
-        }
-        if (shape.Onion is > 0f) {
-            detail = MathF.Min(x: detail, y: (shape.Onion.Value / 4f));
-        }
-        if (shape.Profile is { Kind: SdfPrismProfileKind.Convex or SdfPrismProfileKind.RoundedRectangle } profile) {
-            var radius = (profile.CornerRadius * MathF.Min(x: size.X, y: size.Y));
-
-            if (profile.Kind == SdfPrismProfileKind.Convex) {
-                var inradius = SdfSolidGeometry.ScaledConvexProfile(profile: profile, scale: size).Inradius;
-
-                radius = SdfProgramBuilder.ClampRounding(
-                    rounding: ((profile.CornerRadius * inradius) + (shape.Rounding ?? 0f)),
-                    profileInradius: inradius,
-                    lift: (shape.Lift ?? SdfLift.Extrude),
-                    liftAmount: size.Z
-                );
-            }
-            if (radius > 0f) { detail = MathF.Min(x: detail, y: (radius / 4f)); }
-        }
-        // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document
-        // reads it as authored.
-        if (ShapePointOps.NeedsScope(shape: shape)) {
-            var lift = (shape.Lift ?? SdfLift.Extrude);
-            var x = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitX);
-            var y = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitY);
-            var z = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lift, axis: Vector3.UnitZ);
-            var extent = MathF.Min(x: x, y: MathF.Min(x: y, y: z));
-
-            if (extent > 0f) { detail = MathF.Min(x: detail, y: (extent / 32f)); }
-        }
-
-        var plate = PlateDetail(scale: 1f, shape: shape);
-
-        detail = ((plate > 0f) ? MathF.Min(x: detail, y: plate) : detail);
-
-        return (float.IsFinite(f: detail) ? MathF.Max(x: (detail * scale), y: FinestDetail) : 0f);
-    }
-
-    // A plate, a slab, a strip or a streamer: its bound measures its length, but its thickness is the feature. A lattice
-    // sized by the bound steps clean over a sheet thinner than its cell, and the sheet bakes to nothing, so a shape far
-    // thinner than it is long is contoured no coarser than its half thickness, in world units at `scale`; zero for a shape
-    // that is not thin. A static shape (ShapeDetail) and a pooled blend group's part (WorldCreationInstances.PartDetail)
-    // both declare it.
-    internal static float PlateDetail(ShapeDocument shape, float scale) {
-        var size = (shape.Scale ?? Vector3.One);
-        var lifted = (shape.Lift ?? SdfLift.Extrude);
-        var halfX = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitX);
-        var halfY = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitY);
-        var halfZ = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: size, lift: lifted, axis: Vector3.UnitZ);
-        var thinnest = MathF.Min(x: halfX, y: MathF.Min(x: halfY, y: halfZ));
-        var longest = MathF.Max(x: halfX, y: MathF.Max(x: halfY, y: halfZ));
-
-        return (((thinnest > 0f) && (longest > (ThinRatio * thinnest))) ? (thinnest * scale) : 0f);
-    }
-
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
     private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, bool[]? hiddenOpaque, bool[]? glassHidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
@@ -662,7 +586,7 @@ public static class WorldPlacementStamper {
             for (var index = 0; (index < shapes.Count); index++) {
                 if ((hidden is not null) && hidden[index]) { continue; }
 
-                var own = ShapeDetail(scale: scale, shape: shapes[index]);
+                var own = WorldShapeDetail.Of(scale: scale, shape: shapes[index]);
 
                 if (own > 0f) { detail = MathF.Min(x: detail, y: own); }
             }
@@ -797,7 +721,7 @@ public static class WorldPlacementStamper {
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin),
-                        detail: ShapeDetail(shape: shape, scale: placement.Scale),
+                        detail: WorldShapeDetail.Of(shape: shape, scale: placement.Scale),
                         box: ((box is { } tight) ? ((tight.Low - margin), (tight.High + margin)) : null)
                     );
                     CreationStampEmitter.EmitShapeStamp(

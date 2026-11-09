@@ -76,6 +76,11 @@ internal interface ISdfRefinedContourLattice : ISdfContourLattice {
     // Whether a refined coarse cell's fine samples were measured. A refined cell that was not merges the fine vertices
     // of each connected piece of its surface into one, so it adds no detail its coarse corners lack.
     bool Measured(int x, int y, int z);
+    // A measured coarse cell's stride: the fine cells along each axis each of its own cells spans, a power of two dividing
+    // Refinement. A cell of stride one keeps its fine vertices; one of a larger stride merges the fine vertices of each
+    // connected piece of its surface inside each of its own cells into one, as an unmeasured refined cell merges its whole
+    // cell's.
+    int Stride(int x, int y, int z);
     // Whether the coarse sample at coarse coordinates (x, y, z) lies inside: Inside of its corner, read without the
     // fine corner's coordinates.
     bool CoarseInside(int x, int y, int z);
@@ -259,8 +264,13 @@ internal static class SdfDualContouring {
         var fineVertices = new Dictionary<long, int>();
         var positions = new List<double>();
         var normals = new List<double>();
-        // Per vertex, the unmeasured refined cell whose fine vertices it merges with, or -1.
+        // Per vertex, the block whose fine vertices it merges with (OwnerOf, Block), or -1.
         var owners = new List<int>();
+        // Per merging block, its low corner in fine lattice coordinates and its fine cells along each axis: an unmeasured
+        // refined coarse cell, numbered by its coarse index, then the stride cells of measured cells of a stride past one,
+        // numbered after the coarse cells as they are first met.
+        var strideBlocks = new Dictionary<long, int>();
+        var blocks = new List<(int X, int Y, int Z, int Size)>();
         var features = new List<bool>();
         var solveds = new List<bool>();
         var besides = new List<bool>();
@@ -356,10 +366,40 @@ internal static class SdfDualContouring {
 
                         fineMasks.Add(key: key, value: crossedCell.Mask);
                         fineVertices.Add(key: key, value: (positions.Count / 3));
-                        AddVertices(mask: crossedCell.Mask, owner: (grid.Measured(x: cx, y: cy, z: cz) ? -1 : index), stride: 1, x: fx, y: fy, z: fz);
+                        AddVertices(mask: crossedCell.Mask, owner: OwnerOf(cx: cx, cy: cy, cz: cz, fx: fx, fy: fy, fz: fz, index: index), stride: 1, x: fx, y: fy, z: fz);
                     }
                 }
             }
+        }
+
+        // The block a fine vertex of refined coarse cell (cx, cy, cz) at fine cell (fx, fy, fz) merges into: none in a
+        // measured cell of stride one, its stride cell in a measured cell of a larger stride, the whole coarse cell in an
+        // unmeasured one.
+        int OwnerOf(int cx, int cy, int cz, int fx, int fy, int fz, int index) {
+            if (!grid.Measured(x: cx, y: cy, z: cz)) { return index; }
+
+            var size = grid.Stride(x: cx, y: cy, z: cz);
+
+            if (size <= 1) { return -1; }
+
+            var (bx, by, bz) = (((fx / size) * size), ((fy / size) * size), ((fz / size) * size));
+            var key = ((((((long)bz * (cells[1] + 1L)) + by) * (cells[0] + 1L)) + bx) * 8L) + BitOperations.Log2(value: ((uint)size));
+
+            if (!strideBlocks.TryGetValue(key: key, value: out var owner)) {
+                owner = (coarseCount + blocks.Count);
+                strideBlocks.Add(key: key, value: owner);
+                blocks.Add(item: (bx, by, bz, size));
+            }
+
+            return owner;
+        }
+        // The block an owner names (OwnerOf): its low corner in fine lattice coordinates and its fine cells a side.
+        (int X, int Y, int Z, int Size) Block(int owner) {
+            if (owner >= coarseCount) { return blocks[(owner - coarseCount)]; }
+
+            var (bx, by, bz) = ((owner % coarse[0]), ((owner / coarse[0]) % coarse[1]), (owner / (coarse[0] * coarse[1])));
+
+            return ((bx * factor), (by * factor), (bz * factor), factor);
         }
 
         // The vertex of the single-patch cell holding a point in fine lattice coordinates, at the resolution that cell
@@ -613,22 +653,19 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(besides: besides, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quads: quads, solveds: solveds, vertexPlanes: vertexPlanes);
+        return Merge(besides: besides, block: Block, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quads: quads, solveds: solveds, vertexPlanes: vertexPlanes);
     }
     // The point of a merged piece every one of its fine vertices' tangent planes `planes` (world space, nx, ny, nz, d
     // each) passes through, within MergedResidual of a fine cell root mean square, solved toward the piece's mean along the
-    // planes' common null space, with how far past the piece's coarse cell `owner` it lies, in coarse cells (zero within
-    // it); null where the planes do not meet at one point. Where the point is a convex crease up to FeatureReach past the
-    // cell, `Inside` is the point the piece's vertex takes instead: the mean-biased point, which a straight crease's planes
-    // meet too, as Place keeps it; else the point inside the cell (CellSolve.Inside), the crease handed to the neighbour
-    // (`HandOff`). Null otherwise. The planes are solved in the coarse cell's unit coordinates, as Place solves a cell's.
-    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff, bool Beside)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, int owner, ReadOnlySpan<double> planes) where TLattice : ISdfRefinedContourLattice {
-        var factor = grid.Refinement;
-        var coarseX = (grid.CellsX / factor);
-        var coarseY = (grid.CellsY / factor);
-        var (cx, cy, cz) = ((owner % coarseX), ((owner / coarseX) % coarseY), (owner / (coarseX * coarseY)));
-        var low = grid.World(x: (cx * factor), y: (cy * factor), z: (cz * factor));
-        var high = grid.World(x: ((cx + 1) * factor), y: ((cy + 1) * factor), z: ((cz + 1) * factor));
+    // planes' common null space, with how far past the piece's block `block` (its low corner in fine lattice coordinates
+    // and its fine cells a side) it lies, in blocks (zero within it); null where the planes do not meet at one point.
+    // Where the point is a convex crease up to FeatureReach past the block, `Inside` is the point the piece's vertex takes instead: the mean-biased point, which a straight crease's planes
+    // meet too, as Place keeps it; else the point inside the block (CellSolve.Inside), the crease handed to the neighbour
+    // (`HandOff`). Null otherwise. The planes are solved in the block's unit coordinates, as Place solves a cell's.
+    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff, bool Beside)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, (int X, int Y, int Z, int Size) block, ReadOnlySpan<double> planes) where TLattice : ISdfRefinedContourLattice {
+        var factor = block.Size;
+        var low = grid.World(x: block.X, y: block.Y, z: block.Z);
+        var high = grid.World(x: (block.X + factor), y: (block.Y + factor), z: (block.Z + factor));
         var (ex, ey, ez) = ((high.X - low.X), (high.Y - low.Y), (high.Z - low.Z));
         var local = new double[planes.Length];
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
@@ -689,11 +726,12 @@ internal static class SdfDualContouring {
 
         return ((low.X + (x * ex)), (low.Y + (y * ey)), (low.Z + (z * ez)), past, inside, handOff, beside);
     }
-    // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at the feature
-    // point their crossings' planes meet at (MergedFeature), inside the coarse cell where a convex crease lies past it, or
-    // at their mean, with their mean normal, and drops the quads that collapse to fewer than three vertices. Two fine
-    // vertices of one cell are one piece when a quad joins them.
-    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, List<double>> vertexPlanes, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex) where TLattice : ISdfRefinedContourLattice {
+    // Merges the fine vertices of each connected piece of a block's surface into one (an unmeasured refined cell, or a
+    // stride cell of a measured cell of a stride past one; `block` names each), at the feature point their crossings'
+    // planes meet at (MergedFeature), inside the block where a convex crease lies past it, or at their mean, with their
+    // mean normal, and drops the quads that collapse to fewer than three vertices. Two fine vertices of one block are one
+    // piece when a quad joins them.
+    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, List<double>> vertexPlanes, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
         var pieceSets = new SdfDisjointSet(count: vertexCount);
 
@@ -787,7 +825,7 @@ internal static class SdfDualContouring {
             // A convex crease past the coarse cell, up to FeatureReach of it, is the neighbour's to hold (HandOff), and the
             // piece's vertex stays inside the cell, as Place keeps a cell's.
             var piecePlanes = planeLists.GetValueOrDefault(key: root);
-            var meeting = (((sum.Count > 1) && (piecePlanes is not null)) ? MergedFeature(grid: grid, mean: (x, y, z), owner: owners[root], planes: CollectionsMarshal.AsSpan(list: piecePlanes)) : null);
+            var meeting = (((sum.Count > 1) && (piecePlanes is not null)) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: CollectionsMarshal.AsSpan(list: piecePlanes)) : null);
             var feature = ((meeting is var (fx, fy, fz, past, _, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
 
             if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && pieceFeatures.Contains(item: root)) {

@@ -391,14 +391,21 @@ public sealed class SdfSampledLatticeLawTests {
     }
 
     // A refinement over the fine-sample budget splits each cell into fewer fine cells rather than none, and refuses only
-    // when even two a side are over it. Every cell of a lattice on the surface is measured: at 32 cells a side, eight a
-    // cell would measure 257³ samples, past the budget, and four 129³, within it.
+    // when even two a side are over it. Every cell of a lattice whose samples alternate sign half a cell from the surface
+    // is measured: at 32 cells a side, eight a cell would measure 257³ samples, past the budget, and four 129³, within it.
     [Fact]
     public void ARefinementOverItsBudgetSplitsCoarserOrRefuses() {
         static SdfSampledLattice OnTheSurface(int samples) {
             var count = ((samples * samples) * samples);
+            var values = new float[count];
 
-            return new(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: samples, samplesY: samples, samplesZ: samples, values: new float[count]);
+            for (var index = 0; (index < count); index++) {
+                var parity = (((index % samples) + ((index / samples) % samples)) + (index / (samples * samples))) & 1;
+
+                values[index] = ((parity == 0) ? (0.5f * Cell) : (-0.5f * Cell));
+            }
+
+            return new(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: samples, samplesY: samples, samplesZ: samples, values: values);
         }
         static SdfLatticeRegion[] Whole(int samples) => [new SdfLatticeRegion(High: (Origin + new Vector3(value: (samples * Cell))), Low: Origin)];
 

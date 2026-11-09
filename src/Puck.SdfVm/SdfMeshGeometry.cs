@@ -308,6 +308,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// uncollapsed (<see cref="SdfMeshBakeGroup.Glass"/>), and the same shapes opaque key another geometry. Which
     /// materials are glass is the one material fact beside their places that shapes a mesh.</summary>
     public void AppendGlass() => Hash(fact: Fact.Glass, source: []);
+    /// <summary>Appends the tier the group bakes at (<see cref="SdfMeshTier"/>), which floors every spacing its refinement
+    /// aims for, so each tier of a geometry is its own mesh and its own cache entry. Every sealed group appends one
+    /// (<see cref="SdfMeshBakeGroup.Seal"/>).</summary>
+    /// <param name="tier">The tier, from zero to <see cref="SdfMeshTier.Last"/>.</param>
+    public void AppendTier(int tier) => Hash(fact: Fact.Tier, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in tier)));
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>
@@ -469,6 +474,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         SideTable,
         Instruction,
         Part,
+        Tier,
     }
     // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
     [StructLayout(LayoutKind.Sequential)]
