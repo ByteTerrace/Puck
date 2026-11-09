@@ -7,16 +7,16 @@
 // position, extent, curve, sweep radius and blend radius scales by `s`; rotations do not. s = 1 is the chibi head the
 // first Moth wore; 0.68 is her real head, about 0.26 m from crown to chin.
 //
-// The palette differs between creations, so the slots are parameters: skin, the nostrils' darker lip, eye whites, iris,
-// pupil, catchlight and hair. A creation also places the head's paints in its own palette (the mouth on "face", the
-// upper lids and lashes on "eye-left" and "eye-right"), scaled by the same `s`, and its blink frame from
-// mothBlinkPose.
+// The palette differs between creations, so the slots are parameters: skin, eye whites, iris, pupil and hair. A creation
+// also places the head's paints in its own palette, scaled by the same `s`: the mouth on "face" and the nostrils
+// (mothNostrilPaints) in its skin slot, the upper lids and lashes (mothLidPaints) in its eye-white slot, the
+// catchlights in its pupil (mothPupilPaints) and iris (mothIrisPaints) slots, and its blink frame from mothBlinkPose.
 
 let mothHeadPivot = [0, 1.745, 0.2]
 let mothHeadSoftness = 2.1
 
 // The blink frame's poses in the head's unscaled frame, [id, x, y, z]: each closed lid forward over its eye, each open
-// eye's white, opening, iris, pupil, catchlights, lids and lash back inside the face. A creation places each at its own
+// eye's white, opening, iris, pupil, lids and lash back inside the face. A creation places each at its own
 // head as at + (v - mothHeadPivot) * s.
 let mothBlinkPose = [
   [284, 0.07656, 1.74842, 0.21045]
@@ -25,8 +25,6 @@ let mothBlinkPose = [
   [42, 0.07656, 1.74842, 0.06945]
   [43, 0.07456, 1.74842, 0.11045]
   [44, 0.07456, 1.74842, 0.11545]
-  [45, 0.06856, 1.76042, 0.11945]
-  [46, 0.08556, 1.73642, 0.11745]
   [47, 0.02956, 1.74842, 0.09645]
   [48, 0.02956, 1.74842, 0.09645]
   [49, 0.11656, 1.76542, 0.09945]
@@ -36,8 +34,6 @@ let mothBlinkPose = [
   [58, -0.07656, 1.74842, 0.06945]
   [59, -0.07456, 1.74842, 0.11045]
   [60, -0.07456, 1.74842, 0.11545]
-  [61, -0.06856, 1.76042, 0.11945]
-  [62, -0.08556, 1.73642, 0.11745]
   [63, -0.02956, 1.74842, 0.09645]
   [64, -0.02956, 1.74842, 0.09645]
   [65, -0.11656, 1.76542, 0.09945]
@@ -111,6 +107,26 @@ function mothLidPaints(s) = [
   }
 ]
 
+// The nostrils, two dark ovals painted under the nose's tip in the nose's frame and scaled by `s`; a sculpted nostril is
+// a millimetre across and bakes no surface.
+function mothNostrilPaints(s, color) = [
+  { parent: "nose", type: "Ellipsoid", position: map([-0.0085, -0.0105, 0.004], v => v * s), scale: map([0.0038, 0.0022, 0.008], v => v * s), color: color }
+  { parent: "nose", type: "Ellipsoid", position: map([0.0085, -0.0105, 0.004], v => v * s), scale: map([0.0038, 0.0022, 0.008], v => v * s), color: color }
+]
+
+// The large catchlight, high on each pupil toward her right (both eyes see one light), in the pupil's frame and scaled
+// by `s`.
+function mothPupilPaints(s, color) = [
+  { parent: "pupil-left", type: "Ellipsoid", position: map([-0.004, 0.009, 0.004], v => v * s), scale: map([0.0045, 0.0055, 0.008], v => v * s), color: color }
+  { parent: "pupil-right", type: "Ellipsoid", position: map([-0.004, 0.009, 0.004], v => v * s), scale: map([0.0045, 0.0055, 0.008], v => v * s), color: color }
+]
+
+// The small catchlight, low on each iris toward her left, in the iris's frame and scaled by `s`.
+function mothIrisPaints(s, color) = [
+  { parent: "iris-left", type: "Ellipsoid", position: map([0.012, -0.014, 0.006], v => v * s), scale: map([0.0026, 0.003, 0.008], v => v * s), color: color }
+  { parent: "iris-right", type: "Ellipsoid", position: map([0.012, -0.014, 0.006], v => v * s), scale: map([0.0026, 0.003, 0.008], v => v * s), color: color }
+]
+
 // One lock of hair: a tapering sweep from its root on the crown or temple, laid over the scalp and face and smoothly
 // joined to the scalp's group, so the hair reads as one swept mass. `a` is the root in the head's unscaled frame, `b` and
 // `c` the sweep's control and end points relative to it.
@@ -133,9 +149,9 @@ template mothHairLock(name, id, a, b, c, radiusStart, radiusEnd, s, at, parentNa
   }
 }
 
-// One eye: a carved socket in the face, a white clipped to an almond opening, iris, pupil, two catchlights, the lids,
-// a lash flick and the brow. `side` is 1 for her left (+X) and -1 for her right.
-template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, iris, pupil, glint, hair) {
+// One eye: a carved socket in the face, a white clipped to an almond opening, iris, pupil, the lids, a lash flick and
+// the brow; the catchlights are paints. `side` is 1 for her left (+X) and -1 for her right.
+template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, iris, pupil, hair) {
   shape Prism $"socket-{name}" {
     id: baseId
     position: map([side * 0.07656, 1.74842, 0.20745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
@@ -187,24 +203,6 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
     position: map([side * 0.07456, 1.74842, 0.23545], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     scale: map([0.0105, 0.016, 0.004], v => v * s)
     material: pupil
-    parent: parentName
-    exponent: mothHeadSoftness
-  }
-
-  shape Superellipsoid $"catchlight-{name}" {
-    id: baseId + 5
-    position: map([side * 0.06856, 1.76042, 0.23945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0044, 0.0052, 0.002], v => v * s)
-    material: glint
-    parent: parentName
-    exponent: mothHeadSoftness
-  }
-
-  shape Superellipsoid $"catchlightSmall-{name}" {
-    id: baseId + 6
-    position: map([side * 0.08556, 1.73642, 0.23745], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0018, 0.0022, 0.0015], v => v * s)
-    material: glint
     parent: parentName
     exponent: mothHeadSoftness
   }
@@ -292,9 +290,9 @@ template mothBlinkLid(name, side, baseId, s, at, parentName, skin, hair) {
   }
 }
 
-// The whole head. Shape ids are the suited Moth's: face and features 32..50 and 56..66, scalp 76..78, the nose's wings
-// 79 and 80, the hair locks 81..84 and the blink lids 284..287; groups 6..9 and 14.
-template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair) {
+// The whole head. Shape ids are the suited Moth's: face and features 32..50 and 56..66, scalp 76..78, the hair locks
+// 81..84 and the blink lids 284..287; groups 6..9.
+template mothHead(s, at, parentName, skin, white, iris, pupil, hair) {
   shape Superellipsoid "face" {
     id: 32
     position: map([0, 1.7405, 0.10575], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
@@ -341,79 +339,37 @@ template mothHead(s, at, parentName, skin, lip, white, iris, pupil, glint, hair)
     parent: parentName
   }
 
-  // A soft bridge in the face's group, and a small rounded tip with its two wings in a group of its own: a part a few
-  // centimetres across bakes on a lattice of its own size, where the face's group bakes at the coarsest cell.
-  shape Sweep "noseBridge" {
+  // A soft bridge and a rounded tip blended into the face's group, so the nose bakes on the face's lattice as one
+  // continuous surface; the nostrils are paints (mothNostrilPaints).
+  shape Superellipsoid "noseBridge" {
     id: 36
-    position: map([0, 1.7295, 0.2275], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: map([0, 1.7134, 0.2328], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    rotation [-0.156434, 0, 0, 0.987688]
+    scale: map([0.0065, 0.019, 0.0065], v => v * s)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.02 * s
     group: 6
     parent: parentName
-    curve {
-      a [0, 0, 0]
-      b: map([0, -0.0176, 0.0065], v => v * s)
-      c: map([0, -0.0322, 0.0105], v => v * s)
-      radiusStart: 0.005 * s
-      radiusEnd: 0.007 * s
-    }
+    exponent: mothHeadSoftness
   }
 
   shape Superellipsoid "nose" {
     id: 37
     position: map([0, 1.6915, 0.2415], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0135, 0.0105, 0.0105], v => v * s)
-    material: skin
-    group: 14
-    parent: parentName
-    exponent: 2
-  }
-
-  shape Superellipsoid "noseWing-left" {
-    id: 79
-    position: map([0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0075, 0.007, 0.0075], v => v * s)
+    scale: map([0.016, 0.0125, 0.013], v => v * s)
     material: skin
     blend: "SmoothUnion"
-    smooth: 0.007 * s
-    group: 14
-    parent: parentName
-    exponent: 2
-  }
-
-  shape Superellipsoid "noseWing-right" {
-    id: 80
-    position: map([-0.0115, 1.6855, 0.2355], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0075, 0.007, 0.0075], v => v * s)
-    material: skin
-    blend: "SmoothUnion"
-    smooth: 0.007 * s
-    group: 14
-    parent: parentName
-    exponent: 2
-  }
-
-  shape Superellipsoid "nostril-1" {
-    id: 38
-    position: map([-0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0035, 0.0016, 0.0025], v => v * s)
-    material: lip
+    smooth: 0.012 * s
+    group: 6
     parent: parentName
     exponent: mothHeadSoftness
   }
 
-  shape Superellipsoid "nostril1" {
-    id: 39
-    position: map([0.0085, 1.6805, 0.2425], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.0035, 0.0016, 0.0025], v => v * s)
-    material: lip
-    parent: parentName
-    exponent: mothHeadSoftness
-  }
 
-  mothEye("left", 1, 40, 7, s, at, parentName, skin, white, iris, pupil, glint, hair)
-  mothEye("right", -1, 56, 8, s, at, parentName, skin, white, iris, pupil, glint, hair)
+
+  mothEye("left", 1, 40, 7, s, at, parentName, skin, white, iris, pupil, hair)
+  mothEye("right", -1, 56, 8, s, at, parentName, skin, white, iris, pupil, hair)
 
   shape Superellipsoid "scalp" {
     id: 76

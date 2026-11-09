@@ -80,10 +80,10 @@ let trousers = 1 // charcoal work trousers, with the knee pads' straps painted
 let skin = 2 // #B76B3C her skin
 let hair = 3 // #171210 hair, lids and brows
 let eyeWhite = 4 // #FFF8E9 the eyes' whites
-let lip = 5 // #754137 the nostrils
+// Slot 5 (brown) is free.
 let iris = 6 // #89481D
 let pupil = 7 // #120D13
-let glint = 8 // #FFF8EF catchlights
+// Slot 8 (pearl) is free.
 let pad = 9 // soft rubber knee and elbow pads
 let leather = 10 // flat ankle boots
 let sole = 11 // boot soles
@@ -719,21 +719,24 @@ prototypes {
           specular: 0.04
           wrap: 0.15
           fill: "#4B2318"
-          // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
-          paints [
-            {
-              parent: "face"
-              type: "Sweep"
-              curve {
-                a: map([-0.05808, -0.088389, 0.1068], v => v * pilotHeadScale)
-                b: map([0, -0.1141765, 0.1082], v => v * pilotHeadScale)
-                c: map([0.05808, -0.0862981, 0.1078], v => v * pilotHeadScale)
-                radiusStart: 0.0015
-                radiusEnd: 0.0015
+          // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it; and the nostrils.
+          paints: concat(
+            [
+              {
+                parent: "face"
+                type: "Sweep"
+                curve {
+                  a: map([-0.05808, -0.088389, 0.1068], v => v * pilotHeadScale)
+                  b: map([0, -0.1141765, 0.1082], v => v * pilotHeadScale)
+                  c: map([0.05808, -0.0862981, 0.1078], v => v * pilotHeadScale)
+                  radiusStart: 0.0015
+                  radiusEnd: 0.0015
+                }
+                color: "#754137"
               }
-              color: "#754137"
-            }
-          ]
+            ],
+            mothNostrilPaints(pilotHeadScale, "#754137")
+          )
         }
         {
           color: "#171210"
@@ -757,11 +760,13 @@ prototypes {
           color: "#89481D"
           roughness: 0.25
           specular: 0.04
+          paints: mothIrisPaints(pilotHeadScale, "#FFF8EF")
         }
         {
           color: "#120D13"
           roughness: 0.25
           specular: 0.04
+          paints: mothPupilPaints(pilotHeadScale, "#FFF8EF")
         }
         {
           color: "#FFF8EF"
@@ -1072,7 +1077,7 @@ prototypes {
         ]
       }
 
-      mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, lip, eyeWhite, iris, pupil, glint, hair)
+      mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, eyeWhite, iris, pupil, hair)
 
       // The braid roots under the lock beside her right cheek as one smooth tapering root, which a core carries over her
       // right collarbone onto her chest; the plait's lobes alternate down the core to an ochre tie and a short tassel.
