@@ -430,7 +430,7 @@ public sealed partial class SdfFieldEvaluator {
     //
     // Point: the 2D field is sign·√min(|ca|², |cb|²): ca is exact and ends on a cap, cb ends on the slant at the rounded,
     // clamped projection, so each length is at least the distance to the outline; the rounded squares and root cost at
-    // most 2⁻⁸·⁵ units. The projection is within εp = 4 raws/|k2|² + 1 raw of the exact one, which moves cb by |k2|·εp
+    // most 2⁻⁸·⁵ units. The projection rounds the exact quotient once, so it is within εp = 1 raw of the exact one, which moves cb by |k2|·εp
     // and its x by εx = |k2.x|·εp + ½ raw; a point the sign reads inside while it is outside then has cb.x in [0, εx) and
     // lies within μ = εx·|k2|/(2h) of the slant. So the 2D field is within 2μ + |k2|·εp + 512 raws of the exact signed
     // distance, and the extrusion's plain join and the revolution's rounded radius are 1-Lipschitz in it.
@@ -452,7 +452,7 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var slant = Math.Sqrt(d: slantSquared);
-        var projection = (((4.0 * RawUnit) / slantSquared) + RawUnit);
+        var projection = RawUnit;
         var crossing = ((Math.Abs(value: kx) * projection) + (0.5 * RawUnit));
         var outline = ((crossing * slant) / (2.0 * h));
         var widest = Math.Max(val1: r1, val2: r2);

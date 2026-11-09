@@ -715,8 +715,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             SdfShapeType.Capsule => SdfCapsule(
             p: p,
             endpoint: Vector(instruction: instruction),
-            radius: instruction.Data0W,
-            inverseLengthSquared: instruction.Data1Y
+            radius: instruction.Data0W
         ),
             SdfShapeType.Cylinder => (SdfCylinder(
             p: p,
@@ -881,14 +880,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return ((outside + inside) - cornerRadius);
     }
-    private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) {
-        var h = FixedQ4816.Clamp(
-            value: (FixedVector3.Dot(
-                left: p,
-                right: endpoint
-            ) * inverseLengthSquared),
-            minimum: FixedQ4816.Zero,
-            maximum: FixedQ4816.One
+    // The kernel multiplies by the packed 1 / |endpoint|^2 (data1.y) in float; the carrier divides the exact dot products
+    // once instead (SegmentParameter), since a rounded dot of two centimetre vectors keeps a few bits.
+    private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
+        var h = FixedVector3.SegmentParameter(
+            point: p,
+            segment: endpoint
         );
 
         return ((p - (endpoint * h)).Length - radius);
@@ -1509,24 +1506,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             )),
             Y: (FixedQ4816.Abs(value: p.Y) - halfHeight)
         );
-        // k2 is the slanted side; the projection divides by its squared length. SdfProgramBuilder.MinTrapezoidProfileSlant
-        // keeps every admitted profile clear of the rounding window where that length reads zero, so the zero arm is
-        // unreachable through the builder — it is here because an integer divide has no NaN to propagate, and a
-        // total function is the only shape this may take on a query path the authoritative server calls per tick.
-        var slantLengthSquared = FixedVector2.Dot(
-            left: k2,
-            right: k2
-        );
-        var projection = ((slantLengthSquared == FixedQ4816.Zero)
-            ? FixedQ4816.Zero
-            : FixedQ4816.Clamp(
-                value: (FixedVector2.Dot(
-                    left: (k1 - p),
-                    right: k2
-                ) / slantLengthSquared),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            )
+        // k2 is the slanted side; the projection divides by its squared length, both exact and rounded once.
+        var projection = FixedVector2.SegmentParameter(
+            point: (k1 - p),
+            segment: k2
         );
         var cb = ((p - k1) + (k2 * projection));
         var sign = (((cb.X < FixedQ4816.Zero) && (ca.Y < FixedQ4816.Zero))

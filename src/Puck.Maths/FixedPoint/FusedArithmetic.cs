@@ -160,6 +160,22 @@ public static class FusedArithmetic {
         ));
     }
 
+    /// <summary>Rounds the exact quotient of two exact product sums at one scale, clamped to <c>[0, 1]</c>, to
+    /// <see cref="FixedQ4816"/> once, to nearest with ties to even: the segment parameter a projection reads.</summary>
+    /// <param name="numerator">The signed numerator as sign plus magnitude.</param>
+    /// <param name="denominator">The non-negative denominator magnitude, at the numerator's scale.</param>
+    /// <returns>Zero when the numerator is not positive or the denominator is zero, one when the numerator reaches the
+    /// denominator, and the rounded quotient otherwise.</returns>
+    internal static FixedQ4816 ClampedUnitQuotient((bool Negative, UInt128 Magnitude) numerator, UInt128 denominator) {
+        if (numerator.Negative || (numerator.Magnitude == UInt128.Zero) || (denominator == UInt128.Zero)) {
+            return FixedQ4816.Zero;
+        }
+
+        return ((numerator.Magnitude >= denominator)
+            ? FixedQ4816.One
+            : FixedQ4816.FromRawBits(value: DivideProductSum(denominator: denominator, numerator: numerator)));
+    }
+
     // The exponent every mixed-scale kernel rounds at, formed in long so no combination of int extremes wraps it.
     internal static long MixedScaleShift(int fractionBitsOut, int first, int second) =>
         ((((long)fractionBitsOut) - first) - second);

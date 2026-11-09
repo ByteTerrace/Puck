@@ -42,7 +42,7 @@ public sealed class SdfPrimitiveLipschitzLawTests {
     public void APrimitiveMovesNoFasterThanItsStepScaleAtACentimetreAndAMetre(SdfSolidPrimitive type, float exponent, float roundingShare, float chamferShare) {
         var checkedScales = 0;
 
-        foreach (var scale in (ReadOnlySpan<Vector3>)[new Vector3(x: 0.019f, y: 0.012f, z: 0.01f), new Vector3(x: 1f, y: 0.6f, z: 0.8f)]) {
+        foreach (var scale in (ReadOnlySpan<Vector3>)[new Vector3(x: 0.019f, y: 0.012f, z: 0.01f), new Vector3(value: 0.012f), new Vector3(x: 1f, y: 0.6f, z: 0.8f)]) {
             var smallest = MathF.Min(x: scale.X, y: MathF.Min(x: scale.Y, y: scale.Z));
             var rounding = (roundingShare * smallest);
             var chamfer = (chamferShare * smallest);
@@ -68,6 +68,22 @@ public sealed class SdfPrimitiveLipschitzLawTests {
         }
 
         Assert.True(condition: (checkedScales > 0), userMessage: $"{type}: the door refused both scales.");
+    }
+
+    // A capsule spelled natively (a rig's or a collider's segment, never through a Scale op) at a centimetre: its
+    // parameter divides two dot products of centimetre vectors.
+    [Fact]
+    public void ACentimetreCapsuleMovesNoFasterThanItsStepScale() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.ResetPoint().Capsule(endpoint: new Vector3(x: 0.011f, y: 0.017f, z: -0.007f), material: material, radius: 0.004f);
+
+        var program = builder.Build();
+
+        foreach (var reading in (ReadOnlySpan<SdfFieldReading>)[SdfFieldReading.Render, SdfFieldReading.Contact]) {
+            Check(field: new SdfFieldEvaluator(program: program, reading: reading), label: $"native capsule ({reading})", scale: new Vector3(value: 0.012f));
+        }
     }
 
     private static void Check(SdfFieldEvaluator field, Vector3 scale, string label) {
