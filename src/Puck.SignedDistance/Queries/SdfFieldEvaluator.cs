@@ -16,7 +16,8 @@ namespace Puck.SignedDistance.Queries;
 // run; only the ANSWER differs).
 //
 // THE EXCLUDED-OPS RULE (asserted once at construction, never per query): read for contact, this evaluator is
-// WARP-FREE — it rejects any program containing a warp, fold or per-shape relief whose value is not physical clearance
+// scoped: twist and bend (RotatePlane) read their deformed surface, with the scope's 1/L bounding clearance.
+// It rejects any program containing a render-only warp, fold or per-shape relief whose value is not physical clearance
 // (every op in RenderWarpOps). Creation relief (NoiseDisplace) is read: a solid collides with the relief it draws, and
 // its scope's 1/L keeps the reading a lower bound on the distance to that surface, as CellDisplace's does. It also
 // rejects the one op needing a per-frame dynamic-transform buffer this evaluator's signature has no seam for
@@ -35,7 +36,7 @@ namespace Puck.SignedDistance.Queries;
 // lower bound, a Sweep takes every strand, and every op in RenderWarpOps is interpreted (WarpPoint and WarpBounds for
 // AxialProfile and RotatePlane, SdfFieldEvaluator.RenderOps.cs for the rest), so their mapCore cases are a sync pair
 // with this evaluator too. A LaneErode reads every lane as zero, the value a static placement's bake reads. A contact
-// reading never admits any of them.
+// reading admits RotatePlane through the same point and interval rules; the remaining RenderWarpOps stay render-only.
 //
 // THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
 // certificate (SdfFieldEvaluator.Certificates.cs), derived from the compiled fixed-point stream, proves it cannot move
@@ -117,7 +118,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// every baked float (a Rotate's quaternion, a shape's dimensions, a blend's smooth radius, ...) converts to
     /// <see cref="FixedQ4816"/> exactly once and is cached, never re-converted per query.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape this WARP-FREE
+    /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape this contact
     /// evaluator cannot interpret, or a <see cref="SdfOp.Scale"/> whose axes differ in magnitude (a sign is exact), whose
     /// value is only a conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/>
     /// is excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
@@ -980,12 +981,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var inverseExponent = (FixedQ4816.One / exponent);
 
         return ((m * memo.Pow(
-            x: sum,
             work: ref work,
+            x: sum,
             y: inverseExponent
         )) - minRadius);
     }
-
     // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres. min(r) <= r_i, so it never exceeds
     // |p_i| and never wraps; it is non-decreasing in |p_i|, which SuperellipsoidScaledRatioBounds relies on.
     private static FixedQ4816 SuperellipsoidScaledRatio(FixedQ4816 magnitude, FixedQ4816 radius, FixedQ4816 minRadius) =>
@@ -1600,10 +1600,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // How far below the point's cheap reach a tap's can fall: a tap moves one axis by the step, which moves the largest
     // axis distance from any centre by at most the step, plus a raw of slack.
     private static long GradientReachMargin(FixedQ4816 step) => (Reach.CheapPointReachFall(move: step.Value) + 1L);
+
     // The widest step whose margin a shared prepass absorbs: a metre, far past any gradient probe's span.
     private static readonly long MaxSharedGradientStep = FixedQ4816.One.Value;
 
     private readonly record struct GradientReaches(bool Filled, int Candidate);
+
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================
 

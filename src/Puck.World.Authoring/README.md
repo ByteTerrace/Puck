@@ -505,7 +505,7 @@ These conservative ceilings keep both nearest features inside a fixed
 and 1 + amplitude*frequency*L must not exceed 8, with L=1 for F1 and
 L=2 for F2MinusF1. Invalid fields are refused by name.
 
-Flare, shear, bumps, and erode take a per-shape clamp when a field scope is
+Twist, bend, flare, shear, bumps, warp, displace and erode take a per-shape clamp when a field scope is
 available. Inside a creation or group scope, the same warp stays on its own
 shape chain, while the enclosing scope's clamp applies to all its siblings.
 Static erosion is emitted in either scope form and reads zero-valued lanes;
@@ -520,6 +520,10 @@ pooled rest geometry. `world.budget` reports the live global scale, count of
 scoped/shared clamps, and the worst scope's scale, instruction range,
 instance, and shape count. A global scale of one can coexist with strong
 shared clamps; their factors are field bounds, not measured GPU cost.
+`ShapePointOps` derives the shared scope decision from the point chain's emission
+mask. Static and pooled emission, static bake partitioning, bounds and detail use it.
+Solid contact shares twist and bend through the fixed-point field interpreter;
+its rotation intervals contract with the query box using directed interval trigonometry.
 
 Cells require a closed primitive and a per-shape field scope. Sweep,
 grouped shapes, detail-only shapes,

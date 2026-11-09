@@ -481,6 +481,7 @@ prototypes {
         scale [0.015729, 0.023983, 0.024]
         profile {
           kind: "Convex"
+          cornerRadius: 0.15
           vertices [
             [-1, -1]
             [0.109928, 1]
@@ -659,6 +660,7 @@ prototypes {
         scale [0.02728, 0.024717, 0.032]
         profile {
           kind: "Convex"
+          cornerRadius: 0.15
           vertices [
             [-1, -1]
             [-1, -0.274452]

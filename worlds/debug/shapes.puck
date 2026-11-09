@@ -2215,7 +2215,7 @@ template motionPrototypesB() {
       )
     }
   }
-  // Twist and bend emit only on the stamp-pool path; a static placement ignores both. The twist's constant-wave swing is
+  // Static and pooled shapes share twist and bend, and solid contact follows their deformed field. The twist's constant-wave swing is
   // a pose the driver's weight blends in: a lean that eases in and out with the exhibit's gate.
   prototype "motion-twist" {
     document {

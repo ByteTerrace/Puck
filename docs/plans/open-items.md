@@ -90,7 +90,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | landing with the w1 moving-blends fix pass, which merged it |
 | `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
@@ -5426,8 +5425,9 @@ read one. The plans that keep open items:
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.
 - [Modeling authoring](modeling-authoring.md#5-implementation-slices): the
-  engine limits authors met with their owners and steps (a static placement's
-  dropped `twist`, Convex rounding, the paint outline cap, a fold's detail),
+  remaining engine limits authors met (bake detail, folds and non-uniform scale);
+  static twist/bend including contact and scoped clamps, Convex rounding,
+  paint outlines and word layout are delivered there. The plan also owns
   the `mirror` block, rotation builtins and `relativeTo` placement as slices
   S1 to S3, the preview compare and named anchors after them.
 - [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the unbuilt

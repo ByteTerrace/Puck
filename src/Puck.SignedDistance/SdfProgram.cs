@@ -42,7 +42,8 @@ namespace Puck.SignedDistance;
 //   [materialOffset ..) = the APPEARANCE section, after every table the field interpreter reads (FieldWords): the
 //                         material table, SdfAppearance.MaterialVectorsPerEntry uvec4 per material (sdfMaterialLoad), then
 //                         the paints, SdfAppearance.PaintVectorsPerEntry uvec4 each, every material's contiguous
-//                         (sdfApplyPaints). SdfAppearance.Pack writes it; the field constructor only sizes it.
+//                         (sdfApplyPaints), then all paint side tables at absolute vector offsets, then shade programs.
+//                         SdfAppearance.Pack writes it; the field constructor only sizes it.
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -72,9 +73,10 @@ public sealed partial class SdfProgram {
     /// <c>bound.w &lt; 0</c> branch while the slot still occupies its reserved capacity. Chosen well below any
     /// legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
+
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
-    private const int SweepCurveVectorsPerEntry = 3;
+    internal const int SweepCurveVectorsPerEntry = 3;
 
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so every bound test admits it and the
@@ -426,8 +428,10 @@ public sealed partial class SdfProgram {
     /// change to a material's values or its paints leaves it as it was, and a palette's size moves lane 1 alone; the
     /// bake's field fingerprint describes the encoding over it.</summary>
     public ReadOnlySpan<uint> FieldWords => m_words.AsSpan(start: 0, length: FieldWordCount);
+
     // The words before the appearance section: its first vector, the header's material offset, in words.
     private int FieldWordCount => (((int)m_words[ProgramMaterialOffsetLane]) * WordsPerVector);
+
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
@@ -1606,6 +1610,7 @@ public sealed partial class SdfProgram {
         m_words[((entryBase + WordsPerVector) + 2)] = ((uint)record.Instruction);
         m_words[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
     }
+
     internal static void WriteVector4(uint[] words, int baseIndex, float x, float y, float z, float w) {
         words[baseIndex] = BitConverter.SingleToUInt32Bits(value: x);
         words[(baseIndex + 1)] = BitConverter.SingleToUInt32Bits(value: y);

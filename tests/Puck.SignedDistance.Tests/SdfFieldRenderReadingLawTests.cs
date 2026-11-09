@@ -11,10 +11,12 @@ namespace Puck.SignedDistance.Tests;
 /// (<see cref="SdfOp.AxialProfile"/>) and a twist (<see cref="SdfOp.RotatePlane"/>) warp the point as <c>mapCore</c>'s
 /// cases do, written here in single precision from the kernel's own formulas, and a non-uniform
 /// <see cref="SdfOp.Scale"/> reads as its minimum-axis bound; the box bounds enclose every point answer under each warp.
-/// The contact reading still refuses all three by name, and an excerpt of a program answers as the instructions it holds.
+/// The contact reading shares twist and bend, refuses flare and non-uniform scale by name,
+/// and an excerpt of a program answers as the instructions it holds.
 /// </summary>
 public sealed class SdfFieldRenderReadingLawTests {
     private const float Tolerance = 2e-3f;
+
     private static readonly Vector3 HalfExtents = new(x: 0.2f, y: 0.4f, z: 0.1f);
 
     // The points the laws read the field at: a lattice through the warped box and the space about it.
@@ -36,12 +38,12 @@ public sealed class SdfFieldRenderReadingLawTests {
     private static float Box(Vector3 p) {
         var q = (Vector3.Abs(value: p) - HalfExtents);
 
-        return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f));
+        return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(x: MathF.Max(x: q.X, y: MathF.Max(x: q.Y, y: q.Z)), y: 0f));
     }
     private static float Read(SdfFieldEvaluator field, Vector3 point) {
         Assert.True(condition: field.TryDistance(distance: out var distance, material: out _, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))));
 
-        return (float)(double)distance;
+        return ((float)((double)distance));
     }
     private static void AssertAnswers(SdfProgram program, Func<Vector3, float> reference) {
         var field = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
@@ -74,7 +76,7 @@ public sealed class SdfFieldRenderReadingLawTests {
 
         AssertAnswers(program: program, reference: point => {
             var t = Math.Clamp(value: ((flare.Data0.Z - point.Y) * flare.Data0.W), min: 0f, max: 1f);
-            var scale = MathF.Max(((flare.Data1.Y + (flare.Data0.X * t)) + (flare.Data0.Y * MathF.Sin(x: (MathF.PI * t)))), SdfProgramBuilder.FlareMinScale);
+            var scale = MathF.Max(x: ((flare.Data1.Y + (flare.Data0.X * t)) + (flare.Data0.Y * MathF.Sin(x: (MathF.PI * t)))), y: SdfProgramBuilder.FlareMinScale);
 
             return (Box(p: new Vector3(x: (point.X / scale), y: point.Y, z: (point.Z / scale))) * flare.Data1.X);
         });
@@ -88,6 +90,7 @@ public sealed class SdfFieldRenderReadingLawTests {
 
         AssertAnswers(program: program, reference: point => {
             var angle = (Rate * (point.Y - Origin));
+
             var (sine, cosine) = MathF.SinCos(x: angle);
 
             return Box(p: new Vector3(x: ((cosine * point.X) + (sine * point.Z)), y: point.Y, z: ((cosine * point.Z) - (sine * point.X))));
@@ -119,7 +122,6 @@ public sealed class SdfFieldRenderReadingLawTests {
     public void TheContactReadingRefusesWhatOnlyTheRenderReadingAdmits() {
         SdfProgram[] programs = [
             Program(warp: static builder => builder.AxialProfile(amount: 0.3f, bulge: 0f, span: 0.6f, top: 0.3f)),
-            Program(warp: static builder => builder.TwistY(rate: 1f)),
             Program(warp: static builder => builder.Scale(scale: new Vector3(x: 1f, y: 2f, z: 1f))),
         ];
 
@@ -129,6 +131,10 @@ public sealed class SdfFieldRenderReadingLawTests {
         }
 
         Assert.True(condition: new SdfFieldEvaluator(program: Program(warp: static builder => builder)).Capabilities.WarpFree);
+        var twisted = new SdfFieldEvaluator(program: Program(warp: static builder => builder.TwistY(rate: 1f).BendY(rate: 0.3f)));
+
+        Assert.Equal(SdfFieldReading.Contact, twisted.Reading);
+        AssertBoundsEnclose(program: Program(warp: static builder => builder.TwistY(rate: 1f).BendY(rate: 0.3f)));
         Assert.Equal(expected: SdfFieldReading.Contact, actual: new SdfFieldEvaluator(program: Program(warp: static builder => builder)).Reading);
         Assert.All(collection: SdfFieldEvaluator.RenderWarpOps, action: static op => Assert.True(condition: (SdfFieldEvaluator.IsSupportedOp(op: op, reading: SdfFieldReading.Render) && !SdfFieldEvaluator.IsSupportedOp(op: op, reading: SdfFieldReading.Contact))));
     }
@@ -142,7 +148,7 @@ public sealed class SdfFieldRenderReadingLawTests {
             .Build();
         var polygon = Enumerable.Range(start: 0, count: program.Instructions.Count).Where(predicate: index => (program.Instructions[index].Op == SdfOp.ShapeBlend)).Last();
         var excerpt = program.Excerpt(indices: [.. Enumerable.Range(start: 3, count: (program.Instructions.Count - 3))]);
-        var moved = program.Excerpt(indices: [0, 1, 2], rewrite: (_, instruction) => ((instruction.Op == SdfOp.Translate) ? [instruction with { Data0 = new Vector4(x: -1f, y: 0f, z: 0f, w: 0f) }] : [instruction]));
+        var moved = program.Excerpt(indices: [0, 1, 2], rewrite: (_, instruction) => ((instruction.Op == SdfOp.Translate) ? [instruction with { Data0 = new Vector4(w: 0f, x: -1f, y: 0f, z: 0f) }] : [instruction]));
         var whole = new SdfFieldEvaluator(program: program);
         var alone = new SdfFieldEvaluator(program: excerpt);
         var turned = new SdfFieldEvaluator(program: moved);
@@ -164,7 +170,7 @@ public sealed class SdfFieldRenderReadingLawTests {
             .Build();
         var sweep = Enumerable.Range(start: 0, count: program.Instructions.Count).Last(predicate: index => (program.Instructions[index].Op == SdfOp.ShapeBlend));
         var excerpt = program.Excerpt(indices: [.. Enumerable.Range(start: 2, count: (program.Instructions.Count - 2))]);
-        var swept = new SdfFieldEvaluator(program: program.Excerpt(indices: [.. Enumerable.Range(start: (sweep - 1), count: 2)]));
+        var swept = new SdfFieldEvaluator(program: program.Excerpt(indices: [.. Enumerable.Range(count: 2, start: (sweep - 1))]));
 
         // The path and the sweep keep their tables, so each excerpt builds and reads its own: the sweep its curve, the
         // path its edges (the square's half-depth is nearer the origin than its sides).

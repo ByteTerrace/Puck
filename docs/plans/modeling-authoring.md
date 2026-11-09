@@ -54,7 +54,7 @@ and a check here.
 |---|---|---|---|---|
 | 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | The brief names lane part-detail; no branch of that name exists at this tree, so the lead confirms the owner |
 | 2 | Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
-| 3 | A smooth blend between parts that move apart tears | PUCK122 warns; the skinned seam inside an admitted envelope is designed | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | `lane/moving-blends`, three commits at this tree |
+| 3 | A smooth blend between parts that move apart tears | PUCK122 warns; admitted motion envelopes and skinned seams are delivered | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | Landed with the moving-blends fix pass |
 | 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | Delivered by w1-limits; section 1.3 |
 | 5 | A material crease left T-junctions | The material cut's quartered edges | The swallow's painted feathers | Landed on the integration tip (two material-cut commits); closed pending the look lanes' captures |
 | 6 | A `Convex` prism refuses any `rounding` | `MaxRounding` returns 0 for Convex and Path, so the door says "no room to round" | A rounded convex blade faked with superellipsoids ([language and authoring](open-items.md#language-and-authoring)) | Delivered by w1-limits; section 1.4 |
@@ -119,15 +119,13 @@ brief names. The step it hands that lane beyond its brief:
 
 **[record]** [Moving blends](moving-blends.md) holds the design (an admitted
 motion envelope, dual-quaternion skinning of two owners a vertex, the settle
-rebake retired) and `lane/moving-blends` has landed three of its commits at
-this tree (`git log lead/velocity..lane/moving-blends`: "stage rest pose
-admission and influence storage", "wire propagated influences through dual
-quaternion skinning", "keep share gradients with the evaluator reading").
+rebake retired). Its admission, influence storage, dual-quaternion skinning and
+share gradients landed with the moving-blends fix pass.
 The material cut has landed on the integration tip in two commits ("the
 material cut shares each quartered edge's middle, so a crease leaves no
 T-junction" and "the material cut finds a quartered edge's whole holders by
 position"), so limit 5 is closed pending the look lanes' captures. Neither
-limit needs a step from this memo; the lead lands the moving-blends branch.
+limit needs a step from this memo.
 
 ### 1.3 Twist and bend on a static placement (limit 4)
 
@@ -136,7 +134,11 @@ Delivered by w1-limits. Static and pooled emission share
 bumps, warp, elongation. The stamp prefix already puts points in creation
 units; pooled callers provide their length conversion, with inverse-length
 rates converted reciprocally. The previous static chain omitted both rotations.
-The existing fixed contact emitter still omits these render deformations.
+The fixed contact emitter shares the twist/bend chain too. Such a solid selects
+the composed field collider, with a rotation-invariant reach and no exact
+straight-primitive partition shortcut. `ShapePointOps` derives scope admission
+from the same operation mask emission reads; static and pooled emission, bake
+partitioning, bounds and detail share that decision.
 
 Check: a static Box blade with `twist: 1`, `bend: 0.3` reports
 `lowered=RotatePlane·RotatePlane·Box` through `creation shape`.
@@ -152,6 +154,8 @@ inradius and, on an extrude, its half-depth. `ConvexProfile` already added
 separate rounding to corner rounding, and `SdfProgramBuilder.ConvexPolygon`
 already inset the polygon and lift before emitting the fillet; those existing
 mechanisms are reused. A radius past the ceiling refuses with its value.
+Scaled vertices and their inradius come from `SdfSolidGeometry.ScaledConvexProfile`
+for emission, admission and detail; a rounding-only Convex prism requests fillet detail.
 
 Check: a Convex blade at scale [0.2, 0.6, 0.04], `cornerRadius: 0.1`,
 `rounding: 0.002` passes compile validation, reports `distance=exact`,
@@ -168,6 +172,8 @@ shade programs. `VectorsOf` and `Pack` use the same side-table size function;
 `SdfPaintShape.Data0At` relocates each reference into that table region. The
 shader reads the generated stride and its existing absolute table references.
 There is no extra paint-specific vertex cap.
+`SdfPaintShape.HasValidTable` ties the table's float count to the packed vertex
+count at paint admission, including directly constructed descriptors.
 
 `CreationCanonicalizer.ValidatePaletteLayers` already resolves paints through
 `ToPaint`, the same primitive emission stats uses. Its `ResolvePaint` now
@@ -182,7 +188,9 @@ rounding is authored explicitly. Compile validation and stats admit 8, 9 and
 using the atlas's glyph bounds, advances, tracking and kerning. Enriched text
 and plain strings share that path. Only a word wider than the entire available
 line falls back to glyph breaks. Nonbreaking spaces stay within their word;
-wrapped lines omit leading breakable spaces. Unwrapped text keeps its original
+soft-wrapped lines omit leading breakable spaces; hard newlines retain indentation.
+U+2007, like U+00A0 and U+202F, does not break a word. Word and fallback glyph
+wraps use one alignment-aware width measure. Unwrapped text keeps its original
 scalar layout. Creation `maxWidth` uses this shared layout in both static and
 pooled text emission, rather than a gallery-specific text implementation.
 

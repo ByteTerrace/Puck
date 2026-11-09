@@ -104,7 +104,7 @@ public static class SdfSolidGeometry {
             // regular polygon rounds, which the fixed-point evaluator answers too.
             SdfPrismProfileKind.Polygon => ConvexProfile(
             chain: chain,
-            vertices: RegularVertices(sides: profile.Sides, scale: new Vector2(x: scale.X, y: scale.Y)),
+            geometry: ScaledConvexProfile(profile: profile, scale: scale),
             cornerFraction: 0f,
             rounding: rounding,
             lift: lift,
@@ -153,7 +153,7 @@ public static class SdfSolidGeometry {
             // MaxRounding and the builder's ClampRounding bound the same total.
             SdfPrismProfileKind.Convex => ConvexProfile(
             chain: chain,
-            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))],
+            geometry: ScaledConvexProfile(profile: profile, scale: scale),
             cornerFraction: profile.CornerRadius,
             rounding: rounding,
             lift: lift,
@@ -174,11 +174,25 @@ public static class SdfSolidGeometry {
 
             return new Vector2(x: (sin * scale.X), y: (cos * scale.Y));
         })];
-    private static SdfProgramBuilder ConvexProfile(SdfProgramBuilder chain, Vector2[] vertices, float cornerFraction, float rounding,
+
+    /// <summary>The scaled vertices and their conservative inradius, shared by emission, rounding admission and bake detail.</summary>
+    public static (Vector2[] Vertices, float Inradius) ScaledConvexProfile(SdfPrismProfile profile, Vector3 scale) {
+        var magnitude = EffectiveScale(scale: scale);
+        var xy = new Vector2(x: magnitude.X, y: magnitude.Y);
+        var vertices = profile.Kind switch {
+            SdfPrismProfileKind.Convex => profile.Vertices!.Select(selector: vertex => (vertex * xy)).ToArray(),
+            SdfPrismProfileKind.Polygon => RegularVertices(profile.Sides, xy),
+            _ => throw new ArgumentException(message: "A convex or regular polygon profile is required.", paramName: nameof(profile)),
+        };
+
+        return (vertices, SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices));
+    }
+
+    private static SdfProgramBuilder ConvexProfile(SdfProgramBuilder chain, (Vector2[] Vertices, float Inradius) geometry, float cornerFraction, float rounding,
         SdfLift lift, float liftAmount, int material, SdfBlendOp blend, float smooth, bool detail) =>
         chain.ConvexPolygon(
-            vertices,
-            ((cornerFraction * SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices)) + rounding),
+            geometry.Vertices,
+            ((cornerFraction * geometry.Inradius) + rounding),
             lift,
             liftAmount,
             material,
@@ -1331,8 +1345,7 @@ public static class SdfSolidGeometry {
     }
 
     private static float ConvexRoundingCeiling(SdfPrismProfile profile, Vector3 scale, SdfLift lift) {
-        var inradius = SdfProgramBuilder.ConvexPolygonInradius(
-            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))]);
+        var inradius = ScaledConvexProfile(profile: profile, scale: scale).Inradius;
         var corner = SdfProgramBuilder.ClampRounding(lift: lift, liftAmount: scale.Z,
             profileInradius: inradius, rounding: (profile.CornerRadius * inradius));
 

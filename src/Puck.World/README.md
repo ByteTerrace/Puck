@@ -1555,7 +1555,7 @@ shape: a static placement stamps it into the static program, and an animated,
 inhabited, or attached placement carries it through the replay stamp pool—the
 run rides the registration's root transform, so lettering follows the body or
 the placed root while timeline frames move the shapes. A `textRuns[]` row may
-also author `maxWidth` (greedy glyph-level wrapping), `align`
+also author `maxWidth` (word wrapping with glyph breaks for oversized words), `align`
 (`left`/`center`/`right` against the block's widest line), `tracking` (em), and
 `lineSpacing` (a line-height multiplier). Layout is Unicode-scalar based;
 complex shaping and bidirectional script handling are not yet part of the World

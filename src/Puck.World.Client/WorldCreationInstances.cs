@@ -468,17 +468,13 @@ public sealed partial class WorldCreationInstances {
         // otherwise fold into the WHOLE program's step scale; its own scope clamps it onto this candidate at the pop
         // instead. Inside a group the group's scope already covers it (GroupNeedsScope). (The probe already emits the scope
         // unconditionally, so the envelope is unchanged.)
-        var wantsFlare = (flare is not null);
-        var wantsShear = (shear is not null);
-        var wantsBumps = (bumps is { Count: > 0 });
-        var wantsErode = (erode is not null);
-        var wantsWarp = (warp is not null);
+        var wantsWarpScope = ShapePointOps.NeedsScope(bend: bend, bumps: bumps, cells: cells, displace: displace, erode: erode, flare: flare, shear: shear, twist: twist, warp: warp);
         var wantsDisplace = (displace is not null);
 
         // A pop-only blend (morph, stairs) composes at a scope's pop alone, so its shape opens its own scope even
         // inside its group's.
         if (
-            ((wantsDilate || wantsOnion || wantsPanel || wantsFlare || wantsShear || wantsBumps || wantsErode || wantsWarp || wantsDisplace || (cells is not null)) &&
+            ((wantsDilate || wantsOnion || wantsPanel || wantsWarpScope) &&
             !inGroupScope) ||
             ShapeScope.IsPopOnly(blend: blend)
         ) {

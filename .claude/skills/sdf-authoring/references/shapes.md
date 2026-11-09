@@ -57,7 +57,7 @@ Prism ceilings by profile, then additionally capped at `scale.z` for an extrude:
 | Polygon | min(x,y)·cos(π/sides) | 0 |
 | Ellipse | min(x,y) − 1e-4 | min(that, z) |
 | ChamferedRectangle | chamfered-rect inradius | 0 — the profile carries its own |
-| Convex | 0 — `cornerRadius` **is** the rounding | 0 |
+| Convex | scaled polygon inradius minus the clamped `cornerRadius` fillet | 0 |
 
 ## Profiles and lifts
 
@@ -181,6 +181,9 @@ about 4 cm thick to survive the mesh bake: the Moth's pod plates at 2.2 cm baked
 with their backs missing, the core showing through, while the same shapes at
 4.4 cm baked whole. The validator accepts the thin version, so look at a capture.
 
+Creation contact honours `twist` and `bend` through the same ordered point chain
+as rendering, evaluated in fixed point. A solid with either uses its deformed
+field, with rotation-invariant bounds and no straight-primitive contact shortcut.
 Creation contact emission omits `flare`, `shear`, `bumps`, `warp`, `displace`,
 `elongate` and `erode`.
 This is an authoring-path omission, not a statement that their low-level VM

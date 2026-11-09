@@ -130,7 +130,8 @@ Layout walks one Unicode scalar at a time, advances the pen by each glyph's
 lines on `\n`, and skips code points the atlas doesn't contain. Wrapping is
 **greedy at word boundaries**. A word moves intact to the next line; only a word
 that exceeds the whole width falls back to glyph breaks. Wrapped lines discard
-leading breakable whitespace; nonbreaking spaces stay within their word.
+leading breakable whitespace; the first line and hard newlines keep indentation.
+Nonbreaking spaces (U+00A0, U+2007 and U+202F) stay within their word.
 The `TextLayoutOptions` overload adds block alignment
 (`Left`, `Center`, or `Right`), tracking in em units, and a line-height
 multiplier while preserving the option-free overload's defaults.

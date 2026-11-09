@@ -10,6 +10,8 @@ public sealed partial class SdfFieldEvaluator {
             SdfOp.ResetPoint or
             SdfOp.Translate or
             SdfOp.Rotate or
+            // Twist and bend: the shared fixed-point point and interval rules read their deformed surface.
+            SdfOp.RotatePlane or
             SdfOp.Scale or
             SdfOp.Elongate or
             SdfOp.ShapeBlend or
@@ -27,6 +29,7 @@ public sealed partial class SdfFieldEvaluator {
             _ => false,
         };
     }
+
     /// <summary>Gets the ops the evaluator interprets under <see cref="SdfFieldReading.Render"/> alone, each with a point
     /// rule mirroring <c>mapCore</c>'s case (<c>SdfFieldEvaluator.RenderOps.cs</c>) and an inclusion rule: every warp,
     /// fold and per-shape relief the renderer draws but no contact field reads. <see cref="SdfOp.TransformDynamic"/> stays out of
@@ -34,7 +37,6 @@ public sealed partial class SdfFieldEvaluator {
     /// poses each slot as a translate and rotate before it reads a group (<c>SdfMeshAudit.Field</c>).</summary>
     public static IReadOnlyList<SdfOp> RenderWarpOps { get; } = [
         SdfOp.AxialProfile,
-        SdfOp.RotatePlane,
         SdfOp.Shear,
         SdfOp.GaussianPush,
         SdfOp.DomainWarp,
@@ -45,6 +47,7 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.LaneErode,
         SdfOp.Displace,
     ];
+
     /// <summary>Returns whether the evaluator interprets <paramref name="op"/> under a reading; a program holding any other
     /// op is refused at construction.</summary>
     /// <param name="op">The op.</param>
