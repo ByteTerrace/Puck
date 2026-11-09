@@ -12,7 +12,7 @@
 // The look is the painted one of the selected direction (docs/game/art/valley-and-gallery.md): the lit side shows each
 // paint exactly as the continuous light does, and one held step below it, the coloured shadow of the canyon panels, where
 // a rock's lit orange turns mauve rather than brown. On a light's shade side a surface shows the colour it would have lit
-// (that light at the band's lit cosine, with the sky and bounce it owns) times `shadowTint`: its luminance, about one
+// (that light at full visibility, with the sky and bounce it owns) times `shadowTint`: its luminance, about one
 // half, is the step's value, and its cool violet the shadow's hue, so the step reads on scenery under a strong fill. A
 // low threshold keeps most of a lit form in the lit band, so a boulder half turned from the sun still shows both.
 //

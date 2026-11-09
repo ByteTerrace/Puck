@@ -12,12 +12,16 @@
 //   the combat yard (north, x 24 .. 50, z 40 .. 66) and the climate wing (east, x 72 .. 122, z 12 .. 28) are
 //   reserved on the floor; nothing here stands there
 
+import "../standard/styles"
 import "../standard/terrain"
 import "valley-form"
 import "water-site"
 
 let valleyRock = 0
 let valleyDeck = 1
+// The walls band on their form at the scale of their relief, metres of fBm over masses hundreds of metres across: at
+// the default style's radius the band steps each lump of that relief, and the shadow each lump casts, into a speckle.
+let valleyRockStyle = celStyle with { formRadius: 8 }
 
 // The overlook: a deck at deckHeight on the south-west sector's inner face, standing out over the floor. The face's
 // distance from the centre at that height follows the main mass's ellipse (terrainMass, exponent 2).
@@ -111,6 +115,7 @@ prototypes {
             color: "#7D7366"
             roughness: 0.95
             specular: 0.02
+            toon: valleyRockStyle
           }
         ]
         terrainRelief(seed: sector.seed)
@@ -162,6 +167,7 @@ prototypes {
           color: "#7D7366"
           roughness: 0.95
           specular: 0.02
+          toon: valleyRockStyle
         }
         {
           color: "#9A958B"

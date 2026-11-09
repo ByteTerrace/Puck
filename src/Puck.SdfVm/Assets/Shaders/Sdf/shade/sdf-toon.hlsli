@@ -9,8 +9,8 @@
 // The lit side is the continuous response, untouched: a style never darkens, desaturates or compresses the key. Each
 // direct light's band, b = step(cosine) x shadow, read on the surface's form (its macro normal and form-filtered shadow,
 // sdfToonForm) decides where the light's shade side begins; there the surface shows the colour it would have lit, the
-// light restored at the band's lit cosine and at full visibility together with the share of the sky and bounced light
-// that light owns, times the tint: one darker, coloured step of the surface's whole light rather than of the key alone
+// light's continuous diffuse restored to full visibility together with the share of the sky and bounced light that light
+// owns, times the tint: one darker, coloured step of the surface's whole light rather than of the key alone
 // (sdfToonShade). A light's step reaches only as far as the light reaches the surface's surroundings (its region): a
 // form or cast shadow in the open air steps, and a room the light never enters keeps its continuous light.
 #ifndef SHADE_SDF_TOON_HLSLI
@@ -105,20 +105,22 @@ float sdfToonOpen(float skyVisibility) {
 }
 
 // One light's cel step at a surface (SdfLightResponse.toon...): `light` is what the light delivers at unit cosine and
-// full visibility (its colour, strength, reach and the occlusion the continuous response keeps), `cosine` the band's on
-// the form's normal, `band` the light's banded share and `region` how far the light reaches the surface's surroundings.
-// The light's restored diffuse is the light at the band's lit cosine (the cosine itself, or the threshold where the
-// form turns past it), so a shade side shows a held colour; `shade` is how far the step applies, the band's shade share
-// within the region; `potential` the light's luminance within the region, by which it owns a share of the fill.
+// full visibility (its colour, strength, reach and the occlusion the continuous response keeps), `lambert` the
+// continuous response's own cosine term at the pixel, `band` the light's banded share and `region` how far the light
+// reaches the surface's surroundings. The light's restored diffuse is the continuous one at full visibility, so a cast
+// shadow shows the colour its surface would have lit and a form shadow its own continuous light, and no shade side is
+// ever brighter than its unshadowed continuous light times the tint; `shade` is how far the step applies, the band's
+// shade share within the region; `potential` the light's luminance within the region, by which it owns a share of the
+// fill.
 struct SdfToonLight {
     float3 restored;
     float shade;
     float potential;
 };
-SdfToonLight sdfToonLight(SdfToonStyle style, float3 light, float cosine, float band, float region) {
+SdfToonLight sdfToonLight(float3 light, float lambert, float band, float region) {
     SdfToonLight step;
     float reached = saturate(region);
-    step.restored = light * max(cosine, style.bands.y);
+    step.restored = light * max(lambert, 0.0);
     step.shade = ((1.0 - saturate(band)) * reached);
     step.potential = (dot(light, SDF_LUMINANCE) * reached);
     return step;

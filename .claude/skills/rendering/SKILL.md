@@ -557,8 +557,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   The lit side is the continuous response, every term of it (`sdfLightResponse`
   computes it whatever the style): a cel style never darkens, desaturates or
   compresses the key. Each directional and point light also returns its step
-  (`SdfToonLight`: its diffuse restored at the band's lit cosine and full
-  visibility, its shade share `(1 − band) × region`, its potential), the walk
+  (`SdfToonLight`: its continuous diffuse restored to full visibility, never a
+  cosine floor, which lifts a pixel whose own normal faces away into a bright
+  line along a crease; its shade share `(1 − band) × region`, its potential), the walk
   sums them (`sdfToonAdd`), and the stage adds `sdfToonShade` through
   `sdfMaterialDiffuse` after the indirect and fill terms: on a light's shade
   side the surface shows `tint ×` (the restored light plus the share of the sky,

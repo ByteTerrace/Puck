@@ -161,8 +161,8 @@ owner ruled the second (a style per material, not one look per world).
   kept, and decides only where each direct light's shade side begins: a band of
   the light's cosine on the surface's form (a macro normal at an authored
   radius) and, for `band: Combined`, of its filtered shadow. On the shade side
-  the surface shows the colour it would have lit, the light restored at the
-  band's lit cosine together with the share of the sky and bounce that light
+  the surface shows the colour it would have lit, the light's continuous
+  diffuse restored to full visibility together with the share of the sky and bounce that light
   owns, times the style's tint. A step of the direct key alone leaves the shade
   side's value to the fill, which outdoors nearly matches the lit side, so it
   reads as a hue shift; a step of the whole light is one darker, coloured value

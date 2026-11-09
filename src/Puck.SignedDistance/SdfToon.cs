@@ -27,8 +27,8 @@ public readonly record struct SdfToon {
     /// <summary>The full width of the soft band transition.</summary>
     public float Softness { get; init; }
     /// <summary>The share of its lit colour, per linear RGB channel, a surface keeps on a light's shade side (form and
-    /// cast shadow alike) wherever the light reaches the surface's surroundings: the light restored at the band's lit
-    /// cosine together with the sky and bounced light that light owns, times this tint. Its luminance is the step's held
+    /// cast shadow alike) wherever the light reaches the surface's surroundings: the light's continuous diffuse restored
+    /// to full visibility together with the sky and bounced light that light owns, times this tint. Its luminance is the step's held
     /// value and its chroma the painted shadow's hue; the lit side is the continuous response.</summary>
     public Vector3 ShadowTint { get; init; }
     /// <summary>The radius, in metres, of the form the band reads: the band's normal is the surface's shape at this

@@ -346,7 +346,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
                 : sdfLightVisibility(light.index, surface.toon.shadows, surface.ambientOcclusion, surface.shadowMeasured));
             float band = sdfToonBand(surface.toon, cosine, visibility, sdfToonShadowWidth(surface.toon, light.index));
             float region = (surface.probed ? surface.toon.open : saturate(occlusion));
-            response.toon = sdfToonLight(surface.toon, light.color * light.weight, cosine, band, region);
+            response.toon = sdfToonLight(light.color * light.weight, lambert, band, region);
         }
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 pointDirection = inputs.direction;
@@ -359,7 +359,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
             if (toon) {
                 // The reach already holds the light's traced visibility, so its step reaches wherever the light does.
                 float cosine = sdfWrapDiffuse(dot(surface.toon.normal, pointDirection), surface.material.wrap);
-                response.toon = sdfToonLight(surface.toon, light.color * (reach * surface.ambientOcclusion), cosine,
+                response.toon = sdfToonLight(light.color * (reach * surface.ambientOcclusion), pointLambert,
                     sdfToonStep(surface.toon, cosine), 1.0);
             }
         }

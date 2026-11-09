@@ -590,10 +590,12 @@ A lit pixel is the continuous response, every term of it: a style never
 darkens, desaturates or compresses the key. The views pass steps each direct
 light's diffuse cosine about `threshold` on the surface's form (below), and
 where a light's band turns to its shade side, form and cast shadow alike, the
-surface shows the colour it would have lit times `shadowTint`: that light
-restored at the band's lit cosine (the cosine itself, or `threshold` where the
-form turns past it) and at full visibility, together with the share of the
-sky, bounced light and authored fill the light owns. A light owns the fill in
+surface shows the colour it would have lit times `shadowTint`: that light's
+continuous diffuse restored to full visibility, together with the share of the
+sky, bounced light and authored fill the light owns. A cast shadow therefore
+shows its surface's lit colour times the tint, a form shadow its own
+continuous light times the tint, and no shade side is ever brighter than its
+unshadowed continuous light times the tint. A light owns the fill in
 proportion to its strength over the larger of all the stepped lights'
 strength and the fill's own, so outdoors the sun owns the whole of it and a
 room lit mostly by bounce keeps most of its fill whatever one lamp's band
