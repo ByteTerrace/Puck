@@ -861,6 +861,15 @@ compares and fails naming the file that drifted, it writes nothing.
   Lipschitz factor; make the primitive 1-Lipschitz. Scope clamps
   (`SdfProgram.FieldScopeClamps`, `world.budget`) are field bounds, not measured
   GPU cost.
+- **The CPU evaluator's rounding is part of its Lipschitz bound.** A product of
+  two lengths rounded to the carrier keeps `2⁻¹⁶` of its value, a few bits at
+  centimetre sizes, so a ratio, projection or nearest-sample comparison built on
+  one reads a millimetre of noise and the field overstates its own distance
+  (the Moth's spine joints read 26 times it). Round such quotients once
+  (`maths-usage`'s Choose table). `SdfPrimitiveLipschitzLawTests` samples every
+  door primitive at a centimetre and a metre; run it after changing a shape, and
+  read `puck mesh audit --cpu --field-levels`' `lower/upper` witness (value and
+  bracketed upper bound) to trace a group whose step scale fails.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
 - **An interval rule whose width compounds shrinks the whole evaluator.** The

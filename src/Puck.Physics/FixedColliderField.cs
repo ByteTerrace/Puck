@@ -493,8 +493,6 @@ public static class FixedFieldColliderContact {
         var best = FixedQ4816.MaxValue;
         var bestPoint = point;
         var bestSurface = point;
-        var squared = FixedVector3.Dot(left: axis, right: axis);
-
         for (var round = 0; (round < PairRounds); round++) {
             if (!sampler.TryProject(distance: out var distance, limit: limit, local: point, surface: out var surface, value: value)) {
                 break;
@@ -504,11 +502,11 @@ public static class FixedFieldColliderContact {
                 (best, bestPoint, bestSurface) = (distance, point, surface);
             }
 
-            if (squared == FixedQ4816.Zero) {
+            if (axis == FixedVector3.Zero) {
                 break;
             }
 
-            var next = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: (FixedVector3.Dot(left: (surface - lower), right: axis) / squared));
+            var next = FixedVector3.SegmentParameter(point: (surface - lower), segment: axis);
             var nextPoint = (lower + (axis * next));
 
             if (((nextPoint - point).Length <= Tolerance) || !sampler.TryValue(local: nextPoint, value: out var nextValue)) {
