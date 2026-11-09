@@ -225,8 +225,10 @@ public enum SdfMeshBakeTicket {
 /// bake's <see cref="Identity"/> loads from disk off the frame's thread (<see cref="SdfMeshStore"/>), baking only when the
 /// store refuses the entry. The bake reports its counted work, the groups it loaded and the wall time it took
 /// (<see cref="Describe"/>).</para>
-/// <para>A dynamic group whose shapes ride slots besides its own is planned again once those shapes settle away from the
-/// pose it was baked at, and its new mesh replaces the skinned one when it lands (<see cref="SdfMeshSettle"/>).</para>
+/// <para>A dynamic group whose shapes ride slots besides its own bakes a skin (<see cref="SdfMeshSkin"/>) from its own
+/// sealed instructions (<see cref="SdfMeshSkinSource"/>). A rest-pose skin bakes once; any other such group is planned
+/// again once those shapes settle away from the pose it was baked at, and its new mesh replaces the skinned one when it
+/// lands (<see cref="SdfMeshSettle"/>).</para>
 /// </summary>
 public sealed partial class SdfMeshPathBake {
     /// <summary>The field evaluations one lattice makes at most: long lattices and point runs are cut into chunks of this
@@ -2289,8 +2291,6 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
-        // Whether the group's geometry reads a slot besides its own: a skinned group, whose members drift (Settle).
-        public bool ReadsOtherSlots => (Skin is not null);
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.

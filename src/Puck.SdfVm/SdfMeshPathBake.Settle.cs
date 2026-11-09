@@ -24,7 +24,7 @@ public sealed partial class SdfMeshPathBake {
         m_settleWatch.Clear();
         m_sampledReaders.Clear();
         for (var index = 0; (index < m_groups.Count); index++) {
-            if (m_groups[index].ReadsOtherSlots && !m_groups[index].Geometry.RestPoseSkin) { m_settleWatch.Add(item: index); }
+            if ((m_groups[index].Skin is not null) && !m_groups[index].Geometry.RestPoseSkin) { m_settleWatch.Add(item: index); }
             if (m_groups[index].Geometry.ReadsSampled) { m_sampledReaders.Add(item: index); }
         }
     }
@@ -32,7 +32,7 @@ public sealed partial class SdfMeshPathBake {
     private void WatchSettle(int index, Group group) {
         var at = m_settleWatch.BinarySearch(item: index);
 
-        if (group.ReadsOtherSlots && !group.Geometry.RestPoseSkin) {
+        if ((group.Skin is not null) && !group.Geometry.RestPoseSkin) {
             if (at < 0) { m_settleWatch.Insert(index: ~at, item: index); }
         } else if (at >= 0) {
             m_settleWatch.RemoveAt(index: at);

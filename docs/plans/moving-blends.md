@@ -265,8 +265,37 @@ feeds simulation state. Other dynamic instances retain their absolute-pose seman
 | Step | Result by symbol | Mechanical evidence |
 |---|---|---|
 | 1 | `CreationMotion.Envelope`, `CreationMotionPlan.RenderDocument`, `SdfMeshGeometryBuilder.RestPoseSkin` | `MovingBlendRestLawTests.EveryOwnerPublishesTheIdentityDeltaAtAuthoredRest` exercises swing, slide and timeline owners through `PackTransforms`; `MovingBlendLawTests.ArrivalPoseCannotChangeTheRestGeometryOrItsMembers` compares geometry, form and frozen poses at two arrivals. `CreationMotion.Describe` reports θ, D and the whole group's actual outcome. |
-| 2 | `SdfFieldEvaluator.ReadInfluences`, `ReadInfluenceGradient`, `SdfMeshSkin.Build`, `SdfMesh.Influences` | `MovingBlendLawTests.NestedSharesFollowLeavesAndScopes` gives ¼, ¼, ½; `CopiesShareTuplesAndTheStoreAndMergePreserveThem` covers crease copies and codec planes; `SdfMeshPlanarMergeLawTests.ABlendZoneKeepsItsInteriorVerticesAndEveryTuple` exercises a removable grid interior; `AThirdOwnerRefusesTheSkinAndBakesRigidPieces` exercises the fallback contour. The audit prints blended vertices and split-tuple places. |
-| 3 | `sdfMeshWorldVertex`, `sdfMeshBlendPose`, `sdfMeshMemberDelta`, `sdfMeshPreviousPosition` | The shared helper resolves group-relative dual quaternions, hemisphere matching and the normal correction. The shadow entry calls the same position helper. `TranslationBendsTheNormalAndQuaternionSignsDoNotChangeThePose` is the CPU witness; `SdfMeshSkin.Pose` reuses `FixedRigidTransform` for the audit counterpart. GPU bursts remain the lead's verification request below. |
+| 2 | `SdfFieldEvaluator.ReadInfluences`, `ReadInfluenceGradient`, `SdfMeshSkin.Build`, `SdfMeshSkinTuple.Of`, `SdfMesh.Influences` | `MovingBlendLawTests.NestedSharesFollowLeavesAndScopes` gives ¼, ¼, ½; `CopiesShareTuplesAndTheStoreAndMergePreserveThem` covers crease copies and codec planes; `SdfMeshPlanarMergeLawTests.ABlendZoneKeepsItsInteriorVerticesAndEveryTuple` exercises a removable grid interior; `AThirdOwnerRefusesTheSkinAndBakesRigidPieces` exercises the fallback contour. The audit prints root, rigid-member and blended vertices and split-tuple places; `world.counters sdf.mesh-skin` counts the same paths over the meshes a World draws. |
+| 3 | `sdfMeshWorldVertex`, `sdfMeshSkinPose`, `sdfMeshSkinSlotsOf`, `sdfMeshMemberDelta`, `sdfMeshPreviousPosition` | One pose helper serves current and previous positions; each caller reads its own transform table. The shadow entry calls the same position helper. `TranslationBendsTheNormalAndQuaternionSignsDoNotChangeThePose` is the CPU witness; `SdfMeshSkin.Pose` reuses `FixedRigidTransform` for the audit counterpart. |
+
+Three invariants hold the skin, each behind one door:
+
+- **A skin is a function of its geometry.** `SdfMeshBakeGroup` seals a skinned group with
+  an `SdfMeshSkinSource` taken from the program it was planned from; `SdfMeshSkin.Build`
+  and `Split` take only that source, and its constructor is internal to the seal. A group
+  kept across a restart, or one still contouring after its program left, reads its own
+  instructions, never the program the bake carries now. The source copies the group's
+  instructions on first reading and lets the program go then or when the group's
+  workspace is released.
+- **A vertex wholly one owner's rides that owner first, with no share.**
+  `SdfMeshSkinTuple.Of` collapses a share that rounds to either end onto the owner that
+  holds the vertex, with `SdfMeshInfluence.Rigid`; `SdfMeshInfluence`'s constructor is
+  internal and the `SdfMesh` constructor refuses any tuple that is not
+  `SdfMeshInfluence.Canonical`. Such vertices take the vertex stage's rigid path, and
+  their material layers shade in their owner's frame (`sdfMeshSurfaceNormal`'s frame slot).
+- **A carve one owner makes in another stays cut in every fallback.** The third-owner
+  split keeps every carving shape (`SdfBoundAlgebra.Carves`) in every member's part
+  (`SdfMeshAudit.MemberFields`), and a partitioned group borrows every other owner's carve
+  (`CreationMotionPlan.Borrows`), riding its own slot. A carve that moves against the
+  surface it cuts keeps its rest cut there; one that moves with it is exact.
+
+Two shapes move apart only by motion below their nearest common ancestor
+(`CreationMotion.MovingBlends`): a swing, slide or effector on either side, or timeline
+frames that carry the two sides by different composed motions. Shapes one frame moves
+together, such as the Moth's eye whites and their openings in the blink, join without a
+crease. The envelope's frame term is each frame's largest separation of the two sides'
+composed motions over the seam box's corners, and each swing's reach grows by the
+displacement counted before it, so the bound holds for swings about different pivots.
 
 The rest-identity premise was checked, and holds: `WorldCreationInstances.PackRegistration`
 publishes each owner's pose after removing its authored shape pose; `EmitShape` reapplies
@@ -281,20 +310,26 @@ Followers and timeline descendants inherit their actual parent's slot. Unbounded
 followers cannot enter an admitted blend.
 
 The evaluator's existing gradient reading is central differences. `ReadInfluenceGradient`
-uses six fixed-point taps at ±1/1024 creation unit on the renormalized pair, in addition
-to the centre share reading; it is not an analytic gradient. That fixed stencil makes
-the influence function independent of tessellation normals and backend. Three half
+uses six fixed-point taps on the renormalized pair, in addition to the centre share
+reading; it is not an analytic gradient. `SdfMeshSkin.Build` sets the step to a sixteenth
+of the group's narrowest smooth radius, between 1/16384 and 1/1024 unit, so the stencil
+stays inside a millimetre blend zone. The step is a function of the group's instructions,
+which keeps the influence function independent of tessellation normals and backend. Three half
 components plus padding and the packed share/second-owner word add twelve GPU bytes.
 Planar merge compares complete tuples and removes no strictly blended vertex.
 
 An active case absent from the draft premise was engraved animated text: the old emitter
 coupled glyphs and several motion owners into one field. Glyphs have no CPU reading.
 `WorldCreationInstances.EmitEngravedOwners` now uses the existing group and text emitters
-to carve rigid owner surfaces, with engraving riding the surface it carved. The updated
+to carve rigid owner surfaces, with engraving riding the surface it carved. A run riding
+a shape (`TextRunDocument.ShapeId`) is emitted only into that shape's owner; a run in
+creation space carves every owner. The updated
 `WorldTextAuthoringLawTests.AnEngravedMovingCreationCarvesEachRigidOwnerInItsOwnInstance`
 checks that no such instance reads another motion slot. Regular polygons partition before
 emission. A third-owner overflow uses `MemberFields` and the existing `ContourLevel`, with
 the same `SdfMeshCpuField` sampler the offline tools use; there is no second contourer.
+Its cell coarsens until each owner's lattice holds at most `SdfMeshSkin.SplitSamples`, a
+union final lattice's budget.
 
 Step 4 is next: material coordinates and blended lanes. Steps 1–3 do not claim that
 paints already follow the seam. Rest skins are excluded from the old settle watch now;
@@ -345,35 +380,15 @@ puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 
 puck mesh audit --cpu --world <verification-source> --prototype swallow --top 1 --worst 0 --pose '1=-0.0005999600008,0,-0.0000059998,0,-0.0099998333,0,0.9999500004'
 ```
 
-All three runs produced 26,862 triangles, 18,873 vertices, 2,834 blend-zone vertices,
-zero split-tuple places, zero open or non-manifold edges and zero uncovered crossings.
-The rest geometry key was the same in all three runs. Maximum vertex/centroid/midpoint
-field errors were 1.11/0.66/0.85 mm at all three poses, below the head/body D bound
-of 1.19234 mm (θ = 1.14592°). These include the rest contour's error, not only skin error.
-The audit reports 40/42/40 folds and 32/32/31 flipped faces at rest/positive/negative;
-the GPU inspection must check the throat and distinguish these rest contour defects
-from a moving seam. The CPU audit alone does not establish the visual bar.
+Each run prints the posed field error, which must stay under the head/body D bound
+(`compile --validate` prints θ and D for the pair), and the skin line: zero split-tuple
+places, and the head's own vertices counted as rigid member vertices, not blended. The
+error includes the rest contour's error, not only skin error, and the CPU audit alone
+does not establish the visual bar. The figures each run produced are in the commits that
+ran them.
 
-The rendering skill gained a capability eval, `moving-blend-crease-copies`. Its regression
-and capability runs belong to the lead's eval window; this lane did not run model sessions.
-
-### Lane verification
-
-On the merged lane head, Release builds of `Puck.World` with
-`-p:PuckShaderSpirvEnabled=true`, the CLI and the four touched test projects
-completed with zero warnings and errors. The focused laws passed 15 cases: five
-influence/pose laws, one planar law, four rest/envelope cases, one engraving case,
-three motion diagnostics and one shared packing law. The debug document validated;
-its four PUCK122 warnings identify the Moth and pilot eyelid intersections that crease.
-The headless debug package started through `puck_world_start` and stopped through
-`puck_world_stop` with exit code 0. Presented GPU evidence is still requested above.
-The draft swallow also validated over the debug basis, printing each pair's bounds
-and crease decision: head/body θ = 31.5127°, D = 0.0323783 versus 0.007;
-tail/body θ = 10.3132°, D = 0.00821369 versus 0.003. This confirms that the
-original large glance is outside the envelope; the admitted fixture intentionally
-reduces it rather than claiming that the original pose can skin.
-`puck shaders generate --check` passed with generated files staged. `puck docs links`
-passed after repairing the two citations displaced by the implementation documentation.
+The rendering skill carries a capability eval, `moving-blend-crease-copies`, for the
+lead's eval window.
 
 1. **Rest-pose bake and the envelope.** `SdfMeshGeometryBuilder` keys a skinned
    group at rest. `CreationMotion` computes θ and D per moving blend, and

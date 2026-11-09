@@ -58,9 +58,9 @@ A. Engine limits on authoring [high], in the plan's
      so D7 is built with it (see [Bake detail](#bake-detail)). The gallery
      shows it too: `shape-pipe-subtraction` and `shape-groove-subtraction`
      (4 cm rim features) bake with sawtooth rims, slivers and torn edges;
-   - blends between moving parts tear: steps 1 to 3 are built on
-     `lane/moving-blends`, unlanded behind two high review findings (see
-     [Bake detail](#bake-detail));
+   - blends between moving parts tear: steps 1 to 3 and their review fixes
+     are ready to land with the w1 moving-blends pass; step 4, paints and
+     lanes across a blended seam, is next (see [Bake detail](#bake-detail));
    - a `Convex` prism refuses any rounding
      ([1.4](modeling-authoring.md#14-convex-rounding-limit-6));
    - paint outlines cap at eight vertices behind a generic message, and
@@ -98,7 +98,7 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | a fix pass on MB-1 and MB-2 |
+| `lane/moving-blends` | moving blends steps 1 to 3 | landing with the w1 moving-blends fix pass, which merged it |
 | `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
@@ -3248,8 +3248,8 @@ reproduce worker for what remains.
 ### Bake detail
 
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
-· Next: the owner's cost bound for `lane/part-detail`, then the moving blends
-fix pass on `lane/moving-blends`.
+· Next: the owner's cost bound for `lane/part-detail`, then moving blends
+step 4.
 
 - [high] `lane/part-detail` holds one detail rule (WorldShapeDetail.Of on the branch)
   replacing the static, blend-group, ungrouped and coupled declarations, with
@@ -3268,26 +3268,16 @@ fix pass on `lane/moving-blends`.
   round sections only where a turn is visible at the creation's own scale. Its
   curvature gate also refines sharp creases (toes, soles about 2x), since
   sample values cannot tell a crease from a turn.
-- [high] `lane/moving-blends` holds
-  [moving blends](moving-blends.md) steps 1 to 3 (rest-pose bake and
-  envelope, propagated influences, dual-quaternion skinning on current,
-  previous and shadow positions; CPU pose error 1.11 mm under a 1.19 mm bound).
-  Its adversarial review found the C#/HLSL skin layout and the blend math right
-  and these to fix before landing: MB-1 (high, `SdfMeshSkin`) every vertex of a
-  moving part stores the root as its first member, so paints, insets and lanes
-  swim on every moving part and those vertices miss the rigid fast path; MB-2
-  (high, `SdfMeshPathBake`) skin `Build` and `Split` read the current program on
-  the bake pool, so a group kept across a restart reads another instance's
-  instructions and the mesh is no longer a function of its geometry; MB-3
-  (CreationMotion.Driven on the branch) shapes one frame moves together are flagged as
-  moving apart; MB-4 (`CreationMotionPlan`) a carve or clip one owner applies to
-  another is lost in both fallbacks, so the Moth's eye whites lose their clip;
-  MB-5 the envelope adds absolute frame shift instead of relative motion; MB-6
-  the third-owner CPU fallback contours with no sample cap; low: engraved runs
-  emitted per owner, the rotation bound under different pivots, the influence
-  stencil at millimetre radii, LINQ in the influence reading, a dead
-  `sdfMeshMemberLocal`, and docs that disagree with the code. A 60-frame
-  presented glance on both backends follows the fixes.
+- [high] [Moving blends](moving-blends.md) steps 4 and 5 remain: paints,
+  insets and lanes across a blended seam (a vertex wholly one owner's already
+  shades in that owner's frame), then retiring the settle rebake for the
+  dynamic groups that are not rest skins and the quiet-window cost measurement
+  of a skinned close-up and crowd on both backends.
+- [medium] A carve that moves against the surface it cuts keeps its rest cut in
+  both fallbacks (`CreationMotionPlan.Borrows`, the third-owner split): an
+  author who wants a moving carve gets no diagnostic saying so. PUCK122 could
+  name a cross-owner carve in a partitioned group the way it names a creased
+  blend.
 
 - Static placements' plain round shapes still bake at
   15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
