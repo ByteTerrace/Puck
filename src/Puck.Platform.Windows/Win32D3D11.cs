@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Puck.Maths;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -88,7 +87,7 @@ internal static unsafe class Win32D3D11 {
                 );
 
                 var description = adapter->GetDesc1();
-                var luid = PackedIntPair.Pack(high: description.AdapterLuid.HighPart, low: unchecked(((int)description.AdapterLuid.LowPart)));
+                var luid = GpuAdapterLuid.Pack(highPart: description.AdapterLuid.HighPart, lowPart: description.AdapterLuid.LowPart);
 
                 if (luid == adapterLuid) {
                     return adapter;

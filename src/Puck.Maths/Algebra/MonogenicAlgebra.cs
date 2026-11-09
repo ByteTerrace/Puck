@@ -1603,7 +1603,7 @@ public readonly struct MonogenicAlgebra<TScalar> : IEquatable<MonogenicAlgebra<T
             }
         }
 
-        return unchecked((int)(hash.Value ^ (hash.Value >> 32)));
+        return unchecked((int)PackedIntPair.FoldXor(value: hash.Value));
     }
     // Structural comparison of two coordinate vectors, shared by the descriptor's modulus tail and by the
     // Element/Projective coordinate vectors. A null vector is the default value and matches only another default.

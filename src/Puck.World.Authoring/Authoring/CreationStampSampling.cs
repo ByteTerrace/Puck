@@ -13,7 +13,6 @@ namespace Puck.World.Authoring;
 /// simulation state).
 /// </summary>
 public static class CreationStampSampling {
-    private static uint FoldSeed(uint seed, ulong worldSeed) => unchecked((uint)(seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
     private static FixedQ4816 GridHalfExtent(FixedQ4816 cellSize, int count) => ((cellSize * FixedQ4816.FromInteger(value: count)) / FixedQ4816.FromInteger(value: 2));
 
     /// <summary>The worst-case, seed-independent cell count a Noise region could ever admit — width x depth, the
@@ -53,10 +52,7 @@ public static class CreationStampSampling {
             val1: 1,
             val2: octaves
         );
-        var hashSeed = FoldSeed(
-            seed: seed,
-            worldSeed: worldSeed
-        );
+        var hashSeed = (seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var half = (cellSize / FixedQ4816.FromInteger(value: 2));
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
@@ -141,10 +137,7 @@ public static class CreationStampSampling {
         );
         var blocksX = ((effectiveWidth + (effectiveSpacing - 1)) / effectiveSpacing);
         var blocksZ = ((effectiveDepth + (effectiveSpacing - 1)) / effectiveSpacing);
-        var hashSeed = FoldSeed(
-            seed: seed,
-            worldSeed: worldSeed
-        );
+        var hashSeed = (seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
             count: effectiveWidth
