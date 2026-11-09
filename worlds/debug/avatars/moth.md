@@ -210,14 +210,15 @@ everything parented beneath them, still posed and animated by the hidden body;
 
 ## Geometry and motion
 
-The creation uses superellipsoids for smooth volumes, convex extrusions for
-armor plates, quadratic sweeps for digits and facial lines, and axial profiles
-for flared shins. Scoped subtraction and intersection isolate the hood opening,
-eye sockets, plate boundaries and ankle arches. The shin's ivory arch bands and
-side panels are fitted geometry. Detail that is colour rather than form is paint
+The creation uses superellipsoids for soft volumes, extruded and tapered prisms
+for armor plates (a plate is flat-faced with chamfered or rounded edges), and
+quadratic sweeps for digits and facial lines. Scoped subtraction and
+intersection isolate the hood opening, eye sockets, plate boundaries and the
+greaves' arches. A raised ivory band is the shell it sits on, a finger proud,
+cut between two planes, so it reads as part of the plate with its edges
+showing depth. Detail that is colour rather than form is paint
 (`palette[].paints`), drawn crisp at the pixel and absent from the bake:
-the chest slab's lavender centre, the lower shoulder plate's ivory upper half,
-the gauntlets' lavender inner halves, the vent slot pairs on the
+the chest slab's lavender centre, the gauntlets' lavender inner halves, the vent slot pairs on the
 outer faces of the gauntlets and shin panels, the boot seams, the mouth and
 nostrils, the eyes' catchlights, the grey insets on the pods' lower bands, and
 the upper lids and lashes where their tubes cross the eye whites. The near-ellipsoidal forms use
@@ -240,18 +241,18 @@ blink frame (`blinkPose`) live in the creation and scale by the same
 `headScale`. Her face sits recessed behind the hood's raised ivory bezel, with
 dark headroom round it, and the skin's wrap and warm fill raised so it reads lit
 inside the hood. The face is
-the character's charm, after sheet 03: a small soft nose (a gentle bridge and a
-rounded tip blended into the face's group, so it bakes as one surface with the
-face; a group of its own baked it on a sub-millimetre lattice into a frayed
-shell), almond eyes
+the character's charm, after sheet 03: a small soft nose (one rounded tip
+blended into the face's group, so it bakes as one surface with the face),
+almond eyes
 in softly rounded sockets, swept brows and a painted smile. Her black hair is a
 scalp cut to a soft hairline and four tapering locks smoothly joined to it: a
 thick fringe swept from the parting on her left across her forehead to her right
 temple, a shorter one back to her left temple, and a lock down each side of her
 face. The fringe locks root inside the scalp, so nothing stands up from her
 crown on either form. The hood is a wide dome, wider than it is tall, with a
-thick ivory bezel (`helmetRim`) standing forward round a horseshoe opening that
-is open over the collar. Its charcoal interior is its own cut (the cutter's
+thick, rolled ivory bezel (`helmetRim`) leaning a little forward round a
+horseshoe opening that is open over the collar, its front plane ahead of her
+face. Its charcoal interior is its own cut (the cutter's
 material), rounded where it meets the face opening, which is itself a rounded
 cut, so the rim and the interior bake clean. Each ear disc (`hoodEar`) is broad
 and flush, faced out and a little forward so it reads as a disc from the front; the ochre collar stands forward
@@ -269,56 +270,56 @@ torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
 flight pack is the `flightPod` template, once a side: a charcoal mount riding
 the torso, with the shell, the two bands and the nozzle parented to it, and its
 hinge on the torso under the hood; the narrow spine between the pods is one
-chamfered prism. Each pod is about 0.28 m wide from 1.03 to 1.63 m: its rear
+chamfered prism. Each pod is about 0.33 m wide from 0.98 to 1.64 m, standing
+past her sides: its rear
 outline (`podOutline`) extruded and domed by an ellipsoid into one convex
 lavender shell with the cap's small opening cut into its back. Each ivory band is
 the same shell a finger proud of it between two planes that slope down to the
 outer side, in its own group, so its edges show its depth without a seam in the
-shell. The nozzle is a charcoal barrel set square in the lip's underside, aimed
-in, down and a little back, its cyan lens softly lit at rest.
+shell. The lip sweeps down and out; the nozzle, a large charcoal barrel set
+square in the lip's underside on its inner end, is aimed in, down and a little
+back, its cyan lens softly lit at rest.
 
-Each shoulder is a stack of two thick plates sloping down and out over a round
-charcoal pivot with a gunmetal cap that shows under the upper plate's inner end,
-all riding the upper arm. Each plate is its side outline, a rounded rectangle
-that domes over the shoulder at front and back, extruded along the slope with
-45-degree chamfers on its ends: the upper plate lavender, the lower one ivory
-above a lavender skirt. The upper plate's inner end stays outboard of the hood
-through the gait and the flight splay. Each hip carries an ivory guard, a large
+Each shoulder is a pauldron of three thick plates fanned round the shoulder
+joint: a lavender plate sloping down and out over the top, an ivory band, and a
+lavender plate hanging down the outside of the upper arm, each flat-faced with
+chamfered edges and drooping at front and back so the stack wraps the arm. A
+charcoal pivot disc with a raised boss sits in front of the joint under the top
+plate. All ride the upper arm, and the top plate's inner end stays outboard of
+the hood through the gait and the flight splay. Each hip carries an ivory guard, a large
 charcoal disc and a raised boss at the pelvis's front corner, faced out and
 forward so the disc reads round from the front and the side; the thighs are bare
 charcoal and swing behind them.
 
 The arm is a short upper arm, an elbow at 1.22 m and a long forearm, as on the
 sheets: the charcoal elbow joint shows between the shoulder stack and the
-gauntlet, as wide as the shoulder stack: a flat-faced block with rounded
-corners and chamfered front and back edges from below the hinge to the wrist,
-faced square to the body rather than the forearm's twist. The elbow bends about
-its lateral axis. The gloved hands are a third larger than
+gauntlet, as wide as the shoulder stack: a slanted ivory tube along the forearm
+from below the hinge to the wrist, its rounded section extruded with chamfered
+ends and open at the cuff the hand comes out of, faced square to the body rather
+than the forearm's twist. The elbow bends about its lateral axis, which a
+charcoal hinge disc and boss cap on its outer side. The gloved hands are a third larger than
 the first Moth's, scaled about the wrist.
 
 Each piston is a rod entering a cylinder, attached at both ends, and needs no
-driver of its own: a steel rod hangs from a charcoal lug on the upper bone and a
-satin steel cylinder rises from the lower bone (out of the gauntlet's top at the
-elbow, in front, inside the bend; out of the greave's top behind the knee's outer
-side). The forearm and shin swing by `elbowSwings` and `kneeSwings` at k = 1, and
+driver of its own: a steel rod hangs from a charcoal eye on the upper bone and a
+satin steel cylinder rises from the lower bone (from an eye seated on the
+gauntlet's top at the elbow, in front, inside the bend; out of the greave's top
+behind the knee's outer side). The forearm and shin swing by `elbowSwings` and `kneeSwings` at k = 1, and
 the rod and cylinder take the same swings scaled about their own lugs by the
 share of the bend that keeps them on one line, so the rod slides into the
 cylinder as the joint bends.
 
 The greaves flare straight from a narrow top under the knee to a wide foot,
-flat-faced (exponent 4.5, which their arch, back-band and side-panel shells
-share), under an octagonal chamfered ivory knee guard that rides the thigh and
-stands proud of the greave's lavender front. The boots are their own lavender blocks under the greave's
-ivory cuff: fitted ivory ankle arches, broad lavender insteps and toe caps on
-thick charcoal soles, and split heel pads. The boots carry lights and never fire
-(the concept pack): each heel's recessed cyan lens, angled 55 degrees below
-rearward horizontal between two closed lavender heel guards, and each ankle
-hub's cyan lens in its charcoal bezel stay softly lit by day and at night. The
-[debug studio](../debug.md#avatar-studio) provides front, side, low rear and
-quarter views on a neutral platform.
-At close range the curved ankle trim still shows some uneven baked shading;
-`mesh audit` locates small folds at its clipped edges even though the mesh is
-closed. Judge the silhouette separately from that remaining surface defect.
+flat-faced: each is a front trapezoid and a side trapezoid intersected with
+rounded edges, under an octagonal chamfered ivory knee guard that rides the thigh
+and stands proud of the greave's lavender front. A broad ivory band wraps the
+greave's foot, arched over the instep where the boot runs in, and an ivory
+pentagon panel with its vent pair sits on the outer face. The boots are one
+lavender piece from heel to toe with a raised toe cap on one charcoal sole. The
+boots carry lights and never fire (the concept pack): a flush round cyan light
+low on each greave's back and each ankle hub's cyan lens in its charcoal bezel
+stay softly lit by day and at night. The [debug studio](../debug.md#avatar-studio)
+provides front, side, low rear and quarter views on a neutral platform.
 
 The rig swings the thighs, shins, feet, arms and forearms during walking.
 Two surface effectors plant the feet in alternating stride phases. Their target

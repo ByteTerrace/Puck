@@ -162,10 +162,10 @@ public sealed class MeshCommandTests {
         Assert.Contains(expectedSubstring: "2 group(s) of", actualString: damage);
         Assert.Contains(expectedSubstring: "is truncated", actualString: damage);
 
-        var (absent, guidance) = Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+        var (absent, guidance) = Invoke("mesh", "audit", "--world", world, "--group", "podShell-left", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         Assert.Equal(expected: 2, actual: absent);
-        Assert.Contains(expectedSubstring: "podCap-left: no stored mesh", actualString: guidance);
+        Assert.Contains(expectedSubstring: "podShell-left: no stored mesh", actualString: guidance);
         Assert.Contains(expectedSubstring: "the store holds no mesh of them under bake identity", actualString: guidance);
     }
     // With --cpu the verb bakes the selected groups itself, through the bake's own lattices answered by the field
@@ -201,7 +201,7 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--build", directory.RootPath, "--backend", "vulkan"), text: "cannot read the bake identity"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", malformed), text: "failed to load"));
         // This build's own identity, read from its assemblies and kernels, keys nothing in an empty store.
-        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
+        Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podShell-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
     }
     // mesh scene builds the irradiance trace scene over the stored static meshes, traces it, updates it for one draw's new
     // geometry (building that alone), a move and a return (building nothing), and traces each answer alike; a change no
