@@ -1615,7 +1615,12 @@ by `world.view.pick`.
   rules she "isn't sacred and would be vastly improved". Her current sculpt,
   palette, rig and bake cost carry no weight; the pack's turnaround and
   construction sheets are the standard, and the items below are parts of it.
-  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  Her remaining modeling (suit, off-suit pilot and the shared head) waits for
+  a pair session with the owner (the owner's ruling: the agent rebuild
+  "deviated a bit from our intended look on her"); no lane models her until
+  then. The suit and pilot lanes' work is kept on their branches for that
+  session, unlanded. Engine defects her rebuild surfaced (per-part bake detail,
+  blends between moving parts) proceed on their own. The anim-bake change took her pooled bake from 464,018 to 1,145,385
   triangles at parity with static detail; the rebuild sets her budget at the
   cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
@@ -1700,7 +1705,9 @@ by `world.view.pick`.
   why a named world camera row does not replace the view.
 - [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
   world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
+  `debug.puck`. Its modeling joins the Moth's pair session with the owner (the
+  owner's ruling); seven agent passes did not converge, the last one against a
+  cited reference document kept unlanded on the swallow-7 lane's branch. Its static sculpt reached a readable silhouette (chestnut mask
   around the beak, teal breast band, cream belly, wings past a forked tail)
   from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
   drivers) then tore the throat, faceted the eyes and fragmented the tail on
@@ -1939,8 +1946,12 @@ measured.
 
 - [high] `world.reload` is refused on the debug world: "Rebuild payload is
   21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
-  documented edit-then-reload loop does not work on the proving ground. A
-  reload should send what changed, not the whole rebuilt document.
+  documented edit-then-reload loop does not work on the proving ground. The
+  cap is `WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`,
+  and reload ships the whole composed definition. A reload should send what
+  changed (the edit-to-running bar wants that anyway), never a larger cap
+  alone. A look lane comparing two palette styles had to boot a second World
+  for each comparison because of it.
 
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
@@ -2017,12 +2028,6 @@ document values bind by copying only the paths to their references
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.
 
-- [high] `world.reload` cannot reload the debug world: it is refused with
-  `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
-  (`WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`); reload
-  ships the whole composed definition. Decide: a reload that sends what changed
-  (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
-  larger cap alone. Found in the lead's verification window.
 - The boot's `System.Text.Json` JIT is the source-generated context's own
   generic instantiations (`WorldJsonSourceContext` behind `WorldJsonContext`),
   not reflection: its metadata instantiates the serializer's generics once per
@@ -3129,6 +3134,21 @@ the static round-section term's cost with `puck mesh audit --cpu`.
   for static instances and merges every member's detail into one
   `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
   member declare its own detail.
+- [medium] A flare's field bound is loose: `SdfProgramBuilder.AxialProfile`
+  builds in `1/maxS` and `SdfProgram.FlareOperatorNorm` bounds the shear term
+  with the chain's whole reach times `maxS`, so a flared primitive's slope reads
+  about 0.22. That multiplies the CPU twin's one-raw rounding about four times
+  (`puck mesh audit --cpu` rough p99 about 6 degrees on every flared primitive)
+  and makes the bake refine more than it needs. Invariant-bearing: the bound
+  must stay sound.
+- [medium] Contour folds the four-probe scan finds (plain, deformed, thin,
+  turned thin): a thin cone folds at its apex (23 and 14 folds), a thin
+  `ChamferedRectangle` prism folds (15 and 14), and a flared cylinder's top rim
+  bakes 4 open edges.
+- [low] A tapered tip thinner than about 1.5 bake cells does not bake (a
+  swallow streamer ending at 0.3 to 0.7 mm radius stops 8 to 10 mm short at the
+  2 mm `WorldPlacementStamper.FinestDetail`), so a small creation cannot have a
+  needle point; a finer floor for small creations needs its cost measured.
 
 ### Residency and streaming
 
@@ -3983,6 +4003,16 @@ still changes a fraction of a percent of pixels, not exactly zero.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- [medium] Paint and profile limits authors meet without a named refusal: a
+  convex paint outline holds at most 8 vertices (`SdfAppearance.PaintTableVectors`)
+  and over that the validator says only "Invalid inset, weathering, paint or
+  flow" (`CreationCanonicalizer.Wear`); `puck compile --validate` accepts a paint
+  profile that `puck creation stats` then refuses, so paint emission is not
+  checked at compile; a Convex paint profile with no `cornerRadius` is stored
+  with 0.15; and a `Convex` prism profile refuses any `rounding` ("no room to
+  round", `SdfSolidGeometry`), so a rounded convex prism has to be faked with
+  superellipsoids.
 
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
