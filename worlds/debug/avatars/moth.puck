@@ -14,9 +14,9 @@ let headAt = [0, 1.735, 0.207]
 
 // The suit's two plate colours, from the concept pack: dusty lavender and a warm ivory, with the darker lavender of
 // a groove and the near-black of a vent slot.
-let lavenderPlate = "#744080"
+let lavenderPlate = "#926BA6"
 let ivoryPlate = "#E8B88C"
-let lavenderSeam = "#5E3468"
+let lavenderSeam = "#755982"
 let ventSlot = "#2B2630"
 
 // Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's cel
@@ -67,11 +67,9 @@ let creamUndercoat = [
   { threshold: 0.38, surface { color: "#5B5D63", roughness: 0.52, metal: 0.55 } }
 ]
 
-// The reference's recessed heel jets point 55 degrees below rearward horizontal.
-// The cylinder's -Y cap and the lens's -Z face share (0, -sin(55), -cos(55));
-// the exhaust volume inherits the lens frame, so it leaves along the same axis.
-let bootNozzleRotation = [0.3007058, 0, 0, 0.9537170]
-let bootLensRotation = [-0.4617486, 0, 0, 0.8870108]
+// The heel light faces the greave's back face, which leans 10.6 degrees in toward the knee: its cylinders' -Y caps face
+// (0, 0.184, -0.983).
+let heelLensRotation = [0.7694, 0, 0, 0.6388]
 let bootPlanOutline = [[-0.82, -1], [-1, -0.3], [-0.9, 0.72], [-0.64, 1], [0.64, 1], [0.9, 0.72], [1, -0.3], [0.82, -1]]
 
 let archBackOutline = [
@@ -86,6 +84,8 @@ let archBackOutline = [
 ]
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
+// How far the trailing knee folds at the top of a stride, in radians.
+let kneeFold = 0.6
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
 let diagonal = 0.7071068 // sin/cos of 45 degrees, the quarter-turn quaternion component
 let braidTwist = 0.247404 // sin of the braid's half-angle
@@ -159,16 +159,17 @@ let braid1Rotation = [
 // volume takes the same frame and leaves along the same axis.
 let podNozzleRotationLeft = [0.171329, 0, -0.207672, 0.963077]
 let podNozzleRotationRight = [0.171329, 0, 0.207672, 0.963077]
-// A band plate stands its extruded rounded rectangle on end and tips its top 14 degrees in toward her back, so its lower
-// edge swings out over the plate below like a shingle: local X stays across, local Y becomes the depth and local Z the
-// height.
-let podBandRotation = [0.788011, 0, 0, 0.615661]
-// The skirt is extruded front to back and tipped the same 14 degrees.
-let podSkirtRotation = [0.121869, 0, 0, 0.992546]
-// The skirt plate's outline seen from behind: square at the top, its outer side running down to the lip's tip and its
-// lower edge rising 23 degrees in toward the spine over the nozzle, wound clockwise for each side.
-let podSkirtOutlineLeft = [[-1, 1], [1, 1], [1, -0.8], [0.8, -1], [-1, -0.13]]
-let podSkirtOutlineRight = [[1, -0.13], [-0.8, -1], [-1, -0.8], [-1, 1], [1, 1]]
+// The shoulder stack's front outline, x outward and wound clockwise (sheet 01): a top sloping down and out from the
+// collar, a rounded outer side and a level bottom at the bottom of the chest.
+let shoulderOutline = [[-0.95, 0.8], [-0.4, 1], [0.6, 0.62], [0.95, 0.35], [1, -0.6], [0.85, -1], [-0.45, -1], [-0.9, -0.3], [-1, 0.45]]
+
+// A pod's shell (sheets 07 and 12): its outline seen from behind, x outward and wound clockwise, narrow at the domed
+// cap, widest at the second band and running down the outer side to the long lip's tip, its lower edge rising in toward
+// the spine over the nozzle; the extruded outline is domed by an ellipsoid so its back is a convex shell.
+let podOutline = [[-0.22, 1], [0.33, 0.93], [0.78, 0.62], [1, 0.08], [0.96, -0.45], [0.82, -1], [-0.6, -0.4], [-0.98, -0.2], [-1, 0.53], [-0.78, 0.86]]
+// The pod's side outline, x toward her back and wound clockwise: the front flat against her back, the cap rounded, the
+// back deepest at the second band and sweeping forward to the lip's point.
+let podSideOutline = [[-1, 0.92], [-0.3, 1], [0.5, 0.75], [1, 0.1], [0.75, -0.5], [-0.4, -1], [-1, -0.6]]
 
 template cameraLayout(name) {
   layout name {
@@ -185,21 +186,19 @@ template cameraLayout(name) {
   }
 }
 
-// The flight pack (sheets 01, 07 and 12): two rigid curved pods beside a narrow charcoal spine, flush to her back, each a
-// broad shield about 0.25 m wide running from under the hood's rim to the upper pelvis. Each is five plates over a
-// charcoal core, reading from the top: a domed lavender cap with its small dark opening cut into its back, an ivory
-// band, a lavender band, an ivory band with its grey inset and the long lavender skirt, whose lip tapers down to a tip on
-// the outer side over one recessed nozzle. The bands are flat-faced chamfered slabs whose tops tip in toward her back,
-// so each lower edge stands proud over the plate below; their inner and outer edges line up, so only the shingled
-// lower edges step. One union group per pod: every plate rides the pod's swings through `parent`, so no blend
-// crosses parts that move apart, and the only cuts are the opening and the nozzle's bore.
-template flightPod(side, sx, baseId, groupId, violetPod, skirtOutline, nozzleRotation, wingAmplitude, bankAmplitude) {
+// The flight pack (sheets 01, 07 and 12): two rigid curved pods beside a narrow charcoal spine, flush to her back, from
+// under the hood's rim to the upper pelvis. Each pod is one convex lavender shell (its rear outline extruded and domed
+// by an ellipsoid), narrow at its cap, widest at the second band and tapering down its outer side to the long lip, with
+// a small dark opening cut into the cap's back and one nozzle recessed under the lip on its inner side. Its two ivory
+// bands are plates of the same shell a finger proud of it between two planes that slope down to the outer side, so
+// their edges show their depth. The shell and each band are their own group, all riding the pod's charcoal mount
+// through `parent`, so no blend crosses parts that move apart.
+template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmplitude, bankAmplitude) {
   shape Superellipsoid $"pod-{side}" {
     id: baseId
-    position [sx * 0.14, 1.29, -0.19]
-    scale [0.095, 0.29, 0.065]
+    position [sx * 0.15, 1.3, -0.17]
+    scale [0.07, 0.24, 0.045]
     material: charcoal
-    group: groupId
     parent: "torso"
     exponent: 3
     swings [
@@ -218,126 +217,135 @@ template flightPod(side, sx, baseId, groupId, violetPod, skirtOutline, nozzleRot
     exponent: 5
   }
 
-  shape Superellipsoid $"podCap-{side}" {
-    id: baseId + 2
-    position [sx * 0.143, 1.535, -0.195]
-    scale [0.105, 0.06, 0.062]
-    material: violetPod
-    group: groupId
-    parent: $"pod-{side}"
-    exponent: 4
+  for (layer, k) in [{ name: "podShell", material: violetPod, grow: 0 }, { name: "podBand1", material: shinCream, grow: 0.008, y: 1.475, h: 0.045 }, { name: "podBand2", material: shinCream, grow: 0.008, y: 1.28, h: 0.05 }] {
+    shape Prism $"{layer.name}-{side}" {
+      id: baseId + 2 + 3 * k
+      position [sx * 0.19, 1.3, -0.25]
+      rotation: prismMirror(sx, [0, 0, 0, 1])
+      scale [0.165 + layer.grow, 0.35 + layer.grow, 0.11 + layer.grow]
+      material: layer.material
+      group: groupId + k
+      parent: $"pod-{side}"
+      profile { kind: "Convex", vertices: podOutline, cornerRadius: 0.15 }
+    }
+
+    shape Superellipsoid $"{layer.name}Dome-{side}" {
+      id: baseId + 3 + 3 * k
+      position [sx * 0.19, 1.25, -0.1]
+      scale [0.24 + layer.grow, 0.7 + layer.grow, 0.26 + layer.grow]
+      material: layer.material
+      blend: "SmoothIntersection"
+      smooth: 0.03
+      group: groupId + k
+      parent: $"pod-{side}"
+      exponent: 2
+    }
+
+    // The side profile (sheet 07's right side), extruded across the pod: narrow at the cap, deepest at the second
+    // band and sweeping down to the long pointed lip. It reads the same from either side, so it is not mirrored.
+    shape Prism $"{layer.name}Profile-{side}" {
+      id: baseId + 20 + k
+      position [sx * 0.19, 1.3, -0.245]
+      rotation [0, diagonal, 0, diagonal]
+      scale [0.11 + layer.grow, 0.36 + layer.grow, 0.3]
+      profile { kind: "Convex", vertices: podSideOutline, cornerRadius: 0.2 }
+      material: layer.material
+      blend: "SmoothIntersection"
+      smooth: 0.03
+      group: groupId + k
+      parent: $"pod-{side}"
+    }
+  }
+
+  for (band, b) in [{ name: "podBand1", y: 1.5, h: 0.048 }, { name: "podBand2", y: 1.31, h: 0.055 }] {
+    shape Box $"{band.name}Span-{side}" {
+      id: baseId + 7 + 3 * b
+      position [sx * 0.19, band.y, -0.25]
+      rotation [0, 0, -sx * 0.10453, 0.99452]
+      scale [0.3, band.h, 0.2]
+      material: shinCream
+      blend: "SmoothIntersection"
+      smooth: 0.004
+      group: groupId + 1 + b
+      parent: $"pod-{side}"
+    }
   }
 
   // The cap's small dark opening, a rounded recess in its back face; the cut takes the cutter's near-black.
   shape Box $"podOpening-{side}" {
-    id: baseId + 12
-    position [sx * 0.148, 1.552, -0.257]
-    scale [0.034, 0.024, 0.02]
+    id: baseId + 4
+    position [sx * 0.17, 1.565, -0.3]
+    scale [0.032, 0.022, 0.03]
     material: jet
-    blend: "Subtraction"
+    blend: "SmoothSubtraction"
+    smooth: 0.006
     group: groupId
     parent: $"pod-{side}"
     rounding: 0.008
   }
 
-  shape Prism $"podBand1-{side}" {
-    id: baseId + 3
-    position [sx * 0.158, 1.455, -0.218]
-    rotation: podBandRotation
-    scale [0.12, 0.075, 0.048]
-    material: shinCream
-    group: groupId
-    parent: $"pod-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.6 }
-    chamfer: 0.014
-  }
-
-  shape Prism $"podMid-{side}" {
-    id: baseId + 4
-    position [sx * 0.158, 1.36, -0.22]
-    rotation: podBandRotation
-    scale [0.12, 0.075, 0.05]
-    material: violetPod
-    group: groupId
-    parent: $"pod-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.6 }
-    chamfer: 0.014
-  }
-
-  shape Prism $"podBand2-{side}" {
-    id: baseId + 5
-    position [sx * 0.158, 1.25, -0.222]
-    rotation: podBandRotation
-    scale [0.12, 0.075, 0.062]
-    material: shinCream
-    group: groupId
-    parent: $"pod-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.6 }
-    chamfer: 0.014
-  }
-
-  shape Prism $"podSkirt-{side}" {
-    id: baseId + 6
-    position [sx * 0.158, 1.095, -0.2465]
-    rotation: podSkirtRotation
-    scale [0.12, 0.11, 0.07]
-    material: violetPod
-    group: groupId
-    parent: $"pod-{side}"
-    profile { kind: "Convex", vertices: skirtOutline, cornerRadius: 0.1 }
-  }
-
-  // The nozzle: a gunmetal barrel set square in the skirt's lower edge, its face flush with the opening, its bore dark,
-  // its cyan lens and pale core a finger inside the mouth, lit by flight mode (lane 2); the exhaust volume leaves along
-  // the same axis.
+  // The nozzle tucked under the lip's inner end (sheet 07): a charcoal barrel set square in the lip's underside, its
+  // axis the opening's normal, whose rounded mouth rims a cyan lens that glows dimly at rest and a pale core lit by
+  // flight mode (lane 2); the exhaust volume leaves the mouth along the same axis.
   shape Cylinder $"nozzle-{side}" {
-    id: baseId + 7
-    position [sx * 0.122, 1.0757, -0.2451]
+    id: baseId + 12
+    position [sx * 0.1363, 1.1304, -0.2667]
     rotation: nozzleRotation
-    scale [0.042, 0.03, 0.042]
-    material: gunmetal
-    group: groupId
+    scale [0.055, 0.04, 0.055]
+    material: charcoal
+    parent: $"pod-{side}"
+    rounding: 0.008
+  }
+
+  shape Cylinder $"nozzleGlow-{side}" {
+    id: baseId + 13
+    position [sx * 0.1214, 1.0988, -0.2789]
+    rotation: nozzleRotation
+    scale [0.042, 0.01, 0.042]
+    material: bootCyan
     parent: $"pod-{side}"
     rounding: 0.006
   }
 
-  shape Cylinder $"nozzleBore-{side}" {
-    id: baseId + 8
-    position [sx * 0.1148, 1.0603, -0.251]
-    rotation: nozzleRotation
-    scale [0.032, 0.016, 0.032]
-    material: jet
-    blend: "Subtraction"
-    group: groupId
-    parent: $"pod-{side}"
-  }
-
-  shape Cylinder $"nozzleGlow-{side}" {
-    id: baseId + 9
-    position [sx * 0.1204, 1.0722, -0.2464]
-    rotation: nozzleRotation
-    scale [0.03, 0.004, 0.03]
-    material: thrusterCyan
-    parent: $"pod-{side}"
-  }
-
   shape Cylinder $"nozzleCore-{side}" {
-    id: baseId + 10
-    position [sx * 0.1194, 1.0701, -0.2472]
+    id: baseId + 14
+    position [sx * 0.1198, 1.0953, -0.2802]
     rotation: nozzleRotation
-    scale [0.013, 0.004, 0.013]
+    scale [0.018, 0.008, 0.018]
     material: thrusterGlow
     parent: $"pod-{side}"
   }
 
   shape Cylinder $"podHinge-{side}" {
-    id: baseId + 11
+    id: baseId + 15
     position [sx * 0.09, 1.55, -0.17]
     rotation [diagonal, 0, 0, diagonal]
     scale [0.018, 0.008, 0.018]
     material: charcoal
     parent: "torso"
     rounding: 0.003
+  }
+}
+
+// A hood's ear disc (sheet 01): broad and flush, an ivory mount sunk into the hood's side with a lavender ring, a thin
+// ochre ring and a violet centre standing just proud of it, faced out and 18 degrees forward so it reads round from the
+// side and as a disc, not a stub, from the front.
+template hoodEar(side, sx, idBase) {
+  for (part, k) in [
+    { name: "earMount", material: skin, r: 0.088, h: 0.02, out: 0.29 }
+    { name: "earCover", material: violet, r: 0.068, h: 0.012, out: 0.304 }
+    { name: "earRing", material: brass, r: 0.054, h: 0.008, out: 0.312 }
+    { name: "earButton", material: violet, r: 0.046, h: 0.009, out: 0.316 }
+  ] {
+    shape Cylinder $"{part.name}-{side}" {
+      id: idBase + 1 + k
+      position [sx * part.out * 0.951, 1.77, -0.012 + part.out * 0.309]
+      rotation [0.2192, 0, -sx * 0.6718, 0.7071]
+      scale [part.r, part.h, part.r]
+      material: part.material
+      parent: "helmet"
+      rounding: 0.002
+    }
   }
 }
 
@@ -355,6 +363,969 @@ template braidChain(chainIdx, baseId, positions, rotations) {
       scale [0.014, 0.026, 0.016]
       smooth: 0
     }
+  }
+}
+
+// A mirrored rotation for a prism whose outline is not symmetric across its own X: the mirrored pose turns the prism a
+// half turn about its local Y, which carries the outline across while its symmetric extrusion stays put.
+function prismMirror(sx, q) = sx > 0 ? q : [q[2], q[3], q[0], q[1]]
+
+// The elbow's bend: the forearm's swings about the elbow's lateral axis at k = 1. The elbows bend 0.36 rad at a jump's
+// peak, 0.51 rising and 0.21 falling, and a little further as she lands. The piston's cylinder and rod take the same
+// swings scaled by k about their own lugs: the share of the bend that keeps them on one line.
+function elbowSwings(sx, stride, pivot, k) = [
+  { driver: "run", axis [0.985, sx * 0.175, 0], amplitude: -0.45 * k, pivot: pivot, wave: "constant", phase: 0 }
+  { driver: "gait", axis [0.985, sx * 0.175, 0], amplitude: 0.3 * k, pivot: pivot, wave: "sine", phase: 3.6416 + stride }
+  { driver: "flight", axis [0.985, sx * 0.175, 0], amplitude: -0.15 * k, pivot: pivot, wave: "linear", phase: 0 }
+  { driver: "air", axis [0.985, sx * 0.175, 0], amplitude: -0.03 * k, pivot: pivot, wave: "linear", phase: 12 }
+  { driver: "land", axis [0.985, sx * 0.175, 0], amplitude: 0.05 * k, pivot: pivot, wave: "linear" }
+]
+
+// One arm, authored as her left (+X) and mirrored for the right by `sx`: positions, pivots and curves negate X,
+// rotations and swing axes conjugate by the mirror, and `stride` puts the right arm's gait and tread half a cycle on.
+template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
+  shape Sweep $"upperArm-{side}" {
+    id: idBase + 148
+    position [sx * 0.295, 1.4515, 0]
+    rotation [0, 0, -sx * 0.078459, 0.996917]
+    material: charcoal
+    parent: "torso"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0363, -0.1009, 0]
+      c [sx * 0.0727, -0.2059, 0]
+      radiusStart: 0.08
+      radiusEnd: 0.08
+    }
+    swings [
+      { driver: "swim", axis [1, 0, 0], amplitude: 0.55, pivot [sx * 0.295, 1.4515, 0], wave: "sine", phase: stride }
+      { driver: "swim", axis [0, 0, sx], amplitude: -0.85, pivot [sx * 0.295, 1.4515, 0], wave: "constant" }
+      {
+        driver: "run"
+        axis [0, 0, sx]
+        amplitude: -0.15
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "constant"
+        phase: 0
+      }
+      {
+        driver: "gait"
+        axis [0.987688, -sx * 0.156434, 0]
+        amplitude: 0.55
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "sine"
+        phase: 3.1415927 + stride
+      }
+      // In flight mode the arms hang at her sides (sheet 10): this undoes the air pose's 0.45 rad spread and its
+      // 0.12 rad forward lift at zero vertical speed, leaving them a hand's breadth off her hips.
+      {
+        driver: "flight"
+        axis [0, 0, sx]
+        amplitude: -0.4
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "linear"
+        phase: 0
+      }
+      {
+        driver: "flight"
+        axis [0.987688, -sx * 0.156434, 0]
+        amplitude: 0.12
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "linear"
+        phase: 0
+      }
+      // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
+      {
+        driver: "air"
+        axis [0, 0, sx]
+        amplitude: 0.03
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "linear"
+        phase: 15
+      }
+      // And lift forward 0.12 rad, 0.2 rising.
+      {
+        driver: "air"
+        axis [0.987688, -sx * 0.156434, 0]
+        amplitude: -0.015
+        pivot [sx * 0.295, 1.4515, 0]
+        wave: "linear"
+        phase: 8
+      }
+    ]
+  }
+
+  shape Superellipsoid $"elbow-{side}" {
+    id: idBase + 149
+    position [sx * 0.336, 1.2201, 0.004]
+    rotation [0, 0, -sx * 0.078459, 0.996917]
+    scale [0.07, 0.065, 0.072]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    exponent: softness
+  }
+
+  // The shoulder stack (sheets 01 and 02): one solid convex lavender shell from collar height to the bottom of the
+  // chest, wrapping the top and outside of the upper arm, its front outline sloping down and out and its front and back
+  // domed by an ellipsoid. A lavender cap plate and an ivory band below it are the same shell a finger proud between
+  // planes that slope down and out, so the stack reads as plates on plates with their edges showing depth. A charcoal
+  // pivot disc with a raised boss shows in front of the joint at the shell's inner edge. All ride the upper arm; the
+  // shell's inner top stays outboard of the hood as the arm swings.
+  shape Cylinder $"shoulderPivot-{side}" {
+    id: idBase + 150
+    position [sx * 0.222, 1.455, 0.12]
+    rotation [0.6124, 0, -sx * 0.3536, 0.7071]
+    scale [0.065, 0.02, 0.065]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.008
+  }
+
+  shape Cylinder $"shoulderPivotCap-{side}" {
+    id: idBase + 155
+    position [sx * 0.2345, 1.455, 0.1417]
+    rotation [0.6124, 0, -sx * 0.3536, 0.7071]
+    scale [0.04, 0.012, 0.04]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.006
+  }
+
+  for (layer, k) in [
+    { name: "shoulderSlab", ids [151, 158, 0], material: violetBand, grow: 0 }
+    { name: "shoulderCap", ids [210, 211, 212], material: violetBand, grow: 0.012, y: 1.6, h: 0.075 }
+    { name: "shoulderBand", ids [207, 208, 209], material: skin, grow: 0.012, y: 1.465, h: 0.042 }
+  ] {
+    shape Prism $"{layer.name}-{side}" {
+      id: idBase + layer.ids[0]
+      position [sx * 0.37, 1.455, 0]
+      rotation: prismMirror(sx, [0, 0, 0, 1])
+      scale [0.14 + layer.grow, 0.2 + layer.grow, 0.17 + layer.grow]
+      material: layer.material
+      group: groupBase + 150 + k
+      parent: $"upperArm-{side}"
+      profile { kind: "Convex", vertices: shoulderOutline, cornerRadius: 0.12 }
+    }
+
+    shape Superellipsoid $"{layer.name}Dome-{side}" {
+      id: idBase + layer.ids[1]
+      position [sx * 0.35, 1.42, 0]
+      scale [0.25 + layer.grow, 0.33 + layer.grow, 0.2 + layer.grow]
+      material: layer.material
+      blend: "SmoothIntersection"
+      smooth: 0.03
+      group: groupBase + 150 + k
+      parent: $"upperArm-{side}"
+      exponent: 2
+    }
+  }
+
+  for (band, b) in [{ name: "shoulderCap", id: 212, y: 1.6, h: 0.075 }, { name: "shoulderBand", id: 209, y: 1.465, h: 0.042 }] {
+    shape Box $"{band.name}Span-{side}" {
+      id: idBase + band.id
+      position [sx * 0.37, band.y, 0]
+      rotation [0, 0, -sx * 0.13053, 0.99144]
+      scale [0.3, band.h, 0.3]
+      material: skin
+      blend: "SmoothIntersection"
+      smooth: 0.005
+      group: groupBase + 151 + b
+      parent: $"upperArm-{side}"
+    }
+  }
+
+  // The elbow piston in the inside of the bend (sheet 02): a rod hung from an eye on the upper arm and a cylinder
+  // rising from an eye seated on the gauntlet's top, on the forearm. Each turns about its own eye by the share of the
+  // elbow's bend that keeps the two on one line (elbowSwings), so the rod slides into the cylinder as the elbow bends.
+  // A charcoal hinge disc with a boss caps the elbow's outer side on its lateral axis.
+  shape Cylinder $"elbowLug-{side}" {
+    id: idBase + 154
+    position [sx * 0.317, 1.33, 0.088]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.026, 0.018, 0.026]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.006
+  }
+
+  shape Cylinder $"elbowRod-{side}" {
+    id: idBase + 156
+    position [sx * 0.3266, 1.2771, 0.0904]
+    rotation [-0.02097, 0, sx * 0.08389, 0.99625]
+    scale [0.012, 0.055, 0.012]
+    material: steel
+    parent: $"upperArm-{side}"
+    rounding: 0.003
+    swings: elbowSwings(sx, stride, [sx * 0.317, 1.33, 0.088], 0.3557)
+  }
+
+  shape Cylinder $"elbowHinge-{side}" {
+    id: idBase + 162
+    position [sx * 0.41, 1.233, 0.004]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.05, 0.016, 0.05]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.006
+  }
+
+  shape Cylinder $"elbowHingeCap-{side}" {
+    id: idBase + 163
+    position [sx * 0.4297, 1.2365, 0.004]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.03, 0.01, 0.03]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.005
+  }
+
+  shape Superellipsoid $"forearm-{side}" {
+    id: idBase + 159
+    position [sx * 0.3706, 1.0524, 0.0024]
+    rotation [-0.08495, sx * 0.400689, -sx * 0.033242, 0.911661]
+    scale [0.07, 0.19, 0.07]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    exponent: 2.6
+    swings: elbowSwings(sx, stride, [sx * 0.336, 1.2201, 0.004], 1)
+  }
+
+  // The heavy gauntlet (sheets 01 and 02): as wide as the shoulder stack, a slanted ivory tube along the forearm from
+  // under the elbow to the wrist, its rounded section extruded with rounded ends, lavender on its inner side (paint)
+  // and open at the wrist, where the hand comes out of the cuff. It is faced square to the body rather than the
+  // forearm's twist, so its outer face and its vents look straight out.
+  shape Prism $"bracer-{side}" {
+    id: idBase + 160
+    position [sx * 0.37, 0.995, 0.012]
+    rotation [-0.75162, -sx * 0.15601, 0, 0.64088]
+    scale [0.12, 0.13, 0.165]
+    material: gauntlet
+    group: groupBase + 16
+    parent: $"forearm-{side}"
+    profile { kind: "RoundedRectangle", cornerRadius: 0.45 }
+    rounding: 0.03
+  }
+
+  shape Cylinder $"bracerMouth-{side}" {
+    id: idBase + 161
+    position [sx * 0.395, 0.8746, 0.0343]
+    rotation [-0.09011, 0, sx * 0.10091, 0.99081]
+    scale [0.085, 0.05, 0.085]
+    material: charcoal
+    blend: "SmoothSubtraction"
+    smooth: 0.008
+    group: groupBase + 16
+    parent: $"forearm-{side}"
+  }
+
+  shape Cylinder $"cuff-{side}" {
+    id: idBase + 164
+    position [sx * 0.380726, 0.872656, 0.026507]
+    rotation [-0.08495, sx * 0.400689, -sx * 0.033242, 0.911661]
+    scale [0.09, 0.006, 0.09]
+    material: charcoal
+    parent: $"forearm-{side}"
+    rounding: 0.003
+  }
+
+  shape Cylinder $"elbowCylinder-{side}" {
+    id: idBase + 153
+    position [sx * 0.3366, 1.2142, 0.0929]
+    rotation [-0.02097, 0, sx * 0.08389, 0.99625]
+    scale [0.023, 0.05, 0.023]
+    material: pistonSteel
+    parent: $"forearm-{side}"
+    rounding: 0.006
+    swings: elbowSwings(sx, stride, [sx * 0.345, 1.165, 0.095], -0.6443)
+  }
+
+  shape Box $"elbowMount-{side}" {
+    id: idBase + 213
+    position [sx * 0.345, 1.15, 0.095]
+    rotation [-0.02097, 0, sx * 0.08389, 0.99625]
+    scale [0.034, 0.02, 0.032]
+    material: charcoal
+    parent: $"forearm-{side}"
+    rounding: 0.008
+  }
+
+  shape Cylinder $"elbowFoot-{side}" {
+    id: idBase + 206
+    position [sx * 0.345, 1.165, 0.095]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.026, 0.018, 0.026]
+    material: charcoal
+    parent: $"forearm-{side}"
+    rounding: 0.006
+    swings: elbowSwings(sx, stride, [sx * 0.345, 1.165, 0.095], -0.6443)
+  }
+
+  shape Superellipsoid $"palm-{side}" {
+    id: idBase + 165
+    position [sx * 0.3775, 0.7677, 0.0504]
+    rotation [-0.08495, sx * 0.400689, -sx * 0.033242, 0.911661]
+    scale [0.09045, 0.0729, 0.054]
+    material: charcoal
+    parent: $"forearm-{side}"
+    exponent: 2.8
+  }
+
+  shape Sweep $"wrist-{side}" {
+    id: idBase + 166
+    position [sx * 0.376562, 0.887196, 0.028315]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0107719, -0.0460057, 0]
+      c [sx * 0.0230827, -0.0985838, 0]
+      radiusStart: 0.0513
+      radiusEnd: 0.0513
+    }
+  }
+
+  shape Sweep $"finger-{side}-0" {
+    id: idBase + 167
+    position [sx * 0.3382, 0.7431, 0.1047]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0215438, -0.0920114, 0.00675]
+      c [sx * 0.0236724, -0.0845806, -0.056025]
+      radiusStart: 0.01755
+      radiusEnd: 0.01755
+    }
+  }
+
+  shape Sweep $"finger-{side}-1" {
+    id: idBase + 168
+    position [sx * 0.3665, 0.7377, 0.0744]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0233905, -0.0998981, 0.00675]
+      c [sx * 0.0230741, -0.0930397, -0.056025]
+      radiusStart: 0.01755
+      radiusEnd: 0.01755
+    }
+  }
+
+  shape Sweep $"finger-{side}-2" {
+    id: idBase + 169
+    position [sx * 0.3949, 0.7324, 0.044]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0215438, -0.0920114, 0.00675]
+      c [sx * 0.0187826, -0.0857254, -0.056025]
+      radiusStart: 0.01755
+      radiusEnd: 0.01755
+    }
+  }
+
+  shape Sweep $"finger-{side}-3" {
+    id: idBase + 170
+    position [sx * 0.4232, 0.727, 0.0137]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.0184662, -0.078867, 0.00675]
+      c [sx * 0.01326, -0.0731534, -0.056025]
+      radiusStart: 0.01755
+      radiusEnd: 0.01755
+    }
+  }
+
+  shape Sweep $"thumb-{side}" {
+    id: idBase + 171
+    position [sx * 0.3312, 0.7959, 0.086]
+    rotation [-0.130367, sx * 0.388295, -sx * 0.137633, 0.901825]
+    material: charcoal
+    parent: $"forearm-{side}"
+    curve {
+      a [0, 0, 0]
+      b [-sx * 0.0399434, -0.0869971, -0.0054]
+      c [sx * 0.020021, -0.1062331, -0.04995]
+      radiusStart: 0.02565
+      radiusEnd: 0.02565
+    }
+  }
+}
+
+// The knee's fold: the shin's swings about the knee's axis at k = 1. In flight mode the knee undoes 1.0 rad of its air
+// tuck, keeping a 0.2 rad bend; in the air it folds 1.2 rad at the peak, 1.45 rising and 0.95 falling; landing, it takes
+// twice the hip's fold. The knee piston's cylinder and rod take the same swings scaled by k about their own lugs.
+function kneeSwings(sx, stride, pivot, k) = [
+  { driver: "swim", axis [1, 0, 0], amplitude: 0.45 * k, pivot: pivot, wave: "sine", phase: stride }
+  { driver: "gait", axis [1, 0, 0], amplitude: kneeFold * k, pivot: pivot, wave: "halfSine", phase: 5.184 + stride }
+  { driver: "flight", axis [1, 0, 0], amplitude: -1 * k, pivot: pivot, wave: "linear", phase: 0 }
+  { driver: "air", axis [1, 0, 0], amplitude: 0.05 * k, pivot: pivot, wave: "linear", phase: 24 }
+  { driver: "land", axis [1, 0, 0], amplitude: -0.2 * k, pivot: pivot, wave: "linear" }
+]
+
+// One leg, authored as her left and mirrored for the right exactly as `mothArm` is.
+template mothLeg(side, sx, stride, idBase, groupBase) {
+  shape Sweep $"thigh-{side}" {
+    id: idBase + 174
+    position [sx * 0.135, 1.0265, 0]
+    material: charcoal
+    parent: "pelvis"
+    curve {
+      a [0, 0, 0]
+      b [sx * 0.025, -0.135, 0]
+      c [sx * 0.05, -0.285, 0]
+      radiusStart: 0.095
+      radiusEnd: 0.095
+    }
+    // The stride swings in the plane of travel: the hip's own turn into the travel direction is undone, the plane
+    // is turned to the full travel direction, the leg strides, and both turns are put back. A forward diagonal
+    // strides straight ahead of the turned hips, a pure strafe abducts into a sidestep, and a backpedal strides
+    // backward. The travel direction is the world's, not a side's, so the heading turns are never mirrored.
+    swings [
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: 0.7
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "sine"
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: -0.5
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "linear"
+      }
+      {
+        driver: "gait"
+        axis [1, 0, 0]
+        amplitude: 0.45
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "sine"
+        phase: stride
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: 0.5
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "linear"
+      }
+      {
+        driver: "heading"
+        axis [0, 1, 0]
+        amplitude: -0.7
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "sine"
+      }
+      // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
+      // the leg 0.1 rad back, so she hovers and flies with straight legs.
+      {
+        driver: "flight"
+        axis [1, 0, 0]
+        amplitude: 0.898
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "linear"
+        phase: 0
+      }
+      // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
+      {
+        driver: "air"
+        axis [1, 0, 0]
+        amplitude: -0.06
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "linear"
+        phase: 13.3
+      }
+      // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
+      {
+        driver: "land"
+        axis [1, 0, 0]
+        amplitude: 0.1
+        pivot [sx * 0.145, 1.0265, 0]
+        wave: "linear"
+      }
+    ]
+  }
+
+  // The hip pivot (sheets 01 and 02): a large charcoal disc with a raised boss on an ivory guard at the pelvis's front
+  // corner, all faced out and forward along (0.64, 0, 0.77) so the disc reads round from the front and from the side.
+  // They ride the pelvis; the thigh swings behind them.
+  shape Prism $"hipGuard-{side}" {
+    id: idBase + 175
+    position [sx * 0.172, 1.085, 0.062]
+    rotation [0, sx * 0.3397, 0, 0.9405]
+    scale [0.105, 0.125, 0.032]
+    material: skin
+    parent: "pelvis"
+    profile { kind: "Ellipse" }
+    rounding: 0.016
+  }
+
+  shape Cylinder $"hipDisc-{side}" {
+    id: idBase + 176
+    position [sx * 0.199, 1.085, 0.0943]
+    rotation [0.5445, 0, -sx * 0.4525, 0.7071]
+    scale [0.074, 0.022, 0.074]
+    material: charcoal
+    parent: "pelvis"
+    rounding: 0.01
+  }
+
+  shape Cylinder $"hipBoss-{side}" {
+    id: idBase + 172
+    position [sx * 0.2117, 1.085, 0.1097]
+    rotation [0.5445, 0, -sx * 0.4525, 0.7071]
+    scale [0.044, 0.014, 0.044]
+    material: charcoal
+    parent: "pelvis"
+    rounding: 0.008
+  }
+
+  // The knee piston behind the knee's outer side (sheet 02): a rod hung from a lug on the thigh and a cylinder rising
+  // out of the greave's top on the shin, each turned about its lug by the share of the knee's fold that keeps them on
+  // one line (kneeSwings), so the rod slides into the cylinder as the knee folds.
+  shape Cylinder $"kneeLug-{side}" {
+    id: idBase + 173
+    position [sx * 0.245, 0.875, -0.065]
+    rotation [0, 0, -sx * diagonal, diagonal]
+    scale [0.024, 0.018, 0.024]
+    material: charcoal
+    parent: $"thigh-{side}"
+    rounding: 0.006
+  }
+
+  shape Cylinder $"kneeRod-{side}" {
+    id: idBase + 157
+    position [sx * 0.245, 0.815, -0.0675]
+    rotation [0.02082, 0, 0, 0.99978]
+    scale [0.012, 0.06, 0.012]
+    material: steel
+    parent: $"thigh-{side}"
+    rounding: 0.003
+    swings: kneeSwings(sx, stride, [sx * 0.245, 0.875, -0.065], 0.4768)
+  }
+
+  shape Superellipsoid $"knee-{side}" {
+    id: idBase + 178
+    position [sx * 0.19, 0.7465, 0]
+    scale [0.095, 0.085, 0.0975]
+    material: charcoal
+    parent: $"thigh-{side}"
+    exponent: softness
+  }
+
+  shape Prism $"kneeGuard-{side}" {
+    id: idBase + 179
+    position [sx * 0.19, 0.735, 0.12]
+    scale [0.088, 0.102, 0.045]
+    material: skin
+    parent: $"thigh-{side}"
+    profile {
+      kind: "ChamferedRectangle"
+      cornerRadius: 0.42
+    }
+    rounding: 0.012
+  }
+
+  // The greave (sheet 01): flat-faced and flaring from under the knee to a wide foot, the intersection of a front
+  // trapezoid and a side trapezoid with rounded edges, its arch over the instep lined lavender where the boot runs in.
+  shape Prism $"shin-{side}" {
+    id: idBase + 180
+    position [sx * 0.2, 0.4265, 0.0125]
+    scale [0.21, 0.3, 0.24]
+    material: shinViolet
+    group: groupBase + 18
+    parent: $"thigh-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+    swings: kneeSwings(sx, stride, [sx * 0.19, 0.7465, 0], 1)
+  }
+
+  shape Prism $"shinSide-{side}" {
+    id: idBase + 970
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.225, 0.3, 0.25]
+    material: shinViolet
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 18
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Box $"shinEnds-{side}" {
+    id: idBase + 181
+    position [sx * 0.2, 0.407, 0.0125]
+    scale [0.3, 0.302, 0.4]
+    material: shinViolet
+    blend: "SmoothIntersection"
+    smooth: 0.01
+    group: groupBase + 18
+    parent: $"shin-{side}"
+  }
+
+  shape Prism $"shinArch-{side}" {
+    id: idBase + 183
+    position [sx * 0.2, 0.0458, 0.075]
+    rotation [-0.342, 0, 0, 0.9397]
+    scale [0.17, 0.085, 0.3]
+    material: shinViolet
+    blend: "SmoothSubtraction"
+    smooth: 0.008
+    group: groupBase + 18
+    parent: $"shin-{side}"
+    profile { kind: "Convex", cornerRadius: 0.07, vertices: archBackOutline }
+  }
+
+  // The ivory wrap band round the greave's foot (sheet 01): the greave's own shell a finger proud of it between two
+  // heights, so it reads as part of the greave with its edges showing depth, opened by the same arch over the instep.
+  shape Prism $"archBand-{side}" {
+    id: idBase + 950
+    position [sx * 0.2, 0.4265, 0.0125]
+    scale [0.222, 0.312, 0.252]
+    material: shinCream
+    group: groupBase + 76
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Prism $"archBandSide-{side}" {
+    id: idBase + 971
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.237, 0.312, 0.262]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 76
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Box $"archBandEnds-{side}" {
+    id: idBase + 951
+    position [sx * 0.2, 0.215, 0.0125]
+    scale [0.3, 0.1, 0.4]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.006
+    group: groupBase + 76
+    parent: $"shin-{side}"
+  }
+
+  shape Prism $"archBandInner-{side}" {
+    id: idBase + 953
+    position [sx * 0.2, 0.0458, 0.075]
+    rotation [-0.342, 0, 0, 0.9397]
+    scale [0.176, 0.091, 0.3]
+    material: shinCream
+    blend: "SmoothSubtraction"
+    smooth: 0.006
+    group: groupBase + 76
+    parent: $"shin-{side}"
+    profile { kind: "Convex", cornerRadius: 0.07, vertices: archBackOutline }
+  }
+
+  // The ivory side panel on the greave's outer face, with its vent pair (paint), likewise the shell a finger proud of
+  // it within the panel's pentagon.
+  shape Prism $"sidePanel-{side}" {
+    id: idBase + 954
+    position [sx * 0.2, 0.4265, 0.0125]
+    scale [0.222, 0.312, 0.252]
+    material: shinCream
+    group: groupBase + 77
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Prism $"sidePanelSide-{side}" {
+    id: idBase + 972
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.237, 0.312, 0.262]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 77
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Prism $"sidePanelCut-{side}" {
+    id: idBase + 955
+    position [sx * 0.35, 0.4465, 0.0125]
+    rotation: prismMirror(sx, [0, diagonal, 0, diagonal])
+    scale [0.13, 0.18, 0.2]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.012
+    group: groupBase + 77
+    parent: $"shin-{side}"
+    profile { kind: "Convex", vertices: shinPanelOutline, cornerRadius: 0.12 }
+  }
+
+  shape Sweep $"shinCore-{side}" {
+    id: idBase + 191
+    position [sx * 0.2, 0.2415, 0.0075]
+    material: charcoal
+    parent: $"shin-{side}"
+    curve {
+      a [0, 0, 0]
+      b [-sx * 0.005, 0.21, -0.0025]
+      c [-sx * 0.01, 0.455, -0.0075]
+      radiusStart: 0.0715
+      radiusEnd: 0.0715
+    }
+  }
+
+  shape Cylinder $"kneeCylinder-{side}" {
+    id: idBase + 177
+    position [sx * 0.245, 0.705, -0.0721]
+    rotation [0.02082, 0, 0, 0.99978]
+    scale [0.024, 0.07, 0.024]
+    material: pistonSteel
+    parent: $"shin-{side}"
+    rounding: 0.006
+    swings: kneeSwings(sx, stride, [sx * 0.245, 0.635, -0.075], -0.5232)
+  }
+
+  // The ankle hub: the joint the foot turns about, a gunmetal drum on the greave's outer face at the heel with a charcoal
+  // bezel round a cyan lens that is always softly lit (sheet 01), so it reads as a light by day and at night.
+  shape Cylinder $"ankleHub-{side}" {
+    id: idBase + 1000
+    position [sx * 0.392, 0.175, -0.07]
+    rotation [0, 0, sx * diagonal, diagonal]
+    scale [0.072, 0.024, 0.072]
+    material: gunmetal
+    group: groupBase + 122
+    parent: $"shin-{side}"
+    rounding: 0.008
+  }
+
+  shape Cylinder $"ankleBezel-{side}" {
+    id: idBase + 1001
+    position [sx * 0.408, 0.175, -0.07]
+    rotation [0, 0, sx * diagonal, diagonal]
+    scale [0.05, 0.01, 0.05]
+    material: charcoal
+    parent: $"shin-{side}"
+    rounding: 0.004
+  }
+
+  shape Cylinder $"ankleHubInset-{side}" {
+    id: idBase + 1303
+    position [sx * 0.415, 0.175, -0.07]
+    rotation [0, 0, sx * diagonal, diagonal]
+    scale [0.036, 0.011, 0.036]
+    material: bootCyan
+    parent: $"shin-{side}"
+    rounding: 0.006
+  }
+
+  // The boot (sheet 02): one lavender piece from heel to toe with a raised toe cap on one charcoal sole under toe and
+  // heel; a flush round cyan light sits low on the greave's back above the heel.
+  shape Prism $"boot-{side}" {
+    id: idBase + 195
+    position [sx * 0.2, 0.1875, 0.0775]
+    rotation: prismMirror(sx, [0, -diagonal, 0, diagonal])
+    scale [0.235, 0.235, 0.2]
+    material: violet
+    group: groupBase + 21
+    swings [
+      {
+        driver: "gait"
+        pivot [sx * 0.2, 0.1715, 0.0075]
+        axis [1, 0, 0]
+        amplitude: 0.2
+        phase: stride
+        wave: "sine"
+      }
+      {
+        driver: "gait"
+        pivot [sx * 0.2, 0.1715, 0.0075]
+        axis [1, 0, 0]
+        amplitude: -0.25
+        phase: 5.184 + stride
+        wave: "halfSine"
+      }
+      {
+        driver: "flight"
+        pivot [sx * 0.2, 0.1715, 0.0075]
+        axis [1, 0, 0]
+        amplitude: 0.12
+        phase: 0
+        wave: "linear"
+      }
+      {
+        driver: "air"
+        pivot [sx * 0.2, 0.1715, 0.0075]
+        axis [1, 0, 0]
+        amplitude: 0.02
+        phase: 12.5
+        wave: "linear"
+      }
+      {
+        driver: "land"
+        pivot [sx * 0.2, 0.1715, 0.0075]
+        axis [1, 0, 0]
+        amplitude: 0.1
+        wave: "linear"
+      }
+    ]
+    parent: $"shin-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.1
+      vertices [
+        [-0.85, -0.34]
+        [-0.85, 0.45]
+        [-0.32, 0.54]
+        [0.18, 0.36]
+        [0.65, 0.08]
+        [0.93, -0.18]
+        [0.96, -0.34]
+      ]
+    }
+  }
+
+  shape Prism $"bootPlan-{side}" {
+    id: idBase + 196
+    position [sx * 0.2, 0.19, 0.085]
+    rotation [diagonal, 0, 0, diagonal]
+    scale [0.165, 0.24, 0.25]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.012
+    group: groupBase + 21
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.12
+      vertices: bootPlanOutline
+    }
+  }
+
+  shape Box $"bootUnderBand-{side}" {
+    id: idBase + 1020
+    position [sx * 0.2, -0.248, 0.3339]
+    rotation [-0.342, 0, 0, 0.9397]
+    scale [0.5, 0.5, 0.5]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.01
+    group: groupBase + 21
+    parent: $"boot-{side}"
+  }
+
+  shape Superellipsoid $"ankle-{side}" {
+    id: idBase + 192
+    position [sx * 0.2, 0.17, 0.06]
+    rotation [0, 0, 0, 1]
+    scale [0.12, 0.07, 0.1]
+    material: charcoal
+    blend: "Union"
+    group: groupBase + 127
+    parent: $"boot-{side}"
+    exponent: 2
+  }
+
+  shape Prism $"toe-{side}" {
+    id: idBase + 199
+    position [sx * 0.2, 0.125, 0.205]
+    rotation: prismMirror(sx, [0, -diagonal, 0, diagonal])
+    scale [0.19, 0.12, 0.215]
+    material: violet
+    group: groupBase + 120
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.075
+      vertices [
+        [-1, -0.78]
+        [-1, 0.22]
+        [-0.65, 0.64]
+        [0.28, 0.51]
+        [0.82, 0.13]
+        [1, -0.35]
+        [0.86, -0.78]
+      ]
+    }
+  }
+
+  shape Prism $"toePlan-{side}" {
+    id: idBase + 200
+    position [sx * 0.2, 0.1, 0.205]
+    rotation [diagonal, 0, 0, diagonal]
+    scale [0.18, 0.2, 0.2]
+    material: violet
+    blend: "SmoothIntersection"
+    smooth: 0.012
+    group: groupBase + 120
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.12
+      vertices: bootPlanOutline
+    }
+  }
+  shape Prism $"sole-{side}" {
+    id: idBase + 201
+    position [sx * 0.2, 0.03, 0.14]
+    rotation [diagonal, 0, 0, diagonal]
+    scale [0.18, 0.27, 0.03]
+    material: charcoal
+    parent: $"boot-{side}"
+    profile {
+      kind: "Convex"
+      cornerRadius: 0.12
+      vertices: bootPlanOutline
+    }
+  }
+
+  shape Cylinder $"heelBezel-{side}" {
+    id: idBase + 202
+    position [sx * 0.2, 0.19, -0.207]
+    rotation: heelLensRotation
+    scale [0.05, 0.008, 0.05]
+    material: charcoal
+    parent: $"shin-{side}"
+    rounding: 0.004
+  }
+
+  shape Cylinder $"heelLight-{side}" {
+    id: idBase + 205
+    position [sx * 0.2, 0.1906, -0.2105]
+    rotation: heelLensRotation
+    scale [0.036, 0.008, 0.036]
+    material: bootCyan
+    parent: $"shin-{side}"
+    rounding: 0.006
+  }
+
+  shape Cylinder $"heelCore-{side}" {
+    id: idBase + 980
+    position [sx * 0.2, 0.1912, -0.2125]
+    rotation: heelLensRotation
+    scale [0.014, 0.008, 0.014]
+    material: bootGlow
+    parent: $"shin-{side}"
+    rounding: 0.004
   }
 }
 
@@ -1093,13 +2064,6 @@ dynamics [
     r: 0
     zeta: 0.5
   }
-  // The boot jets' flame: lit within a few frames of the air jump and out within a quarter second of its cut.
-  {
-    f: 6
-    name: "boot-boost"
-    r: 0
-    zeta: 1
-  }
 ]
 
 gravity {
@@ -1159,7 +2123,7 @@ kits [
       speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
-    // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
+    // makes of the holds' 28:46 arc, a second press in the air jumps once more, and letting go while still rising cuts the
     // arc short. North or F switches flight mode.
     actions {
       jump {
@@ -1185,7 +2149,7 @@ kits [
           ]
         }
         // Leaving the ground without jumping (walking off a ledge) spends the ground jump, so the one left is the
-        // air jump her boot jets push.
+        // air jump.
         onFact [
           {
             fact: "Airborne"
@@ -1279,14 +2243,13 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
-        // Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she
-        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights. Lane 3 is the
-        // boot jets' flame under the air jump.
+        // Lane 1 is the pod jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as
+        // she flies. Lane 2 is flight mode itself, the nozzle cores it lights. The boots carry lights and never fire.
         lanes [
           0
           maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
           maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
-          bootBoost[$body]
+          0
         ]
         poses {
           blink: "state.blink.$body"
@@ -1376,13 +2339,12 @@ prototypes {
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          // The sole grooves, and the hood's ivory trim in the helmet's frame: a horseshoe round the face opening, its
-          // ellipse projected along the face's forward axis; the throat opening leaves the helmet no surface below it.
+          // The sole grooves.
           paints [
             {
               parent: "sole-left"
               type: "Prism"
-              position [0, 0.02, 0.29]
+              position [0, 0.084, 0.29]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -1391,7 +2353,7 @@ prototypes {
             {
               parent: "sole-left"
               type: "Prism"
-              position [0, 0.022, -0.115]
+              position [0, 0.086, -0.115]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -1400,7 +2362,7 @@ prototypes {
             {
               parent: "sole-right"
               type: "Prism"
-              position [0, 0.02, 0.29]
+              position [0, 0.084, 0.29]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -1409,20 +2371,11 @@ prototypes {
             {
               parent: "sole-right"
               type: "Prism"
-              position [0, 0.022, -0.115]
+              position [0, 0.086, -0.115]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
               color: lavenderSeam
-            }
-            {
-              parent: "helmet"
-              type: "Prism"
-              position [0, -0.0198, 0.21575]
-              scale [0.24265, 0.26245, 0.2]
-              profile { kind: "Ellipse" }
-              stroke: 0.0227
-              color: ivoryPlate
             }
           ]
         }
@@ -1542,8 +2495,7 @@ prototypes {
           emissive: 1200
           coat: 0
         }
-        // The left shoulder stack, in each slab's own frame: an ivory band along the upper slab's lower edge, and the
-        // lower slab ivory above its lavender skirt.
+        // The left shoulder stack's lavender plates.
         {
           color: lavenderPlate
           toonSelect: mothStyles
@@ -1562,22 +2514,6 @@ prototypes {
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            {
-              parent: "shoulderSlab-left"
-              type: "Box"
-              position [0, -0.04, 0]
-              scale [0.2, 0.026, 0.25]
-              color: ivoryPlate
-            }
-            {
-              parent: "shoulderSlabLower-left"
-              type: "Box"
-              position [0, 0.035, 0]
-              scale [0.2, 0.034, 0.25]
-              color: ivoryPlate
-            }
-          ]
         }
         {
           color: lavenderPlate
@@ -1597,22 +2533,6 @@ prototypes {
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            {
-              parent: "shoulderSlab-right"
-              type: "Box"
-              position [0, -0.04, 0]
-              scale [0.2, 0.026, 0.25]
-              color: ivoryPlate
-            }
-            {
-              parent: "shoulderSlabLower-right"
-              type: "Box"
-              position [0, 0.035, 0]
-              scale [0.2, 0.034, 0.25]
-              color: ivoryPlate
-            }
-          ]
         }
         {
           color: lavenderPlate
@@ -1734,8 +2654,8 @@ prototypes {
               scale [0.08, 0.0075, 0.032]
               color: ventSlot
             }
-            { parent: "podBand2-left", type: "Box", position [0.012, -0.075, 0], scale [0.038, 0.02, 0.016], color: "#7E828E" }
-            { parent: "podBand2-right", type: "Box", position [-0.012, -0.075, 0], scale [0.038, 0.02, 0.016], color: "#7E828E" }
+            { parent: "podBand2-left", type: "Box", position [0.02, -0.05, 0], scale [0.036, 0.016, 0.12], color: "#7E828E" }
+            { parent: "podBand2-right", type: "Box", position [0.02, -0.05, 0], scale [0.036, 0.016, 0.12], color: "#7E828E" }
           ]
         }
         {
@@ -2139,7 +3059,7 @@ prototypes {
           {
             driver: "run"
             axis [1, 0, 0]
-            amplitude: 0.1
+            amplitude: 0.2
             pivot [0, 1.0765, 0]
             wave: "constant"
             phase: 0
@@ -2159,8 +3079,8 @@ prototypes {
       // One flat chamfered slab over the chest; its ivory border and lavender centre are paint (chestArmor).
       shape Prism "chestSlab" {
         id: 3
-        position [0, 1.37, 0.1]
-        scale [0.195, 0.18, 0.06]
+        position [0, 1.385, 0.1]
+        scale [0.172, 0.178, 0.06]
         material: chestArmor
         parent: "torso"
         profile {
@@ -2190,32 +3110,31 @@ prototypes {
         exponent: 4
       }
 
-      // The lavender plate below the belt, narrowing to a point between the thighs.
+      // The lavender plate below the belt, narrowing between the thighs: a trapezoid turned point-down, its edges
+      // rounded so the slanted sides bake smooth.
       shape Prism "pelvicShield" {
         id: 7
         position [0, 1.0, 0.13]
+        rotation [0, 0, 1, 0]
         scale [0.125, 0.11, 0.04]
         material: violet
         parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
-          cornerRadius: 0.1
-        }
+        profile { kind: "Trapezoid" }
+        taper: 0.3
+        rounding: 0.014
       }
 
       // Its twin behind (sheet 01's back): a lavender plate over the seat between the pods' lips.
       shape Prism "seatShield" {
         id: 8
         position [0, 0.985, -0.15]
+        rotation [0, 0, 1, 0]
         scale [0.15, 0.115, 0.035]
         material: violet
         parent: "pelvis"
-        profile {
-          kind: "Convex"
-          vertices [[-1, 1], [1, 1], [0.85, 0.2], [0.3, -1], [-0.3, -1], [-0.85, 0.2]]
-          cornerRadius: 0.1
-        }
+        profile { kind: "Trapezoid" }
+        taper: 0.3
+        rounding: 0.014
       }
 
       shape Superellipsoid "belt" {
@@ -2308,14 +3227,17 @@ prototypes {
         rounding: 0.00125
       }
 
+      // The hood (sheets 01 to 03): a wide, round lavender dome, wider than it is tall, with a thick ivory bezel standing
+      // forward round its face opening, so from the side the rim is a band at the front and her face sits recessed
+      // behind it with dark headroom all round. The opening is open at the bottom, a horseshoe over the collar.
       shape Superellipsoid "helmet" {
         id: 23
-        position [0, 1.7603, -0.01575]
-        scale [0.2882, 0.3014, 0.2475]
+        position [0, 1.79, -0.012]
+        scale [0.295, 0.27, 0.26]
         material: violet
         group: 4
         parent: "torso"
-        exponent: softness
+        exponent: 2.3
         // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
         swings [
           {
@@ -2351,124 +3273,61 @@ prototypes {
         ]
       }
 
+      // The bezel is rolled, a thick ring rounded front and back, and leans forward 14 degrees at the top over her face.
+      shape Prism "helmetRim" {
+        id: 27
+        position [0, 1.795, 0.185]
+        rotation [0.12187, 0, 0, 0.99255]
+        scale [0.255, 0.252, 0.062]
+        material: skin
+        blend: "SmoothUnion"
+        smooth: 0.045
+        group: 4
+        parent: "helmet"
+        profile { kind: "Ellipse" }
+        rounding: 0.058
+      }
+
       // The hood's charcoal interior, the headroom round her face reading as its padded lining: the cut takes the
       // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
       shape Superellipsoid "helmetInner" {
         id: 24
-        position [0, 1.7559, 0.009]
-        scale [0.21, 0.224, 0.186]
+        position [0, 1.79, 0.018]
+        scale [0.228, 0.212, 0.2]
         material: charcoal
         blend: "SmoothSubtraction"
         smooth: 0.01
         group: 4
         parent: "helmet"
-        exponent: softness
+        exponent: 2.3
       }
 
       shape Prism "helmetFaceOpening" {
         id: 25
-        position [0, 1.7405, 0.2475]
-        scale [0.2222, 0.24112, 0.23175]
+        position [0, 1.79, 0.285]
+        scale [0.196, 0.21, 0.2]
         material: charcoal
         // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
         blend: "SmoothSubtraction"
         smooth: 0.012
         group: 4
         parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
+        profile { kind: "Ellipse" }
       }
 
       shape Box "helmetThroatOpening" {
         id: 26
-        position [0, 1.37, 0]
+        position [0, 1.425, 0]
         scale [0.6, 0.197, 0.6]
         material: charcoal
-        blend: "Subtraction"
+        blend: "SmoothSubtraction"
+        smooth: 0.01
         group: 4
         parent: "helmet"
       }
 
-      shape Cylinder "earMount-left" {
-        id: 51
-        position [0.296, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.098, 0.022, 0.098]
-        material: skin
-        parent: "helmet"
-        rounding: 0.002
-      }
-
-      shape Cylinder "earCover-left" {
-        id: 52
-        position [0.324, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.074, 0.012, 0.074]
-        material: violet
-        parent: "helmet"
-        rounding: 0.002
-      }
-
-      shape Cylinder "earRing-left" {
-        id: 53
-        position [0.337, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.046, 0.004, 0.046]
-        material: brass
-        parent: "helmet"
-        rounding: 0.0012
-      }
-
-      shape Cylinder "earButton-left" {
-        id: 54
-        position [0.341, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.034, 0.004, 0.034]
-        material: violet
-        parent: "helmet"
-        rounding: 0.0012
-      }
-
-      shape Cylinder "earMount-right" {
-        id: 67
-        position [-0.296, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.098, 0.022, 0.098]
-        material: skin
-        parent: "helmet"
-        rounding: 0.002
-      }
-
-      shape Cylinder "earCover-right" {
-        id: 68
-        position [-0.324, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.074, 0.012, 0.074]
-        material: violet
-        parent: "helmet"
-        rounding: 0.002
-      }
-
-      shape Cylinder "earRing-right" {
-        id: 69
-        position [-0.337, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.046, 0.004, 0.046]
-        material: brass
-        parent: "helmet"
-        rounding: 0.0012
-      }
-
-      shape Cylinder "earButton-right" {
-        id: 70
-        position [-0.341, 1.7295, -0.01575]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.034, 0.004, 0.034]
-        material: violet
-        parent: "helmet"
-        rounding: 0.0012
-      }
+      hoodEar("left", 1, 50)
+      hoodEar("right", -1, 66)
 
       mothHead(headScale, headAt, "helmet", rust, ivory, umber, jet, ink)
 
@@ -2538,2522 +3397,13 @@ prototypes {
         exponent: softness
       }
 
-      shape Sweep "upperArm-left" {
-        id: 148
-        position [0.295, 1.4515, 0]
-        rotation [0, 0, -0.078459, 0.996917]
-        material: charcoal
-        parent: "torso"
-        curve {
-          a [0, 0, 0]
-          b [0.0363, -0.1009, 0]
-          c [0.0727, -0.2059, 0]
-          radiusStart: 0.08
-          radiusEnd: 0.08
-        }
-        swings [
-          { driver: "swim", axis [1, 0, 0], amplitude: 0.55, pivot [0.295, 1.4515, 0], wave: "sine", phase: 0 }
-          { driver: "swim", axis [0, 0, 1], amplitude: -0.85, pivot [0.295, 1.4515, 0], wave: "constant" }
-          {
-            driver: "run"
-            axis [0, 0, 1]
-            amplitude: -0.15
-            pivot [0.295, 1.4515, 0]
-            wave: "constant"
-            phase: 0
-          }
-          {
-            driver: "gait"
-            axis [0.987688, -0.156434, 0]
-            amplitude: 0.42
-            pivot [0.295, 1.4515, 0]
-            wave: "sine"
-            phase: 3.1415927
-          }
-          {
-            driver: "flight"
-            axis [0, 0, 1]
-            amplitude: -0.1
-            pivot [0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
-          {
-            driver: "air"
-            axis [0, 0, 1]
-            amplitude: 0.03
-            pivot [0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 15
-          }
-          // And lift forward 0.12 rad, 0.2 rising.
-          {
-            driver: "air"
-            axis [0.987688, -0.156434, 0]
-            amplitude: -0.015
-            pivot [0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 8
-          }
-        ]
-      }
-
-      shape Superellipsoid "elbow-left" {
-        id: 149
-        position [0.336, 1.2201, 0.004]
-        rotation [0, 0, -0.078459, 0.996917]
-        scale [0.07, 0.065, 0.072]
-        material: charcoal
-        parent: "upperArm-left"
-        exponent: softness
-      }
-
-      // The shoulder stack: two thick slabs on a round charcoal pivot, riding the upper arm. The upper slab's inner
-      // edge stays outboard of the hood as the arm swings.
-      shape Superellipsoid "shoulderPivot-left" {
-        id: 150
-        position [0.3, 1.46, 0]
-        scale [0.085, 0.085, 0.085]
-        material: charcoal
-        parent: "upperArm-left"
-        exponent: 3
-      }
-
-      shape Superellipsoid "shoulderSlab-left" {
-        id: 151
-        position [0.4, 1.48, -0.005]
-        rotation [0, 0, -0.1305, 0.9914]
-        scale [0.15, 0.06, 0.19]
-        material: violetBandLeft
-        parent: "upperArm-left"
-        exponent: 6
-        shear {
-          linear: 0
-          quadratic: -0.9
-          cubic: 0
-          target: 1
-          driver: 2
-        }
-      }
-
-      shape Superellipsoid "shoulderSlabLower-left" {
-        id: 152
-        position [0.425, 1.37, 0]
-        rotation [0, 0, -0.0698, 0.9976]
-        scale [0.16, 0.08, 0.2]
-        material: violetBandLeft
-        parent: "upperArm-left"
-        exponent: 6
-        shear {
-          linear: 0
-          quadratic: -0.7
-          cubic: 0
-          target: 1
-          driver: 2
-        }
-      }
-
-      // The elbow piston, inside the bend: a cylinder on the upper arm and a rod on the forearm, both aimed at the
-      // hinge so they meet inside the joint at any bend.
-      shape Cylinder "elbowCylinder-left" {
-        id: 153
-        position [0.3834, 1.3086, 0.0499]
-        rotation [-0.6604, 0, 0.6817, 0.3149]
-        scale [0.022, 0.0594, 0.022]
-        material: pistonSteel
-        parent: "upperArm-left"
-        rounding: 0.006
-      }
-
-      shape Superellipsoid "forearm-left" {
-        id: 159
-        position [0.3706, 1.0524, 0.0024]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.1, 0.2, 0.105]
-        material: charcoal
-        parent: "upperArm-left"
-        exponent: 2.6
-        swings [
-          {
-            driver: "run"
-            axis [0.660568, -0.349483, -0.664463]
-            amplitude: -0.7
-            pivot [0.336, 1.2201, 0.004]
-            wave: "constant"
-            phase: 0
-          }
-          {
-            driver: "gait"
-            axis [0.660568, -0.349483, -0.664463]
-            amplitude: 0.18
-            pivot [0.336, 1.2201, 0.004]
-            wave: "sine"
-            phase: 3.6416
-          }
-          {
-            driver: "flight"
-            axis [0.660568, -0.349483, -0.664463]
-            amplitude: -0.25
-            pivot [0.336, 1.2201, 0.004]
-            wave: "linear"
-            phase: 0
-          }
-          // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
-          {
-            driver: "air"
-            axis [0.660568, -0.349483, -0.664463]
-            amplitude: -0.03
-            pivot [0.336, 1.2201, 0.004]
-            wave: "linear"
-            phase: 12
-          }
-          // And bend a little further as she lands.
-          {
-            driver: "land"
-            axis [0.660568, -0.349483, -0.664463]
-            amplitude: 0.05
-            pivot [0.336, 1.2201, 0.004]
-            wave: "linear"
-          }
-        ]
-      }
-
-      // The heavy gauntlet: a squared block from the elbow to the wrist, faced square to the body rather than the
-      // forearm's twist, so its outer face and its vents look straight out.
-      shape Superellipsoid "bracer-left" {
-        id: 160
-        position [0.395, 0.985, 0]
-        rotation [-0.0915, 0, 0, 0.9958]
-        scale [0.13, 0.165, 0.14]
-        material: gauntletLeft
-        group: 16
-        parent: "forearm-left"
-        exponent: 4.5
-      }
-
-      shape Box "bracerMouth-left" {
-        id: 161
-        position [0.379697, 0.474186, 0.104559]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.4, 0.4, 0.4]
-        material: skin
-        blend: "Subtraction"
-        group: 16
-        parent: "forearm-left"
-      }
-
-      shape Cylinder "cuff-left" {
-        id: 164
-        position [0.380726, 0.872656, 0.026507]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.09, 0.006, 0.09]
-        material: charcoal
-        parent: "forearm-left"
-        rounding: 0.003
-      }
-
-      shape Capsule "elbowRod-left" {
-        id: 156
-        position [0.466, 1.1236, 0.084]
-        rotation [-0.253, 0, 0.411, 0.8758]
-        scale [0.013, 0.2612, 0.013]
-        material: steel
-        parent: "forearm-left"
-      }
-
-      shape Superellipsoid "palm-left" {
-        id: 165
-        position [0.3775, 0.7677, 0.0504]
-        rotation [-0.08495, 0.400689, -0.033242, 0.911661]
-        scale [0.09045, 0.0729, 0.054]
-        material: charcoal
-        parent: "forearm-left"
-        exponent: 2.8
-      }
-
-      shape Sweep "wrist-left" {
-        id: 166
-        position [0.376562, 0.887196, 0.028315]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [0.0107719, -0.0460057, 0]
-          c [0.0230827, -0.0985838, 0]
-          radiusStart: 0.0513
-          radiusEnd: 0.0513
-        }
-      }
-
-      shape Sweep "finger-left-0" {
-        id: 167
-        position [0.3382, 0.7431, 0.1047]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [0.0215438, -0.0920114, 0.00675]
-          c [0.0236724, -0.0845806, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-left-1" {
-        id: 168
-        position [0.3665, 0.7377, 0.0744]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [0.0233905, -0.0998981, 0.00675]
-          c [0.0230741, -0.0930397, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-left-2" {
-        id: 169
-        position [0.3949, 0.7324, 0.044]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [0.0215438, -0.0920114, 0.00675]
-          c [0.0187826, -0.0857254, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-left-3" {
-        id: 170
-        position [0.4232, 0.727, 0.0137]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [0.0184662, -0.078867, 0.00675]
-          c [0.01326, -0.0731534, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "thumb-left" {
-        id: 171
-        position [0.3312, 0.7959, 0.086]
-        rotation [-0.130367, 0.388295, -0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-left"
-        curve {
-          a [0, 0, 0]
-          b [-0.0399434, -0.0869971, -0.0054]
-          c [0.020021, -0.1062331, -0.04995]
-          radiusStart: 0.02565
-          radiusEnd: 0.02565
-        }
-      }
-
-      shape Sweep "thigh-left" {
-        id: 174
-        position [0.135, 1.0265, 0]
-        material: charcoal
-        parent: "pelvis"
-        curve {
-          a [0, 0, 0]
-          b [0.025, -0.135, 0]
-          c [0.05, -0.285, 0]
-          radiusStart: 0.095
-          radiusEnd: 0.095
-        }
-        // The stride swings in the plane of travel: the hip's own turn into the travel direction is undone, the plane
-        // is turned to the full travel direction, the leg strides, and both turns are put back. A forward diagonal
-        // strides straight ahead of the turned hips, a pure strafe abducts into a sidestep, and a backpedal strides
-        // backward.
-        swings [
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: 0.7
-            pivot [0.145, 1.0265, 0]
-            wave: "sine"
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.5
-            pivot [0.145, 1.0265, 0]
-            wave: "linear"
-          }
-          {
-            driver: "gait"
-            axis [1, 0, 0]
-            amplitude: 0.7
-            pivot [0.145, 1.0265, 0]
-            wave: "sine"
-            phase: 0
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: 0.5
-            pivot [0.145, 1.0265, 0]
-            wave: "linear"
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.7
-            pivot [0.145, 1.0265, 0]
-            wave: "sine"
-          }
-          // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
-          // the leg 0.1 rad back, so she hovers and flies with straight legs.
-          {
-            driver: "flight"
-            axis [1, 0, 0]
-            amplitude: 0.898
-            pivot [0.145, 1.0265, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
-          {
-            driver: "air"
-            axis [1, 0, 0]
-            amplitude: -0.06
-            pivot [0.145, 1.0265, 0]
-            wave: "linear"
-            phase: 13.3
-          }
-          // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
-          {
-            driver: "land"
-            axis [1, 0, 0]
-            amplitude: 0.1
-            pivot [0.145, 1.0265, 0]
-            wave: "linear"
-          }
-        ]
-      }
-
-      // The hip pivot: a large charcoal disc on the hip's axis, set on an ivory guard, both riding the thigh.
-      shape Prism "hipGuard-left" {
-        id: 175
-        position [0.23, 1.05, 0]
-        rotation [0, diagonal, 0, diagonal]
-        scale [0.13, 0.125, 0.024]
-        material: skin
-        parent: "thigh-left"
-        profile {
-          kind: "Convex"
-          vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Cylinder "hipDisc-left" {
-        id: 176
-        position [0.25, 1.0265, 0]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.075, 0.022, 0.075]
-        material: charcoal
-        parent: "thigh-left"
-        rounding: 0.01
-      }
-
-      // The knee piston, behind the knee: a cylinder on the thigh and a rod on the shin, both aimed at the hinge.
-      shape Cylinder "kneeCylinder-left" {
-        id: 177
-        position [0.1751, 0.8416, -0.0554]
-        rotation [0.9286, 0, -0.2563, 0.2684]
-        scale [0.021, 0.065, 0.021]
-        material: pistonSteel
-        parent: "thigh-left"
-        rounding: 0.006
-      }
-
-      shape Superellipsoid "knee-left" {
-        id: 178
-        position [0.19, 0.7465, 0]
-        scale [0.095, 0.085, 0.0975]
-        material: charcoal
-        parent: "thigh-left"
-        exponent: softness
-      }
-
-      shape Prism "kneeGuard-left" {
-        id: 179
-        position [0.19, 0.735, 0.12]
-        scale [0.088, 0.102, 0.045]
-        material: skin
-        parent: "thigh-left"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.42
-        }
-        rounding: 0.012
-      }
-
-      shape Superellipsoid "shin-left" {
-        id: 180
-        position [0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinViolet
-        group: 18
-        parent: "thigh-left"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-        swings [
-          { driver: "swim", axis [1, 0, 0], amplitude: 0.45, pivot [0.19, 0.7465, 0], wave: "sine", phase: 0 }
-          {
-            driver: "gait"
-            axis [1, 0, 0]
-            amplitude: 1.25
-            pivot [0.19, 0.7465, 0]
-            wave: "halfSine"
-            phase: 5.184
-          }
-          // And the knee undoes its 1.2 rad of air tuck, keeping a 0.2 rad bend.
-          {
-            driver: "flight"
-            axis [1, 0, 0]
-            amplitude: -1
-            pivot [0.19, 0.7465, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
-          {
-            driver: "air"
-            axis [1, 0, 0]
-            amplitude: 0.05
-            pivot [0.19, 0.7465, 0]
-            wave: "linear"
-            phase: 24
-          }
-          // The knee takes twice the hip's fold.
-          {
-            driver: "land"
-            axis [1, 0, 0]
-            amplitude: -0.2
-            pivot [0.19, 0.7465, 0]
-            wave: "linear"
-          }
-        ]
-      }
-
-      shape Box "shinEnds-left" {
-        id: 181
-        position [0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
-        material: shinViolet
-        blend: "Intersection"
-        group: 18
-        parent: "shin-left"
-      }
-
-      shape Superellipsoid "shinCavity-left" {
-        id: 182
-        position [0.2, 0.4265, 0.0125]
-        scale [0.083, 0.42, 0.09]
-        material: charcoal
-        blend: "Subtraction"
-        group: 18
-        parent: "shin-left"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "shinArch-left" {
-        id: 183
-        position [0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.17, 0.12, 0.3]
-        material: charcoal
-        blend: "Subtraction"
-        group: 18
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices: archBackOutline
-        }
-      }
-
-      shape Prism "shinArchBack-left" {
-        id: 964
-        position [0.2, 0.195, -0.25]
-        rotation [0, 0, 0, 1]
-        scale [0.152, 0.162, 0.19]
-        material: jet
-        blend: "Subtraction"
-        group: 18
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-
-      shape Superellipsoid "archBand-left" {
-        id: 950
-        position [0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 76
-        parent: "shin-left"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "archBandEnds-left" {
-        id: 951
-        position [0.2, 0.407, 0.22]
-        scale [0.3, 0.302, 0.28]
-        material: shinCream
-        blend: "Intersection"
-        group: 76
-        parent: "shin-left"
-      }
-
-      shape Prism "archBandOuter-left" {
-        id: 952
-        position [0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.212, 0.159, 0.3]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.008
-        group: 76
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "archBandHollow-left" {
-        id: 990
-        position [0.2, 0.4265, 0.0125]
-        scale [0.083, 0.33, 0.09]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.008
-        group: 76
-        parent: "shin-left"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "archBandInner-left" {
-        id: 953
-        position [0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.159, 0.105, 0.3]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 76
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "archBandBack-left" {
-        id: 966
-        position [0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 80
-        parent: "shin-left"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "archBandBackEnds-left" {
-        id: 967
-        position [0.2, 0.407, -0.16]
-        scale [0.3, 0.302, 0.1]
-        material: shinCream
-        blend: "Intersection"
-        group: 80
-        parent: "shin-left"
-      }
-
-      shape Prism "archBandBackOuter-left" {
-        id: 968
-        position [0.2, 0.195, -0.2125]
-        rotation [0, 0, 0, 1]
-        scale [0.19, 0.205, 0.225]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.006
-        group: 80
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Prism "archBandBackInner-left" {
-        id: 969
-        position [0.2, 0.195, -0.2125]
-        rotation [0, 0, 0, 1]
-        scale [0.148, 0.158, 0.226]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 80
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "sidePanel-left" {
-        id: 954
-        position [0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 77
-        parent: "shin-left"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "sidePanelCut-left" {
-        id: 955
-        position [0.35, 0.4465, 0.0125]
-        rotation [0, diagonal, 0, diagonal]
-        scale [0.13, 0.18, 0.2]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 77
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          vertices: shinPanelOutline
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Sweep "shinCore-left" {
-        id: 191
-        position [0.2, 0.2415, 0.0075]
-        material: charcoal
-        parent: "shin-left"
-        curve {
-          a [0, 0, 0]
-          b [-0.005, 0.21, -0.0025]
-          c [-0.01, 0.455, -0.0075]
-          radiusStart: 0.0715
-          radiusEnd: 0.0715
-        }
-      }
-
-      shape Capsule "kneeRod-left" {
-        id: 157
-        position [0.1955, 0.5716, -0.1233]
-        rotation [0.3021, 0, 0.0134, 0.9532]
-        scale [0.012, 0.404, 0.012]
-        material: steel
-        parent: "shin-left"
-      }
-
-
-      // The ankle hub: the joint the foot turns about, a dark gunmetal drum on the greave's outer face at the heel, with a
-      // violet bezel round a dark glass lens, after the model sheet's side views.
-      shape Cylinder "ankleHub-left" {
-        id: 1000
-        position [0.392, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.072, 0.024, 0.072]
-        material: gunmetal
-        group: 122
-        parent: "shin-left"
-        rounding: 0.008
-      }
-
-      shape Cylinder "ankleBezel-left" {
-        id: 1001
-        position [0.41, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.057, 0.01, 0.057]
-        material: violet
-        group: 122
-        parent: "shin-left"
-        rounding: 0.004
-      }
-
-      shape Cylinder "ankleLens-left" {
-        id: 1002
-        position [0.418, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.036, 0.009, 0.036]
-        material: jet
-        blend: "Subtraction"
-        group: 122
-        parent: "shin-left"
-        rounding: 0.003
-      }
-
-      shape Cylinder "ankleHubInset-left" {
-        id: 1303
-        position [0.407, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.035, 0.004, 0.035]
-        material: jet
-        parent: "shin-left"
-        rounding: 0.002
-      }
-
-
-
-
-
-
-      // A sloping cream instep under the fitted ankle arch, a raised violet toe cap,
-      // and separate forefoot tread and heel cheeks follow the boot reference.
-      shape Prism "boot-left" {
-        id: 195
-        position [0.2, 0.1875, 0.0775]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.2]
-        material: violet
-        group: 21
-        swings [
-          {
-            driver: "gait"
-            pivot [0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.2
-            phase: 0
-            wave: "sine"
-          }
-          {
-            driver: "gait"
-            pivot [0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: -0.25
-            phase: 5.184
-            wave: "halfSine"
-          }
-          {
-            driver: "flight"
-            pivot [0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.12
-            phase: 0
-            wave: "linear"
-          }
-          {
-            driver: "air"
-            pivot [0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.02
-            phase: 12.5
-            wave: "linear"
-          }
-          {
-            driver: "land"
-            pivot [0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.1
-            wave: "linear"
-          }
-        ]
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.1
-          vertices [
-            [-0.85, -0.34]
-            [-0.85, 0.45]
-            [-0.32, 0.54]
-            [0.18, 0.36]
-            [0.65, 0.08]
-            [0.93, -0.18]
-            [0.96, -0.34]
-          ]
-        }
-      }
-
-      shape Prism "bootPlan-left" {
-        id: 196
-        position [0.2, 0.19, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.165, 0.24, 0.25]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 21
-        parent: "boot-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-
-      shape Box "bootUnderBand-left" {
-        id: 1020
-        position [0.2, -0.248, 0.3339]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.5, 0.5, 0.5]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.01
-        group: 21
-        parent: "boot-left"
-      }
-
-      // Clearance follows the nozzle axis through the instep and rubber ankle.
-      shape Cylinder "bootJetClearance-left" {
-        id: 1340
-        position [0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "Subtraction"
-        group: 21
-        parent: "boot-left"
-        rounding: 0.008
-      }
-
-      shape Superellipsoid "ankle-left" {
-        id: 192
-        position [0.2, 0.17, 0.06]
-        rotation [0, 0, 0, 1]
-        scale [0.12, 0.07, 0.1]
-        material: charcoal
-        blend: "Union"
-        group: 127
-        parent: "boot-left"
-        exponent: 2
-      }
-
-      shape Cylinder "ankleJetClearance-left" {
-        id: 1341
-        position [0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: charcoal
-        blend: "Subtraction"
-        group: 127
-        parent: "ankle-left"
-        rounding: 0.008
-      }
-
-      shape Prism "toe-left" {
-        id: 199
-        position [0.2, 0.125, 0.205]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.19, 0.12, 0.215]
-        material: violet
-        group: 120
-        parent: "boot-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.075
-          vertices [
-            [-1, -0.78]
-            [-1, 0.22]
-            [-0.65, 0.64]
-            [0.28, 0.51]
-            [0.82, 0.13]
-            [1, -0.35]
-            [0.86, -0.78]
-          ]
-        }
-      }
-
-      shape Prism "toePlan-left" {
-        id: 200
-        position [0.2, 0.1, 0.205]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.18, 0.2, 0.2]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 120
-        parent: "boot-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-      // The air gate opens the heel before a second-jump jet fires: fold the
-      // centre tread forward, and splay the two carved guards at their front hinges.
-      shape Prism "heelTread-left" {
-        id: 956
-        position [0.2, 0.035, -0.08]
-        rotation [0, 0, 0, 1]
-        scale [0.055, 0.035, 0.065]
-        material: gunmetal
-        blend: "Union"
-        parent: "boot-left"
-        swings [
-          {
-            driver: "air"
-            pivot [0.2, 0.09, -0.015]
-            axis [1, 0, 0]
-            amplitude: 1.0471976
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        slides [
-          {
-            driver: "air"
-            axis [0, 0, 1]
-            amplitude: 0.08
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.25
-          sides: 6
-        }
-        rounding: 0.008
-      }
-
-      shape Prism "sole-left" {
-        id: 201
-        position [0.2, 0.03, 0.204]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.18, 0.2, 0.03]
-        material: charcoal
-        parent: "boot-left"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-
-      shape Prism "heelCheek-inner-left" {
-        id: 1301
-        position [0.085, 0.09, -0.135]
-        rotation [0, -0.7071068, 0, 0.7071068]
-        scale [0.115, 0.09, 0.052]
-        material: violet
-        blend: "Union"
-        group: 129
-        parent: "boot-left"
-        swings [
-          {
-            driver: "air"
-            pivot [0.085, 0.09, -0.02]
-            axis [0, 1, 0]
-            amplitude: 0.1
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.18
-          sides: 6
-          vertices [
-            [-1, -0.8]
-            [-1, 0.22]
-            [-0.3, 0.84]
-            [0.55, 0.55]
-            [1, -0.1]
-            [0.85, -0.8]
-          ]
-        }
-      }
-
-      shape Cylinder "heelCheekClearance-inner-left" {
-        id: 1342
-        position [0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 129
-        parent: "heelCheek-inner-left"
-        rounding: 0.008
-      }
-
-      shape Prism "heelCheek-outer-left" {
-        id: 1300
-        position [0.315, 0.09, -0.135]
-        rotation [0, -0.7071068, 0, 0.7071068]
-        scale [0.115, 0.09, 0.052]
-        material: violet
-        blend: "Union"
-        group: 130
-        parent: "boot-left"
-        swings [
-          {
-            driver: "air"
-            pivot [0.315, 0.09, -0.02]
-            axis [0, 1, 0]
-            amplitude: -0.28
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.18
-          sides: 6
-          vertices [
-            [-1, -0.8]
-            [-1, 0.22]
-            [-0.3, 0.84]
-            [0.55, 0.55]
-            [1, -0.1]
-            [0.85, -0.8]
-          ]
-        }
-      }
-
-      shape Cylinder "heelCheekClearance-outer-left" {
-        id: 1343
-        position [0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 130
-        parent: "heelCheek-outer-left"
-        rounding: 0.008
-      }
-
-      shape Cylinder "heelHousing-left" {
-        id: 202
-        position [0.2, 0.245, -0.16]
-        rotation: bootNozzleRotation
-        scale [0.106, 0.052, 0.106]
-        material: gunmetal
-        group: 121
-        parent: "boot-left"
-        rounding: 0.014
-      }
-
-      shape Cylinder "heelRing-left" {
-        id: 203
-        position [0.2, 0.2089573, -0.1852374]
-        rotation: bootNozzleRotation
-        scale [0.098, 0.014, 0.098]
-        material: steel
-        group: 121
-        parent: "boot-left"
-        rounding: 0.008
-      }
-
-      shape Cylinder "heelBore-left" {
-        id: 1302
-        position [0.2, 0.1917551, -0.1972825]
-        rotation: bootNozzleRotation
-        scale [0.076, 0.043, 0.076]
-        material: jet
-        group: 121
-        blend: "Subtraction"
-        rounding: 0.004
-        parent: "boot-left"
-      }
-
-      shape Cylinder "heelInset-left" {
-        id: 204
-        position [0.2, 0.2245212, -0.1743394]
-        rotation: bootNozzleRotation
-        scale [0.074, 0.01, 0.074]
-        material: jet
-        parent: "boot-left"
-        rounding: 0.003
-      }
-
-      shape Superellipsoid "heelLight-left" {
-        id: 205
-        position [0.2, 0.2155105, -0.1806488]
-        rotation: bootLensRotation
-        scale [0.058, 0.058, 0.013]
-        material: bootCyan
-        parent: "boot-left"
-        exponent: 2
-      }
-
-      shape Superellipsoid "heelCore-left" {
-        id: 980
-        position [0.2, 0.2089573, -0.1852374]
-        rotation: bootLensRotation
-        scale [0.028, 0.028, 0.011]
-        material: bootGlow
-        parent: "boot-left"
-        exponent: 2
-      }
-
-      flightPod("left", 1, 1100, 90, violetPodLeft, podSkirtOutlineLeft, podNozzleRotationLeft, 0.105, 0.05)
-
-      shape Sweep "upperArm-right" {
-        id: 216
-        position [-0.295, 1.4515, 0]
-        rotation [0, 0, 0.078459, 0.996917]
-        material: charcoal
-        parent: "torso"
-        curve {
-          a [0, 0, 0]
-          b [-0.0363, -0.1009, 0]
-          c [-0.0727, -0.2059, 0]
-          radiusStart: 0.08
-          radiusEnd: 0.08
-        }
-        swings [
-          { driver: "swim", axis [1, 0, 0], amplitude: 0.55, pivot [-0.295, 1.4515, 0], wave: "sine", phase: 3.14159265358979 }
-          { driver: "swim", axis [0, 0, 1], amplitude: 0.85, pivot [-0.295, 1.4515, 0], wave: "constant" }
-          {
-            driver: "run"
-            axis [0, 0, 1]
-            amplitude: 0.15
-            pivot [-0.295, 1.4515, 0]
-            wave: "constant"
-            phase: 0
-          }
-          {
-            driver: "gait"
-            axis [0.987688, 0.156434, 0]
-            amplitude: 0.42
-            pivot [-0.295, 1.4515, 0]
-            wave: "sine"
-            phase: 6.2831853
-          }
-          {
-            driver: "flight"
-            axis [0, 0, 1]
-            amplitude: 0.1
-            pivot [-0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
-          {
-            driver: "air"
-            axis [0, 0, 1]
-            amplitude: -0.03
-            pivot [-0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 15
-          }
-          // And lift forward 0.12 rad, 0.2 rising.
-          {
-            driver: "air"
-            axis [0.987688, 0.156434, 0]
-            amplitude: -0.015
-            pivot [-0.295, 1.4515, 0]
-            wave: "linear"
-            phase: 8
-          }
-        ]
-      }
-
-      shape Superellipsoid "elbow-right" {
-        id: 217
-        position [-0.336, 1.2201, 0.004]
-        rotation [0, 0, 0.078459, 0.996917]
-        scale [0.07, 0.065, 0.072]
-        material: charcoal
-        parent: "upperArm-right"
-        exponent: softness
-      }
-
-      shape Superellipsoid "shoulderPivot-right" {
-        id: 218
-        position [-0.3, 1.46, 0]
-        scale [0.085, 0.085, 0.085]
-        material: charcoal
-        parent: "upperArm-right"
-        exponent: 3
-      }
-
-      shape Superellipsoid "shoulderSlab-right" {
-        id: 219
-        position [-0.4, 1.48, -0.005]
-        rotation [0, 0, 0.1305, 0.9914]
-        scale [0.15, 0.06, 0.19]
-        material: violetBandRight
-        parent: "upperArm-right"
-        exponent: 6
-        shear {
-          linear: 0
-          quadratic: -0.9
-          cubic: 0
-          target: 1
-          driver: 2
-        }
-      }
-
-      shape Superellipsoid "shoulderSlabLower-right" {
-        id: 220
-        position [-0.425, 1.37, 0]
-        rotation [0, 0, 0.0698, 0.9976]
-        scale [0.16, 0.08, 0.2]
-        material: violetBandRight
-        parent: "upperArm-right"
-        exponent: 6
-        shear {
-          linear: 0
-          quadratic: -0.7
-          cubic: 0
-          target: 1
-          driver: 2
-        }
-      }
-
-      shape Cylinder "elbowCylinder-right" {
-        id: 221
-        position [-0.3834, 1.3086, 0.0499]
-        rotation [-0.6604, 0, -0.6817, 0.3149]
-        scale [0.022, 0.0594, 0.022]
-        material: pistonSteel
-        parent: "upperArm-right"
-        rounding: 0.006
-      }
-
-      shape Superellipsoid "forearm-right" {
-        id: 227
-        position [-0.3706, 1.0524, 0.0024]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.1, 0.2, 0.105]
-        material: charcoal
-        parent: "upperArm-right"
-        exponent: 2.6
-        swings [
-          {
-            driver: "run"
-            axis [0.660568, 0.349483, 0.664463]
-            amplitude: -0.7
-            pivot [-0.336, 1.2201, 0.004]
-            wave: "constant"
-            phase: 0
-          }
-          {
-            driver: "gait"
-            axis [0.660568, 0.349483, 0.664463]
-            amplitude: 0.18
-            pivot [-0.336, 1.2201, 0.004]
-            wave: "sine"
-            phase: 0.5
-          }
-          {
-            driver: "flight"
-            axis [0.660568, 0.349483, 0.664463]
-            amplitude: -0.25
-            pivot [-0.336, 1.2201, 0.004]
-            wave: "linear"
-            phase: 0
-          }
-          // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
-          {
-            driver: "air"
-            axis [0.660568, 0.349483, 0.664463]
-            amplitude: -0.03
-            pivot [-0.336, 1.2201, 0.004]
-            wave: "linear"
-            phase: 12
-          }
-          // And bend a little further as she lands.
-          {
-            driver: "land"
-            axis [0.660568, 0.349483, 0.664463]
-            amplitude: 0.05
-            pivot [-0.336, 1.2201, 0.004]
-            wave: "linear"
-          }
-        ]
-      }
-
-      shape Superellipsoid "bracer-right" {
-        id: 228
-        position [-0.395, 0.985, 0]
-        rotation [-0.0915, 0, 0, 0.9958]
-        scale [0.13, 0.165, 0.14]
-        material: gauntletRight
-        group: 30
-        parent: "forearm-right"
-        exponent: 4.5
-      }
-
-      shape Box "bracerMouth-right" {
-        id: 229
-        position [-0.379697, 0.474186, 0.104559]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.4, 0.4, 0.4]
-        material: skin
-        blend: "Subtraction"
-        group: 30
-        parent: "forearm-right"
-      }
-
-      shape Cylinder "cuff-right" {
-        id: 232
-        position [-0.380726, 0.872656, 0.026507]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.09, 0.006, 0.09]
-        material: charcoal
-        parent: "forearm-right"
-        rounding: 0.003
-      }
-
-      shape Capsule "elbowRod-right" {
-        id: 224
-        position [-0.466, 1.1236, 0.084]
-        rotation [-0.253, 0, -0.411, 0.8758]
-        scale [0.013, 0.2612, 0.013]
-        material: steel
-        parent: "forearm-right"
-      }
-
-      shape Superellipsoid "palm-right" {
-        id: 233
-        position [-0.3775, 0.7677, 0.0504]
-        rotation [-0.08495, -0.400689, 0.033242, 0.911661]
-        scale [0.09045, 0.0729, 0.054]
-        material: charcoal
-        parent: "forearm-right"
-        exponent: 2.8
-      }
-
-      shape Sweep "wrist-right" {
-        id: 234
-        position [-0.376562, 0.887196, 0.028315]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [-0.0107719, -0.0460057, 0]
-          c [-0.0230827, -0.0985838, 0]
-          radiusStart: 0.0513
-          radiusEnd: 0.0513
-        }
-      }
-
-      shape Sweep "finger-right-0" {
-        id: 235
-        position [-0.3382, 0.7431, 0.1047]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [-0.0215438, -0.0920114, 0.00675]
-          c [-0.0236724, -0.0845806, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-right-1" {
-        id: 236
-        position [-0.3665, 0.7377, 0.0744]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [-0.0233905, -0.0998981, 0.00675]
-          c [-0.0230741, -0.0930397, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-right-2" {
-        id: 237
-        position [-0.3949, 0.7324, 0.044]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [-0.0215438, -0.0920114, 0.00675]
-          c [-0.0187826, -0.0857254, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "finger-right-3" {
-        id: 238
-        position [-0.4232, 0.727, 0.0137]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [-0.0184662, -0.078867, 0.00675]
-          c [-0.01326, -0.0731534, -0.056025]
-          radiusStart: 0.01755
-          radiusEnd: 0.01755
-        }
-      }
-
-      shape Sweep "thumb-right" {
-        id: 239
-        position [-0.3312, 0.7959, 0.086]
-        rotation [-0.130367, -0.388295, 0.137633, 0.901825]
-        material: charcoal
-        parent: "forearm-right"
-        curve {
-          a [0, 0, 0]
-          b [0.0399434, -0.0869971, -0.0054]
-          c [-0.020021, -0.1062331, -0.04995]
-          radiusStart: 0.02565
-          radiusEnd: 0.02565
-        }
-      }
-
-      shape Sweep "thigh-right" {
-        id: 242
-        position [-0.135, 1.0265, 0]
-        material: charcoal
-        parent: "pelvis"
-        curve {
-          a [0, 0, 0]
-          b [-0.025, -0.135, 0]
-          c [-0.05, -0.285, 0]
-          radiusStart: 0.095
-          radiusEnd: 0.095
-        }
-        // The stride swings in the plane of travel, as thigh-left's does.
-        swings [
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: 0.7
-            pivot [-0.145, 1.0265, 0]
-            wave: "sine"
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.5
-            pivot [-0.145, 1.0265, 0]
-            wave: "linear"
-          }
-          {
-            driver: "gait"
-            axis [1, 0, 0]
-            amplitude: 0.7
-            pivot [-0.145, 1.0265, 0]
-            wave: "sine"
-            phase: 3.1415927
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: 0.5
-            pivot [-0.145, 1.0265, 0]
-            wave: "linear"
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.7
-            pivot [-0.145, 1.0265, 0]
-            wave: "sine"
-          }
-          {
-            driver: "flight"
-            axis [1, 0, 0]
-            amplitude: 0.898
-            pivot [-0.145, 1.0265, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
-          {
-            driver: "air"
-            axis [1, 0, 0]
-            amplitude: -0.06
-            pivot [-0.145, 1.0265, 0]
-            wave: "linear"
-            phase: 13.3
-          }
-          // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
-          {
-            driver: "land"
-            axis [1, 0, 0]
-            amplitude: 0.1
-            pivot [-0.145, 1.0265, 0]
-            wave: "linear"
-          }
-        ]
-      }
-
-      shape Prism "hipGuard-right" {
-        id: 243
-        position [-0.23, 1.05, 0]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.13, 0.125, 0.024]
-        material: skin
-        parent: "thigh-right"
-        profile {
-          kind: "Convex"
-          vertices [[-0.6, 1], [0.6, 1], [1, 0.2], [0.7, -0.7], [-0.7, -0.7], [-1, 0.2]]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Cylinder "hipDisc-right" {
-        id: 244
-        position [-0.25, 1.0265, 0]
-        rotation [0, 0, -diagonal, diagonal]
-        scale [0.075, 0.022, 0.075]
-        material: charcoal
-        parent: "thigh-right"
-        rounding: 0.01
-      }
-
-      shape Cylinder "kneeCylinder-right" {
-        id: 225
-        position [-0.1751, 0.8416, -0.0554]
-        rotation [0.9286, 0, 0.2563, 0.2684]
-        scale [0.021, 0.065, 0.021]
-        material: pistonSteel
-        parent: "thigh-right"
-        rounding: 0.006
-      }
-
-      shape Superellipsoid "knee-right" {
-        id: 246
-        position [-0.19, 0.7465, 0]
-        scale [0.095, 0.085, 0.0975]
-        material: charcoal
-        parent: "thigh-right"
-        exponent: softness
-      }
-
-      shape Prism "kneeGuard-right" {
-        id: 247
-        position [-0.19, 0.735, 0.12]
-        scale [0.088, 0.102, 0.045]
-        material: skin
-        parent: "thigh-right"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.42
-        }
-        rounding: 0.012
-      }
-
-      shape Superellipsoid "shin-right" {
-        id: 248
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinViolet
-        group: 32
-        parent: "thigh-right"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-        swings [
-          { driver: "swim", axis [1, 0, 0], amplitude: 0.45, pivot [-0.19, 0.7465, 0], wave: "sine", phase: 3.14159265358979 }
-          {
-            driver: "gait"
-            axis [1, 0, 0]
-            amplitude: 1.25
-            pivot [-0.19, 0.7465, 0]
-            wave: "halfSine"
-            phase: 2.0424
-          }
-          {
-            driver: "flight"
-            axis [1, 0, 0]
-            amplitude: -1
-            pivot [-0.19, 0.7465, 0]
-            wave: "linear"
-            phase: 0
-          }
-          // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
-          {
-            driver: "air"
-            axis [1, 0, 0]
-            amplitude: 0.05
-            pivot [-0.19, 0.7465, 0]
-            wave: "linear"
-            phase: 24
-          }
-          // The knee takes twice the hip's fold.
-          {
-            driver: "land"
-            axis [1, 0, 0]
-            amplitude: -0.2
-            pivot [-0.19, 0.7465, 0]
-            wave: "linear"
-          }
-        ]
-      }
-
-      shape Box "shinEnds-right" {
-        id: 249
-        position [-0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
-        material: shinViolet
-        blend: "Intersection"
-        group: 32
-        parent: "shin-right"
-      }
-
-      shape Superellipsoid "shinCavity-right" {
-        id: 250
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.083, 0.42, 0.09]
-        material: charcoal
-        blend: "Subtraction"
-        group: 32
-        parent: "shin-right"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "shinArch-right" {
-        id: 251
-        position [-0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.17, 0.12, 0.3]
-        material: charcoal
-        blend: "Subtraction"
-        group: 32
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices: archBackOutline
-        }
-      }
-
-      shape Prism "shinArchBack-right" {
-        id: 972
-        position [-0.2, 0.195, -0.25]
-        rotation [0, 0, 0, 1]
-        scale [0.152, 0.162, 0.19]
-        material: jet
-        blend: "Subtraction"
-        group: 32
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-
-      shape Superellipsoid "archBand-right" {
-        id: 957
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 78
-        parent: "shin-right"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "archBandEnds-right" {
-        id: 958
-        position [-0.2, 0.407, 0.22]
-        scale [0.3, 0.302, 0.28]
-        material: shinCream
-        blend: "Intersection"
-        group: 78
-        parent: "shin-right"
-      }
-
-      shape Prism "archBandOuter-right" {
-        id: 959
-        position [-0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.212, 0.159, 0.3]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.008
-        group: 78
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "archBandHollow-right" {
-        id: 991
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.083, 0.33, 0.09]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.008
-        group: 78
-        parent: "shin-right"
-        exponent: 4.5
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "archBandInner-right" {
-        id: 960
-        position [-0.2, 0.0458, 0.075]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.159, 0.105, 0.3]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 78
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "archBandBack-right" {
-        id: 974
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 81
-        parent: "shin-right"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "archBandBackEnds-right" {
-        id: 975
-        position [-0.2, 0.407, -0.16]
-        scale [0.3, 0.302, 0.1]
-        material: shinCream
-        blend: "Intersection"
-        group: 81
-        parent: "shin-right"
-      }
-
-      shape Prism "archBandBackOuter-right" {
-        id: 976
-        position [-0.2, 0.195, -0.2125]
-        rotation [0, 0, 0, 1]
-        scale [0.19, 0.205, 0.225]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.006
-        group: 81
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Prism "archBandBackInner-right" {
-        id: 977
-        position [-0.2, 0.195, -0.2125]
-        rotation [0, 0, 0, 1]
-        scale [0.148, 0.158, 0.226]
-        material: shinCream
-        blend: "SmoothSubtraction"
-        smooth: 0.004
-        group: 81
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.07
-          vertices [
-            [-1, -1]
-            [-1, 0]
-            [-0.809, 0.588]
-            [-0.309, 0.951]
-            [0.309, 0.951]
-            [0.809, 0.588]
-            [1, 0]
-            [1, -1]
-          ]
-        }
-      }
-
-      shape Superellipsoid "sidePanel-right" {
-        id: 961
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.105, 0.36, 0.112]
-        material: shinCream
-        group: 79
-        parent: "shin-right"
-        exponent: 4.5
-        dilate: 0.01
-        flare {
-          amount: 1
-          bulge: 0
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "sidePanelCut-right" {
-        id: 962
-        position [-0.35, 0.4465, 0.0125]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.13, 0.18, 0.2]
-        material: shinCream
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 79
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          vertices: shinPanelOutline
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Sweep "shinCore-right" {
-        id: 259
-        position [-0.2, 0.2415, 0.0075]
-        material: charcoal
-        parent: "shin-right"
-        curve {
-          a [0, 0, 0]
-          b [0.005, 0.21, -0.0025]
-          c [0.01, 0.455, -0.0075]
-          radiusStart: 0.0715
-          radiusEnd: 0.0715
-        }
-      }
-
-      shape Capsule "kneeRod-right" {
-        id: 226
-        position [-0.1955, 0.5716, -0.1233]
-        rotation [0.3021, 0, -0.0134, 0.9532]
-        scale [0.012, 0.404, 0.012]
-        material: steel
-        parent: "shin-right"
-      }
-
-
-      // The ankle hub: the joint the foot turns about, a dark gunmetal drum on the greave's outer face at the heel, with a
-      // violet bezel round a dark glass lens, after the model sheet's side views.
-      shape Cylinder "ankleHub-right" {
-        id: 1006
-        position [-0.392, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.072, 0.024, 0.072]
-        material: gunmetal
-        group: 126
-        parent: "shin-right"
-        rounding: 0.008
-      }
-
-      shape Cylinder "ankleBezel-right" {
-        id: 1007
-        position [-0.41, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.057, 0.01, 0.057]
-        material: violet
-        group: 126
-        parent: "shin-right"
-        rounding: 0.004
-      }
-
-      shape Cylinder "ankleLens-right" {
-        id: 1008
-        position [-0.418, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.036, 0.009, 0.036]
-        material: jet
-        blend: "Subtraction"
-        group: 126
-        parent: "shin-right"
-        rounding: 0.003
-      }
-
-      shape Cylinder "ankleHubInset-right" {
-        id: 1323
-        position [-0.407, 0.175, -0.07]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.035, 0.004, 0.035]
-        material: jet
-        parent: "shin-right"
-        rounding: 0.002
-      }
-
-
-
-
-
-
-      // Mirrored instep, shaped toe cap and separate heel pads; the nozzle stays
-      // recessed beneath the rear cream arch and points 55 degrees downward.
-      shape Prism "boot-right" {
-        id: 263
-        position [-0.2, 0.1875, 0.0775]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.2]
-        material: violet
-        group: 35
-        swings [
-          {
-            driver: "gait"
-            pivot [-0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.2
-            phase: 3.1416
-            wave: "sine"
-          }
-          {
-            driver: "gait"
-            pivot [-0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: -0.25
-            phase: 2.0424
-            wave: "halfSine"
-          }
-          {
-            driver: "flight"
-            pivot [-0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.12
-            phase: 0
-            wave: "linear"
-          }
-          {
-            driver: "air"
-            pivot [-0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.02
-            phase: 12.5
-            wave: "linear"
-          }
-          {
-            driver: "land"
-            pivot [-0.2, 0.1715, 0.0075]
-            axis [1, 0, 0]
-            amplitude: 0.1
-            wave: "linear"
-          }
-        ]
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.1
-          vertices [
-            [-0.85, -0.34]
-            [-0.85, 0.45]
-            [-0.32, 0.54]
-            [0.18, 0.36]
-            [0.65, 0.08]
-            [0.93, -0.18]
-            [0.96, -0.34]
-          ]
-        }
-      }
-
-      shape Prism "bootPlan-right" {
-        id: 264
-        position [-0.2, 0.19, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.165, 0.24, 0.25]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 35
-        parent: "boot-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-
-      shape Box "bootUnderBand-right" {
-        id: 1021
-        position [-0.2, -0.248, 0.3339]
-        rotation [-0.342, 0, 0, 0.9397]
-        scale [0.5, 0.5, 0.5]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.01
-        group: 35
-        parent: "boot-right"
-      }
-
-      // Clearance follows the nozzle axis through the instep and rubber ankle.
-      shape Cylinder "bootJetClearance-right" {
-        id: 1360
-        position [-0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "Subtraction"
-        group: 35
-        parent: "boot-right"
-        rounding: 0.008
-      }
-
-      shape Superellipsoid "ankle-right" {
-        id: 260
-        position [-0.2, 0.17, 0.06]
-        rotation [0, 0, 0, 1]
-        scale [0.12, 0.07, 0.1]
-        material: charcoal
-        blend: "Union"
-        group: 128
-        parent: "boot-right"
-        exponent: 2
-      }
-
-      shape Cylinder "ankleJetClearance-right" {
-        id: 1361
-        position [-0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: charcoal
-        blend: "Subtraction"
-        group: 128
-        parent: "ankle-right"
-        rounding: 0.008
-      }
-
-      shape Prism "toe-right" {
-        id: 267
-        position [-0.2, 0.125, 0.205]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.19, 0.12, 0.215]
-        material: violet
-        group: 124
-        parent: "boot-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.075
-          vertices [
-            [-1, -0.78]
-            [-1, 0.22]
-            [-0.65, 0.64]
-            [0.28, 0.51]
-            [0.82, 0.13]
-            [1, -0.35]
-            [0.86, -0.78]
-          ]
-        }
-      }
-
-      shape Prism "toePlan-right" {
-        id: 268
-        position [-0.2, 0.1, 0.205]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.18, 0.2, 0.2]
-        material: violet
-        blend: "SmoothIntersection"
-        smooth: 0.012
-        group: 124
-        parent: "boot-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-      // Mirror the left heel's airborne clearance and return to the resting pads.
-      shape Prism "heelTread-right" {
-        id: 963
-        position [-0.2, 0.035, -0.08]
-        rotation [0, 0, 0, 1]
-        scale [0.055, 0.035, 0.065]
-        material: gunmetal
-        blend: "Union"
-        parent: "boot-right"
-        swings [
-          {
-            driver: "air"
-            pivot [-0.2, 0.09, -0.015]
-            axis [1, 0, 0]
-            amplitude: 1.0471976
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        slides [
-          {
-            driver: "air"
-            axis [0, 0, 1]
-            amplitude: 0.08
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.25
-          sides: 6
-        }
-        rounding: 0.008
-      }
-
-      shape Prism "sole-right" {
-        id: 269
-        position [-0.2, 0.03, 0.204]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.18, 0.2, 0.03]
-        material: charcoal
-        parent: "boot-right"
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.12
-          vertices: bootPlanOutline
-        }
-      }
-
-      shape Prism "heelCheek-inner-right" {
-        id: 1321
-        position [-0.085, 0.09, -0.135]
-        rotation [0, -0.7071068, 0, 0.7071068]
-        scale [0.115, 0.09, 0.052]
-        material: violet
-        blend: "Union"
-        group: 131
-        parent: "boot-right"
-        swings [
-          {
-            driver: "air"
-            pivot [-0.085, 0.09, -0.02]
-            axis [0, 1, 0]
-            amplitude: -0.1
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.18
-          sides: 6
-          vertices [
-            [-1, -0.8]
-            [-1, 0.22]
-            [-0.3, 0.84]
-            [0.55, 0.55]
-            [1, -0.1]
-            [0.85, -0.8]
-          ]
-        }
-      }
-
-      shape Cylinder "heelCheekClearance-inner-right" {
-        id: 1362
-        position [-0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 131
-        parent: "heelCheek-inner-right"
-        rounding: 0.008
-      }
-
-      shape Prism "heelCheek-outer-right" {
-        id: 1320
-        position [-0.315, 0.09, -0.135]
-        rotation [0, -0.7071068, 0, 0.7071068]
-        scale [0.115, 0.09, 0.052]
-        material: violet
-        blend: "Union"
-        group: 132
-        parent: "boot-right"
-        swings [
-          {
-            driver: "air"
-            pivot [-0.315, 0.09, -0.02]
-            axis [0, 1, 0]
-            amplitude: 0.28
-            phase: 0
-            wave: "constant"
-          }
-        ]
-        profile {
-          kind: "Convex"
-          cornerRadius: 0.18
-          sides: 6
-          vertices [
-            [-1, -0.8]
-            [-1, 0.22]
-            [-0.3, 0.84]
-            [0.55, 0.55]
-            [1, -0.1]
-            [0.85, -0.8]
-          ]
-        }
-      }
-
-      shape Cylinder "heelCheekClearance-outer-right" {
-        id: 1363
-        position [-0.2, 0.169638, -0.212769]
-        rotation: bootNozzleRotation
-        scale [0.12, 0.24, 0.12]
-        material: violet
-        blend: "SmoothSubtraction"
-        smooth: 0.012
-        group: 132
-        parent: "heelCheek-outer-right"
-        rounding: 0.008
-      }
-
-      shape Cylinder "heelHousing-right" {
-        id: 270
-        position [-0.2, 0.245, -0.16]
-        rotation: bootNozzleRotation
-        scale [0.106, 0.052, 0.106]
-        material: gunmetal
-        group: 125
-        parent: "boot-right"
-        rounding: 0.014
-      }
-
-      shape Cylinder "heelRing-right" {
-        id: 271
-        position [-0.2, 0.2089573, -0.1852374]
-        rotation: bootNozzleRotation
-        scale [0.098, 0.014, 0.098]
-        material: steel
-        group: 125
-        parent: "boot-right"
-        rounding: 0.008
-      }
-
-      shape Cylinder "heelBore-right" {
-        id: 1322
-        position [-0.2, 0.1917551, -0.1972825]
-        rotation: bootNozzleRotation
-        scale [0.076, 0.043, 0.076]
-        material: jet
-        group: 125
-        blend: "Subtraction"
-        rounding: 0.004
-        parent: "boot-right"
-      }
-
-      shape Cylinder "heelInset-right" {
-        id: 272
-        position [-0.2, 0.2245212, -0.1743394]
-        rotation: bootNozzleRotation
-        scale [0.074, 0.01, 0.074]
-        material: jet
-        parent: "boot-right"
-        rounding: 0.003
-      }
-
-      shape Superellipsoid "heelLight-right" {
-        id: 273
-        position [-0.2, 0.2155105, -0.1806488]
-        rotation: bootLensRotation
-        scale [0.058, 0.058, 0.013]
-        material: bootCyan
-        parent: "boot-right"
-        exponent: 2
-      }
-
-      shape Superellipsoid "heelCore-right" {
-        id: 981
-        position [-0.2, 0.2089573, -0.1852374]
-        rotation: bootLensRotation
-        scale [0.028, 0.028, 0.011]
-        material: bootGlow
-        parent: "boot-right"
-        exponent: 2
-      }
-
-      flightPod("right", -1, 1200, 100, violetPodRight, podSkirtOutlineRight, podNozzleRotationRight, -0.105, -0.05)
+      mothArm("left", 1, 0, 0, 0, gauntletLeft, violetBandLeft)
+      mothLeg("left", 1, 0, 0, 0)
+      flightPod("left", 1, 1100, 90, violetPodLeft, podNozzleRotationLeft, 0.105, 0.05)
+
+      mothArm("right", -1, 3.1415927, 2000, 200, gauntletRight, violetBandRight)
+      mothLeg("right", -1, 3.1415927, 2000, 200)
+      flightPod("right", -1, 1200, 100, violetPodRight, podNozzleRotationRight, -0.105, -0.05)
 
       drivers [
         // A gentle tread while the medium hold carries her shoulders at the surface.
@@ -5250,7 +3600,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-left"
-          position [-0.102, -0.3939, -0.1244]
+          position [-0.0978, -0.3492, -0.166]
           rotation: podNozzleRotationLeft
           halfExtent [0.15, 0.18, 0.15]
           axis: 0.36
@@ -5262,7 +3612,7 @@ prototypes {
           speed: 1.5
           seed: 31
           steps: 40
-          intensity: 90000
+          intensity: 260000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -5289,7 +3639,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-right"
-          position [0.102, -0.3939, -0.1244]
+          position [0.0978, -0.3492, -0.166]
           rotation: podNozzleRotationRight
           halfExtent [0.15, 0.18, 0.15]
           axis: 0.36
@@ -5301,90 +3651,11 @@ prototypes {
           speed: 1.5
           seed: 39
           steps: 40
-          intensity: 90000
+          intensity: 260000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
           intensityLane: 1
-          ramp [
-            {
-              density: 0
-              color: "#134D8B"
-            }
-            {
-              density: 0.3
-              color: "#238EDB"
-            }
-            {
-              density: 0.65
-              color: "#57DCEE"
-            }
-            {
-              density: 1
-              color: "#DCFCFF"
-            }
-          ]
-        }
-        // The boot jets, one out of each heel thruster's lens, dark but for the air jump's boost.
-        {
-          kind: "flow"
-          parent: "heelLight-left"
-          position [0, 0, -0.19]
-          rotation [0.707107, 0, 0, 0.707107]
-          halfExtent [0.08, 0.18, 0.08]
-          axis: 0.36
-          width: 0.045
-          spread: 1.3
-          fade: 1.1
-          noiseScale: 0.05
-          noiseDepth: 0.4
-          speed: 2.5
-          seed: 53
-          steps: 32
-          intensity: 120000
-          extinction: 1.2
-          pulseAmplitude: 0.06
-          pulseFrequency: 18
-          intensityLane: 3
-          ramp [
-            {
-              density: 0
-              color: "#134D8B"
-            }
-            {
-              density: 0.3
-              color: "#238EDB"
-            }
-            {
-              density: 0.65
-              color: "#57DCEE"
-            }
-            {
-              density: 1
-              color: "#DCFCFF"
-            }
-          ]
-        }
-        {
-          kind: "flow"
-          parent: "heelLight-right"
-          position [0, 0, -0.19]
-          rotation [0.707107, 0, 0, 0.707107]
-          halfExtent [0.08, 0.18, 0.08]
-          axis: 0.36
-          width: 0.045
-          spread: 1.3
-          fade: 1.1
-          noiseScale: 0.05
-          noiseDepth: 0.4
-          speed: 2.5
-          seed: 59
-          steps: 32
-          intensity: 120000
-          extinction: 1.2
-          pulseAmplitude: 0.06
-          pulseFrequency: 18
-          intensityLane: 3
           ramp [
             {
               density: 0
@@ -5595,22 +3866,6 @@ rule "airborne-off" {
   airWings[$each] = 0
 }
 
-// The air jump spends her last jump: the boot jets fire for a quarter second, then ease out.
-rule "boot-boost-on" {
-  when bodyState(each, jumps) == 0 and fact(each, Airborne) == 1 and bodyState(each, flightFuel) == 0
-  mode: Edge
-  forEach: bootBoost
-  bootBoost[$each] = 1
-  schedule bootBoostEnd[$each] in 0.25s
-}
-
-rule "boot-boost-off" {
-  when bootBoost[$each] == 1 and $tick >= bootBoostEnd[$each]
-  mode: Level
-  forEach: bootBoost
-  bootBoost[$each] = 0
-}
-
 rule "blink-close" {
   when blink[$each] == 0 and $tick >= blinkAt[$each]
   mode: Level
@@ -5711,23 +3966,6 @@ state {
       ]
       kind: "Fixed"
       name: "airWings"
-    }
-    row {
-      cells [
-        {
-          dynamics {
-            row: "boot-boost"
-          }
-          key: "0"
-          value: "0"
-        }
-      ]
-      capacity: 1
-      kind: "Fixed"
-      name: "bootBoost"
-    }
-    table bootBoostEnd {
-      "0" = 0
     }
     table blink capacity(1) {
       "0" = 0
