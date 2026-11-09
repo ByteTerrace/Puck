@@ -557,11 +557,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   A light reaches a cel surface as `light × (band + (1 − band) × region × tint)`
   (`sdfToonShare`): the tint is a direct light's shade-side share, never a
   multiplier on sky or bounced light, so an interior lit by bounce keeps its
-  exposure; `region` is the larger of the cascades' visibility, which the
-  surface pass queries on a cel material's shade side too
-  (`sdfMaterialShadowDemand`), and the open sky the probes see above the surface
-  (`sdfToonOpen`). Reading the light's probe share there instead printed the
-  probe cells as soft patches across open walls.
+  exposure; `region` is the open sky the probes see above the surface
+  (`sdfToonOpen`). The light's probe share printed the probe cells as soft
+  patches across open walls, and the cascades' visibility lit the inner face of
+  an outer wall (its own exit from the light). The surface pass queries a cel
+  material's shadows on every side (`sdfMaterialShadowDemand`): the band's
+  neighbourhood normal faces the light past the pixel's own terminator, and an
+  unqueried slot there lit a line of full key light along every edge.
   `band: Combined` steps the filtered visibility too, at a width
   `sdfToonResolve` keeps at or above what the cascade texel resolves at the
   receiver (`sdfToonShadowTexels`, through the shared `sdfMeshCascadeHolding`

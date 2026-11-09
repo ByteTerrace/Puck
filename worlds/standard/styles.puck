@@ -32,7 +32,7 @@ function celMaterial(base, style, combined = 1) = base with {
 let celStyle = {
   threshold: 0.2
   softness: 0.08
-  shadowTint [0.45, 0.47, 0.68]
+  shadowTint [0.3, 0.32, 0.5]
   outlineWidth: 0
   outlineDistance: 12
   outlineNormal: 0.5

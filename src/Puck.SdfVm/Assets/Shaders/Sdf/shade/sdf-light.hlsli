@@ -313,14 +313,14 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         float occlusion = inputs.visibility;
 
         if (toon) {
-            // The band reads the style's neighbourhood normal; the highlight keeps the surface's own. The region is where
-            // the light would reach the surface were it turned toward it, which the surface pass measures on a cel
-            // material's shade side too (sdfMaterialShadowDemand): a form shadow on its own body passes and a room's
-            // shell does not. A cast shadow in the open air passes too (the style's `open`), so it keeps the tint as a
-            // form shadow does.
+            // The band reads the style's neighbourhood normal; the highlight keeps the surface's own. The region is whether
+            // the surface stands in the open air (the style's `open`, from the sky the probes see above it), so a form or
+            // cast shadow outdoors keeps the tint and a room does not. The cascades cannot answer it: the inner face of a
+            // building's outer wall is that wall's own exit from the light, so it would read as reached. Without the
+            // volume the cascades' visibility stands in.
             float cosine = sdfWrapDiffuse(dot(surface.toon.normal, light.position), surface.material.wrap);
             float band = sdfToonBand(surface.toon, cosine, occlusion, sdfToonShadowWidth(surface.toon, light.index));
-            float region = max(saturate(occlusion), surface.toon.open);
+            float region = (surface.probed ? surface.toon.open : saturate(occlusion));
             response.diffuse = light.color * (light.weight * sdfToonShare(surface.toon, band, region));
             response.metered = light.color * (light.weight * region * cosine);
             response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, band);
