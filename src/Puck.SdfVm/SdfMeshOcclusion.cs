@@ -43,6 +43,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private IGpuBuffer? m_counts;
     private IGpuBuffer? m_depth;
     private bool m_visibleCleared;
+    // Whether the current recording recorded the visible set's clear (and its seed's copy): it takes effect only once the
+    // recording submits (Submitted), since an abandoned recording's commands never run.
+    private bool m_visibleRecorded;
     private SdfWorldTables? m_historyOwner;
     private uint m_capacity;
     private uint m_count;
@@ -92,6 +95,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public uint CandidateCount => m_count;
 
     internal void Submitted(int slot) {
+        if (m_visibleRecorded) {
+            m_visibleRecorded = false;
+            m_visibleCleared = true;
+            m_seedVisible = null;
+        }
         m_retired[slot].AddRange(collection: m_replaced);
         m_replaced.Clear();
         m_sightCopies.Submitted(slot: slot);
@@ -100,7 +108,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // buffers replaced before that submission are read by nothing left and are disposed, and its sight copy is read.
     internal void Completed(int slot) {
         foreach (var buffer in m_retired[slot]) {
-            // A recording that never submitted left its seed uncopied; the visible set starts cleared instead.
+            // A seed no submitted recording copied is dropped with its buffer; the visible set then starts cleared.
             if (ReferenceEquals(objA: buffer, objB: m_seedVisible)) { m_seedVisible = null; }
             buffer.Dispose();
         }
@@ -126,6 +134,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         // The node completed this slot before its recording (Completed): replacements made here retire at its next
         // completion, after this slot's history copy and every preceding submission.
         m_slot = slot;
+        // An abandoned recording's clear never ran, so this recording records it again.
+        m_visibleRecorded = false;
         m_count = count;
         m_width = Math.Max(val1: width, val2: 1u);
         m_height = Math.Max(val1: height, val2: 1u);
@@ -219,10 +229,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                     destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
                 recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: previous.BufferHandle,
                     destinationBufferHandle: m_visible.BufferHandle, sizeBytes: previous.SizeBytes);
-                m_seedVisible = null;
             }
             Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: (copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite), sourceStage: GpuStage.Transfer);
-            m_visibleCleared = true;
+            m_visibleRecorded = true;
         }
 
         Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
