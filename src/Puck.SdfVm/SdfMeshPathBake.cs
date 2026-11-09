@@ -1785,13 +1785,8 @@ public sealed partial class SdfMeshPathBake {
 
         if (empty) {
             if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
-        } else {
-            var found = new List<int>();
-
-            for (var vertex = 0; (vertex < contour!.VertexCount); vertex++) {
-                if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
-            }
-            creases = [.. found];
+        } else if (contour is not null) {
+            creases = CreaseVertices(contour: contour);
             if (creases.Length > 0) {
                 group.Projection = new ContourProjection(contour: contour);
                 group.CreaseSpacing = lattice.ContourCell;
@@ -1825,6 +1820,16 @@ public sealed partial class SdfMeshPathBake {
             group.PointsAnswered = 0;
             group.Next = CreaseChunk(group: group);
         }
+    }
+    // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
+    private static int[] CreaseVertices(SdfContour contour) {
+        var found = new List<int>();
+
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
+        }
+
+        return [.. found];
     }
     // The next chunk of the vertices a group's field check measures, as many as a frame's share of field evaluations takes.
     private static SdfMeshBakeRequest CreaseChunk(Group group) {
@@ -1861,29 +1866,8 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < request.Samples); index++) {
             var vertex = group.Creases![(group.PointsAnswered + index)];
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
-            var length = gradient.Length();
 
-            if (!(length > (KinkGradient * group.CreaseSlope))) { continue; }
-
-            var distance = (values[index] / length);
-
-            if (!(MathF.Abs(x: distance) > tolerance)) { continue; }
-            gradient /= length;
-            if (!(Vector3.Dot(vector1: gradient, vector2: group.Projection!.Outward(vertex: vertex)) > 0f)) { continue; }
-            var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
-            var point = group.Projection!.Move(amount: out var amount, contour: contour, displacement: (-distance * gradient), vertex: vertex);
-
-            if (!(amount > 0f)) { continue; }
-            contour.Positions[(3 * vertex)] = point.X;
-            contour.Positions[((3 * vertex) + 1)] = point.Y;
-            contour.Positions[((3 * vertex) + 2)] = point.Z;
-            if ((MathF.Abs(x: distance) * (1f - amount)) <= tolerance) {
-                if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
-                contour.Normals[(3 * vertex)] = gradient.X;
-                contour.Normals[((3 * vertex) + 1)] = gradient.Y;
-                contour.Normals[((3 * vertex) + 2)] = gradient.Z;
-            }
-            softened++;
+            softened += (ProjectCrease(contour: contour, gradient: gradient, projection: group.Projection!, slope: group.CreaseSlope, tolerance: tolerance, value: values[index], vertex: vertex) ? 1 : 0);
         }
         group.PointsAnswered += request.Samples;
 
@@ -1907,6 +1891,34 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = true;
             Schedule(group: group, work: () => Split(group: group));
         }
+    }
+    // Moves one vertex no crossing pins onto the field's surface by its value and gradient there, as AnswerCreases
+    // describes; whether it moved.
+    private static bool ProjectCrease(SdfContour contour, ContourProjection projection, int vertex, float value, Vector3 gradient, float tolerance, float slope) {
+        var length = gradient.Length();
+
+        if (!(length > (KinkGradient * slope))) { return false; }
+
+        var distance = (value / length);
+
+        if (!(MathF.Abs(x: distance) > tolerance)) { return false; }
+        gradient /= length;
+        if (!(Vector3.Dot(vector1: gradient, vector2: projection.Outward(vertex: vertex)) > 0f)) { return false; }
+        var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
+        var point = projection.Move(amount: out var amount, contour: contour, displacement: (-distance * gradient), vertex: vertex);
+
+        if (!(amount > 0f)) { return false; }
+        contour.Positions[(3 * vertex)] = point.X;
+        contour.Positions[((3 * vertex) + 1)] = point.Y;
+        contour.Positions[((3 * vertex) + 2)] = point.Z;
+        if ((MathF.Abs(x: distance) * (1f - amount)) <= tolerance) {
+            if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
+            contour.Normals[(3 * vertex)] = gradient.X;
+            contour.Normals[((3 * vertex) + 1)] = gradient.Y;
+            contour.Normals[((3 * vertex) + 2)] = gradient.Z;
+        }
+
+        return true;
     }
     // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).

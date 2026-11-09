@@ -240,6 +240,80 @@ public static class SdfMeshAudit {
 
         return shapes;
     }
+    /// <summary>Returns each slot's own part of a bake group whose shapes ride several dynamic slots: the group's field
+    /// (<see cref="Field"/>) with every shape of another slot left out, each with the field edits that follow it, and the
+    /// first shape left in each field scope blended as a union. A shape rides the slot its chain's last dynamic transform
+    /// names since the chain's reset, or the group's own slot. A part's surface is that member's own: where another
+    /// member carved it or blended into it, the whole field differs.</summary>
+    /// <param name="program">The program the group was planned from.</param>
+    /// <param name="group">The group.</param>
+    /// <returns>Each slot whose shapes the group holds and its part's field, the group's own slot first; a single entry
+    /// for a group whose shapes all ride one slot.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="group"/> is
+    /// <see langword="null"/>.</exception>
+    public static IReadOnlyList<(int Slot, SdfProgram Field)> MemberFields(SdfProgram program, SdfMeshBakeGroup group) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: group);
+
+        var indices = group.InstructionIndices(program: program);
+        var instructions = program.Instructions;
+        var slotOf = new Dictionary<int, int>();
+        var slot = group.Slot;
+
+        foreach (var index in indices) {
+            var op = instructions[index].Op;
+
+            if (op == SdfOp.ResetPoint) { slot = group.Slot; }
+            if (op == SdfOp.TransformDynamic) { slot = (int)instructions[index].Data0.X; }
+            if (op == SdfOp.ShapeBlend) { slotOf[index] = slot; }
+        }
+
+        // A slot whose shapes only carve (subtract or intersect) has no surface of its own: its carving shapes the other
+        // members' surfaces in the whole field and is left out of every part.
+        var slots = slotOf.Where(predicate: entry => !Carves(blend: (SdfBlendOp)instructions[entry.Key].Blend)).Select(selector: static entry => entry.Value).Distinct().OrderBy(keySelector: other => ((other == group.Slot) ? int.MinValue : other)).ToArray();
+
+        if (slots.Length < 2) { return [(group.Slot, Field(group: group, program: program))]; }
+
+        return [.. slots.Select(selector: member => {
+            var (kept, first) = OwnPart(indices: indices, instructions: instructions, member: member, slotOf: slotOf);
+
+            return (member, program.Excerpt(indices: kept, rewrite: (source, instruction) => Posed(group: group, instruction: (first.Contains(item: source) ? (instruction with { Blend = (uint)SdfBlendOp.Union }) : instruction))));
+        })];
+    }
+    // The group's instruction indices less every shape of another slot and the field edits that follow it, and the
+    // shapes left first in their field scope, which blend into nothing.
+    private static (List<int> Kept, HashSet<int> First) OwnPart(IReadOnlyList<int> indices, IReadOnlyList<SdfInstruction> instructions, int member, Dictionary<int, int> slotOf) {
+        var kept = new List<int>();
+        var first = new HashSet<int>();
+        var empty = new Stack<bool>();
+        var dropping = false;
+        var open = true;
+
+        foreach (var index in indices) {
+            var op = instructions[index].Op;
+
+            if (op == SdfOp.ShapeBlend) {
+                dropping = (slotOf[index] != member);
+            } else if (SdfOpRoles.Of(op: op) != SdfOpRole.Field) {
+                dropping = false;
+            }
+            if (dropping) { continue; }
+            kept.Add(item: index);
+            if (op == SdfOp.PushField) {
+                empty.Push(item: open);
+                open = true;
+            } else if ((op == SdfOp.PopField) && (empty.Count > 0)) {
+                open = (empty.Pop() && open);
+            } else if ((op == SdfOp.ShapeBlend) && open && !Carves(blend: (SdfBlendOp)instructions[index].Blend)) {
+                _ = first.Add(item: index);
+                open = false;
+            }
+        }
+
+        return (kept, first);
+    }
+    // Whether a blend only removes from what it blends into: the subtraction and intersection families.
+    private static bool Carves(SdfBlendOp blend) => (SdfBoundAlgebra.IsSubtraction(blend: blend) || SdfBoundAlgebra.IsIntersection(blend: blend) || (blend == SdfBlendOp.PipeSubtraction));
     /// <summary>Measures a baked mesh against its group's field and names its worst clusters by its shapes' own
     /// fields.</summary>
     /// <param name="mesh">The mesh, in the group's frame.</param>
@@ -564,7 +638,7 @@ public static class SdfMeshAudit {
 
         return lengths[(lengths.Length - 1) / 2];
     }
-    private static SdfMeshAuditStatistic Statistic(float[] values, float over) {
+    internal static SdfMeshAuditStatistic Statistic(float[] values, float over) {
         var finite = values.Where(predicate: static value => float.IsFinite(f: value)).ToArray();
 
         if (finite.Length == 0) { return default; }

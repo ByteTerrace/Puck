@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 
+using Puck.Cli.Host;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
 using Puck.World.Client;
@@ -50,15 +51,20 @@ public static class MeshCommand {
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
         var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
         var levelOption = CliOptions.Count(defaultValue: 0, description: "Measure this rendered level, clamped to each piece's last available level. Keeps level zero's error thresholds and coverage lattice.", minimum: 0, name: "--level");
+        var fieldLevelsOption = new Option<bool>(name: "--field-levels") { Description = "With --cpu, also contour each group's field levels (cells of twice the previous, offset outward by half a cell, per member where its shapes ride several slots, to an empty level) and measure them and the collapse's levels by the error contract: both geometric directions, enclosure, material and normal runs, vanished parts, open edges, flips and missing crossings, field evaluations and each path's own processor work." };
+        var aimOption = new Option<string>(name: "--field-aim") { DefaultValueFactory = static _ => "local", Description = "How --field-levels converts a level's offset to field units to aim its contour: local, by each sample's own slope, or lattice, by the lattice's median slope. The oracle measures where either landed." };
+        aimOption.AcceptOnlyFromAmong("local", "lattice");
         var command = new Command(
             description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
-        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption };
+        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption, fieldLevelsOption, aimOption };
 
         command.SetAction(action: parseResult => Run(request: new AuditRequest(
             Backend: parseResult.GetValue(option: backendOption)!,
             Build: parseResult.GetValue(option: buildOption),
             Cpu: parseResult.GetValue(option: cpuOption),
+            FieldLevels: parseResult.GetValue(option: fieldLevelsOption),
+            LocalAim: (parseResult.GetValue(option: aimOption) == "local"),
             CacheRoot: parseResult.GetValue(option: cacheOption),
             Group: parseResult.GetValue(option: groupOption),
             History: parseResult.GetValue(option: historyOption),
@@ -87,6 +93,11 @@ public static class MeshCommand {
             return 2;
         }
 
+        if (request.FieldLevels && (!request.Cpu || (request.Level > 0))) {
+            Console.Error.WriteLine(value: $"{Verb}: --field-levels contours each group's field again offline, so it needs --cpu, and measures every level itself, so it takes no --level.");
+            return 2;
+        }
+
         if (request.Cpu && ((request.Build is not null) || (request.Identity is not null))) {
             Console.Error.WriteLine(value: $"{Verb}: --cpu derives meshes with this tool's code and reads no stored bake; --build and --identity select stored meshes instead.");
             return 2;
@@ -110,7 +121,8 @@ public static class MeshCommand {
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(val1: request.Top, val2: request.Worst), Level = request.Level };
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
-        var baked = (request.Cpu ? MeshCpuBake.Bake(farDistance: farDistance, groups: selected, scene: scene) : null);
+        var evaluations = new Dictionary<int, long>();
+        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene) : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
@@ -144,6 +156,9 @@ public static class MeshCommand {
         }
 
         WriteWorst(images: request.Images, level: request.Level, ordered: ordered, output: output, results: results, worst: request.Worst);
+        if (request.FieldLevels) {
+            FieldLevels(evaluations: evaluations, groups: groups, options: new SdfMeshFieldLevelOptions { LocalAim = request.LocalAim }, output: output, results: results, scene: scene);
+        }
         Console.Out.Write(value: output.ToString());
 
         if ((stored == 0) && request.Cpu) {
@@ -266,6 +281,67 @@ public static class MeshCommand {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
         }
     }
+    // Each audited group's field chain beside its collapse (MeshFieldLevels), in group order, then the totals the plan's
+    // success clauses read.
+    private static void FieldLevels(IReadOnlyList<SdfMeshBakeGroup> groups, Outcome?[] results, RestScene scene, Dictionary<int, long> evaluations, SdfMeshFieldLevelOptions options, StringBuilder output) {
+        var measured = new MeshFieldLevels.Group?[groups.Count];
+
+        _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
+            if (results[ordinal] is not { Mesh: { } mesh, Report: { } report }) { return; }
+            measured[ordinal] = MeshFieldLevels.Measure(bakeEvaluations: evaluations.GetValueOrDefault(key: groups[ordinal].Selector), group: groups[ordinal], mesh: mesh, options: options, reference: report, scene: scene);
+        });
+
+        var all = Enumerable.Range(start: 0, count: groups.Count).Where(predicate: ordinal => (measured[ordinal] is not null)).ToArray();
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels: {all.Length} group(s), offset {options.OffsetShare} of a level's cell aimed by {(options.LocalAim ? "each sample's slope" : "the lattice's median slope")}, tolerance {options.ToleranceShare} of level zero's cell\n");
+        foreach (var ordinal in all) {
+            MeshFieldLevels.Write(group: measured[ordinal]!, label: string.Create(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {results[ordinal]!.Label}"), output: output);
+        }
+
+        var chosen = all.Select(selector: ordinal => measured[ordinal]!).ToArray();
+        var deepest = chosen.Select(selector: static group => group.Field.Count).DefaultIfEmpty(defaultValue: 0).Max();
+        var collapseDeepest = chosen.Select(selector: static group => group.Collapse.Count).DefaultIfEmpty(defaultValue: 0).Max();
+        var line = new StringBuilder();
+
+        line.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels total: L0 {chosen.Sum(selector: static group => (long)group.Triangles)}");
+        for (var level = 1; (level <= collapseDeepest); level++) {
+            line.Append(provider: CultureInfo.InvariantCulture, handler: $" C{level} {chosen.Sum(selector: group => (long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[(Math.Min(val1: level, val2: group.Collapse.Count) - 1)].Triangles))}");
+        }
+        for (var level = 1; (level <= deepest); level++) {
+            line.Append(provider: CultureInfo.InvariantCulture, handler: $" F{level} {chosen.Sum(selector: group => (long)((level <= group.Field.Count) ? group.Field[(level - 1)].Triangles : 0))}");
+        }
+        output.Append(value: line.Append(value: '\n').ToString());
+
+        var collapseFloor = chosen.Sum(selector: static group => (long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[^1].Triangles));
+        var fieldFloor = chosen.Sum(selector: static group => (long)(group.Field.LastOrDefault(predicate: static row => (row.Triangles > 0))?.Triangles ?? 0));
+        var unlevelled = chosen.Count(predicate: static group => (group.Collapse.Count == 0));
+        var shallow = chosen.Count(predicate: static group => (group.Field.Count(predicate: static row => (row.Triangles > 0)) < 2));
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels floor: collapse coarsest {collapseFloor} ({unlevelled} group(s) with no collapse level), field coarsest nonempty {fieldFloor}, then empty; groups with fewer than two nonempty field levels {shallow}\n");
+
+        var binds = chosen.SelectMany(selector: static group => group.Field.Where(predicate: static row => (row.Error is not null)).Select(selector: MeshFieldLevels.Binds)).GroupBy(keySelector: static name => name).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels binding: {string.Join(separator: ", ", values: binds.Select(selector: static named => $"{named.Key} {named.Count()}"))}\n");
+
+        var bakeEvaluations = chosen.Sum(selector: static group => group.BakeEvaluations);
+        var contour = chosen.Sum(selector: static group => group.ChainContour);
+        var oracle = chosen.Sum(selector: static group => group.ChainOracle);
+        var chainCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.ChainCycles));
+        var contourCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.ContourCycles));
+        var collapseCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.CollapseCycles));
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels cost: bake evaluations {bakeEvaluations}, chain evaluations {(contour + oracle)} (contour {contour}, oracle {oracle}), {(((double)(contour + oracle)) / Math.Max(val1: 1L, val2: bakeEvaluations)):0.00}x the bake's; {ThreadCycles.Unit} chain {chainCycles} (contour {contourCycles}, oracle {(chainCycles - contourCycles)}) collapse {collapseCycles}, {(((double)chainCycles) / Math.Max(val1: 1UL, val2: collapseCycles)):0.00}x the collapse's\n");
+
+        (string Name, (int Ordinal, string? Why)[] Failures) Failing(string name, Func<MeshFieldLevels.Group, string?> clause) =>
+            (name, all.Select(selector: ordinal => (ordinal, Why: clause(arg: measured[ordinal]!))).Where(predicate: static entry => (entry.Why is not null)).ToArray());
+
+        foreach (var (clause, failures) in new[] { Failing(clause: static group => MeshFieldLevels.ClauseA(group: group), name: "a"), Failing(clause: static group => MeshFieldLevels.ClauseA(group: group, normals: false), name: "a without normals"), Failing(clause: MeshFieldLevels.ClauseB, name: "b") }) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels clause ({clause}): {(all.Length - failures.Length)} pass, {failures.Length} fail\n");
+            foreach (var (ordinal, why) in failures.Take(count: 12)) {
+                output.Append(provider: CultureInfo.InvariantCulture, handler: $"  group {ordinal} {results[ordinal]!.Label}: {why}\n");
+            }
+        }
+    }
     // The worst clusters across every group, each with its image when a directory is named.
     private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, int level, StringBuilder output) {
         var clusters = ordered
@@ -314,12 +390,13 @@ public static class MeshCommand {
     }
     private static string Statistic(SdfMeshAuditStatistic statistic, float scale) =>
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {(statistic.P50 * scale):0.00} p99 {(statistic.P99 * scale):0.00} max {(statistic.Max * scale):0.00} over {statistic.Over}/{statistic.Count}");
-    private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(metres * 1000f):0.0}");
+    // A length in metres as millimetres, to a tenth by default.
+    internal static string Millimetres(float metres, string format = "0.0") => (metres * 1000f).ToString(format: format, provider: CultureInfo.InvariantCulture);
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level);
+    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu, int Level, bool FieldLevels, bool LocalAim);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);

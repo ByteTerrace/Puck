@@ -14,18 +14,41 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <param name="bakeHalfDiagonal">The nearest triangle's own contour precision.</param>
     /// <returns>Whether a finite, nondegenerate nearest triangle was found.</returns>
     public bool TryNearestSurface(Vector3 point, float radius, out Vector3 surface, out Vector3 normal, out float bakeHalfDiagonal) {
-        var nearest = new NearestSurface { Squared = radius * radius, Instance = -1, Triangle = -1 };
+        if (!TryNearestSurface(accept: null, instance: out var instance, point: point, radius: radius, surface: out surface, triangle: out _, leaf: out var leaf)) {
+            normal = default;
+            bakeHalfDiagonal = 0;
+            return false;
+        }
+        ref readonly var nearest = ref m_instances[instance];
+        normal = nearest.NormalOf(leaf);
+        bakeHalfDiagonal = nearest.BakeHalfDiagonal;
+        return true;
+    }
+    /// <summary>Finds the closest point inside a world-space search radius on the retained triangles a predicate
+    /// accepts, as the overload without one does over them all, and names the draw and its mesh triangle that hold
+    /// it.</summary>
+    /// <param name="point">World-space witness.</param>
+    /// <param name="radius">Maximum correspondence search distance in metres.</param>
+    /// <param name="accept">Whether a triangle may answer, given its draw (in the order of the draws the scene kept), its
+    /// mesh triangle and its closest point to the witness; asked only of a triangle nearer than the best so far.
+    /// <see langword="null"/> accepts every triangle.</param>
+    /// <param name="surface">Certified nearest accepted surface point inside the radius.</param>
+    /// <param name="instance">The draw holding it.</param>
+    /// <param name="triangle">The draw mesh's triangle holding it.</param>
+    /// <returns>Whether a finite, nondegenerate accepted triangle was found.</returns>
+    public bool TryNearestSurface(Vector3 point, float radius, Func<int, int, Vector3, bool>? accept, out Vector3 surface, out int instance, out int triangle) =>
+        TryNearestSurface(accept: accept, instance: out instance, leaf: out _, point: point, radius: radius, surface: out surface, triangle: out triangle);
+
+    private bool TryNearestSurface(Vector3 point, float radius, Func<int, int, Vector3, bool>? accept, out Vector3 surface, out int instance, out int triangle, out int leaf) {
+        var nearest = new NearestSurface { Squared = radius * radius, Instance = -1, Triangle = -1, Accept = accept };
         if (m_nodes.Length > 0 && float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
             NearestNode(m_nodes, 0, -1, point, ref nearest);
         }
         surface = nearest.Point;
-        normal = default;
-        bakeHalfDiagonal = 0;
-        if (nearest.Instance < 0) { return false; }
-        ref readonly var instance = ref m_instances[nearest.Instance];
-        normal = instance.NormalOf(nearest.Triangle);
-        bakeHalfDiagonal = instance.BakeHalfDiagonal;
-        return true;
+        instance = nearest.Instance;
+        leaf = nearest.Triangle;
+        triangle = (instance < 0) ? -1 : m_instances[instance].Geometry.Triangles[leaf];
+        return (instance >= 0);
     }
 
     private struct NearestSurface {
@@ -33,6 +56,7 @@ public sealed partial class SdfMeshIrradianceScene {
         public Vector3 Point;
         public int Instance;
         public int Triangle;
+        public Func<int, int, Vector3, bool>? Accept;
     }
 
     // Reuse both levels of the ray scene's hierarchy. Transform node boxes conservatively, then test triangles in world
@@ -66,7 +90,11 @@ public sealed partial class SdfMeshIrradianceScene {
             var closest = SdfMeshTriangle.Closest(point, a, b, c);
             var squared = Vector3.DistanceSquared(point, closest);
             if (!float.IsFinite(squared) || squared > nearest.Squared) { continue; }
-            nearest = new NearestSurface { Squared = squared, Point = closest, Instance = instanceIndex, Triangle = i };
+            if ((nearest.Accept is { } accept) && !accept(instanceIndex, geometry.Triangles[i], closest)) { continue; }
+            nearest.Squared = squared;
+            nearest.Point = closest;
+            nearest.Instance = instanceIndex;
+            nearest.Triangle = i;
         }
     }
 
