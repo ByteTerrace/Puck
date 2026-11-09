@@ -153,6 +153,7 @@ public readonly record struct FixedInterval {
             upper: Ceiling(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
         );
     }
+
     /// <summary>Returns the interval of every product <see cref="FixedQ4816"/> multiplication answers for a representable
     /// value inside the operand and a fixed factor: the rounded products of the two ends, since rounding to nearest keeps
     /// the order of the exact products. It holds the rounded products, not every real one, so a chain of them tracks a
@@ -164,6 +165,7 @@ public readonly record struct FixedInterval {
     public static FixedInterval RoundedProduct(FixedInterval value, FixedQ4816 factor) => ((value * FromPoint(value: factor)).IsUnbounded
         ? Entire
         : Hull(first: (value.Lower * factor), second: (value.Upper * factor)));
+
     /// <summary>Returns the interval of every quotient, or <see cref="Entire"/> when the divisor holds zero.</summary>
     public static FixedInterval operator /(FixedInterval left, FixedInterval right) {
         if (left.IsUnbounded || right.IsUnbounded || right.Contains(value: FixedQ4816.Zero)) {
@@ -304,6 +306,44 @@ public readonly record struct FixedInterval {
             lower: FixedQ4816.Clamp(value: value.Lower, minimum: minimum, maximum: maximum),
             upper: FixedQ4816.Clamp(value: value.Upper, minimum: minimum, maximum: maximum)
         ));
+    /// <summary>Encloses the rounded projection parameter of every point in a two-dimensional box onto a fixed segment
+    /// from the origin, without rounding either dot product to the carrier.</summary>
+    /// <param name="x">The point's X interval.</param>
+    /// <param name="y">The point's Y interval.</param>
+    /// <param name="segment">The segment's endpoint relative to the origin.</param>
+    /// <returns>The exact hull of the rounded parameters; zero for a zero segment, or <see cref="Entire"/> for an
+    /// unbounded input.</returns>
+    public static FixedInterval SegmentParameter(FixedInterval x, FixedInterval y, FixedVector2 segment) =>
+        SegmentParameter(x: x, y: y, z: FromPoint(value: FixedQ4816.Zero), segment: new FixedVector3(X: segment.X, Y: segment.Y, Z: FixedQ4816.Zero));
+    /// <summary>Encloses the rounded projection parameter of every point in a three-dimensional box onto a fixed segment
+    /// from the origin, without rounding either dot product to the carrier.</summary>
+    /// <param name="x">The point's X interval.</param>
+    /// <param name="y">The point's Y interval.</param>
+    /// <param name="z">The point's Z interval.</param>
+    /// <param name="segment">The segment's endpoint relative to the origin.</param>
+    /// <returns>The exact hull of the rounded parameters; zero for a zero segment, or <see cref="Entire"/> for an
+    /// unbounded input.</returns>
+    /// <remarks>The dot product is linear in the point and its denominator is fixed and non-negative. Clamping and
+    /// rounding to nearest preserve order, so the two corners selected by the segment's component signs attain the
+    /// extrema. The point kernel owns the full-width sums and the one rounding, including tiny and zero segments.</remarks>
+    public static FixedInterval SegmentParameter(FixedInterval x, FixedInterval y, FixedInterval z, FixedVector3 segment) {
+        if (x.IsUnbounded || y.IsUnbounded || z.IsUnbounded) {
+            return Entire;
+        }
+
+        var lower = new FixedVector3(
+            X: ((segment.X < FixedQ4816.Zero) ? x.Upper : x.Lower),
+            Y: ((segment.Y < FixedQ4816.Zero) ? y.Upper : y.Lower),
+            Z: ((segment.Z < FixedQ4816.Zero) ? z.Upper : z.Lower));
+        var upper = new FixedVector3(
+            X: ((segment.X < FixedQ4816.Zero) ? x.Lower : x.Upper),
+            Y: ((segment.Y < FixedQ4816.Zero) ? y.Lower : y.Upper),
+            Z: ((segment.Z < FixedQ4816.Zero) ? z.Lower : z.Upper));
+
+        return new FixedInterval(
+            lower: FixedVector3.SegmentParameter(point: lower, segment: segment),
+            upper: FixedVector3.SegmentParameter(point: upper, segment: segment));
+    }
     /// <summary>Returns the interval of every Euclidean length <c>√(x² + y²)</c>, decided on the exact sums of squares
     /// and rooted once in each direction, so it holds every <see cref="FixedVector2"/> length the box reaches.</summary>
     public static FixedInterval Magnitude(FixedInterval x, FixedInterval y) => Magnitude(

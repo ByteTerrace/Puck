@@ -99,6 +99,11 @@ maps each question to its wing and README section.
 - **Do not reassociate a rounded product.** `(a * b) * c` and `a * (b * c)`
   differ over `FixedQ4816`; the fused kernels round a whole expression once.
   Finite-field products are exact and may be reassociated.
+- **Projection bounds use the point kernel too.** `FixedInterval.SegmentParameter`
+  encloses a fixed segment's parameter over a 2D or 3D box through its two
+  extreme corners. Dividing carrier-rounded dot-product intervals can turn
+  a tiny squared length into a divisor containing zero, or overflow a large
+  one, and leave an otherwise valid SDF program with no query frame.
 - **Float presentation helpers live in `VectorFunctions`.** The angle wraps,
   easings, shortest arc, −Z-forward attitude readbacks and unorm packers every
   presentation seam shares are in `Puck.Maths.VectorFunctions`, outside the

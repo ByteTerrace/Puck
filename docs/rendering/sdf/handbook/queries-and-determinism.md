@@ -226,10 +226,19 @@ the whole program's bounds stay bounded.
   wrong answer, and `TryDistanceBounds` refuses any box reaching past it.
 - A program that overflows everywhere (dilated by the carrier's whole range,
   say) has a negative frame and answers nowhere.
-- Typical programs reach 2⁶⁰ raws or more. A polygon's or trapezoid's squared
-  distance leaves the carrier near 2³⁹ raws, so its frame is a few million
-  units. A sweep's search compares squared distances too, so its frame is about
-  2²² units.
+- Typical programs reach 2⁶⁰ raws or more. A trapezoid's squared distance
+  leaves the carrier near 2³⁹ raws, so its frame is a few million units.
+  Polygon and sweep comparisons keep full-width raw squares; their bounds
+  use full-width lengths and impose no carrier-rounded squared-distance limit.
+
+Capsule, trapezoid and polygon projections share
+`FixedInterval.SegmentParameter`: its two extreme corners call the same
+one-rounding point kernel as the evaluator. A squared length narrowed to an
+interval first can contain zero for a millimetre segment, or overflow for a
+large one, even though the clamped parameter fits. The shared hull avoids
+both and keeps the zero segment's parameter exactly zero. Capsule packing
+also carries the true float reciprocal below a centimetre, so the rendered
+projection follows the same segment.
 
 Every point answer therefore lies inside its box's bounds, or both refuse. Every
 instruction joins the proof, so adding an instruction to a program can only

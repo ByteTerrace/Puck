@@ -101,7 +101,7 @@ public sealed class SdfFieldOverflowLawTests {
         // there and near the shape the point answer lies inside the box rule's.
         var far = FixedQ4816.FromInteger(value: (1L << 44));
 
-        foreach (var position in (ReadOnlySpan<FixedPosition>)[FixedPosition.FromLocal(local: new FixedVector3(X: far, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)), FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromInteger(value: 3L), Y: FixedQ4816.One, Z: FixedQ4816.Zero))]) {
+        foreach (var position in ((ReadOnlySpan<FixedPosition>)[FixedPosition.FromLocal(local: new FixedVector3(X: far, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)), FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromInteger(value: 3L), Y: FixedQ4816.One, Z: FixedQ4816.Zero))])) {
             Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: position));
             Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: position, upper: position));
             Assert.True(condition: bounds.Contains(value: distance), userMessage: $"the point answer {distance} lies outside {bounds}");
@@ -109,26 +109,18 @@ public sealed class SdfFieldOverflowLawTests {
         }
     }
     [Fact]
-    public void ASweepCannotHideASaturatedSearch() {
+    public void ASweepComparesFullWidthSearchDistances() {
         var evaluator = Program(emit: (builder, material) => builder.Sweep(a: Vector3.Zero, b: Vector3.UnitY, bulge: 0f, c: (2f * Vector3.UnitY), material: material, radiusEnd: 0.25f, radiusStart: 0.25f, strandOffset: 0f, strands: 1, twist: 0f));
-        // At y = 1e8 every candidate's squared distance saturates the carrier, so the search ties at its start, the tube's
-        // far cap, and answers two units long: a downward cast trusting it would step through the near cap. The frame
-        // stops short of that, both interpreters refuse there, and the cast certifies no clearance from it.
+        // At y = 1e8 a carrier-rounded squared distance would saturate and tie every candidate at the start. The
+        // full-width comparison selects the near cap, and its bounds no longer impose the retired squared-length limit.
         var far = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: 100_000_000L), Z: FixedQ4816.Zero);
         var position = FixedPosition.FromLocal(local: far);
 
-        Assert.True(condition: (evaluator.Frame < far.Y), userMessage: $"the frame {evaluator.Frame} holds a saturated search");
-        Assert.False(condition: evaluator.TryDistance(distance: out var skipped, material: out _, position: position), userMessage: $"the point evaluator answered {skipped}");
-        Assert.False(condition: evaluator.TryDistanceBounds(distance: out _, lower: position, upper: position));
-        Assert.True(condition: evaluator.TryCertifiedSweep(
-            boundsQueryBudget: 64,
-            displacement: new FixedVector3(X: FixedQ4816.Zero, Y: -far.Y, Z: FixedQ4816.Zero),
-            origin: position,
-            radius: FixedQ4816.Zero,
-            sweep: out var sweep
-        ));
-        Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
-        Assert.Equal(expected: UnitInterval32.Zero, actual: sweep.Fraction);
+        Assert.True(condition: (evaluator.Frame >= far.Y));
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: position));
+        Assert.Equal(expected: FixedQ4816.FromDouble(value: 99_999_997.75), actual: distance);
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: position, upper: position));
+        Assert.True(condition: bounds.Contains(value: distance));
     }
     public static TheoryData<string> ShrinkCases() {
         var data = new TheoryData<string>();
