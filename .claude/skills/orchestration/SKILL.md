@@ -340,6 +340,13 @@ the work without reducing it. If no round covers it, run one first (AGENTS.md,
 "Regular research is worth it"); the round costs an hour beside other lanes, a
 wrong design costs a lane, its review and the redo.
 
+A round's models follow the owner's routing: "Fable for synthesis, not the
+rest", and "Astra for adversarial review of the synthesis". The researchers
+run on Opus (`specialist`), Sol and Argon, one focus each; Fable (`principal`)
+writes the one synthesis from their findings and the code; Astra reviews that
+synthesis adversarially, findings-only, before any build lane is briefed. The
+two frontier models touch the round only at those two points.
+
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
 status, and count the commits behind with
