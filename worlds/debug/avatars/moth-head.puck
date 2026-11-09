@@ -164,7 +164,7 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
 
   shape Superellipsoid $"eye-{name}" {
     id: baseId + 1
-    position: map([side * 0.07656, 1.74842, 0.1755], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    position: map([side * 0.07656, 1.74842, 0.1715], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     scale: map([0.058, 0.058, 0.058], v => v * s)
     material: white
     group: eyeGroup
@@ -199,8 +199,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
       a [0, 0, 0]
       b: map([side * 0.047, 0.066, 0.033], v => v * s)
       c: map([side * 0.094, 0.004, 0], v => v * s)
-      radiusStart: 0.0065 * s
-      radiusEnd: 0.0065 * s
+      radiusStart: 0.008 * s
+      radiusEnd: 0.008 * s
     }
   }
 
@@ -227,8 +227,8 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
       a [0, 0, 0]
       b: map([side * 0.04048, 0.02332, 0.0072], v => v * s)
       c: map([side * 0.09988, 0.00132, -0.02655], v => v * s)
-      radiusStart: 0.005 * s
-      radiusEnd: 0.005 * s
+      radiusStart: 0.0065 * s
+      radiusEnd: 0.0065 * s
     }
   }
 }
