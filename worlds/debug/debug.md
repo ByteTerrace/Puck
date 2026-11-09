@@ -219,14 +219,17 @@ cliffs (panel 4). The cycle's levers:
 | Restart the cycle | boot the world again: a reload keeps the lattice's water |
 
 A barn swallow ([`birds.puck`](birds.puck)) perches on the reservoir
-pavilion's west rail beside the pool, facing out over the water it hunts above.
-Its references are a perched male barn swallow: a glossy steel-blue back, wings
-and tail; a chestnut forehead and throat closed off by a dark blue breast band
-from cream underparts; long pointed wings crossing over the rump; and a deeply
-forked tail whose streamers reach past the wingtips, with white spots on their
-inner webs. It reads in the art direction's treatment as one shaped body in
-flat values with crisp painted markings, at 1.5 times a real bird's size so it
-reads from the pool's path.
+pavilion's west rail beside the pool, gripping the rail's pool-side edge with
+its tail hanging free over the water and its face toward the path. Its
+references are a perched male barn swallow: an upright stance on short dark
+legs; a glossy steel-blue back, wings and tail; a chestnut forehead joined to
+the bill and a chestnut chin and throat, closed off by a narrow dark blue
+breast band from warm buff underparts; long pointed wings crossing past the
+rump; and a deeply forked tail whose fine streamers reach past the wingtips,
+with white spots on their inner webs. It reads in the art direction's
+treatment as one shaped body in flat values with crisp painted markings and a
+painted gloss band along the back and crown, at 1.5 times a real bird's size so
+it reads from the pool's path.
 
 ## Going places
 
