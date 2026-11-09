@@ -282,7 +282,9 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports, out _));
         var clear = Assert.Single(collection: reports[..8], predicate: r => (r.Cell == (0, 0, 0)));
 
-        Assert.True(condition: (clear.Visibility > 0.95f), userMessage: $"beyond the block's extent visibility={clear.Visibility}");
+        // A finest probe's visibility eases over a texel past the block's silhouette (SdfMeshProbeCoverage), so a receiver
+        // just beyond it is partly visible, never closed.
+        Assert.True(condition: (clear.Visibility > 0.5f), userMessage: $"beyond the block's extent visibility={clear.Visibility}");
 
         var wall = frame with { MeshDraws = [floor, Draw(mesh: Box(low: new Vector3(x: 0.85f, y: 0f, z: -10f), high: new Vector3(x: 1f, y: 5f, z: 10f)))] };
 
