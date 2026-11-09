@@ -1432,9 +1432,9 @@ template surfacePrototypes() {
       )
     }
   }
-  // Two spheres of one paint, the left banded by its palette row's own cel style and the right continuous, under a
-  // world whose default style is off: the left shows the band, its soft shadow edge, its rim and its ink, the right and
-  // the plinth stay continuous.
+  // Two spheres of one paint, the left banded by its palette row's own cel style and the right kept continuous by
+  // continuousStyle under the world's banded default: the left shows the band, its crisp shadow edge and its ink, the
+  // right the continuous response the band replaces.
   prototype "shape-cel" {
     document {
       shape Sphere "subject" {
@@ -1450,10 +1450,10 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL STYLE",
         extra: [
-          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celStyle)
-          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
+          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celInkStyle)
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: continuousStyle }
         ],
-        note: "left: its own cel style, the shadow kept under the band; right: continuous"
+        note: "left: the standard's inked cel style; right: continuous"
       )
     }
   }
@@ -1472,10 +1472,10 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL HARD",
         extra: [
-          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle, combined: 1)
-          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
+          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle)
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: continuousStyle }
         ],
-        note: "left: the band over light and shadow together; right: continuous"
+        note: "left: the hardest band, a near-step terminator; right: continuous"
       )
     }
   }

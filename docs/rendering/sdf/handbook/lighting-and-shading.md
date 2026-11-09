@@ -549,9 +549,10 @@ material with it; every other material inherits the world's default style,
 `toon { enabled: false }` stays continuous under a banded world, and one scene
 mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
 `shape-cel-hard` exhibits on level 3). The standard package authors styles as
-data in `worlds/standard/styles.puck` (`celStyle`, `celHardStyle`,
-`continuousStyle`): a row names one with `toon: celStyle` and a world with
-`render { toon: celStyle }`. The engine holds no look of its own: a style that
+data in `worlds/standard/styles.puck` (`celStyle`, `celInkStyle`,
+`celHardStyle`, `continuousStyle`): a row names one with `toon: celInkStyle`
+and a world with `render { toon: celStyle }`, as the debug world does, and a
+variant is `celStyle with { softness: 0.2 }`. The engine holds no look of its own: a style that
 bands authors every value below, and validation names each one it leaves out;
 a style that says `enabled: false` needs none.
 
@@ -562,7 +563,8 @@ whole value names (an enum member's ordinal, an integer, or a boolean as zero or
 one), and with its `toon` while the cell names none. A command that writes the
 cell swaps the look; only the material's style rows change, so nothing bakes.
 The debug world's Moth reads her `mothStyle` row this way, and `moth.style
-Plain|Cel` swaps her between continuous shading and the standard's `celStyle`.
+Plain|Cel` swaps her between continuous shading and the standard's
+`celInkStyle`, which she boots with.
 
 `world.toon on|off|toggle` is the live lever over the world's default style.
 With no argument it echoes the choice. It uses the same render-section grant and
@@ -576,21 +578,9 @@ session choice applies to the host, routed worlds and nested views, with each
 world's own style. `world.save` folds the live choice into the render settings.
 
 ```text
+import "../standard/styles"
 render {
-  toon {
-    enabled: true
-    band: Visibility
-    threshold: 0.45
-    softness: 0.08
-    shadowTint [0.38, 0.48, 0.65]
-    outlineWidth: 1.5
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [0.08, 0.10, 0.16]
-    specularSize: 0.025
-    exposure: 0.5
-    shoulder: 0.65
-  }
+  toon: celStyle with { softness: 0.2 }
 }
 ```
 
@@ -602,8 +592,14 @@ visibility together, `band(cosine × visibility)`, the harder look in which a
 penumbra snaps to the band. Point lights retain their range, cone and probe
 visibility, with a banded diffuse cosine under ambient occlusion. A short soft
 terminator joins the two tones; `threshold` places it and `softness` is its
-full cosine width. Indirect light and sky ambient take the cooler linear RGB
-`shadowTint`, with AO still affecting indirect light. This does not add
+full cosine width, widened at each pixel to at least the cosine's change across
+it (the surface's mean curvature times the pixel's footprint), so a small or
+distant curved shape's terminator spans a pixel rather than stepping between
+neighbours. Indirect light and sky ambient take the linear RGB
+`shadowTint`, with AO still affecting indirect light. Indoors that bounce is
+the whole of the light, so a tint far below unit luminance darkens a room the
+meter exposed for; the standard keeps its tint near unit luminance and lets it
+carry hue. This does not add
 unoccluded sunlight inside a shadowed room. Specular lobes become bounded
 patches: `specularSize` is one minus their half-vector cosine, with a narrow
 soft edge. The banded lights shade the paint flat, metals included; the rim
