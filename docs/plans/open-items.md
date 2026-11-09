@@ -1854,14 +1854,6 @@ Next: the harness's residency wait below, then rerun its two refused pairs.
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-- [high] A ten-minute window cannot answer one frame question: a `bench frames`
-  sample over four sweep stops with three samples each takes about three and a
-  half minutes (boot, bake, settle per stop), so the default five ABAB pairs of
-  one request need about 35 minutes and a window answers one and a half pairs.
-  The frame-teal and frame-cpu requests have stayed pending through two windows
-  for this. Fix at the cause: a sample that boots once and measures both sides'
-  stops warm, or requests sized to what a window can answer, never a timing
-  claim from one pair.
 The queue is the `measure` folder of the main checkout's ignored scratch, so it is
 machine-local. The same-build `bench world` and `bench startup` controls are
 answered and sit well inside their 10 % criteria; a `bench world` or
@@ -4754,11 +4746,6 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
-- [low] `puck measure` has no verb to withdraw a queued request: a lane that
-  filed one against a build it later found wrong cannot take it back, so it
-  stays pending and an unfiltered `measure run` spends window time on it. Add
-  `measure withdraw <id> --reason <text>`, recorded beside the request as the
-  hand-edited withdrawals already are.
 - [medium] `puck_world_start` discards a build and asks for a restart when
   any file under the checkout changes mid-build, documentation included (a
   lane lost two builds to its own doc edits). Key the source state on what the

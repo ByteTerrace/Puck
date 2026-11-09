@@ -88,7 +88,7 @@ public sealed class MeasureLawTests {
         Assert.Contains("/metrics/boot.frames.p50/median", error.Message);
         Assert.Contains("puck.bench.v1", error.Message);
         Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.frames.p99/samples/1"));
-        MeasureCommand.ValidateMetric(["bench", "frames", "--samples", "2"], "/metrics/boot.frames.p99/samples/1");
+        MeasureCommand.ValidateMetric(["bench", "frames", "--samples", "1"], "/metrics/boot.frames.p99/samples/0");
         MeasureCommand.ValidateMetric(["bench", "frames", "--gpu-pass", "world/glass"], "/metrics/boot.gpu.world~1glass/median");
         Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames"], "/metrics/boot.gpu.world~1glass/median"));
         using var temporary = new Puck.Testing.TemporaryDirectory(prefix: "puck-frames-plan-");
@@ -96,6 +96,42 @@ public sealed class MeasureLawTests {
         File.WriteAllText(plan, """{"tour":{"stops":[{"name":"pool","lines":[]},{"name":"lake","lines":[]}]}}""");
         MeasureCommand.ValidateMetric(["bench", "frames", "--plan", plan, "--stop", "pool"], "/metrics/pool.frames.p50/median");
         Assert.Throws<InvalidDataException>(() => MeasureCommand.ValidateMetric(["bench", "frames", "--plan", plan, "--stop", "pool"], "/metrics/lake.frames.p50/median"));
+    }
+
+    [Fact]
+    public void ReplicationInsideAPairIsRefusedAndAnAbsentCountIsFrozenAsOne() {
+        var error = Assert.Throws<ArgumentException>(() => MeasureCommand.ValidateMetric(["bench", "frames", "--samples", "3"], "/metrics/boot.frames.p99/median"));
+        Assert.Contains("--samples 3", error.Message);
+        Assert.Throws<ArgumentException>(() => MeasureCommand.PinInnerSamples(["bench", "world", "--repeats=5"]));
+        Assert.Throws<ArgumentException>(() => MeasureCommand.PinInnerSamples(["bench", "startup", "worlds/debug", "--samples", "0"]));
+        Assert.Equal(["bench", "startup", "worlds/debug", "--samples", "1"], MeasureCommand.PinInnerSamples(["bench", "startup", "worlds/debug"]));
+        Assert.Equal(["bench", "frames", "--samples", "1", "--stop", "a"], MeasureCommand.PinInnerSamples(["bench", "frames", "--samples", "1", "--stop", "a"]));
+        Assert.Equal(["sweep", "--plan", "p.json"], MeasureCommand.PinInnerSamples(["sweep", "--plan", "p.json"]));
+    }
+
+    [Fact]
+    public async Task EachPairReportsItsWallTimeAndTheEstimateReadsThemBack() {
+        using var temporary = new Puck.Testing.TemporaryDirectory(prefix: "puck-measure-wall-");
+        var clock = new Puck.Testing.VirtualClock();
+        var request = new MeasurementRequest("a", "timed", temporary.RootPath, clock.GetUtcNow(), new("a", "tree-a", null), new("b", "tree-b", null), ["bench", "world", "--repeats", "1"], ["/metric"], "zero", null);
+        var path = temporary.PathOf("a/request.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var deadline = new Puck.Abstractions.OperationDeadline(Timeout.InfiniteTimeSpan, clock, TestContext.Current.CancellationToken);
+        var (exit, output, _) = await ConsoleCapture.RunSplitAsync(() => MeasureCommand.DrainAsync([(path, request)], 2, (item, side, round, directory, token) => {
+            clock.Advance(TimeSpan.FromSeconds(side == "before" ? 10 : 20));
+            return Task.FromResult(new MeasurementSample(side, round, new Dictionary<string, double> { ["/metric"] = 1 }, "fixture"));
+        }, CancellationToken.None, deadline, clock));
+        Assert.Equal(CliExit.Success, exit);
+        Assert.Contains("pair #1/2: wall 30.0 s (before 10.0 s, after 20.0 s); 1 pair(s) left", output);
+        Assert.Contains("pair #2/2: wall 30.0 s", output);
+        using var report = JsonDocument.Parse(File.ReadAllText(Directory.GetFiles(temporary.PathOf("a/answers"), "report.json", SearchOption.AllDirectories).Single()));
+        Assert.Equal([30.0, 30.0], report.RootElement.GetProperty("PairWallSeconds").EnumerateArray().Select(value => value.GetDouble()));
+        var history = MeasureEstimate.History(temporary.RootPath);
+        Assert.Equal(15, history["bench world --repeats 1"]);
+        var lines = MeasureEstimate.Lines([request], 5, 600, 30, 600, history);
+        Assert.Contains("150 s", lines[0]);
+        Assert.Contains("done about 180 s (3.0 min) into the window", lines[0]);
+        Assert.Contains("no earlier sample", MeasureEstimate.Lines([request with { Command = ["bench", "world"] }], 5, 600, 30, 600, history)[0]);
     }
 
     [Fact]

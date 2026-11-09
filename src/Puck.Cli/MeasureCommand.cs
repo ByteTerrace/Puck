@@ -29,6 +29,8 @@ public static class MeasureCommand {
             var arguments = parse.GetValue(argument: command)!;
 
             ValidateCommand(arguments: arguments);
+            // The frozen command carries its inner sample count explicitly, so a default above one never replicates inside a pair.
+            arguments = PinInnerSamples(arguments: arguments);
             var selected = parse.GetValue(option: metrics)!;
 
             if ((selected.Length == 0) || selected.Any(predicate: static metric => !metric.StartsWith(value: '/')) || (selected.Distinct(comparer: StringComparer.Ordinal).Count() != selected.Length)) {
@@ -53,17 +55,54 @@ public static class MeasureCommand {
             Console.WriteLine(value: $"measure: queued {id} {item.Name}; frozen builds and request at {PuckPaths.Normalize(path: directory)}");
             return 0;
         });
-        request.Detail(detail: "Use: puck measure request --name <question> --before-commit <revision> --after-commit <revision> --metric <JSON-pointer> --decides <criterion> -- bench world\nA commit side freezes its entire tree and build. An artifact side requires --before-input-tree or --after-input-tree to declare the worlds and plan inputs it pairs with; git input trees copy tracked and nonignored untracked files as they are on disk. Standalone trees copy their contents. Commands use repository-relative input paths and run inside each side's frozen tree, independently of later edits or checkout removal. Requests contain no timing claim.");
-        var list = new Command(description: "List pending and answered timing questions, their criteria and answer files.", name: "list");
+        request.Detail(detail: "Use: puck measure request --name <question> --before-commit <revision> --after-commit <revision> --metric <JSON-pointer> --decides <criterion> -- bench world\nA commit side freezes its entire tree and build. An artifact side requires --before-input-tree or --after-input-tree to declare the worlds and plan inputs it pairs with; git input trees copy tracked and nonignored untracked files as they are on disk. Standalone trees copy their contents. Commands use repository-relative input paths and run inside each side's frozen tree, independently of later edits or checkout removal. Replication is the run's paired ABAB rounds alone: a bench command's own sample count (--samples for bench startup and bench frames, --repeats for bench world) must be 1 or absent, and an absent one is frozen as 1. Requests contain no timing claim.");
+        var list = new Command(description: "List pending, withdrawn, failed and answered timing questions, their criteria and answer files.", name: "list");
 
         list.SetAction(action: async (_, token) => {
             var queue = await QueueAsync(checkout: RepositoryPaths.RequireRoot(), token: token).ConfigureAwait(continueOnCapturedContext: false);
 
             foreach (var (_, item) in ReadQueue(queue: queue)) {
-                Console.WriteLine(value: $"{item.Id} {((item.Failure is not null) ? "failed" : ((item.Report is null) ? "pending" : "answered"))} {item.Name}: {item.Decides}{((item.Report is null) ? "" : $"; {item.Report}")}{((item.Failure is null) ? "" : $"; {item.Failure}")}");
+                var state = ((item.Withdrawn is not null) ? "withdrawn" : ((item.Failure is not null) ? "failed" : ((item.Report is null) ? "pending" : "answered")));
+
+                Console.WriteLine(value: $"{item.Id} {state} {item.Name}: {item.Decides}{((item.Report is null) ? "" : $"; {item.Report}")}{((item.Failure is null) ? "" : $"; {item.Failure}")}{((item.Withdrawn is null) ? "" : $"; withdrawn: {item.Withdrawn}")}");
             }
             return 0;
         });
+        var withdrawn = new Argument<string>(name: "request") { Description = "The pending or failed request's ID." };
+        var reason = new Option<string>("--reason") { Description = "Why the question is withdrawn; recorded in the request and shown by list.", Required = true };
+        var withdraw = new Command(description: "Take back a request that is no longer wanted: it is never drained again, and its frozen builds are deleted.", name: "withdraw") { withdrawn, reason };
+
+        withdraw.SetAction(action: async (parse, token) => {
+            var queue = await QueueAsync(checkout: RepositoryPaths.RequireRoot(), token: token).ConfigureAwait(continueOnCapturedContext: false);
+            var why = parse.GetValue(option: reason);
+
+            if (string.IsNullOrWhiteSpace(value: why)) { return CliExit.Refuse(verb: "measure withdraw", what: "--reason", why: "must be nonempty."); }
+            Directory.CreateDirectory(path: queue);
+            // A drain rewrites request.json from its own snapshot; holding the runner's guard keeps the two writers apart.
+            using var runner = FileLock.TryAcquire(path: Path.Combine(path1: queue, path2: "run.guard"));
+
+            if (runner is null) { return CliExit.Refuse(verb: "measure withdraw", what: "queue", why: "a measurement window is draining it; withdraw after it closes."); }
+            var id = parse.GetValue(argument: withdrawn)!;
+            var rows = ReadQueue(queue: queue).Where(predicate: row => (row.Item.Id == id)).ToArray();
+
+            if (rows.Length == 0) { return CliExit.Refuse(verb: "measure withdraw", what: "request", why: $"no request {id}."); }
+            var (path, item) = rows[0];
+
+            if (item.Report is not null) { return CliExit.Refuse(verb: "measure withdraw", what: "request", why: "it is already answered."); }
+            if (item.Withdrawn is not null) { return CliExit.Refuse(verb: "measure withdraw", what: "request", why: $"it is already withdrawn: {item.Withdrawn}"); }
+            Write(path, item with { Withdrawn = why }, MeasureJsonContext.Default.MeasurementRequest);
+            // The frozen builds are about a gigabyte a side and nothing runs them again; answers/ keeps any partial evidence.
+            foreach (var side in new[] { "before", "after" }) {
+                var frozen = Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: side);
+
+                if (Directory.Exists(path: frozen)) {
+                    try { Directory.Delete(path: frozen, recursive: true); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Console.Error.WriteLine(value: $"measure: could not delete {PuckPaths.Normalize(path: frozen)}: {error.Message}"); }
+                }
+            }
+            Console.WriteLine(value: $"measure: withdrew {item.Id} {item.Name}: {why}");
+            return 0;
+        });
+        withdraw.Detail(detail: "Use: puck measure withdraw <request-id> --reason <text>\nRecords the reason in the request, so list shows it as withdrawn and no drain, named or unfiltered, picks it up again; deletes its frozen before and after directories (answers/ is kept). Refuses an answered request, and refuses while a window is draining the queue.");
         var repeats = CliOptions.Count(defaultValue: 5, description: "Number of paired A/B rounds per request (1..100, default 5), run ABAB.", maximum: 100, minimum: 1, name: "--repeats");
         var wait = CliOptions.Count(name: "--wait", description: "Total seconds to acquire the priority quiet window (default 600).", minimum: 0, defaultValue: 600);
         var settle = CliOptions.Count(name: "--settle", description: "Idle seconds before measurement (default 30); zero explicitly skips settling.", minimum: 0, defaultValue: 30);
@@ -91,12 +130,13 @@ public static class MeasureCommand {
 
             if (runner is null) { return CliExit.Refuse(verb: "measure run", what: "queue", why: "another measurement window is already draining it."); }
             var selected = (parse.GetValue(argument: ids) ?? []);
-            var pending = ReadQueue(queue: queue).Where(predicate: row => ((row.Item.Report is null) && ((selected.Length == 0)
+            var pending = ReadQueue(queue: queue).Where(predicate: row => ((row.Item.Report is null) && (row.Item.Withdrawn is null) && ((selected.Length == 0)
                 ? (row.Item.Failure is null) : selected.Contains(row.Item.Id, StringComparer.Ordinal))))
                 .Select(selector: row => (row.Path, Item: row.Item with { Failure = null })).ToArray();
 
-            if (selected.Any(predicate: id => !pending.Any(predicate: row => (row.Item.Id == id)))) { return CliExit.Refuse(verb: "measure run", what: "requests", why: "an ID is missing or already answered."); }
+            if (selected.Any(predicate: id => !pending.Any(predicate: row => (row.Item.Id == id)))) { return CliExit.Refuse(verb: "measure run", what: "requests", why: "an ID is missing, withdrawn or already answered."); }
             if (pending.Length == 0) { Console.WriteLine(value: "measure: no pending questions."); return 0; }
+            foreach (var line in MeasureEstimate.Lines(pending: pending.Select(selector: row => row.Item).ToArray(), rounds: rounds, timeoutSeconds: bound, settleSeconds: settling, windowSeconds: budget, history: MeasureEstimate.History(queue: queue))) { Console.WriteLine(value: line); }
             var leases = await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false);
             using var deadline = new OperationDeadline(TimeSpan.FromSeconds(seconds: budget), clock, token);
 
@@ -106,7 +146,7 @@ public static class MeasureCommand {
                 if ((settling > 0) && (await settleWait(TimeSpan.FromSeconds(seconds: settling), TimeSpan.FromSeconds(value: (waiting + ((double)settling))), Console.Error, deadline.Token).ConfigureAwait(continueOnCapturedContext: false) is { } reason)) {
                     return CliExit.Refuse(verb: "measure run", what: "settle", why: reason);
                 }
-                return await DrainAsync(pending: pending, rounds: rounds, sampleAsync: (item, side, round, directory, cancellation) => SampleAsync(directory: directory, item: item, round: round, side: side, timeout: bound, token: cancellation), token: token, windowDeadline: deadline).ConfigureAwait(continueOnCapturedContext: false);
+                return await DrainAsync(pending: pending, rounds: rounds, sampleAsync: (item, side, round, directory, cancellation) => SampleAsync(directory: directory, item: item, round: round, side: side, timeout: bound, token: cancellation), token: token, windowDeadline: deadline, clock: clock).ConfigureAwait(continueOnCapturedContext: false);
             } catch (OperationCanceledException) when (deadline.IsExpired && !token.IsCancellationRequested) {
                 return CliExit.Success;
             } finally {
@@ -117,13 +157,15 @@ public static class MeasureCommand {
                 foreach (var (_, item) in left) { Console.WriteLine(value: $"measure: pending {item.Id} {item.Name}"); }
             }
         });
-        run.Detail(detail: "Use: puck measure run [request-ids...] [--window-seconds 600] [--repeats 5] [--wait 600] [--settle 30]\nTakes one priority quiet lease for the pending snapshot. The window deadline includes acquisition and settling; expiry stops the active sample through process cleanup, releases quiet priority and lists pending requests. Incomplete requests stay pending with partial evidence retained for inspection; the next window retries them from the first pair. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Explicitly name failed IDs to retry unchanged frozen inputs into a new answer directory; an unselected drain skips failures. Re-file to correct inputs. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
-        return new Command(description: "Queue frozen before/after timing questions and answer them in a priority quiet window.", name: "measure") { request, list, run };
+        run.Detail(detail: "Use: puck measure run [request-ids...] [--window-seconds 600] [--repeats 5] [--wait 600] [--settle 30]\nPrints an estimate of the drain's sampling time before it takes the lease (from the wall time earlier samples of the same command recorded; a command with none shows its --timeout-seconds ceiling), and each completed pair's wall time as it finishes. Takes one priority quiet lease for the pending snapshot. The window deadline includes acquisition and settling; expiry stops the active sample through process cleanup, releases quiet priority and lists pending requests. Incomplete requests stay pending with partial evidence retained for inspection; the next window retries them from the first pair. Each request runs before, after in repeated pairs. Failed commands or missing/nonfinite metrics mark that request failed and continue the queue; partial evidence stays. Explicitly name failed IDs to retry unchanged frozen inputs into a new answer directory; an unselected drain skips failures. Re-file to correct inputs. Reports record raw samples, median and IQR for before, after and paired after-minus-before differences. --decides remains a human criterion.");
+        return new Command(description: "Queue frozen before/after timing questions and answer them in a priority quiet window.", name: "measure") { request, list, withdraw, run };
     }
     // One request owns its failure boundary: only a complete set of paired samples can publish an answer.
     public static async Task<int> DrainAsync(IEnumerable<(string Path, MeasurementRequest Item)> pending, int rounds,
-        Func<MeasurementRequest, string, int, string, CancellationToken, Task<MeasurementSample>> sampleAsync, CancellationToken token, OperationDeadline windowDeadline) {
+        Func<MeasurementRequest, string, int, string, CancellationToken, Task<MeasurementSample>> sampleAsync, CancellationToken token, OperationDeadline windowDeadline, TimeProvider? clock = null) {
         var failed = false;
+
+        clock ??= TimeProvider.System;
 
         foreach (var (path, item) in pending) {
             token.ThrowIfCancellationRequested();
@@ -138,32 +180,36 @@ public static class MeasureCommand {
                 for (var round = 0; (round < rounds); round++) {
                     foreach (var side in new[] { "before", "after" }) {
                         windowDeadline.Token.ThrowIfCancellationRequested();
+                        var started = clock.GetTimestamp();
                         var sample = await sampleAsync(item, side, round, directory, windowDeadline.Token).ConfigureAwait(continueOnCapturedContext: false);
 
-                        samples.Add(item: sample);
-                        Write(report, new MeasurementReport(item, rounds, samples.ToArray(), []), MeasureJsonContext.Default.MeasurementReport);
+                        samples.Add(item: sample with { WallSeconds = clock.GetElapsedTime(startingTimestamp: started).TotalSeconds });
+                        Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], PairWallSeconds: PairWalls(samples: samples)), MeasureJsonContext.Default.MeasurementReport);
                     }
+                    var pairs = PairWalls(samples: samples);
+
+                    Console.WriteLine(value: MeasureEstimate.PairLine(item.Name, round, rounds, pairs, samples[^2].WallSeconds, samples[^1].WallSeconds));
                 }
                 windowDeadline.Token.ThrowIfCancellationRequested();
                 var summaries = item.Metrics.Select(selector: metric => Summarize(metric,
                     samples.Where(predicate: sample => (sample.Side == "before")).Select(selector: sample => sample.Metrics[metric]).ToArray(),
                     samples.Where(predicate: sample => (sample.Side == "after")).Select(selector: sample => sample.Metrics[metric]).ToArray())).ToArray();
 
-                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), summaries), MeasureJsonContext.Default.MeasurementReport);
+                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), summaries, PairWallSeconds: PairWalls(samples: samples)), MeasureJsonContext.Default.MeasurementReport);
                 foreach (var metric in summaries) {
                     Console.WriteLine(value: string.Create(CultureInfo.InvariantCulture, $"measure {item.Name} {metric.Metric}: before median={metric.Before.Median:G6} IQR={metric.Before.Iqr:G6}; after median={metric.After.Median:G6} IQR={metric.After.Iqr:G6}; paired difference median={metric.Difference.Median:G6} IQR={metric.Difference.Iqr:G6}"));
                 }
                 Write(path, item with { Report = PuckPaths.Normalize(path: report) }, MeasureJsonContext.Default.MeasurementRequest);
                 Console.WriteLine(value: $"measure: answered {item.Id}; {item.Decides}; report {PuckPaths.Normalize(path: report)}");
             } catch (OperationCanceledException) when (windowDeadline.IsExpired && !token.IsCancellationRequested) {
-                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], "Window deadline reached; request remains pending."), MeasureJsonContext.Default.MeasurementReport);
+                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], "Window deadline reached; request remains pending.", PairWalls(samples: samples)), MeasureJsonContext.Default.MeasurementReport);
                 Write(path, item, MeasureJsonContext.Default.MeasurementRequest);
                 break;
             } catch (Exception error) when ((error is InvalidDataException or InvalidOperationException or ArgumentException or IOException)) {
                 failed = true;
                 var reason = $"measure {item.Name} ({item.Id}): {error.Message}";
 
-                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], reason), MeasureJsonContext.Default.MeasurementReport);
+                Write(report, new MeasurementReport(item, rounds, samples.ToArray(), [], reason, PairWalls(samples: samples)), MeasureJsonContext.Default.MeasurementReport);
                 Write(path, item with { Failure = reason }, MeasureJsonContext.Default.MeasurementRequest);
                 Console.Error.WriteLine(value: $"measure: failed {reason}; evidence {PuckPaths.Normalize(path: report)}");
             }
@@ -233,8 +279,39 @@ public static class MeasureCommand {
         CliFiles.CopyDirectory(Path.GetDirectoryName(path: Path.GetFullPath(path: source))!, target);
         return PuckPaths.Normalize(path: Path.Combine(path1: target, path2: Path.GetFileName(path: source)));
     }
+    /// <summary>Gets the bench command's own replication option, which a measurement pins to one so the run's paired rounds are the only replication.</summary>
+    /// <param name="arguments">The command after <c>--</c>.</param>
+    /// <returns>The option name, or <see langword="null"/> for a command with none (sweep).</returns>
+    private static string? InnerSampleOption(string[] arguments) => arguments switch {
+        ["bench", "world", ..] => "--repeats",
+        ["bench", "startup", ..] or ["bench", "frames", ..] => "--samples",
+        _ => null,
+    };
+    /// <summary>Returns the command with its inner sample count made explicit: an absent count is appended as 1, because bench startup defaults to 3.</summary>
+    /// <param name="arguments">The command after <c>--</c>.</param>
+    /// <returns>The command, carrying its replication option set to 1 where it has one.</returns>
+    /// <exception cref="ArgumentException">The command sets its replication option above 1, or to something other than a count.</exception>
+    public static string[] PinInnerSamples(string[] arguments) {
+        if (InnerSampleOption(arguments: arguments) is not { } option) { return arguments; }
+        for (var index = 0; (index < arguments.Length); index++) {
+            var token = arguments[index];
+            var value = ((token == option) ? ((index + 1 < arguments.Length) ? arguments[index + 1] : "") : (token.StartsWith(comparisonType: StringComparison.Ordinal, value: (option + "=")) ? token[(option.Length + 1)..] : null));
+
+            if (value is null) { continue; }
+            if (!(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var count) && (count == 1))) {
+                throw new ArgumentException(message: $"{option} {value} replicates inside every pair, so the window pays it twice over. Replication is `puck measure run --repeats` (ABAB pairs); pass {option} 1 or omit it.");
+            }
+            return arguments;
+        }
+        return [.. arguments, option, "1"];
+    }
+    /// <summary>Sums each completed round's before and after wall seconds.</summary>
+    /// <param name="samples">The samples taken so far, before then after for each round.</param>
+    /// <returns>One total per round that has both sides.</returns>
+    public static double[] PairWalls(IReadOnlyList<MeasurementSample> samples) => samples.GroupBy(keySelector: sample => sample.Round).Where(predicate: pair => (pair.Count() == 2)).OrderBy(keySelector: pair => pair.Key).Select(selector: pair => pair.Sum(selector: sample => sample.WallSeconds)).ToArray();
     private static void ValidateCommand(string[] arguments) {
         if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["bench", "frames", ..] or ["sweep", ..])) { throw new ArgumentException(message: "Measurement commands are bench world, bench startup, bench frames or sweep (including headless frame-signal plans)."); }
+        _ = PinInnerSamples(arguments: arguments);
         if (arguments.Any(predicate: static value => ((value is "--world-artifact" or "--output") || value.StartsWith(comparisonType: StringComparison.Ordinal, value: "--world-artifact=") || value.StartsWith(comparisonType: StringComparison.Ordinal, value: "--output=")))) {
             throw new ArgumentException(message: "The measurement runner supplies --world-artifact and --output.");
         }
@@ -338,11 +415,11 @@ public static class MeasureCommand {
     }
 }
 public sealed record MeasurementSide(string Artifact, string Tree, string? Revision);
-public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, MeasurementSide Before, MeasurementSide After, string[] Command, string[] Metrics, string Decides, string? Report, string? Failure = null);
-public sealed record MeasurementSample(string Side, int Round, Dictionary<string, double> Metrics, string SourceReport);
+public sealed record MeasurementRequest(string Id, string Name, string Checkout, DateTimeOffset Created, MeasurementSide Before, MeasurementSide After, string[] Command, string[] Metrics, string Decides, string? Report, string? Failure = null, string? Withdrawn = null);
+public sealed record MeasurementSample(string Side, int Round, Dictionary<string, double> Metrics, string SourceReport, double WallSeconds = 0);
 public sealed record MeasurementDistribution(double Median, double Iqr);
 public sealed record MeasurementMetric(string Metric, MeasurementDistribution Before, MeasurementDistribution After, MeasurementDistribution Difference);
-public sealed record MeasurementReport(MeasurementRequest Request, int Repeats, MeasurementSample[] Samples, MeasurementMetric[] Metrics, string? Failure = null);
+public sealed record MeasurementReport(MeasurementRequest Request, int Repeats, MeasurementSample[] Samples, MeasurementMetric[] Metrics, string? Failure = null, double[]? PairWallSeconds = null);
 
 [JsonSerializable(typeof(MeasurementRequest))]
 [JsonSerializable(typeof(MeasurementReport))]
