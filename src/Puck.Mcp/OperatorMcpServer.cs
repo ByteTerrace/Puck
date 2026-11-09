@@ -237,13 +237,21 @@ public static class OperatorMcpServer {
             );
         } catch (Exception error) when (((error is TimeoutException) || ((error is OperationCanceledException) && !token.IsCancellationRequested))) {
             client.Dispose();
-            return Fail("Deadline expired. Attachment closed; dispatched outcome is unknown. Inspect state before retrying; the next call attaches anew.");
+            return Fail($"Deadline expired after dispatch; the attachment was closed and the outcome is unknown. {Inspect(client: client)}");
         } catch (OperationCanceledException) {
             client.Dispose();
             throw;
         } catch (Exception error) when ((error is IOException or InvalidDataException or System.Net.Sockets.SocketException or ObjectDisposedException or JsonException)) {
-            return Fail($"Attachment closed; dispatched outcome may be unknown. Inspect state before retrying; the next call attaches anew. {error.Message}");
+            return Fail($"The attachment closed during the call ({error.Message.TrimEnd('.')}); the outcome may be unknown. {Inspect(client: client)}");
         }
+    }
+    // What an unknown outcome names for the caller to inspect before any retry: whether the World still runs, what it
+    // logged, and the state the call would have changed.
+    private static string Inspect(IControlSession client) {
+        var world = ((client is LocalControlClient { Endpoint: var endpoint }) ? $"World {endpoint.ProcessId}" : "the World");
+
+        return $"Before retrying, check that puck_worlds still lists {world} (if not, it exited: puck_world_start_wait or its stderrLog says why), " +
+            "read its `host.log last 20` for the command's echo or refusal, and read the state the command changes; the next call attaches anew.";
     }
     /// <summary>Describes a World's attachment file for a result.</summary>
     /// <param name="info">What the World published.</param>

@@ -38,7 +38,7 @@ internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime
 
 /// <summary>What <see cref="HealthGateFile.ClearHealthy"/> proved and pruned.</summary>
 /// <param name="Cleared">Whether this process was the selected install and its health was recorded.</param>
-/// <param name="Pruned">The prune pass that followed, or <see langword="null"/> when nothing was recorded.</param>
+/// <param name="Pruned">The prune pass that followed, or <see langword="null"/> when nothing was recorded or no pass was asked for.</param>
 /// <param name="Retryable">Lock contention prevented the decision; permanent I/O, permissions and platform errors do not retry.</param>
 public sealed record HealthClearResult(bool Cleared, InstallPruneResult? Pruned, bool Retryable = false);
 /// <summary>Startup health's recording half; see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
@@ -49,12 +49,14 @@ public static class HealthGateFile {
     /// <param name="registration">This process's registration.</param>
     /// <param name="cancellationToken">Ends the retries.</param>
     /// <param name="keepVersions">The number of most recently installed versions kept beyond the protected ones.</param>
+    /// <param name="prune">Whether a prune pass follows a recorded health; a caller that answers a client before pruning
+    /// passes <see langword="false"/> and runs <see cref="InstallPruner.Prune"/> itself.</param>
     /// <returns>Whether health was recorded, and what the prune pass did.</returns>
     public static async Task<HealthClearResult> ClearHealthyAsync(string cacheRoot, string version, InstallRegistration registration,
-        CancellationToken cancellationToken, int keepVersions = AddSelfUpdateDefaults.KeepVersions) {
+        CancellationToken cancellationToken, int keepVersions = AddSelfUpdateDefaults.KeepVersions, bool prune = true) {
         while (true) {
             cancellationToken.ThrowIfCancellationRequested();
-            var result = ClearHealthy(cacheRoot: cacheRoot, keepVersions: keepVersions, registration: registration, version: version);
+            var result = ClearHealthy(cacheRoot: cacheRoot, keepVersions: keepVersions, registration: registration, version: version, prune: prune);
 
             if (!result.Retryable) { return result; }
             await Task.Delay(TimeSpan.FromMilliseconds(milliseconds: 100), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -70,9 +72,10 @@ public static class HealthGateFile {
     /// <param name="version">The version to record healthy.</param>
     /// <param name="registration">This process's registration.</param>
     /// <param name="keepVersions">The number of most recently installed versions kept beyond the protected ones.</param>
+    /// <param name="prune">Whether the prune pass follows a recorded health.</param>
     /// <returns>Whether health was recorded, and what the prune pass did.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registration"/> is <see langword="null"/>.</exception>
-    public static HealthClearResult ClearHealthy(string cacheRoot, string version, InstallRegistration registration, int keepVersions = AddSelfUpdateDefaults.KeepVersions) {
+    public static HealthClearResult ClearHealthy(string cacheRoot, string version, InstallRegistration registration, int keepVersions = AddSelfUpdateDefaults.KeepVersions, bool prune = true) {
         ArgumentNullException.ThrowIfNull(argument: registration);
 
         if (!string.Equals(a: registration.Version, b: version, comparisonType: InstallLayout.NameComparison)) {
@@ -95,6 +98,6 @@ public static class HealthGateFile {
             return new HealthClearResult(Cleared: false, Pruned: null);
         }
         // Pruning takes the publication lease before the update lease, so it runs after this one is released.
-        return new HealthClearResult(Cleared: true, Pruned: InstallPruner.Prune(installRoot: cacheRoot, keepVersions: keepVersions));
+        return new HealthClearResult(Cleared: true, Pruned: (prune ? InstallPruner.Prune(installRoot: cacheRoot, keepVersions: keepVersions) : null));
     }
 }

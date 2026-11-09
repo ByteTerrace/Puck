@@ -54,20 +54,11 @@ if ($null -eq $build) {
     }
 }
 
-# Only the small BCL stub is bootstrapped here. Application publication, signature verification, staging and
-# activation use the launcher release chain; no private application-copy staging lives in this hook.
+# The build activates itself: `--prepare-install` installs the stub and its configuration from this build, beside the
+# release record the same build writes, then publishes, verifies, stages and activates through the launcher release
+# chain. The running front follows later builds the same way, so the hook holds no install logic of its own.
 $install = Join-Path $source '.claude/mcp-install'
-$stubBuild = Join-Path $source 'src/Puck.Launcher.Stub/bin/Release/net11.0'
-& dotnet build (Join-Path $source 'src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj') -c Release -nodeReuse:false 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $null = New-Item -ItemType Directory -Force -Path $install
-foreach ($file in Get-ChildItem -LiteralPath $stubBuild -File) {
-    $target = Join-Path $install $file.Name
-    if ((Test-Path -LiteralPath $target) -and ((Get-FileHash -LiteralPath $target).Hash -eq (Get-FileHash -LiteralPath $file.FullName).Hash)) { continue }
-    # A stub another client is running keeps its files locked; the next start after it exits takes the new build.
-    try { Copy-Item -LiteralPath $file.FullName -Destination $target -Force } catch { Write-Note "kept the running stub's $($file.Name): $($_.Exception.Message)" }
-}
-'{"AppExecutableFileName":"Puck.Cli.exe","MaxAttempts":3}' | Set-Content -LiteralPath (Join-Path $install 'stub.json') -NoNewline
 $dll = Join-Path $build 'Puck.Cli.dll'
 & dotnet $dll mcp --profile operator --prepare-install --install-root $install --build-source $build 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

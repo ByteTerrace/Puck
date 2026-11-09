@@ -14,6 +14,9 @@
         <ProjectReference Include="../Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
         <ProjectReference Include="../Puck.Cli.Source/Puck.Cli.Source.csproj" />
         <ProjectReference Include="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
+        <!-- The operator install's stub ships in the CLI build, so activating a build installs the stub built from the same
+             sources as the release record code that build writes (LocalAdapterInstall). -->
+        <ProjectReference Include="../Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <ProjectReference Include="../Puck.Mcp/Puck.Mcp.csproj" />
         <ProjectReference Include="../Puck.World.Silo/Puck.World.Silo.csproj" />
     </ItemGroup>

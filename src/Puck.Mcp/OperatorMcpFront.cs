@@ -36,7 +36,8 @@ public static class OperatorMcpFront {
 
             foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
             var process = (Process.Start(startInfo: info) ?? throw new IOException(message: "The application stub did not start."));
-            var errors = ForwardErrors(process: process);
+            var recent = new Queue<string>();
+            var errors = ForwardErrors(process: process, recent: recent);
             McpClient client;
 
             try {
@@ -46,9 +47,18 @@ public static class OperatorMcpFront {
                         ProtocolVersion = "2025-11-25",
                         DiscoverProbeTimeout = Timeout.InfiniteTimeSpan,
                     }, cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
-            } catch {
+            } catch (Exception error) {
+                var exited = process.HasExited;
+
                 await StopWorker(client: null, errors: errors, process: process).ConfigureAwait(continueOnCapturedContext: false);
-                throw;
+                if ((error is OperationCanceledException) && token.IsCancellationRequested) { throw; }
+                // The transport only knows the stream ended or the handshake timed out; the stub and the worker say why on
+                // standard error (a launch refusal, a registration refusal, a crash), which the client never sees otherwise.
+                string said;
+
+                lock (recent) { said = string.Join(separator: " | ", values: recent); }
+                throw new IOException(message: $"{error.Message.TrimEnd('.')}. The worker {(exited ? $"exited with code {process.ExitCode}" : "did not answer and was stopped")}; " +
+                    ((said.Length == 0) ? "it wrote nothing to standard error." : $"its last standard error: {said}"), innerException: error);
             }
             return (client, () => StopWorker(client: client, errors: errors, process: process), process.WaitForExitAsync());
         }, cancellationToken);
@@ -332,8 +342,16 @@ public static class OperatorMcpFront {
         if (bounded.Failure is { } failure) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: failure).Throw(); }
     }
 
-    private static async Task ForwardErrors(Process process) {
-        while (await process.StandardError.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) { Console.Error.WriteLine(value: line); }
+    // Forwards a worker's standard error to the session's, keeping the last few lines for a failure to name.
+    private static async Task ForwardErrors(Process process, Queue<string> recent) {
+        while (await process.StandardError.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+            Console.Error.WriteLine(value: line);
+            if (line.Length == 0) { continue; }
+            lock (recent) {
+                if (recent.Count == 4) { _ = recent.Dequeue(); }
+                recent.Enqueue(item: line);
+            }
+        }
     }
     private static async Task StopWorker(McpClient? client, Process process, Task errors) {
         try {
