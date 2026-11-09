@@ -130,6 +130,36 @@ public static class FusedArithmetic {
         );
     }
 
+    /// <summary>Rounds <c>multiplicand · multiplier / divisor</c> to <see cref="FixedQ4816"/> exactly once, to nearest
+    /// with ties to even, wrapping on overflow as the carrier's operators do.</summary>
+    /// <param name="multiplicand">The first factor.</param>
+    /// <param name="multiplier">The second factor.</param>
+    /// <param name="divisor">The divisor; non-zero.</param>
+    /// <returns>The rounded quotient of the exact product.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
+    /// <remarks>The operator form <c>(x * y) / z</c> rounds the product to the carrier first, which keeps only
+    /// <c>2^-16</c> of the product's absolute value: for two centimetre lengths (a product near <c>1e-4</c>) that is a
+    /// few significant bits, and the division by a centimetre then multiplies the loss back up to a millimetre. Here
+    /// the whole product (at most <c>2^126</c>) is formed exactly and divided once.</remarks>
+    public static FixedQ4816 MultiplyDivide(FixedQ4816 multiplicand, FixedQ4816 multiplier, FixedQ4816 divisor) {
+        if (divisor.Value == 0L) {
+            throw new DivideByZeroException();
+        }
+
+        var product = Product(
+            left: multiplicand.Value,
+            right: multiplier.Value
+        );
+
+        // DivideProductSumCore rounds numerator / denominator · 2^16; carrying the divisor's raw at 2^16 more makes
+        // that the raw quotient x·y / z.
+        return FixedQ4816.FromRawBits(value: DivideProductSumCore(
+            denominatorMagnitude: (((UInt128)RawMagnitude(value: divisor.Value)) << FixedQ4816.FractionBitCount),
+            numerator: product,
+            resultNegative: (product.Negative ^ (divisor.Value < 0L))
+        ));
+    }
+
     // The exponent every mixed-scale kernel rounds at, formed in long so no combination of int extremes wraps it.
     internal static long MixedScaleShift(int fractionBitsOut, int first, int second) =>
         ((((long)fractionBitsOut) - first) - second);

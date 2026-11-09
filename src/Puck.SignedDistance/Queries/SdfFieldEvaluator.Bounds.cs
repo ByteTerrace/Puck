@@ -1018,26 +1018,15 @@ public sealed partial class SdfFieldEvaluator {
 
         return joined!.Value;
     }
-    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box, each step's rounding enclosed: the product-first form where
-    // every magnitude the box holds takes it, and both forms joined where the box reaches the divide-first side.
+    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box: the point side's one rounding is non-decreasing in the
+    // magnitude, so its values at the box's two ends enclose every value the box holds, exactly.
     private static IntervalVector3 SuperellipsoidScaledRatioBounds(IntervalVector3 absolute, FixedVector3 radii, FixedQ4816 minimumRadius) {
-        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) {
-            if (magnitude.IsUnbounded) {
-                return FixedInterval.Entire;
-            }
-
-            var productFirst = ((magnitude * Point(value: minimumRadius)) / Point(value: radius));
-
-            if ((magnitude.Upper.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit)) {
-                return productFirst;
-            }
-
-            var divideFirst = ((magnitude / Point(value: radius)) * Point(value: minimumRadius));
-
-            return (((magnitude.Lower.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit))
-                ? FixedInterval.Union(first: productFirst, second: divideFirst)
-                : divideFirst);
-        }
+        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) => (magnitude.IsUnbounded
+            ? FixedInterval.Entire
+            : new FixedInterval(
+                lower: SuperellipsoidScaledRatio(magnitude: magnitude.Lower, minRadius: minimumRadius, radius: radius),
+                upper: SuperellipsoidScaledRatio(magnitude: magnitude.Upper, minRadius: minimumRadius, radius: radius)
+            ));
 
         return new(X: Axis(magnitude: absolute.X, radius: radii.X), Y: Axis(magnitude: absolute.Y, radius: radii.Y), Z: Axis(magnitude: absolute.Z, radius: radii.Z));
     }

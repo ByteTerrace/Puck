@@ -403,7 +403,7 @@ public sealed partial class SdfFieldEvaluator {
     // power has a unit component and a root >= One, so v >= max(q)-s, also for e=2's full-width norm.
     // Thus v >= (s/max(r))/sqrt(3)*|p| - s - E. The frame's uncullable interval walk proves intermediate
     // operations fit; outside that frame this certificate grants nothing. The numeric sign/range proof and the
-    // two ratio-rounding envelopes live in docs/rendering/sdf/handbook/queries-and-determinism.md.
+    // ratio-rounding envelope live in docs/rendering/sdf/handbook/queries-and-determinism.md.
     private static LocalCertificate? TrySuperellipsoidCertificate(in CompiledInstruction instruction) {
         var (rx, ry, rz) = (instruction.Data0X.Value, instruction.Data0Y.Value, instruction.Data0Z.Value);
         var exponent = instruction.Data0W;
@@ -414,23 +414,14 @@ public sealed partial class SdfFieldEvaluator {
             return null;
         }
 
-        const long F = (1L << FixedQ4816.FractionBitCount);
         var minimum = Math.Min(val1: rx, val2: Math.Min(val1: ry, val2: rz));
         var maximum = Math.Max(val1: rx, val2: Math.Max(val1: ry, val2: rz));
-        // RN(RN(p*F/r)*s/F) loses at most s/(2F)+1/2 raw. Product-first loses F/(2r)+1/2,
-        // greatest at the smallest radius. Integer ceilings keep tiny-radius amplification outward.
-        var error = ((((Int128)minimum) + F).CeilingDivide(divisor: (((Int128)2) * F)));
-
-        if (minimum < SuperellipsoidScaledRadiusLimit) {
-            var productFirst = ((((Int128)F) + minimum).CeilingDivide(divisor: (((Int128)2) * minimum)));
-            error = Int128.Max(x: error, y: productFirst);
-        }
-
+        // E: SuperellipsoidScaledRatio rounds the exact p*s/r once, to nearest, at most half a raw; one whole raw outward.
         return new LocalCertificate(
             BoxLoss: 0.0, BoxRadius: 0.0, Boxed: false,
             CenterX: 0.0, CenterY: 0.0, CenterZ: 0.0,
             PointGain: ((((double)minimum) / maximum) / Sqrt3),
-            PointSlack: (((double)error) * RawUnit),
+            PointSlack: RawUnit,
             Radius: (minimum * RawUnit)
         );
     }

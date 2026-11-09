@@ -453,23 +453,37 @@ public sealed class SuperellipsoidLawTests {
         Assert.True(condition: evaluator.TryDistance(distance: out var inward, material: out _, position: Position(x: 0.0, y: height, z: (z - Step))));
         Assert.True(condition: (outward > inward), userMessage: $"a 1 mm step across the surface at y = {height} read no slope ({(double)inward} to {(double)outward}).");
     }
-    // THE LAW: the bounds side encloses the point side on both sides of the scaled ratio's product limit (2^20 m),
-    // where the point side divides first rather than wrap, and across it, where a box holds both forms.
+    // THE LAW: a millimetre ellipsoid reads what the kernel's float gauge reads, (|p| / r - 1) · r: at radius 1/1024 m
+    // the point (1/256, 0, 0) is 3/1024 m outside. Rounding the product |p| · r to the carrier before dividing by r read
+    // it 1/1024 m inside, so contact and the drawn surface disagreed at small sizes.
+    [Fact]
+    public void AMillimetreEllipsoidReadsTheKernelsGauge() {
+        var evaluator = Superellipsoid(exponent: 2f, radii: new Vector3(value: (1f / 1024f)));
+
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: Position(x: (1.0 / 256.0), y: 0.0, z: 0.0)));
+        Assert.Equal(expected: (3.0 / 1024.0), actual: (double)distance);
+    }
+    // THE LAW: the bounds side encloses the point side at terrain radii, out to millions of metres, and at centimetre
+    // radii.
     [Theory]
-    [InlineData(2f, 1000.0, 0.0)]
-    [InlineData(2f, 1048570.0, 0.0)]
-    [InlineData(2f, 1048580.0, 0.0)]
-    [InlineData(2f, 1048570.0, 20.0)]
-    [InlineData(4f, 1048570.0, 20.0)]
-    [InlineData(4f, 5000000.0, 0.0)]
-    public void ScaledRatioBoundsEncloseThePointValueAcrossTheProductLimit(float exponent, double x, double width) {
-        var evaluator = Superellipsoid(exponent: exponent, radii: new Vector3(x: 230f, y: 514f, z: 280f));
-        var lower = Position(x: x, y: 100.0, z: 50.0);
-        var upper = Position(x: (x + width), y: 100.0, z: 50.0);
+    [InlineData(2f, 1000.0, 0.0, 1.0)]
+    [InlineData(2f, 1048570.0, 0.0, 1.0)]
+    [InlineData(2f, 1048580.0, 0.0, 1.0)]
+    [InlineData(2f, 1048570.0, 20.0, 1.0)]
+    [InlineData(4f, 1048570.0, 20.0, 1.0)]
+    [InlineData(4f, 5000000.0, 0.0, 1.0)]
+    [InlineData(3f, 0.015, 0.002, 0.0001)]
+    [InlineData(2f, 0.004, 0.01, 0.0001)]
+    public void ScaledRatioBoundsEncloseThePointValue(float exponent, double x, double width, double radiusScale) {
+        var radii = (new Vector3(x: 230f, y: 514f, z: 280f) * ((float)radiusScale));
+        var evaluator = Superellipsoid(exponent: exponent, radii: radii);
+        var (y, z) = ((100.0 * radiusScale), (50.0 * radiusScale));
+        var lower = Position(x: x, y: y, z: z);
+        var upper = Position(x: (x + width), y: y, z: z);
 
         Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: lower, upper: upper));
         foreach (var at in ((double[])[x, (x + (width / 2.0)), (x + width)])) {
-            Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: Position(x: at, y: 100.0, z: 50.0)));
+            Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: Position(x: at, y: y, z: z)));
             Assert.True(condition: bounds.Contains(value: distance), userMessage: $"[{(double)bounds.Lower}, {(double)bounds.Upper}] misses {(double)distance} at x = {at}.");
         }
     }
