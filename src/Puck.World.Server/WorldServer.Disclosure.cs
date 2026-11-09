@@ -75,7 +75,7 @@ public sealed partial class WorldServer {
 internal sealed class WorldDeliveryRows {
     private FieldCellDelta[] m_cells = [];
     private int m_count;
-    private readonly HashSet<int> m_changed = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_changed = new();
     private int[] m_changedRows = [];
 
     internal ReadOnlyMemory<FieldCellDelta> Advance(WorldRecipientView view, WorldDeliveryCursor cursor,
@@ -96,7 +96,7 @@ internal sealed class WorldDeliveryRows {
             ref readonly var delta = ref span[index];
             bool discloses;
             if (delta.Row >= 0) {
-                m_changed.Add(delta.Row);
+                m_changed.Add(index: delta.Row);
                 if (delta.Row != wholeRow) { wholeRow = delta.Row; wholeRowReads = view.ReadsWhole(delta.Row); }
                 discloses = wholeRowReads;
             } else if (delta.Cell < 0) {
@@ -116,7 +116,7 @@ internal sealed class WorldDeliveryRows {
         if (rows) {
             var changedCount = m_changed.Count;
             if (m_changedRows.Length < changedCount) { m_changedRows = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)changedCount)]; }
-            m_changed.CopyTo(m_changedRows);
+            m_changed.Members.CopyTo(m_changedRows);
             var changedRows = m_changedRows.AsSpan(0, changedCount);
             changedRows.Sort();
             foreach (var replacement in view.Advance(cursor, changedRows)) {
