@@ -39,7 +39,7 @@ let celStyle = {
   outlineTint [0.22, 0.15, 0.2]
   specularSize: 0.025
   exposure: 0
-  shoulder: 0.5
+  shoulder: 0.2
   band: Combined
 }
 
