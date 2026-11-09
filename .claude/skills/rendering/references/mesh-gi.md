@@ -219,7 +219,7 @@ after the main residency's done line; a nested residency's done line is insuffic
   measured, and the wall law reads visibility 1 through it. A receiver with no
   answering probe never reads black: the extended stages answer far gallery walls
   and outdoor shaded faces past a window, and a receiver no stage answers reads
-  the camera sample's open sky (`sdfMeshAnswers`, below).
+  the camera sample's light (`sdfMeshAnswers`, below).
   `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one published
   volume and requires the same sixteen slots, weights, share and measured flags
   on both backends; `SdfMeshIrradianceLawTests.FarField.cs` holds the four-storey
@@ -233,8 +233,13 @@ after the main residency's done line; a nested residency's done line is insuffic
   view down level 1's hall from its west end read the far ceiling and floor from
   the storey level, whose 4 m probes 1.75 m under the ceiling see it past the
   hanging strips at grazing angles: jagged dark streaks beside each strip, and a
-  floor 2 to 3 times too bright under the lamps. Turning the camera moves the
-  anchor; the window recentres only once the anchor leaves its middle.
+  floor 2 to 3 times too bright under the lamps. The first camera itself stays
+  in the middle too: the window keeps its place only while the camera, its
+  anchor and the views that fit all stand in the middle, and a recentred window
+  shifts as little as puts them all there (`WindowLow`, `Centre`). Turning in
+  place moves only the anchor, so the window recentres only as the anchor leaves
+  its middle (about every third of a turn); walking backward recentres before
+  the camera nears the back face (`TheFinestWindowKeepsItsCameraInItsMiddle`).
 - A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
   and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
   Read the wait's bake description twice: its meshes, pending groups,
@@ -277,21 +282,27 @@ after the main residency's done line; a nested residency's done line is insuffic
   while reading the lawn through the same window exactly. The
   lighting version advances on a change of the directional or traced lights,
   the gains, the sources, the bounce switch, the scene's materials or the sky
-  (the packed sky's key, then its projected irradiance). `render.indirect.lightingGrid`
+  (the packed sky's key, then the sky texels themselves: `Lighting.SkyMatches`
+  compares exactly what the relight and the meter read, so a kept capture never
+  holds texels a replacement would change). `render.indirect.lightingGrid`
   authors direction steps in degrees and fractional radiance steps; zero is the
   neutral engine default. `SdfIndirectLightingGrid` snaps the directional records
-  once for both the key and capture. Sky coefficients share a quantum per colour
+  once for both the key and capture. The sky texels share a quantum per colour
   channel, anchored to the current channel peak's power-of-two range; tiny
-  coefficients do not each trigger a new capture. These are functions of the
+  texels do not each trigger a new capture. These are functions of the
   current frame, never the last capture. Gridded lighting uses this policy in
   asynchronous and converged modes without the wall-clock capture throttle.
   Converged sky comparison is exact, with or without a grid. Only continuous
-  asynchronous skies retain `SkyTolerance` against the preceding capture.
+  asynchronous skies retain `SkyTolerance` against the preceding capture, per
+  texel and channel relative to that texel's own value, so a probe that sees
+  the sky through a few rays still relights when those rays' sky changes.
   A relight's bounce reads the volume about each hit as it stands, so
   the bounce is one iteration over the whole window: a sweep relights every
   probe once, and another follows while any probe of the last moved past
   `ConvergedShare` (plus `ConvergedFloor` nits) in any colour channel of any
-  axis, or was relit under a lighting since replaced; it stops only when a
+  axis of either cube a relight reads (`Moves`: the radiance and the sky light,
+  so an open probe whose sky light alone changed still owes the sweep its
+  gatherers relight in), or was relit under a lighting since replaced; it stops only when a
   whole sweep under unchanged inputs moved nothing, or after `MaxSweeps` (an
   `[sdf.mesh-gi] unconverged` line). Convergence is never a probe's own: a
   probe that read zero before the light reached it is relit by the next sweep,
@@ -485,14 +496,17 @@ after the main residency's done line; a nested residency's done line is insuffic
   published probe answers (`sdfMeshAnswers` in `shade/sdf-light.hlsli`: every
   surface before the first publication, and surfaces past every published probe
   after a camera cut until the moved windows land) is lit by the exposure
-  meter's sample at the camera as one probe: the sky over the share it sees open
-  (`airLight`) and its metered luminance (`meterLuminance`, grey) over the rest,
-  for both its indirect light and its reflection, with its traced lights
-  unoccluded. The meter sets the exposure from that same sample, so a cold room
-  reads as the meter measured it, never white and blue-washed under the
-  unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
-  which reproduces the unpublished state on a warm boot. Before the meter's first reading `airLight` is one
-  and the luminance zero, so the first frames of a boot still read the open sky.
+  meter's sample at the camera as one probe. Its diffuse light is the sample's
+  six-axis RGB light (`meterLight`, `SdfViewExposures.LightOf`: the radiance and
+  sky-light cubes summed, its open rays carrying the sky's own radiance as a
+  probe's do) read about the normal by the probe cube's rule (`sdfMeshCubeFace`);
+  its reflection is the environment over the share it sees open (`airLight`)
+  and its metered luminance (`meterLuminance`, grey) over the rest; its traced
+  lights go unoccluded. No diffuse reader multiplies a share by the sky's SH. The
+  meter sets the exposure from that same light, so a cold room reads as the
+  meter measured it, never white and blue-washed under the unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
+  which reproduces the unpublished state on a warm boot. Before the meter's first reading `meterLight` reads W zero,
+  `airLight` one and the luminance zero, so the first frames of a boot still read the open sky.
   Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.

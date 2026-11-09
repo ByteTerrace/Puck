@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
@@ -646,6 +647,56 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
 
         Assert.Equal(expected: resized.Finest.Low, actual: kept.Finest.Low);
         Assert.Equal(expected: (resized.Finest.Low.X + 15), actual: moved.Finest.Low.X);
+    }
+    /// <summary>The finest window holds its first camera in its middle, an eighth of the window short of each face, though
+    /// it centres a quarter of its extent ahead of the camera: a camera walking backward, straight or sideways, moves the
+    /// window before it nears the back face, and a camera turning in place moves it only as its anchor leaves the middle,
+    /// about every third of a turn.</summary>
+    [Theory]
+    [InlineData(SdfIndirectTier.Medium)]
+    [InlineData(SdfIndirectTier.High)]
+    public void TheFinestWindowKeepsItsCameraInItsMiddle(SdfIndirectTier tier) {
+        const BindingFlags Private = (BindingFlags.Instance | BindingFlags.NonPublic);
+        var finest = SdfMeshIrradiance.LevelsOf(tier: tier)[0];
+        var volume = Volume();
+        var layout = typeof(SdfMeshIrradiance).GetNestedType(name: "Layout", bindingAttr: BindingFlags.NonPublic)!.GetMethod(name: "Of", bindingAttr: (BindingFlags.Static | BindingFlags.Public))!.Invoke(obj: null, parameters: [tier, 0, 60f]);
+        var windowLow = typeof(SdfMeshIrradiance).GetMethod(name: "WindowLow", bindingAttr: Private)!;
+        var camera = typeof(SdfMeshIrradiance).GetField(name: "m_camera", bindingAttr: Private)!;
+        var view = Frame().Views[0];
+        var low = default((int X, int Y, int Z));
+        var moves = 0;
+
+        void Step(Vector3 position, Vector3 forward, bool resizing) {
+            camera.SetValue(obj: volume, value: position);
+
+            var frame = Frame() with { Views = [view with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: position, target: (position + forward), viewportHeight: 4u, viewportWidth: 4u) }] };
+            var next = ((int X, int Y, int Z))windowLow.Invoke(obj: volume, parameters: [frame, 0, layout, low, resizing])!;
+
+            moves += ((next != low) ? 1 : 0);
+            low = next;
+
+            int[] cell = [(int)MathF.Floor(x: (position.X / finest.Spacing.X)), (int)MathF.Floor(x: (position.Y / finest.Spacing.Y)), (int)MathF.Floor(x: (position.Z / finest.Spacing.Z))];
+            int[] first = [low.X, low.Y, low.Z];
+            int[] dims = [finest.Dims.X, finest.Dims.Y, finest.Dims.Z];
+
+            for (var axis = 0; (axis < 3); axis++) {
+                var margin = Math.Max(val1: 1, val2: (dims[axis] / 8));
+
+                Assert.InRange(actual: cell[axis], low: (first[axis] + margin), high: ((first[axis] + dims[axis]) - margin - 1));
+            }
+        }
+
+        Step(position: new Vector3(x: 0f, y: 2f, z: 0f), forward: Vector3.UnitX, resizing: true);
+        for (var step = 1; (step <= 400); step++) {
+            Step(position: new Vector3(x: (-0.25f * step), y: 2f, z: (-0.1f * step)), forward: Vector3.UnitX, resizing: false);
+        }
+        moves = 0;
+        for (var step = 0; (step <= 72); step++) {
+            var angle = (step * (MathF.PI / 36f));
+
+            Step(position: new Vector3(x: -100f, y: 2f, z: -40f), forward: new Vector3(x: MathF.Cos(x: angle), y: 0f, z: MathF.Sin(x: angle)), resizing: false);
+        }
+        Assert.InRange(actual: moves, low: 1, high: 4);
     }
     // A first view another residency renders (a seat crossed into another world, its camera in that world's coordinates)
     // holds the window where it stood and meters no exposure; the window follows the view again once this residency

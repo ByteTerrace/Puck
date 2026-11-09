@@ -112,6 +112,10 @@ public static partial class SdfWorldPackage {
     /// local adaptation measures each surface's surroundings against; zero while the meter has no reading
     /// (<c>float</c>).</summary>
     public const string MeterLuminance = "meterLuminance";
+    /// <summary>The pass-group rows holding the light the view's meter sample receives along each of its six axes (+X,
+    /// -X, +Y, -Y, +Z, -Z), RGB in nits, with W one once the meter has read and zero before (six <c>float4</c>): the
+    /// light a surface no published probe answers reads, as one probe at the camera.</summary>
+    public const string MeterLight = "meterLight";
     /// <summary>The pass-group value holding the share of the local adaptation, in [0, 1] (<c>SdfExposure.Local</c>):
     /// how far the composite moves each surface's exposure from the view's toward the one its surroundings in the
     /// irradiance volume would meter (<c>float</c>).</summary>
@@ -332,6 +336,7 @@ public static partial class SdfWorldPackage {
         Value(name: ExposeShare, type: ShaderValueType.Float),
         Value(name: AirLight, type: ShaderValueType.Float),
         Value(name: MeterLuminance, type: ShaderValueType.Float),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: MeterLight, type: ShaderValueType.Float4),
         Value(name: LocalAdaptation, type: ShaderValueType.Float),
         Value(name: SkyPeakLuminance, type: ShaderValueType.Float),
         Value(name: FlowClock, type: ShaderValueType.Float),

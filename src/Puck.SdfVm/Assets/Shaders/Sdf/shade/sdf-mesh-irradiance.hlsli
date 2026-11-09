@@ -29,7 +29,12 @@ uint sdfMeshIrradianceSlot(int3 cell, int3 dims) {
 float sdfMeshIrradianceHalf(uint word, uint high) {
     return f16tof32((high != 0u) ? (word >> 16) : (word & 0xffffu));
 }
-// The ambient cube's value about a normal: each axis's face toward the normal, weighted by the normal's squared component.
+// The ambient cube's value about a normal: each axis's face toward the normal (+X, -X, +Y, -Y, +Z, -Z), weighted by the
+// normal's squared component. The face one axis reads; every six-axis cube a view reads (a probe's, the camera sample's
+// in sdfMeshCameraLight) chooses its faces here.
+uint sdfMeshCubeFace(float3 normal, uint axis) {
+    return ((2u * axis) + ((normal[axis] < 0.0) ? 1u : 0u));
+}
 // A probe's sky share, its surfaces' radiance and its sky light, all read from its slot's words.
 void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance, out float3 skyLight) {
     float3 squared = (normal * normal);
@@ -37,8 +42,8 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
     radiance = 0.0;
     skyLight = 0.0;
     [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
-        uint negative = ((normal[axis] < 0.0) ? 1u : 0u);
-        uint face = ((2u * axis) + negative);
+        uint face = sdfMeshCubeFace(normal, axis);
+        uint negative = (face & 1u);
         sky += (squared[axis] * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_WORD + axis], negative));
         float3 value;
         float3 open;
