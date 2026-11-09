@@ -36,22 +36,9 @@ what it surfaces is fixed at the cause.
 
 Owed at the integration tip, for whoever leads next:
 
-- a quiet frame-p99 window for the frame bar, the machine to itself, now that
-  the frame-cpu-2 lane's allocation cuts have landed (its readings were not
-  quiet: spawn 50 of 1200 frames over 16.7 ms, flight B 63 of 878);
-- Codex reviews of the trust-boundary and GPU-lifetime changes that landed
-  without one: the deal displacement (`WorldPlacementFrameCompilation.LocalFrame`,
-  `WorldPlacementDeal.Reconcile`, `WorldStateDisclosure.Shown`) and the
-  vk-glass-loss lane's whole-target clear (`SdfWorldPassRecorder.RecordMesh`)
-  and device-address report (`VulkanDeviceAddressBindings`);
-- a look at glass and water under a roof on both backends, since glass now
-  gathers the irradiance probes (`SdfFrameBlock.WriteInto`);
-- the duplicate found at the cold-bake lane's landing, dispatched rather than
-  left here: the reciprocal divisor and packed-pair comparer (refactoring
-  campaign), and the branch-scoped duplicate check (agent tooling);
-- the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
-  bar from references, then its idle rig once a moving blend holds
-  ([the visual bar](#the-visual-bar)). Work whose correctness rests
+- a Vulkan look at glass under a roof, the pair of the Direct3D 12 look the
+  visual bar packet records (glass gathers the irradiance probes,
+  `SdfFrameBlock.WriteInto`), in the next batch window. Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -72,60 +59,69 @@ milestone. The owner requested its baseline and implementation plan, which
    bar]: the caldera water as its first proof (glacier, lake, falls, river,
    pool against the caldera pack), then the per-milestone review across every
    place.
-1. The frame bar [high]: 60 FPS steady state on the lead machine is not met at
-   p99. The far cascade's cadence is settled: a receiver-conditioned cascade's
-   coverage identity names the sample grid alone (`SdfWorldPasses.ReceiverSignatureOf`),
-   so it holds and splits under occlusion culling as it does box-only (it
-   rendered both layers on every frame of the live debug world before, since
-   the identity hashed the geometry signature and the jitter), and every timed
-   refresh splits over two frames whatever the frames' pace, so no frame draws
-   both far layers for the rate's sake and a slow frame is no longer held slow
-   by its own cascade. On the RTX 4070 at 1280×900 that took `shadow-far` from
-   4.4 to 2.2 ms at spawn, 3.4 to 1.8 at the teal roof, 2.0 to 1.4 at flight B
-   and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
-   of GPU at every one of those stops, under the bar with headroom; the frame
-   p50 sits at the display rate there, and what remains over 16.7 ms at p99 is
-   the CPU side, read under a loaded machine, so a quiet-window `bench frames`
-   pair is owed before the p99 is called. The frame thread's CPU side now
-   reads apart: `host.frames` splits produce into `produce-work` and
-   `produce-fence` (time blocked on submission fences) and prints the frame
-   thread's allocated bytes per iteration. A headless debug World's tick
-   allocates about 24 KB on the frame thread (p99 42 KB). Disclosure images are
-   shared by audience, never composed per sink: the debug world's 8.4 row
-   compositions a tick are the public rows one audience reads whole whose values
-   move every tick (the hydrology, glow, clock and watchdog rows), imaged
-   because `WorldDeliveryCursor.DeliveredRows` brings the definition identity
-   current after every delivered snapshot (the disclosure item below). Windowed
-   on the RTX 4070 (Direct3D 12) with `dotnet-trace` (gc-verbose, the GC
-   survival-and-movement keyword read against sampled allocation addresses, and
-   sampled thread time), what remains over 16.7 ms is:
+1. The frame bar [high]: measured quiet, the studio and the meadow meet 60 FPS
+   at p99 and the teal roof and flight B do not. The far cascade's cadence is settled: a
+   receiver-conditioned cascade's coverage identity names the sample grid alone
+   (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
+   two frames, so no frame draws both far layers for the rate's sake. `bench
+   frames` pauses authority at each stop, so its p99 reads the frame side alone;
+   a played frame also carries the tick. What remains, read with `host.frames`
+   (produce split into `produce-work` and `produce-fence`), `world.residency`'s
+   `gpu-work` line, `world.counters sdf.mesh-gi` and `dotnet-trace` sampled
+   thread time at both stops:
 
-   - A young collection, which the frame thread starts itself (it is the only
-     thread allocating small objects at volume): about 4 to 8 ms at a still
-     stop and 9 to 22 ms in the seconds after a move. Thread suspension is under
-     0.2 ms of it; the rest is marking through the cards of a 400 MB gen2 and a
-     2.2 GB large-object heap and copying what they keep alive, at a still spawn
-     about 1.1 MB through cards. The largest survivors are the disclosure
-     definition identities and what a move builds (meshes, draws, irradiance).
-   - GPU back-pressure, seen as `produce-fence` in `SdfWorldTables.SubmitUpload`:
-     the root view's passes take 12 to 14 ms (`views` 5.8 of it) beside the
-     beacon and session views, and the irradiance's relight and meter jobs share
-     the queue (`world.counters sdf.mesh-gi` at the teal roof: about 42 ms of
-     relight and 12 ms of meter GPU time a second, the lighting recaptured about
-     nine times a second as the sky moves). A deeper upload ring would hide a
-     spike, not remove it.
-   - A step frame whose tick runs long: the tick takes 5 to 9 ms (body contact
-     solves through `FixedFieldColliderContact`'s bounds about a fifth, rule
-     evaluation about a third, snapshot delivery about a tenth). Frames without
-     a step carry the rated work (body poses and their effector surface probes in
-     `WorldSurfaceQuery.March`, nested views, screens, the far cascade), which
-     the scheduler moves off step frames without a budget; their `produce-work`
-     p99 reads 9 to 15 ms at the stops below.
+   - Background GPU jobs longer than a frame's share, fixed for the irradiance
+     volume. The queue runs a background job whole before the frame submitted
+     after it, so a job's length, not the average `SdfGpuWork.GpuShare`, decides
+     how late that frame is. The volume's relight jobs were cut at a predicted-ray
+     bound sized against the device timeout (`SdfMeshIrradiance.RelightRaysPerJob`)
+     and charged at a fixed per-ray estimate that undercounted a shadow ray toward
+     a point light by more than an order of magnitude. Beside the teal room's
+     lamps a fresh probe's relight traces toward every one of them, and one probe
+     was one thread group, so a single probe's relight held the queue for about a
+     frame whatever the job's size, and the volume's fill after arrival submitted
+     such jobs a few times a second, seen as produce-fence and present stalls.
+     The relight now spreads each probe over `SdfMeshProbeRelight.Slices` groups,
+     one hit texel a lane, whose partial sums `sdf-probe-combine` adds into the
+     probe's output; jobs are cut to `SdfGpuWork.FrameShareSeconds` at each
+     kind's measured rate (`SdfGpuWorkRate`; `SdfMeshProbeGpuWork.Trace` cuts
+     traces itself and `SdfMeshProbeGpuWork.RelightRaysWithinShare` bounds
+     relights), the service is charged at the same rate, and its bank holds at
+     most one frame's share. `world.residency`'s `gpu-work` line counts the jobs
+     measured past the share (`over-frame-share`) and names the longest
+     (`most-job`); a queued measurement holds the timing question. A probe scene
+     upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
+     share against its `SdfGpuWork.UploadSecondsOf` estimate.
+   - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
+     lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
+     during play still submits jobs of several frames' length. Cutting them with
+     `SdfGpuWorkRate` changes the cold-bake bar's job count and needs its own
+     measured change.
+   - The volume's fill at a place with many point lights. A fresh probe's relight
+     traces every hit texel toward every shadowing point light in range
+     (`sdfProbeShade`), so filling the window beside the teal room's lamps spends
+     minutes of the background share, and indirect light there is stale for that
+     long after arrival. A per-light visibility the probe shares across its
+     texels, or culling lights by each hit's distance before the trace, would
+     cut it at the cause.
+   - The frame thread is CPU-bound at both stops: sampled thread time finds it
+     running almost the whole of every iteration. The tick (`WorldTick.StepCore`:
+     `WorldPopulation.AdvanceSimulated`, `WorldRuleHost.EvaluateWorldRules`,
+     `WorldTick.EmitSnapshot`) runs on the frame thread (`HostLoop.Run`) and takes
+     the largest share; then the frame's capture (`SdfWorldResidency.Capture`:
+     `WorldFramePresenter.CaptureFrame`, and `SdfCompositionFrameSource.PackTransforms`
+     through `WorldCreationInstances.PackRegistration`), table packing and screen
+     binding (`SdfWorldResidency.PrepareOnce`), and the upload's fence wait
+     (`SdfWorldTables.SubmitUpload`). Zero-fill and copies are a visible slice:
+     `HashSet<int>.Clear` in `WorldDeliveryRows.Advance`,
+     `WorldBody.CaptureIntegrationResidue` (beside the scoped replay's
+     `WorldScopedReplayRuntime.AfterTick`, whose `WorldPopulation.AppendContinuationHash`
+     encodes each scope body's checkpoint every tick the scope runs) and
+     `WorldInputOwner.TryAdmit`. Garbage collection
+     was not a factor in the traced windows. Rated work still lands on frames
+     without a step, so both kinds of frame sit near the budget and any jitter
+     misses it.
 
-   Readings at the lane's head (`host.frames` over 600 to 1200 iterations after
-   bakes settled and 150 ticks, a lightly loaded machine, not a timing claim):
-   spawn 50 of 1200 iterations over 16.7 ms (p99 23.6), the teal roof 7 of 1199
-   (p99 17.2), flight B 63 of 878 (p99 27.0), the meadow 38 of 899 (p99 19.1).
    `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
@@ -843,7 +839,7 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   retained original vertices witness themselves, and rejected distances skip
   normal interpolation. Planar merging precedes spatial splitting so artificial
   seams do not keep flat contour rows through every level. The lattice divides
-  fine keys by multiplication (`SdfSampledLattice.FineDivisor`). A further
+  fine keys by multiplication (`ReciprocalDivisor32`). A further
   halving of the collapse needs fewer or cheaper acceptance checks per
   collapse (about five attempts a collapse, half refused by `Measure` at the
   removed vertex's own samples), not lower overhead.
@@ -1610,6 +1606,25 @@ by `world.view.pick`.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
+- [high] The hall's interiors read near black at noon. The exposure floor
+  (`worlds/debug/hall.puck`, `exposure.minimum`, EV 7 from dawn to dusk) holds
+  view 0 at EV 7 in the devices room, where the probes meter 9 to 15 nits and
+  the metered exposure with the authored compensation is about EV 4.5: about
+  two and a half stops under, so the walls, floor and devices read as murk.
+  The floor exists so the moonlit valley reads at night; a daytime floor that
+  clamps every dim interior is the wrong lever. Decide the interiors' look
+  (lamps, fill, or an exposure that meters them) against the gallery's
+  references, then judge every room.
+- [medium] The Humble Gaming Brick's atomic-orange glass shell
+  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as an
+  opaque deep red even at a pinned exposure that shows the room (EV 4.5): the
+  board, chips and cells behind it do not show through. On Direct3D 12 the
+  probe gather leaks no sky light into it under the roof (it reads as dim as
+  its surroundings, neither glowing nor black).
+- [low] `world.indirect off` leaves auto exposure metering the probes (view 0
+  read 15.272 nits before and after the toggle) while the frame turns white at
+  EV 4.5 in the devices room: the lever's fallback ambient lights an interior
+  as if it stood under the open sky, and the meter does not follow it.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
@@ -2051,16 +2066,6 @@ certified-contact packet and step 8 closes. The measured state is in the
   instance path), and `world.nudge` with a captured reference frame
   (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
   change and now cover dealt children too. Route both through the one resolver.
-- [medium · duplicate] Division by a reused divisor through a ceil(2^64/d)
-  high multiply exists twice, both private: `SdfSampledLattice.FineDivisor`
-  and `PrimeExtensions.QuotientCountWord32` (`Reciprocal`, `Divide`). Make one
-  public reciprocal divisor in `Puck.Maths` and move both callers onto it. Its
-  neighbour `SdfMeshCollapse.Collapser.MixedKey` is a private comparer for packed
-  `long` place pairs, whose default hash folds the halves together; any other
-  dictionary keyed by a packed pair collides the same way, so the comparer
-  belongs beside `InvertibleBitMix` where every such dictionary can share it.
-  The bake-collapse lane searched for a divisor and missed the prime kernel's
-  under its other name.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
@@ -4102,7 +4107,8 @@ brief's priorities ([security review](../development/security-review.md)).
   credential selection, with a bound-seat positive control and an unbound-link
   refusal case.
 
-- [medium, confirmed] Rejected payload selection (verified finding 2.1).
+- [medium, confirmed] Rejected payload selection (verified finding 2.1;
+  [the updater policy memo](updater-policy.md)).
   `StubInstall.RevertToLastGood` cancels the failed version's intent but records
   no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
   slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
@@ -4113,7 +4119,8 @@ brief's priorities ([security review](../development/security-review.md)).
   rollback, consult it at install selection and retention, and prove that rollout
   metadata progression cannot retry identical rejected content while changed
   payloads remain eligible. Keep this state separate from transient launch attempts.
-- [medium, confirmed] Revoked rollback candidate (verified finding 2.2).
+- [medium, confirmed] Revoked rollback candidate (verified finding 2.2;
+  [the updater policy memo](updater-policy.md)).
   `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
   does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
   revoked current as last-good; `StubDecisionTable.Decide` checks generations and
@@ -4566,6 +4573,11 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [low] `puck measure` has no verb to withdraw a queued request: a lane that
+  filed one against a build it later found wrong cannot take it back, so it
+  stays pending and an unfiltered `measure run` spends window time on it. Add
+  `measure withdraw <id> --reason <text>`, recorded beside the request as the
+  hand-edited withdrawals already are.
 - [medium] `puck_world_start` discards a build and asks for a restart when
   any file under the checkout changes mid-build, documentation included (a
   lane lost two builds to its own doc edits). Key the source state on what the
@@ -4742,22 +4754,14 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
-- [high] A mechanical duplicate check over a branch. The landing check in
-  [orchestration](../../.claude/skills/orchestration/SKILL.md#write-and-track-assignments)
-  is done by hand: list the branch's new declarations and search each general
-  technique against its shared home. `puck scan --only clones` finds token
-  clones over the whole tree, but most duplicates are the same technique in
-  other code (a reciprocal divisor, a frame resolver, a CPU twin of a GPU
-  kernel). Give the scan a branch scope (new declarations against a base), a
-  flag for `private` or `internal` helpers whose shape is a general technique,
-  and a near-neighbour pass (normalized bodies, shared constants and BCL calls)
-  against the rest of the tree; the lead and every lane run it before landing.
 - [medium] Capability indexes in the area skills. A skill's map answers "where
   is symbol X"; a duplicate is written when an agent asks "what does X" and no
   index answers. Give each area skill a capability table (`maths-usage`'s
-  Choose table is the model), starting with the areas where copies were found:
-  rendering (frame and placement resolution, CPU twins of kernels), the world
-  deal and placement code, and collections and comparers.
+  Choose table is the model; the rendering skill's "What already does it" is
+  the first), starting with the areas where copies were found: the world deal
+  and placement code, and collections and comparers. Rendering's table lists
+  what each mechanism does; extend it with the rows the next duplicate shows
+  it lacks.
 
 - [low] Five new area skills (state, physics, media, platform, dashboard) have
   ten capability eval cases that have not run, and seven sibling skills gained

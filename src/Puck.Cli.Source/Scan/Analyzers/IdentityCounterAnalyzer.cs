@@ -44,11 +44,7 @@ internal sealed class IdentityCounterAnalyzer : ISourceAnalyzer {
             (segment == "Puck.World.Server") ||
             (segment == "Puck.World.Schema")
         ));
-    private static string TypeKey(SyntaxNode node) =>
-        string.Join(
-            separator: ".",
-            values: node.AncestorsAndSelf().OfType<BaseTypeDeclarationSyntax>().Reverse().Select(selector: static type => type.Identifier.ValueText)
-        );
+    private static string TypeKey(SyntaxNode node) => ScanSyntax.TypePath(node: node);
     private static string MemberName(SyntaxNode node) => node.Ancestors().FirstOrDefault(predicate: static ancestor => ancestor is MemberDeclarationSyntax and not BaseTypeDeclarationSyntax) switch {
         MethodDeclarationSyntax method => method.Identifier.ValueText,
         PropertyDeclarationSyntax property => property.Identifier.ValueText,

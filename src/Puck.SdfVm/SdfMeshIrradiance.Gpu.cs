@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -160,8 +161,8 @@ public sealed partial class SdfMeshIrradiance {
                         row[7] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
                         row[8] = probe.GpuSlot;
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
-                        row[9] = (uint)token;
-                        row[10] = (uint)(token >> 32);
+                        row[9] = PackedIntPair.Low(value: token);
+                        row[10] = PackedIntPair.High(value: token);
                         var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
                         row[11] = BitConverter.SingleToUInt32Bits(age);
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
@@ -249,19 +250,20 @@ public sealed partial class SdfMeshIrradiance {
         return rows;
     }
 
-    // The predicted rays one relight job carries at most (RelightRays). A relight shades every hit texel of each probe
-    // toward every shadowing light that reaches it (sdfProbeShade): a probe that reuses its local cube traces toward the
-    // directional lights alone, a fresh one toward every point light in range as well, so one batch's cost spans two
-    // orders of magnitude for one probe count. A whole 384-probe batch of fresh probes beside the debug world's stage,
-    // 78 shadowing point lights in range of each, ran past the device's timeout as one dispatch.
+    // The predicted rays one relight job carries at most whatever its measured rate (RelightRays). A relight shades every
+    // hit texel of each probe toward every shadowing light that reaches it (sdfProbeShade): a probe that reuses its local
+    // cube traces toward the directional lights alone, a fresh one toward every point light in range as well, so one
+    // batch's cost spans two orders of magnitude for one probe count. A whole 384-probe batch of fresh probes beside the
+    // debug world's stage, 78 shadowing point lights in range of each, ran past the device's timeout as one dispatch.
     internal const long RelightRaysPerJob = 1L << 17;
     private long[] m_gpuRelightRays = [];
 
     // Relights a batch's probes on the GPU and commits each probe's published record into the feedback volume: the rows
-    // for the whole batch are composed once, then submitted in consecutive jobs of at most RelightRaysPerJob predicted
-    // rays each (a probe whose own prediction exceeds it goes alone), each committed before the next is submitted, so no
-    // relight dispatch carries more than that bound however many lights reach the batch. False when the snapshot no
-    // longer stands at a commit; the probes committed before it stay committed.
+    // for the whole batch are composed once, then submitted in consecutive jobs whose predicted rays fit background
+    // work's share of a frame at the relight's measured rate (SdfMeshProbeGpuWork.RelightRaysWithinShare, at most
+    // RelightRaysPerJob; a probe whose own prediction exceeds it goes alone), each committed before the next is
+    // submitted, so no relight job holds the frame behind it longer than that share however many lights reach the batch.
+    // False when the snapshot no longer stands at a commit; the probes committed before it stay committed.
     private bool RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = (m_gpuLightingRows = LightingRows(lighting, in snapshot, feedback, rows: m_gpuLightingRows));
@@ -292,8 +294,8 @@ public sealed partial class SdfMeshIrradiance {
                 probes[i] = probe;
                 row[0] |= 4;
             }
-            row[1] = (uint)probe.GpuToken;
-            row[2] = (uint)(probe.GpuToken >> 32);
+            row[1] = PackedIntPair.Low(value: probe.GpuToken);
+            row[2] = PackedIntPair.High(value: probe.GpuToken);
             row[3] = probe.GpuSlot;
             Compose(in probe, candidate.Cell, row[SdfMeshProbeRelight.RecordInputWord..]);
             var reuses = false;
@@ -308,7 +310,8 @@ public sealed partial class SdfMeshIrradiance {
         }
         for (var start = 0; (start < count);) {
             var end = start + 1;
-            for (var taken = m_gpuRelightRays[start]; (end < count) && ((taken + m_gpuRelightRays[end]) <= RelightRaysPerJob); end++) { taken += m_gpuRelightRays[end]; }
+            var bound = GpuTrace!.RelightRaysWithinShare;
+            for (var taken = m_gpuRelightRays[start]; (end < count) && ((taken + m_gpuRelightRays[end]) <= bound); end++) { taken += m_gpuRelightRays[end]; }
             var rays = 0L;
             for (var i = start; (i < end); i++) { rays += m_gpuRelightRays[i]; }
             using var output = RelightGpuJob(candidates: candidates, first: first, start: start, count: (end - start), probes: probes, lights: lights, rows: rows, rays: rays, snapshot: in snapshot);

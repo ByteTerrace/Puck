@@ -646,26 +646,23 @@ public static partial class PrimeExtensions {
             ))));
         }
 
-        return CountQuotients<uint, QuotientCountWord32>(cancellationToken: default, squareRoot: ((uint)Math.Sqrt(d: value)), value: value);
+        return CountQuotients(cancellationToken: default, squareRoot: ((uint)Math.Sqrt(d: value)), value: value);
     }
 
-    // The narrow quotient-counting recurrence. TLarge carries pi(value/k) and every quotient of value;
+    // The narrow quotient-counting recurrence. larges carries pi(value/k) and every quotient of value;
     // smalls hold pi(k) for k<=sqrt.
     // Requires value>=9 and squareRoot=floor(sqrt(value)).
-    private static TLarge CountQuotients<TLarge, TWidth>(TLarge value, uint squareRoot, CancellationToken cancellationToken)
-        where TLarge : unmanaged, IBinaryInteger<TLarge>, IUnsignedNumber<TLarge>
-        where TWidth : struct, IQuotientCountWidth<TLarge> {
+    private static uint CountQuotients(uint value, uint squareRoot, CancellationToken cancellationToken) {
         var roughCount = ((squareRoot + 1U) >> 1);
         var ignore = ArrayPool<bool>.Shared.Rent(minimumLength: ((int)(squareRoot + 1U)));
-        var larges = ArrayPool<TLarge>.Shared.Rent(minimumLength: ((int)roughCount));
-        var multipliers = ArrayPool<ulong>.Shared.Rent(minimumLength: ((int)roughCount));
+        var larges = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)roughCount));
+        var divisors = ArrayPool<ReciprocalDivisor32>.Shared.Rent(minimumLength: ((int)roughCount));
         var roughs = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)roughCount));
         var smalls = ArrayPool<uint>.Shared.Rent(minimumLength: ((int)roughCount));
-        var root = TLarge.CreateTruncating(value: squareRoot);
 
         try {
             for (var index = 0U; (index < roughCount); ++index) {
-                larges[index] = (((value / TLarge.CreateTruncating(value: ((index << 1) + 1U))) - TLarge.One) >> 1);
+                larges[index] = (((value / ((index << 1) + 1U)) - 1U) >> 1);
                 roughs[index] = ((index << 1) + 1U);
                 smalls[index] = index;
             }
@@ -676,7 +673,7 @@ public static partial class PrimeExtensions {
                 if (ignore[factor]) { continue; }
                 var factorSquared = (((ulong)factor) * factor);
 
-                if ((factorSquared * factorSquared) > ulong.CreateTruncating(value: value)) { break; }
+                if ((factorSquared * factorSquared) > value) { break; }
                 cancellationToken.ThrowIfCancellationRequested();
                 ignore[factor] = true;
                 for (var multiple = ((uint)factorSquared); (multiple <= squareRoot); multiple += (factor << 1)) { ignore[multiple] = true; }
@@ -686,13 +683,13 @@ public static partial class PrimeExtensions {
                     var rough = roughs[index];
 
                     if (ignore[rough]) { continue; }
-                    // rough<=sqrt(value) and factor<=value^(1/4), so the product fits TLarge.
-                    var product = (TLarge.CreateTruncating(value: rough) * TLarge.CreateTruncating(value: factor));
-                    var removed = ((product > root)
-                        ? TLarge.CreateTruncating(value: smalls[uint.CreateTruncating(value: (((value / product) - TLarge.One) >> 1))])
-                        : larges[(smalls[uint.CreateTruncating(value: (product >> 1))] - counter)]);
+                    // rough<=sqrt(value) and factor<=value^(1/4), so the product fits uint.
+                    var product = (rough * factor);
+                    var removed = ((product > squareRoot)
+                        ? smalls[(((value / product) - 1U) >> 1)]
+                        : larges[(smalls[(product >> 1)] - counter)]);
 
-                    larges[nextCount] = ((larges[index] - removed) + TLarge.CreateTruncating(value: counter));
+                    larges[nextCount] = ((larges[index] - removed) + counter);
                     roughs[nextCount++] = rough;
                 }
                 roughCount = nextCount;
@@ -712,44 +709,31 @@ public static partial class PrimeExtensions {
                 ++counter;
             }
 
-            var count = TLarge.CreateTruncating(value: roughCount);
+            var count = roughCount;
 
-            larges[0] += (((count + (TLarge.CreateTruncating(value: (counter - 1U)) << 1)) * (count - TLarge.One)) >> 1);
+            larges[0] += (((count + ((counter - 1U) << 1)) * (count - 1U)) >> 1);
             for (var index = 1U; (index < roughCount); ++index) { larges[0] -= larges[index]; }
-            for (var index = 1U; (index < roughCount); ++index) { multipliers[index] = TWidth.Reciprocal(divisor: roughs[index]); }
+            for (var index = 1U; (index < roughCount); ++index) { divisors[index] = new ReciprocalDivisor32(divisor: roughs[index]); }
             for (var index = 1U; (index < roughCount); ++index) {
-                var quotient = TWidth.Divide(divisors: roughs, index: index, reciprocals: multipliers, value: value);
-                var bound = (smalls[uint.CreateTruncating(value: ((TWidth.Divide(divisors: roughs, index: index, reciprocals: multipliers, value: quotient) - TLarge.One) >> 1))] - counter);
+                var quotient = divisors[index].Divide(value: value);
+                var bound = (smalls[((divisors[index].Divide(value: quotient) - 1U) >> 1)] - counter);
 
                 if (bound < (index + 1U)) { break; }
-                var sum = TLarge.Zero;
+                var sum = 0U;
 
                 for (var next = (index + 1U); (next <= bound); ++next) {
-                    sum += TLarge.CreateTruncating(value: smalls[uint.CreateTruncating(value: ((TWidth.Divide(divisors: roughs, index: next, reciprocals: multipliers, value: quotient) - TLarge.One) >> 1))]);
+                    sum += smalls[((divisors[next].Divide(value: quotient) - 1U) >> 1)];
                 }
-                larges[0] += (sum - (TLarge.CreateTruncating(value: (bound - index)) * TLarge.CreateTruncating(value: ((counter + index) - 1U))));
+                larges[0] += (sum - ((bound - index) * ((counter + index) - 1U)));
             }
-            return (larges[0] + TLarge.One);
+            return (larges[0] + 1U);
         } finally {
             ArrayPool<uint>.Shared.Return(array: smalls);
             ArrayPool<uint>.Shared.Return(array: roughs);
-            ArrayPool<ulong>.Shared.Return(array: multipliers);
-            ArrayPool<TLarge>.Shared.Return(array: larges);
+            ArrayPool<ReciprocalDivisor32>.Shared.Return(array: divisors);
+            ArrayPool<uint>.Shared.Return(array: larges);
             ArrayPool<bool>.Shared.Return(array: ignore);
         }
     }
 
-    // Division of a quotient-counting word by an odd divisor 1<d<=sqrt(value) through a precomputed reciprocal.
-    // Divide reads divisors[index] only when its width needs the divisor itself.
-    private interface IQuotientCountWidth<TLarge> where TLarge : unmanaged, IBinaryInteger<TLarge> {
-        static abstract ulong Reciprocal(uint divisor);
-        static abstract TLarge Divide(TLarge value, uint[] divisors, ulong[] reciprocals, uint index);
-    }
-    private readonly struct QuotientCountWord32 : IQuotientCountWidth<uint> {
-        // ceil(2^64/d): for a 32-bit value the high product is exactly floor(value/d), since the reciprocal's
-        // excess below d times value stays below 2^64.
-        public static ulong Reciprocal(uint divisor) => ((ulong.MaxValue / divisor) + 1UL);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static uint Divide(uint value, uint[] divisors, ulong[] reciprocals, uint index) => ((uint)((((UInt128)reciprocals[index]) * value) >> 64));
-    }
 }

@@ -578,7 +578,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         try {
             dxgiDevice->GetAdapter(pAdapter: &adapter);
             var description = adapter->GetDesc();
-            var actualLuid = (((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart;
+            var actualLuid = GpuAdapterLuid.Pack(highPart: description.AdapterLuid.HighPart, lowPart: description.AdapterLuid.LowPart);
 
             if (actualLuid != expectedLuid) {
                 throw new NotSupportedException(message: $"the camera GPU selected adapter 0x{actualLuid:X16}, but the renderer uses 0x{expectedLuid:X16}");

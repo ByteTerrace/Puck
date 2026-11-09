@@ -111,7 +111,7 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   passes all checks. `PrepareFrom` lays out each source fan's corners, link
   stamps and geometry once for every neighbour tried; its tracked samples and
   lines are listed by the first neighbour that needs them. A `Dictionary<long, …>`
-  keyed by two packed places takes `MixedKey`: long's own hash folds the halves,
+  keyed by two packed places takes `PackedIntPairComparer.Instance`: long's own hash folds the halves,
   and neighbouring places collided until the refusal lookups dominated a mesh.
   A faster query or a different witness assignment still needs the field audit:
   tiny arithmetic and ownership changes can alter later collapse choices and

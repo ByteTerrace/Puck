@@ -13,6 +13,15 @@ public static class AffectedCommand {
     /// <summary>The tree of the repository's world asset packages, repository-relative.</summary>
     public const string ShippedTree = "worlds";
 
+    /// <summary>The trees a canary's world documents, the sources they lower from, and every file their compiles read
+    /// are authored in: what a revision's document composer needs exported.</summary>
+    public static IReadOnlyList<string> DocumentTrees { get; } = [
+        "tests/Puck.World.Canaries",
+        "tests/Puck.World.Verdicts",
+        "tests/Puck.Counters",
+        "worlds",
+    ];
+
     private const string Verb = "affected";
 
     private static string Relative(string repositoryRoot, string path) => Path.GetRelativePath(
@@ -151,7 +160,7 @@ public static class AffectedCommand {
         // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
         // base's map, over the tree the base recorded, only for a deleted file one can reach.
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
-        using var baseTree = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: since, root: repositoryRoot);
+        using var baseTree = new AffectedRevisionTree(documentTrees: AffectedCommand.DocumentTrees, revision: since, root: repositoryRoot);
         // Each tree's kernels and post-process packages are read once, for its documents' reach.
         var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
         var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);
@@ -175,7 +184,7 @@ public static class AffectedCommand {
 
         bool WorldInput(string path) => worldRoots.Value.Any(predicate: root => (string.Equals(a: path, b: root, comparisonType: StringComparison.Ordinal) || path.StartsWith(comparisonType: StringComparison.Ordinal, value: (root + "/"))));
 
-        // Reading the base revision's documents exports its files (AffectedRevisionExport), which a stalled or failing
+        // Reading the base revision's documents exports its files (RevisionExport), which a stalled or failing
         // git refuses by name.
         try {
             plan = AffectedSelection.Select(
@@ -199,7 +208,7 @@ public static class AffectedCommand {
                     ? reaching
                     : none)
             );
-        } catch (AffectedRevisionExportRefusedException exception) {
+        } catch (RevisionExportRefusedException exception) {
             error = exception.Message;
 
             return false;
