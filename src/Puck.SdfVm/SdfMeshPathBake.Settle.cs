@@ -133,25 +133,10 @@ public sealed partial class SdfMeshPathBake {
             transforms: frame.DynamicTransforms
         )!;
 
-        group.TakeDemandBox();
         Library.Settles.Count(kind: SdfMeshSettle.Queued);
         StartSettle(time: frame.Time);
-        group.Replaces = old;
-        Replace(group: group, index: index);
-        m_replacing.Add(item: (group, index));
         m_productRevision++;
-        group.Identity = Identity.Value;
-        if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked)) {
-            group.Mesh = baked;
-            group.Done = true;
-            group.Stored = true;
-            return false;
-        }
-
-        group.Mesh = old.Mesh?.Acquire();
-        _ = Begin(group: group);
-
-        return true;
+        return StartReplacement(group: group, index: index, old: old);
     }
     // Whether the bake may start another settle rebake at `time`: fewer than SdfMeshSettle.MaxPerSecond started in the
     // second before it. A time before the oldest start (a new frame source's clock) forgets the starts.

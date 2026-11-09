@@ -181,10 +181,16 @@ public sealed partial class SdfMeshPathBake {
 
         // A dynamic slot no active instance rides any more plans nothing; the next program drops the group.
         if (ReferenceEquals(objA: group, objB: old)) { return false; }
-        group.TakeDemandBox();
         group.Retiering = true;
         group.OwedFrames = old.OwedFrames;
         group.DemandedTier = old.DemandedTier;
+        return StartReplacement(group: group, index: index, old: old);
+    }
+    // Starts a replacement planned for a landed group in that group's place: the library's mesh of its geometry lands at
+    // once, and otherwise it bakes (or loads from the store) while the mesh it replaces keeps drawing; true when the
+    // replacement is still to land. FinishReplacements retires the replaced group once it does. Under the gate.
+    private bool StartReplacement(Group group, Group old, int index) {
+        group.TakeDemandBox();
         group.Replaces = old;
         Replace(group: group, index: index);
         m_replacing.Add(item: (group, index));

@@ -76,7 +76,7 @@ lattice's spacing is never finer than MinimumCell, so a small part meshes at
 the detail a view resolves rather than at its own scale", with
 `if (gradients) { target = MathF.Max(x: target, y: MinimumCell); }`. A part
 refines below the floor only where its instance declares detail: a static
-shape through `WorldPlacementStamper.ShapeDetail`
+shape through `WorldShapeDetail.Of`
 (`src/Puck.World.Client/WorldPlacementStamper.cs:588-638`), which reads
 cellular relief, a sweep's radius, an onion, a rounded profile, a warp's
 smallest extent and `PlateDetail`'s half thickness, floored at
@@ -85,7 +85,7 @@ part through `PartDetail` (`src/Puck.World.Client/WorldCreationInstances.Emit.cs
 whose `SectionDetail` is a round section's radius over `CellsPerRadius`,
 "zero for none, or for one no finer than the bake's own lattice already is".
 A dynamic group then merges every member's detail into one box
-(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:365-372`):
+(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:388-390`):
 
 ```csharp
                 group.DetailLow = (first ? low : Vector3.Min(value1: group.DetailLow, value2: low));
@@ -181,7 +181,7 @@ outline's corners in the profile plane; `rounding` on every other prism insets
 cap edges along the extrusion. A convex blade therefore keeps sharp cap edges,
 and the open item records the workaround (superellipsoids). **[opened]** The
 detail code already prices the combination the door refuses:
-`WorldPlacementStamper.ShapeDetail` (`:604-611`) computes
+`WorldShapeDetail.ProfileCorner` computes
 `SdfProgramBuilder.ClampRounding(rounding: ((profile.CornerRadius * inradius) + (shape.Rounding ?? 0f)), …)`
 for a Convex profile, so the bake expects a Convex prism to carry both.
 
