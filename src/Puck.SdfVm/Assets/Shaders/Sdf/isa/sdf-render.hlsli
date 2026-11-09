@@ -53,6 +53,7 @@
 #define SDF_PAINT_VECTORS_PER_ENTRY    13u
 #define SDF_MAX_PAINTS_PER_MATERIAL    8u
 #define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
+#define SDF_PAINT_DRAW_FRAME           0xFFFFFFFEu
 
 // The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).
 #define SDF_MAX_SCREEN_SURFACES      32u

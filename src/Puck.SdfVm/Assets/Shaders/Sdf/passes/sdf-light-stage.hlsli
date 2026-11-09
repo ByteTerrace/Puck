@@ -134,7 +134,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             SdfShadeBinding shadeBinding = sdfShadeBinding(material);
             float paintCoverage;
             bool deferPaint = (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u;
-            sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, paintFirst, paintCount, deferPaint, paintedAlbedo, paintCoverage);
+            sdfApplyPaints(surfacePoint, layerPoint, s.meshDraw, p.pixelFootprint * s.t, paintFirst, paintCount, deferPaint, paintedAlbedo, paintCoverage);
 
             SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
 

@@ -7,11 +7,11 @@
 // shape dispatch (evaluateShape) and never through the field, gives the albedo the paint's colour inside the shape, or
 // within its stroke of the shape's surface, the edge antialiased over `footprint`, the world size of the pixel at the
 // hit. `worldPoint` is the hit in world space and `layerPoint` in the winning frame; a paint riding a slot reads that
-// slot's frame. A hit outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. It reads
-// and writes the albedo alone (sdfMaterialPaints), so the caller loads the rest of the material after it: a material
-// live across the shape dispatch held the views pass at 168 registers on Direct3D 12. KEEP IN SYNC with
-// SdfAppearance.PackPaint.
-void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint paintFirst, uint paintCount, bool deferLast, inout float3 albedo, out float coverage) {
+// slot's frame, and one riding the draw frame reads the object space of `meshDraw`, the draw holding the hit. A hit
+// outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. It reads and writes the
+// albedo alone (sdfMaterialPaints), so the caller loads the rest of the material after it: a material live across the
+// shape dispatch held the views pass at 168 registers on Direct3D 12. KEEP IN SYNC with SdfAppearance.PackPaint.
+void sdfApplyPaints(float3 worldPoint, float3 layerPoint, uint meshDraw, float footprint, uint paintFirst, uint paintCount, bool deferLast, inout float3 albedo, out float coverage) {
     coverage = 0.0;
     uint count = min(paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
     if ((count == 0u) || !sdfProgramRange(paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
@@ -25,7 +25,9 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint 
         uint slot = asuint(slotCenter.x);
         float3 p = layerPoint;
 
-        if (slot != SDF_PAINT_WINNING_FRAME) {
+        if (slot == SDF_PAINT_DRAW_FRAME) {
+            p = sdfMeshObjectPoint(sdfMeshRecord(meshDraw), worldPoint);
+        } else if (slot != SDF_PAINT_WINNING_FRAME) {
             float4 slotRotation = sdfDynamicTransformRow((3u * slot) + 1u);
             if (dot(slotRotation, slotRotation) <= 0.0) continue;
             p = rotatePointByInverseQuaternion((worldPoint - sdfDynamicTransformRow(3u * slot).xyz), slotRotation);

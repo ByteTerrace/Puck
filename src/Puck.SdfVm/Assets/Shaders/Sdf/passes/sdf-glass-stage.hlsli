@@ -289,7 +289,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             uint paintCount;
             float3 painted = sdfMaterialPaints(materialId, paintFirst, paintCount);
             float paintCoverage;
-            sdfApplyPaints(surfacePoint, layerPoint, footprint * t, paintFirst, paintCount,
+            sdfApplyPaints(surfacePoint, layerPoint, draw, footprint * t, paintFirst, paintCount,
                 (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
             material.albedo = painted;
             SdfShadeStamp shadeStamp = sdfShadeStamp(material, surfacePoint, layerPoint, normal, rayDirection,

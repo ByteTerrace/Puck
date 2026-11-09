@@ -61,6 +61,8 @@ import "lawn"
 import "water"
 import "pool"
 import "water-scenery"
+// A barn swallow on the reservoir pavilion's rail by the pool (birds.puck).
+import "birds"
 import "forest"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"

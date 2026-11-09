@@ -130,8 +130,9 @@ public static class WorldPlacementStamper {
             ),
             val2: 1
         );
-    // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
-    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null, CreationMotionPlan? motion = null) {
+    // Registers a creation's palette into ids, which holds PaletteLength(document) entries. templateScale is the scale a
+    // static copy's shared template bakes at (WorldRigidAssets), whose parented paints ride the draw frame.
+    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null, CreationMotionPlan? motion = null, float? templateScale = null) {
         var palette = (document.Palette ?? []);
         var count = Math.Min(
             val1: palette.Count,
@@ -161,16 +162,18 @@ public static class WorldPlacementStamper {
                 albedo: albedo,
                 colors: colors,
                 scale: (pool?.Scale ?? 1f),
-                paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion)
+                paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion, templateScale: templateScale)
             ));
         }
     }
 
     // A palette slot's paints. A creation resolves a parented paint into its parent's motion-owner frame and
-    // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
+    // scales it by the placement. A static copy of a shared template (templateScale) has no slot: its parented paint
+    // resolves into the template's space at the parent's rest pose and rides the draw frame, which the copy's matrix
+    // takes to the world. Any other static placement shares one palette across placements baked in world space, so it
     // draws only the paints that ride the winning frame, as authored. A paint parented to a shape the isolation hides
     // goes with it.
-    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool, bool[]? hidden, CreationMotionPlan? motion) {
+    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool, bool[]? hidden, CreationMotionPlan? motion, float? templateScale) {
         if (entry?.Paints is not { Count: > 0 } paints) {
             return null;
         }
@@ -184,7 +187,9 @@ public static class WorldPlacementStamper {
 
                 continue;
             }
-            if (pool is not { } frames) {
+            var frames = (pool ?? ((templateScale is { } bake) ? (RootSlot: SdfPaint.DrawFrame, Scale: bake) : null));
+
+            if (frames is not { } frame) {
                 continue;
             }
 
@@ -197,11 +202,12 @@ public static class WorldPlacementStamper {
             if ((hidden is not null) && hidden[shapeIndex]) {
                 continue;
             }
-            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: (frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)));
+            var slot = ((pool is null) ? frame.RootSlot : (frame.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)));
+            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frame.Scale, slot: slot);
             var shape = shapes[shapeIndex];
 
             resolved.Add(authored with {
-                Origin = ((shape.Position.Value * frames.Scale) + Vector3.Transform(authored.Origin, shape.Rotation.Value)),
+                Origin = ((shape.Position.Value * frame.Scale) + Vector3.Transform(authored.Origin, shape.Rotation.Value)),
                 Rotation = Quaternion.Normalize((shape.Rotation.Value * authored.Rotation)),
             });
         }
