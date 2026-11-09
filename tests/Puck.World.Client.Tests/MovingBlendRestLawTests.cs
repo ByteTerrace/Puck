@@ -21,12 +21,12 @@ public sealed class MovingBlendRestLawTests {
             Drivers = [new("clock", CreationDriverDocument.SignalTime, 1f)],
             Frames = kind == "frame" ? [new("away", [new(0, Vector3.UnitY, Quaternion.Identity)])] : null,
         };
-        var creation = CreationFixtures.Prototype("rest-delta", document);
+        var creation = CreationFixtures.Prototype(id: "rest-delta", document: document);
         var definition = Fixtures.BuildDocument() with { CreationsRaw = [creation], LookRowsRaw = [new("rest-delta", new WorldLookSource.Creation(creation.Id), 1f, WorldLookMotion.Default)] };
         var client = ClientFixtures.Client(definition);
         var rootPosition = new Vector3(2f, 3f, 4f);
         var rootRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
-        client.DeliverSnapshot(new("a", 1, 1, 1, [new(Active: true, Index: 0, Generation: 1, Continuity: EntityContinuity.Continuous, BodyColor: Vector3.One, CatalogRig: 0, Kit: 0, Look: 0, Orientation: rootRotation, Position: rootPosition)]));
+        client.DeliverSnapshot(new(Authority: "a", Revision: 1, Tick: 1, StepTicks: 1, Entries: new EntitySnapshot[] { new(Active: true, Index: 0, Generation: 1, Continuity: EntityContinuity.Continuous, BodyColor: Vector3.One, CatalogRig: 0, Kit: 0, Look: 0, Orientation: rootRotation, Position: rootPosition) }));
         client.UpdateRenderPoses(1f);
         var pool = new WorldCreationInstances();
         pool.Reconcile(WorldPlacementFrameCompilation.Compile([], 0), [], [creation], [], [new(0, creation, 1f, WorldLook.Implicit)]);

@@ -2021,7 +2021,7 @@ public sealed partial class SdfMeshPathBake {
         if (skinned) {
             mesh = SdfMeshSkin.Build(mesh!, m_program!, group, out var refusal);
             if (mesh is null) {
-                SdfMeshBakeReport.Refused(selector: group.Selector, refusal: $"moving blend splits: {refusal}");
+                SdfMeshBakeReport.SkinSplit(group.Selector, group.Sealed, refusal);
                 mesh = SdfMeshSkin.Split(m_program!, group);
             }
         }

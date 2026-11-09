@@ -216,6 +216,8 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
     public static void Refused(int selector, string refusal) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
+    /// <summary>Names a rest skin that fell back to rigid owner contours.</summary>
+    public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Console.Error.WriteLine($"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

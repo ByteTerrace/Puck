@@ -101,9 +101,9 @@ public static class SdfMeshSkin {
         var influences = new SdfMeshInfluence[first.Length];
         var places = new Dictionary<Vector3, (byte First, SdfMeshInfluence Influence)>();
         var weights = new FixedQ4816[slots.Length];
-        var low = new FixedQ4816[slots.Length];
-        var high = new FixedQ4816[slots.Length];
-        var step = FixedQ4816.FromRawBits(64); // 1/1024 metre; fixed stencil, independent of backend and vertex normal.
+
+
+
         for (var vertex = 0; vertex < first.Length; vertex++) {
             var point = mesh.Positions.Span[vertex];
             if (!places.TryGetValue(point, out var tuple)) {
@@ -119,17 +119,7 @@ public static class SdfMeshSkin {
                 var share = ((a == b) || (total == FixedQ4816.Zero)) ? FixedQ4816.Zero : (weights[b] / total);
                 var gradient = FixedVector3.Zero;
                 if ((share > FixedQ4816.Zero) && (share < FixedQ4816.One)) {
-                    var derivatives = new FixedQ4816[3];
-                    for (var axis = 0; axis < 3; axis++) {
-                        var offset = new FixedVector3(axis == 0 ? step : FixedQ4816.Zero, axis == 1 ? step : FixedQ4816.Zero, axis == 2 ? step : FixedQ4816.Zero);
-                        if (!field.ReadInfluences(FixedPosition.FromLocal(fixedPoint - offset), owners, low) || !field.ReadInfluences(FixedPosition.FromLocal(fixedPoint + offset), owners, high)) { refusal = "share gradient left the field"; return null; }
-                        var lowTotal = low[a] + low[b];
-                        var highTotal = high[a] + high[b];
-                        var lowShare = (lowTotal > FixedQ4816.Zero) ? low[b] / lowTotal : share;
-                        var highShare = (highTotal > FixedQ4816.Zero) ? high[b] / highTotal : share;
-                        derivatives[axis] = (highShare - lowShare) / (step + step);
-                    }
-                    gradient = new(derivatives[0], derivatives[1], derivatives[2]);
+                    if (!field.ReadInfluenceGradient(FixedPosition.FromLocal(fixedPoint), owners, slots.Length, a, b, out gradient)) { refusal = "share gradient left the field"; return null; }
                 }
                 byte Member(int index) => ((slots[index] == group.Slot) ? SdfMesh.NoMember : (byte)Array.IndexOf(others, slots[index]));
                 var quantized = (ushort)Math.Clamp((share.Value * ushort.MaxValue + 32768) / 65536, 0L, ushort.MaxValue);

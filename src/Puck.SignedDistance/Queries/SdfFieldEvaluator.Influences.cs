@@ -4,6 +4,27 @@ namespace Puck.SignedDistance.Queries;
 
 public sealed partial class SdfFieldEvaluator {
     private InfluenceWalk? m_influenceWalk;
+    private FixedQ4816[] m_influenceLow = [];
+    private FixedQ4816[] m_influenceHigh = [];
+
+    /// <summary>Reads the gradient of the second owner's share after the selected pair is renormalized.
+    /// Central differences use a fixed 1/1024-unit stencil, independent of backend, tessellation and vertex normal.</summary>
+    public bool ReadInfluenceGradient(FixedPosition position, IReadOnlyList<int> shapeOwners, int ownerCount, int first, int second, out FixedVector3 gradient) {
+        gradient = FixedVector3.Zero;
+        if (m_influenceLow.Length != ownerCount) { m_influenceLow = new FixedQ4816[ownerCount]; m_influenceHigh = new FixedQ4816[ownerCount]; }
+        var step = FixedQ4816.FromRawBits(64);
+        Span<FixedQ4816> derivatives = stackalloc FixedQ4816[3];
+        for (var axis = 0; axis < 3; axis++) {
+            var offset = new FixedVector3(axis == 0 ? step : FixedQ4816.Zero, axis == 1 ? step : FixedQ4816.Zero, axis == 2 ? step : FixedQ4816.Zero);
+            if (!ReadInfluences(position + (-offset), shapeOwners, m_influenceLow) || !ReadInfluences(position + offset, shapeOwners, m_influenceHigh)) { return false; }
+            var lowTotal = m_influenceLow[first] + m_influenceLow[second];
+            var highTotal = m_influenceHigh[first] + m_influenceHigh[second];
+            if ((lowTotal <= FixedQ4816.Zero) || (highTotal <= FixedQ4816.Zero)) { return false; }
+            derivatives[axis] = ((m_influenceHigh[second] / highTotal) - (m_influenceLow[second] / lowTotal)) / (step + step);
+        }
+        gradient = new(derivatives[0], derivatives[1], derivatives[2]);
+        return true;
+    }
 
     /// <summary>Reads owner shares through the same field composition and scopes as the render point reading.
     /// Culling is disabled: a contributor with a small share must not disappear from the influence vector.</summary>
