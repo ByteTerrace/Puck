@@ -1,0 +1,29 @@
+// Turns as quaternions [x, y, z, w] in a creation's author frame, and points carried by them, for authoring a part in
+// the pose it rests in (an elbow bent, a forearm swung out) from coordinates measured on the straight limb. A library:
+// import it and call the functions where a `rotation` or a `position` is written.
+
+// The turn of `radians` about the unit `axis`, positive by the right-hand rule.
+function turnAbout(axis, radians) = [
+  axis[0] * sine(radians / 2),
+  axis[1] * sine(radians / 2),
+  axis[2] * sine(radians / 2),
+  cosine(radians / 2)
+]
+
+// The turn that applies `first` and then `second`, the quaternion product second * first.
+function turnThen(first, second) = [
+  second[3] * first[0] + second[0] * first[3] + second[1] * first[2] - second[2] * first[1],
+  second[3] * first[1] - second[0] * first[2] + second[1] * first[3] + second[2] * first[0],
+  second[3] * first[2] + second[0] * first[1] - second[1] * first[0] + second[2] * first[3],
+  second[3] * first[3] - second[0] * first[0] - second[1] * first[1] - second[2] * first[2]
+]
+
+function turnCross(a, b) = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+function turnVectorWith(q, v, t) = map(v, (component, k) => component + 2 * q[3] * t[k] + 2 * turnCross(q, t)[k])
+
+// The vector `v` turned by the unit quaternion `q`: v + 2w(u x v) + 2u x (u x v), with u the quaternion's vector part.
+function turnVector(q, v) = turnVectorWith(q, v, turnCross(q, v))
+
+// The point `p` turned by `q` about `pivot`.
+function turnPoint(q, p, pivot) = map(turnVector(q, map(p, (component, k) => component - pivot[k])), (component, k) => component + pivot[k])

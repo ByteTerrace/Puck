@@ -68,6 +68,10 @@ and which a game's own rule collects. The games in [`../games/`](../games/README
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
 
+`turns.puck` is a library of turns as quaternions (`turnAbout`, `turnThen`) and the points and vectors they carry
+(`turnPoint`, `turnVector`), for authoring a part in the pose it rests in from coordinates measured on a straight limb;
+the off-suit Moth's arms use it.
+
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
 `fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk
 and run, and `stillMotion`, a body the rules pose), and the kits of a piece that stays where it is put (`pieceKit` for
