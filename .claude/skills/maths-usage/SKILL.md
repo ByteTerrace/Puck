@@ -52,6 +52,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | An angle in degrees entering the sim | `FixedQ4816.FromDegrees` (one rounding against `PiQ189`) | `FromDouble(degrees * (Math.PI / 180))`, a rounded radians-per-degree factor |
 | π, π/2, 2π, or an angle reduced to one turn | `FixedQ4816.Pi`/`HalfPi`/`Tau`, `FixedQ4816.WrapAngle` | `FromDouble(Math.PI)`, `Pi + Pi` (one raw short of `Tau`), a floor-and-correct wrap |
 | A vector shortened to a length, or rejected from an axis | `FixedVector3.ClampLength`/`WithLength` (toward zero, never above), `RejectFrom`/`TryRejectNormalized`; a one-sided limit (a contact removing approach velocity) is `LimitAlong` | `(v / v.Length) * limit`, which can land above the limit |
+| A product over a divisor (`x·y/z`), a projection's segment parameter (`clamp(dot(p, s)/dot(s, s), 0, 1)`), or the nearer of two offsets | `FusedArithmetic.MultiplyDivide`; `FixedVector2.SegmentParameter` / `FixedVector3.SegmentParameter` (or `FusedArithmetic.ClampedUnitQuotient` over sums already formed); `FixedVector3.CompareLengthTo`. Each rounds once or not at all | `(x * y) / z`, `Dot(p, s) / Dot(s, s)`, `a.LengthSquared < b.LengthSquared`: each rounds a product of lengths to `2⁻¹⁶`, which at centimetre sizes keeps a few bits and puts a millimetre of noise in a field |
 | A sphere or cone test | `FixedVector3.IsWithin` (exact `\|d\|² ≤ r²`), `IsWithinCone` (apex inside, normalized forward) | `LengthSquared > r * r` (rounded twice), a cone that rejects its apex |
 | Spread points, or stratification that must be a theorem | `LowDiscrepancy` (R1, R2), `DigitalNetSampler` | Plain random scatter |
 | A per-tick state hash for a replay probe | `Fnv1aHash` | `string.GetHashCode` or `HashCode.Combine` (randomly seeded per process) |
@@ -98,6 +99,11 @@ maps each question to its wing and README section.
 - **Do not reassociate a rounded product.** `(a * b) * c` and `a * (b * c)`
   differ over `FixedQ4816`; the fused kernels round a whole expression once.
   Finite-field products are exact and may be reassociated.
+- **Projection bounds use the point kernel too.** `FixedInterval.SegmentParameter`
+  encloses a fixed segment's parameter over a 2D or 3D box through its two
+  extreme corners. Dividing carrier-rounded dot-product intervals can turn
+  a tiny squared length into a divisor containing zero, or overflow a large
+  one, and leave an otherwise valid SDF program with no query frame.
 - **Float presentation helpers live in `VectorFunctions`.** The angle wraps,
   easings, shortest arc, −Z-forward attitude readbacks and unorm packers every
   presentation seam shares are in `Puck.Maths.VectorFunctions`, outside the

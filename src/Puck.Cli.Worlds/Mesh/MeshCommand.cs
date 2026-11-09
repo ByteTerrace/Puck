@@ -281,8 +281,8 @@ public static class MeshCommand {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
         }
     }
-    // Each audited group's field chain beside its collapse (MeshFieldLevels), in group order, then the totals the plan's
-    // success clauses read.
+    // Each audited group's collapse levels and the field levels that follow them (MeshFieldLevels), in group order, then
+    // the totals the plan's clauses read.
     private static void FieldLevels(IReadOnlyList<SdfMeshBakeGroup> groups, Outcome?[] results, RestScene scene, Dictionary<int, long> evaluations, SdfMeshFieldLevelOptions options, StringBuilder output) {
         var measured = new MeshFieldLevels.Group?[groups.Count];
 
@@ -293,13 +293,12 @@ public static class MeshCommand {
 
         var all = Enumerable.Range(start: 0, count: groups.Count).Where(predicate: ordinal => (measured[ordinal] is not null)).ToArray();
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels: {all.Length} group(s), offset {options.OffsetShare} of a level's cell aimed by {(options.LocalAim ? "each sample's slope" : "the lattice's median slope")}, tolerance {options.ToleranceShare} of level zero's cell\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels: {all.Length} group(s), offset {options.OffsetShare} of a level's cell aimed by {(options.LocalAim ? "each sample's slope" : "the lattice's median slope")}, near-coplanar faces flattened within {options.FlattenShare} of it, tolerance {options.ToleranceShare} of level zero's cell; each field level follows the collapse's coarsest\n");
         foreach (var ordinal in all) {
             MeshFieldLevels.Write(group: measured[ordinal]!, label: string.Create(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {results[ordinal]!.Label}"), output: output);
         }
 
         var chosen = all.Select(selector: ordinal => measured[ordinal]!).ToArray();
-        var deepest = chosen.Select(selector: static group => group.Field.Count).DefaultIfEmpty(defaultValue: 0).Max();
         var collapseDeepest = chosen.Select(selector: static group => group.Collapse.Count).DefaultIfEmpty(defaultValue: 0).Max();
         var line = new StringBuilder();
 
@@ -307,41 +306,58 @@ public static class MeshCommand {
         for (var level = 1; (level <= collapseDeepest); level++) {
             line.Append(provider: CultureInfo.InvariantCulture, handler: $" C{level} {chosen.Sum(selector: group => (long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[(Math.Min(val1: level, val2: group.Collapse.Count) - 1)].Triangles))}");
         }
-        for (var level = 1; (level <= deepest); level++) {
-            line.Append(provider: CultureInfo.InvariantCulture, handler: $" F{level} {chosen.Sum(selector: group => (long)((level <= group.Field.Count) ? group.Field[(level - 1)].Triangles : 0))}");
-        }
         output.Append(value: line.Append(value: '\n').ToString());
 
-        var collapseFloor = chosen.Sum(selector: static group => (long)((group.Collapse.Count == 0) ? group.Triangles : group.Collapse[^1].Triangles));
-        var fieldFloor = chosen.Sum(selector: static group => (long)(group.Field.LastOrDefault(predicate: static row => (row.Triangles > 0))?.Triangles ?? 0));
+        var collapseFloor = chosen.Sum(selector: static group => (long)group.Follow.Triangles);
         var unlevelled = chosen.Count(predicate: static group => (group.Collapse.Count == 0));
-        var shallow = chosen.Count(predicate: static group => (group.Field.Count(predicate: static row => (row.Triangles > 0)) < 2));
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels floor: collapse coarsest {collapseFloor} ({unlevelled} group(s) with no collapse level), field coarsest nonempty {fieldFloor}, then empty; groups with fewer than two nonempty field levels {shallow}\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels floor: collapse coarsest {collapseFloor} ({unlevelled} group(s) with no collapse level, which level zero stands for)\n");
 
-        var binds = chosen.SelectMany(selector: static group => group.Field.Where(predicate: static row => (row.Error is not null)).Select(selector: MeshFieldLevels.Binds)).GroupBy(keySelector: static name => name).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
+        foreach (var (name, verdicts) in new (string, Func<MeshFieldLevels.Group, IReadOnlyList<MeshFieldLevels.Verdict>>)[] { ("with normals", static group => group.Shaded), ("without normals", static group => group.Unshaded) }) {
+            var depth = chosen.Select(selector: group => verdicts(arg: group).Count(predicate: static verdict => verdict.Kept)).DefaultIfEmpty(defaultValue: 0).Max();
+            var appended = new StringBuilder();
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels binding: {string.Join(separator: ", ", values: binds.Select(selector: static named => $"{named.Key} {named.Count()}"))}\n");
+            for (var at = 1; (at <= depth); at++) {
+                appended.Append(provider: CultureInfo.InvariantCulture, handler: $" A{at} {chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group).Where(predicate: static verdict => verdict.Kept).Take(count: at).ToArray()).Triangles)}");
+            }
+
+            var floor = chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Triangles);
+            var gained = chosen.Count(predicate: group => verdicts(arg: group).Any(predicate: static verdict => verdict.Kept));
+            var empty = chosen.Count(predicate: group => MeshFieldLevels.ReachesEmpty(verdicts: verdicts(arg: group)));
+            var share = chosen.Select(selector: group => (double)(MeshFieldLevels.Floor(group: group, verdicts: verdicts(arg: group)).Error / group.HalfDiagonal)).Order().ToArray();
+            var refusals = chosen.SelectMany(selector: group => verdicts(arg: group).Where(predicate: static verdict => (verdict.Measured && !verdict.Kept))).ToArray();
+            var reasons = refusals.SelectMany(selector: static verdict => verdict.Reasons.Split(separator: ' ').Where(predicate: static word => char.IsLetter(c: word[0]) && (word != "mm"))).GroupBy(keySelector: static word => word).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
+
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name}: kept{appended} | coarsest nonempty {floor} ({((double)collapseFloor / Math.Max(val1: 1L, val2: floor)):0.0}x below the collapse's); {gained} group(s) gain a field level, {empty} run to the empty level unbroken; coarsest error over half-diagonal p50 {Quantile(sorted: share, at: 0.5):0.###} p90 {Quantile(sorted: share, at: 0.9):0.###}\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name} refusals: {refusals.Length} level(s); {string.Join(separator: ", ", values: reasons.Select(selector: static named => $"{named.Key} {named.Count()}"))}\n");
+        }
+
+        // What each binding clause rejects: the floor were it left out, a diagnosis rather than a judgement (a level with
+        // refused witnesses has no bound, and one with surface outside it no enclosure).
+        var waivers = new StringBuilder();
+
+        foreach (var (normals, waived) in new (bool, string[])[] { (false, ["refused"]), (false, ["outside"]), (false, ["refused", "outside"]), (true, ["refused", "outside"]), (true, ["refused", "outside", "dominated"]) }) {
+            var floor = chosen.Sum(selector: group => (long)MeshFieldLevels.Floor(group: group, verdicts: MeshFieldLevels.Judge(group: group, normals: normals, waived: waived)).Triangles);
+
+            waivers.Append(provider: CultureInfo.InvariantCulture, handler: $"{((waivers.Length == 0) ? string.Empty : "; ")}{(normals ? "with" : "without")} normals less {string.Join(separator: "+", values: waived)} {floor} ({((double)collapseFloor / Math.Max(val1: 1L, val2: floor)):0.0}x)");
+        }
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels waived: {waivers}\n");
+
+        var rows = chosen.SelectMany(selector: static group => group.Field).ToArray();
+        var binds = rows.Where(predicate: static row => (row.Error is not null)).Select(selector: static row => MeshFieldLevels.Binds(error: row.Error!)).GroupBy(keySelector: static name => name).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
+
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels binding: {string.Join(separator: ", ", values: binds.Select(selector: static named => $"{named.Key} {named.Count()}"))}; vanished {rows.Sum(selector: static row => row.Vanished)} component(s), {rows.Sum(selector: static row => (long)(row.Whole - row.Triangles))} triangle(s)\n");
 
         var bakeEvaluations = chosen.Sum(selector: static group => group.BakeEvaluations);
-        var contour = chosen.Sum(selector: static group => group.ChainContour);
-        var oracle = chosen.Sum(selector: static group => group.ChainOracle);
-        var chainCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.ChainCycles));
+        var contour = chosen.Sum(selector: static group => group.ContourEvaluations);
+        var oracle = chosen.Sum(selector: static group => group.OracleEvaluations);
         var contourCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.ContourCycles));
+        var oracleCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.OracleCycles));
         var collapseCycles = chosen.Aggregate(seed: 0UL, func: static (sum, group) => (sum + group.CollapseCycles));
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels cost: bake evaluations {bakeEvaluations}, chain evaluations {(contour + oracle)} (contour {contour}, oracle {oracle}), {(((double)(contour + oracle)) / Math.Max(val1: 1L, val2: bakeEvaluations)):0.00}x the bake's; {ThreadCycles.Unit} chain {chainCycles} (contour {contourCycles}, oracle {(chainCycles - contourCycles)}) collapse {collapseCycles}, {(((double)chainCycles) / Math.Max(val1: 1UL, val2: collapseCycles)):0.00}x the collapse's\n");
-
-        (string Name, (int Ordinal, string? Why)[] Failures) Failing(string name, Func<MeshFieldLevels.Group, string?> clause) =>
-            (name, all.Select(selector: ordinal => (ordinal, Why: clause(arg: measured[ordinal]!))).Where(predicate: static entry => (entry.Why is not null)).ToArray());
-
-        foreach (var (clause, failures) in new[] { Failing(clause: static group => MeshFieldLevels.ClauseA(group: group), name: "a"), Failing(clause: static group => MeshFieldLevels.ClauseA(group: group, normals: false), name: "a without normals"), Failing(clause: MeshFieldLevels.ClauseB, name: "b") }) {
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels clause ({clause}): {(all.Length - failures.Length)} pass, {failures.Length} fail\n");
-            foreach (var (ordinal, why) in failures.Take(count: 12)) {
-                output.Append(provider: CultureInfo.InvariantCulture, handler: $"  group {ordinal} {results[ordinal]!.Label}: {why}\n");
-            }
-        }
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels cost: bake evaluations {bakeEvaluations}, contour evaluations {contour} ({(((double)contour) / Math.Max(val1: 1L, val2: bakeEvaluations)):0.00}x the bake's), oracle evaluations {oracle} (the audit's, not the bake's); {ThreadCycles.Unit} contour {contourCycles} ({(((double)contourCycles) / Math.Max(val1: 1UL, val2: collapseCycles)):0.00}x the collapse's {collapseCycles}), oracle {oracleCycles}\n");
     }
+    private static double Quantile(double[] sorted, double at) => ((sorted.Length == 0) ? 0.0 : sorted[(int)((sorted.Length - 1) * at)]);
     // The worst clusters across every group, each with its image when a directory is named.
     private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, int level, StringBuilder output) {
         var clusters = ordered

@@ -272,6 +272,24 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             (((Int128)left.Y.Value) * right.Y.Value)) +
             (((Int128)left.Z.Value) * right.Z.Value)))));
     }
+    /// <summary>Returns the parameter of <paramref name="point"/>'s projection onto the segment from the origin to
+    /// <paramref name="segment"/>, <c>clamp(dot(point, segment) / dot(segment, segment), 0, 1)</c>, with both dot products
+    /// exact and one rounding.</summary>
+    /// <param name="point">The point, relative to the segment's start.</param>
+    /// <param name="segment">The segment's end, relative to its start.</param>
+    /// <returns>The clamped parameter in <c>[0, 1]</c>; zero for a zero <paramref name="segment"/>.</returns>
+    /// <remarks>Dividing the carrier-rounded dot products keeps only <c>2^-16</c> of each: a centimetre segment's
+    /// squared length is a few dozen raws, so its parameter would move by a few percent.</remarks>
+    public static FixedQ4816 SegmentParameter(FixedVector3 point, FixedVector3 segment) {
+        static (bool Negative, UInt128 Magnitude) DotOf(FixedVector3 left, FixedVector3 right) {
+            var pair = FusedArithmetic.AddProducts(firstLeft: left.X.Value, firstRight: right.X.Value, secondLeft: left.Y.Value, secondRight: right.Y.Value);
+            var third = FusedArithmetic.Product(left: left.Z.Value, right: right.Z.Value);
+
+            return FusedArithmetic.CombineSigned(firstMagnitude: pair.Magnitude, firstNegative: pair.Negative, secondMagnitude: third.Magnitude, secondNegative: third.Negative);
+        }
+
+        return FusedArithmetic.ClampedUnitQuotient(denominator: DotOf(left: segment, right: segment).Magnitude, numerator: DotOf(left: point, right: segment));
+    }
     /// <summary>Intersects the ray <c>origin + t·direction</c>, <c>t ≥ 0</c>, with the plane through
     /// <paramref name="planePoint"/> whose normal is <paramref name="planeNormal"/> — integer-only, deterministic.</summary>
     /// <param name="origin">The ray's origin.</param>

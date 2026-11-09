@@ -18,6 +18,9 @@ public sealed record SdfMeshFieldLevelOptions {
     /// <summary>Gets a value indicating whether a level's offset is aimed by each sample's own slope rather than its
     /// lattice's median slope (<see cref="SdfMeshPathBake.ContourLevel"/>).</summary>
     public bool LocalAim { get; init; } = true;
+    /// <summary>Gets the share of a level's cell a vertex of a near-coplanar region may move onto the region's plane so
+    /// the planar merge takes the region (<see cref="SdfMeshPlanarMerge.Flatten"/>).</summary>
+    public float FlattenShare { get; init; } = 0.0625f;
 }
 
 /// <summary>Runs of level-zero triangles a level misrepresents, connected over level zero's shared edges.</summary>
@@ -48,7 +51,8 @@ public readonly record struct SdfMeshLevelRuns(int Count, int Triangles, float L
 /// normal of every level triangle within the geometric error, at its point nearest the witness.</param>
 /// <param name="NormalNearest">The runs whose witnesses' normals turn past that angle from the nearest triangle's alone:
 /// printed beside, recorded nowhere.</param>
-/// <param name="Vanished">The level-zero components no level triangle lies near.</param>
+/// <param name="Vanished">The runs of level zero the level leaves: components no level triangle lies near, and the parts
+/// nearest a component the level vanished (<see cref="SdfMeshFieldLevels.Contour"/>), each run's extent its error.</param>
 /// <param name="Recorded">The error recorded: the largest component, raised to the finer level's.</param>
 public sealed record SdfMeshLevelError(
     SdfMeshAuditStatistic MeshToSurface,
@@ -67,29 +71,38 @@ public sealed record SdfMeshLevelError(
 ) {
     /// <summary>Gets the geometric error: the larger of the two directions' largest bounds.</summary>
     public float Geometric => MathF.Max(x: MeshToSurface.Max, y: SurfaceToMesh.Max);
+    /// <summary>Gets each level-zero triangle marked where it lies in a vanished run: surface the level accounts for by
+    /// the run's extent rather than by a triangle near it.</summary>
+    public IReadOnlyList<bool> VanishedTriangles { get; init; } = [];
 }
 
-/// <summary>One level of a group's field chain.</summary>
-/// <param name="Level">The level, one for the first coarser.</param>
+/// <summary>One contoured field level of a group (<see cref="SdfMeshFieldLevels.Contour"/>).</summary>
+/// <param name="Level">The level, <c>k</c> for a cell of <c>2^k</c> times level zero's.</param>
 /// <param name="Cell">The level's lattice cell, in metres.</param>
 /// <param name="Offset">How far outside the surface the level is contoured, in metres: its budget.</param>
-/// <param name="Mesh">The level's mesh (pieces joined), or <see langword="null"/> for the terminal empty level or a
-/// skipped one.</param>
-/// <param name="Error">The level's measurement, or <see langword="null"/> where it holds no mesh.</param>
-/// <param name="Recorded">The error the level records, in metres; the group's half diagonal for the empty level.</param>
-/// <param name="Skipped">Why the level holds no mesh, or <see langword="null"/>.</param>
-public sealed record SdfMeshFieldLevel(int Level, float Cell, float Offset, SdfMesh? Mesh, SdfMeshLevelError? Error, float Recorded, string? Skipped) {
-    /// <summary>Gets the level's triangles.</summary>
+/// <param name="Mesh">The level's kept triangles (pieces joined), or <see langword="null"/> when its contour found no
+/// surface, every component vanished, or it was skipped.</param>
+/// <param name="Whole">The level as contoured, before components vanished, or <see langword="null"/>.</param>
+/// <param name="Vanished">Each triangle of <paramref name="Whole"/> marked where it vanished, or <see langword="null"/>.</param>
+/// <param name="VanishedComponents">The components that vanished.</param>
+/// <param name="Members">Each vertex of <paramref name="Mesh"/>'s member, or <see langword="null"/> for a level of the
+/// whole field.</param>
+/// <param name="Skipped">Why the level was not contoured or not kept, or <see langword="null"/>.</param>
+public sealed record SdfMeshFieldContour(int Level, float Cell, float Offset, SdfMesh? Mesh, SdfMesh? Whole, bool[]? Vanished, int VanishedComponents, byte[]? Members, string? Skipped) {
+    /// <summary>Gets the level's kept triangles.</summary>
     public int Triangles => (Mesh?.TriangleCount ?? 0);
+    /// <summary>Gets a value indicating whether the level ends the chain: its contour found no surface, or every
+    /// component vanished.</summary>
+    public bool Empty => ((Mesh is null) && (Skipped is null));
 }
 
 /// <summary>
-/// The field-levels chain of one group (G1 of the virtual geometry plan): each coarser level contoured again from the
-/// group's field on a lattice of twice the previous cell (<see cref="SdfMeshPathBake.ContourLevel"/>), offset outward by
-/// its budget, per member for a group whose shapes ride several slots, until a level is empty or its cell passes the
-/// group's extent, then a terminal empty level recording the group's half diagonal; and the oracle that measures any
-/// level, a collapse level included, by the error contract. Offline and load-independent: it reads fields and meshes
-/// and writes nothing.
+/// The field levels of one group that follow its collapse levels: each contoured again from the group's field on a
+/// lattice of twice the previous cell (<see cref="SdfMeshPathBake.ContourLevel"/>), offset outward by its budget, per
+/// member for a group whose shapes ride several slots, its near-coplanar faces merged and its components that would flip
+/// or open an edge vanished (<see cref="Contour"/>), from the coarsest level down to the first holding more than the
+/// kept share of the level it follows; and the oracle that measures any level, a collapse level included, by the error
+/// contract. Offline and load-independent: it reads fields and meshes and writes nothing.
 /// <para>The invariant the oracle measures: a level's recorded error bounds, in world units, the distance from each of
 /// its witnesses to the field's surface and from each surface witness to the level, encloses the surface, covers every
 /// material or normal region and every part it loses, and is at least the finer level's. <see cref="Measure"/> is the
@@ -97,6 +110,10 @@ public sealed record SdfMeshFieldLevel(int Level, float Cell, float Offset, SdfM
 /// than level zero's own sampling.</para>
 /// </summary>
 public sealed class SdfMeshFieldLevels {
+    // The probe step a level's facing is judged at: the audit's, so a component the level keeps flips no more for the
+    // audit than for this.
+    private static readonly float FacingStep = new SdfMeshAuditOptions().GradientStep;
+
     private readonly ISdfMeshLevelField m_field;
     private readonly SdfMesh m_reference;
     private readonly float m_cell;
@@ -168,21 +185,26 @@ public sealed class SdfMeshFieldLevels {
         var bracket = Bracket(field: field, normals: [.. witnessNormals.Select(selector: Unit)], points: [.. points], reach: (4f * cell), step: cell);
         var kept = new List<int>();
         var ratio = 0f;
+        var ratioWitness = (At: Vector3.Zero, Value: 0f, Upper: 0f);
 
         for (var witness = 0; (witness < points.Count); witness++) {
             if (!bracket.Found[witness]) { continue; }
             kept.Add(item: witness);
-            if (bracket.Upper[witness] > 0f) { ratio = MathF.Max(x: ratio, y: ((MathF.Abs(x: bracket.Value[witness]) * field.StepScale) / bracket.Upper[witness])); }
+
+            var lowerOverUpper = ((bracket.Upper[witness] > 0f) ? ((MathF.Abs(x: bracket.Value[witness]) * field.StepScale) / bracket.Upper[witness]) : 0f);
+
+            if (lowerOverUpper > ratio) { (ratio, ratioWitness) = (lowerOverUpper, (points[witness], bracket.Value[witness], bracket.Upper[witness])); }
         }
         SurfaceRefused = (points.Count - kept.Count);
         LowerOverUpper = ratio;
+        LowerOverUpperWitness = ratioWitness;
         Certified = ((field.StepScale > 0f) && (ratio <= 1f));
         m_surface = [.. kept.Select(selector: witness => bracket.Surface[witness])];
         m_owner = [.. kept.Select(selector: witness => owners[witness])];
         m_material = [.. m_owner.Select(selector: triangle => (reference.TriangleMaterials.IsEmpty ? 0 : (int)reference.TriangleMaterials.Span[triangle]))];
         m_normal = [.. kept.Select(selector: witness => Unit(vector: witnessNormals[witness]))];
 
-        (m_neighbours, m_component, m_components) = Adjacency(positions: positions, indices: indices, triangles: triangles);
+        (m_neighbours, m_component, m_components, _) = Adjacency(positions: positions, indices: indices, triangles: triangles);
         HalfDiagonal = (0.5f * Vector3.Distance(value1: reference.PositionLow, value2: reference.PositionHigh));
     }
 
@@ -196,31 +218,30 @@ public sealed class SdfMeshFieldLevels {
     /// the field's step scale) to the bracketed upper bound: above one, the step scale certifies nothing for this
     /// field.</summary>
     public float LowerOverUpper { get; }
+    /// <summary>Gets the level-zero witness where <see cref="LowerOverUpper"/> was read, so a failing step scale is traced
+    /// to the shape there: its position in the group's rest frame, the field's value there and the bracketed upper bound
+    /// on its distance to the surface, all in metres.</summary>
+    public (Vector3 At, float Value, float Upper) LowerOverUpperWitness { get; }
     /// <summary>Gets a value indicating whether the field's step scale held as a lower bound at every level-zero witness,
     /// so a closed group's finer levels may skip the samples a coarser one certifies far from the surface; otherwise every
     /// sample is answered.</summary>
     public bool Certified { get; }
 
-    /// <summary>Builds and measures a group's field chain: levels of cell <c>2^k</c> times level zero's for
-    /// <c>k = 1, 2, …</c> while the cell is no wider than the group's longest side, each contoured from
-    /// <paramref name="pieces"/> (or the whole field when there are none) and joined, the chain ending at its first
-    /// empty level, then the terminal empty level recording the group's half diagonal.</summary>
+    /// <summary>Contours a group's field levels below the level they follow: levels of cell <c>2^k</c> times level
+    /// zero's while the cell is no wider than the group's longest side, coarsest first (so each finer level skips what
+    /// the coarser one certifies far from its surface), each contoured from <paramref name="pieces"/> (or the whole field
+    /// when there are none) and joined, its near-coplanar faces flattened and merged, and its components that would flip
+    /// or open an edge vanished (<see cref="Vanish"/>). The first level holding more than <paramref name="most"/>
+    /// triangles ends the contouring, since every finer level holds more: the levels a bake appends below the collapse's
+    /// coarsest are the coarser ones.</summary>
     /// <param name="pieces">Each member's own field and the member its vertices ride, for a group whose shapes ride
     /// several slots; empty for a closed group, which contours its whole field.</param>
     /// <param name="preserveFeatures">Whether the group holds glyphs.</param>
-    /// <returns>The chain, finest level first.</returns>
+    /// <param name="most">The most triangles a level may hold: the kept share of the level it follows.</param>
+    /// <param name="allowance">The flipped triangles and open edges level zero holds, which a level may hold too.</param>
+    /// <returns>Each level, finest first.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pieces"/> is <see langword="null"/>.</exception>
-    public IReadOnlyList<SdfMeshFieldLevel> Chain(IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, bool preserveFeatures) =>
-        Chain(contoured: Contour(pieces: pieces, preserveFeatures: preserveFeatures), pieces: pieces);
-
-    /// <summary>Contours a group's field levels, as <see cref="Chain(IReadOnlyList{ValueTuple{ISdfMeshLevelField, byte}}, bool)"/>
-    /// does before it measures them.</summary>
-    /// <param name="pieces">Each member's own field and its member; empty for a closed group.</param>
-    /// <param name="preserveFeatures">Whether the group holds glyphs.</param>
-    /// <returns>Each level's mesh, finest first: its joined mesh and each vertex's member, nothing for a level whose
-    /// contour found no surface, or why it was skipped.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="pieces"/> is <see langword="null"/>.</exception>
-    public IReadOnlyList<(SdfMesh? Mesh, byte[]? Members, string? Skipped)> Contour(IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, bool preserveFeatures) {
+    public IReadOnlyList<SdfMeshFieldContour> Contour(IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, bool preserveFeatures, int most, (int Flips, int OpenEdges) allowance) {
         ArgumentNullException.ThrowIfNull(argument: pieces);
 
         var low = m_reference.PositionLow;
@@ -231,80 +252,163 @@ public sealed class SdfMeshFieldLevels {
         while ((m_cell * MathF.Pow(x: 2f, y: (count + 1))) <= longest) { count++; }
 
         var fields = ((pieces.Count == 0) ? [(m_field, SdfMesh.NoMember)] : pieces);
-        var made = new (SdfMesh? Mesh, byte[]? Members, string? Skipped)[count];
+        var made = new SdfMeshFieldContour[count];
         var coarser = new SdfMeshLevelSamples?[fields.Count];
         // A member's part reaches past the whole group's box where another member carved or covered it, so each part
         // takes its own box, read from its field on a lattice of the coarsest level's cell over the group's box widened by
         // half its longest side.
         var boxes = fields.Select(selector: piece => ((pieces.Count == 0) ? (low, high) : PieceBox(cell: (m_cell * MathF.Pow(x: 2f, y: Math.Max(val1: 1, val2: count))), field: piece.Field, high: (high + new Vector3(value: (0.5f * longest))), low: (low - new Vector3(value: (0.5f * longest)))))).ToArray();
+        string? ended = null;
 
-        // Coarsest first, so each finer level skips what the coarser one certifies far from its surface.
         for (var level = count; (level >= 1); level--) {
             var cell = (m_cell * MathF.Pow(x: 2f, y: level));
             var offset = (m_options.OffsetShare * cell);
+
+            if (ended is not null) {
+                made[(level - 1)] = new SdfMeshFieldContour(Cell: cell, Level: level, Members: null, Mesh: null, Offset: offset, Skipped: ended, Vanished: null, VanishedComponents: 0, Whole: null);
+                continue;
+            }
+
             var meshes = new List<(SdfMesh Mesh, byte Member)>();
             var skipped = false;
 
             for (var piece = 0; (piece < fields.Count); piece++) {
                 // Only a closed group's whole field is checked against its step scale; a member's part is answered whole.
-                var mesh = SdfMeshPathBake.ContourLevel(cell: cell, coarser: ((Certified && (pieces.Count == 0)) ? coarser[piece] : null), field: fields[piece].Field, high: boxes[piece].Item2, localAim: m_options.LocalAim, low: boxes[piece].Item1, mostSamples: m_options.MostSamples, offset: offset, preserveFeatures: preserveFeatures, samples: out var samples);
+                var mesh = SdfMeshPathBake.ContourLevel(cell: cell, coarser: ((Certified && (pieces.Count == 0)) ? coarser[piece] : null), field: fields[piece].Field, flatten: (m_options.FlattenShare * cell), high: boxes[piece].Item2, localAim: m_options.LocalAim, low: boxes[piece].Item1, mostSamples: m_options.MostSamples, offset: offset, preserveFeatures: preserveFeatures, samples: out var samples);
 
                 skipped |= (samples is null);
                 coarser[piece] = samples;
                 if (mesh is not null) { meshes.Add(item: (mesh, fields[piece].Member)); }
             }
-            made[(level - 1)] = (skipped
-                ? (null, null, $"lattice past {m_options.MostSamples} samples")
-                : ((meshes.Count == 0) ? (null, null, null) : Join(pieces: meshes, members: (pieces.Count > 0))));
+            if (skipped) {
+                made[(level - 1)] = new SdfMeshFieldContour(Cell: cell, Level: level, Members: null, Mesh: null, Offset: offset, Skipped: $"lattice past {m_options.MostSamples} samples", Vanished: null, VanishedComponents: 0, Whole: null);
+                continue;
+            }
+            if (meshes.Count == 0) {
+                made[(level - 1)] = new SdfMeshFieldContour(Cell: cell, Level: level, Members: null, Mesh: null, Offset: offset, Skipped: null, Vanished: null, VanishedComponents: 0, Whole: null);
+                continue;
+            }
+
+            var (whole, members) = Join(members: (pieces.Count > 0), pieces: meshes);
+
+            if (whole.TriangleCount > most) {
+                made[(level - 1)] = new SdfMeshFieldContour(Cell: cell, Level: level, Members: null, Mesh: null, Offset: offset, Skipped: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{whole.TriangleCount} triangles keep more than {SdfMeshCollapse.KeptShare} of the level it follows"), Vanished: null, VanishedComponents: 0, Whole: null);
+                ended = "finer than a level past the kept share, not contoured";
+                continue;
+            }
+
+            var (kept, keptMembers, vanished, components) = Vanish(allowance: allowance, members: members, pieces: pieces, whole: whole);
+
+            made[(level - 1)] = new SdfMeshFieldContour(Cell: cell, Level: level, Members: keptMembers, Mesh: kept, Offset: offset, Skipped: null, Vanished: vanished, VanishedComponents: components, Whole: whole);
         }
 
         return made;
     }
-    /// <summary>Measures contoured levels (<see cref="Contour"/>) into the chain: each level up to the first empty one
-    /// by <see cref="Measure"/>, its error raised to the finer level's, then the terminal empty level recording the
-    /// group's half diagonal.</summary>
-    /// <param name="contoured">The contoured levels, finest first.</param>
-    /// <param name="pieces">The pieces they were contoured from; empty for a closed group.</param>
-    /// <returns>The chain, finest level first.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="contoured"/> or <paramref name="pieces"/> is
-    /// <see langword="null"/>.</exception>
-    public IReadOnlyList<SdfMeshFieldLevel> Chain(IReadOnlyList<(SdfMesh? Mesh, byte[]? Members, string? Skipped)> contoured, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces) {
-        ArgumentNullException.ThrowIfNull(argument: contoured);
-        ArgumentNullException.ThrowIfNull(argument: pieces);
+    /// <summary>Vanishes a contoured level's components that would flip or open an edge: a component holding a triangle
+    /// that faces against its piece's field (<see cref="SdfMeshAudit.Flips"/>, judged at its centroid by the bake's tap
+    /// stencil) or an edge one triangle alone holds, smallest box first, until the level holds no more flipped triangles
+    /// and open edges than level zero does. A vanished component draws nothing, and the level's measurement records each
+    /// part of level zero it leaves by that part's own extent (<see cref="Measure"/>).</summary>
+    /// <param name="whole">The level as contoured.</param>
+    /// <param name="members">Each vertex's member, or <see langword="null"/> for a level of the whole field.</param>
+    /// <param name="pieces">Each member's own field; empty for a level of the whole field.</param>
+    /// <param name="allowance">The flipped triangles and open edges level zero holds.</param>
+    /// <returns>The level's kept triangles as a mesh of their own (<see langword="null"/> when every triangle vanished),
+    /// each kept vertex's member, each triangle of <paramref name="whole"/> marked where it vanished, and the components
+    /// vanished.</returns>
+    private (SdfMesh? Kept, byte[]? Members, bool[] Vanished, int Components) Vanish(SdfMesh whole, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, (int Flips, int OpenEdges) allowance) {
+        var positions = whole.Positions.Span;
+        var indices = whole.Indices.Span;
+        var triangles = whole.TriangleCount;
+        var faces = new Vector3[triangles];
+        var gradients = new Vector3[triangles];
+        var byPiece = new Dictionary<int, List<int>>();
+        var pieceOf = new Dictionary<byte, int>();
 
-        var made = contoured;
-        var count = contoured.Count;
-        var chain = new List<SdfMeshFieldLevel>();
-        var finer = 0f;
-        var kept = m_reference.TriangleCount;
+        for (var index = 0; (index < pieces.Count); index++) { _ = pieceOf.TryAdd(key: pieces[index].Member, value: index); }
+        for (var triangle = 0; (triangle < triangles); triangle++) {
+            var (a, b, c) = Corners(indices: indices, triangle: triangle);
+            var piece = (((members is not null) && pieceOf.TryGetValue(key: members[a], value: out var own)) ? own : 0);
 
-        for (var level = 1; (level <= count); level++) {
-            var (mesh, members, skipped) = made[(level - 1)];
-            var cell = (m_cell * MathF.Pow(x: 2f, y: level));
-            var offset = (m_options.OffsetShare * cell);
-
-            if (skipped is not null) {
-                chain.Add(item: new SdfMeshFieldLevel(Cell: cell, Error: null, Level: level, Mesh: null, Offset: offset, Recorded: finer, Skipped: skipped));
-                continue;
+            faces[triangle] = SdfMeshAudit.FaceNormal(a: positions[a], b: positions[b], c: positions[c]);
+            if (!byPiece.TryGetValue(key: piece, value: out var list)) {
+                list = [];
+                byPiece.Add(key: piece, value: list);
             }
-            if (mesh is null) { break; }
-            // A level that keeps more than the collapse's kept share of the triangles before it saves too little to draw,
-            // as a collapse level is dropped (a refined group's level zero is coarser than its finest cell nearly
-            // everywhere, so its first lattices can hold more triangles than it does).
-            if (mesh.TriangleCount > (SdfMeshCollapse.KeptShare * kept)) {
-                chain.Add(item: new SdfMeshFieldLevel(Cell: cell, Error: null, Level: level, Mesh: null, Offset: offset, Recorded: finer, Skipped: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"dropped: {mesh.TriangleCount} triangles keep more than {SdfMeshCollapse.KeptShare} of {kept}")));
-                continue;
-            }
-            kept = mesh.TriangleCount;
-
-            var error = Measure(budget: offset, cell: cell, finer: finer, level: mesh, members: members, pieces: pieces);
-
-            finer = error.Recorded;
-            chain.Add(item: new SdfMeshFieldLevel(Cell: cell, Error: error, Level: level, Mesh: mesh, Offset: offset, Recorded: finer, Skipped: null));
+            list.Add(item: triangle);
         }
-        chain.Add(item: new SdfMeshFieldLevel(Cell: (m_cell * MathF.Pow(x: 2f, y: (chain.Count + 1))), Error: null, Level: (chain.Count + 1), Mesh: null, Offset: 0f, Recorded: MathF.Max(x: HalfDiagonal, y: finer), Skipped: "terminal empty level"));
+        foreach (var (piece, list) in byPiece) {
+            var field = ((pieces.Count == 0) ? m_field : pieces[piece].Field);
+            var centroids = list.Select(selector: triangle => {
+                var (a, b, c) = Corners(indices: whole.Indices.Span, triangle: triangle);
 
-        return chain;
+                return (((whole.Positions.Span[a] + whole.Positions.Span[b]) + whole.Positions.Span[c]) / 3f);
+            }).ToArray();
+            var values = new float[centroids.Length];
+            var slopes = new Vector3[centroids.Length];
+
+            field.Gradients(gradients: slopes, points: centroids, spacing: FacingStep, values: values, work: SdfMeshLevelWork.Contour);
+            for (var at = 0; (at < list.Count); at++) { gradients[list[at]] = Unit(vector: slopes[at]); }
+        }
+
+        var winding = SdfMeshAudit.Winding(faceNormals: faces, gradients: gradients);
+        var (_, component, components, open) = Adjacency(indices: indices, positions: positions, triangles: triangles);
+        var flips = new int[components];
+        var opens = new int[components];
+        var lows = Enumerable.Repeat(element: new Vector3(value: float.MaxValue), count: components).ToArray();
+        var highs = Enumerable.Repeat(element: new Vector3(value: float.MinValue), count: components).ToArray();
+        var flipped = 0;
+        var opened = 0;
+
+        for (var triangle = 0; (triangle < triangles); triangle++) {
+            var (a, b, c) = Corners(indices: indices, triangle: triangle);
+            var own = component[triangle];
+            var flip = (SdfMeshAudit.Flips(faceNormal: faces[triangle], gradient: gradients[triangle], winding: winding) ? 1 : 0);
+
+            flips[own] += flip;
+            opens[own] += open[triangle];
+            flipped += flip;
+            opened += open[triangle];
+            lows[own] = Vector3.Min(value1: lows[own], value2: Vector3.Min(value1: positions[a], value2: Vector3.Min(value1: positions[b], value2: positions[c])));
+            highs[own] = Vector3.Max(value1: highs[own], value2: Vector3.Max(value1: positions[a], value2: Vector3.Max(value1: positions[b], value2: positions[c])));
+        }
+
+        var gone = new bool[components];
+        var vanishedComponents = 0;
+
+        while ((flipped > allowance.Flips) || (opened > allowance.OpenEdges)) {
+            var pick = -1;
+
+            for (var candidate = 0; (candidate < components); candidate++) {
+                if (gone[candidate] || !(((flipped > allowance.Flips) && (flips[candidate] > 0)) || ((opened > allowance.OpenEdges) && (opens[candidate] > 0)))) { continue; }
+                if ((pick < 0) || (Vector3.DistanceSquared(value1: lows[candidate], value2: highs[candidate]) < Vector3.DistanceSquared(value1: lows[pick], value2: highs[pick]))) { pick = candidate; }
+            }
+            if (pick < 0) { break; }
+            gone[pick] = true;
+            vanishedComponents++;
+            flipped -= flips[pick];
+            opened -= opens[pick];
+        }
+
+        var vanished = new bool[triangles];
+        var keptIndices = new List<uint>();
+        var keptMaterials = new List<uint>();
+        var materials = whole.TriangleMaterials.Span;
+
+        for (var triangle = 0; (triangle < triangles); triangle++) {
+            vanished[triangle] = gone[component[triangle]];
+            if (vanished[triangle]) { continue; }
+            keptIndices.Add(item: indices[(3 * triangle)]);
+            keptIndices.Add(item: indices[((3 * triangle) + 1)]);
+            keptIndices.Add(item: indices[((3 * triangle) + 2)]);
+            if (!materials.IsEmpty) { keptMaterials.Add(item: materials[triangle]); }
+        }
+        if (vanishedComponents == 0) { return (whole, members, vanished, 0); }
+        if (keptIndices.Count == 0) { return (null, null, vanished, vanishedComponents); }
+
+        var kept = SdfMeshAudit.Subset(indices: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: keptIndices), materials: keptMaterials.ToArray(), mesh: whole, sources: out var sources);
+
+        return (kept, ((members is null) ? null : [.. sources.Select(selector: vertex => members[vertex])]), vanished, vanishedComponents);
     }
 
     /// <summary>Measures one level against the field and level zero by the error contract.</summary>
@@ -316,10 +420,14 @@ public sealed class SdfMeshFieldLevels {
     /// <param name="cell">The level's cell, in metres: its witness spacing.</param>
     /// <param name="budget">The level's budget, in metres: its offset, or a collapse level's own recorded error.</param>
     /// <param name="finer">The finer level's recorded error, in metres, which this level's is raised to.</param>
+    /// <param name="whole">The level as contoured before <see cref="Vanish"/> took components from it, or
+    /// <see langword="null"/> when none vanished.</param>
+    /// <param name="vanished">Each triangle of <paramref name="whole"/> marked where it vanished, or
+    /// <see langword="null"/>.</param>
     /// <returns>The measurement.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="level"/> or <paramref name="pieces"/> is
     /// <see langword="null"/>.</exception>
-    public SdfMeshLevelError Measure(SdfMesh level, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, float cell, float budget, float finer) {
+    public SdfMeshLevelError Measure(SdfMesh level, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, float cell, float budget, float finer, SdfMesh? whole = null, bool[]? vanished = null) {
         ArgumentNullException.ThrowIfNull(argument: level);
         ArgumentNullException.ThrowIfNull(argument: pieces);
 
@@ -333,40 +441,63 @@ public sealed class SdfMeshFieldLevels {
         var distance = new float[count];
         var nearest = new Vector3[count];
         var held = new int[count];
-        var outside = 0;
-        var outsideMax = 0f;
+        var excused = new bool[count];
         var positions = level.Positions.Span;
         var indices = level.Indices.Span;
 
-        for (var witness = 0; (witness < count); witness++) {
-            var point = m_surface[witness];
+        // A surface witness nearest a vanished triangle of the level as contoured lies on a part the level vanished: it
+        // counts in that part's extent, not in a distance to whatever surface remains.
+        if ((whole is not null) && (vanished is not null) && vanished.Contains(value: true)) {
+            using var contoured = SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: whole, Material: 0, Mesh: whole, ObjectToWorld: Matrix4x4.Identity)]);
 
-            if (!scene.TryNearestSurface(accept: null, instance: out _, point: point, radius: radius, surface: out var surface, triangle: out var triangle)) {
+            for (var witness = 0; (witness < count); witness++) {
+                excused[witness] = (contoured.TryNearestSurface(accept: null, instance: out _, point: m_surface[witness], radius: radius, surface: out _, triangle: out var triangle) && vanished[triangle]);
+            }
+        }
+        for (var witness = 0; (witness < count); witness++) {
+            if (excused[witness] || !scene.TryNearestSurface(accept: null, instance: out _, point: m_surface[witness], radius: radius, surface: out var surface, triangle: out var triangle)) {
                 distance[witness] = radius;
                 held[witness] = -1;
                 continue;
             }
-            distance[witness] = Vector3.Distance(value1: point, value2: surface);
+            distance[witness] = Vector3.Distance(value1: m_surface[witness], value2: surface);
             nearest[witness] = surface;
             held[witness] = triangle;
-
-            var (a, b, c) = Corners(indices: indices, triangle: triangle);
-
-            if ((distance[witness] > m_tolerance) && (Vector3.Dot(vector1: Face(positions[a], positions[b], positions[c]), vector2: (point - surface)) > 0f)) {
-                outside++;
-                outsideMax = MathF.Max(x: outsideMax, y: distance[witness]);
-            }
         }
 
         // A component no witness of which lies within reach of the level has vanished; it counts its own extent.
         var covered = new bool[m_components];
 
         for (var witness = 0; (witness < count); witness++) {
-            if (distance[witness] <= vanishReach) { covered[m_component[m_owner[witness]]] = true; }
+            if (!excused[witness] && (distance[witness] <= vanishReach)) { covered[m_component[m_owner[witness]]] = true; }
         }
 
-        var vanished = Runs(marked: Enumerable.Range(start: 0, count: m_reference.TriangleCount).Select(selector: triangle => !covered[m_component[triangle]]).ToArray());
-        var kept = Enumerable.Range(start: 0, count: count).Where(predicate: witness => covered[m_component[m_owner[witness]]]).Select(selector: witness => distance[witness]).ToArray();
+        var gone = new bool[m_reference.TriangleCount];
+
+        for (var triangle = 0; (triangle < gone.Length); triangle++) { gone[triangle] = !covered[m_component[triangle]]; }
+        for (var witness = 0; (witness < count); witness++) {
+            if (excused[witness]) { gone[m_owner[witness]] = true; }
+        }
+
+        bool Counted(int witness) => (!excused[witness] && covered[m_component[m_owner[witness]]]);
+
+        // The enclosure: a counted witness on the outer side of its nearest triangle by more than the tolerance.
+        var outside = 0;
+        var outsideMax = 0f;
+
+        for (var witness = 0; (witness < count); witness++) {
+            if (!Counted(witness: witness) || (held[witness] < 0) || !(distance[witness] > m_tolerance)) { continue; }
+
+            var (a, b, c) = Corners(indices: indices, triangle: held[witness]);
+
+            if (Vector3.Dot(vector1: Face(positions[a], positions[b], positions[c]), vector2: (m_surface[witness] - nearest[witness])) > 0f) {
+                outside++;
+                outsideMax = MathF.Max(x: outsideMax, y: distance[witness]);
+            }
+        }
+
+        var vanishedRuns = Runs(marked: gone);
+        var kept = Enumerable.Range(start: 0, count: count).Where(predicate: Counted).Select(selector: witness => distance[witness]).ToArray();
         var fromSurface = SdfMeshAudit.Statistic(over: budget, values: kept);
         var geometric = MathF.Max(x: toSurface.Max, y: fromSurface.Max);
         var allowed = MathF.Max(x: geometric, y: budget);
@@ -390,7 +521,7 @@ public sealed class SdfMeshFieldLevels {
         for (var witness = 0; (witness < count); witness++) {
             var triangle = held[witness];
 
-            if ((triangle < 0) || !covered[m_component[m_owner[witness]]]) { continue; }
+            if ((triangle < 0) || !Counted(witness: witness)) { continue; }
 
             var wanted = m_material[witness];
             var own = (levelMaterials.IsEmpty ? 0 : (int)levelMaterials.Span[triangle]);
@@ -416,7 +547,7 @@ public sealed class SdfMeshFieldLevels {
 
         var material = Runs(marked: materialMarked);
         var normalRuns = Runs(marked: normalMarked);
-        var recorded = MathF.Max(x: finer, y: MathF.Max(x: geometric, y: MathF.Max(x: material.Largest, y: MathF.Max(x: normalRuns.Largest, y: vanished.Largest))));
+        var recorded = MathF.Max(x: finer, y: MathF.Max(x: geometric, y: MathF.Max(x: material.Largest, y: MathF.Max(x: normalRuns.Largest, y: vanishedRuns.Largest))));
 
         return new SdfMeshLevelError(
             Interior: interior,
@@ -431,10 +562,9 @@ public sealed class SdfMeshFieldLevels {
             Recorded: recorded,
             Refused: refused,
             SurfaceToMesh: fromSurface,
-            Vanished: vanished
-        );
+            Vanished: vanishedRuns
+        ) { VanishedTriangles = gone };
     }
-
     // The level's witnesses (vertices, centroids, edge midpoints and a grid at the level's cell over larger triangles),
     // each bracketed onto its piece's field: the upper bounds, the largest certified lower bound, the witnesses whose lower
     // bound passes their upper one, those refused, and those left out as interior.
@@ -721,9 +851,9 @@ public sealed class SdfMeshFieldLevels {
     /// <param name="pieces">The pieces' meshes and members, at least one.</param>
     /// <param name="members">Whether to return each vertex's member.</param>
     /// <returns>The joined mesh and, when asked, each vertex's member.</returns>
-    private static (SdfMesh Mesh, byte[]? Members, string? Skipped) Join(List<(SdfMesh Mesh, byte Member)> pieces, bool members) {
+    private static (SdfMesh Mesh, byte[]? Members) Join(List<(SdfMesh Mesh, byte Member)> pieces, bool members) {
         if (pieces.Count == 1) {
-            return (pieces[0].Mesh, (members ? Enumerable.Repeat(element: pieces[0].Member, count: pieces[0].Mesh.Positions.Length).ToArray() : null), null);
+            return (pieces[0].Mesh, (members ? Enumerable.Repeat(element: pieces[0].Member, count: pieces[0].Mesh.Positions.Length).ToArray() : null));
         }
 
         var joined = SdfMeshChunks.Join(chunks: [.. pieces.Select(selector: static piece => piece.Mesh)]);
@@ -731,10 +861,11 @@ public sealed class SdfMeshFieldLevels {
 
         foreach (var (mesh, member) in pieces) { vertexMembers.AddRange(collection: Enumerable.Repeat(element: member, count: mesh.Positions.Length)); }
 
-        return (new SdfMesh(indices: joined.Indices, normals: joined.Normals, positions: joined.Positions, triangleMaterials: joined.TriangleMaterials) { BakeCell = pieces[0].Mesh.BakeCell }, (members ? [.. vertexMembers] : null), null);
+        return (new SdfMesh(indices: joined.Indices, normals: joined.Normals, positions: joined.Positions, triangleMaterials: joined.TriangleMaterials) { BakeCell = pieces[0].Mesh.BakeCell }, (members ? [.. vertexMembers] : null));
     }
-    // Level zero's triangle neighbours across welded edges, each triangle's connected component and how many there are.
-    private static (int[][] Neighbours, int[] Component, int Components) Adjacency(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangles) {
+    // A mesh's triangle neighbours across welded edges, each triangle's connected component, how many there are, and each
+    // triangle's open edges (welded edges it alone holds, as the audit counts them).
+    private static (int[][] Neighbours, int[] Component, int Components, int[] Open) Adjacency(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangles) {
         var weld = new Dictionary<Vector3, int>(capacity: positions.Length);
         var welded = new int[positions.Length];
 
@@ -761,9 +892,11 @@ public sealed class SdfMeshFieldLevels {
         }
 
         var neighbours = new List<int>[triangles];
+        var open = new int[triangles];
 
         for (var triangle = 0; (triangle < triangles); triangle++) { neighbours[triangle] = []; }
         foreach (var held in edges.Values) {
+            if (held.Count == 1) { open[held[0]]++; }
             foreach (var first in held) {
                 foreach (var second in held) {
                     if (first != second) { neighbours[first].Add(item: second); }
@@ -790,7 +923,7 @@ public sealed class SdfMeshFieldLevels {
             component[triangle] = number;
         }
 
-        return ([.. neighbours.Select(selector: static list => list.ToArray())], component, numbering.Count);
+        return ([.. neighbours.Select(selector: static list => list.ToArray())], component, numbering.Count, open);
     }
     // The barycentric steps (u, v) of a grid over a triangle at a spacing, corners left out, its centroid included when
     // asked: none beyond the centroid for a triangle no longer than the spacing.

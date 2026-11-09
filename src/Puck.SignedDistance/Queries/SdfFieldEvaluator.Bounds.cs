@@ -911,7 +911,7 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Torus => TorusBounds(p: p, majorRadius: Point(value: instruction.Data0X), minorRadius: Point(value: instruction.Data0Y)),
             SdfShapeType.Plane => PlaneBounds(p: p, normal: Interval(value: Vector(instruction: instruction)), offset: Point(value: instruction.Data0W)),
             SdfShapeType.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
-            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W, inverseLengthSquared: instruction.Data1Y),
+            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W),
             SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
             SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
             SdfShapeType.RoundedRectangle or SdfShapeType.Ellipse => (LiftedBounds(
@@ -965,20 +965,17 @@ public sealed partial class SdfFieldEvaluator {
 
         return ((outside + inside) - cornerRadius);
     }
-    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) =>
-        CapsuleBounds(p: p, endpoint: Interval(value: endpoint), radius: Point(value: radius), inverseLengthSquared: Point(value: inverseLengthSquared));
-    private static FixedInterval CapsuleBounds(IntervalVector3 p, IntervalVector3 endpoint, FixedInterval radius, FixedInterval inverseLengthSquared) {
-        var h = FixedInterval.Clamp(
-            value: ((((p.X * endpoint.X) + (p.Y * endpoint.Y)) + (p.Z * endpoint.Z)) * inverseLengthSquared),
-            minimum: FixedQ4816.Zero,
-            maximum: FixedQ4816.One
-        );
+    // The shared interval parameter takes the exact quotient at its extreme corners. Squaring the endpoint into a
+    // Q48.16 interval first would lose tiny segments to a divisor containing zero, or overflow on large ones.
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
+        var segment = Interval(value: endpoint);
+        var h = FixedInterval.SegmentParameter(x: p.X, y: p.Y, z: p.Z, segment: endpoint);
 
         return (new IntervalVector3(
-            X: (p.X - (endpoint.X * h)),
-            Y: (p.Y - (endpoint.Y * h)),
-            Z: (p.Z - (endpoint.Z * h))
-        ).Length - radius);
+            X: (p.X - (segment.X * h)),
+            Y: (p.Y - (segment.Y * h)),
+            Z: (p.Z - (segment.Z * h))
+        ).Length - Point(value: radius));
     }
     // SdfSuperellipsoid over a box. The point side scales each ratio q_i/m into [0, 1] (each q_i is at most the largest,
     // m), raises it, sums, and roots the sum; the largest axis's ratio is exactly one and so is its power, so the sum is
@@ -1018,26 +1015,15 @@ public sealed partial class SdfFieldEvaluator {
 
         return joined!.Value;
     }
-    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box, each step's rounding enclosed: the product-first form where
-    // every magnitude the box holds takes it, and both forms joined where the box reaches the divide-first side.
+    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box: the point side's one rounding is non-decreasing in the
+    // magnitude, so its values at the box's two ends enclose every value the box holds, exactly.
     private static IntervalVector3 SuperellipsoidScaledRatioBounds(IntervalVector3 absolute, FixedVector3 radii, FixedQ4816 minimumRadius) {
-        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) {
-            if (magnitude.IsUnbounded) {
-                return FixedInterval.Entire;
-            }
-
-            var productFirst = ((magnitude * Point(value: minimumRadius)) / Point(value: radius));
-
-            if ((magnitude.Upper.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit)) {
-                return productFirst;
-            }
-
-            var divideFirst = ((magnitude / Point(value: radius)) * Point(value: minimumRadius));
-
-            return (((magnitude.Lower.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit))
-                ? FixedInterval.Union(first: productFirst, second: divideFirst)
-                : divideFirst);
-        }
+        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) => (magnitude.IsUnbounded
+            ? FixedInterval.Entire
+            : new FixedInterval(
+                lower: SuperellipsoidScaledRatio(magnitude: magnitude.Lower, minRadius: minimumRadius, radius: radius),
+                upper: SuperellipsoidScaledRatio(magnitude: magnitude.Upper, minRadius: minimumRadius, radius: radius)
+            ));
 
         return new(X: Axis(magnitude: absolute.X, radius: radii.X), Y: Axis(magnitude: absolute.Y, radius: radii.Y), Z: Axis(magnitude: absolute.Z, radius: radii.Z));
     }
@@ -1045,19 +1031,11 @@ public sealed partial class SdfFieldEvaluator {
     // the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset the
     // interval its rotated frame reaches. The lower bound is the box's least distance to that hull, less the largest
     // radius. The upper bound is the lesser of the far side of that hull and, because either search measures the curve's
-    // start and only ever keeps a point it measures nearer, the distance to that start. The search's
-    // own squared distances are enclosed too, so a box where they would leave the carrier answers unbounded and the
-    // frame excludes it.
+    // start and only ever keeps a point it measures nearer, the distance to that start. The search compares full-width
+    // sums of raw squares; only the coordinate differences and final lengths need to fit the Q48.16 carrier.
     private static FixedInterval SweepBounds(IntervalVector3 p, SweepCurveFixed curve, FixedQ4816 strandOffset) {
         var t = SweepParameter;
         var centre = BezierBounds(a: curve.A, b: curve.B, c: curve.C, t: t);
-        var reach = new IntervalVector3(X: (p.X - centre.X), Y: (p.Y - centre.Y), Z: (p.Z - centre.Z));
-        var searchSquared = ((FixedInterval.Square(value: reach.X) + FixedInterval.Square(value: reach.Y)) + FixedInterval.Square(value: reach.Z));
-
-        if (searchSquared.IsUnbounded) {
-            return FixedInterval.Entire;
-        }
-
         var taper = (Point(value: curve.RadiusStart) + ((Point(value: curve.RadiusEnd) - Point(value: curve.RadiusStart)) * t));
         var swell = FixedInterval.Max(first: FixedInterval.Sin(angle: (Point(value: SweepPi) * t)), second: Point(value: FixedQ4816.Zero));
         var radius = (taper + (Point(value: curve.Bulge) * FixedInterval.Pow(exponent: Point(value: SweepBulgeExponent), value: swell)));
@@ -1072,10 +1050,10 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         // From the start: the search's first best is the start a itself and it only ever moves to a centreline point whose
-        // squared distance rounds strictly lower. Each rounding is half a raw, so the pick's exact squared distance is at
-        // most the start's plus one raw; its root, the strand's reach and half a raw of the final root bound the answer.
-        var startSquared = ((FixedInterval.Square(value: (p.X - Point(value: curve.A.X))) + FixedInterval.Square(value: (p.Y - Point(value: curve.A.Y)))) + FixedInterval.Square(value: (p.Z - Point(value: curve.A.Z))));
-        var fromStart = (((FixedInterval.Sqrt(value: (startSquared + Point(value: FixedQ4816.Epsilon))) + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius);
+        // exact squared distance is strictly lower. The monotone, nearest-rounded length cannot increase. The strand's
+        // reach and one raw for its rounded coordinates and final root bound the answer.
+        var startDistance = new IntervalVector3(X: (p.X - Point(value: curve.A.X)), Y: (p.Y - Point(value: curve.A.Y)), Z: (p.Z - Point(value: curve.A.Z))).Length;
+        var fromStart = (((startDistance + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius);
 
         return (fromStart.IsUnbounded
             ? hull
@@ -1203,15 +1181,15 @@ public sealed partial class SdfFieldEvaluator {
 
         return FixedInterval.Max(first: box, second: bevel);
     }
+    // The shared interval parameter encloses the point side's exact quotient without a carrier-rounded squared length.
     private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedQ4816 r1, FixedQ4816 r2, FixedQ4816 halfHeight) {
-        var k2 = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
+        var slant = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
 
         return Trapezoid2DBounds(p: p, r1: Point(value: r1), r2: Point(value: r2), halfHeight: Point(value: halfHeight),
-            slant: new IntervalVector2(X: Point(value: k2.X), Y: Point(value: k2.Y)),
-            slantLengthSquared: Point(value: FixedVector2.Dot(left: k2, right: k2)));
+            slant: slant);
     }
     private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedInterval r1, FixedInterval r2, FixedInterval halfHeight,
-        IntervalVector2 slant, FixedInterval slantLengthSquared) {
+        FixedVector2 slant) {
         var px = FixedInterval.Abs(value: p.X);
         var zero = Point(value: FixedQ4816.Zero);
         // p.x − min(p.x, r) is max(p.x − r, 0) exactly; r is r1 below the axis and r2 at or above it.
@@ -1222,15 +1200,9 @@ public sealed partial class SdfFieldEvaluator {
                 : FixedInterval.Union(first: r1, second: r2)));
         var cax = FixedInterval.Max(first: (px - r), second: zero);
         var cay = (FixedInterval.Abs(value: p.Y) - halfHeight);
-        var projection = ((slantLengthSquared == zero)
-            ? zero
-            : FixedInterval.Clamp(
-                value: ((((r2 - px) * slant.X) + ((halfHeight - p.Y) * slant.Y)) / slantLengthSquared),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            ));
-        var cbx = ((px - r2) + (slant.X * projection));
-        var cby = ((p.Y - halfHeight) + (slant.Y * projection));
+        var projection = FixedInterval.SegmentParameter(x: (r2 - px), y: (halfHeight - p.Y), segment: slant);
+        var cbx = ((px - r2) + (Point(value: slant.X) * projection));
+        var cby = ((p.Y - halfHeight) + (Point(value: slant.Y) * projection));
         var magnitude = FixedInterval.Sqrt(value: FixedInterval.Min(
             first: (FixedInterval.Square(value: cax) + FixedInterval.Square(value: cay)),
             second: (FixedInterval.Square(value: cbx) + FixedInterval.Square(value: cby))

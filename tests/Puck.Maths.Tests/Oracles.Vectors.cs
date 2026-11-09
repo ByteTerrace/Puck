@@ -1346,6 +1346,17 @@ internal static partial class Oracles {
 
         return (((exact >= long.MinValue) && (exact <= long.MaxValue)), exact);
     }
+    /// <summary>The reference segment parameter: the exact quotient clamped to <c>[0, 1]</c>, rounded once to Q16, zero
+    /// for a non-positive numerator or denominator.</summary>
+    /// <param name="numerator">The exact numerator, at the denominator's scale.</param>
+    /// <param name="denominator">The exact denominator.</param>
+    /// <returns>The raw parameter.</returns>
+    public static long ClampedUnitQuotient(BigInteger numerator, BigInteger denominator) =>
+        (((numerator.Sign <= 0) || (denominator.Sign <= 0))
+            ? 0L
+            : ((numerator >= denominator)
+                ? (1L << 16)
+                : ((long)RoundRationalTiesToEven(denominator: denominator, numerator: (numerator << 16)))));
     /// <summary>The exact rational <c>numerator / denominator</c> rounded UP — the reference every directed-up law
     /// states its bound against.</summary>
     /// <param name="numerator">The exact numerator.</param>

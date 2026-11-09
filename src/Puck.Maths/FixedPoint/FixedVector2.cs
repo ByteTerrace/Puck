@@ -161,6 +161,19 @@ public readonly record struct FixedVector2(FixedQ4816 X, FixedQ4816 Y)
         return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(
             ((((Int128)left.X.Value) * right.X.Value) + (((Int128)left.Y.Value) * right.Y.Value)))));
     }
+    /// <summary>Returns the parameter of <paramref name="point"/>'s projection onto the segment from the origin to
+    /// <paramref name="segment"/>, <c>clamp(dot(point, segment) / dot(segment, segment), 0, 1)</c>, with both dot products
+    /// exact and one rounding.</summary>
+    /// <param name="point">The point, relative to the segment's start.</param>
+    /// <param name="segment">The segment's end, relative to its start.</param>
+    /// <returns>The clamped parameter in <c>[0, 1]</c>; zero for a zero <paramref name="segment"/>.</returns>
+    /// <remarks>Dividing the carrier-rounded dot products keeps only <c>2^-16</c> of each: a centimetre segment's
+    /// squared length is a few dozen raws, so its parameter would move by a few percent.</remarks>
+    public static FixedQ4816 SegmentParameter(FixedVector2 point, FixedVector2 segment) =>
+        FusedArithmetic.ClampedUnitQuotient(
+            denominator: FusedArithmetic.AddProducts(firstLeft: segment.X.Value, firstRight: segment.X.Value, secondLeft: segment.Y.Value, secondRight: segment.Y.Value).Magnitude,
+            numerator: FusedArithmetic.AddProducts(firstLeft: point.X.Value, firstRight: segment.X.Value, secondLeft: point.Y.Value, secondRight: segment.Y.Value)
+        );
     /// <summary>Linearly interpolates each component from <paramref name="from"/> to <paramref name="to"/> by <paramref name="amount"/>.</summary>
     /// <param name="from">The vector returned when <paramref name="amount"/> is zero.</param>
     /// <param name="to">The vector returned when <paramref name="amount"/> is one.</param>

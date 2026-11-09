@@ -150,7 +150,7 @@ give each type its full contract.
 | `SecondOrderDynamics` (with `SecondOrderStep`, `SecondOrderState`/`SecondOrderState3`, `SecondOrderSample`) | `readonly record struct` | A pole-matched second-order response—`Create(f, ζ, r)` derives the coefficients from an authored frequency, damping ratio, and initial response; `Compile`+`Step` advance per tick/frame, `Evaluate`+`Retarget` read a closed form from initial conditions; `SecondOrderState.WithPosition`/`WithVelocity` replace one lane exactly and keep the other's raw. Q32 authoritative state; a `MathF` float twin lives in `Puck.SdfVm.Views` for presentation-only followers. |
 | `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points—`Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; presentation (the camera program's `path` op) samples the `CompiledCurvatureSpline` and converts the sample to floats. |
 | `FixedVectorMath` | `static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
-| `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider, beside the wrapping `MixedScaleProduct` and the `RawMagnitude` sign-magnitude primitive. The remaining sign-plus-`UInt128` accumulation and wrapping siblings are internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
+| `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, the product quotient `MultiplyDivide`, the clamped quotient `ClampedUnitQuotient`, and the generalized `TryDivideMagnitudeRounded` divider, beside the wrapping `MixedScaleProduct` and the `RawMagnitude` sign-magnitude primitive. The remaining sign-plus-`UInt128` accumulation and wrapping siblings are internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
 | `FixedLinearSolve` | `public static` | Scale-free general 3×3 solve, `TrySolve3`, by Cramer's rule on `FixedSymmetricSolve`'s machinery: nine independent raw-`long` entries at any shared caller scale, one rounding per component, and a refusal that clears every output. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. Every apply, solve and invert kernel is public: `TryApplySymmetric2`/`3`, `TrySolveSymmetric2`/`3` and `TryInvertSymmetric2`/`3`. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
 | `FixedMassProperties` | `public static` | Volume, mass and centroidal inertia for the solid primitives (sphere, box, capsule bodies; all four volumes), the parallel-axis transfer, compound accumulation, and mass/inertia inversion. `TrySphereBody`, `TryBoxBody`, `TryCapsuleBody`, `TryTranslateInertia`, `TryInvertMass` and `TryInvertInertia` are the construction path a rigid body needs from a collider; the four `Try*Volume` overloads, `TryCylinderBody` and `TryCompound` (over its `CompoundPart` record) serve volume alone, a cylinder collider, and a compound body. |
@@ -1066,6 +1066,20 @@ The refusing `TryMixedScaleProduct`, `TryMixedScaleDotProduct`, and
 `TryScaledReciprocal` faces keep mixed-scale callers on the same exact
 accumulation and one-rounding rule without exposing those sign-magnitude
 building blocks.
+
+`MultiplyDivide` rounds `x·y/z` once, and `ClampedUnitQuotient` rounds the
+quotient of two exact sums clamped to `[0, 1]` (the segment parameter
+`FixedVector2.SegmentParameter` and `FixedVector3.SegmentParameter` read). The
+operator forms round the product or each dot product to the carrier first, which
+keeps `2⁻¹⁶` of its absolute value: for centimetre lengths, whose products are a
+few dozen raws, that is a few bits, and a field built on them reads a
+millimetre of noise.
+
+`FixedInterval.SegmentParameter` encloses the same rounded parameter over a
+2D or 3D box. Its two corners are selected by the segment's component signs
+and evaluated by the point kernel: linearity, clamping and rounding preserve
+their order. It never narrows the squared length to the carrier, including for
+tiny and zero segments, and propagates an unbounded coordinate interval.
 
 ### `FixedSymmetricSolve`
 
