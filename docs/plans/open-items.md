@@ -50,8 +50,8 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (done for tooling, physics and world contact, and rendering; the state and
-   rules audit is still open), then its live copies as a batch, and
+   (done for tooling, physics and world contact, rendering, and state and
+   rules), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -652,20 +652,10 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
-  (`TryGetValue` and `GetValueRefOrAddDefault` in
-  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
-  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
-  edge bit and schedule in one entry of one table. The state hash sorts the
-  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
-  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
-  from the unhashed schedule cache. The host's interaction path still resolves
-  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
-  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
-  `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
-  success (`GeneratorEngine.cs:567-569`, `:1407`) and the caller slices to the
+  `GeneratorEngine.TryFireBatch` passes `values.Length` to `GeneratorEngine.TryRunBatch`,
+  which writes every index in that range before success, and the caller slices to the
   lattice's cell count (`:54-57`), but the determinism of the paint rests on
   that loop. Keep the buffer with the lattice that owns the row, sized once, so
   whatever it holds is that row's own earlier paint.
@@ -2498,6 +2488,34 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      `D3DCompile` with no include handler. Merging needs that compile to resolve an
      engine header (and key its incremental check on the header) first; the group
      accumulators differ per kernel, so only the two-line scale helper is shared.
+
+State and rules audit remainder (paths under `src/`):
+
+- [low · owner: state] The rule VM's latch keeps a binding in two dictionaries:
+  `RuleLatch.RuleState.Held` (`Puck.State.Rules/Evaluation/RuleLatch.cs:72`)
+  and `RuleLatch.RuleState.Scheduling` (`:76`), both walked by
+  `RuleLatch.EndSweep` (`:495`) after each swept rule. Shared home: one binding
+  entry in `RuleLatch.RuleState`, holding the edge bit and schedule together.
+  Keep the hashed, checkpointed bit apart from the unhashed schedule cache:
+  `RuleLatch.AppendStateHash` sorts binding identities and folds their edge bits;
+  schedule caches stay out.
+  This needs the journal-participant and lifecycle writers moved together,
+  with latch and undo checks plus the rule-faults reproduce run. The host's
+  interaction path also resolves its `RuleState` by name per tick
+  (`IRuleOwner.TryEvaluateOwn` carries no state); the evaluator's own family
+  walk reads them from `RuleLatch.States`.
+- [medium · owner: body programs] `WorldBody.GateOpen`
+  (`Puck.World.Server/WorldBody.ActionState.cs:551`) interprets a postfix
+  `CompiledPredicate[]` beside `RuleEvaluation.Decide`
+  (`Puck.State.Rules/Evaluation/RuleEvaluation.cs:64`). Both share
+  `GateProgramEvaluator`'s Boolean stack operations, but body predicates still
+  have a separate dispatch over recency clocks, counters, timers and held
+  input. Shared home: operands and gate programs in `Puck.State.Rules`, with
+  body facts served by the World host. Move the predicates and their validation
+  together; retain the body's recency and timer continuation when doing so.
+  This is a body-program lowering change, beyond the local duplication fix
+  pass. Check it through the debug world's authored body-action scenarios and
+  their reproduce runs.
 
 Rendering duplicates the dup-render audit found (paths under `src/`):
 
