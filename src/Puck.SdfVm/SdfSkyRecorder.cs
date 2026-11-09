@@ -217,13 +217,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             var recorder = recording.Recorder;
             var commandBuffer = recording.CommandBuffer;
 
-            recorder.TransitionBuffer(bufferHandle: meter.Histogram.BufferHandle, commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer,
-                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
-            recorder.CopyBuffer(commandBufferHandle: commandBuffer, destinationBufferHandle: meter.Readback.BufferHandle, sizeBytes: MeterBytes, sourceBufferHandle: meter.Histogram.BufferHandle);
-            recorder.TransitionBuffer(bufferHandle: meter.Readback.BufferHandle, commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer);
+            GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: meter.Readback, recorder: recorder, sizeBytes: MeterBytes,
+                source: meter.Histogram, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             ToShader(meter: meter, recorder: recorder, commandBuffer: commandBuffer, source: GpuAccess.TransferRead);
             meter.Exposures = residency.Exposures;
             meter.View = index;

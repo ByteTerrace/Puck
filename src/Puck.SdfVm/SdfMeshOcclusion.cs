@@ -269,15 +269,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
             var slot = m_sightSlots[m_slot];
             slot.Buffer ??= m_buffers.CreateReadback(sizeBytes: CountsBytes, name: Name("portal sight", m_slot));
-            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_counts!.BufferHandle,
-                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
-                destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-            recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: m_counts.BufferHandle,
-                destinationBufferHandle: slot.Buffer.BufferHandle, sizeBytes: CountsBytes);
-            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: slot.Buffer.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
-            Ready(buffer: m_counts, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
+            GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: slot.Buffer, recorder: recorder, sizeBytes: CountsBytes,
+                source: m_counts!, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
             m_sightCopies.Record(slot: m_slot, result: slot);
         }
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
