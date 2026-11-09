@@ -556,8 +556,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   A light reaches a cel surface as `light × (band + (1 − band) × region × tint)`
   (`sdfToonShare`): the tint is a direct light's shade-side share, never a
   multiplier on sky or bounced light, so an interior lit by bounce keeps its
-  exposure; `region` is a shadowing directional's probe share
-  (`sdfMeshLightVisibility`), the cascades' visibility without the volume.
+  exposure; `region` is the larger of the cascades' visibility, which the
+  surface pass queries on a cel material's shade side too
+  (`sdfMaterialShadowDemand`), and the open sky the probes see above the surface
+  (`sdfToonOpen`). Reading the light's probe share there instead printed the
+  probe cells as soft patches across open walls.
   `band: Combined` steps the filtered visibility too, at a width
   `sdfToonResolve` keeps at or above what the cascade texel resolves at the
   receiver (`sdfToonShadowTexels`, through the shared `sdfMeshCascadeHolding`
@@ -573,7 +576,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   opposite neighbours turned apart, so a raised plate's edge draws none; ink at
   a plate or paint boundary is those measures', not the style's. The standard's
   `cel` shade program mirrors the response without the neighbourhood normal,
-  the widening or the probe-share fallback, which no stamp input carries yet. Keep screen pictures, portal pictures, sky and self-emission
+  the widening or the open-air region, which no stamp input carries yet. Keep screen pictures, portal pictures, sky and self-emission
   out of both the banding and ink. Nested worlds take the live enable override
   but retain their own document styles. The tuning belongs to the lighting
   cadence signature, never the bake closure.

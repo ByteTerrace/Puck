@@ -18,7 +18,7 @@
 // The projected cascade texel, in pixels, at which the shadow step keeps the whole filtered penumbra: the filter is at
 // least a texel wide, so a sharp step of it draws the texel grid's corners, and once a texel spans this many pixels (a
 // far cascade on a receiver grazing the light) those corners read as blocks.
-static const float SdfToonShadowBlockPixels = 32.0;
+static const float SdfToonShadowBlockPixels = 64.0;
 
 // A style as a pixel shades with it: the authored rows; the band softness, widened at this pixel to what the surface
 // resolves; the width of the shadow step for each shadow slot, in visibility; and the normal the band reads.
@@ -29,6 +29,7 @@ struct SdfToonStyle {
     float3 ink;
     float2 shadowStep;
     float3 normal;
+    float open;
 };
 
 // The style a material shades with: its own when it authors one, else the world's default, as authored. A pixel that
@@ -45,6 +46,7 @@ SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     style.outline.x *= passGroup.toonInk.w;
     style.shadowStep = float2(1.0, 1.0);
     style.normal = float3(0.0, 0.0, 0.0);
+    style.open = 0.0;
     return style;
 }
 
@@ -90,6 +92,15 @@ float sdfToonBand(SdfToonStyle style, float cosine, float visibility, float widt
         shadow = smoothstep(0.5 - halfWidth, 0.5 + halfWidth, shadow);
     }
     return sdfToonStep(style, cosine) * shadow;
+}
+
+// The share of the sky above a surface its probes see open (sdfMeshIrradianceAt, about straight up) at which the surface
+// counts as in the open air: a cast shadow there, under a tree or in a building's shadow on the lawn, keeps the shade
+// side's tint as a form shadow does, while a room, which sees almost no sky, does not. The probes sit a storey cell apart,
+// so the share varies in broad soft patches; a share past this one reads as open air whole, so those patches never print.
+static const float SdfToonOpenSky = 0.25;
+float sdfToonOpen(float skyVisibility) {
+    return smoothstep(0.0, SdfToonOpenSky, skyVisibility);
 }
 
 // What a light delivers at a surface per unit of its strength: the whole on the lit side, the tint's share on the shade

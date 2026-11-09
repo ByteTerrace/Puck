@@ -9,9 +9,9 @@ shade template paint(color) { surface { albedo = mix(material.albedo, color, pai
 
 // The engine's cel response (shade/sdf-toon.hlsli) as a program: a light's band steps its cosine and, combined, its
 // filtered shadow visibility; the lit side takes the light whole and the shade side the tint's share of it, as far as the
-// light reaches the surface's surroundings (a directional's probe share; a point light's reach already holds its own).
-// The engine also reads the band's cosine on a neighbourhood normal and widens the steps to what the surface and the
-// cascade resolve, which a program cannot yet read.
+// light reaches the surface's surroundings (a directional's visibility or probe share; a point light's reach already
+// holds its own). The engine also reads the band's cosine on a neighbourhood normal, widens the steps to what the surface
+// and the cascade resolve, and counts a surface in the open air as reached, which a program cannot yet read.
 function celStep(value, threshold, softness) = smoothstep(threshold - max(softness * 0.5, 0.0005), threshold + max(softness * 0.5, 0.0005), saturate(value))
 function celShadow(visibility, softness, combined) = combined ? smoothstep(0.5 - max(softness * 0.5, 0.0005), 0.5 + max(softness * 0.5, 0.0005), saturate(visibility)) : saturate(visibility)
 shade template cel(threshold, softness, shadowTint, specularSize, exposureStops, shoulder, structural combined = 0) {
@@ -20,7 +20,7 @@ shade template cel(threshold, softness, shadowTint, specularSize, exposureStops,
     let direct = (light.kind == uint(0)) + point
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
     let band = celStep(cosine, threshold, softness) * (point ? 1 : celShadow(light.visibility, softness, combined))
-    let region = point ? 1 : light.probeShare
+    let region = point ? 1 : max(light.visibility, light.probeShare)
     let reach = point ? light.reach * light.probeShare * light.occlusion : 1
     let share = [band, band, band] + shadowTint * ((1 - band) * region)
     diffuse = direct ? light.color * share * (light.weight * reach) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])

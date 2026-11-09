@@ -591,12 +591,15 @@ and the light reaches the surface as
 `light × (band + (1 − band) × region × shadowTint)`: the lit side takes the
 light whole, and the shade side, form and cast shadow alike, keeps
 `shadowTint`'s share of it, the painted shadow colour, as far as the light
-reaches the surface's surroundings. For a shadowing directional that region is
-the irradiance volume's traced share of the light about the surface
-(`sdfMeshLightVisibility`), so a shadowed room the sun never enters takes no
-tinted sunlight while a cast shadow on an open lawn takes it all; without the
-volume it is the cascades' visibility. A point light's reach already holds its
-traced visibility. Sky and bounced light add as they do in the continuous
+reaches the surface's surroundings. For a directional that region is the
+larger of two measures: the cascades' visibility, which the surface pass
+reads on a cel material's shade side too (`sdfMaterialShadowDemand`), so a
+form shadow on its own body passes through the cascade's exit layer while a
+room's shell blocks it; and whether the surface is in the open air, the share
+of the sky above it the irradiance volume's probes see (`sdfToonOpen`), so a
+cast shadow under a tree or beside a building keeps the tint as a form shadow
+does. A room the sun never enters passes neither and takes no tinted sunlight.
+A point light's reach already holds its traced visibility. Sky and bounced light add as they do in the continuous
 response, untinted, so a room lit only by bounce keeps its exposure and the
 lit-to-shade step outdoors is the tint the author chose rather than the
 sky-to-sun ratio. The local adaptation meters each light without its band or

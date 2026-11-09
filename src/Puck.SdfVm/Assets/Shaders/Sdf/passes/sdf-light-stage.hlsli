@@ -216,6 +216,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 style = sdfToonResolve(style, gathered.normal, max(gathered.spread, abs(s.curvature) * footprint),
                     sdfMeshNormalSpread(s.meshDraw, s.meshTriangle), sdfToonShadowTexels(surfacePoint, s.normal, footprint));
             }
+            if (toon && meshIndirect && sdfMeshAnswers(probes)) {
+                float skyVisibility;
+                float3 skyRadiance;
+                float3 skyLight;
+                sdfMeshIrradianceAt(probes, float3(0.0, 1.0, 0.0), skyVisibility, skyRadiance, skyLight);
+                style.open = sdfToonOpen(skyVisibility);
+            }
             shadeSurface.toon = (SdfToonStyle)0;
             if (toon) { shadeSurface.toon = style; }
             shadeSurface.ambientOcclusion = ambientOcclusion;

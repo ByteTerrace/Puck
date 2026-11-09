@@ -267,8 +267,7 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // authored light phase's stamp both read. `visibility` is the share of the light the default response lets through:
 // the cascade slot's (the probes' where no cascade measured it) for a directional, the probes' share for a traced point
 // light, and one for every other kind. The authored stamp requests every term; ordinary shading requests only the
-// terms its light kind uses, preserving the no-program path's work. A cel style reads a shadowing directional's probe
-// share as the region its shade side's tint reaches (sdfToonShare).
+// terms its light kind uses, preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
 SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored) {
     SdfLightInputs inputs;
@@ -285,7 +284,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         if (light.kind == SdfLightScreen) inputs.reach = saturate(dot(light.facing, -inputs.direction)) / (distanceSquared + light.weight);
     }
     if (surface.probed && light.record.Shadows != 0u && light.index >= 0 &&
-        (authored || (light.kind == SDF_LIGHT_DIRECTIONAL && (!surface.cascaded || sdfToonEnabled(surface.toon))) ||
+        (authored || (light.kind == SDF_LIGHT_DIRECTIONAL && !surface.cascaded) ||
          (light.kind == SDF_LIGHT_POINT && light.weight * inputs.reach > 0.0))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
     }
@@ -314,11 +313,14 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         float occlusion = inputs.visibility;
 
         if (toon) {
-            // The band reads the style's neighbourhood normal; the highlight keeps the surface's own. The region is the
-            // probes' share of the light about the surface where the volume traced it, else the cascades' visibility.
+            // The band reads the style's neighbourhood normal; the highlight keeps the surface's own. The region is where
+            // the light would reach the surface were it turned toward it, which the surface pass measures on a cel
+            // material's shade side too (sdfMaterialShadowDemand): a form shadow on its own body passes and a room's
+            // shell does not. A cast shadow in the open air passes too (the style's `open`), so it keeps the tint as a
+            // form shadow does.
             float cosine = sdfWrapDiffuse(dot(surface.toon.normal, light.position), surface.material.wrap);
             float band = sdfToonBand(surface.toon, cosine, occlusion, sdfToonShadowWidth(surface.toon, light.index));
-            float region = ((surface.probed && (light.record.Shadows != 0u) && (light.index >= 0)) ? inputs.probeShare : occlusion);
+            float region = max(saturate(occlusion), surface.toon.open);
             response.diffuse = light.color * (light.weight * sdfToonShare(surface.toon, band, region));
             response.metered = light.color * (light.weight * region * cosine);
             response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, band);

@@ -1891,8 +1891,8 @@ reported until it does.
   (`shade/sdf-toon.hlsli`, `sdfLightResponse`'s toon branches) and the
   standard's `cel` program (`worlds/standard/shading.puck`), which mirrors it
   but cannot read the band's neighbourhood normal (`sdfToonGather`), the
-  per-pixel widening (`sdfToonResolve`) or the directional region's fallback to
-  the cascades' visibility, since no stamp input carries them. Section 3.10 of
+  per-pixel widening (`sdfToonResolve`) or the open-air region (`sdfToonOpen`),
+  since no stamp input carries them. Section 3.10 of
   the memo deletes the HLSL banding once a world default can name a program;
   until then both change together, and the stamp needs those inputs first.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
