@@ -256,6 +256,17 @@ brief:
   section in the hand-back: the capability searched, the decision registers,
   references and skills read, the candidates found with citations, and why the
   chosen one owns it. The lead reads it before merging;
+- for a lane building a creation to push the engine (a probe, AGENTS.md "Puck's
+  purpose"), the stop rule in its own words: when a defect is an engine limit,
+  the lane stops sculpting that part and hands back the limit with its
+  evidence. A probe lane's hand-back leads with what the engine could not do.
+  At most two look-critic rounds per creation per wave; a third failure changes
+  the approach or goes to the owner;
+- for a lane changing a shared system (the field, bake, lighting, materials,
+  input), a finish line that names the gallery exhibits and walkthrough
+  segments it reaches, judged against their plaques
+  ([the scripted walkthrough](../../../docs/decisions/engine-design.md#the-scripted-walkthrough)),
+  not only the creation that prompted it;
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
@@ -340,12 +351,11 @@ the work without reducing it. If no round covers it, run one first (AGENTS.md,
 "Regular research is worth it"); the round costs an hour beside other lanes, a
 wrong design costs a lane, its review and the redo.
 
-A round's models follow the owner's routing: "Fable for synthesis, not the
-rest", and "Astra for adversarial review of the synthesis". The researchers
-run on Opus (`specialist`), Sol and Argon, one focus each; Fable (`principal`)
-writes the one synthesis from their findings and the code; Astra reviews that
-synthesis adversarially, findings-only, before any build lane is briefed. The
-two frontier models touch the round only at those two points.
+A round's models are chosen by the factors in AGENTS.md ("Models are chosen
+intelligently, never religiously"): researchers from several families, one
+focus each; one synthesis written by the model whose judgement best fits it;
+and an adversarial, findings-only review of that synthesis by another family
+than its author, before any build lane is briefed.
 
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
@@ -956,13 +966,15 @@ rejects the flag ([`verification`](../verification/SKILL.md#build-before-you-tes
 
 ## Select models and route findings
 
-All three families implement. Choose the model and effort per lane by fit: put the strongest available
-model on subtle or correctness-heavy work. Codex's two models are Astra
-(`gpt-6-astra`, the frontier model, Fable's counterpart) and Sol
-(`gpt-6.1-sol`, OpenAI's intended counterpart of Opus 5.5, even where
-benchmarks score it lower). Sol is the default Codex model for
-implementation and review-and-fix passes; Astra is conserved as Fable is (the
-owner's ruling); pass `--model` and `--effort` on every launch
+All three families implement. Choose the model and effort per lane by the
+factors AGENTS.md names (the owner's ruling: "intelligent", not "religious"):
+how hard and open the work is, what an undetected error costs, cost and speed
+per task, family diversity between author and reviewer, the environment the
+work needs, and measured results on that kind of task. No model is conserved
+by standing rule, and the brief states the one-line reason for its choice.
+Codex's two models are Astra (`gpt-6-astra`, the frontier model, Fable's
+counterpart) and Sol (`gpt-6.1-sol`, OpenAI's intended counterpart of Opus
+5.5, even where benchmarks score it lower); pass `--model` and `--effort` on every launch
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Use Codex
 slots both to implement and to review Claude authors' changes
 ([spend verification](#spend-verification-not-writing)).
@@ -986,7 +998,7 @@ holds only what they leave out:
 | `implementer` | Sonnet 5.5 | high | own | `delegate` |
 | `reviewer` | Opus 5.5 | high | none | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
 | `specialist` | Opus 5.5 | high | own | `delegate` |
-| `principal` | Fable 5.1 | high | own | `delegate` |
+| `principal` | Fable 5.2 | high | own | `delegate` |
 
 Route each brief to the role that fits it, and say why in the brief: a brief
 with a known cause or a specified result goes to `implementer` even when it is
@@ -994,10 +1006,11 @@ large, since length alone is no reason for a stronger role. Escalate when
 quality or progress calls for it (AGENTS.md: a stronger model is used wherever
 it pays for itself): a stalled lane moves to a stronger role or the other
 family, never to a third attempt on the same footing. `principal` (Fable, the
-most capable model) takes the work where its judgement changes the outcome:
+most capable model) fits work where its judgement changes the outcome:
 designs, architectures and design reviews; breaking a spiral
-([no bad loops](#no-bad-loops)); and a hard diagnosis or an invariant-heavy
-implementation whose brief says why Fable fits. Codex is part of the same
+([no bad loops](#no-bad-loops)); hard diagnoses and invariant-heavy
+implementation. Weigh it against `specialist` per task: Anthropic positions
+Fable 5.2 near Opus 5.5 at maximum effort at about half the cost per task. Codex is part of the same
 lineup: Sol is the peer of `specialist` and `implementer` and takes the same
 briefs (demanding implementation, diagnosis, invariant-heavy work and review
 included), and Astra is the peer of `principal`: it takes the work where the
@@ -1048,15 +1061,15 @@ worktree of it can call `puck_worlds` and the rest.
 
 | Codex model | Id | Role | Effort |
 |---|---|---|---|
-| Astra | `gpt-6-astra` | The frontier model, conserved like Fable: designs, spirals, the hardest diagnosis | `low` to `max`; refuses `none` |
+| Astra | `gpt-6-astra` | The frontier model, Fable's counterpart: designs, spirals, the hardest diagnosis | `low` to `max`; refuses `none` |
 | Sol | `gpt-6.1-sol` | The default Codex model, Opus 5.5's counterpart: implementation, diagnosis, review | `low` to `max`, default `medium`; refuses `none` and `minimal` |
 
 The companion's `--effort` stops at `xhigh`; `max` needs `codex exec -c
 model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
 the effort). Codex draws on the plan's allowance. Effort is not capability
 across models: OpenAI's Codex guidance says Astra at `low` can outperform Sol at
-`high`, but Astra is conserved, so a demanding Codex lane runs Sol at `high` or
-`xhigh` and moves to Astra only as `principal` work moves to Fable. Raising effort never supplies a missing file, tool or
+`high`, so for a demanding Codex lane weigh Astra at a lower effort against Sol
+at `high` or `xhigh` on the same factors. Raising effort never supplies a missing file, tool or
 permission; fix the brief first. Astra asks more questions when input
 could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is

@@ -149,9 +149,8 @@ public static class SdfSolidGeometry {
         ),
             // The vertices are authored in the unit square and scaled into place here: an affine image of a convex polygon is
             // the convex polygon of its scaled vertices, whose field is its exact distance. CornerRadius reads as a fraction
-            // of the scaled polygon's inradius, the profile's sole rounding control; the separate rounding field has no
-            // independent ceiling here (MaxRounding's Convex arm is 0), so it is summed in rather than dropped, and the
-            // builder's ClampRounding bounds the total.
+            // of the scaled polygon's inradius; separate rounding adds a fillet within the remaining inset/lift room.
+            // MaxRounding and the builder's ClampRounding bound the same total.
             SdfPrismProfileKind.Convex => ConvexProfile(
             chain: chain,
             vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))],
@@ -187,12 +186,14 @@ public static class SdfSolidGeometry {
             smooth,
             detail: detail
         );
+
     /// <summary>The positive, nonzero magnitudes used by primitive emission and its canonical descriptors.</summary>
     public static Vector3 EffectiveScale(Vector3 scale) =>
         Vector3.Max(
             value1: Vector3.Abs(value: scale),
             value2: new Vector3(value: MinimumScale)
         );
+
     private static bool IsUniform(Vector3 scale) =>
         ((scale.X == scale.Y) && (scale.Y == scale.Z));
     private static void RequireTaper(float taper) {
@@ -1257,10 +1258,10 @@ public static class SdfSolidGeometry {
                             liftAmount: effectiveScale.Z
                         )
                     ),
-                        // Convex's CornerRadius IS the corner rounding (SdfProgramBuilder.ConvexPolygon), so the
-                        // separate rounding field has no independent room left — zero here, like Polygon's own baked
-                        // constant leaves it none.
-                        SdfPrismProfileKind.Convex or SdfPrismProfileKind.Path => 0f,
+                        // The same inset and lift ceiling ConvexProfile/ConvexPolygon emit, less the
+                        // profile's own corner fillet. Separate rounding consumes the remaining room.
+                        SdfPrismProfileKind.Convex => ConvexRoundingCeiling(lift: lift, profile: profile!, scale: effectiveScale),
+                        SdfPrismProfileKind.Path => 0f,
                         // The trapezoid's ceiling is the builder's own: the narrower end's inset width reaching zero
                         // binds before the half-height does whenever the profile is thinner than it is tall.
                         _ => SdfProgramBuilder.TrapezoidRoundingCeiling(
@@ -1328,6 +1329,16 @@ public static class SdfSolidGeometry {
             y: inradius
         );
     }
+
+    private static float ConvexRoundingCeiling(SdfPrismProfile profile, Vector3 scale, SdfLift lift) {
+        var inradius = SdfProgramBuilder.ConvexPolygonInradius(
+            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))]);
+        var corner = SdfProgramBuilder.ClampRounding(lift: lift, liftAmount: scale.Z,
+            profileInradius: inradius, rounding: (profile.CornerRadius * inradius));
+
+        return MathF.Max(x: 0f, y: (((lift == SdfLift.Extrude) ? MathF.Min(x: inradius, y: scale.Z) : inradius) - corner));
+    }
+
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component's
     /// magnitude times the primitive's farthest surface point.</summary>
     /// <param name="type">The primitive.</param>

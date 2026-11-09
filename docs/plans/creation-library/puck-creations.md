@@ -297,7 +297,7 @@ puts or gets a creation outside a projection **[inference]** from that search.
 
 The mesh bake keys each group by its geometry, a 128-bit hash that ignores where
 the program places the group **[opened]**
-(`docs/rendering/sdf/handbook/frame-rendering.md:1349-1351`):
+(`docs/rendering/sdf/handbook/frame-rendering.md:1357-1359`):
 
 ```text
 and the old buffer is disposed once that upload has completed. The bake keys each group by its
@@ -438,7 +438,7 @@ lists and levels, and the same lines print further levels
 ## 5. Scale and units
 
 The metre is the unit by ruling, and true size is the convention **[opened]**
-(`docs/decisions/engine-design.md:285-287`):
+(`docs/decisions/engine-design.md:319-321`):
 
 ```text
 A world's length unit is the metre, and content is authored at the size the

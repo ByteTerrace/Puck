@@ -18,11 +18,8 @@ public sealed class SdfAppearance {
     public const int MaterialVectorsPerEntry = 34;
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
-    /// the slot and bound center, the bound half-extents, the primitive rotation, then <see cref="PaintTableVectors"/> of side table.</summary>
-    public const int PaintVectorsPerEntry = (9 + PaintTableVectors);
-    /// <summary>The side-table vectors a paint carries inline: a convex polygon's eight vertices or a sweep's curve
-    /// (<c>SDF_PAINT_TABLE_VECTORS</c>).</summary>
-    public const int PaintTableVectors = 4;
+    /// the slot and bound center, the bound half-extents, the primitive rotation, with variable side tables stored after the fixed paint entries.</summary>
+    public const int PaintVectorsPerEntry = 9;
     /// <summary>The most paints one material carries (<c>SDF_MAX_PAINTS_PER_MATERIAL</c>).</summary>
     public const int MaxPaintsPerMaterial = 8;
     /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
@@ -62,18 +59,20 @@ public sealed class SdfAppearance {
             var unshaded = SdfShadeReads.None;
             var emission = SdfShadeReads.None;
             var inherits = false;
+
             foreach (var material in m_materials) {
-                var reads = material.Flow is null ? SdfShadeReads.None : SdfShadeReads.Clock;
-                if (IsWorldLane(material.Weathering?.Lane) || IsWorldLane(material.Flow?.Lane) || IsWorldLane(material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
-                if (IsWorldLane(material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
+                var reads = ((material.Flow is null) ? SdfShadeReads.None : SdfShadeReads.Clock);
+
+                if (IsWorldLane(lane: material.Weathering?.Lane) || IsWorldLane(lane: material.Flow?.Lane) || IsWorldLane(lane: material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
+                if (IsWorldLane(lane: material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
                 layers |= reads;
-                if (material.Shade is { } shade) { authored |= shade.Reads; }
-                else { inherits = true; unshaded |= reads; }
+                if (material.Shade is { } shade) { authored |= shade.Reads; } else { inherits = true; unshaded |= reads; }
             }
             m_shadeReads = (layers, authored, unshaded, emission, inherits);
         }
         var cached = m_shadeReads.Value;
-        return cached.Emission | (programs ? cached.Authored | (cached.Inherits ? fallback?.Reads ?? cached.Unshaded : SdfShadeReads.None) : cached.Layers);
+
+        return cached.Emission | (programs ? cached.Authored | (cached.Inherits ? (fallback?.Reads ?? cached.Unshaded) : SdfShadeReads.None) : cached.Layers);
     }
 
     /// <summary>Initializes a new instance of the <see cref="SdfAppearance"/> class from a palette and its screen
@@ -139,8 +138,9 @@ public sealed class SdfAppearance {
     public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
     /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
     public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
+
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
-    /// then each paint's <see cref="PaintVectorsPerEntry"/>. The one statement of the appearance section's size, which a
+    /// then each paint's <see cref="PaintVectorsPerEntry"/> and its variable side table. The one statement of the appearance section's size, which a
     /// capacity probe (<see cref="SdfProgramBuilder.MeasureCapacity"/>) reads without packing.</summary>
     /// <param name="materials">The palette.</param>
     /// <returns>The vectors.</returns>
@@ -151,13 +151,14 @@ public sealed class SdfAppearance {
         var shades = 0;
 
         foreach (var material in materials) {
-            paints += (material.Paints?.Count ?? 0);
+            paints += (material.Paints?.Sum(selector: static paint => (PaintVectorsPerEntry + PaintSideVectors(paint: paint))) ?? 0);
             if (material.Shade is { } shade) { shades = checked((shades + ((shade.Words.Length + shade.ParameterWords.Length) / WordsPerVector))); }
         }
 
-        return checked((((MaterialVectorsPerEntry * materials.Count) + (PaintVectorsPerEntry * paints)) + shades));
+        return checked((((MaterialVectorsPerEntry * materials.Count) + paints) + shades));
     }
 
+    private static int PaintSideVectors(SdfPaint paint) => (((paint.Shape.Table.Count + WordsPerVector) - 1) / WordsPerVector);
     private static bool IsWorldLane(int? lane) => (lane >= SdfLanes.FirstWorld);
     private static SdfMaterial[] Snapshot(IReadOnlyList<SdfMaterial> materials) {
         var snapshot = new SdfMaterial[materials.Count];
@@ -339,7 +340,8 @@ public sealed class SdfAppearance {
     /// <param name="materialVector">The vector the material table starts at (the header's material offset).</param>
     internal void Pack(uint[] words, int materialVector) {
         var paintCursor = (materialVector + (MaterialVectorsPerEntry * m_materials.Length));
-        var shadeCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
+        var tableCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
+        var shadeCursor = checked((tableCursor + m_materials.Sum(selector: static m => (m.Paints?.Sum(selector: PaintSideVectors) ?? 0))));
         Span<Vector4> toonRows = stackalloc Vector4[4];
 
         for (var index = 0; (index < m_materials.Length); index++) {
@@ -379,12 +381,13 @@ public sealed class SdfAppearance {
                     y: BitConverter.UInt32BitsToSingle(value: ((uint)paints.Count)),
                     z: BitConverter.UInt32BitsToSingle(value: ((m.EmissiveLane is { } lane) ? (((uint)lane) + 1u) : 0u)),
                     w: BitConverter.UInt32BitsToSingle(value: ((m.Glass is { HasContact: true } contact)
-                        ? BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactReach)) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactCoverage))) << 16)
+                        ? VectorFunctions.PackHalf2x16(contact.ContactReach, contact.ContactCoverage)
                         : 0u))
                 )
             );
             foreach (var paint in paints) {
-                PackPaint(paint: paint, paintVector: paintCursor, words: words);
+                PackPaint(paint: paint, paintVector: paintCursor, tableVector: tableCursor, words: words);
+                tableCursor += PaintSideVectors(paint: paint);
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {
@@ -469,12 +472,11 @@ public sealed class SdfAppearance {
     private static uint LanePlusOne(int? lane) => ((lane is { } index) ? (((uint)index) + 1u) : 0u);
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
-    // 3..4 the shape's data vectors, a side-table shape's offset naming row 9; 5 color, stroke;
+    // 3..4 the shape's data vectors, a side-table shape's absolute offset; 5 color, stroke;
     // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, 0);
-    // 8 primitive rotation; 9.. the side table.
-    private static void PackPaint(SdfPaint paint, int paintVector, uint[] words) {
+    // 8 primitive rotation. Side tables follow all fixed paint entries.
+    private static void PackPaint(SdfPaint paint, int paintVector, int tableVector, uint[] words) {
         var shape = paint.Shape;
-        var tableVector = (paintVector + 9);
         var data0 = shape.Data0At(tableVector: tableVector);
         var rotation = Quaternion.Normalize(value: paint.Rotation);
         var minimumScale = MathF.Min(x: shape.Scale.X, y: MathF.Min(x: shape.Scale.Y, y: shape.Scale.Z));

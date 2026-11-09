@@ -2196,7 +2196,7 @@
                     "null"
                   ],
                   "default": null,
-                  "description": "The greedy glyph-level wrap width, in the creation\u0027s own units (null = only explicit line feeds break lines). Must be positive when present."
+                  "description": "The greedy word wrap width, in the creation\u0027s own units (null = only explicit line feeds break lines). Must be positive when present."
                 },
                 "align": {
                   "type": [

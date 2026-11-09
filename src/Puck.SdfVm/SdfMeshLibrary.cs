@@ -33,6 +33,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
     /// <summary>Gets the allocator supplied by the host, or null for a managed-only offline library.</summary>
     public IAllocator? Allocator { get; } = allocator;
+
     /// <summary>Gets the single process byte-accounting authority.</summary>
     public MemoryAccount Account => MemoryAccount.Shared;
 
@@ -57,6 +58,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <summary>Gets the settle rebakes' counts (<see cref="SdfMeshSettle"/>) every bake holding the library counts
     /// into, so one source reads a presentation's residencies together.</summary>
     public WorkCounterSet Settles { get; } = SdfMeshSettle.Counters();
+    /// <summary>Gets the skinned meshes' counts (<see cref="SdfMeshSkin"/>) every bake holding the library counts into:
+    /// each skinned mesh a group starts drawing, and its vertices by vertex-stage path.</summary>
+    public WorkCounterSet Skins { get; } = SdfMeshSkin.Counters();
 
     /// <summary>Gets how many geometries the library holds.</summary>
     public int Count {
@@ -102,9 +106,11 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             return owned;
         } catch { owned.Release(); throw; }
     }
+
     private bool HoldsAny(SdfMeshGeometry geometry, UInt128 identity) {
         lock (m_gate) { return m_meshes.ContainsKey(key: (identity, geometry)); }
     }
+
     /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
     /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
     /// member's slot (<see cref="SdfMesh.Members"/>), renumbered for the taking group's materials as
@@ -212,7 +218,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             var copy = source.NativeCopy(Allocator, Account, restore: (this, identity, geometry));
 
             try {
-                _ = Hold(geometry, identity, copy, heldIds, form);
+                _ = Hold(form: form, geometry: geometry, identity: identity, materials: heldIds, mesh: copy);
                 if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
                 // The library let go of the geometry between the hold and the take (a trim): the copy is the mesh.
                 mesh = (ReferenceEquals(objA: heldIds, objB: materials) ? copy.Acquire() : Renumber(from: heldIds, mesh: copy, to: materials));
@@ -325,6 +331,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// levels (<see cref="Lose"/>): a bake holding the library restarts when it moves, baking again each group whose
     /// mesh is lost.</summary>
     public long LostRevision => Interlocked.Read(location: ref m_lostRevision);
+
     private long m_lostRevision;
 
     /// <summary>Forgets a geometry whose store entry could not restore a published mesh's normals and levels, so the
@@ -375,7 +382,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             levels[level] = (mesh.Levels[level] with { TriangleMaterials = Renumbered(from: from, source: mesh.Levels[level].TriangleMaterials.Span, to: to) });
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(from: from, source: mesh.TriangleMaterials.Span, to: to), vertexMembers: mesh.VertexMembers) { BakeCell = mesh.BakeCell, Levels = levels };
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(from: from, source: mesh.TriangleMaterials.Span, to: to), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
     }
     private static uint[] Renumbered(ReadOnlySpan<uint> source, int[] from, int[] to) {
         var renumbered = new uint[source.Length];

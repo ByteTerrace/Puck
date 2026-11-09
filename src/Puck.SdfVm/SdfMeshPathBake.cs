@@ -72,6 +72,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <summary>Gets the snapshots the batch's lattices sample, each at its field's handle in the program the batch samples:
     /// the ones its groups' geometries hashed (<see cref="SdfMeshBakeGroup.SampledSnapshots"/>), one snapshot a handle.</summary>
     public (int Handle, SdfSampledSnapshot Snapshot)[] Sampled { get; init; } = [];
+
     /// <summary>Gets the handles of the program the batch samples (<see cref="SdfProgram.SampledFields"/>), which its sampled
     /// table's directory holds a word for.</summary>
     public int SampledHandles { get; init; }
@@ -80,10 +81,11 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
         get {
             var words = SampledHandles;
 
-            foreach (var (_, snapshot) in Sampled) { words = checked(words + snapshot.Count); }
+            foreach (var (_, snapshot) in Sampled) { words = checked((words + snapshot.Count)); }
             return Math.Max(val1: 1, val2: words);
         }
     }
+
     /// <summary>Writes the table the bake kernel reads sampled values from (<c>SdfWorldPackage.SampledValues</c>): a word a
     /// handle, the word its snapshot starts at or <c>0xFFFFFFFF</c> for a handle the batch samples none of, then each
     /// snapshot's voxels as float bits.</summary>
@@ -93,11 +95,12 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
         var cursor = SampledHandles;
 
         foreach (var (handle, snapshot) in Sampled) {
-            table[handle] = (uint)cursor;
+            table[handle] = ((uint)cursor);
             System.Runtime.InteropServices.MemoryMarshal.Cast<float, uint>(span: snapshot.Values).CopyTo(destination: table[cursor..]);
             cursor += snapshot.Count;
         }
     }
+
     /// <summary>Gets the input prefix the batch reads: explicit points at their sample offsets, then saved poses after
     /// all samples. Grid samples without poses need no input rows, including trailing grid samples.</summary>
     public int InputRows {
@@ -106,11 +109,11 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             var required = 0;
 
             foreach (var lattice in Lattices) {
-                if (!lattice.Points.IsEmpty) { required = Math.Max(val1: required, val2: checked(first + lattice.Points.Length)); }
-                first = checked(first + lattice.Samples);
+                if (!lattice.Points.IsEmpty) { required = Math.Max(val1: required, val2: checked((first + lattice.Points.Length))); }
+                first = checked((first + lattice.Samples));
             }
             foreach (var (_, rows) in Poses) {
-                first = checked(first + rows.Length);
+                first = checked((first + rows.Length));
                 if (!rows.IsEmpty) { required = Math.Max(val1: required, val2: first); }
             }
 
@@ -132,6 +135,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             return samples;
         }
     }
+
     // Each lattice's ticket, written only under its bake's gate by its one transition (SdfMeshPathBake.Settle).
     internal SdfMeshBakeTicket[] States { get; } = new SdfMeshBakeTicket[Tickets.Length];
 
@@ -143,7 +147,6 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
         if (Bake is not { } bake) { return States[lattice]; }
         lock (bake.Gate) { return States[lattice]; }
     }
-
     /// <summary>Returns the runs of the batch's point table: each points lattice's points at its first sample's place in
     /// the dispatch, then each lattice's poses from <see cref="PoseBase"/>, in table rows of one <see cref="Vector4"/>.
     /// The rows between the runs are never read, so a table that holds the runs alone leaves no row the bake kernel reads
@@ -222,8 +225,10 @@ public enum SdfMeshBakeTicket {
 /// bake's <see cref="Identity"/> loads from disk off the frame's thread (<see cref="SdfMeshStore"/>), baking only when the
 /// store refuses the entry. The bake reports its counted work, the groups it loaded and the wall time it took
 /// (<see cref="Describe"/>).</para>
-/// <para>A dynamic group whose shapes ride slots besides its own is planned again once those shapes settle away from the
-/// pose it was baked at, and its new mesh replaces the skinned one when it lands (<see cref="SdfMeshSettle"/>).</para>
+/// <para>A dynamic group whose shapes ride slots besides its own bakes a skin (<see cref="SdfMeshSkin"/>) from its own
+/// sealed instructions (<see cref="SdfMeshSkinSource"/>). A rest-pose skin bakes once; any other such group is planned
+/// again once those shapes settle away from the pose it was baked at, and its new mesh replaces the skinned one when it
+/// lands (<see cref="SdfMeshSettle"/>).</para>
 /// </summary>
 public sealed partial class SdfMeshPathBake {
     /// <summary>The field evaluations one lattice makes at most: long lattices and point runs are cut into chunks of this
@@ -258,9 +263,10 @@ public sealed partial class SdfMeshPathBake {
 
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
-    // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
-    // along each axis (SdfSampledLattice.Refine).
-    private const float FineCell = 0.005f;
+    /// <summary>The spacing, in metres, a final lattice's refined cells aim for where no member declares a detail
+    /// (<see cref="SdfInstanceRange.Detail"/>), floored by the group's tier (<see cref="SdfMeshTier"/>); the most fine cells
+    /// a coarse cell splits into along each axis is <c>MaxRefinement</c> (<see cref="SdfSampledLattice.Refine"/>).</summary>
+    public const float FineCell = 0.005f;
 
     private const int MaxRefinement = 4;
     // The most fine cells a coarse cell splits into along each axis when a member declares its own detail
@@ -275,9 +281,8 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
-
     /// <summary>Gets this residency's process-local diagnostic identity, independent of its display name and program.</summary>
-    public string ResidencyId { get; } = Guid.NewGuid().ToString("N");
+    public string ResidencyId { get; } = Guid.NewGuid().ToString(format: "N");
 
     /// <summary>Gets the selectors of the groups the bake bakes, every group when <see langword="null"/>: a group outside
     /// it finishes unbaked, with no mesh, and no selected group of its geometry waits on it (an offline audit of chosen
@@ -295,8 +300,10 @@ public sealed partial class SdfMeshPathBake {
     public SdfMeshBakeIdentity Identity { get; set; } = new(value: UInt128.Zero);
 
     private readonly Lock m_gate = new();
+
     // The gate a taken batch's tickets are read under (SdfMeshBakeBatch.StateOf).
     internal Lock Gate => m_gate;
+
     private readonly List<Group> m_groups = [];
     private readonly List<Group> m_retiredGroups = [];
 
@@ -306,6 +313,7 @@ public sealed partial class SdfMeshPathBake {
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
+
     // The baked sampled set the groups were planned at (SdfSampledSet.Baked): a frame carrying another resamples the groups
     // that read a moved field.
     private SdfSampledSet m_sampled = SdfSampledSet.Empty;
@@ -313,6 +321,7 @@ public sealed partial class SdfMeshPathBake {
     // Which groups read one is the program's (a group planned again at an index holds the same instances), so Restart, the
     // one writer of a program's group list, rebuilds it (WatchSettles).
     private readonly List<int> m_sampledReaders = [];
+
     // The groups holding a successor (Group.Successor), which Promote starts once their bake lands.
     private int m_successors;
     // Frames prepared; restarts and the groups they planned; resamples, the readers they walked, the newer plans that
@@ -376,7 +385,7 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) {
                 if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
                 foreach (var group in m_groups) {
-                    if ((!group.Dynamic || m_fixedAssetSlots.Contains(group.Slot)) && !group.Glass && !group.Done) { return true; }
+                    if ((!group.Dynamic || m_fixedAssetSlots.Contains(item: group.Slot)) && !group.Glass && !group.Done) { return true; }
                 }
                 return false;
             }
@@ -411,12 +420,16 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+
     private long m_copyLayoutRevision;
+
     private readonly record struct CopyLayout(int AssetSlot, SdfMeshTemplateRange? TemplateRange, bool IsDynamic, bool HasMesh, int[] OtherAssetSlots);
 
     // A changed landed product is acknowledged only after the dresser has published its draws and ownership claims.
     private long m_productRevision;
+
     private long m_dressedRevision = -1;
+
     // The library's lost revision this bake last restarted at.
     private long m_lostRevision;
 
@@ -429,59 +442,67 @@ public sealed partial class SdfMeshPathBake {
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps).
-            if (!ReferenceEquals(frame.Program, m_program) || (Library.LostRevision != m_lostRevision)) {
+            if (!ReferenceEquals(objA: frame.Program, objB: m_program) || (Library.LostRevision != m_lostRevision)) {
                 m_lostRevision = Library.LostRevision;
-                Restart(frame);
-            } else if (!ReferenceEquals(frame.Sampled.Baked, m_sampled)) {
-                Resample(frame);
+                Restart(frame: frame);
+            } else if (!ReferenceEquals(objA: frame.Sampled.Baked, objB: m_sampled)) {
+                Resample(frame: frame);
             }
-            if (m_successors > 0) { Promote(frame); }
+            if (m_successors > 0) { Promote(frame: frame); }
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
-            if (!SameCopyLayout(frame)) { IndexCopies(frame); }
+            if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
         }
         // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
         Prioritize();
         var scope = EnterFrameGate();
+
         try {
-            Settle(frame);
-            return new FrameAccess(this, scope);
+            FinishReplacements();
+            Settle(frame: frame);
+            Retier(frame: frame);
+            return new FrameAccess(owner: this, scope: scope);
         } catch { scope.Dispose(); throw; }
     }
 
     internal ref struct FrameAccess {
         private readonly SdfMeshPathBake m_owner;
+
         private Lock.Scope m_scope;
+
         internal FrameAccess(SdfMeshPathBake owner, Lock.Scope scope) {
             m_owner = owner;
             m_scope = scope;
             Revision = owner.m_productRevision;
             CopyLayoutRevision = owner.m_copyLayoutRevision;
         }
+
         internal long Revision { get; }
         internal long CopyLayoutRevision { get; }
         internal IReadOnlyList<SdfMeshBakeGroup> Groups => m_owner.m_groups;
+
         internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Mesh;
-        internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group);
+        internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
         internal void Acknowledge() => m_owner.m_dressedRevision = Revision;
+
         public void Dispose() => m_scope.Dispose();
     }
 
     private bool SameCopyLayout(SdfFrame frame) {
         if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
-        for (var index = 0; index < m_copyAssetSlots.Length; index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
-        for (var index = 0; index < m_copyLayout.Length; index++) {
+        for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        for (var index = 0; (index < m_copyLayout.Length); index++) {
             var old = m_copyLayout[index];
             var copy = frame.MeshInstances[index];
+
             if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
                 (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
-            for (var surface = 0; surface < old.OtherAssetSlots.Length; surface++) {
+            for (var surface = 0; (surface < old.OtherAssetSlots.Length); surface++) {
                 if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
             }
         }
         return true;
     }
-
     // The one membership index serves both pending-bake demand and landed draw dressing. It contains no poses:
     // a moving occurrence keeps its membership and supplies its current matrix through m_demandCopies.
     private void IndexCopies(SdfFrame frame) {
@@ -490,34 +511,37 @@ public sealed partial class SdfMeshPathBake {
         m_fixedAssetSlots.Clear();
         m_copyAssetSlots = frame.MeshAssetSlots.ToArray();
         m_copyLayout = new CopyLayout[frame.MeshInstances.Count];
-        for (var index = 0; index < m_copyLayout.Length; index++) {
+        for (var index = 0; (index < m_copyLayout.Length); index++) {
             var copy = frame.MeshInstances[index];
-            m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, copy.Mesh is not null, copy.OtherAssetSlots.ToArray());
+
+            m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, (copy.Mesh is not null), copy.OtherAssetSlots.ToArray());
         }
         m_copyLayoutRevision++;
-        for (var index = 0; index < frame.MeshInstances.Count; index++) {
+        for (var index = 0; (index < frame.MeshInstances.Count); index++) {
             var copy = frame.MeshInstances[index];
+
             if (copy.TemplateRange is { } range) {
-                for (var instance = 0; instance < range.InstanceCount; instance++) { AddCopyIndex(m_instanceCopies, range.FirstInstance + instance, index); }
+                for (var instance = 0; (instance < range.InstanceCount); instance++) { AddCopyIndex(m_instanceCopies, (range.FirstInstance + instance), index); }
                 continue;
             }
             AddCopyIndex(m_slotCopies, copy.AssetSlot, index);
-            if (!copy.IsDynamic) { m_fixedAssetSlots.Add(copy.AssetSlot); }
+            if (!copy.IsDynamic) { m_fixedAssetSlots.Add(item: copy.AssetSlot); }
             foreach (var slot in copy.OtherAssetSlots) {
-                if (slot != copy.AssetSlot) { AddCopyIndex(m_slotCopies, slot, index); }
-                if (!copy.IsDynamic) { m_fixedAssetSlots.Add(slot); }
+                if (slot != copy.AssetSlot) { AddCopyIndex(copy: index, key: slot, table: m_slotCopies); }
+                if (!copy.IsDynamic) { m_fixedAssetSlots.Add(item: slot); }
             }
         }
     }
     private static void AddCopyIndex(Dictionary<int, List<int>> table, int key, int copy) {
-        if (!table.TryGetValue(key, out var indices)) { table.Add(key, indices = []); }
-        if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(copy); }
+        if (!table.TryGetValue(key: key, value: out var indices)) { table.Add(key: key, value: indices = []); }
+        if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(item: copy); }
     }
     private IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) {
-        if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(group.FirstInstance); }
-        if (!m_copyAssetSlots.Contains(group.Slot)) { return null; }
-        return (m_slotCopies.TryGetValue(group.Slot, out var copies) ? copies : Array.Empty<int>());
+        if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(key: group.FirstInstance); }
+        if (!m_copyAssetSlots.Contains(value: group.Slot)) { return null; }
+        return (m_slotCopies.TryGetValue(key: group.Slot, value: out var copies) ? copies : Array.Empty<int>());
     }
+
     // The lattices and their groups while TryTake chooses them, reused take to take.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
     private readonly List<object> m_takenTickets = [];
@@ -722,6 +746,7 @@ public sealed partial class SdfMeshPathBake {
         }
         return true;
     }
+
     // The groups a take may take a lattice of, by priority, reused take to take.
     private readonly List<(float Priority, int Index)> m_candidates = [];
 
@@ -795,6 +820,7 @@ public sealed partial class SdfMeshPathBake {
             Complete(batch: batch, index: index, request: in lattice, samples: slice);
         }
     }
+
     // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
     // samples reach its group or slice (the group stays in flight until its answer job runs), Returned when they never will,
     // which hands the lattice back to be taken again. Under the gate; false when the ticket was settled already.
@@ -809,7 +835,6 @@ public sealed partial class SdfMeshPathBake {
         m_accounts.Discarded += batch.Lattices[index].Samples;
         return true;
     }
-
     // Answers a field slice's lattice.
     private void Complete(SdfMeshBakeBatch batch, int index, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
         if (batch.Tickets[index] is SliceTicket sliced) {
@@ -888,9 +913,7 @@ public sealed partial class SdfMeshPathBake {
         var materials = answer.Materials.GetSpan();
 
         if (!request.Points.IsEmpty) {
-            if (group.Skin is not null) {
-                AnswerPoints(group: group, kind: 7, materials: answer.Slots.GetSpan(), request: in request);
-            } else if (group.Final is { } final) {
+            if (group.Final is { } final) {
                 AnswerFinal(final: final, gradients: answer.Gradients.GetSpan(), group: group, materials: materials, request: in request, values: values);
             } else if (group.Creases is not null) {
                 AnswerCreases(gradients: answer.Gradients.GetSpan(), group: group, request: in request, values: values);
@@ -952,6 +975,7 @@ public sealed partial class SdfMeshPathBake {
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
+            tier: Tiers(transforms: transforms),
             transforms: transforms
         );
 
@@ -1000,14 +1024,21 @@ public sealed partial class SdfMeshPathBake {
 
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
         // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
+        var tiers = Tiers(transforms: frame.DynamicTransforms);
+
         if (plan is not null) {
+            // A group that read a transform is planned again unless the previous program keeps it; a static group that
+            // read none is planned again only when the frame's demand moved its tier.
             _ = SdfMeshBakeGroup.Refresh(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
                 groups: plan,
                 program: program,
                 sampled: sampled,
-                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)),
+                stale: group => ((group.Dynamic || group.Geometry.ReadsSlots)
+                    ? !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old))
+                    : Retiered(group: group, tiers: tiers)),
+                tier: tiers,
                 transforms: frame.DynamicTransforms
             );
             m_groups.AddRange(collection: plan);
@@ -1017,6 +1048,7 @@ public sealed partial class SdfMeshPathBake {
                 farDistance: frame.FarDistance,
                 program: program,
                 sampled: sampled,
+                tier: tiers,
                 transforms: frame.DynamicTransforms
             ));
         }
@@ -1092,6 +1124,7 @@ public sealed partial class SdfMeshPathBake {
             program: m_program!,
             sampled: sampled,
             stale: static _ => false,
+            tier: Tiers(transforms: frame.DynamicTransforms),
             transforms: frame.DynamicTransforms
         );
 
@@ -1464,23 +1497,35 @@ public sealed partial class SdfMeshPathBake {
         var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
         var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
 
-        if (!(group.Detail > 0f) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
-            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory);
+        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
+        // The group's tier floors the spacing its detail asks: a view that resolves no finer cell is baked none.
+        var tierCell = SdfMeshTier.Cell(tier: group.Tier);
+        var detail = MathF.Max(x: group.Detail, y: tierCell);
+
+        // A detail at or past the lattice's own spacing is one the lattice already resolves, as a union's member's is.
+        if (!(group.Detail > 0f) || (detail >= coarse) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
+            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { TierCell = tierCell };
         }
 
-        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
-
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / group.Detail))), min: 2, max: MaxDetailRefinement),
+            Factor = RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: detail),
             Regions = [new SdfLatticeRegion(High: high, Low: low)],
+            TierCell = tierCell,
         };
     }
+    // The fine cells along each axis a region whose own spacing is `spacing` asks a final lattice of `coarse` spacing to
+    // split a coarse cell into: the fewest that reach it, from two to `most`. The lattice splits each region cell the
+    // fewest times the finest region's factor divides into by a power of two that still reach its own
+    // (SdfSampledLattice.Refine).
+    private static int RegionFactor(float coarse, float spacing, int most) =>
+        Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / spacing))), min: 2, max: most);
     // The final lattice of a union of members (a static copy's run, a dynamic slot's several instances, or the parts a pooled
     // group declares), which keeps each member at the resolution its own final lattice would give it, in the group's frame
     // and alike for static and dynamic groups: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
     // UnionSamples and coarser where it does not, never coarser than the capped lattice over the union's box; a member
-    // whose own spacing stays finer than that by more than RegionRatio is a region its refinement measures at its own
-    // spacing (SdfSampledLattice.Refine). A member's own spacing is its bounding sphere's box at FinalSamples a side.
+    // whose own spacing stays finer than that by more than RegionRatio, or that declares a detail finer than it, is a
+    // region its refinement measures at its own factor (SdfSampledLattice.Refine), so one fine member refines no other
+    // member's box. A member's own spacing is its bounding sphere's box at FinalSamples a side.
     private static FinalLattice UnionFinal(Group group) {
         var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
@@ -1507,29 +1552,35 @@ public sealed partial class SdfMeshPathBake {
         var spacing = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
         var coarse = MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z));
         var regions = new List<SdfLatticeRegion>();
-        var target = float.PositiveInfinity;
-        var detailed = float.PositiveInfinity;
+        var factor = 0;
+        var tierCell = SdfMeshTier.Cell(tier: group.Tier);
 
         foreach (var (_, radius, detail, low, high) in group.Members) {
-            var own = ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius));
+            // The group's tier floors each member's own spacing: a view that resolves no finer cell is baked none.
+            var own = MathF.Max(x: ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius)), y: tierCell);
 
             // A member the lattice already resolves refines nothing: a declared detail at or past the coarse spacing (a
             // slab's half thickness over a lattice finer than it) would only spend the refinement's sample budget on
             // surface the coarse contour holds, leaving the thin members that need it the coarse cell.
             if ((detail > 0f) ? (own >= coarse) : ((own * RegionRatio) >= coarse)) { continue; }
+
+            // Each member refines toward its own spacing, so one fine member refines no other member's box.
+            var ownFactor = RegionFactor(coarse: coarse, most: ((detail > 0f) ? MaxDetailRefinement : MaxRefinement), spacing: own);
+
             regions.Add(item: new SdfLatticeRegion(
                 High: Vector3.Min(value1: group.High, value2: high),
-                Low: Vector3.Max(value1: group.Low, value2: low)
+                Low: Vector3.Max(value1: group.Low, value2: low),
+                Factor: ownFactor
             ));
-            target = MathF.Min(x: target, y: own);
-            if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
+            factor = Math.Max(val1: factor, val2: ownFactor);
         }
 
         var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
+            Factor = factor,
             Regions = [.. regions],
+            TierCell = tierCell,
         };
     }
     // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
@@ -1670,13 +1721,13 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
     // The fine cells along each axis a final lattice's coarse cell refines into at most: a union's own factor, or as many
-    // as reach FineCell, at most MaxRefinement.
+    // as reach FineCell floored by the group's tier, at most MaxRefinement.
     private static int FactorOf(FinalLattice final) {
         var cell = final.Lattice.Cell;
 
         return ((final.Factor > 0)
             ? final.Factor
-            : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / FineCell)))));
+            : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: FineCell, y: final.TierCell))))));
     }
 
     // The workspace bytes a final lattice's bake holds at once, per lattice sample and per fine sample: the lattice's
@@ -1973,7 +2024,7 @@ public sealed partial class SdfMeshPathBake {
 
             group.Next = null;
             group.Contouring = true;
-            Schedule(group: group, work: ((group.Skin is null) ? () => Advance(group: group) : () => Land(group: group, mesh: Skinned(group: group))));
+            Schedule(group: group, work: () => Advance(group: group));
         }
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
@@ -2016,56 +2067,18 @@ public sealed partial class SdfMeshPathBake {
         group.Contour = null;
         group.Creases = null;
         group.Cut = null;
-        // A group whose shapes ride slots besides its own asks which shape wins at each vertex, so each vertex follows
-        // its own shape's slot as it moves (SdfMesh.Members).
-        var skinned = ((mesh is not null) && group.Dynamic && group.Geometry.Poses.Keys.Any(predicate: slot => (slot != group.Slot)));
-
-        if (skinned) {
-            var positions = mesh!.Positions.Span;
-            var normals = mesh.Normals.Span;
-
-            group.Points.Resize(positions.Length, clear: false, preserve: false);
-            for (var vertex = 0; (vertex < positions.Length); vertex++) {
-                group.Points[vertex] = new Vector4(value: (positions[vertex] + (normals.IsEmpty ? Vector3.Zero : (normals[vertex] * SkinLift))), w: 0f);
-            }
-            group.PointMaterials.Resize(positions.Length, clear: false, preserve: false);
-            group.PointsAnswered = 0;
-            group.Skin = mesh;
-        }
-        lock (m_gate) {
-            m_accounts.CutEdges += edges;
-            if (skinned) {
-                group.Contouring = false;
-                if (m_groups.Contains(item: group)) { group.Next = PointChunk(group: group); }
-                return;
+        // The CPU influence reading propagates owners through composition once per exact position. Copies at a
+        // crease or material cut carry the same motion, independently of their normals. It reads the group's own
+        // instructions (SdfMeshSkinSource), so the skin stays a function of the geometry the mesh is stored under.
+        if ((mesh is not null) && (group.Skin is { } skin)) {
+            mesh = SdfMeshSkin.Build(mesh: mesh, refusal: out var refusal, skin: skin);
+            if (mesh is null) {
+                SdfMeshBakeReport.SkinSplit(group.Selector, group.Sealed, refusal);
+                mesh = SdfMeshSkin.Split(skin: skin);
             }
         }
+        lock (m_gate) { m_accounts.CutEdges += edges; }
         Land(group: group, mesh: mesh);
-    }
-    // The skin round's answer: the group's mesh with each vertex riding the member slot that won at it, or the mesh as it
-    // is when every vertex's winner is the group's own slot.
-    private static SdfMesh Skinned(Group group) {
-        var mesh = group.Skin!;
-        var slots = group.PointMaterials;
-        var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).ToArray();
-
-        if (others.Length > SdfMesh.MaxMembers) {
-            throw new InvalidOperationException(message: $"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
-        }
-        var vertexMembers = new byte[slots.Length];
-        var any = false;
-
-        for (var vertex = 0; (vertex < slots.Length); vertex++) {
-            var member = Array.FindIndex(array: others, match: pose => (pose.Key == slots[vertex]));
-
-            vertexMembers[vertex] = ((member < 0) ? SdfMesh.NoMember : (byte)member);
-            any |= (member >= 0);
-        }
-        if (!any) { return mesh; }
-
-        var members = others.Select(selector: pose => new SdfMeshMember(Orientation: pose.Value.Orientation, Position: pose.Value.Position, SlotOffset: (pose.Key - group.Slot))).ToArray();
-
-        return new SdfMesh(indices: mesh.Indices, members: members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: mesh.TriangleMaterials, vertexMembers: vertexMembers);
     }
     // Lands a group's finished mesh, its coplanar triangles merged into the polygons they tile (SdfMeshPlanarMerge) and its
     // coarser levels collapsed from those (SdfMeshCollapse): in the library, which keeps it for another program or
@@ -2094,7 +2107,7 @@ public sealed partial class SdfMeshPathBake {
             group.Done = true;
             Draw(group: group, mesh: mesh);
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
-            group.Skin = null;
+
             group.Points.Resize(0);
             group.PointMaterials.Resize(0);
             Finish();
@@ -2154,9 +2167,6 @@ public sealed partial class SdfMeshPathBake {
     // slope, and the value over that length puts the surface many cells off. A field that is no true distance reads well
     // under its slope in places (a fifth of the distance on the Moth's shins), whose vertices still move.
     private const float KinkGradient = 0.1f;
-    // How far off the surface, along its normal, a vertex's skin point lies, where a hit reads the shape whose surface the
-    // vertex lies on: the material cut's lift.
-    private const float SkinLift = 0.0005f;
 
     // The contour's initial triangle facings and vertex-to-triangle rows, retained only during field projection.
     // A triangle's area normal is affine in one moving vertex, so its dot with this fixed reference clips a proposed
@@ -2280,7 +2290,7 @@ public sealed partial class SdfMeshPathBake {
     // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
     private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
         // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
-        public SdfMesh? Skin { get; set; }
+
         public bool Contouring { get; set; }
 
         private bool m_done;
@@ -2298,7 +2308,6 @@ public sealed partial class SdfMeshPathBake {
         // the mesh a listed group draws moves that bake's product revision here, the one door, so the dresser can trust
         // the revision: a group no list holds yet draws nothing.
         public SdfMeshPathBake? Owner { get; set; }
-
         public SdfMesh? Mesh {
             get => m_mesh;
             set {
@@ -2306,14 +2315,14 @@ public sealed partial class SdfMeshPathBake {
 
                 m_mesh = (Retired ? null : value);
                 if (Retired) { value?.Release(); }
-                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) { owner.m_productRevision++; }
+                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) {
+                    owner.m_productRevision++;
+                    if (m_mesh is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: m_mesh); }
+                }
                 old?.Release();
             }
         }
-        private bool? m_readsOtherSlots;
 
-        // Whether the group's geometry reads a slot besides its own: a skinned group, whose members drift (Settle).
-        public bool ReadsOtherSlots => (m_readsOtherSlots ??= (Dynamic && Geometry.Poses.Keys.Any(predicate: slot => (slot != Slot))));
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
@@ -2338,8 +2347,6 @@ public sealed partial class SdfMeshPathBake {
 
         public OwnedBuffer<int> PointMaterials => m_pointMaterials ??= new(allocator: Allocator, observer: Memory);
         public int PointsAnswered { get; set; }
-
-
         // The final lattice while its slabs and corner gradients are sampled.
         public FinalLattice? Final { get; set; }
         // Why a finished group has no mesh, or null.
@@ -2386,8 +2393,9 @@ public sealed partial class SdfMeshPathBake {
                     Final?.Dispose(); Final = null;
                     m_points?.Dispose();
                     m_pointMaterials?.Dispose();
-                    Contour = null; Cut = null; Skin = null; Creases = null; Projection = null;
+                    Contour = null; Cut = null; Creases = null; Projection = null;
                     Next = null; Deferred = null;
+                    Skin?.Release();
                     Memory.Dispose();
                 }
                 if (Retired && !m_released) {
@@ -2430,6 +2438,13 @@ public sealed partial class SdfMeshPathBake {
         // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }
+        // The tier the demand asked of the group at the latest frame (Retier), the frames in a row it has owed a finer
+        // tier than it draws, whether it is the finer tier's replacement of the group it replaces, and whether a finer
+        // tier's bake meshed nothing at the demanded tier, so none is tried until the demand asks another.
+        public int DemandedTier { get; set; }
+        public int OwedFrames { get; set; }
+        public bool Retiering { get; set; }
+        public bool RetierRefused { get; set; }
 
         // Takes the demand box from the planned box, once.
         public void TakeDemandBox() {
@@ -2485,7 +2500,6 @@ public sealed partial class SdfMeshPathBake {
         public int Planes { get; set; }
         public SdfSampledLattice? Sampled { get; set; }
         public FinalStage Stage { get; set; }
-
         // The current round, the lattice's own storage (SdfSampledLattice.Refine): all chunks of a round finish before the
         // lattice writes the next, which the group's running stage does on its worker before the gate publishes the
         // round's first chunk.
@@ -2499,6 +2513,8 @@ public sealed partial class SdfMeshPathBake {
         public int Factor { get; init; }
 
         public SdfLatticeRegion[] Regions { get; init; } = [];
+        // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
+        public float TierCell { get; init; }
     }
     private enum FinalStage {
         Refinement,

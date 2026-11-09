@@ -14,7 +14,7 @@ public enum TextAlignment {
 /// alignment, per-glyph tracking, and line-spacing. The defaults reproduce the option-free layout exactly.
 /// </summary>
 /// <param name="MaxLineWidth">The maximum line width, in the layout's scaled units, beyond which glyphs wrap
-/// to a new line (greedy, glyph-granular); <see langword="null"/> = only explicit line feeds break lines.
+/// to a new line (greedy at word boundaries, with glyph breaks only for an oversized word); <see langword="null"/> = only explicit line feeds break lines.
 /// Must be greater than zero when provided.</param>
 /// <param name="Alignment">How lines position horizontally within the block.</param>
 /// <param name="Tracking">Extra advance added after every glyph, in em units (scaled with the layout scale).

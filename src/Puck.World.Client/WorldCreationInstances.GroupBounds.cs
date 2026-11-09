@@ -11,7 +11,7 @@ public sealed partial class WorldCreationInstances {
     // Cuts/intersections cannot enlarge the solid; union members, smooth halos and outward field ops can.
     private static bool TryTightGroupRadius(Registration live, CreationDocument document, int fromIndex, int groupId, out float radius) {
         radius = 0f;
-        var shapes = document.Shapes!;
+        var shapes = live.Motion.RenderDocument.Shapes!;
         var anchor = shapes[fromIndex];
 
         if (

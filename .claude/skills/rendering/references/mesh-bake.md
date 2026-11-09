@@ -366,33 +366,94 @@ laws exercise that boundary.
   (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
   irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
-- **Static features declare their spacing.** `WorldPlacementStamper.StaticInstanceVisitor.ShapeDetail`
-  feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
-  geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
-  thickness or a rounded profile's radius, a thirty-second of a warped shape's
-  smallest half-extent, or a thirty-second of a cellular relief's wavelength. The tightest applies, at
-  placement scale, and none finer than 2 mm (`WorldPlacementStamper.FinestDetail`:
-  an 18 cm swallow's 3 mm wing blade, whose rounded corner asks 0.2 mm, bakes
-  30,000 triangles at that floor and 382,000 without it); a scoped creation keeps its tightest shape's spacing, or its
-  noise relief's (`CreationNoiseDocument.DetailSpacing`: a quarter of the
-  wavelength of the finest octave carrying a sixteenth of the amplitude) where
-  that is finer. Refinement stops at eight cells a coarse axis, and a scoped
-  creation's coarse lattice spans its bound sphere about the creation's origin,
-  so a terrain sector centred on its ring's centre bakes at 2.8 m, not its
-  declared 1.56 m (`docs/plans/valley-and-moons.md`).
-  A bound alone misses thin strands and leaves warped corners under-resolved.
-  In a static union a member's region is its own world-axis box where the
-  stamper knows one (`SdfInstanceRange.Box`, `CreationStampEmitter.ShapeStampBox`:
-  an unwarped, unfolded primitive), not its bound sphere's cube, which for a
-  48 m strip spans the whole slab it hangs from; and a member whose declared
-  detail is at or past the union's coarse spacing is no region at all
-  (`SdfMeshPathBake.UnionFinal`), since the lattice already resolves it.
-  Convex rounding reads the scaled polygon's inradius and extrusion clamp;
-  warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
-  an offset and may be zero while its radial extent remains positive. A plate
-  longer than eight of its half-thicknesses (a slab, a wall, a light strip)
-  declares its half thickness: a lattice sized by its length steps clean over
-  a sheet thinner than its cell, and the sheet bakes to nothing.
+- **Every shape declares its spacing by one rule.** `WorldShapeDetail.Of`
+  serves a static stamp's shape, a pooled blend group's part and an ungrouped
+  pooled shape alike, feeding `SdfInstanceRange.Detail` and
+  `SdfInstancePart.Detail`. A bound measures a shape's reach, not its smallest
+  feature, so each feature declares a spacing: a round section (a sphere's, an
+  ellipsoid's middle radius, a superellipsoid's tightened by its exponent, a
+  cylinder's or cone's, a capsule's, a torus's tube, a strand's thicker radius,
+  an elliptic profile's tightest bend, a rounded or convex profile's corner)
+  bakes at `SdfSampledLattice.RoundCell`, the finer of a third of its radius
+  (each cell turns under the contour's 25-degree crease split, so it shades
+  round) and the cell whose chord strays at most `SilhouetteError` (0.2 mm,
+  half a pixel at the closest camera) inside it, so a drum's or a lens's
+  outline is round, not a 30-gon. A rounding of 5 mm or more declares its
+  radius: a fillet about a cell wide otherwise contours as a staircase,
+  crease or face cell by cell (the Moth's seat plate), while a narrower one is
+  a crease the contour keeps sharp. A plate longer than eight of its
+  half-thicknesses declares its half thickness, and a folded shape its copies'
+  smallest half extent, since a lattice sized by its length or its copies'
+  span steps clean over the sheet. A shell declares a quarter of its
+  thickness, a warped shape a thirty-second of its smallest half extent and
+  cellular relief a thirty-second of its wavelength. A blend's seam is a
+  feature neither shape's bound measures, so a shape with a `smooth` blend
+  declares it: a smooth, pipe or groove seam turns at `smooth` (`RoundCell`),
+  a chamfer's bevel is a face `smooth` wide (half of it), stairs are `steps`
+  turns each; the pipe and groove exhibits refined nothing before this term
+  and contoured their 4 cm bead on 27 mm cells. The finest applies, at
+  placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`); a
+  part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
+  declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
+  its noise relief's (`CreationNoiseDocument.DetailSpacing`) where that is
+  finer; text declares `WorldPlacementStamper.TextDetail`. Refinement stops at
+  eight cells a coarse axis, and a scoped creation's coarse lattice spans its
+  bound sphere about the creation's origin, so a terrain sector centred on its
+  ring's centre bakes at 2.8 m, not its declared 1.56 m
+  (`docs/plans/valley-and-moons.md`). A declaration bounds refinement; the bake
+  decides its cost (next bullets): a detail at or past the lattice's own
+  spacing refines nothing, alone (`SdfMeshPathBake.OwnFinal`) or in a union
+  (`UnionFinal`). In a static union a member's region is its own world-axis box
+  where the stamper knows one (`SdfInstanceRange.Box`,
+  `CreationStampEmitter.ShapeStampBox`: an unwarped, unfolded primitive), not
+  its bound sphere's cube, which for a 48 m strip spans the whole slab it hangs
+  from. Convex rounding reads the scaled polygon's inradius and extrusion
+  clamp; extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
+  an offset and may be zero while its radial extent remains positive.
+- **A declaration is bounded by what a view resolves: the group's tier.**
+  `SdfMeshTier` is one ladder of cells (1 mm times two to the tier). A group's
+  tier floors every spacing its refinement aims for (`OwnFinal`, `UnionFinal`
+  and `FactorOf` take `SdfMeshTier.Cell(group.Tier)` as the floor of a member's
+  detail, `FineCell` and `MemberCell`), and is a fact of the sealed geometry
+  (`SdfMeshBakeGroup.Seal` appends it, `Fact.Tier`), so each tier of a
+  geometry is its own library and store entry. A residency's bake plans each
+  group at the coarsest tier whose cell stays under half a display pixel at
+  the group's box from the nearest demand point (`SdfMeshDemand.PixelAt`,
+  `SdfMeshTier.Of`; at 1080 lines and a 60-degree field, 2 mm within 3.7 m,
+  4 mm to 7.5 m, 8 mm to 15 m, 16 mm to 30 m), held between the rungs that
+  change its mesh (`FinestTier`, the finest spacing any member asks;
+  `CoarsestTier`, the planned final cell, past which nothing refines). With
+  no demand point a group plans at its coarsest; an offline bake
+  (`MeshCpuBake`, `puck mesh audit --cpu`) sets `SdfMeshPathBake.PlannedTier`
+  and takes each group's finest unless `--tier` or `--eye` says otherwise. A
+  landed group whose demanded tier has been finer than its own for
+  `SdfMeshTier.HoldFrames` frames is planned again at the finer tier and placed
+  as a replacement (`SdfMeshPathBake.Retier`, the settle rebake's `Replaces`
+  path, at most `MaxInFlight` at once, the finest demand first): the coarser
+  mesh draws until the finer lands (`FinishReplacements`, one step for settles
+  and tiers). A coarser tier demanded leaves the finer mesh until the library
+  evicts it; the restart that follows plans at the current demand.
+  `world.residency` reports `tiers-owed`, `owed-error` (the worst owing
+  group's resident cell in display pixels), `owed-frames`, the worst of each
+  since the bake started, `retiers` and the resident triangles by tier
+  ([the memo](../../../../docs/plans/bake-demand-tiers.md)).
+- **A region refines only where its surface turns, and each region at its own
+  factor.** `SdfSampledLattice.Refine` takes a factor per region
+  (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own
+  (`SdfMeshPathBake.RegionFactor`), so one fine member refines no other
+  member's box, and the lattice's split is the finest region's. Inside a region
+  a cell refines only where the coarse samples' second differences show the
+  surface turning (`CurvedSplit`: a plane's field is affine and contours
+  exactly), each to the factor its curvature needs under `RoundCell`, never
+  past its region's. A cell's split is the refinement's own divided by a power
+  of two, so every split divides the finest; a measured cell of a coarser split
+  measures only its stride's grid of fine samples and interpolates the rest
+  inside each stride cell (`StrideHolder`, the finest holder of a shared face
+  answering for both sides), and the contour merges each stride cell's fine
+  vertices per connected piece, as it merges an unmeasured ring cell's
+  (`SdfDualContouring.Merge`), so its triangles follow its own split. The
+  value-only test cannot tell a sharp crease or a sub-cell fillet from a tight
+  turn, so a declared region still refines its creases.
 - **A tall union misses thin layers.** One static creation holding stacked
   floors bakes as one union whose lattice is sized by its height, so a 0.3 m
   slab between two samples never crosses and is dropped while it still
@@ -431,23 +492,6 @@ laws exercise that boundary.
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
-- **A body's round sections declare their spacing.** Every pooled instance
-  declares detail from its shapes' round sections (`WorldCreationInstances.BodyDetail`):
-  a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle
-  radius (a superellipsoid's tightened by its exponent), or an elliptic prism's
-  tightest bend (an eye socket's carved rim follows it), over three cells, so
-  each cell turns about 19 degrees, under the contour's 25-degree crease split.
-  At `SdfMeshPathBake.MinimumCell` (15 mm) any section under 4.5 cm turns past
-  it and shades as flat facets: the Moth's fingers, hair locks and braid did.
-  A flattened ellipsoid, a box, another prism or a cylinder declares nothing (an edge
-  bends along its length alone, and the contour keeps it as a crease), and
-  neither does a detail of 15 mm or more. A shape alone (ungrouped, or a group of
-  one) refines its whole bound and drops a section finer than 2 mm
-  (`WorldPlacementStamper.FinestDetail`). A blend group's shape refines only its
-  own part (below) and bakes a finer section at that 2 mm floor
-  (`WorldCreationInstances.PartDetail`). Static placements keep `ShapeDetail`,
-  floored at the same 2 mm. `puck mesh audit --prototype <id> --cpu` prints each
-  group's triangles and cell before a boot.
 - **A pooled blend group bakes as a union of its parts.** Its one instance
   declares a part a shape (`SdfInstanceRange.Parts`, `SdfInstancePart`): the
   shape's box in its own slot's frame and its detail. The plan carries each box
@@ -460,11 +504,8 @@ laws exercise that boundary.
   way. Parts are hashed into the geometry by slot offset. Under `OwnFinal` an
   18 cm swallow's blend group bakes on a 15 mm lattice refined over its whole
   bound; under `UnionFinal` it starts at the 2.8 mm its static stamp's union
-  takes. `UnionFinal` takes one refinement factor for all its regions, the
-  finest member's, so one thin member refines every member's box: the reason
-  pooled parts declare `BodyDetail`'s round sections and not `ShapeDetail`'s
-  plate and rounded-profile terms, which put the Moth's suit at 4.7 M triangles
-  in place of 1.1 M.
+  takes, each member refined over its own box at its own factor. A folded
+  member's part is the cube about its slot's origin its copies reach.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
   (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their
@@ -517,52 +558,19 @@ laws exercise that boundary.
   boundary its edges' bisection finds (`SdfMeshMaterialCut`). A material
   boundary only lies on the surface within one group: two groups' shapes meet
   as crossing meshes, whatever their materials.
-- **A group's vertices follow their own shape's slot.** A dynamic group whose
-  shapes ride slots besides its own gets one more points round over its
-  finished mesh: the bake kernel answers each vertex's winning slot in the first
-  gradient word of a points lattice without gradients, and the mesh keeps each
-  other slot as a member (`SdfMesh.Members`: its offset from the group's slot
-  and the pose it was baked at) and each vertex's member
-  (`SdfMesh.VertexMembers`). The draw record's skin word names the members when
-  its flags carry `SdfMeshRecord.SkinFlag`, and every mesh read
-  (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
-  carries a member's vertex out through that slot's live (or previous)
-  transform, so the mesh interface binds the dynamic transforms. The surface
-  pass records the member slot of the hit triangle's nearest vertex as the
-  pixel's frame slot (`sdfMeshSurfaceNormal`), so an inset, weathering, an
-  unparented paint and the lanes read the shape's own slot rather than the
-  group's. A cut or
-  intersection face keeps the slot of the shape it shapes
-  (`sdfComposeCandidate`); only a union-family winner hands its slot on. Rigid
-  per-vertex skinning stretches a blend seam between members that move far
-  apart, until they settle.
-- **A skinned group bakes again once its members settle (owner's ruling).** A
-  smooth or non-union blend across shapes that move independently is warned at
-  authoring time (PUCK122, `CreationMotion.MovingBlends`), and its mesh is
-  rebaked once the shapes' relative pose settles. `SdfMeshPathBake.Settle`
-  watches every dynamic group whose geometry reads slots besides its own: once
-  their poses in the group's frame drift past `SdfMeshSettle.DriftPosition` or
-  `DriftAngle` from the baked pose and then hold within `StillPosition` and
-  `StillAngle` for `SettleSeconds` of frame time, `SdfMeshBakeGroup.PlanSlot`
-  plans that slot's group again with its other slots' poses snapped to
-  `SdfMeshSettle.PositionSteps` and `OrientationSteps`
-  (`SdfMeshGeometryBuilder.Snap`, whose steps join the hash), so poses that
-  settle near one another key one geometry and the library or its store answers
-  the second. The snap's worst rounding sits under the drift, so a group baked at
-  its snapped pose is no candidate where it stands. The replacement takes the
-  group's place drawing the old skinned mesh until its own lands; one that meshes
-  no surface hands the group back, blocked until its pose moves. A pose still
-  changing never rebakes, and each bake starts at most `MaxInFlight` at once and
-  `MaxPerSecond` a second. The thresholds are bake constants beside its cell
-  sizes, not document fields: they measure a mesh against its own field, not
-  anything a world means. `world.counters sdf.mesh-settle` reads queued, done,
-  reused, moving (frames a drifted group waited while it moved), capped and
-  refused, summed over the residencies sharing the presentation's library. A
-  program that arrives later plans every group at the pose of its frame,
-  unsnapped, but keeps a dynamic group whose form held (`SdfMeshBakeGroup.Form`,
-  `SdfMeshGeometryBuilder.Form`: the geometry without the other slots' poses):
-  a body breathing while a placement elsewhere changes keeps its skinned mesh,
-  and only its settle rebakes it (`SdfMeshPathBakeLawTests`, the rebuild law).
+- **Moving blends bake at authored rest.** The pooled emitter marks its delta-frame instances
+  `RestPoseSkin`; `SdfMeshGeometryBuilder` freezes those deltas at identity. `CreationMotion.Envelope`
+  admits bounded smooth seams, and `CreationMotionPlan.RenderDocument` partitions rejected groups by
+  motion owner before emission. The CPU `SdfMeshSkin.Build` round propagates owner shares through the
+  evaluator, once per exact position; every crease/material copy takes that tuple. Twelve packed bytes
+  in `SdfMesh.Influences` carry a second owner, share and gradient. A third share above 1/64 falls back
+  to rigid owner contours through the existing contour pipeline. Current, previous and shadow positions
+  share group-relative dual quaternions and corrected normals (`frame/sdf-mesh-skin.hlsli`). See
+  [moving blends](../SKILL.md#moving-blends) for the complete contract and checks.
+- **Rest skins never settle-rebake.** `SdfMeshPathBake.Settle` excludes rest-pose skins. The older
+  non-rest dynamic path and `SdfMeshSettle` counters remain until step 5 of the moving-blends plan
+  deletes them. Material coordinates still use the nearest member until step 4; geometry continuity
+  alone does not prove that paints and lanes follow the seam.
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and
   `Load` hand the new mesh over through `SdfMeshPathBake.Draw`, which marks the
@@ -821,19 +829,10 @@ laws exercise that boundary.
   sharing silently: canonicalize it in the builder. Anything the bake samples
   that the instructions do not hold (another slot's transform, a lane, a table)
   leaves a stale mesh drawing after an edit: hash it in the builder. A
-  stamp-pool blend group is one instance on its first shape's slot whose later
-  shapes ride their own slots, so their places and turns are frame transforms;
-  the symptom of a miss is an edit that shows only once the group's first shape
-  changes. The key is taken from the frame a program arrives in, so shapes that
-  move against one another later keep the mesh of that pose until they settle
-  and the group bakes again (the settle rebake above). A geometry whose bake
-  found no surface is held as empty (`SdfMeshLibrary.StoreEmpty`), so a group
-  of it at another selector finishes at once instead of baking again. A dynamic
-  group whose geometry the library lacks but whose form it holds (a body
-  crossing into another world mid-stride, or wearing a creation another body
-  wears) takes that form's latest skinned mesh (`SdfMeshLibrary.TryTakeForm`)
-  and watches its members against the poses the mesh's skin records
-  (`SdfMesh.Members`), so it bakes only once it settles away from them. The
+  stamp-pool blend group uses rigid delta slots and opts into the authored-rest geometry, so arrival
+  poses do not change its key or its form's reference pose. Other dynamic instances retain their
+  declared pose semantics. A geometry whose bake found no surface is held as empty
+  (`SdfMeshLibrary.StoreEmpty`), so a group of it at another selector finishes at once. The
   library holds every mesh, empty result and form under the identity of the
   bake that made it, and a program keeps a group (`SdfMeshPathBake.Keeps`,
   `Renumbers`) only while that identity stands: after an applied update to the

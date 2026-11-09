@@ -15,6 +15,30 @@ world ([the world model](docs/architecture/worlds.md#the-idea-in-plain-terms)),
 and records what it settled in [the MMO foundations memo](docs/plans/mmo-foundations/synthesis.md)'s
 manner: options, evidence, the attacks each closes, and the ruling it rests on.
 
+The debug world is the sandbox that proves it (the owner's ruling).
+If exploring this small world is "truly inspiring and fun for players", a real
+world built on it gains tenfold. The valley pulls a player toward what lies
+beyond. The gallery is "a sort of subtle but very simple/nuanced tutorial":
+crossing a portal teaches worlds "without exposition of any kind". The moons
+are places to explore, federated worlds of their own. Puck's aim is "NEVER
+replication, but true evolution from experience/observation", and the whole
+counts more than any part, so feel (input, camera, motion) is weighed as
+heavily as looks. Three things follow for every agent:
+
+- **A creation built to push the engine is a probe, not the deliverable.** When
+  it meets an engine limit, stop sculpting around it and fix the limit, or hand
+  it back. Lanes modeling the Moth and the swallow polished nitpicks for rounds
+  while the engine limits behind them went unfixed. A brief for such a lane
+  states this stop rule in its own words and allows at most two look-critic
+  rounds per creation per wave; a third failure changes the approach or goes to
+  the owner.
+- **The gallery is the engine's self-test.** "Every single item in the gallery
+  is meant to ensure that the engine is operating correctly". A change to a
+  shared system is judged by whether the exhibits it reaches still read as
+  their plaques say.
+- **Do things right.** The owner's ruling: size and timeline are not the
+  owner's concerns; "doing things right" is.
+
 ## Puck is pre-release
 
 Nothing has shipped, and nothing outside this repository depends on Puck. Every
@@ -274,7 +298,13 @@ agent works in that mode by default, without asking:
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
   - The work comes first. Usage is worth keeping in mind, never a limit: a
-    stronger model is used wherever it pays for itself. A subscription nearing
+    stronger model is used wherever it pays for itself. Models are chosen
+    intelligently, never religiously (the owner's ruling): each lane's model
+    follows the factors that matter for it (how hard and open the work is, what
+    an undetected error costs, cost and speed per task rather than per token,
+    a reviewer from another family than the author, the environment the work
+    needs, and measured results on that kind of task), and no model is reserved
+    or conserved by standing rule. A subscription nearing
     its weekly cap changes no routing (the owner's ruling: the owner swaps
     subscriptions when one is reached). Parallelism is pushed
     smartly, and review, integration and fixing never run serially behind

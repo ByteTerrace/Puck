@@ -3539,6 +3539,13 @@ never writes the store, so it reads a store a running World owns.
   default), clamped to each chunk's last available level. Only referenced
   vertices count. The error threshold and coverage lattice retain level zero's
   cell and bounds, so simplifying cannot make the audit more lenient.
+- `--pose '1=tx,ty,tz,qx,qy,qz,qw;2=...'` poses a skin in its group's frame,
+  with member slot offsets naming rigid delta frames. Unnamed slots hold rest.
+  The audit measures it against the field at the same poses; geometry keys,
+  blend-zone vertex counts and positions with inconsistent influence tuples
+  are printed. Use either stored meshes or `--cpu`, without `--history` or
+  `--field-levels`. This is a presentation audit, with the Maths rigid carrier
+  as the CPU counterpart of the float shader blend.
 - `--top <n>` clusters a group reports, `--worst <n>` clusters the closing list
   reports across every group, and `--images <dir>` writes a PNG of each of
   those: the mesh around the cluster's worst sample from three sides, shading
@@ -3553,6 +3560,15 @@ never writes the store, so it reads a store a running World owns.
   tetrahedral gradient a sample, with taps at least half a millimetre out since
   the evaluator answers in steps of 2⁻¹⁶ m. A bake change is measured this way
   with no device; a group whose field the evaluator refuses is named as such.
+- `--tier <n>` plans every group at that detail tier (`SdfMeshTier`: tier
+  `n`'s cell is 1 mm times two to the `n`), held to the rungs that change each
+  group's mesh; zero, the default, is each group's finest, the geometry's own
+  detail. With `--cpu` the bake refines no finer than the tier's cell;
+  without, the tier selects the stored mesh, since the tier is part of its
+  geometry. `--eye <x,y,z>` plans each group at the tier one eye there demands
+  (the coarsest whose cell stays under half a display pixel at the group's
+  box), as a residency's bake plans it, with `--view-height <lines>` (1080 by
+  default) at a 60-degree vertical field; it replaces `--tier`.
 - `--field-levels` (with `--cpu`) also contours the field levels that follow
   each audited group's coarsest collapse level (`SdfMeshFieldLevels.Contour`,
   `SdfMeshPathBake.ContourLevel`): lattices of twice the previous cell, offset

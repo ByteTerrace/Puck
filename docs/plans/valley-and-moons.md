@@ -161,6 +161,12 @@ heightfield is added only if that reading fails.
   reuses the Moth's existing free flight as it is. The later assistance is a
   standard ability template that the Moth refines.
 - **Landing is open,** anywhere a body can stand, as it is now.
+- **Each moon is a federated world of its own**, beside the debug world rather
+  than inside it: "it actually makes sense in Puck for a moon and the debug
+  world to be federated worlds", whether both run in one process or on two
+  hosts. Crossing to a moon exercises custody, what a visited world may write,
+  and seams ([worlds and federation](../decisions/worlds-and-federation.md)).
+  The moons are places to explore, not backdrops.
 - **The valley as built falls short** (the owner, walking it): its walls read as
   soft white masses with metre-scale grain, without material, with clipped
   exposure and no sense of distance. It needs a real terrain pass, not tuning:
