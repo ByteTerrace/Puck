@@ -1026,6 +1026,21 @@ Remaining:
   with about 60 % of the cube's excess at 30°; an oriented box in the surface's
   frame removes it. Either costs more box
   walks per unproved query, which are few (0 to 12 a tick at the rim).
+- **[medium] A body at a hard subtraction's convex crease is unproved.** All of
+  the headless sweep's `physics.contact.field-unproved` comes from one walker
+  (`range-walker-10`, `worlds/debug/range.puck`) on the river channel's bank
+  (`riverChannel`, `worlds/standard/water.puck`: a ground box less tapered prism
+  cuts that rise `reach` above it). Over the cut, `max(box, −cut)` reads the box
+  term, the height over a ground plane the cut removed, and the walker rests
+  where that reading equals its reach. The proof's box touches that plane, so
+  its interval's lower end sits at the point slack below zero, and the surface
+  solve's ray meets the slant or bed past the reach, or no crossing within
+  twice the reach where the cut's cap stands in open air. The body is clear by
+  millimetres to centimetres. A proof needs a bound that follows the crease
+  (the box split where `max` changes operand, or the cut's analytic surface
+  read across the crease) rather than one box per core piece. The ground snap's
+  bracket (`FixedSupportDistance.TryBracket`) counts every probe, so the total
+  follows the walker's path and swings by thousands when a pose moves by a raw.
 - **[medium] Box and ellipsoid bodies solve from their centre**
   (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:580`): the
   support along the measured normal, not the volume's own nearest point. Cover
