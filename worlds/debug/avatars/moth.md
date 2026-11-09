@@ -262,7 +262,7 @@ tapering sweep that becomes the plait below her jaw and leaves through the
 hood's front opening.
 
 The torso carries one flat chamfered slab (`chestSlab`), ivory round a painted
-lavender hexagon, with a lavender rib plate down each flank under the arms
+lavender hexagon, with charcoal flanks down each side under the arms
 (`flank-left`, `flank-right`), above the segmented charcoal waist and the ochre
 belt; the ochre collar stands above it at the neck. A lavender plate
 (`pelvicShield`) narrows below the belt, and its twin behind (`seatShield`)
@@ -279,14 +279,17 @@ cylinder across the pod sets its side profile, thickest at the second band and
 thinning to the cap and down the long lip. Each ivory band is
 the same shell a finger proud of it between two planes that slope down to the
 outer side, in its own group, so its edges show its depth without a seam in the
-shell. The lip sweeps down and out; the nozzle, a large charcoal barrel set
-square in the lip's underside on its inner end, is aimed in, down and a little
-back, its cyan lens softly lit at rest.
+shell, and a vertical seam (paint) splits every plate into inner and outer
+pieces, with a grey badge inside the lower band. The lip sweeps down and out;
+the nozzle, a charcoal barrel about a third of the pod's width set square in the
+lip's underside, is aimed down, back and a little in, so its plume leaves clear
+of her seat and legs, and its blue lens glows at rest.
 
 Each shoulder stack is one solid convex lavender shell from collar height to the
 bottom of the chest, wrapping the top and outside of the upper arm: its front
-outline (`shoulderOutline`) slopes down and out, and an ellipsoid domes its front
-and back. A lavender cap plate and an ivory band below it are the same shell a
+outline (`shoulderOutline`) slopes down and out, its side outline
+(`shoulderSideOutline`) slopes down toward a chamfered front edge, and an
+ellipsoid domes it; it stands a little forward, clear of the pack. A lavender cap plate and an ivory band below it are the same shell a
 finger proud between planes that slope down and out, so the stack reads as plates
 on plates. A charcoal pivot disc with a raised boss shows in front of the joint
 at the shell's inner edge. All ride the upper arm, and the shell's inner top
@@ -319,10 +322,11 @@ rounded edges, under an octagonal chamfered ivory knee guard that rides the thig
 and stands proud of the greave's lavender front. A broad ivory band wraps the
 greave's foot, arched over the instep where the boot runs in, and an ivory
 pentagon panel with its vent pair sits on the outer face. The boots are one
-lavender piece from heel to toe with a raised toe cap on one charcoal sole. The
-boots carry lights and never fire (the concept pack): a flush round cyan light
-low on each greave's back and each ankle hub's cyan lens in its charcoal bezel
-stay softly lit by day and at night. The [debug studio](../debug.md#avatar-studio)
+lavender piece from heel to toe with a raised toe cap on one charcoal sole, with
+a gap between the legs. The boots carry lights and never fire (the concept
+pack): a glowing blue orb in a charcoal bezel low on each greave's back, and
+another on each ankle hub, faced 30 degrees forward so it reads from the front,
+stay lit by day and at night. The [debug studio](../debug.md#avatar-studio)
 provides front, side, low rear and quarter views on a neutral platform.
 
 The rig swings the thighs, shins, feet, arms and forearms during walking.
@@ -346,10 +350,11 @@ rules and damped state responses provide takeoff and landing transitions. Each
 pod deploys approximately six degrees outward and four degrees aft. No extra
 fan blades deploy. Two bounded `flow` volumes, one per pod on lane 1, supply
 the animated translucent exhaust, the only exhaust she makes. Each pod's plume
-leaves its nozzle along the nozzle's axis and widens to two and a half times its
-mouth over 0.36 m, short, as sheet 10 draws it. The pods' pale nozzle cores
-use flight-mode lane 2; their cyan lenses and the boot lights glow at rest
-whatever the lane. In flight mode her arms hang at her sides.
+leaves its nozzle along the nozzle's axis, widens its
+mouth a little and fades within 0.3 m, short, as sheet 10 draws it. The pods' pale nozzle cores
+use flight-mode lane 2; their blue lenses and the boot lights glow at rest
+whatever the lane. In flight mode her arms hang at her sides and her hands close
+into fists.
 Lane expressions use keyed state syntax, unlike the
 drivers' `state.airPose.$body` binding. Collision and movement controls remain
 the world kit's responsibility.
