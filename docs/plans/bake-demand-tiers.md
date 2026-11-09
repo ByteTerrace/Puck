@@ -98,6 +98,13 @@ D9's. When the library loses a group's mesh the bake restarts it, and that
 restart plans at the current demand, so an evicted finer tier comes back as
 the coarser one the view now asks for.
 
+The cold bake is the boot's views' bake: the plan a residency makes for its
+first frame takes that frame's demand points (the residency observes them
+before it dresses the frame), so a fresh store bakes each group at the tier
+the spawn views resolve, and a finer tier a later view asks for is owed and
+counted, never part of the bar
+([the cold-bake bar under demand tiers](virtual-geometry.md#the-cold-bake-bar-under-demand-tiers)).
+
 ## The debt's contract
 
 Per group, each frame: the **owed error** is its resident tier's cell in
