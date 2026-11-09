@@ -656,12 +656,7 @@ public sealed partial class StateArena {
             // A retained member-key entry carries its key's ledger ordinal: the ledger only ever sheds keys a rewound
             // scope minted, and a retained turn holds committed writes, so the ordinal still names the same key.
             Visit(lanes: (1L + retained.ComponentLength));
-            if (retained.ComponentLength > 0) {
-                VectorSpan(slot: entry.Index).Clear();
-                segment.Components(entry: retained).CopyTo(destination: VectorSpan(slot: entry.Index));
-            } else {
-                Restore(entry: entry);
-            }
+            Restore(entry: entry, components: segment.Components(entry: retained));
             BumpGeneration(column: entry.Column, index: entry.Index);
             MarkReindex(column: entry.Column, epoch: epoch, index: entry.Index);
             var changedRow = m_layout.RowOf(column: entry.Column, index: entry.Index);

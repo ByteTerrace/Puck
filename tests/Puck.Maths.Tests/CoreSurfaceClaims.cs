@@ -654,6 +654,26 @@ internal static class CoreSurfaceClaims {
         // same multiset in different orders must differ, so a Compute that summed rather than folded is visible.
         Assert.NotEqual(expected: Fnv1aHash.Compute(values: "ab"u8), actual: Fnv1aHash.Compute(values: "ba"u8));
 
+        // A char is a UTF-16 code unit widened to a little-endian uint, including zero and surrogate halves.
+        var text = "\0A\u03a9\ud83d\ude80";
+        byte[] characterBytes = [0, 0, 0, 0, 0x41, 0, 0, 0, 0xa9, 3, 0, 0, 0x3d, 0xd8, 0, 0, 0x80, 0xde, 0, 0];
+        var characters = Fnv1aHash.Create();
+
+        characters.Add(values: text.AsSpan(length: 2, start: 0));
+        characters.Add(values: ReadOnlySpan<char>.Empty);
+        characters.Add(values: text.AsSpan(start: 2));
+        Assert.Equal(expected: Fnv1aHash.Compute(values: characterBytes), actual: characters.Value);
+        Assert.Equal(expected: characters.Value, actual: Fnv1aHash.Compute(values: text.AsSpan()));
+
+        var framed = Fnv1aHash.Create();
+
+        framed.Add(value: ((uint)text.Length));
+        framed.Add(values: characterBytes);
+        var stringHash = Fnv1aHash.Create();
+
+        stringHash.Add(value: text);
+        Assert.Equal(expected: framed.Value, actual: stringHash.Value);
+
         // The packed zero-lane reduction and chunked span walk must keep the scalar recurrence, including
         // arbitrary incoming hashes, partial lanes, every split boundary, and a nonzero byte in any lane.
         var buffer = new byte[129];
