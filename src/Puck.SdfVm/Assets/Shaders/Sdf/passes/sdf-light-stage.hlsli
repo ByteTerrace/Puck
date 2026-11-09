@@ -190,7 +190,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // The irradiance volume is the indirect light, gathered once about the surface: its enabled sky source
             // replaces the unoccluded harmonic ambient (disabling that source retains the authored ambient look), its
             // probes occlude the traced point and spot lights and the reflected environment, and a surface no probe has
-            // measured yet reads the camera sample's open sky (sdfMeshAnswers). Direct lights and atmosphere remain
+            // measured yet reads the camera sample's light (sdfMeshAnswers). Direct lights and atmosphere remain
             // independent.
             bool meshIndirect = sdfMeshIrradianceEnabled();
             bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));

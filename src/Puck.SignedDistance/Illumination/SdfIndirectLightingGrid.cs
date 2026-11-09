@@ -6,7 +6,7 @@ namespace Puck.SignedDistance;
 /// continuous. Direct illumination uses the original frame lights.</summary>
 /// <param name="DirectionDegrees">Directional-light azimuth and elevation step in degrees; zero disables snapping.</param>
 /// <param name="Radiance">Fractional step per power-of-two range, independently per colour channel. Applied to
-/// directional colour and weight, projected sky coefficients and the sky peak; zero disables snapping.</param>
+/// directional colour and weight, the sky radiance each probe ray carries and the sky peak; zero disables snapping.</param>
 public readonly record struct SdfIndirectLightingGrid(float DirectionDegrees, float Radiance) {
     /// <summary>Whether either grid is authored.</summary>
     public bool Enabled => DirectionDegrees > 0 || Radiance > 0;
@@ -43,9 +43,9 @@ public readonly record struct SdfIndirectLightingGrid(float DirectionDegrees, fl
         return light;
     }
 
-    /// <summary>Snaps signed projected radiance using a fixed quantum per channel, derived from that channel's
-    /// current largest coefficient's power-of-two range. Near-zero coefficients share that quantum.</summary>
-    /// <param name="values">The current capture's coefficients, replaced in place.</param>
+    /// <summary>Snaps signed radiance values using a fixed quantum per channel, derived from that channel's
+    /// current largest value's power-of-two range. Near-zero values share that quantum.</summary>
+    /// <param name="values">The current capture's values, replaced in place.</param>
     public void SnapRadiance(Span<Vector3> values) {
         Validate();
         if (Radiance == 0) { return; }

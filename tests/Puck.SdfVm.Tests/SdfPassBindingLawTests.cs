@@ -12,16 +12,20 @@ namespace Puck.SdfVm.Tests;
 /// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
+    // The views pass's kernels: the unsplit interpreter and its plain counterpart, and the binned shading kernel and its
+    // plain counterpart. Each of a pass's variants reads what the pass reads; the binned filter and bins passes shade
+    // nothing and read no light or sky table.
+    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsPlain, SdfKernel.ViewsShade, SdfKernel.ViewsShadePlain];
+    private static readonly SdfKernel[] GlassKernels = [SdfKernel.Glass, SdfKernel.GlassPlain];
     // The kernels each light and sky table is bound by, and no other.
     // The glass shading pass lights its highlights from the lights table, reflects the environment map and reads the
     // atmosphere's lanes of the sky block.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Glass, .. ViewsKernels]),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, SdfKernel.Glass, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, SdfKernel.Glass, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [.. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyCoefficients, [.. GlassKernels, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, .. GlassKernels, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

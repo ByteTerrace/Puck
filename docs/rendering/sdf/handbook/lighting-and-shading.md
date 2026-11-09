@@ -312,7 +312,7 @@ in the frame.
   directional light and the bounce. `render.indirect.lightingGrid` optionally
   snaps indirect captures: `directionDegrees` steps directional azimuth and
   elevation; `radiance` is a fractional step per colour channel's power-of-two
-  range for directional radiometry and projected sky. Each zero or absent step
+  range for directional radiometry and the sky radiance each probe ray carries. Each zero or absent step
   leaves that component continuous. The standard chooses its precision in
   `worlds/standard/quality.puck`. Within a grid cell, a moving sun reuses the
   capture; crossing a boundary relights under the new values. Converged frames

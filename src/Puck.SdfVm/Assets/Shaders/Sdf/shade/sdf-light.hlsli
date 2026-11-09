@@ -27,33 +27,53 @@ float sdfLocalAdaptationGain(float incoming) {
 // Whether the irradiance volume answers a surface: some published probe about it measured it (sdfMeshProbesAt). While
 // the volume is on, a surface it has not measured (every surface before a level first publishes; past every published
 // probe after a camera cut, until the moved windows land) is lit as the view's camera sample measured the surroundings,
-// one probe at the camera that the exposure meter traces there the moment a view arrives: the share of the sky open
-// about the camera (airLight, SdfViewExposures.AirLightOf) arrives as the live sky, and the rest as the luminance the
-// meter read (meterLuminance), as a probe's sky share and reflected radiance do; its traced lights go unoccluded as
-// with the volume off. It reads neither darkness nor the unoccluded sky, and the image agrees with the exposure the
-// meter set from the same sample. Pixel passes only: a probe's relight never reads this, so an unmeasured hit never
-// feeds the volume a guess.
+// one probe at the camera that the exposure meter reads there the moment a view arrives: its diffuse light is the
+// sample's six-axis light (meterLight, SdfViewExposures.LightOf: the radiance and sky-light cubes summed, the sky
+// integrated along each open ray as a probe's is) read about the normal as a probe's cube is, and its reflection the
+// environment over the share of the sky open about the camera (airLight) and the luminance the meter read
+// (meterLuminance) over the rest; its traced lights go unoccluded as with the volume off. It reads neither darkness nor
+// the unoccluded sky, and the image agrees with the exposure the meter set from the same light. Before the meter's
+// first reading no sample exists and the surface reads the open sky. Pixel passes only: a probe's relight never reads
+// this, so an unmeasured hit never feeds the volume a guess.
 bool sdfMeshAnswers(SdfMeshProbes probes) {
     return (probes.share > 0.0);
 }
 // The camera sample's light from the surroundings it did not see open: the meter's luminance over the closed share,
-// grey, since the meter reads luminance alone.
+// grey, which its reflection reads.
 float3 sdfMeshCameraSurroundings() {
     return (max(passGroup.meterLuminance, 0.0) * (1.0 - saturate(passGroup.airLight))).xxx;
 }
-// The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the camera sample's: its
-// open sky under the volume's sky source, and its surroundings.
+// The light the view's camera sample receives about a normal, its six faces read as a probe's cube; false before the
+// meter's first reading (meterLight's W zero).
+bool sdfMeshCameraLight(float3 normal, out float3 light) {
+    light = float3(0.0, 0.0, 0.0);
+    if (passGroup.meterLight[0].w <= 0.0) {
+        return false;
+    }
+
+    float3 squared = (normal * normal);
+
+    [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
+        light += (squared[axis] * passGroup.meterLight[sdfMeshCubeFace(normal, axis)].rgb);
+    }
+    return true;
+}
+// The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the camera sample's light,
+// or before the meter has read the open sky under the volume's sky source.
 float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
     if (sdfMeshAnswers(probes)) {
         return sdfMeshIndirect(probes, normal);
     }
 
-    float3 sky = float3(0.0, 0.0, 0.0);
+    float3 light;
 
-    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
-        sky = (sdfSkyPhysicalIrradiance(normal) * ((saturate(passGroup.airLight) * passGroup.indirectSourceGains.w) / 3.141592653589793));
+    if (sdfMeshCameraLight(normal, light)) {
+        return light;
     }
-    return (sky + sdfMeshCameraSurroundings());
+    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
+        return (sdfSkyPhysicalIrradiance(normal) * (passGroup.indirectSourceGains.w / 3.141592653589793));
+    }
+    return float3(0.0, 0.0, 0.0);
 }
 // The environment a surface reflects along a mirror direction under the volume (sdfMeshReflection), or where it has
 // measured nothing the camera sample's: the environment as far as it sees the sky open, and its surroundings for the
