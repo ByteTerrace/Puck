@@ -2232,6 +2232,12 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · volume emission] `WorldPlacementStamper.AppendStaticVolumes` and
+  `WorldCreationInstances.AppendVolumes` repeat enabled-volume admission,
+  capacity refusal, parent lookup and isolation filtering. Share that walk
+  and keep each caller's static or motion-slot frame resolution at its boundary.
+  The deformation fix pass's duplicate scan found the existing pair; the next
+  volume/client pass owns its unification.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
