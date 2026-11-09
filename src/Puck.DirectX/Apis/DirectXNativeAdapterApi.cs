@@ -15,7 +15,7 @@ namespace Puck.DirectX.Apis;
 public sealed unsafe class DirectXNativeAdapterApi : IDirectXAdapterApi {
     internal static DirectXAdapterDescription Describe(in DXGI_ADAPTER_DESC1 description) {
         return new DirectXAdapterDescription(
-            AdapterLuid: DxgiInterop.ToLuid(luid: in description.AdapterLuid),
+            AdapterLuid: GpuAdapterLuid.Pack(highPart: description.AdapterLuid.HighPart, lowPart: description.AdapterLuid.LowPart),
             DedicatedSystemMemory: ((ulong)description.DedicatedSystemMemory),
             DedicatedVideoMemory: ((ulong)description.DedicatedVideoMemory),
             Description: description.Description.ToString(),

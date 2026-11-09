@@ -1,13 +1,11 @@
 using System.Runtime.Versioning;
-using Puck.Maths;
 using Windows.Win32;
-using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dxgi;
 
 namespace Puck.DirectX.Interop;
 
 /// <summary>
-/// Low-level DXGI helpers shared by the native APIs: creating a factory and packing adapter LUIDs.
+/// Low-level DXGI helpers shared by the native APIs: creating a factory.
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
 internal static unsafe class DxgiInterop {
@@ -22,11 +20,5 @@ internal static unsafe class DxgiInterop {
 
         result.ThrowIfFailed(operation: "CreateDXGIFactory2");
         return factory;
-    }
-    /// <summary>Packs a native <c>LUID</c> into a single 64-bit value.</summary>
-    /// <param name="luid">The locally unique identifier to pack.</param>
-    /// <returns>The identifier as <c>(HighPart &lt;&lt; 32) | LowPart</c>.</returns>
-    public static long ToLuid(in LUID luid) {
-        return PackedIntPair.Pack(high: luid.HighPart, low: unchecked(((int)luid.LowPart)));
     }
 }

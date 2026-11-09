@@ -139,7 +139,7 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             &luid
         );
 
-        return DxgiInterop.ToLuid(luid: in luid);
+        return GpuAdapterLuid.Pack(highPart: luid.HighPart, lowPart: luid.LowPart);
     }
     /// <inheritdoc/>
     public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) =>

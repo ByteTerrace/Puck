@@ -255,7 +255,7 @@ public sealed class FieldLattice {
         );
         var one = FixedQ4816.One;
         var span = (one - fill.Threshold);
-        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
+        var seed = (fill.Seed ^ PackedIntPair.FoldXor(value: worldSeed));
 
         for (var z = 0; (z < m_depth); z++) {
             for (var x = 0; (x < m_width); x++) {
@@ -386,7 +386,7 @@ public sealed class FieldLattice {
             field: field,
             value: fill.Value
         );
-        var seed = unchecked((uint)(fill.Seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
+        var seed = (fill.Seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var spacing = System.Math.Max(
             val1: 2,
             val2: fill.Spacing

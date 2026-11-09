@@ -41,4 +41,11 @@ public static class PackedIntPair {
     /// <returns>Bits 0 to 31.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint Low(ulong value) => unchecked((uint)value);
+    /// <summary>Folds a 64-bit word into 32 bits by xoring its two halves: the low word (bits 0 to 31) with the high
+    /// word (bits 32 to 63). Both halves contribute to every result, so a 64-bit seed or hash narrows to a 32-bit
+    /// one without dropping the high word. Cast the result to int for a <see cref="object.GetHashCode"/>.</summary>
+    /// <param name="value">The 64-bit word.</param>
+    /// <returns><c>Low(value) ^ High(value)</c>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint FoldXor(ulong value) => (Low(value: value) ^ High(value: value));
 }
