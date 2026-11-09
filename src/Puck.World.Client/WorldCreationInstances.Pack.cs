@@ -152,6 +152,8 @@ public sealed partial class WorldCreationInstances {
 
         var deltaSeconds = m_pendingDeltaSeconds;
 
+        m_rateFrameSeconds = deltaSeconds;
+
         m_pendingDeltaSeconds = 0f;
 
         for (var index = 0; (index < m_pool.Length); index++) {

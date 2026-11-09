@@ -82,14 +82,14 @@ public sealed class SdfKernelInterfaces {
     public const int MeshReceiverShift = 4;
     /// <summary>Receiver sample grid and jitter row.</summary>
     public const int MeshReceiverRow = 14;
-    /// <summary>First portal sight query row.</summary>
+    /// <summary>The view sight's header row, whose first word is its query count; four rows a query follow it.</summary>
     public const int MeshSightRow = 15;
-    /// <summary>First portal sight verdict after draw counts.</summary>
+    /// <summary>First view sight verdict after draw counts.</summary>
     public const int MeshSightCountBase = 5;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
-    /// receiver camera's sample grid/jitter row, followed by portal sight queries.
+    /// receiver camera's sample grid/jitter row, followed by the view sight's header row and queries.
     /// Draw bounds and mesh level metadata are retained in the shared mesh region.</summary>
     public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
     /// <summary>The raster pass's per-draw retained state: visibility, previous level, mesh reference identity and

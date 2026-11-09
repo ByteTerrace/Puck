@@ -122,6 +122,10 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 _ = ((reading.Hertz == SdfUpdateRateTiers.HeldHertz)
                     ? echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {reading.Name}={ReadingSize(lever: lever, size: reading.Size)}@held")
                     : echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {reading.Name}={ReadingSize(lever: lever, size: reading.Size)}@{reading.Hertz}hz"));
+                // A creation every view's sight hid names the latency of the evidence it is rated by, in frames.
+                if (reading.SightFrames >= 0) {
+                    _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $"(occluded,latency={reading.SightFrames}f)");
+                }
             }
         }
 

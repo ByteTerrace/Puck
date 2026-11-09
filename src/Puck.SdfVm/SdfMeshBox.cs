@@ -168,6 +168,47 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         );
     }
 
+    /// <summary>Writes boxes that together hold every receiver a caster can shadow in a cascade: the caster's sphere swept
+    /// along the light from the receivers' reach before it to the far side of the cascade's sphere (no receiver reading the
+    /// cascade lies past it), grown across the light by the receivers' reach and by the chord a light turned by up to
+    /// <paramref name="turn"/> sweeps over that length, and cut along the light into boxes about as long as they are
+    /// wide. A receiver outside every box reads none of the caster in the cascade, in any of its layers (depth, exit or
+    /// optical), while the light stays within <paramref name="turn"/> of the cascade's.</summary>
+    /// <param name="cascade">The cascade's light camera.</param>
+    /// <param name="center">The caster sphere's center, in world space.</param>
+    /// <param name="radius">The caster sphere's radius, in world units.</param>
+    /// <param name="reach">The receivers' reach in the cascade, in world units (<see cref="SdfMeshCull.ReachOf"/>).</param>
+    /// <param name="turn">The angle, in radians, the light may turn from the cascade's while the boxes still hold.</param>
+    /// <param name="boxes">The boxes to write; its length is the most the sweep is cut into, at least one.</param>
+    /// <returns>The boxes written, from the light's side.</returns>
+    /// <exception cref="ArgumentException"><paramref name="boxes"/> is empty.</exception>
+    public static int ShadowReach(in SdfMeshShadowCamera cascade, Vector3 center, float radius, float reach, float turn, Span<SdfMeshBox> boxes) {
+        if (boxes.IsEmpty) {
+            throw new ArgumentException(message: "At least one box is required.", paramName: nameof(boxes));
+        }
+
+        var forward = cascade.Forward;
+        var sphere = (cascade.Position + (forward * (cascade.Far - cascade.HalfHeight)));
+        var toSphere = (sphere - center);
+        var start = -(radius + reach);
+        var end = (MathF.Max(x: start, y: ((Vector3.Dot(vector1: toSphere, vector2: forward) + cascade.HalfHeight) + (toSphere.Length() * turn))) + reach);
+        var length = (end - start);
+        var across = ((radius + reach) + (length * turn));
+        var count = (int)Math.Clamp(value: MathF.Ceiling(x: (length / MathF.Max(x: (2f * across), y: 1.0e-6f))), min: 1f, max: boxes.Length);
+        var step = (length / count);
+
+        for (var index = 0; (index < count); index++) {
+            boxes[index] = new SdfMeshBox(
+                Center: (center + (forward * (start + ((index + 0.5f) * step)))),
+                HalfX: (cascade.Right * across),
+                HalfY: (cascade.Up * across),
+                HalfZ: (forward * (0.5f * step))
+            );
+        }
+
+        return count;
+    }
+
     // Whether the box's extent along a unit axis meets [low, high].
     private bool Within(Vector3 axis, float low, float high, Vector3 toward) {
         var middle = Vector3.Dot(vector1: toward, vector2: axis);

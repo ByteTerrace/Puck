@@ -85,7 +85,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly List<string?> m_filmedViewNames = [];
     private readonly List<float> m_rateViewPixels = [];
     // The shadow cascades' caster culls of the frame's views, each with its view's index, which the bodies lever reads.
-    private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
+    private readonly List<WorldCreationInstances.RateShadow> m_rateShadows = [];
+    private readonly List<string?> m_rateInstances = [];
 
     // The display extent this frame's cameras and placements share.
     private uint m_displayHeight;
@@ -1591,9 +1592,24 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return m_rateViewPixels;
     }
-    // The caster cull of each shadow cascade the dressed frame's views render, with that frame's own lights and far
-    // distance: the bodies lever holds no body one of them may draw. Every view counts, shown on the display or not.
-    private List<(int View, SdfMeshCull Cull)> RateShadows(SdfFrame frame, uint width, uint height) {
+    // The instance that renders each of the frame's views of this world, whose sight the bodies lever reads: a seat's
+    // view's producer, a filmed view's instance, and none for a seat's view routed to another world's scene.
+    private List<string?> RateViewInstances() {
+        m_rateInstances.Clear();
+
+        for (var index = 0; (index < m_frameViews.Count); index++) {
+            var filmed = (index - m_views.Count);
+
+            m_rateInstances.Add(item: ((filmed >= 0)
+                ? ((filmed < m_filmedViewNames.Count) ? m_filmedViewNames[filmed] : null)
+                : (((index < m_viewRoutes.Count) && (m_viewRoutes[index].Scene is not null)) ? null : ViewProducerName(view: index))));
+        }
+
+        return m_rateInstances;
+    }
+    // Each shadow cascade the dressed frame's views render, with that frame's own lights and far distance: the bodies
+    // lever holds no body one of them may draw. Every view counts, shown on the display or not.
+    private List<WorldCreationInstances.RateShadow> RateShadows(SdfFrame frame, uint width, uint height) {
         m_rateShadows.Clear();
 
         for (var view = 0; (view < m_frameViews.Count); view++) {
@@ -1609,7 +1625,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             var count = ((cascades.SecondPenumbraSlope > 0f) ? 3 : 2);
 
             for (var cascade = 0; (cascade < count); cascade++) {
-                m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
+                m_rateShadows.Add(item: new WorldCreationInstances.RateShadow(
+                    Cascade: cascades[cascade],
+                    Cull: SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth),
+                    Reach: SdfMeshCull.ReachOf(cascade: cascades[cascade], texels: cascades.Texels),
+                    View: view
+                ));
             }
         }
 
@@ -2101,8 +2122,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             counts: m_settings.RateCounts,
             height: height,
             intervals: m_settings.RateIntervals,
+            instances: RateViewInstances(),
             pixels: RateViewPixels(height: height),
             readings: m_settings.RateReadings,
+            sight: m_graphs?.Pickers,
             views: m_frameViews
         );
 

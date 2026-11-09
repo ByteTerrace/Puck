@@ -16,7 +16,9 @@ namespace Puck.World.Client;
 // everything it held. A placed creation (a row-rooted registration) decides through the same function (RateOf): it
 // holds wherever nothing may show or read it, and takes the reduced tiers only where its creation's author allows them
 // (CreationBehaviorDocument.ReducedRateAtDistance), sized for its measured part speed rather than a body's assumed one,
-// updating every frame otherwise. The registrations that take a tier together alternate their phase by half its period, so their packs
+// updating every frame otherwise. A registration that every view's sight hides, with every receiver its shadow can reach,
+// and that nothing reads, takes the slowest nonzero tier (SdfUpdateRateTiers.OccludedHertz) whatever its frustum tier,
+// never a hold (WorldCreationInstances.Sight). The registrations that take a tier together alternate their phase by half its period, so their packs
 // spread over the period's frames. The levers and the step flags are this frame's (PresentAt, before the pack); the
 // views and shadow cascades are the frame just dressed, a frame's lag the tiers do not notice, so a camera cut shows a
 // held body's held pose for one frame.
@@ -25,8 +27,8 @@ public sealed partial class WorldCreationInstances {
     private long m_packCount;
     // The views the last frame rendered the pool's world through: each camera and its image's height in pixels.
     private readonly List<(CameraSnapshot Camera, float Pixels)> m_rateViews = [];
-    // The shadow cascades of those views, each the renderer's own caster cull (SdfMeshCull) and the view it shadows.
-    private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
+    // The shadow cascades of those views (RateShadow).
+    private readonly List<RateShadow> m_rateShadows = [];
     private bool m_rateShadowsKnown;
     // Whether the next body to choose its phase within a tier takes the later half of the period.
     private bool m_rateLateHalf;
@@ -72,10 +74,19 @@ public sealed partial class WorldCreationInstances {
     /// <param name="codes">Whether each pack writes its bodies' tiers into <see cref="SlotRateCodes"/>.</param>
     /// <param name="pixels">The display pixels each view is shown over, by view, or <see langword="null"/> for each
     /// view's region of <paramref name="height"/>.</param>
+    /// <param name="sight">The evidence of what each rendered view hides, or <see langword="null"/> for none, which rates
+    /// no registration by occlusion.</param>
+    /// <param name="instances">The instance that renders each view of this pool's world, by view, <see langword="null"/>
+    /// for a view no such instance renders (whose sight then keeps demand), or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void RateBy(WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false, IReadOnlyList<float>? pixels = null) {
+    public void RateBy(WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false, IReadOnlyList<float>? pixels = null, ISdfViewSight? sight = null, IReadOnlyList<string?>? instances = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
+        m_rateSight = sight;
+        m_rateInstances.Clear();
+        if (instances is not null) {
+            m_rateInstances.AddRange(collection: instances);
+        }
         m_rateCounts = counts;
         m_rateIntervals = intervals;
         m_rateReadings = readings;
@@ -89,9 +100,9 @@ public sealed partial class WorldCreationInstances {
     /// <summary>Records the shadow cascades of the views <see cref="RateBy"/> recorded, fitted on the frame just dressed
     /// with its own lights, which the next <see cref="PackTransforms"/> reads: a body no view may see but one of these may
     /// draw takes the slowest tier rather than holding.</summary>
-    /// <param name="shadows">Each cascade's caster cull with the index of the view whose receivers it shadows, or
-    /// <see langword="null"/> when the cascades are not known, which holds no body.</param>
-    public void ShadowBy(IReadOnlyList<(int View, SdfMeshCull Cull)>? shadows) {
+    /// <param name="shadows">Each cascade of each view, or <see langword="null"/> when the cascades are not known, which
+    /// holds no body.</param>
+    public void ShadowBy(IReadOnlyList<RateShadow>? shadows) {
         m_rateShadows.Clear();
         m_rateShadowsKnown = (shadows is not null);
 
@@ -120,11 +131,23 @@ public sealed partial class WorldCreationInstances {
 
             var shownElsewhere = ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius));
 
-            hertz = ((live.BodyIndex is not null)
-                ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
-                : (ReducesAtDistance(live: live)
-                    ? SdfUpdateRateTiers.BodyHertz(partSpeed: (live.PartSpeed * placementScale), pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
-                    : (((pixelsPerMetre > 0f) || shownElsewhere) ? SdfUpdateRateTiers.EveryFrameHertz : SdfUpdateRateTiers.HeldHertz)));
+            hertz = TierOf(live: live, pixelsPerMetre: pixelsPerMetre, placementScale: placementScale, shownElsewhere: shownElsewhere);
+            live.RateSightFrames = -1;
+
+            // Occlusion only lowers a tier something may show: the held tier stays the evidence of no frustum, no cascade
+            // and no consumer alone.
+            if ((hertz != SdfUpdateRateTiers.HeldHertz) && (hertz > SdfUpdateRateTiers.OccludedHertz)) {
+                switch (SightOf(center: center, live: live, placementScale: placementScale, radius: radius, latency: out var latency)) {
+                    case Sight.Hidden:
+                        hertz = SdfUpdateRateTiers.OccludedHertz;
+                        live.RateSightFrames = latency;
+                        m_rateCounts?.Count(kind: SdfUpdateRateCounts.Occluded);
+                        break;
+                    case Sight.ShadowOnly:
+                        hertz = Math.Min(val1: hertz, val2: TierOf(live: live, pixelsPerMetre: 0f, placementScale: placementScale, shownElsewhere: true));
+                        break;
+                }
+            }
         }
 
         live.RatePack = m_packCount;
@@ -133,16 +156,24 @@ public sealed partial class WorldCreationInstances {
 
         return (hertz, pixelsPerMetre);
     }
+    // The tier a registration's frustum and cascade evidence give it (RateOf, before occlusion): a body's by its pixels per
+    // metre, a reducing placed creation's by its measured part speed too, any other placed creation's every frame wherever
+    // anything may show it and held where nothing may.
+    private static int TierOf(Registration live, float pixelsPerMetre, float placementScale, bool shownElsewhere) => ((live.BodyIndex is not null)
+        ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
+        : (ReducesAtDistance(live: live)
+            ? SdfUpdateRateTiers.BodyHertz(partSpeed: (live.PartSpeed * placementScale), pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
+            : (((pixelsPerMetre > 0f) || shownElsewhere) ? SdfUpdateRateTiers.EveryFrameHertz : SdfUpdateRateTiers.HeldHertz)));
     // Whether a row-rooted registration's author lets it take the reduced tiers.
     private static bool ReducesAtDistance(Registration live) => (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true);
-    // Measures a reducing placed creation's part speed after a full pack (the bound RateOf sizes its tiers for): each
-    // part's travel relative to the root since the previous full pack, its centre's displacement plus the chord its
-    // reach sweeps by its turn, over the seconds between the packs. The bound keeps the fastest any such interval
-    // showed, in creation units a second, so a held pose never differs from the full-rate pose by more than the tier's
-    // step for any speed already seen. An interval across a cut (a new registration, a reseat, a resume after an unseen
-    // hold, a scale change) measures nothing and only restarts the comparison.
+    // Measures a placed creation's part speed after a full pack (the bound a reducing one's tiers are sized for, and every
+    // one's sight sweeps its reach by): each part's travel relative to the root since the previous full pack, its centre's
+    // displacement plus the chord its reach sweeps by its turn, over the seconds between the packs. The bound keeps the
+    // fastest any such interval showed, in creation units a second, so a held pose never differs from the full-rate pose
+    // by more than the tier's step for any speed already seen. An interval across a cut (a new registration, a reseat, a
+    // resume after an unseen hold, a scale change) measures nothing and only restarts the comparison.
     private void MeasurePartSpeed(Registration live, in DynamicTransform root, int shapeCount, float elapsedSeconds, bool continuous) {
-        if ((live.BodyIndex is not null) || !ReducesAtDistance(live: live) || (root.Scale <= 0f)) {
+        if ((live.BodyIndex is not null) || (root.Scale <= 0f)) {
             return;
         }
         if (live.PartLocalPositions.Length != shapeCount) {
@@ -199,8 +230,8 @@ public sealed partial class WorldCreationInstances {
 
         var box = new SdfMeshBox(Center: center, HalfX: (Vector3.UnitX * radius), HalfY: (Vector3.UnitY * radius), HalfZ: (Vector3.UnitZ * radius));
 
-        foreach (var (_, cull) in m_rateShadows) {
-            if (cull.Keeps(box: box)) {
+        foreach (var shadow in m_rateShadows) {
+            if (shadow.Cull.Keeps(box: box)) {
                 return true;
             }
         }
@@ -270,7 +301,7 @@ public sealed partial class WorldCreationInstances {
 
         if (((m_rates & SdfUpdateRates.Bodies) != 0) && (m_rateReadings is not null)) {
             live.RateName ??= ((live.BodyIndex is { } body) ? $"body:{body}" : $"placement:{live.Row?.Id}");
-            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: live.RateName, Size: pixelsPerMetre));
+            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: live.RateName, Size: pixelsPerMetre, SightFrames: live.RateSightFrames));
         }
         if (m_writesRateCodes) {
             m_slotRateCodes.AsSpan(length: packedSlots, start: rootSlot).Fill(value: ((byte)SdfUpdateRateTiers.CodeOf(hertz: hertz, updated: posed)));

@@ -48,6 +48,10 @@ public static class SdfUpdateRateTiers {
     /// <summary>Gets the rates a body's pose takes, in hertz, fastest first: every frame, then each reduced tier. Each
     /// divides 30 and 60, so its floor lands on an even cadence on either grid.</summary>
     public static ReadOnlySpan<int> BodyTiers => [EveryFrameHertz, 30, 15, 10, 5];
+    /// <summary>Gets the slowest nonzero body tier, in hertz: the rate a posed creation takes while every view's sight
+    /// hides it and its shadow's receivers, so its pose is at most one period plus the sight's latency stale when it shows
+    /// again, where a hold (<see cref="HeldHertz"/>) would be unbounded.</summary>
+    public static int OccludedHertz => BodyTiers[^1];
     /// <summary>The share of its own height a nested view's content moves in a second at most, which the view tiers are
     /// sized for: a viewer walking past a window, not a snap turn.</summary>
     public const float ViewParallaxPerSecond = 0.5f;
@@ -277,7 +281,9 @@ public sealed class SdfUpdateRateReadings {
     /// <param name="Name">The item: <c>body:&lt;index&gt;</c>, or the instance a view or screen shows.</param>
     /// <param name="Size">The size on screen the item was rated by, in the lever's unit.</param>
     /// <param name="Hertz">The tier it took: 60 for every frame, 30 or 15.</param>
-    public readonly record struct Reading(string Name, double Size, int Hertz);
+    /// <param name="SightFrames">For a creation every view's sight hid (<see cref="SdfUpdateRateTiers.OccludedHertz"/>),
+    /// the most frames a sight that hid it took from a query to its answer; -1 for any other reading.</param>
+    public readonly record struct Reading(string Name, double Size, int Hertz, int SightFrames = -1);
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<SdfUpdateRates, List<Reading>> m_latest = [];
@@ -332,6 +338,9 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind PlacementsPosed = new(name: "sdf.rates.placements.posed", unit: "placements", workClass: WorkClass.Pacing);
     /// <summary>Counts each animated placed creation's pose a frame held.</summary>
     public static readonly WorkKind PlacementsHeld = new(name: "sdf.rates.placements.held", unit: "placements", workClass: WorkClass.Pacing);
+    /// <summary>Counts each body or animated placed creation a frame rated at <see cref="SdfUpdateRateTiers.OccludedHertz"/>
+    /// because every view's sight hid it and the receivers its shadow can reach.</summary>
+    public static readonly WorkKind Occluded = new(name: "sdf.rates.occluded", unit: "creations", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view rendered both layers of its far cascade.</summary>
     public static readonly WorkKind ShadowFarRendered = new(name: "sdf.rates.shadow-far.rendered", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view rendered one layer of its far cascade, half of a split refresh.</summary>
@@ -346,7 +355,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, Occluded, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

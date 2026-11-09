@@ -162,15 +162,13 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     id.x += id.y * (SDF_MESH_SELECTION_GROUP_SIZE * SDF_MESH_SELECTION_GROUPS_PER_ROW);
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
-    // One workgroup tests the consumer's portal slabs with exactly the draw test and the same pyramid.
-    // Four rows per screen follow the selection controls; the first five count words are draw phases.
+    // The view's sight queries (portal slabs, then rated bodies' boxes) take exactly the draw test against the same
+    // pyramid, one invocation a query. The sight's header row holds the query count, and four rows a query follow it;
+    // the first five count words are draw phases. An empty row (w zero) may show.
     if (step == SDF_OCCLUSION_SIGHT_STEP) {
-        uint rows;
-        uint stride;
-        sdfMeshOcclusionCandidates.GetDimensions(rows, stride);
-        uint screens = (rows - SDF_SIGHT_ROW) / 4u;
-        if (id.x < screens) {
-            uint row = SDF_SIGHT_ROW + id.x * 4u;
+        uint queries = sdfMeshOcclusionCandidates[SDF_SIGHT_ROW].x;
+        if (id.x < queries) {
+            uint row = SDF_SIGHT_ROW + 1u + id.x * 4u;
             float4 center = asfloat(sdfMeshOcclusionCandidates[row]);
             bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz,
                 asfloat(sdfMeshOcclusionCandidates[row + 1u].xyz),

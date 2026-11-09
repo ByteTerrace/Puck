@@ -24,7 +24,6 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private const int HeaderWords = (SdfKernelInterfaces.MeshSightRow * 4);
     // Every pass reserves early/late entry; cascades add solid exit, thin exit and optional extinction.
     private readonly uint m_argumentPhases;
-    private const ulong CountsBytes = ((SdfKernelInterfaces.MeshSightCountBase + SdfPortalSight.Capacity) * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;
     private readonly string m_owner;
@@ -54,11 +53,17 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private readonly SightSlot[] m_sightSlots;
     // Each slot's sight copy, read only once the node proves that slot complete, which precedes the slot's next Stage.
     private readonly RenderGraphSlotResults<SightSlot> m_sightCopies;
+    // The controls a Stage writes: the selection rows, the sight's header row and its queries, grown with the queries.
+    private System.Numerics.Vector4[] m_rows = [];
+    // The bytes a sight readback is read into, grown with the largest copy.
+    private byte[] m_sightBytes = [];
+    // The queries the counts buffer, each candidates buffer and each readback are sized for, and this frame's.
+    private int m_sightCapacity = SdfPortalSight.Screens;
+    private int m_sightQueries;
 
     private sealed class SightSlot {
-        internal readonly SdfPortalSight.Query?[] Queries = new SdfPortalSight.Query?[SdfPortalSight.Capacity];
+        internal readonly SdfPortalSight.Captured Captured = new();
         internal IGpuReadbackBuffer? Buffer;
-        internal long Epoch;
     }
 
     // Creates a view's occlusion state; every buffer is created on the first frame that needs it.
@@ -91,11 +96,16 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_sightCopies.Completed(slot: slot);
     }
     private void ReadSight(SightSlot slot) {
-        Span<byte> bytes = stackalloc byte[(int)CountsBytes];
+        var length = (int)CountsBytesOf(queries: slot.Captured.Queries);
+
+        if (m_sightBytes.Length < length) { m_sightBytes = new byte[length]; }
+        var bytes = m_sightBytes.AsSpan(start: 0, length: length);
 
         slot.Buffer!.Read(bytes);
-        m_sight!.Complete(slot.Epoch, slot.Queries, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[SdfKernelInterfaces.MeshSightCountBase..]);
+        m_sight!.Complete(slot.Captured, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bytes)[SdfKernelInterfaces.MeshSightCountBase..]);
     }
+    // The counts buffer's bytes for a sight's queries: the draw phases' counts, then one verdict a query.
+    private static ulong CountsBytesOf(int queries) => (((ulong)(SdfKernelInterfaces.MeshSightCountBase + queries)) * sizeof(uint));
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer
@@ -113,10 +123,23 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_receiverWidth = receiverWidth;
         m_receiverHeight = receiverHeight;
         var sightSlot = m_sightSlots[slot];
-        Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[SdfKernelInterfaces.MeshSightRow + (4 * SdfPortalSight.Capacity)];
-        rows.Clear();
-        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[SdfKernelInterfaces.MeshSightRow..], sightSlot.Queries, in camera); }
-        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows);
+        var sees = (occlude && (m_sight is not null));
+        // A recording no sight test runs on leaves the view's earlier answers describing frames it no longer shows.
+        if (!occlude) { m_sight?.Lapse(); }
+        m_sightQueries = 0;
+        if (sees && (m_sight!.QueryCount > m_sightCapacity)) {
+            m_sightCapacity = (int)GpuCapacity.Grown(current: m_sightCapacity, required: m_sight.QueryCount, ceiling: int.MaxValue, divisor: 1);
+        }
+        var rowCount = (SdfKernelInterfaces.MeshSightRow + 1 + (4 * m_sightCapacity));
+        if (m_rows.Length < rowCount) { m_rows = new System.Numerics.Vector4[rowCount]; }
+        var rows = m_rows.AsSpan(start: 0, length: rowCount);
+        rows[..(SdfKernelInterfaces.MeshSightRow + 1)].Clear();
+        if (sees) {
+            m_sightQueries = m_sight!.Capture(rows[(SdfKernelInterfaces.MeshSightRow + 1)..], sightSlot.Captured, in camera);
+        }
+        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows[..(SdfKernelInterfaces.MeshSightRow + 1 + (4 * m_sightQueries))]);
+        // The sight's header row: the query count the sight step tests.
+        words[SdfKernelInterfaces.MeshSightRow * 4] = (uint)m_sightQueries;
 
         words[0] = count;
         words[1] = m_levels;
@@ -264,16 +287,22 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead, sourceStage: GpuStage.DrawIndirect);
         recorder.EndBarriers(commandBufferHandle: commandBuffer);
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionLateStep);
-        if (m_sight is not null) {
+        if ((m_sight is not null) && (m_sightQueries > 0)) {
             Ready(buffer: m_counts!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
-            Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
+            Dispatch(commandBuffer: commandBuffer, invocations: (uint)m_sightQueries, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
             var slot = m_sightSlots[m_slot];
-            slot.Buffer ??= m_buffers.CreateReadback(sizeBytes: CountsBytes, name: Name("portal sight", m_slot));
+            var copyBytes = CountsBytesOf(queries: m_sightQueries);
+            // The node completed this slot before its recording (Completed), so its previous readback is read and idle.
+            if ((slot.Buffer is { } small) && (small.SizeBytes < copyBytes)) {
+                small.Dispose();
+                slot.Buffer = null;
+            }
+            slot.Buffer ??= m_buffers.CreateReadback(sizeBytes: CountsBytesOf(queries: m_sightCapacity), name: Name("view sight", m_slot));
             recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_counts!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
             recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: m_counts.BufferHandle,
-                destinationBufferHandle: slot.Buffer.BufferHandle, sizeBytes: CountsBytes);
+                destinationBufferHandle: slot.Buffer.BufferHandle, sizeBytes: copyBytes);
             recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: slot.Buffer.BufferHandle,
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
@@ -332,7 +361,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // first opaque occlusion frame tests every new candidate in the second phase.
     private void EnsureBuffers(uint draws, bool depth) {
         var capacity = Math.Max(val1: draws, val2: 1u);
-        var candidateBytes = ((ulong)((HeaderWords + (16 * SdfPortalSight.Capacity)) * sizeof(uint)));
+        // The selection rows, the sight's header row, then four rows a query.
+        var candidateBytes = (((ulong)(HeaderWords + 4 + (16 * m_sightCapacity))) * sizeof(uint));
 
         if ((m_candidates[m_slot] is not { } candidates) || (candidates.SizeBytes < candidateBytes)) {
             m_candidates[m_slot]?.Dispose();
@@ -368,9 +398,14 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             );
         }
 
+        // Counts are cleared every recording, so a grown buffer carries nothing over.
+        if ((m_counts is { } counts) && (counts.SizeBytes < CountsBytesOf(queries: m_sightCapacity))) {
+            m_retired[m_slot].Add(item: counts);
+            m_counts = null;
+        }
         m_counts ??= m_buffers.CreateDeviceLocal(
             name: Name(detail: "occlusion counts"),
-            sizeBytes: CountsBytes,
+            sizeBytes: CountsBytesOf(queries: m_sightCapacity),
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
 

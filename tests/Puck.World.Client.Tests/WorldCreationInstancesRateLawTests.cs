@@ -358,4 +358,56 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.False(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: (1d / 32d), frameSeconds: (1d / 32d), hertz: 30, rate: new PresentationRate(DisplayHertz: 32, GridHertz: 32d)));
         Assert.True(condition: SdfUpdateRateTiers.Holds(elapsedSeconds: Frame, frameSeconds: Frame, hertz: 30, rate: Paced60));
     }
+    // A view's sight that answers hidden for a group only once that group's version was asked for the same camera on an
+    // earlier frame, as a completed readback would.
+    private sealed class AnsweringSight(bool hides) : ISdfViewSight {
+        private readonly Dictionary<long, (long Version, CameraSnapshot Camera)> m_asked = [];
+
+        public bool Hidden(string instance, long key, long version, in CameraSnapshot camera, ReadOnlySpan<SdfMeshBox> boxes) {
+            var answered = (m_asked.TryGetValue(key: key, value: out var asked) && (asked.Version == version) && (asked.Camera == camera));
+
+            m_asked[key] = (version, camera);
+
+            return (hides && answered);
+        }
+        public int LatencyFrames(string instance) => 1;
+    }
+    // The occlusion floor (WorldCreationInstances.Sight): a body close before a view that hides it poses at the slowest
+    // nonzero tier, never held, with the sight's latency read back; a camera cut keeps demand until the first answer for
+    // the new camera; a sight that sees it keeps the frustum's tier.
+    [Fact]
+    public void ABodyEveryViewHidesPosesAtTheFloorTierAndACameraCutKeepsDemand() {
+        var (client, pool, transforms) = Stage();
+        var counts = SdfUpdateRateCounts.Counters();
+        var readings = new SdfUpdateRateReadings();
+
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, instances: ["world"], intervals: null, readings: readings, sight: new AnsweringSight(hides: true), views: ViewFrom(distance: 3f));
+        pool.ShadowBy(shadows: []);
+
+        for (var tick = 1UL; (tick <= 12UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+        }
+
+        var reading = Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies));
+
+        Assert.Equal(expected: SdfUpdateRateTiers.OccludedHertz, actual: reading.Hertz);
+        Assert.Equal(expected: 1, actual: reading.SightFrames);
+        Assert.InRange(actual: counts.Read(kind: SdfUpdateRateCounts.BodiesHeld), low: 8L, high: 11L);
+
+        var posed = counts.Read(kind: SdfUpdateRateCounts.BodiesPosed);
+
+        pool.RateBy(counts: counts, height: 900U, instances: ["world"], intervals: null, readings: readings, sight: new AnsweringSight(hides: true), views: ViewFrom(distance: 4f));
+        _ = Walk(client: client, pool: pool, tick: 13UL, transforms: transforms);
+
+        Assert.Equal(expected: (posed + 1L), actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
+        Assert.Equal(expected: SdfUpdateRateTiers.EveryFrameHertz, actual: Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies)).Hertz);
+
+        pool.RateBy(counts: counts, height: 900U, instances: ["world"], intervals: null, readings: readings, sight: new AnsweringSight(hides: false), views: ViewFrom(distance: 4f));
+        _ = Walk(client: client, pool: pool, tick: 14UL, transforms: transforms);
+        _ = Walk(client: client, pool: pool, tick: 15UL, transforms: transforms);
+
+        Assert.Equal(expected: (posed + 3L), actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
+        Assert.Equal(expected: -1, actual: Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies)).SightFrames);
+    }
 }

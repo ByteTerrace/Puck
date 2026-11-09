@@ -23,7 +23,7 @@ public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View
 /// screen, the first taking its lease into the frame's lease list.
 /// </para>
 /// </summary>
-public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
+public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory, ISdfViewSight {
     private readonly Func<string, SdfWorldView?> m_resolve;
 
     // Each instance the runtime asked about: the view it renders, resolved on the frame thread at most once a frame, and
@@ -224,6 +224,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool PortalOccluded(string instance, int screen, in Puck.Abstractions.Cameras.CameraSnapshot camera,
         System.Numerics.Vector3 center, System.Numerics.Vector3 halfX, System.Numerics.Vector3 halfY, System.Numerics.Vector3 halfZ) =>
         Refresh(instance).PortalSight.Occluded(screen, new(camera, center, halfX, halfY, halfZ));
+    /// <inheritdoc/>
+    public bool Hidden(string instance, long key, long version, in Puck.Abstractions.Cameras.CameraSnapshot camera, ReadOnlySpan<SdfMeshBox> boxes) =>
+        Refresh(instance).PortalSight.Hidden(key, version, in camera, boxes);
+    /// <inheritdoc/>
+    public int LatencyFrames(string instance) => Refresh(instance).PortalSight.LatencyFrames;
 
     internal SdfPortalSight PortalSightOf(string instance) => Refresh(instance).PortalSight;
     /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
@@ -656,7 +661,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         entry.View = view;
         entry.Picker.Follow(view: view);
         entry.DiagnosticPicker.Follow(view: view);
-        entry.PortalSight.Follow(view);
+        entry.PortalSight.Follow(view, m_frame);
 
         return entry;
     }

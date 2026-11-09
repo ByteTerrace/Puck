@@ -225,6 +225,15 @@ public sealed partial class WorldCreationInstances {
 
         public float RatePixelsPerMetre;
         public string? RateName;
+        // The occlusion evidence of the rate decision (WorldCreationInstances.Sight): the key its sight groups are asked
+        // under, unique in the process; each rated view's anchor, by view; its root at the last decision that asked and
+        // that decision's pack, which the next measures the root's speed from; and the latency the latest decision that
+        // rated it occluded read, -1 otherwise.
+        public readonly long SightKey = Interlocked.Increment(location: ref SightKeys);
+        public SightAnchor?[] SightAnchors = [];
+        public Vector3 SightCenter;
+        public long SightPack = -1L;
+        public int RateSightFrames = -1;
 
         // A reducing placed creation's measured part speed relative to its root, in creation units a second (infinity
         // until measured), and each shape's root-relative pose at its last full pack, which the next one measures
