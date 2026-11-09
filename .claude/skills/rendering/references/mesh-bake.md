@@ -371,7 +371,9 @@ laws exercise that boundary.
   geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
   thickness or a rounded profile's radius, a thirty-second of a warped shape's
   smallest half-extent, or a thirty-second of a cellular relief's wavelength. The tightest applies, at
-  placement scale; a scoped creation keeps its tightest shape's spacing, or its
+  placement scale, and none finer than 2 mm (`WorldPlacementStamper.FinestDetail`:
+  an 18 cm swallow's 3 mm wing blade, whose rounded corner asks 0.2 mm, bakes
+  30,000 triangles at that floor and 382,000 without it); a scoped creation keeps its tightest shape's spacing, or its
   noise relief's (`CreationNoiseDocument.DetailSpacing`: a quarter of the
   wavelength of the finest octave carrying a sixteenth of the amplitude) where
   that is finer. Refinement stops at eight cells a coarse axis, and a scoped
@@ -439,19 +441,30 @@ laws exercise that boundary.
   it and shades as flat facets: the Moth's fingers, hair locks and braid did.
   A flattened ellipsoid, a box, another prism or a cylinder declares nothing (an edge
   bends along its length alone, and the contour keeps it as a crease), and
-  neither does a detail of 15 mm or more. A blend group takes its finest
-  member's detail over its whole surface, so a member finer than 3 mm (a lid, a
-  rivet) declares none rather than refining the plate or face it is grouped
-  with; a shape on an instance of its own goes to 2 mm. Static placements keep
-  `ShapeDetail` alone. `puck mesh audit --prototype <id> --cpu` prints each
+  neither does a detail of 15 mm or more. A shape alone (ungrouped, or a group of
+  one) refines its whole bound and drops a section finer than 2 mm
+  (`WorldPlacementStamper.FinestDetail`). A blend group's shape refines only its
+  own part (below) and bakes a finer section at that 2 mm floor
+  (`WorldCreationInstances.PartDetail`). Static placements keep `ShapeDetail`,
+  floored at the same 2 mm. `puck mesh audit --prototype <id> --cpu` prints each
   group's triangles and cell before a boot.
-- **A pooled instance's detail spreads over its whole bound.** A dynamic group
-  refines the box its detailed instances' bounds cover
-  (`SdfMeshBakeGroup.DetailLow`, `OwnFinal`), never per member as a static
-  union does, so one thin member of a blend group refines every member's
-  surface. Pooled creations therefore take `BodyDetail`, not `ShapeDetail`,
-  whose plate and rounded-profile terms put the Moth's whole suit at 2 to 3 mm
-  and multiply her triangles about eighteenfold.
+- **A pooled blend group bakes as a union of its parts.** Its one instance
+  declares a part a shape (`SdfInstanceRange.Parts`, `SdfInstancePart`): the
+  shape's box in its own slot's frame and its detail. The plan carries each box
+  into the group's frame through the pose the geometry hashed for that slot
+  (`SdfMeshBakeGroup.AddDynamicMembers`), and each becomes a member
+  (`SdfMeshBakeGroup.Members`), so a group of several members bakes on
+  `UnionFinal` as a static copy's run does: a cubic lattice at the union's own
+  spacing, not `OwnFinal`'s `MinimumCell` floor, refined per member. A dynamic
+  slot holding several instances without parts unions their spheres the same
+  way. Parts are hashed into the geometry by slot offset. Under `OwnFinal` an
+  18 cm swallow's blend group bakes on a 15 mm lattice refined over its whole
+  bound; under `UnionFinal` it starts at the 2.8 mm its static stamp's union
+  takes. `UnionFinal` takes one refinement factor for all its regions, the
+  finest member's, so one thin member refines every member's box: the reason
+  pooled parts declare `BodyDetail`'s round sections and not `ShapeDetail`'s
+  plate and rounded-profile terms, which put the Moth's suit at 4.7 M triangles
+  in place of 1.1 M.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
   (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their

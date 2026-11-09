@@ -230,6 +230,9 @@ public static class WorldSemanticValidator {
         foreach (var warning in MovingBlends(definition: definition)) {
             Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.MovingBlend, message: warning, severity: DiagnosticSeverity.Warning));
         }
+        foreach (var warning in UngroupedBlends(definition: definition)) {
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.UngroupedBlend, message: warning, severity: DiagnosticSeverity.Warning));
+        }
 
         return (errors.Count == 0);
     }
@@ -254,6 +257,27 @@ public static class WorldSemanticValidator {
             if (creations[index]?.Document is not { } document) { continue; }
             foreach (var blend in CreationMotion.MovingBlends(document: document)) {
                 warnings.Add(item: $"prototypes[{index}].doc.shapes[{blend.Shape}].blend: creation '{creations[index].Id}' {CreationMotion.Describe(blend: blend, document: document)}");
+            }
+        }
+
+        return warnings;
+    }
+    /// <summary>Returns a warning for each ungrouped shape of an animated creation that declares a blend other than
+    /// <c>Union</c> (<see cref="CreationMotion.UngroupedBlends"/>), which the pooled bake draws as a hard union, naming
+    /// the creation, the shape and the blend, its path first as a refusal's is.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>The warnings, in prototype and shape order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> UngroupedBlends(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var warnings = new List<string>();
+        var creations = definition.Creations;
+
+        for (var index = 0; (index < creations.Count); index++) {
+            if (creations[index]?.Document is not { } document) { continue; }
+            foreach (var shape in CreationMotion.UngroupedBlends(document: document)) {
+                warnings.Add(item: $"prototypes[{index}].doc.shapes[{shape}].blend: creation '{creations[index].Id}' {CreationMotion.DescribeUngrouped(document: document, shape: shape)}");
             }
         }
 

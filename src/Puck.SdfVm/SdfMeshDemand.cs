@@ -110,7 +110,7 @@ public sealed class SdfMeshDemand {
         var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
 
         center = box.Center;
-        half = ((Vector3.Abs(value: box.HalfX) + Vector3.Abs(value: box.HalfY)) + Vector3.Abs(value: box.HalfZ));
+        half = box.AxisHalf;
         return boxed;
     }
 

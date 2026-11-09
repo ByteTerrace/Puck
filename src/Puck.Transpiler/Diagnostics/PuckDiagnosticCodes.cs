@@ -329,6 +329,11 @@ public static class PuckDiagnosticCodes {
     public const string ShadeCapacity = "PUCK129";
     /// <summary>PUCK130: a runtime shade parameter occurs in a structural position.</summary>
     public const string ShadeStructural = "PUCK130";
+    /// <summary>PUCK131: a warning that an animated creation's ungrouped shape declares a blend other than <c>Union</c>.
+    /// The pooled bake gives each ungrouped shape a group of its own, so the shape draws as a hard union with its
+    /// neighbours, where a static placement of the same creation draws the blend. Giving the shapes one group keeps
+    /// it.</summary>
+    public const string UngroupedBlend = "PUCK131";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

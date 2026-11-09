@@ -82,8 +82,9 @@ public static class CreationMotion {
     }
     /// <summary>Returns every blend of an animated creation's pooled groups that joins shapes moving independently: a
     /// shape whose blend is not <see cref="SdfBlendOp.Union"/> joining a group an earlier member of which inherits
-    /// another shape's motion (<see cref="Owner"/>), or which a timeline frame poses apart from it. Ungrouped shapes, and
-    /// every shape of a creation that does not animate, join by no such blend.</summary>
+    /// another shape's motion (<see cref="Owner"/>), or which a timeline frame poses apart from it. Every shape of a
+    /// creation that does not animate joins by no such blend, and an ungrouped shape's blend is
+    /// <see cref="UngroupedBlends"/>'s.</summary>
     /// <param name="document">The creation document.</param>
     /// <returns>The blends, one per joining shape naming the first earlier member it moves apart from, in shape
     /// order; empty when there is none.</returns>
@@ -118,6 +119,43 @@ public static class CreationMotion {
         }
 
         return found;
+    }
+    /// <summary>Returns every ungrouped shape of an animated creation whose blend is not <see cref="SdfBlendOp.Union"/>
+    /// and which follows another shape. The pooled bake gives each ungrouped shape a group of its own, so it joins its
+    /// neighbours as crossing meshes, a hard union, whatever blend it declares; a static placement of the same creation
+    /// bakes its shapes as one union and draws the blend. A group (<see cref="ShapeDocument.Group"/>) is the partition
+    /// that keeps a pooled blend, which the author chooses: grouping moving parts stretches their seam
+    /// (<see cref="MovingBlends"/>), so the bake never joins ungrouped shapes on its own.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns>The shapes' indices, in shape order; empty when there is none or the creation does not animate.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<int> UngroupedBlends(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        var shapes = (document.Shapes ?? []);
+
+        if ((shapes.Count < 2) || !Animates(document: document)) { return []; }
+
+        var found = new List<int>();
+
+        for (var index = 1; (index < shapes.Count); index++) {
+            if (((shapes[index].Group ?? 0) == 0) && ((shapes[index].Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union)) {
+                found.Add(item: index);
+            }
+        }
+
+        return found;
+    }
+    /// <summary>Describes an ungrouped blend (<see cref="UngroupedBlends"/>) for a diagnostic: the shape by name, its
+    /// blend, and what the pooled bake makes of it.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="shape">The shape's index, one <see cref="UngroupedBlends"/> returned.</param>
+    /// <returns>One sentence, starting lowercase so a caller can lead it with the creation's name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static string DescribeUngrouped(CreationDocument document, int shape) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        return $"blends ungrouped shape '{NameOf(document: document, index: shape)}' into the shapes before it by {(document.Shapes![shape].Blend ?? SdfBlendOp.Union)}: an animated creation bakes each ungrouped shape alone, so it draws as a hard union; give it and the shapes it blends into one group.";
     }
     /// <summary>Describes a moving blend for a diagnostic: the two shapes by name, what moves each, the group and the
     /// blend, and what the bake makes of it.</summary>

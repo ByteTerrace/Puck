@@ -21,6 +21,24 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// projection (under a pixel) and a triangle's coverage of the pixel centers along the image's edge.</summary>
     public const float ViewMarginPixels = 4f;
 
+    /// <summary>Gets the half extents, along the axes of the frame the box lies in, of the axis-aligned box that holds
+    /// it: the absolute values of its three half axes summed.</summary>
+    public Vector3 AxisHalf => ((Vector3.Abs(value: HalfX) + Vector3.Abs(value: HalfY)) + Vector3.Abs(value: HalfZ));
+
+    /// <summary>Returns the box a box of half extents <paramref name="half"/> about <paramref name="center"/> becomes
+    /// when turned by <paramref name="turn"/> and moved by <paramref name="offset"/>.</summary>
+    /// <param name="center">The box's center before the turn.</param>
+    /// <param name="half">The box's half extents along its own axes, none negative.</param>
+    /// <param name="turn">The turn, a unit quaternion.</param>
+    /// <param name="offset">The move after the turn.</param>
+    /// <returns>The turned and moved box.</returns>
+    public static SdfMeshBox Turned(Vector3 center, Vector3 half, Quaternion turn, Vector3 offset) => new(
+        Center: (offset + Vector3.Transform(value: center, rotation: turn)),
+        HalfX: Vector3.Transform(value: new Vector3(x: half.X, y: 0f, z: 0f), rotation: turn),
+        HalfY: Vector3.Transform(value: new Vector3(x: 0f, y: half.Y, z: 0f), rotation: turn),
+        HalfZ: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: half.Z), rotation: turn)
+    );
+
     /// <summary>Returns the fraction a view's frustum sides are widened by: <see cref="ViewMargin"/>, or
     /// <see cref="ViewMarginPixels"/> of the view's shorter side where that is more, as it is for a small nested
     /// window.</summary>

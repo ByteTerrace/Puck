@@ -50,7 +50,7 @@ Owed at the integration tip, for whoever leads next:
   left here: the reciprocal divisor and packed-pair comparer (refactoring
   campaign), and the branch-scoped duplicate check (agent tooling);
 - the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
-  bar from references, then its idle rig once the animated bake holds
+  bar from references, then its idle rig once a moving blend holds
   ([the visual bar](#the-visual-bar)). Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
@@ -1584,20 +1584,29 @@ by `world.view.pick`.
   no context.
 - [medium] The binding-bar overlay sits over the Moth's legs at the centre
   bottom of the screen in third person.
-- [high] The animated creation path cannot hold a sculpt's quality. A
-  creation with drivers bakes pooled and coarser than its static stamp: the
-  swallow drafted in a session baked cleanly static, then on gaining a
-  head glance and tail bob its eyes and back faceted and 4 mm tail streamers
-  broke into fragments. A blend across parts that move apart tears in motion
-  (PUCK122): the head's glance tore the throat into spikes. Find why the
-  pooled bake is coarser at the same projected size and give animated
-  creations the static bake's detail; make a moving part's blend hold (a
-  rebake per settled pose is not enough for continuous idle motion).
-- [high] Adding drivers silently changes a creation's look: animated shapes
-  bake pooled, where `group: 0` is ungrouped, so every `SmoothUnion` becomes a
-  hard union with no diagnostic. Warn (as PUCK122 does for moving blends) when
-  an animated creation carries a non-union blend on an ungrouped shape, or
-  make ungrouped shapes of one creation keep their authored blends.
+- [high] A blend across parts that move apart tears in motion (PUCK122): the
+  swallow's head glance tore the throat into spikes, and a rebake per settled
+  pose is not enough for continuous idle motion. The design is
+  [moving blends](moving-blends.md), which recommends a skinned seam (two members
+  and the blend's weight a vertex, answered by the bake) and is reviewed before
+  code.
+- [medium] One detail rule for static and pooled shapes. A static shape declares
+  `WorldPlacementStamper.ShapeDetail` (half thickness, rounded-profile corner,
+  shell, warp and relief terms); a pooled blend group's part declares only the
+  round-section and half-thickness terms (`WorldCreationInstances.PartDetail`),
+  and an ungrouped pooled shape only the round section (`BodyDetail`). The
+  static terms on the Moth's parts give 4.7 M triangles in place of 1.1 M,
+  because `SdfMeshPathBake.UnionFinal` refines every region by one factor, the
+  finest member's, so one member with a rounded corner refines every member's
+  box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
+  one factor) would let one rule serve both; the static path also lacks the round
+  section term, so its small spheres facet at 15 mm.
+- [medium] The Moth's pooled bake rose from 464,018 to 1,145,385 triangles
+  (levels 393,043 and 238,235) when blend groups took the static union's lattice
+  (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`).
+  Measure her frame cost on the bar devices; if it misses the bar, coarsen at
+  the cause (the union's base spacing for a body, or the level budget), never by
+  returning blend groups to the 15 mm floor.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
@@ -1610,11 +1619,12 @@ by `world.view.pick`.
   around the beak, teal breast band, cream belly, wings past a forked tail)
   from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
   drivers) then tore the throat, faceted the eyes and fragmented the tail on
-  the animated path (the item above). Rebuild it per the authoring skill's
+  the animated path (its blend group now bakes on its static stamp's lattice;
+  the tear is the moving-blend item above). Rebuild it per the authoring skill's
   "Making it read": references named first, one shaped body (`flare`,
   `shear`), inset eyes, painted markings, detail two bake cells wide; meet the
   bar static from every side; then the idle rig with each moving part in its
-  own group, frame-checked, after the animated-bake item. Iterate live with
+  own group, frame-checked, until the moving-blend design lands. Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
 
