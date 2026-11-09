@@ -35,8 +35,8 @@ let swallowAxisZ = [0, 0, 1]
 let swallowBodyAt = [0, 0.02, -0.006]
 let swallowPitch = turn(swallowAxisX, -35)
 let swallowHeadAt = [0, 0.048, 0.023]
-// The breast: under the body's front, along its pitch (body-local [0, -0.006, 0.012]).
-let swallowBreastAt = [0, swallowBodyAt[1] + turned(swallowPitch, [0, -0.006, 0.012])[1], swallowBodyAt[2] + turned(swallowPitch, [0, -0.006, 0.012])[2]]
+// The breast: under the body's front, along its pitch (body-local [0, -0.008, 0.012]).
+let swallowBreastAt = [0, swallowBodyAt[1] + turned(swallowPitch, [0, -0.008, 0.012])[1], swallowBodyAt[2] + turned(swallowPitch, [0, -0.008, 0.012])[2]]
 
 // The plumage colours: the steel-blue back, the near-black blue of the flight feathers (wings and tail), the gloss band
 // and its graded edge, the chestnut and the buff.
@@ -69,15 +69,15 @@ let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 // Y up.
 let swallowWingRound = 0.0008
 let swallowWingProfile = [
-  [0.004, -0.006], [0.012, 0.0022], [0.06, 0.0005], [0.095, -0.0024], [0.0946, -0.0028], [0.064, -0.0064], [0.03, -0.0098],
-  [0.008, -0.0098]
+  [0.004, -0.007], [0.012, 0.004], [0.06, 0.001], [0.095, -0.0024], [0.0946, -0.0028], [0.064, -0.0075], [0.03, -0.0125],
+  [0.008, -0.0118]
 ]
 
 // The wing lies along the body's flank (the profile's X turned to point back), rolled a little so its upper edge lies over
 // the back, yawed so the tips cross behind the rump, and pitched with the body so the tips ride above the hanging tail;
 // the right wing rides a little higher, so where the tips cross it lies over the left one rather than blending into it.
 function swallowWingTurn(sign) = turnThen(
-  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * 18)), turn(swallowAxisY, sign * 5)),
+  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * 12)), turn(swallowAxisY, sign * 5)),
   turn(swallowAxisX, (sign > 0) ? -36 : -32)
 )
 
@@ -87,7 +87,7 @@ template swallowWing(side) {
     blend: "SmoothUnion"
     smooth: 0.004
     material: swallowFlight
-    position [side.sign * 0.0078, 0.031, 0.006]
+    position [side.sign * 0.0098, 0.029, 0.006]
     rotation: swallowWingTurn(side.sign)
     scale [1, 1, 0.0009]
     dilate: swallowWingRound
@@ -270,7 +270,7 @@ prototypes {
         material: swallowPlumage
         position: swallowBodyAt
         rotation: swallowPitch
-        scale [0.0105, 0.0155, 0.041]
+        scale [0.0095, 0.0155, 0.041]
         exponent: 2.2
       }
       shape Superellipsoid "breast" {
@@ -280,7 +280,7 @@ prototypes {
         material: swallowPlumage
         position: swallowBreastAt
         rotation: swallowPitch
-        scale [0.0118, 0.0135, 0.016]
+        scale [0.0125, 0.0135, 0.016]
         exponent: 2.2
       }
       // The head: a small, slightly flattened crown on the body's upper end, narrower than the chest below it.
@@ -293,26 +293,31 @@ prototypes {
         scale [0.0088, 0.0088, 0.0105]
         exponent: 2.2
       }
-      // The bill: a small flat dark wedge, wider than it is tall, pointing forward and a little down between the forehead
-      // blaze and the throat.
-      shape Prism "bill" {
-        group: swallowHeadGroup
-        material: swallowBill
-        position [0, swallowHeadAt[1] - 0.0022, swallowHeadAt[2] + 0.0085]
-        rotation: turn(swallowAxisX, 98)
-        scale [1, 1, 0.0014]
-        dilate: 0.0004
-        profile {
-          kind: "Convex"
-          vertices [[-0.0034, 0], [0, 0.0072], [0.0034, 0]]
-          cornerRadius: 0.05
-        }
-      }
       for side in swallowSides {
         swallowEyeBead(side: side)
         swallowWing(side: side)
         swallowTailHalf(side: side)
         swallowLeg(side: side)
+      }
+      // The bill: a small flat dark wedge, wider than it is tall, tapering (the flare) to its point forward and a little
+      // down between the forehead blaze and the throat. Its shape turns half round so the flare, which narrows toward
+      // local -Z, narrows forward. It comes last: a warped shape bakes alone and so does the one after it, and the bill
+      // meets the head in a hard union anyway.
+      shape Superellipsoid "bill" {
+        group: swallowHeadGroup
+        material: swallowBill
+        position [0, swallowHeadAt[1] - 0.0022, swallowHeadAt[2] + 0.0132]
+        rotation: turnThen(turn(swallowAxisY, 180), turn(swallowAxisX, 8))
+        scale [0.0036, 0.002, 0.0048]
+        exponent: 2.2
+        flare {
+          amount: -0.6
+          bulge: 0
+          span: 0.0096
+          top: 0.0048
+          axis: 2
+          startScale: 1
+        }
       }
     }
   }
