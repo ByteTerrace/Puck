@@ -1,7 +1,9 @@
 # Mesh irradiance
 
 The GPU relight, CPU reference and views shader share one probe lookup. Read this before
-changing indirect light, probe visibility, the volume boundary or exposure.
+changing indirect light, probe visibility, the volume boundary or the camera sample. The exposure
+meters each view's image (`SdfExposure.Meter`, the composite's histogram), never the volume; local
+adaptation still reads the volume's gather at each surface.
 
 The software trace device law compares scene instance and original
 mesh triangle ordinals through a diagnostic output separate from the hit words.
@@ -10,7 +12,7 @@ reconstructed position use a scene-scale FP32 bound with a grazing-incidence
 factor (`SdfMeshIrradianceTraceDeviceLawTests`). A different triangle must itself
 intersect within that bound; the law reports near ties and rejects more than
 0.1% of rays. It also skips a top-level subtree and requires rejection on each
-backend. Runtime trace, relight, selection and exposure queries use
+backend. Runtime trace, relight, selection and camera-sample queries use
 `SdfMeshProbeGpuWork` on the residency's shared `SdfGpuWork` service on both
 backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
 placement still uses CPU nearest-surface and short clearance queries.
@@ -114,7 +116,7 @@ cache pass stamps the token, so hits read back for the CPU's surface map are
 never uploaded again. A relight commits records only after `Stands` accepts
 their scene/window, then frame upload copies the ready slots into the published
 GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
-hit arrays once the batch is relit. Exposure reads the GPU meter's small answer
+hit arrays once the batch is relit. The camera sample reads the GPU kernel's small answer
 rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
 never holds the coordinator or the meter behind it without bound.
@@ -141,7 +143,7 @@ after the main residency's done line; a nested residency's done line is insuffic
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |
 | Volume coordination, CPU reference and bounce lookup | `SdfMeshIrradiance` |
-| Device trace, hit cache, relight, selection and exposure meter | `SdfMeshProbeGpuWork` |
+| Device trace, hit cache, relight, selection and camera sample (`sdf-probe-meter`) | `SdfMeshProbeGpuWork` |
 | Probe record and generated shader constants | `SdfMeshIrradianceProbe`, `SdfIsaHlsl.DeclareRender` |
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
@@ -160,7 +162,7 @@ after the main residency's done line; a nested residency's done line is insuffic
   builds the scene from those landed (`ScenePendingDue`: no build running, the
   previous scene's trace finished, at least `PendingSceneInterval` since the
   last build began, and at least one static draw: an empty scene would measure
-  open sky where walls have yet to land), so the volume and the meter answer
+  open sky where walls have yet to land), so the volume and the camera sample answer
   during a cold bake instead of after it. Waiting for the whole bake left every
   view `meter=none source=held` and every shaded face black for the ten minutes
   of a cold debug-world bake. A lockstep frame still waits for the whole bake.
@@ -441,10 +443,10 @@ after the main residency's done line; a nested residency's done line is insuffic
   with `view.recenter 1` resets the authored orbit/boom and can reverse a chase
   view. Recapture the baseline with the same measured commands before attributing
   those image differences to lighting. Explicit camera eyes/targets avoid this.
-- The exposure meter checks each probe's visibility from the camera through
-  the existing scene. A plain trilinear interpolation meters the room across
+- The camera sample (`SdfMeshIrradiance.TrySampleCamera`) checks each probe's visibility from the
+  camera through the existing scene. A plain trilinear interpolation reads the room across
   a thin partition when the camera approaches it.
-- When none of the eight probes answers, the meter traces a hit buffer at the
+- When none of the eight probes answers, the sample traces a hit buffer at the
   camera with the same rays as a lattice probe and relights it with the same
   materials, shadow tests and bounce cache. A small enclosure may contain no
   lattice centre; searching farther or holding the previous room's exposure
@@ -455,19 +457,18 @@ after the main residency's done line; a nested residency's done line is insuffic
   sample's actual origin. A blocked segment requires a fresh measurement, even
   within one cell. `world.counters sdf.mesh-gi` counts `camera-traces` and
   `camera-relights`; a moving sun adds relights, never traces.
-  At a camera cut the meter reads `fresh`: a sample is reused only from the very
-  position, so the reading after a teleport depends on where the camera stands,
-  not where it stood. `SdfViewExposures` keeps a cut owed until a reading
-  arrives and snaps to that first reading. The runtime meters on the GPU
+  At a camera cut the sample reads `fresh`: a sample is reused only from the very
+  position, so the sample after a teleport depends on where the camera stands,
+  not where it stood. `SdfViewExposures` keeps a cut owed until a sample
+  arrives. The runtime samples on the GPU
   asynchronously (`ScheduleGpuMeters`, at most every `LightingInterval`, at once
   after a cut): each view reads its own latest row wherever its camera now
   stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
   `fresh` read answers only from a row asked after the view's cut revision.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
-  the previous exposure, local-adaptation meter and sky visibility. The authored
-  EV is only the initial value before a reading. `world.exposure` distinguishes `probes`,
-  `camera-trace`, `held` and `initial`; the last two report `meter=none`.
+  the previous sample's light and sky visibility. `world.exposure` names the sample's source as
+  `camera=probes`, `camera-trace`, `held` or `none`.
 - A settled frame with no opaque static draws installs an empty scene and
   retraces its probes against open space. Empty is known geometry, distinct from
   a scene not built yet; removing the last draw must discard its occlusion and
@@ -495,18 +496,17 @@ after the main residency's done line; a nested residency's done line is insuffic
   indirect-off look (harmonic sky ambient and authored fill). A surface no
   published probe answers (`sdfMeshAnswers` in `shade/sdf-light.hlsli`: every
   surface before the first publication, and surfaces past every published probe
-  after a camera cut until the moved windows land) is lit by the exposure
-  meter's sample at the camera as one probe. Its diffuse light is the sample's
+  after a camera cut until the moved windows land) is lit by the volume's camera
+  sample as one probe. Its diffuse light is the sample's
   six-axis RGB light (`meterLight`, `SdfViewExposures.LightOf`: the radiance and
   sky-light cubes summed, its open rays carrying the sky's own radiance as a
   probe's do) read about the normal by the probe cube's rule (`sdfMeshCubeFace`);
   its reflection is the environment over the share it sees open (`airLight`)
-  and its metered luminance (`meterLuminance`, grey) over the rest; its traced
-  lights go unoccluded. No diffuse reader multiplies a share by the sky's SH. The
-  meter sets the exposure from that same light, so a cold room reads as the
-  meter measured it, never white and blue-washed under the unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
-  which reproduces the unpublished state on a warm boot. Before the meter's first reading `meterLight` reads W zero,
-  `airLight` one and the luminance zero, so the first frames of a boot still read the open sky.
+  and the mean luminance of its six axes (grey) over the rest; its traced
+  lights go unoccluded. No diffuse reader multiplies a share by the sky's SH, so a cold room reads as the
+  sample measured it, never white and blue-washed under the unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
+  which reproduces the unpublished state on a warm boot. Before the sample's first reading `meterLight` reads W zero
+  and `airLight` one, so the first frames of a boot still read the open sky.
   Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.

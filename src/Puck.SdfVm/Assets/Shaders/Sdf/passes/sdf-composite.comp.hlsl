@@ -26,7 +26,9 @@
 // - The image meter (SdfExposure.Meter): every output pixel of the final picture adds its weight, toward the image's
 //   centre by exposureCenter, to the log bin of its luminance at the view's whole exposure, display white at stop zero;
 //   each group sums its pixels in groupshared bins and adds each non-empty bin to exposureMeterRW once, which the
-//   recorder clears before the dispatch and reads back after it. A debug view and a far layer meter nothing.
+//   recorder clears before the dispatch and reads back after it. The word after the bins sums the same weights times
+//   each pixel's surface coverage, the share of the reading the local adaptation's gain reaches. A debug view and a far
+//   layer meter nothing.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
@@ -45,7 +47,8 @@ float sdfSkyPeakGain() {
     return min(1.0, (SDF_SKY_PEAK_TARGET / max(exposed, 1.0e-12)));
 }
 
-groupshared uint sdfMeterBins[SDF_EXPOSURE_METER_BINS];
+// The bins, then the covered weight (SDF_EXPOSURE_METER_BINS).
+groupshared uint sdfMeterBins[SDF_EXPOSURE_METER_BINS + 1u];
 
 // The pixel's image-meter bin: its exposed luminance's stop above SDF_EXPOSURE_METER_LOWEST_STOP, the first bin holding
 // everything darker (and a value that is not a positive number) and the last everything brighter.
@@ -65,8 +68,9 @@ uint sdfMeterWeight(uint2 pixel) {
 
 // Composites one output pixel; false outside the extent. exposed receives the luminance the image meter bins, at the
 // view's whole exposure, or a negative value where the pixel is not metered.
-bool sdfCompositePixel(uint3 id, out float exposed) {
+bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
     exposed = -1.0;
+    covered = 0.0;
     if (any(id.xy >= passGroup.extent)) {
         return false;
     }
@@ -158,6 +162,7 @@ bool sdfCompositePixel(uint3 id, out float exposed) {
     if (sdfDebugComposesFinal(passGroup.debugMode)) {
         if (!geometryOnly) {
             exposed = (dot(color, SDF_LUMINANCE) * max(passGroup.exposure, 0.0));
+            covered = saturate(litColor.a);
         }
         color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
     }
@@ -172,22 +177,24 @@ bool sdfCompositePixel(uint3 id, out float exposed) {
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
-    for (uint cleared = lane; (cleared < SDF_EXPOSURE_METER_BINS); cleared += 64u) {
+    for (uint cleared = lane; (cleared <= SDF_EXPOSURE_METER_BINS); cleared += 64u) {
         sdfMeterBins[cleared] = 0u;
     }
     GroupMemoryBarrierWithGroupSync();
 
     float exposed;
+    float covered;
 
-    if (sdfCompositePixel(id, exposed) && (exposed >= 0.0)) {
+    if (sdfCompositePixel(id, exposed, covered) && (exposed >= 0.0)) {
         uint weight = sdfMeterWeight(id.xy);
 
         if (weight != 0u) {
             InterlockedAdd(sdfMeterBins[sdfMeterBin(exposed)], weight);
+            InterlockedAdd(sdfMeterBins[SDF_EXPOSURE_METER_BINS], (uint)round(covered * (float)weight));
         }
     }
     GroupMemoryBarrierWithGroupSync();
-    for (uint bin = lane; (bin < SDF_EXPOSURE_METER_BINS); bin += 64u) {
+    for (uint bin = lane; (bin <= SDF_EXPOSURE_METER_BINS); bin += 64u) {
         uint weight = sdfMeterBins[bin];
 
         if (weight != 0u) {

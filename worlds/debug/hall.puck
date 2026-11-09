@@ -1530,10 +1530,10 @@ render {
     compensation: 2
     adaptation: 0.75
     local: 0.5
-    band: 0.5
+    band: 0.75
     low: 0.1
     high: 0.9
-    center: 0.5
+    center: 0.25
     hold: "state.galleryFill.hold"
   }
   indirect {

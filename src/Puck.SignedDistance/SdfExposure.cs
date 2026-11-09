@@ -75,6 +75,12 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
     public const float MeterLowestStop = -12f;
     /// <summary>The image meter's bins a stop.</summary>
     public const float MeterBinsPerStop = (((float)MeterBins) / MeterStops);
+    /// <summary>The words of the image meter's readback: the <see cref="MeterBins"/> bins, then the covered weight, the
+    /// same pixels' weights each times its surface coverage (<see cref="Settled"/>).</summary>
+    public const int MeterWords = (MeterBins + 1);
+    /// <summary>The most of a reading <see cref="Settled"/> takes the local adaptation to move with its reference, so a
+    /// view that meters every surface on its own (<see cref="Local"/> one) still settles.</summary>
+    public const float MaxLocalFeedback = 0.9f;
     /// <summary>The histogram count a pixel the image meter weights fully adds to its bin; a pixel toward the image's
     /// edge adds its <see cref="Center"/> weight of it, rounded.</summary>
     public const int MeterPixelWeight = 64;
@@ -165,6 +171,23 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
         return (float.IsFinite(f: luminance) && (luminance > 0f));
 
         static double StopOf(int bin) => (MeterLowestStop + ((bin + 0.5d) / MeterBinsPerStop));
+    }
+    /// <summary>Returns the metered <c>EV100</c> a view's image settles at, from one reading of an image the local
+    /// adaptation shaded against another reference. A covered surface's local gain moves by <see cref="Local"/> stops a
+    /// stop of its reference, so a reading of the adapted image follows the reference it was shaded with by that share of
+    /// its covered weight; solving the reading for the reference that equals it removes that feedback, so the dead band
+    /// holds as wide as authored and the meter does not settle wherever it arrived from.</summary>
+    /// <param name="reading">The reading's metered <c>EV100</c> (<see cref="SdfPhotometry.MeteredEv100"/>).</param>
+    /// <param name="reference">The metered <c>EV100</c> the image's local adaptation was shaded against, or
+    /// <see cref="float.NaN"/> where it was shaded with none.</param>
+    /// <param name="local">The local adaptation's share the image was shaded with, in [0, 1].</param>
+    /// <param name="covered">The share of the reading's weight that covered surfaces, which the local gain reaches,
+    /// carried, in [0, 1].</param>
+    /// <returns>The settled metered <c>EV100</c>; the reading itself with no local adaptation or no reference.</returns>
+    public static float Settled(float reading, float reference, float local, float covered) {
+        var share = Math.Clamp(value: (local * covered), min: 0f, max: MaxLocalFeedback);
+
+        return ((float.IsFinite(f: reference) && (share > 0f)) ? ((reading - (share * reference)) / (1f - share)) : reading);
     }
     /// <summary>Returns the <c>EV100</c> an automatic exposure takes a frame later: eased from its current value toward
     /// the target over the adaptation time, and the target itself once within a hundredth of a stop of it, so a still

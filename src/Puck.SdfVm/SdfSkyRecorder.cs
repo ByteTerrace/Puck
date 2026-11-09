@@ -30,7 +30,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     private static readonly int SkyFieldExtentOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyFieldExtent));
     private static readonly int SkyViewsOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews));
     private static readonly int ExposureCenterOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ExposureCenter));
-    private const ulong MeterBytes = (SdfExposure.MeterBins * sizeof(uint));
+    private const ulong MeterBytes = (SdfExposure.MeterWords * sizeof(uint));
     // The interface's image members a port reads through, and those a port writes through.
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
@@ -78,6 +78,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         internal int View;
         internal long Cut;
         internal float Multiplier;
+        internal float Reference;
+        internal float Local;
     }
 
     internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
@@ -123,10 +125,10 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     public void Submitted(int slot) => m_meterCopies?.Submitted(slot: slot);
     public void Completed(int slot) => m_meterCopies?.Completed(slot: slot);
     private static void ReadMeter(MeterSlot slot) {
-        Span<uint> bins = stackalloc uint[SdfExposure.MeterBins];
+        Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
 
-        slot.Readback.Read(MemoryMarshal.AsBytes(span: bins));
-        slot.Exposures?.Publish(bins: bins, cut: slot.Cut, multiplier: slot.Multiplier, view: slot.View);
+        slot.Readback.Read(MemoryMarshal.AsBytes(span: words));
+        slot.Exposures?.Publish(cut: slot.Cut, local: slot.Local, multiplier: slot.Multiplier, reference: slot.Reference, view: slot.View, words: words);
     }
 
     public void Dispose() {
@@ -227,6 +229,10 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             meter.View = index;
             meter.Cut = frame.Views[index].CutRevision;
             meter.Multiplier = residency.Exposures.MultiplierOf(view: index);
+            var reference = residency.Exposures.MeteredOf(view: index);
+
+            meter.Reference = ((reference > 0f) ? SdfPhotometry.MeteredEv100(luminance: reference) : float.NaN);
+            meter.Local = ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f);
             m_meterCopies!.Record(result: meter, slot: recording.Slot);
         }
         m_recordedView = index;

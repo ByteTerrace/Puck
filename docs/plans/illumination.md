@@ -360,17 +360,14 @@ already holds unseen bodies). The counters report age per residency, so a
 screen showing a nested world that falls behind says so without stealing the
 main world's budget.
 
-**The exposure meter's readback when probes move to the GPU.** The meter reads
-the probes on the CPU (`SdfMeshIrradiance.TryMeter`) and traces at the camera
-when no probe answers. Decision: the terrain pass's image meter
-([exposure at its cause](terrain-pass.md#exposure-at-its-cause)) becomes the
-exposure's source, with no readback, and the probe meter stays for local
-adaptation and the air light as a GPU read: the relight writes each view's
-eight-probe gather and, where the camera stands in an enclosure with no
-lattice probe, one camera "probe" traced and relit like any other, into the
-same one-element buffer the image meter and the composite share.
-`world.exposure` reads that buffer back for diagnosis only. Nothing on the
-frame path waits on a readback.
+**The exposure meters the image; the camera sample stays a volume read.** The
+exposure meters each view's own image (the
+[rendering decision](../decisions/rendering.md#lights-screens-and-the-camera-are-photometric)),
+read back asynchronously so nothing on the frame path waits on it. The
+volume's camera sample (`SdfMeshIrradiance.TrySampleCamera`) is no meter: it
+gives the air light and lights a surface no probe answers, read on the GPU as
+the eight-probe gather or, where the camera stands in an enclosure with no
+lattice probe, one camera "probe" traced and relit like any other.
 
 **The lockstep capture drain.** A lockstep frame traces the window to the end
 before rendering so a still never depends on how far an asynchronous trace
@@ -437,7 +434,7 @@ the frame thread records, which J1 does not reorder.
 |---|---|---|---|
 | 0. The Deck leg ([step 0](#step-0-open-checks)) | rendering, with a Deck leg | Today's CPU trace and frame timed on the Deck at High | Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
 | 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
-| 2. Hits and relight (landed on the CPU but for the GPU relight, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
+| 2. Hits and relight (landed on the CPU but for the GPU relight, and the per-probe rescale; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. GPU trace hits, as the [graphics architecture plan](graphics-architecture.md#g1-the-gpu-probe-trace-and-relight) designs it: G1 traces and relights over the uploaded scene hierarchy in compute on every device, G2 adds hardware ray query where it pays | rendering, GPU leg on both backends and the Deck | The trace-hits interface with G1's kernel and G2's ray query; rigid bodies cast; the CPU trace deleted once G1 holds on both backends | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against the CPU trace's; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides G2 |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather; the cel outline's check ([cel shading](#cel-shading), decision 4) | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; under a cel style with outlines on, a presented burst of eight frames at `debug.go meadow` shows no ink shimmer between frames beyond the blades' own motion, and at `debug.go portals` no ink on the paintings' pictures; `world.gpu-timing` of `surface` against today's on all three; stills at the gather stops compared tolerantly |
 | 5. Lights | rendering | The list measurement; LTC for screens, portal openings and authored rectangles; the local shadow residency with overload named | The device row with every screen on: specular on the floor in front of each screen; `world.counters gpu` views texels at 68 fixtures and at a scratch world with 680; a scratch world past the shadow residency names the deferred lights and shows no flicker; the frame bar at `debug.go devices` |
@@ -501,11 +498,11 @@ the authored night exposure are in
 ([mesh GI reference](../../.claude/skills/rendering/references/mesh-gi.md)).
 Open in step 2:
 
-- **The GPU relight and the exposure's GPU read** (decision 1, the third gap).
+- **The GPU relight** (decision 1, the third gap).
   A relight's dominant cost under a moving sun is the sun's shadow ray from each
   hit, which needs the scene; the scene is on the CPU until step 3 puts the
   trace on the GPU, so the relight moves with it rather than reading cascades
-  that cover 120 m. The meter stays a CPU read of the relit volume until then.
+  that cover 120 m.
 - **The per-probe rescale** of probes a relight has not reached during a
   transition.
 - **The lockstep relight under a moving sun**, which relights the whole window

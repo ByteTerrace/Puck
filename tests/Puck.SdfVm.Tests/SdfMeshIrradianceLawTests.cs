@@ -1046,7 +1046,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var multiplier = SdfPhotometry.ExposureOf(ev100: 10f);
         // A histogram of one bin, and the EV100 its reading aims for at that multiplier.
         uint[] Bins(int bin) {
-            var bins = new uint[SdfExposure.MeterBins];
+            var bins = new uint[SdfExposure.MeterWords];
 
             bins[bin] = 1000u;
             return bins;
@@ -1060,16 +1060,16 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
 
         Step(staged: frame);
         Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
-        exposures.Publish(bins: Bins(bin: 80), cut: 0, multiplier: multiplier, view: 0);
+        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 80));
         Step(staged: frame);
         Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
         // Three bins are three eighths of a stop: within the band, so the exposure holds.
-        exposures.Publish(bins: Bins(bin: 83), cut: 0, multiplier: multiplier, view: 0);
+        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 83));
         Step(staged: frame);
         Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
         Assert.Contains(expectedSubstring: "band=holding", actualString: exposures.Describe()[0]);
         // Eight bins are a stop: past the band, so the exposure follows.
-        exposures.Publish(bins: Bins(bin: 88), cut: 0, multiplier: multiplier, view: 0);
+        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 88));
         Step(staged: frame);
         Assert.InRange(actual: Ev100(), low: (TargetOf(bin: 80) + 0.01f), high: (TargetOf(bin: 88) - 0.01f));
         Assert.Contains(expectedSubstring: "band=following", actualString: exposures.Describe()[0]);
@@ -1077,11 +1077,11 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var beforeCut = Ev100();
 
         // A reading rendered before the cut holds the exposure; the first after it snaps.
-        exposures.Publish(bins: Bins(bin: 40), cut: 0, multiplier: multiplier, view: 0);
+        exposures.Publish(cut: 0, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
         Step(staged: cutFrame);
         Assert.Equal(expected: beforeCut, actual: Ev100());
         Assert.Contains(expectedSubstring: "source=cut", actualString: exposures.Describe()[0]);
-        exposures.Publish(bins: Bins(bin: 40), cut: 1, multiplier: multiplier, view: 0);
+        exposures.Publish(cut: 1, local: 0f, multiplier: multiplier, reference: float.NaN, view: 0, words: Bins(bin: 40));
         Step(staged: cutFrame);
         Assert.Equal(expected: TargetOf(bin: 40), actual: Ev100(), precision: 4);
     }
@@ -1098,5 +1098,18 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.True(condition: exposure.Meter(bins: bins, luminance: out var luminance, multiplier: 1f));
         Assert.Equal(expected: (SdfExposure.MeterLowestStop + (60.5f / SdfExposure.MeterBinsPerStop)), actual: MathF.Log2(x: luminance), precision: 4);
         Assert.False(condition: exposure.Meter(bins: new uint[SdfExposure.MeterBins], luminance: out _, multiplier: 1f));
+    }
+    /// <summary>THE LAW: a reading settles whatever reference the local adaptation shaded it against. An image whose
+    /// covered surfaces follow their reference by the local share reads differently shaded from below or above; both
+    /// settle at the one reference that reads itself, so the dead band does not hold the meter wherever it arrived.</summary>
+    [Fact]
+    public void AReadingSettlesWhateverReferenceTheLocalAdaptationShadedItAgainst() {
+        // Its unadapted image reads stop 4; at local 0.5 over a wholly covered image it reads itself at stop 8.
+        float ReadingAt(float reference) => (4f + (0.5f * reference));
+
+        Assert.Equal(expected: 8f, actual: SdfExposure.Settled(covered: 1f, local: 0.5f, reading: ReadingAt(reference: 6f), reference: 6f), precision: 5);
+        Assert.Equal(expected: 8f, actual: SdfExposure.Settled(covered: 1f, local: 0.5f, reading: ReadingAt(reference: 10f), reference: 10f), precision: 5);
+        Assert.Equal(expected: 7f, actual: SdfExposure.Settled(covered: 1f, local: 0.5f, reading: 7f, reference: float.NaN));
+        Assert.Equal(expected: 7f, actual: SdfExposure.Settled(covered: 0f, local: 0.5f, reading: 7f, reference: 6f));
     }
 }

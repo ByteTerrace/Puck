@@ -55,9 +55,11 @@ public sealed class SdfViewExposures {
     private Reading?[] m_readings = [];
 
     private sealed class Reading {
-        internal readonly uint[] Bins = new uint[SdfExposure.MeterBins];
+        internal readonly uint[] Words = new uint[SdfExposure.MeterWords];
         internal long Cut;
         internal float Multiplier;
+        internal float Reference;
+        internal float Local;
         internal bool Fresh;
     }
 
@@ -88,30 +90,34 @@ public sealed class SdfViewExposures {
     /// <param name="view">The view's index in the frame the composite drew.</param>
     /// <param name="cut">The view's cut revision in that frame (<see cref="SdfViewSnapshot.CutRevision"/>).</param>
     /// <param name="multiplier">The exposure multiplier the composite binned the image at.</param>
-    /// <param name="bins">The histogram, <see cref="SdfExposure.MeterBins"/> weights.</param>
-    /// <exception cref="ArgumentException"><paramref name="bins"/> is not <see cref="SdfExposure.MeterBins"/> long.</exception>
-    public void Publish(int view, long cut, float multiplier, ReadOnlySpan<uint> bins) {
-        if (bins.Length != SdfExposure.MeterBins) { throw new ArgumentException(message: $"The image meter's histogram is {SdfExposure.MeterBins} bins.", paramName: nameof(bins)); }
+    /// <param name="reference">The metered <c>EV100</c> the frame's local adaptation shaded against
+    /// (<see cref="MeteredOf"/>), or <see cref="float.NaN"/> for none.</param>
+    /// <param name="local">The local adaptation's share the frame shaded with, in [0, 1].</param>
+    /// <param name="words">The readback, <see cref="SdfExposure.MeterWords"/> words: the histogram, then the covered
+    /// weight.</param>
+    /// <exception cref="ArgumentException"><paramref name="words"/> is not <see cref="SdfExposure.MeterWords"/> long.</exception>
+    public void Publish(int view, long cut, float multiplier, float reference, float local, ReadOnlySpan<uint> words) {
+        if (words.Length != SdfExposure.MeterWords) { throw new ArgumentException(message: $"The image meter's readback is {SdfExposure.MeterWords} words.", paramName: nameof(words)); }
         if (view < 0) { return; }
         lock (m_readingGate) {
             if (m_readings.Length <= view) { Array.Resize(array: ref m_readings, newSize: Math.Max(val1: (view + 1), val2: (m_readings.Length * 2))); }
             var reading = (m_readings[view] ??= new Reading());
 
-            bins.CopyTo(destination: reading.Bins);
+            words.CopyTo(destination: reading.Words);
             reading.Cut = cut;
             reading.Multiplier = multiplier;
+            reading.Reference = reference;
+            reading.Local = local;
             reading.Fresh = true;
         }
     }
     // Takes a view's newest published reading not yet staged.
-    private bool TakeReading(int view, Span<uint> bins, out long cut, out float multiplier) {
+    private bool TakeReading(int view, Span<uint> words, out long cut, out float multiplier, out float reference, out float local) {
         lock (m_readingGate) {
-            cut = 0;
-            multiplier = 0f;
+            (cut, multiplier, reference, local) = (0, 0f, float.NaN, 0f);
             if ((view >= m_readings.Length) || (m_readings[view] is not { Fresh: true } reading)) { return false; }
-            reading.Bins.CopyTo(destination: bins);
-            cut = reading.Cut;
-            multiplier = reading.Multiplier;
+            reading.Words.CopyTo(destination: words);
+            (cut, multiplier, reference, local) = (reading.Cut, reading.Multiplier, reading.Reference, reading.Local);
             reading.Fresh = false;
             return true;
         }
@@ -247,18 +253,22 @@ public sealed class SdfViewExposures {
             _ => (m_sampled[index] ? "held" : "none"),
         });
     }
-    // Takes the view's newest image reading and moves the band: a reading after a cut (or the first) snaps the meter to
-    // it, a reading beyond the band from the one held starts following, and a reading while following is followed.
-    // Returns whether the meter snapped.
+    // Takes the view's newest image reading, settled for the local adaptation it was shaded with, and moves the band: a
+    // reading after a cut (or the first) snaps the meter to it, a reading beyond the band from the one held starts
+    // following, and a reading while following is followed. Returns whether the meter snapped.
     private bool Meter(in SdfExposure exposure, int index) {
-        Span<uint> bins = stackalloc uint[SdfExposure.MeterBins];
+        Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
 
-        if (TakeReading(bins: bins, cut: out var cut, multiplier: out var multiplier, view: index) &&
+        if (TakeReading(cut: out var cut, local: out var local, multiplier: out var multiplier, reference: out var reference, view: index, words: words) &&
             (!m_meterOwed[index] || (cut == m_cuts[index])) &&
-            exposure.Meter(bins: bins, luminance: out var luminance, multiplier: multiplier)) {
-            var reading = SdfPhotometry.MeteredEv100(luminance: luminance);
+            exposure.Meter(bins: words[..SdfExposure.MeterBins], luminance: out var luminance, multiplier: multiplier)) {
+            var total = 0d;
 
-            m_metered[index] = luminance;
+            foreach (var weight in words[..SdfExposure.MeterBins]) { total += weight; }
+            var covered = (float)Math.Clamp(value: (words[SdfExposure.MeterBins] / total), min: 0d, max: 1d);
+            var reading = SdfExposure.Settled(covered: covered, local: local, reading: SdfPhotometry.MeteredEv100(luminance: luminance), reference: reference);
+
+            m_metered[index] = ((SdfPhotometry.MeterCalibration / 100f) * MathF.Pow(x: 2f, y: reading));
             m_meterSources[index] = "image";
             if (m_meterOwed[index] || !float.IsFinite(f: m_heldEv[index])) {
                 m_meterOwed[index] = false;

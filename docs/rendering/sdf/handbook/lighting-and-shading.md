@@ -182,7 +182,7 @@ in the frame.
   into a bounding volume hierarchy on the thread pool. While the bake still
   lands opaque static groups (`SdfMeshPathBake.IrradiancePending`), the scene is
   built from those landed so far once the previous scene's trace has finished,
-  at most every few seconds, so the volume and the meter answer during a cold
+  at most every few seconds, so the volume and the camera sample answer during a cold
   bake; a lockstep frame waits for the whole bake. Dynamic groups, glass and
   diagnostic slices do not enter that scene. A probe's measurement is a hit
   buffer, one closest hit per octahedral texel at full reach, traced once per
@@ -278,9 +278,9 @@ in the frame.
   pushed receiver position. They extend only the light their visibility
   supports; the volume boundary adds no sky. A surface no published probe
   answers, every surface until a level first publishes and those past every
-  published probe just after a camera cut, is lit by the exposure meter's sample
+  published probe just after a camera cut, is lit by the volume's camera sample
   at the view's camera, taken the moment the view arrives, as one probe: the sky
-  over the share it sees open and its metered luminance over the rest, for its
+  over the share it sees open and its mean luminance over the rest, for its
   indirect light and its reflection, with its traced lights unoccluded. It reads
   neither black nor lit by the unoccluded sky, and agrees with the exposure the
   same sample sets; the authored fill stays the indirect-off look alone. `world.debug-view
@@ -321,7 +321,7 @@ in the frame.
   continuous. A body's palette coming or going, which no
   probe ray meets, relights nothing (`SdfMeshIrradianceScene.Materials` names
   the ids the key reads). Old probes keep drawing, and remain available to the
-  exposure meter and viewers, until their replacement lands. A layout change clears the
+  camera sample and viewers, until their replacement lands. A layout change clears the
   staging volume, but the GPU keeps its previous table and coordinates until
   every slot in the new window has a first measurement; a moving window follows
   the same rule, and the thread pool refills its slots from the cache, so a
@@ -424,28 +424,34 @@ directional's lux) or its luminous intensity (a point's or spot's candela) over
 irradiance volume traces and stores nits. Each view's composite multiplies its
 output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
 (`SdfPhotometry.ExposureOf`), before the root's tonemap. `render.exposure` holds
-`EV100` fixed or adapts it: the meter reads the irradiance volume about the
-camera, which carries every traced light's bounce, aims for
-`log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
-over the adaptation time of presentation time, snapping to the first reading
-after a camera cut (`SdfViewExposures`); a cut the meter cannot read yet stays
-owed until it can. The meter reads the probes as last relit, so it follows a
-moving sun into the night. A camera with no visible lattice probe traces a hit
-buffer of its own, cached by camera cell and geometry with storage bounded by
-the view count, and relights it from that origin when the lighting changes or the volume
-settles. Turning the camera reweights it; movement within the cell reuses it
-only across an unblocked segment from its actual origin, and never at a cut,
-whose reading is taken where the camera stands. The `camera-traces` counter
-under `world.counters sdf.mesh-gi` stays constant on steady reads, and
-`camera-relights` counts the relights.
-An unavailable scene or a camera
-inside opaque geometry supplies no reading: exposure, local adaptation's meter
-and sky visibility hold
-their previous values, using the authored EV only before the first reading.
+`EV100` fixed or adapts it. An automatic exposure meters the view's own image:
+the composite bins each output pixel's luminance, at the view's whole exposure,
+into a log histogram weighted toward the centre by `center`
+(`passes/sdf-composite.comp.hlsl`), its recorder reads the histogram back once
+the frame completes (`SdfSkyRecorder`), and `SdfExposure.Meter` averages it
+between the `low` and `high` percentiles into a scene luminance `L`. The
+exposure aims for `log2(L · 100 / 12.5)` less the compensation within the
+bounds, holds while the reading stays within `band` stops of the one it settled
+on, and otherwise eases there over the adaptation time of presentation time
+(`SdfViewExposures`). After a camera cut it holds until a reading rendered after
+the cut lands, then snaps to it. A frame with no metered pixel (a debug view)
+supplies no reading, and the exposure holds, using the authored EV only before
+the first reading.
+The view's camera sample of the volume (`SdfMeshIrradiance.TrySampleCamera`)
+gives the air about the camera its open sky and lights a surface no probe
+answers. A camera with no visible lattice probe traces a hit buffer of its own,
+cached by camera cell and geometry with storage bounded by the view count, and
+relights it from that origin when the lighting changes or the volume settles;
+movement within the cell reuses it only across an unblocked segment from its
+actual origin, and never at a cut, whose sample is taken where the camera
+stands. The `camera-traces` counter under `world.counters sdf.mesh-gi` stays
+constant on steady reads, and `camera-relights` counts the relights. An
+unavailable scene or a camera inside opaque geometry supplies no sample, and
+the sky visibility and the sample's light hold their previous values.
 An automatic exposure's `local` share then adapts each
 surface on its own in the views stage (`sdfLightStage`): the illumination
 arriving at the surface, the lights' diffuse terms and the volume's indirect
-light, is read against the view's meter reading taken as a scene of
+light, is read against the image meter's held and eased reading taken as a scene of
 `SdfExposure.LocalReflectance` albedo, and the surface's exposure moves that
 share of the way from the view's toward the one that illumination would meter,
 within `SdfExposure.LocalRange` stops, before the curvature and grid terms, so
@@ -453,13 +459,14 @@ a dark paint under the same light stays dark. The composite scales a display-ref
 the sky's brightest texel (`skyPeakLuminance`, which the volume's lighting
 measures over its environment map) reaches display white
 (`SdfExposure.SkyPeakTarget`) rather than clipping; a view a window shows
-leaves its sky to the viewer. The pass block carries the view's meter reading
+leaves its sky to the viewer. The pass block carries the meter's reading
 (`meterLuminance`), the share (`localAdaptation`) and the sky's peak
 (`skyPeakLuminance`).
-`world.exposure` echoes the authored exposure and each view's `EV100`, multiplier
-and meter reading, with `source=probes` or `source=camera-trace`. No measurement
-reports `meter=none` and `source=held` (previous exposure) or `source=initial`
-(no previous exposure). A view onto another world through a window, or a sky layer's
+`world.exposure` echoes the authored exposure and each view's `EV100`, multiplier,
+meter reading, the `EV100` it aims for, whether the band is `holding` or
+`following`, its `source` (`image`, `held` with no new reading, `cut` awaiting
+one rendered after a cut, `initial` before any) and its camera sample's source
+(`camera=probes`, `camera-trace`, `held` or `none`). A view onto another world through a window, or a sky layer's
 view, publishes its luminance raised by its own exposure to the window share
 (`SdfViewSnapshot.Unexposed`, the pass block's `exposeShare`,
 `SdfPhotometry.WindowAdaptation`), and the view looking through it applies the
