@@ -23,17 +23,20 @@ public sealed record InstallPruneResult(
     IReadOnlyList<string> Refused
 );
 /// <summary>
-/// Deletes past versions from an install root, keeping <c>current</c>, <c>last-good</c>, the version a pending
-/// <c>install-intent.json</c> names, every version a live process holds (<see cref="InstallRegistration"/>), every
-/// version whose install order cannot be read, and the <c>keepVersions</c> most recently installed others (by
-/// <see cref="InstallRecord.Sequence"/>), then the content-addressed objects nothing kept references.
-/// <para>A pass first reads and validates everything it depends on, deleting nothing: the pointers (each a plain name of
-/// an existing version), the pending intent's manifest, every version's install record (valid, or absent and replaced by
-/// the content pins of the files the version holds), and every store's layout and channel manifests. Any failure there
-/// skips the whole pass with its reason; a pass never deletes on a partial reading, and never throws.</para>
+/// Deletes past versions from an install root, keeping the release record's current version, its rollback target
+/// (<see cref="InstallTransaction.RollbackTarget"/>), the version a pending <c>install-intent.json</c> names unless the
+/// record refuses it, every version a live process holds (<see cref="InstallRegistration"/>), every version whose install
+/// order cannot be read, and the <c>keepVersions</c> others ranked proven first and then most recently installed (by
+/// <see cref="InstallRecord.Sequence"/>); a version the record refuses (revoked, rejected or below the state generation
+/// floor) takes none of those places. It then deletes the content-addressed objects nothing kept references.
+/// <para>A pass first reads and validates everything it depends on, deleting nothing: the release record (its current
+/// version must be an existing version directory), the pending intent's manifest, every version's install record (valid,
+/// or absent and replaced by the content pins of the files the version holds), and every store's layout and channel
+/// manifests. Any failure there skips the whole pass with its reason; a pass never deletes on a partial reading, and
+/// never throws.</para>
 /// <para>Every step acts through <see cref="ConfinedDirectory"/> handles opened from the install root: nothing is
 /// looked up or deleted by a path checked earlier, and no link is followed. A pass holds
-/// <see cref="InstallLeases.PublicationLockFileName"/> and then <see cref="InstallLeases.UpdateLockFileName"/>, and is
+/// <see cref="InstallLeases.PublicationLockFileName"/> and then an <see cref="InstallTransaction"/>, and is
 /// skipped when either is busy, so it never interleaves with an install, a stub launch, a registration or a local
 /// publication. A version is opened for removal first (<see cref="ConfinedDirectory.TryOpenChildForRemoval"/>), which
 /// fails while any process holds it; it then leaves <c>versions/</c> whole by one move into <c>trash/</c>, and is
@@ -42,8 +45,6 @@ public sealed record InstallPruneResult(
 /// Windows and Linux x64 skip the pass.</para>
 /// </summary>
 public static class InstallPruner {
-    private const int MaximumPointerBytes = 4096;
-
     private static readonly string[] StoreDirectoryNames = [ObjectCacheDirectoryName, LocalSourceDirectoryName];
 
     /// <summary>The stager's content-addressed object cache, directly under the install root.</summary>
@@ -74,12 +75,14 @@ public static class InstallPruner {
                 skipped = "the install root does not exist";
             } else {
                 using var publication = root.TryAcquireLock(name: InstallLeases.PublicationLockFileName);
-                using var update = ((publication is null) ? null : root.TryAcquireLock(name: InstallLeases.UpdateLockFileName));
+                using var transaction = ((publication is null) ? null : InstallTransaction.TryBegin(root: root));
 
-                if (update is not null) {
-                    var plan = Read(root: root);
+                if (transaction is not null) {
+                    var plan = Read(transaction: transaction);
 
-                    return ((plan.Failure is { } failure) ? Skip(reason: $"nothing was deleted, because {failure}") : Act(keepVersions: Math.Max(val1: 0, val2: keepVersions), plan: plan, root: root));
+                    return ((plan.Failure is { } failure)
+                        ? Skip(reason: $"nothing was deleted, because {failure}")
+                        : Act(keepVersions: Math.Max(val1: 0, val2: keepVersions), plan: plan, transaction: transaction));
                 }
                 skipped = $"another process holds {((publication is null) ? InstallLeases.PublicationLockFileName : InstallLeases.UpdateLockFileName)}";
             }
@@ -117,9 +120,10 @@ public static class InstallPruner {
     }
 
     private enum Removal { Removed, Gone, Running, Refused }
-    // One version as the validation phase read it: its install order when a valid record names one, and the objects it
-    // references (its record's pins, or the content pins of the files it holds).
-    private sealed record Version(string Name, long? Sequence, IReadOnlySet<string> Objects);
+    // One version as the validation phase read it: its install order when a valid record names one, the objects it
+    // references (its record's pins, or the content pins of the files it holds), whether the release record refuses it
+    // (revoked, rejected or below the floor: it can never run again) and whether a proof of health names its exact install.
+    private sealed record Version(string Name, long? Sequence, IReadOnlySet<string> Objects, bool Disqualified, bool Proven);
     // Everything the deletion phase acts on, read and validated before anything is deleted; Failure names why the pass
     // must not act at all.
     private sealed record Plan(string? Failure, IReadOnlyList<Version> Versions, IReadOnlySet<string> Protected, IReadOnlySet<string> IntentObjects,
@@ -130,8 +134,10 @@ public static class InstallPruner {
     private static Plan Failed(string reason) =>
         new(Failure: reason, IntentObjects: new HashSet<string>(), Protected: new HashSet<string>(), StoreObjects: new Dictionary<string, IReadOnlySet<string>>(), Versions: []);
     // The validation phase: reads, never deletes. The first thing that cannot be read or does not validate fails it.
-    private static Plan Read(ConfinedDirectory root) {
+    private static Plan Read(InstallTransaction transaction) {
         try {
+            var root = transaction.Root;
+            var policy = transaction.Policy;
             using var versions = root.Child(name: VersionsDirectoryName);
             var found = new List<Version>();
             var names = new HashSet<string>(comparer: NameComparer);
@@ -140,32 +146,33 @@ public static class InstallPruner {
                 if (entry.Kind == ConfinedEntryKind.Link) { return Failed(reason: $"{VersionsDirectoryName}/{entry.Name} is a link"); }
                 if (entry.Kind != ConfinedEntryKind.Directory) { continue; }
                 using var version = (versions!.Child(name: entry.Name) ?? throw new IOException(message: $"{VersionsDirectoryName}/{entry.Name} vanished"));
-                var record = InstallRecord.TryRead(version: version);
+                // A record whose file pins are not all well formed names nothing reliable; its version then counts as one
+                // without a record: kept, with the content pins of the files it holds.
+                var record = ((InstallRecord.TryRead(version: version) is { } read) && read.Files.All(predicate: static file => ContentPin.TryParse(pin: out _, text: file))) ? read : null;
+                var disqualified = ((record is not null) && (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: entry.Name) is not null));
 
                 _ = names.Add(item: entry.Name);
                 found.Add(item: new Version(
+                    Disqualified: disqualified,
                     Name: entry.Name,
                     Objects: new HashSet<string>(collection: ((record is not null) ? PinHexes(pins: record.Files) : ObjectsHeld(version: version)), comparer: StringComparer.OrdinalIgnoreCase),
+                    Proven: ((record is not null) && !disqualified && transaction.IsProven(record: record, version: entry.Name)),
                     Sequence: record?.Sequence
                 ));
             }
             var protectedNames = new HashSet<string>(comparer: NameComparer);
 
-            foreach (var (pointer, required) in new[] { (InstallLayout.CurrentFileName, true), ("last-good", false) }) {
-                var named = ReadPointer(name: pointer, root: root);
+            if (policy.Current is not { } current) { return Failed(reason: "the release record names no current version"); }
+            if (!names.Contains(item: current)) { return Failed(reason: $"the release record's current version '{current}' is not a version directory"); }
+            _ = protectedNames.Add(item: current);
+            if (transaction.RollbackTarget() is { } target) { _ = protectedNames.Add(item: target); }
+            var (intent, intentObjects) = ReadIntent(root: root);
 
-                if (named is null) {
-                    if (required) { return Failed(reason: $"'{pointer}' names no version"); }
-                    continue;
-                }
-                if (!IsPlainName(name: named) || !names.Contains(item: named)) { return Failed(reason: $"'{pointer}' names '{named}', which is not a version directory"); }
-                _ = protectedNames.Add(item: named);
-            }
-            var (intentVersion, intentObjects) = ReadIntent(root: root);
-
-            if (intentVersion is not null) {
-                if (!IsPlainName(name: intentVersion)) { return Failed(reason: $"the pending install intent names '{intentVersion}', which is not a version name"); }
-                _ = protectedNames.Add(item: intentVersion);
+            // A pending intent the release record refuses is retired by the next apply; its version takes no protection.
+            if ((intent is not null) &&
+                (policy.Refusal(payloadPins: ReleasePayloadIdentity.All(manifest: intent), stateGeneration: intent.StateGeneration, version: intent.Version) is null)) {
+                if (!InstallLayout.IsPlainName(name: intent.Version)) { return Failed(reason: $"the pending install intent names '{intent.Version}', which is not a version name"); }
+                _ = protectedNames.Add(item: intent.Version);
             }
             var storeObjects = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal);
 
@@ -174,12 +181,13 @@ public static class InstallPruner {
             }
             return new Plan(Failure: null, IntentObjects: new HashSet<string>(collection: intentObjects, comparer: StringComparer.OrdinalIgnoreCase), Protected: protectedNames,
                 StoreObjects: storeObjects, Versions: found);
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)) {
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidDataException)) {
             return Failed(reason: error.Message);
         }
     }
     // The deletion phase: acts only on what the validation phase read.
-    private static InstallPruneResult Act(ConfinedDirectory root, Plan plan, int keepVersions) {
+    private static InstallPruneResult Act(InstallTransaction transaction, Plan plan, int keepVersions) {
+        var root = transaction.Root;
         var refused = new List<string>();
         using var trash = root.Child(create: true, name: TrashDirectoryName)!;
         using var versions = root.Child(name: VersionsDirectoryName);
@@ -187,8 +195,10 @@ public static class InstallPruner {
         foreach (var entry in trash.Entries()) {
             _ = Attempt(action: () => trash.DeleteChild(name: entry.Name), entry: $"{TrashDirectoryName}/{entry.Name}", refused: refused);
         }
-        // Most recent install first; a version whose install order is unknown ranks nowhere and is kept.
-        var ordered = plan.Versions.OrderByDescending(keySelector: static version => (version.Sequence ?? 0L)).ThenByDescending(keySelector: static version => version.Name, comparer: StringComparer.Ordinal).ToList();
+        // Proven rollback targets first, then the most recent install; a version whose install order is unknown ranks
+        // nowhere and is kept. A version the release record refuses can never run again and takes no allowance.
+        var ordered = plan.Versions.OrderByDescending(keySelector: static version => version.Proven).ThenByDescending(keySelector: static version => (version.Sequence ?? 0L))
+            .ThenByDescending(keySelector: static version => version.Name, comparer: StringComparer.Ordinal).ToList();
         var kept = new List<Version>();
         var running = new List<string>();
         var deleted = new List<string>();
@@ -212,7 +222,7 @@ public static class InstallPruner {
                 case Removal.Gone:
                     continue;
             }
-            if (retained++ < keepVersions) {
+            if (!version.Disqualified && (retained++ < keepVersions)) {
                 kept.Add(item: version);
                 continue;
             }
@@ -229,6 +239,8 @@ public static class InstallPruner {
                     break;
             }
         }
+        // Proofs of health for removed installs can never match again; retire them now rather than at the next commit.
+        if (deleted.Count != 0) { _ = Attempt(action: transaction.Compact, entry: $"{InstallLayout.StateDirectoryName}/{InstallLayout.ReleasePolicyFileName}", refused: refused); }
         var referenced = new HashSet<string>(collection: plan.IntentObjects, comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var version in kept) { referenced.UnionWith(other: version.Objects); }
@@ -241,7 +253,6 @@ public static class InstallPruner {
             Skipped: null
         );
     }
-    private static bool IsPlainName(string name) => ((name.Length > 0) && (name is not ("." or "..")) && (name.IndexOfAny(anyOf: ['/', '\\', ':', '\0']) < 0));
     // Runs one deletion, recording a failure against the entry instead of ending the pass.
     private static bool Attempt(Action action, string entry, List<string> refused) {
         try {
@@ -294,17 +305,6 @@ public static class InstallPruner {
             return Removal.Removed;
         }
     }
-    private static string? ReadPointer(ConfinedDirectory root, string name) {
-        using var stream = root.OpenFile(name: name);
-
-        if (stream is null) { return null; }
-        if (stream.Length > MaximumPointerBytes) { throw new IOException(message: $"'{name}' exceeds {MaximumPointerBytes} bytes."); }
-        using var reader = new StreamReader(stream: stream);
-
-        // Only a missing file is absent: an empty or blank pointer is present and names no version, which the caller
-        // refuses like any other name that is not a version.
-        return reader.ReadToEnd().Trim();
-    }
     private static byte[]? ReadBounded(ConfinedDirectory directory, string name) {
         using var stream = directory.OpenFile(name: name);
 
@@ -323,14 +323,14 @@ public static class InstallPruner {
     private static IEnumerable<string> ManifestObjects(ReleaseManifest manifest) =>
         PinHexes(pins: manifest.Payloads.SelectMany(selector: static payload => payload.Files.Select(selector: static file => file.Hash)));
     // An intent whose manifest is absent or fails validation may name any version, so it fails the validation phase.
-    private static (string? Version, IReadOnlyList<string> Objects) ReadIntent(ConfinedDirectory root) {
-        if (ReadBounded(directory: root, name: "install-intent.json") is not { } bytes) { return (null, []); }
+    private static (ReleaseManifest? Manifest, IReadOnlyList<string> Objects) ReadIntent(ConfinedDirectory root) {
+        if (ReadBounded(directory: root, name: InstallLayout.InstallIntentFileName) is not { } bytes) { return (null, []); }
         using var intent = JsonDocument.Parse(utf8Json: bytes);
         var manifest = Valid(manifest: (((intent.RootElement.ValueKind == JsonValueKind.Object) && intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var element))
             ? element.Deserialize<ReleaseManifest>(options: DocumentJsonOptions.Shared)
             : null), what: "the pending install intent");
 
-        return (manifest.Version, ManifestObjects(manifest: manifest).ToArray());
+        return (manifest, ManifestObjects(manifest: manifest).ToArray());
     }
     // A manifest that is absent or fails structural validation names nothing reliable.
     private static ReleaseManifest Valid(ReleaseManifest? manifest, string what) {

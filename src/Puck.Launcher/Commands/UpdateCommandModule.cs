@@ -66,7 +66,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "update.apply",
-            description: "Re-checks the tracked channel and, only when a verified in-rollout newer version is found, stages and applies it — writing state-generation and atomically swapping the install's 'current' pointer the stub reads at its NEXT launch. Refuses without touching anything on disk when the check does not report available. Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull.",
+            description: "Re-checks the tracked channel and, only when a verified in-rollout newer version is found, stages and applies it — writing its install record and durably naming it current in the install's release record, which the stub reads at its NEXT launch. Refuses without touching anything on disk when the check does not report available. Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull.",
             handler: (_, args) => {
                 if (CommandResult.RequireNoArguments(args: in args, verb: "update.apply") is { } refusal) {
                     return refusal;

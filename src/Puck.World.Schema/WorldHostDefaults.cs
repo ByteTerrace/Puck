@@ -329,7 +329,7 @@ public sealed record WorldHostDefaults(
 /// <param name="CheckIntervalSeconds">Seconds between automatic <c>update.check</c> attempts. Null = the app's own
 /// default; <c>0</c> disables automatic checking (a manual <c>update.check</c> still works).</param>
 /// <param name="KeepVersions">The number of most recently installed versions the launcher keeps beyond the current,
-/// last-good, pending and running ones. Null = the app's own default.</param>
+/// rollback target, pending and running ones. Null = the app's own default.</param>
 public sealed record WorldUpdateDefaults(
     string? Channel = null,
     string? CacheRoot = null,

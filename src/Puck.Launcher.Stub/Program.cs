@@ -1,21 +1,22 @@
 using System.Diagnostics;
+using Puck.Confinement;
 using Puck.Launcher.Stub;
 
-// The stub's entire job: read one pointer, exec the target, forward the exit code. Deliberately exempt from the
-// self-update mechanism it drives — a bricked stub is unrecoverable in-band and needs a reinstall, the same way a
-// bricked bootloader would, which is why this stays this small.
+// The stub's entire job: ask the install's release record what to launch, exec it, forward the exit code. Deliberately
+// exempt from the self-update mechanism it drives — a bricked stub is unrecoverable in-band and needs a reinstall, the
+// same way a bricked bootloader would, which is why this stays this small.
 var installRoot = AppContext.BaseDirectory.TrimEnd(
     Path.DirectorySeparatorChar,
     Path.AltDirectorySeparatorChar
 );
-FileStream updateLease;
+InstallTransaction transaction;
 try {
-    updateLease = StubInstall.AcquireUpdateLease(installRoot: installRoot);
+    transaction = InstallTransaction.Begin(cancellationToken: CancellationToken.None, installRoot: installRoot, timeout: StubInstall.LeaseWait);
 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
     Console.Error.WriteLine(value: $"[stub: install is busy or unavailable — {exception.Message}]");
     return 2;
 }
-using var leaseLifetime = updateLease;
+using var transactionLifetime = transaction;
 StubConfiguration configuration;
 try {
     configuration = StubConfigurationFile.Load(installRoot: installRoot);
@@ -24,75 +25,31 @@ try {
 
     return 2;
 }
-var current = StubInstall.ReadPointer(path: Path.Combine(
-    path1: installRoot,
-    path2: StubInstall.CurrentFileName
-));
-if (current is null) {
-    Console.Error.WriteLine(value: $"[stub: no '{StubInstall.CurrentFileName}' pointer under {installRoot} — install is empty]");
-
+LaunchDecision decision;
+try {
+    // Rejection, rollback, the state generation floor and this launch's attempt are one durable commit, made before the
+    // child starts; the child's registration re-checks the record under the same lease before it runs.
+    decision = transaction.SelectLaunch(maxAttempts: configuration.MaxAttempts);
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentOutOfRangeException)) {
+    Console.Error.WriteLine(value: $"[stub: the install's release record is unavailable — {exception.Message}]");
     return 2;
 }
-var lastGood = StubInstall.ReadPointer(path: Path.Combine(
-    path1: installRoot,
-    path2: StubInstall.LastGoodFileName
-));
-var attempts = StubHealth.AttemptsFor(
-    record: StubHealth.Read(installRoot: installRoot),
-    version: current
-);
-StubAction decision;
-try {
-    decision = StubDecisionTable.Decide(
-        attempts: attempts,
-        currentGeneration: StubInstall.ReadGeneration(
-            installRoot: installRoot,
-            version: current
-        ),
-        hasLastGood: (lastGood is not null),
-        lastGoodGeneration: ((lastGood is null)
-        ? 0
-        : StubInstall.ReadGeneration(
-                installRoot: installRoot,
-                version: lastGood
-            )),
-        maxAttempts: configuration.MaxAttempts
-    );
-} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-    Console.Error.WriteLine(value: $"[stub: state generation is unavailable — {exception.Message}]");
+foreach (var note in decision.Notes) {
+    Console.Error.WriteLine(value: $"[stub: {note}]");
+}
+if (decision.Version is not { } launchVersion) {
+    Console.Error.WriteLine(value: $"[stub: refusing to launch — {decision.Refusal}]");
     return 2;
 }
-var launchVersion = current;
-switch (decision) {
-    case StubAction.RevertToLastGood:
-        Console.Error.WriteLine(value: $"[stub: version {current} reached {attempts}/{configuration.MaxAttempts} attempts — reverting to last-good {lastGood}]");
-        try {
-            StubInstall.RevertToLastGood(failedVersion: current, installRoot: installRoot, lastGoodVersion: lastGood!);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)) {
-            Console.Error.WriteLine(value: $"[stub: could not cancel pending install and roll back — {exception.Message}]");
-            return 2;
-        }
-        launchVersion = lastGood!;
-
-        break;
-    case StubAction.LaunchCurrentAnyway:
-        Console.Error.WriteLine(value: $"[stub: stuck on version {current} — {attempts}/{configuration.MaxAttempts} attempts exhausted and its state-generation exceeds last-good's; launching it anyway rather than risk an incompatible read]");
-
-        break;
-}
-Puck.Confinement.ConfinedDirectory heldVersion;
+ConfinedDirectory heldVersion;
 try {
-    heldVersion = StubInstall.HoldVersion(installRoot: installRoot, version: launchVersion);
+    heldVersion = StubInstall.HoldVersion(root: transaction.Root, version: launchVersion);
 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or PlatformNotSupportedException)) {
     Console.Error.WriteLine(value: $"[stub: could not hold version {launchVersion} for its launch — {exception.Message}]");
     return 2;
 }
 // Held from before the child starts until it exits, so pruning never removes the version the child runs from.
 using var heldVersionLifetime = heldVersion;
-StubHealth.IncrementAndFlush(
-    installRoot: installRoot,
-    version: launchVersion
-);
 var executablePath = Path.Combine(
     path1: StubInstall.VersionDirectory(
         installRoot: installRoot,
@@ -105,9 +62,8 @@ if (!File.Exists(path: executablePath)) {
 
     return 2;
 }
-// Selection and any rollback used the pointer read under this lease. Release before child startup: the child
-// owns update commands, and retaining the lease until it exits would prevent every self-update.
-updateLease.Dispose();
+// Release before child startup: the child's registration waits for this lease, and the child owns update commands.
+transaction.Dispose();
 var startInfo = new ProcessStartInfo {
     FileName = executablePath,
     RedirectStandardInput = Console.IsInputRedirected,
