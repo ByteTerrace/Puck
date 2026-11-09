@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -20,6 +21,8 @@ public sealed class SdfViewExposures {
     private float[] m_multipliers = [];
     private float[] m_metered = [];
     private float[] m_airLight = [];
+    // Six rows a view (LightOf), W one once the meter has read.
+    private Vector4[] m_light = [];
     private bool[] m_reads = [];
     private string[] m_sources = [];
     // Per view, the presentation clock and the frame serial it was last staged at.
@@ -57,7 +60,7 @@ public sealed class SdfViewExposures {
             : frameSeconds);
     }
     /// <summary>Opens a frame's exposures: each view is staged on its first read in the frame (<see cref="MultiplierOf"/>,
-    /// <see cref="AirLightOf"/>, <see cref="MeteredOf"/>), its <c>EV100</c> eased toward its target over the presentation
+    /// <see cref="AirLightOf"/>, <see cref="MeteredOf"/>, <see cref="LightOf"/>), its <c>EV100</c> eased toward its target over the presentation
     /// time since it was last staged, so a view nothing renders or reads meters nothing and a view rendered at a reduced
     /// rate meters at that rate.</summary>
     /// <param name="frame">The frame.</param>
@@ -81,6 +84,7 @@ public sealed class SdfViewExposures {
             Array.Resize(array: ref m_multipliers, newSize: grown);
             Array.Resize(array: ref m_metered, newSize: grown);
             Array.Resize(array: ref m_airLight, newSize: grown);
+            Array.Resize(array: ref m_light, newSize: (grown * 6));
             Array.Resize(array: ref m_reads, newSize: grown);
             Array.Resize(array: ref m_sources, newSize: grown);
             Array.Resize(array: ref m_stagedAt, newSize: grown);
@@ -131,7 +135,9 @@ public sealed class SdfViewExposures {
             m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : ev100));
             return;
         }
-        m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, fresh: cut, luminance: out var luminance,
+        Span<Vector3> light = stackalloc Vector3[6];
+
+        m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, fresh: cut, light: light, luminance: out var luminance,
             position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
         if (m_reads[index]) { m_cutOwed[index] = false; }
         m_sources[index] = source switch {
@@ -142,6 +148,7 @@ public sealed class SdfViewExposures {
         if (m_reads[index] || !float.IsFinite(f: m_ev100[index])) {
             m_airLight[index] = airLight;
             m_metered[index] = luminance;
+            for (var axis = 0; (axis < 6); axis++) { m_light[(index * 6) + axis] = (m_reads[index] ? new Vector4(value: light[axis], w: 1f) : Vector4.Zero); }
         }
         if (exposure.Mode == SdfExposureMode.Auto) {
             ev100 = (m_reads[index]
@@ -181,6 +188,20 @@ public sealed class SdfViewExposures {
         if ((view < 0) || (view >= m_count)) { return 0f; }
         StageView(index: view);
         return m_metered[view];
+    }
+    /// <summary>Writes the light a view's meter sample receives along each of its six axes (+X, -X, +Y, -Y, +Z, -Z), RGB
+    /// in nits with W one, staging the view on its first read in the frame; held at its last reading while the scene
+    /// cannot answer. A surface no published probe answers reads it as one probe at the camera.</summary>
+    /// <param name="view">The view's index in the frame's views.</param>
+    /// <param name="rows">The six rows to fill; zero, W included, for a view the frame does not hold or whose meter never
+    /// had a reading.</param>
+    /// <exception cref="ArgumentException"><paramref name="rows"/> is shorter than six.</exception>
+    public void LightOf(int view, Span<Vector4> rows) {
+        if (rows.Length < 6) { throw new ArgumentException(message: "The meter's light is six rows.", paramName: nameof(rows)); }
+        rows[..6].Clear();
+        if ((view < 0) || (view >= m_count)) { return; }
+        StageView(index: view);
+        m_light.AsSpan(length: 6, start: (view * 6)).CopyTo(destination: rows);
     }
     /// <summary>Returns the <c>EV100</c> a view rendered at in the frame last staged, without staging it.</summary>
     /// <param name="view">The view's index in the frame's views.</param>

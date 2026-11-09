@@ -621,25 +621,17 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     private static byte[] Answer(SdfMeshBakeBatch batch, int[] materials, Shape[] shapes) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
-        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         foreach (var lattice in batch.Lattices) {
             var first = -(lattice.Selector + 1);
-            var spacing = (0.015625f * MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)));
+            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
+            var count = lattice.Instances;
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);
 
-                var (value, shape) = Nearest(count: lattice.Instances, first: first, point: position, shapes: shapes);
-                var gradient = Vector3.Zero;
-
-                if (lattice.Gradients) {
-                    foreach (var tap in taps) {
-                        gradient += (tap * Nearest(count: lattice.Instances, first: first, point: (position + (tap * spacing)), shapes: shapes).Value);
-                    }
-                    // The four taps sum to four times the spacing times the gradient.
-                    gradient *= (0.25f / spacing);
-                }
+                var (value, shape) = Nearest(count: count, first: first, point: position, shapes: shapes);
+                var gradient = (lattice.Gradients ? SdfMeshBakeTaps.Gradient(field: point => Nearest(count: count, first: first, point: point, shapes: shapes).Value, point: position, spacing: spacing) : Vector3.Zero);
 
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
@@ -659,10 +651,9 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
     private static byte[] AnswerSlots(SdfMeshBakeBatch batch, Shape[] shapes) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
-        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         foreach (var lattice in batch.Lattices) {
-            var spacing = (0.015625f * MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)));
+            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);
@@ -673,12 +664,8 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
                 BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: shapes[shape].Material);
                 if (lattice.Gradients) {
-                    var gradient = Vector3.Zero;
+                    var gradient = SdfMeshBakeTaps.Gradient(field: point => Nearest(count: shapes.Length, first: 0, point: point, shapes: shapes).Value, point: position, spacing: spacing);
 
-                    foreach (var tap in taps) {
-                        gradient += (tap * Nearest(count: shapes.Length, first: 0, point: (position + (tap * spacing)), shapes: shapes).Value);
-                    }
-                    gradient *= (0.25f / spacing);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);

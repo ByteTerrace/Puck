@@ -3548,6 +3548,23 @@ never writes the store, so it reads a store a running World owns.
   tetrahedral gradient a sample, with taps at least half a millimetre out since
   the evaluator answers in steps of 2⁻¹⁶ m. A bake change is measured this way
   with no device; a group whose field the evaluator refuses is named as such.
+- `--field-levels` (with `--cpu`) also contours each audited group's field
+  levels (`SdfMeshFieldLevels`, `SdfMeshPathBake.ContourLevel`): lattices of
+  twice the previous cell, offset outward by half a cell, per member where its
+  shapes ride several slots, to an empty level, a level that keeps more than the
+  collapse's kept share of the triangles before it dropped. It measures them
+  and the collapse's levels of the same mesh by the virtual geometry plan's
+  [error contract](../plans/virtual-geometry.md#the-error-contract): bracketed
+  upper bounds both ways with the Lipschitz lower bound beside, enclosure,
+  material runs, normal runs (within the level's geometric error, the nearest
+  triangle's alone printed beside), vanished parts, and the audit's open edges,
+  flips and missing crossings on each level. Per group and in total it prints
+  the field evaluations (the bake's lattices, the chain's contours and its
+  oracle apart) and each path's own processor work on its thread (cycles on
+  Windows, thread nanoseconds on Linux, field evaluations excluded), then the
+  plan's G1 clauses (a) and (b) per group. `--field-aim lattice` aims each
+  level's offset by its lattice's median slope rather than each sample's own
+  (`local`, the default).
 
 Per group it prints the distance off the surface at vertices, triangle
 centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
@@ -3595,7 +3612,11 @@ body or placement of the world stands has no geometry to bake and is refused.
   and the default are every one) and named views, `name=azimuth,elevation` in
   degrees about the author frame (azimuth 0 the front, +90 the subject's own
   left, elevation 90 from above), with `,x,y,z,halfWidth` a close window of
-  that half width in metres about an author-frame point. The three-quarter views
+  that half width in metres about an author-frame point. Commas separate
+  standard names in one `--views` value, so each named view goes in a
+  `--views` of its own. A close window's point is in the author frame at the
+  placement's scale, measured from the creation's origin (a perched bird's
+  feet), not in the creation's unit-scale numbers. The three-quarter views
   stand 18 degrees above the horizon. Each view frames the whole mesh, so
   its span is printed; a named close window fixes its own.
 - Lighting is one light fixed in the camera's frame, so every view is lit

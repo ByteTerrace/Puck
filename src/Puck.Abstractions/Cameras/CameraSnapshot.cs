@@ -133,14 +133,7 @@ public readonly record struct CameraSnapshot {
     /// <summary>Gets the normalized camera-up basis vector.</summary>
     public Vector3 Up { get; }
 
-    private static Vector3 SafeNormalize(Vector3 value, Vector3 fallback) {
-        var length = value.Length();
-
-        return ((length > 1e-5f)
-            ? (value / length)
-            : fallback
-        );
-    }
+    private static Vector3 SafeNormalize(Vector3 value, Vector3 fallback) => VectorFunctions.NormalizeOr(fallback: fallback, shortest: 1e-5f, value: value);
     private static void ValidateBasis(Vector3 value, string paramName) {
         if (MathF.Abs(x: (value.LengthSquared() - 1f)) > 1e-3f) {
             throw new ArgumentException(

@@ -2366,12 +2366,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     three times: `Puck.SignedDistance/SdfProgramBuilder.Text.cs:225`,
     `Puck.World.Client/WorldFramePresenter.cs:951`,
     `Puck.World.Client/WorldScreenStamper.cs:23`.
-  - [low] The bake's tetrahedral gradient taps, written out in
-    `Puck.Cli.Worlds/Mesh/MeshCpuBake.cs:30` and four `SdfVm` test helpers
-    (`tests/Puck.SdfVm.Tests/SdfFieldSliceLawTests.cs:33`,
-    `SdfMeshPathBakeLawTests.Settle.cs:204`, `SdfMeshPathBakeLawTests.cs:579`,
-    `:617`); the sample position beside them is already one
-    `SampleAt` (`SdfMeshPathBake.cs:44`). Check the HLSL tap set against the same constant.
+  - [low] The bake's tetrahedral gradient taps have one C# home,
+    `SdfMeshBakeTaps`, which the offline bake, the field levels and the `SdfVm`
+    laws' kernel stand-ins share; the HLSL tap set (`SdfBakeTaps` in
+    `passes/sdf-mesh-bake.comp.hlsl`) is still a hand pair with it, which a
+    generated declaration would close.
   - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
     (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
     `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
@@ -2895,14 +2894,14 @@ the fixed poses and the approaches already rejected.
 - [medium] A surface no published probe answers is lit by the exposure meter's
   camera sample (`sdfMeshAnswers`, [mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)).
   Re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the
-  valley summit on both backends after a `debug.go` cut. The sample is one
-  scalar luminance and one open-sky share per view, so a doorway that frames
-  the outdoors from inside lights both sides alike until the windows land; the
-  meter's six axis readings would make it directional.
+  valley summit on both backends after a `debug.go` cut. Its diffuse light is
+  the sample's six-axis RGB light (`meterLight`), read about the normal as a
+  probe's cube; its reflection still takes the open share and the grey metered
+  luminance.
 - [low] The meter's open-sky share (`airLight`) reads about 0.42 on the open
   lawn at noon (`world.exposure`, the boot's first views), where the meter's
   `SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE` scaling means it to read one. It
-  scales the atmosphere's in-scatter and the camera sample's sky; check the
+  scales the atmosphere's in-scatter and the camera sample's reflected sky; check the
   probes-source path's per-axis sky shares against the camera trace's.
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white
   sun key, hard black shadows with no sky fill, no rim and no aerial haze. A
@@ -3533,6 +3532,17 @@ measurement.
   activating in the shared root reaches every session's tools, so it cannot be
   the measurement. The placement swap needs no more work.
 
+- [high] The operator's worker dies under concurrent lanes: `puck_world_start`
+  and `puck_exec` fail with "activating the current release's worker failed,
+  so the call reached no worker: The server shut down unexpectedly" (the
+  message `OperatorMcpFront` builds), `puck_worlds` with "Initialization timed
+  out", and lockstep Worlds drop attachments ("Host disconnected; dispatched
+  outcome is unknown") while converging. Five look and rendering lanes in one
+  session hit it, one blocked outright from starting its windowed batch; the
+  server came back on its own each time. Find why the worker exits (its log,
+  the release activation, a crash under concurrent sessions or a memory
+  limit), fix it at the cause, and make an unknown outcome name what to
+  inspect.
 - [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout. Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`.
 
 - [medium] Investigate a GPU lease held by an older operator worker while no

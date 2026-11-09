@@ -64,10 +64,13 @@ public sealed class SdfFrameBlockLawTests {
         // This fixture reads neither clock nor lanes; the targeted read-flag law covers their nonzero cases.
         SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes,
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
+        // The bins pass alone reads the widths, and its recorder writes them from the frame's plan just before it dispatches
+        // (SdfFrameBlock.WriteShadeBins).
+        SdfWorldPackage.ShadeBinWidths,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
         SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
         // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
-        SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
+        SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.

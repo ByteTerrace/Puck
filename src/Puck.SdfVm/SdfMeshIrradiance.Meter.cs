@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Puck.SdfVm;
 
@@ -21,7 +22,8 @@ public sealed partial class SdfMeshIrradiance {
     private Vector3[] m_gpuMeterViewPositions = [];
     private long[] m_gpuMeterViewCuts = [];
 
-    // One completed reading: eight words a distinct position, and for each view its row (or -1) and its cut revision.
+    // One completed reading: SdfMeshProbeRelight.MeterOutputWords words a distinct position, and for each view its row
+    // (or -1) and its cut revision.
     private sealed record GpuMeterReading(SdfMeshProbeGpuWork Client, uint[] Words, Vector3[] Positions, int[] Rows, long[] Cuts);
 
     // Enqueue after dropping the volume gate: service admission takes its own gate before reading this volume.
@@ -110,7 +112,7 @@ public sealed partial class SdfMeshIrradiance {
     // Called under the volume gate. No hierarchy traversal, ray shading or waiting occurs on the frame thread: a view
     // reads its own latest row, at most one meter round trip old. At a cut (fresh) only a row asked after the view's cut
     // answers, so the reading after a teleport is where the camera stands, never where it stood.
-    private bool TryGpuMeter(Vector3 position, Vector3 forward, bool fresh, out float luminance, out float skyVisibility, out SdfExposureMeterSource source) {
+    private bool TryGpuMeter(Vector3 position, Vector3 forward, bool fresh, Span<Vector3> light, out float luminance, out float skyVisibility, out SdfExposureMeterSource source) {
         luminance = 0;
         skyVisibility = 1;
         source = SdfExposureMeterSource.None;
@@ -122,17 +124,13 @@ public sealed partial class SdfMeshIrradiance {
         if (row < 0 && view < 0) { row = Array.IndexOf(reading.Positions, position); }
         if (row < 0) { return false; }
         var words = reading.Words.AsSpan(row * SdfMeshProbeRelight.MeterOutputWords, SdfMeshProbeRelight.MeterOutputWords);
-        source = (words[7] & 3) switch { 1 => SdfExposureMeterSource.Probes, 2 => SdfExposureMeterSource.CameraTrace, _ => SdfExposureMeterSource.None };
+        source = (words[^1] & 3) switch { 1 => SdfExposureMeterSource.Probes, 2 => SdfExposureMeterSource.CameraTrace, _ => SdfExposureMeterSource.None };
         if (source == SdfExposureMeterSource.None) { return false; }
-        var total = 0f;
-        for (var axis = 0; axis < 6; axis++) {
-            var ahead = MathF.Max(0, Vector3.Dot(Axes[axis], forward));
-            var weight = MeterSurround + ahead * ahead;
-            luminance += BitConverter.UInt32BitsToSingle(words[axis]) * weight;
-            total += weight;
-        }
-        luminance /= total;
-        skyVisibility = BitConverter.UInt32BitsToSingle(words[6]);
+        Span<Vector3> axes = stackalloc Vector3[6];
+        MemoryMarshal.Cast<uint, Vector3>(words[..18]).CopyTo(axes);
+        luminance = MeteredLuminance(axes, forward);
+        skyVisibility = BitConverter.UInt32BitsToSingle(words[^2]);
+        if (!light.IsEmpty) { axes.CopyTo(light); }
         return true;
     }
 }

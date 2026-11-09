@@ -211,7 +211,6 @@ public sealed partial class SdfMeshPathBakeLawTests {
     private static byte[] AnswerPosed(SdfMeshBakeBatch batch, bool empty, float scale = 1f, int memberGap = 1) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
-        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         for (var lattice = 0; (lattice < batch.Lattices.Length); lattice++) {
             var request = batch.Lattices[lattice];
@@ -222,7 +221,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
                 new(Center: Vector3.Zero, Half: (OwnHalf * scale), Rotation: Quaternion.Identity, Material: 0),
                 new(Center: new Vector3(x: rows.Span[(1 + (3 * member))].X, y: rows.Span[(1 + (3 * member))].Y, z: rows.Span[(1 + (3 * member))].Z), Half: (MemberHalf * scale), Rotation: Quaternion.Identity, Material: 0),
             };
-            var spacing = (0.015625f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
+            var spacing = SdfMeshBakeTaps.Spacing(cell: request.Cell);
 
             for (var local = 0; (local < request.Samples); local++, sample++) {
                 var position = request.SampleAt(local: local);
@@ -232,12 +231,8 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
                 if (request.Gradients) {
-                    var gradient = Vector3.Zero;
+                    var gradient = SdfMeshBakeTaps.Gradient(field: point => (empty ? 1f : Nearest(count: 2, first: 0, point: point, shapes: shapes).Value), point: position, spacing: spacing);
 
-                    foreach (var tap in taps) {
-                        gradient += (tap * (empty ? 1f : Nearest(count: 2, first: 0, point: (position + (tap * spacing)), shapes: shapes).Value));
-                    }
-                    gradient *= (0.25f / spacing);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
                     BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
