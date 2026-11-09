@@ -223,10 +223,12 @@ public sealed record WorldRenderDefaults(
     }
 }
 /// <summary>How a camera exposes: the luminance <c>1.2 · 2^EV100</c> displays as white (before the tonemap), so each stop
-/// up halves the image's brightness. A manual exposure holds <paramref name="Ev100"/>; an automatic one reads a reflected-
-/// light meter about each view's camera (the irradiance volume's light about it and the point lights' at it), aims for
-/// that reading less <paramref name="Compensation"/> within <paramref name="Minimum"/> and <paramref name="Maximum"/>,
-/// and eases toward it over <paramref name="Adaptation"/> seconds of presentation time. Presentation only: nothing in
+/// up halves the image's brightness. A manual exposure holds <paramref name="Ev100"/>; an automatic one meters each
+/// view's own rendered image (a log histogram between the <paramref name="Low"/> and <paramref name="High"/>
+/// percentiles, weighted toward the centre by <paramref name="Center"/>), aims for that reading less
+/// <paramref name="Compensation"/> within <paramref name="Minimum"/> and <paramref name="Maximum"/>, holds while the
+/// reading stays within <paramref name="Band"/> stops of the one it settled on, and otherwise eases toward it over
+/// <paramref name="Adaptation"/> seconds of presentation time. Presentation only: nothing in
 /// simulation state reads it. <paramref name="Ev100"/>, the bounds and the compensation are bindable, so a world keys
 /// them on its day clock as it keys the sun and the sky (a lower floor at night). The darkest exposure any of their
 /// authored values reaches sizes each point and spot light's range, so a keyed floor never changes the lights.</summary>
@@ -243,14 +245,23 @@ public sealed record WorldRenderDefaults(
 /// <param name="Adaptation">The time constant an automatic exposure eases toward its meter with, in seconds, in
 /// <c>[0, 60]</c>; zero follows the meter at once. Absent is <c>SdfExposure.DefaultAdaptation</c>.</param>
 /// <param name="Local">The share of the local adaptation, in <c>[0, 1]</c>: how far each surface's exposure moves from
-/// the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a
-/// dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts
-/// across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the
-/// irradiance volume on.</param>
+/// the view's toward what its own illumination would meter against the view's image meter, within six stops either way,
+/// so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye
+/// adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure.</param>
 /// <param name="Hold">A bindable <c>EV100</c> that pins the exposure while it is above zero, in <c>[0, 20]</c>: every
 /// view then renders manual at that value with no local adaptation, whatever <paramref name="Mode"/> and the bounds say,
 /// and zero (the value of an unbound or released hold) leaves the authored exposure exactly as it was. The bounds still
 /// size each point and spot light's range, so a hold never changes the lights the volume traces. Absent is no hold.</param>
+/// <param name="Band">The automatic exposure's dead band, in stops, in <c>[0, 4]</c>: the exposure holds while the
+/// meter reads within this far of the reading it last settled on, and follows the meter once a reading leaves the band.
+/// Absent is zero, which follows every change.</param>
+/// <param name="Low">The percentile, in <c>[0, 1)</c>, below which the image meter leaves the darkest pixels out.
+/// Absent is zero.</param>
+/// <param name="High">The percentile, above <paramref name="Low"/> and at most one, above which the image meter leaves
+/// the brightest pixels out. Absent is one.</param>
+/// <param name="Center">How far the image meter weights the image toward its centre, in <c>[0, 1]</c>: a pixel counts
+/// <c>1 − Center · r²</c>, <c>r</c> its distance from the centre over the half diagonal. Absent is zero, every pixel
+/// alike.</param>
 public sealed record WorldRenderExposure(
     SdfExposureMode Mode = SdfExposureMode.Manual,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Ev100 = null,
@@ -259,7 +270,11 @@ public sealed record WorldRenderExposure(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Compensation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Hold = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Hold = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Band = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Low = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? High = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Center = null
 ) {
     /// <summary>The lowest an exposure's compensation admits, in stops.</summary>
     public const float MinCompensation = -10f;
@@ -267,6 +282,8 @@ public sealed record WorldRenderExposure(
     public const float MaxCompensation = 10f;
     /// <summary>The longest an exposure's adaptation admits, in seconds.</summary>
     public const float MaxAdaptation = 60f;
+    /// <summary>The widest an exposure's dead band admits, in stops.</summary>
+    public const float MaxBand = 4f;
 
     /// <summary>Returns the brightest exposure the section's authored values reach, which sizes each point and spot
     /// light's range: an absent section's manual default, or this section with each bindable value at its brightest
@@ -315,6 +332,10 @@ public sealed record WorldRenderExposure(
 
         return new SdfExposure(
             Adaptation: (exposure.Adaptation ?? SdfExposure.DefaultAdaptation),
+            Band: (automatic ? (exposure.Band ?? 0f) : 0f),
+            Center: (automatic ? (exposure.Center ?? 0f) : 0f),
+            High: (automatic ? (exposure.High ?? 1f) : 1f),
+            Low: (automatic ? (exposure.Low ?? 0f) : 0f),
             Compensation: ((exposure.Compensation is { } compensation) ? value(compensation, WorldValueFields.ExposureCompensation, false) : 0f),
             Ev100: (ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
             Local: (automatic ? (exposure.Local ?? 0f) : 0f),

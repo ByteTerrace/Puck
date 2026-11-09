@@ -606,7 +606,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             forms: WorldExposureForms,
             handler: (context, args) => {
                 var exposure = WorldRenderExposure.Resolve(exposure: server.ReadView(context).Definition.Render.Exposure);
-                var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##}");
+                var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##} band={exposure.Band:0.##} low={exposure.Low:0.##} high={exposure.High:0.##} center={exposure.Center:0.##}");
                 string Pin() => ((settings.ExposurePin is { } pinned) ? pinned.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "off");
                 // The lever lands through the server, after this answer: echo what was asked.
                 static Func<CommandResult> PinEcho(string pin) => () => new(Output: $"[world.exposure: pin={pin}]");

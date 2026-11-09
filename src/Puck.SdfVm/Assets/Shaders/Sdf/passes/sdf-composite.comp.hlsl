@@ -23,6 +23,12 @@
 //   than clipping, so a window from a dim room shows the sky's gradient; outdoors the sky already lies below white and
 //   is left as it is.
 // A debug view's lit image is its whole picture, so it passes through.
+// - The image meter (SdfExposure.Meter): every output pixel of the final picture adds its weight, toward the image's
+//   centre by exposureCenter, to the log bin of its luminance at the view's whole exposure, display white at stop zero;
+//   each group sums its pixels in groupshared bins and adds each non-empty bin to exposureMeterRW once, which the
+//   recorder clears before the dispatch and reads back after it. The word after the bins sums the same weights times
+//   each pixel's surface coverage, the share of the reading the local adaptation's gain reaches. A debug view and a far
+//   layer meter nothing.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
 #include "sdf-sky-pass.hlsli"
@@ -41,10 +47,32 @@ float sdfSkyPeakGain() {
     return min(1.0, (SDF_SKY_PEAK_TARGET / max(exposed, 1.0e-12)));
 }
 
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
+// The bins, then the covered weight (SDF_EXPOSURE_METER_BINS).
+groupshared uint sdfMeterBins[SDF_EXPOSURE_METER_BINS + 1u];
+
+// The pixel's image-meter bin: its exposed luminance's stop above SDF_EXPOSURE_METER_LOWEST_STOP, the first bin holding
+// everything darker (and a value that is not a positive number) and the last everything brighter.
+uint sdfMeterBin(float exposed) {
+    float stop = ((exposed > 0.0) ? log2(exposed) : SDF_EXPOSURE_METER_LOWEST_STOP);
+
+    return ((uint)clamp(floor((stop - SDF_EXPOSURE_METER_LOWEST_STOP) * SDF_EXPOSURE_METER_BINS_PER_STOP), 0.0, (float)(SDF_EXPOSURE_METER_BINS - 1u)));
+}
+// The pixel's image-meter weight: SDF_EXPOSURE_METER_PIXEL_WEIGHT less the centre weight's share of it, by the squared
+// distance from the image's centre over the half diagonal.
+uint sdfMeterWeight(uint2 pixel) {
+    float2 offset = ((((float2(pixel) + 0.5) / float2(passGroup.extent)) * 2.0) - 1.0);
+    float weight = (1.0 - (saturate(passGroup.exposureCenter) * saturate(dot(offset, offset) * 0.5)));
+
+    return ((uint)round(weight * (float)SDF_EXPOSURE_METER_PIXEL_WEIGHT));
+}
+
+// Composites one output pixel; false outside the extent. exposed receives the luminance the image meter bins, at the
+// view's whole exposure, or a negative value where the pixel is not metered.
+bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
+    exposed = -1.0;
+    covered = 0.0;
     if (any(id.xy >= passGroup.extent)) {
-        return;
+        return false;
     }
 
     float4 litColor = sdfSkyPassLit(int2(id.xy));
@@ -132,6 +160,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // window shows applies the window share of it (exposeShare), and the view looking through the window applies the
     // rest of its own; a debug view leaves it as it is, but for a tier view, which is the final image tinted.
     if (sdfDebugComposesFinal(passGroup.debugMode)) {
+        if (!geometryOnly) {
+            exposed = (dot(color, SDF_LUMINANCE) * max(passGroup.exposure, 0.0));
+            covered = saturate(litColor.a);
+        }
         color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
     }
 
@@ -140,4 +172,33 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     output[id.xy] = float4(min(color, SDF_LUMINANCE_CEILING), (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    return true;
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
+    for (uint cleared = lane; (cleared <= SDF_EXPOSURE_METER_BINS); cleared += 64u) {
+        sdfMeterBins[cleared] = 0u;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    float exposed;
+    float covered;
+
+    if (sdfCompositePixel(id, exposed, covered) && (exposed >= 0.0)) {
+        uint weight = sdfMeterWeight(id.xy);
+
+        if (weight != 0u) {
+            InterlockedAdd(sdfMeterBins[sdfMeterBin(exposed)], weight);
+            InterlockedAdd(sdfMeterBins[SDF_EXPOSURE_METER_BINS], (uint)round(covered * (float)weight));
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    for (uint bin = lane; (bin <= SDF_EXPOSURE_METER_BINS); bin += 64u) {
+        uint weight = sdfMeterBins[bin];
+
+        if (weight != 0u) {
+            InterlockedAdd(exposureMeterRW[bin], weight);
+        }
+    }
 }

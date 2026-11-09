@@ -1511,7 +1511,9 @@ render {
   // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black. A
   // lit room meters above the floor (its fixtures are sized for it, shapes.md), so the floor holds only an unlit room
   // dark. Two stops over the meter keep the world's pale look while a white gallery wall stays short of the tonemap's
-  // shoulder: at the basis's two and a half, a lit level's walls and white exhibits clipped to a flat white.
+  // shoulder: at the basis's two and a half, a lit level's walls and white exhibits clipped to a flat white. The meter
+  // reads the picture as the basis's does (its band, percentiles and centre weight restated, since this section
+  // replaces the basis's whole).
   exposure {
     mode: Auto
     minimum {
@@ -1528,6 +1530,10 @@ render {
     compensation: 2
     adaptation: 0.75
     local: 0.5
+    band: 0.75
+    low: 0.1
+    high: 0.9
+    center: 0.25
     hold: "state.galleryFill.hold"
   }
   indirect {

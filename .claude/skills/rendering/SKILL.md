@@ -396,6 +396,7 @@ add the row you found.
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork` | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
+| Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
 | Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
@@ -617,7 +618,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   pass block's `lightMask`), and a static one is occluded by the irradiance
   volume's visibility bits (`SdfLight.IsTraced`, `sdfMeshLightVisibility`): a
   fixture that lights through a slab is an anchored light or a volume that
-  holds no probe there. `world.exposure` reads each view's EV and meter.
+  holds no probe there. `world.exposure` reads each view's EV, its image
+  meter's reading, target and band state, and its camera sample's source. An
+  automatic exposure meters the view's own composite output a few frames late
+  (`SdfExposure.Meter`), so a debug view meters nothing and holds; pin the
+  exposure for any before/after comparison.
 - **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
   gather supplies indirect light, reflections and traced static-light visibility.
   Each probe publishes its own measured cubes, without neighbour filtering.

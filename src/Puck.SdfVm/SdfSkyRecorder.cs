@@ -18,17 +18,24 @@ namespace Puck.SdfVm;
 // the frame's common values, the temporal ones every part of a frame writes alike among them, and ResolvedSurface, which
 // only a resolved composite sets; the kernels take the sky's direction without the jitter, so the sky never moves with a
 // temporal view's samples. The composite writes the view's color, so it completes the render.
-internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
+// The composite also meters the image it writes (SdfExposure.Meter): each frame slot owns a histogram buffer, which the
+// recording clears before the dispatch and copies into the slot's readback buffer after it, and the copy is read only once
+// the node proves the slot complete (RenderGraphSlotResults), then handed to the residency's exposures
+// (SdfViewExposures.Publish) with the view, cut and multiplier the frame drew with. Both buffers are the recorder's own,
+// never a graph version, and each slot's are touched only by that slot's recordings, which the slot's fence orders.
+internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.SkyParameters);
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
     private static readonly int SkyFieldExtentOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyFieldExtent));
     private static readonly int SkyViewsOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews));
+    private static readonly int ExposureCenterOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ExposureCenter));
+    private const ulong MeterBytes = (SdfExposure.MeterWords * sizeof(uint));
     // The interface's image members a port reads through, and those a port writes through.
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
     private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead, SdfWorldPackage.ExposureMeterWritten];
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -59,6 +66,21 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
     private SdfWorldView m_view;
     private bool m_disposed;
+    // The composite's image meter, one slot each; empty for the sky.
+    private readonly MeterSlot[] m_meters;
+    private readonly RenderGraphSlotResults<MeterSlot>? m_meterCopies;
+
+    // A frame slot's histogram and readback buffers, and what the recording into it drew with.
+    private sealed class MeterSlot(IGpuBuffer histogram, IGpuReadbackBuffer readback) {
+        internal readonly IGpuBuffer Histogram = histogram;
+        internal readonly IGpuReadbackBuffer Readback = readback;
+        internal SdfViewExposures? Exposures;
+        internal int View;
+        internal long Cut;
+        internal float Multiplier;
+        internal float Reference;
+        internal float Local;
+    }
 
     internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
@@ -83,6 +105,30 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         DeclareScreens(residency: view.Residency);
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
+        m_meters = [];
+        if (m_kernel == SdfKernel.Composite) {
+            var buffers = context.Services.BufferFactory;
+
+            m_meters = new MeterSlot[context.InFlightFrames];
+            for (var slot = 0; (slot < m_meters.Length); slot++) {
+                m_meters[slot] = new MeterSlot(
+                    histogram: buffers.CreateDeviceLocal(name: new GpuObjectName(detail: "exposure meter", index: slot, owner: context.Instance, part: context.Part!), sizeBytes: MeterBytes, usage: GpuBufferUsage.Storage),
+                    readback: buffers.CreateReadback(name: new GpuObjectName(detail: "exposure meter readback", index: slot, owner: context.Instance, part: context.Part!), sizeBytes: MeterBytes)
+                );
+            }
+            m_meterCopies = new RenderGraphSlotResults<MeterSlot>(slots: m_meters.Length, complete: ReadMeter);
+        }
+    }
+
+    public ulong ReadbackBytes => ((ulong)m_meters.Length * MeterBytes);
+    public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
+    public void Submitted(int slot) => m_meterCopies?.Submitted(slot: slot);
+    public void Completed(int slot) => m_meterCopies?.Completed(slot: slot);
+    private static void ReadMeter(MeterSlot slot) {
+        Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
+
+        slot.Readback.Read(MemoryMarshal.AsBytes(span: words));
+        slot.Exposures?.Publish(cut: slot.Cut, local: slot.Local, multiplier: slot.Multiplier, reference: slot.Reference, view: slot.View, words: words);
     }
 
     public void Dispose() {
@@ -90,6 +136,10 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             return;
         }
         m_disposed = true;
+        foreach (var meter in m_meters) {
+            meter.Histogram.Dispose();
+            meter.Readback.Dispose();
+        }
         m_owner.Leave(view: m_view);
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
@@ -134,6 +184,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[SkyFieldExtentOffset..], value: fieldWidth);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[(SkyFieldExtentOffset + sizeof(uint))..], value: fieldHeight);
+        BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[ExposureCenterOffset..], value: Math.Clamp(value: frame.Exposure.Center, min: 0f, max: 1f));
         var set = m_sets.PassSet(slot: recording.Slot);
 
         m_work.Write(passSet: set, recording: recording);
@@ -141,7 +192,14 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         BindScreens(frame: frame, recording: in recording, set: set, tables: tables);
         BindInfinityViews(sky: frame.Sky, view: frame.Views[index], recording: in recording, set: set, tables: tables);
         var pipeline = tables.Pipeline(kernel: m_kernel);
+        var meter = ((m_kernel == SdfKernel.Composite) ? m_meters[recording.Slot] : null);
 
+        // The clear precedes the bindings, as a Direct3D 12 clear sets descriptor heaps of its own. The slot's histogram
+        // rests shader-readable between recordings, and its previous copy completed with the slot's fence.
+        if (meter is not null) {
+            recording.Recorder.ClearStorageBuffer(bufferHandle: meter.Histogram.BufferHandle, commandBufferHandle: recording.CommandBuffer, sizeBytes: MeterBytes);
+            ToShader(meter: meter, recorder: recording.Recorder, commandBuffer: recording.CommandBuffer, source: GpuAccess.TransferWrite);
+        }
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
         m_sets.Bind(bindPoint: GpuBindPoint.Compute, commandBuffer: recording.CommandBuffer, pipelineLayout: pipeline.LayoutHandle, recorder: recording.Recorder, slot: recording.Slot);
         recording.Recorder.BindDescriptorSet(
@@ -155,6 +213,23 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         var dispatchHeight = ((m_kernel == SdfKernel.Sky) ? fieldHeight : recording.Height);
 
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: dispatchWidth.CeilingDivide(divisor: 8u), groupCountY: dispatchHeight.CeilingDivide(divisor: 8u), groupCountZ: 1);
+        if (meter is not null) {
+            var recorder = recording.Recorder;
+            var commandBuffer = recording.CommandBuffer;
+
+            GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: meter.Readback, recorder: recorder, sizeBytes: MeterBytes,
+                source: meter.Histogram, sourceAccess: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+            ToShader(meter: meter, recorder: recorder, commandBuffer: commandBuffer, source: GpuAccess.TransferRead);
+            meter.Exposures = residency.Exposures;
+            meter.View = index;
+            meter.Cut = frame.Views[index].CutRevision;
+            meter.Multiplier = residency.Exposures.MultiplierOf(view: index);
+            var reference = residency.Exposures.MeteredOf(view: index);
+
+            meter.Reference = ((reference > 0f) ? SdfPhotometry.MeteredEv100(luminance: reference) : float.NaN);
+            meter.Local = ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f);
+            m_meterCopies!.Record(result: meter, slot: recording.Slot);
+        }
         m_recordedView = index;
         return RenderGraphPackageOutcome.Drew;
     }
@@ -164,6 +239,11 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
     }
 
+    // Returns a histogram to the compute stage's read and write after a transfer.
+    private static void ToShader(MeterSlot meter, IGpuRecorder recorder, nint commandBuffer, GpuAccess source) =>
+        recorder.TransitionBuffer(bufferHandle: meter.Histogram.BufferHandle, commandBufferHandle: commandBuffer,
+            destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader,
+            sourceAccessMask: source, sourceStageMask: GpuStage.Transfer);
     // The lit image this recording reads: the glass shading pass's output, or the opaque image it stands for while no
     // glass is in view.
     private nint LitOf(in RenderGraphPackageRecording recording) {
@@ -199,6 +279,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         }
         foreach (var member in BufferMembers) {
             tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
+        }
+        if (m_kernel == SdfKernel.Composite) {
+            tables.WriteInterfaceBuffer(buffer: m_meters[slot].Histogram, layout: layout, member: SdfWorldPackage.ExposureMeterWritten, set: set);
         }
         for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
             // These shared environment buffers order composition after its source reductions; the sky interface

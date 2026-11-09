@@ -18,7 +18,7 @@ public sealed partial class SdfMeshIrradiance {
     private SdfMeshIrradianceScene? m_gpuMeterScene;
     private SdfMeshProbeGpuWork? m_gpuMeterAskedOf;
     private long m_gpuMeterAt;
-    // The frame's views as the latest Stage saw them, so TryMeter, which names a position, finds its view's row.
+    // The frame's views as the latest Stage saw them, so TrySampleCamera, which names a position, finds its view's row.
     private Vector3[] m_gpuMeterViewPositions = [];
     private long[] m_gpuMeterViewCuts = [];
 
@@ -27,7 +27,7 @@ public sealed partial class SdfMeshIrradiance {
     private sealed record GpuMeterReading(SdfMeshProbeGpuWork Client, uint[] Words, Vector3[] Positions, int[] Rows, long[] Cuts);
 
     // Enqueue after dropping the volume gate: service admission takes its own gate before reading this volume.
-    // A converged frame also awaits its final meter, so exposure never depends on asynchronous progress.
+    // A converged frame also awaits its final camera sample, so its lighting never depends on asynchronous progress.
     private void ScheduleGpuMeters(SdfFrame frame) {
         SdfMeshProbeGpuWork gpu;
         Snapshot snapshot;
@@ -112,10 +112,9 @@ public sealed partial class SdfMeshIrradiance {
     // Called under the volume gate. No hierarchy traversal, ray shading or waiting occurs on the frame thread: a view
     // reads its own latest row, at most one meter round trip old. At a cut (fresh) only a row asked after the view's cut
     // answers, so the reading after a teleport is where the camera stands, never where it stood.
-    private bool TryGpuMeter(Vector3 position, Vector3 forward, bool fresh, Span<Vector3> light, out float luminance, out float skyVisibility, out SdfExposureMeterSource source) {
-        luminance = 0;
+    private bool TryGpuCameraSample(Vector3 position, bool fresh, Span<Vector3> light, out float skyVisibility, out SdfCameraSampleSource source) {
         skyVisibility = 1;
-        source = SdfExposureMeterSource.None;
+        source = SdfCameraSampleSource.None;
         if (m_gpuMeter is not { } reading || !ReferenceEquals(reading.Client, GpuTrace)) { return false; }
         var row = -1;
         var view = Array.IndexOf(m_gpuMeterViewPositions, position);
@@ -124,13 +123,10 @@ public sealed partial class SdfMeshIrradiance {
         if (row < 0 && view < 0) { row = Array.IndexOf(reading.Positions, position); }
         if (row < 0) { return false; }
         var words = reading.Words.AsSpan(row * SdfMeshProbeRelight.MeterOutputWords, SdfMeshProbeRelight.MeterOutputWords);
-        source = (words[^1] & 3) switch { 1 => SdfExposureMeterSource.Probes, 2 => SdfExposureMeterSource.CameraTrace, _ => SdfExposureMeterSource.None };
-        if (source == SdfExposureMeterSource.None) { return false; }
-        Span<Vector3> axes = stackalloc Vector3[6];
-        MemoryMarshal.Cast<uint, Vector3>(words[..18]).CopyTo(axes);
-        luminance = MeteredLuminance(axes, forward);
+        source = (words[^1] & 3) switch { 1 => SdfCameraSampleSource.Probes, 2 => SdfCameraSampleSource.CameraTrace, _ => SdfCameraSampleSource.None };
+        if (source == SdfCameraSampleSource.None) { return false; }
         skyVisibility = BitConverter.UInt32BitsToSingle(words[^2]);
-        if (!light.IsEmpty) { axes.CopyTo(light); }
+        if (!light.IsEmpty) { MemoryMarshal.Cast<uint, Vector3>(words[..18]).CopyTo(light); }
         return true;
     }
 }

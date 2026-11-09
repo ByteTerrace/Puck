@@ -19,6 +19,13 @@ public static partial class SdfWorldPackage {
     /// zero when they are views' at the render extent with the visibility records: the sky's in every fragment, and a
     /// <see cref="NativeFragment"/> composite's (<c>uint</c>).</summary>
     public const string ResolvedSurface = "resolvedSurface";
+    /// <summary>The pass-block value the composite weights its image meter toward the image's centre by, in [0, 1]
+    /// (<c>Puck.SignedDistance.SdfExposure.Center</c>; <c>float</c>).</summary>
+    public const string ExposureCenter = "exposureCenter";
+    /// <summary>The composite's image meter: <c>Puck.SignedDistance.SdfExposure.MeterBins</c> words, each the weight of
+    /// the output pixels whose exposed luminance falls in its log bin, which the composite adds to and its recorder reads
+    /// back (<c>uint</c>).</summary>
+    public const string ExposureMeterWritten = "exposureMeterRW";
     /// <summary>The lit image the sky and composite passes read: views' color at the render extent for the sky, and the
     /// lit image at the output extent for the composite.</summary>
     public const string LitImage = "lit";
@@ -39,7 +46,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The sky and composite interface: the common frame values and <see cref="ResolvedSurface"/>, the lit image,
     /// the visibility records a native view's lit image is read through, the surface transport a
     /// reduced view's is, the sky's field runs as the sky writes them and as the composite reads them, the screens a
-    /// panorama layer or a textured disc samples, the output, the work counters, and the World group's tables. Each pass
+    /// panorama layer or a textured disc samples, the output, the composite's image meter and its centre weight, the work
+    /// counters, and the World group's tables. Each pass
     /// binds a filler at every member it does not read or write.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> SkyMembers => SkyDeclaration.Members;
 
@@ -58,11 +66,13 @@ public static partial class SdfWorldPackage {
             .. Values,
             Value(name: ResolvedSurface, type: ShaderValueType.Uint),
             Value(name: SkyFieldExtent, type: ShaderValueType.Uint2),
+            Value(name: ExposureCenter, type: ShaderValueType.Float),
             ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (SkyViewCount * SkyViewRows), name: SkyViews, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SkyViewCount, name: SkyViewImages, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint2, name: TransportRead),
+            Written(element: ShaderValueType.Uint, name: ExposureMeterWritten),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),

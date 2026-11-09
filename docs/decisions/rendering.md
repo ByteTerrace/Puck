@@ -392,26 +392,64 @@ luminance whose default is a clear day's sky (10,000 nits) beside the default
 sun does.
 
 **A camera exposure maps the luminance to the display, before the tonemap.**
-`render.exposure` is manual (an `EV100`) or automatic. The chosen automatic
-meter reads the log-average of each view's HDR output with a highlight clamp,
-so dynamic meshes and anchored lights contribute to its exposure. Adaptation
-eases toward that reading less compensation, within authored bounds, over
-presentation time. The image meter is open work in
-[Lighting and GI](../plans/open-items.md#lighting-and-gi); the current automatic
-meter still reads the irradiance volume about the camera.
+`render.exposure` is manual (an `EV100`) or automatic.
 
-The probe meter remains for local adaptation and the enclosure case. When no
-visible lattice probe answers, the tracer measures radiance at the camera
-itself. This measures an enclosure smaller than a lattice cell without
-importing light from another room or changing the volume. An unavailable
-measurement holds the previous exposure; the authored EV initializes a view
-before its first reading. `world.exposure` names the measurement source and
-reports no meter reading while holding. The eye adapts across a scene
+**An automatic exposure meters the view's own image.** Each view's composite
+bins every output pixel's luminance, at the view's whole exposure, into a log
+histogram (`SdfExposure.MeterBins` bins over `SdfExposure.MeterStops` stops
+from `SdfExposure.MeterLowestStop` below display white), weighting each pixel
+toward the centre by `render.exposure.center`. The recorder reads the
+histogram back once the frame's slot completes (`SdfSkyRecorder`,
+`SdfViewExposures.Publish`), and `SdfExposure.Meter` averages its bins
+between the `low` and `high` percentiles into a scene luminance, which aims
+the exposure less compensation within the bounds. The exposure holds while
+the reading stays within `render.exposure.band` stops of the one it settled
+on; a reading past the band starts it following the meter, easing over the
+adaptation time until it settles again, so a walk through an evenly lit room
+does not move it and walking into a dark room or out under the sky does. A
+camera cut holds the exposure until a reading rendered after the cut lands,
+then snaps to it. The meter reads what the view shows: dynamic meshes,
+anchored lights, screens, emissive fittings and the sky. Each view meters
+its own image, a window's or a sky layer's view included, and a portal's
+picture enters its viewer's image at the brightness the window shares give
+it, so nested views compose with no special case. The neutral engine default
+averages the whole picture alike with no band (`SdfExposure.Default`); the
+debug world's basis authors its band, percentiles and centre weight.
+
+The readback rather than a GPU-resident exposure was chosen because the
+exposure is read on the host in the same frame by every consumer that divides
+by it (display-referred terms in views and glass, the window shares, the
+curvature strength, the point lights' ranges, `world.exposure`): one value
+owned in C#, a few frames late, against a time constant of most of a second.
+Its cost is that a cut shows the previous exposure for those frames. A
+rejected alternative was keeping the irradiance probes about the camera as the
+meter: they measured light arriving at the camera position, which stepped by
+two stops between neighbouring lattice cells along an evenly lit hall, and
+could not see dynamic meshes or anchored lights. A
+Puck-native option is still open for the owner: exposure authored per place
+or world and blended across seams, so a world's author sets each room's key
+directly instead of a meter inferring it.
+
+The view's camera sample of the volume (`SdfMeshIrradiance.TrySampleCamera`)
+is no meter: it gives the air about the camera its open sky (`airLight`) and
+lights a surface no probe answers. When no visible lattice probe answers, the
+tracer measures radiance at the camera itself, which measures an enclosure
+smaller than a lattice cell without importing light from another room. A
+missing reading holds the previous exposure; the authored EV initializes a
+view before its first reading. `world.exposure` names each view's meter
+reading, its target, whether the band holds or follows, and its camera
+sample's source. The eye adapts across a scene
 where a camera cannot, so an automatic exposure also adapts locally by an
 authored share (`render.exposure.local`): the views stage moves each surface's
 exposure from the view's toward the one its own illumination (the lights'
-diffuse terms and the volume's indirect light, read as a scene of 0.4 albedo)
-would meter, within six stops, so a room beside its sunlit windows reads as a
+diffuse terms and the volume's indirect light, against the image meter's
+reading taken as a scene of 0.4 albedo) would meter, within six stops; the
+reference is the meter's held and eased reading, so it moves only when the
+exposure does. The view meters the adapted image, whose reading follows that
+reference by the local share of its covered weight (the composite sums the
+coverage beside the bins); `SdfExposure.Settled` solves each reading for the
+reference that reads itself, so the band holds as wide as authored instead of
+widening by 1 / (1 − local) and holding wherever the meter arrived from. So a room beside its sunlit windows reads as a
 room and the sunlit ground through the window as ground, while a dark paint
 under the same light stays dark; the composite scales the sky share so the
 sky's brightest texel reaches display white rather than clipping, and a window
@@ -436,7 +474,7 @@ to the exposed colour at the strength of the surface's own exposed
 illumination against the white the meter aims for (`SdfExposure.ReferenceWhite`),
 so a lit room keeps its crisp edges and a dark room's edges stay as dark as its
 walls rather than drawing light lines across them. Exposure is presentation only: it reads presentation time and the
-volume, and nothing in simulation state depends on it.
+rendered image, and nothing in simulation state depends on it.
 
 **A point or spot light ends at a range derived from its intensity.** Its falloff is the windowed inverse square
 `saturate(1 − (d/r)⁴)² / d²`, smooth and exactly zero at the range `r`, the

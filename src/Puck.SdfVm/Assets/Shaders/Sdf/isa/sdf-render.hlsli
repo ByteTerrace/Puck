@@ -60,24 +60,28 @@
 #define SDF_PAINT_WINNING_FRAME        0xFFFFFFFFu
 
 // The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).
-#define SDF_MAX_SCREEN_SURFACES      32u
-#define SDF_MAX_LIGHTS               128u
-#define SDF_MAX_SHADOW_SLOTS         4u
-#define SDF_MAX_DISPATCH_GROUPS      65535u
-#define SDF_SCREEN_EMISSION_EDGE     4u
-#define SDF_LIGHT_MINIMUM_DISTANCE   0.05
-#define SDF_LUMINANCE_CEILING        65000.0
-#define SDF_WINDOW_ADAPTATION        0.75
-#define SDF_LUMINANCE_RED            0.2126
-#define SDF_LUMINANCE_GREEN          0.7152
-#define SDF_LUMINANCE_BLUE           0.0722
-#define SDF_LUMINANCE                float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)
-#define SDF_LOCAL_ADAPTATION_RANGE   6.0
-#define SDF_LOCAL_REFLECTANCE        0.4
-#define SDF_REFERENCE_WHITE          0.26041666
-#define SDF_SKY_PEAK_TARGET          1.0
-#define SDF_MINIMUM_NEAR             0.02
-#define SDF_VOLUME_VECTORS_PER_ENTRY 12u
+#define SDF_MAX_SCREEN_SURFACES          32u
+#define SDF_MAX_LIGHTS                   128u
+#define SDF_MAX_SHADOW_SLOTS             4u
+#define SDF_MAX_DISPATCH_GROUPS          65535u
+#define SDF_SCREEN_EMISSION_EDGE         4u
+#define SDF_LIGHT_MINIMUM_DISTANCE       0.05
+#define SDF_LUMINANCE_CEILING            65000.0
+#define SDF_WINDOW_ADAPTATION            0.75
+#define SDF_LUMINANCE_RED                0.2126
+#define SDF_LUMINANCE_GREEN              0.7152
+#define SDF_LUMINANCE_BLUE               0.0722
+#define SDF_LUMINANCE                    float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)
+#define SDF_LOCAL_ADAPTATION_RANGE       6.0
+#define SDF_LOCAL_REFLECTANCE            0.4
+#define SDF_REFERENCE_WHITE              0.26041666
+#define SDF_SKY_PEAK_TARGET              1.0
+#define SDF_EXPOSURE_METER_BINS          128u
+#define SDF_EXPOSURE_METER_LOWEST_STOP   (-12.0)
+#define SDF_EXPOSURE_METER_BINS_PER_STOP 8.0
+#define SDF_EXPOSURE_METER_PIXEL_WEIGHT  64u
+#define SDF_MINIMUM_NEAR                 0.02
+#define SDF_VOLUME_VECTORS_PER_ENTRY     12u
 
 // Puck.SdfVm.GridOverlayFlags.
 #define SDF_GRID_NONE    0u

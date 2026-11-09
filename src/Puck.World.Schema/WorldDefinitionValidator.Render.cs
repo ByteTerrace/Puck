@@ -412,11 +412,27 @@ public static partial class WorldDefinitionValidator {
         if (exposure.Local is { } local) {
             RequireRange(value: local, min: 0f, max: 1f, name: "render.exposure.local", errors: errors);
         }
+        if (exposure.Band is { } band) {
+            RequireRange(value: band, min: 0f, max: WorldRenderExposure.MaxBand, name: "render.exposure.band", errors: errors);
+        }
+        if (exposure.Low is { } low) {
+            RequireRange(value: low, min: 0f, max: 1f, name: "render.exposure.low", errors: errors);
+        }
+        if (exposure.High is { } high) {
+            RequireRange(value: high, min: 0f, max: 1f, name: "render.exposure.high", errors: errors);
+        }
+        if ((exposure.Low ?? 0f) >= (exposure.High ?? 1f)) {
+            errors.Add(item: $"render.exposure.low {exposure.Low ?? 0f} is not below its high {exposure.High ?? 1f}; the meter averages the pixels between the two percentiles.");
+        }
+        if (exposure.Center is { } center) {
+            RequireRange(value: center, min: 0f, max: 1f, name: "render.exposure.center", errors: errors);
+        }
         if ((exposure.Minimum?.Literal is { } minimum) && (exposure.Maximum?.Literal is { } maximum) && (minimum > maximum)) {
             errors.Add(item: $"render.exposure.minimum {minimum} is above its maximum {maximum}; the darkest exposure an automatic exposure takes is the lower bound.");
         }
-        if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null) || (exposure.Local is not null))) {
-            errors.Add(item: "render.exposure authors automatic bounds, compensation, adaptation or local adaptation with mode Manual, which holds ev100; set mode: Auto or remove them.");
+        if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null) || (exposure.Local is not null)
+            || (exposure.Band is not null) || (exposure.Low is not null) || (exposure.High is not null) || (exposure.Center is not null))) {
+            errors.Add(item: "render.exposure authors automatic bounds, compensation, adaptation, local adaptation or the meter's band, percentiles or centre weight with mode Manual, which holds ev100; set mode: Auto or remove them.");
         }
     }
     // Judges a section after its keys are expanded, as ValidateRenderLighting does.

@@ -10867,13 +10867,29 @@ export type WorldRenderExposure = {
    */
   adaptation?: number | null;
   /**
-   * The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the view's toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.
+   * The share of the local adaptation, in [0, 1]: how far each surface's exposure moves from the view's toward what its own illumination would meter against the view's image meter, within six stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure.
    */
   local?: number | null;
   /**
    * A bindable EV100 that pins the exposure while it is above zero, in [0, 20]: every view then renders manual at that value with no local adaptation, whatever Mode and the bounds say, and zero (the value of an unbound or released hold) leaves the authored exposure exactly as it was. The bounds still size each point and spot light's range, so a hold never changes the lights the volume traces. Absent is no hold.
    */
   hold?: BindableScalar;
+  /**
+   * The automatic exposure's dead band, in stops, in [0, 4]: the exposure holds while the meter reads within this far of the reading it last settled on, and follows the meter once a reading leaves the band. Absent is zero, which follows every change.
+   */
+  band?: number | null;
+  /**
+   * The percentile, in [0, 1), below which the image meter leaves the darkest pixels out. Absent is zero.
+   */
+  low?: number | null;
+  /**
+   * The percentile, above Low and at most one, above which the image meter leaves the brightest pixels out. Absent is one.
+   */
+  high?: number | null;
+  /**
+   * How far the image meter weights the image toward its centre, in [0, 1]: a pixel counts 1 − Center · r², r its distance from the centre over the half diagonal. Absent is zero, every pixel alike.
+   */
+  center?: number | null;
 };
 
 export type WorldRenderFog = {

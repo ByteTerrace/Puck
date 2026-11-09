@@ -187,12 +187,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind CameraTraces = new(name: "sdf.mesh-gi.camera-traces", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Counts relights of a cached camera sample's hits under a changed lighting.</summary>
     public static readonly WorkKind CameraRelights = new(name: "sdf.mesh-gi.camera-relights", unit: "samples", workClass: WorkClass.Pacing);
-    /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
-    public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
+
+    /// <summary>Counts each camera sample asked of the volume (<see cref="TrySampleCamera"/>).</summary>
+    public static readonly WorkKind CameraSamples = new(name: "sdf.mesh-gi.camera-samples", unit: "samples", workClass: WorkClass.Pacing);
+
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
     public static readonly WorkKind GpuMeterNanoseconds = new(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, SkyCaptures, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, SkyCaptures, Behind, CameraTraces, CameraRelights, CameraSamples];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -240,9 +241,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static readonly int DrainWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount - 2));
     private static readonly int BackgroundWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
 
-    /// <summary>The weight every axis of the meter's reading takes besides its facing (<see cref="TryMeter"/>): the
-    /// surround a center-weighted meter still reads.</summary>
-    public const float MeterSurround = 0.05f;
 
     // The least wall time between two scene builds while the bake still lands opaque static meshes, so the trace
     // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
@@ -961,37 +959,32 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Whether cells from low to high fit in a window's middle along one axis.
     private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * MarginOf(dims: dims))));
 
-    /// <summary>Reads the volume as a center-weighted reflected-light meter at a camera: the luminance the probes about
-    /// the camera see along each of their six axes, as last relit, the light the surfaces about it reflect and emit under
-    /// every traced light and the sky through the openings it sees, averaged with each axis weighted by the squared cosine
-    /// of its angle to where the camera looks plus <see cref="MeterSurround"/>, so the axis ahead counts about four fifths
-    /// of the reading. When no visible lattice probe answers, reads a camera sample's hits, traced once per cell and
-    /// geometry and relit when the lighting changes. Reuse within a cell requires visibility from the sample's origin.
-    /// An anchored light and the screens are no part of the reading.</summary>
+    /// <summary>Samples the volume at a camera, as one probe there: the light the probes about the camera see along each
+    /// of their six axes, as last relit, the light the surfaces about it reflect and emit under every traced light and the
+    /// sky through the openings it sees, blended by the camera's place among the visible probes. When no visible lattice
+    /// probe answers, reads a camera sample's hits, traced once per cell and geometry and relit when the lighting changes.
+    /// Reuse within a cell requires visibility from the sample's origin. An anchored light and the screens are no part of
+    /// the sample. The views read it for a surface no probe answers and for the sky the air about the camera sees; the
+    /// exposure meters the view's image, never this sample.</summary>
     /// <param name="position">The camera's position, in world units.</param>
-    /// <param name="forward">The camera's unit forward axis.</param>
-    /// <param name="luminance">The metered average luminance, in nits, when the method returns
-    /// <see langword="true"/>.</param>
     /// <param name="skyVisibility">The share of the sky the probes about the camera see open, alike in every direction,
     /// in [0, 1], when the method returns <see langword="true"/>: one on open ground, whose probes see the sky over the
     /// upper half of their directions, near zero in a closed room.</param>
-    /// <param name="source">Whether the reading came from lattice probes, a camera trace, or neither.</param>
-    /// <param name="fresh">Whether the reading must be the camera's own: at a camera cut, a camera sample is reused only
-    /// from this very position, never from elsewhere in its cell, so the reading depends on where the camera stands and
+    /// <param name="source">Whether the sample came from lattice probes, a camera trace, or neither.</param>
+    /// <param name="fresh">Whether the sample must be the camera's own: at a camera cut, a camera sample is reused only
+    /// from this very position, never from elsewhere in its cell, so the sample depends on where the camera stands and
     /// not on where it stood before.</param>
-    /// <param name="light">Receives, when not empty and the method returns <see langword="true"/>, the light the reading
+    /// <param name="light">Receives, when not empty and the method returns <see langword="true"/>, the light the sample
     /// receives along each of its six axes (+X, -X, +Y, -Y, +Z, -Z), RGB in nits: the radiance and sky-light cubes summed,
-    /// as one probe's indirect light, which the views pass reads for a surface no probe answers. At least six long when
-    /// not empty.</param>
+    /// as one probe's indirect light. At least six long when not empty.</param>
     /// <returns><see langword="false"/> while no scene is available or the camera lies inside opaque geometry.</returns>
-    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility, out SdfExposureMeterSource source, bool fresh = false, Span<Vector3> light = default) {
-        luminance = 0f;
+    public bool TrySampleCamera(Vector3 position, out float skyVisibility, out SdfCameraSampleSource source, bool fresh = false, Span<Vector3> light = default) {
         skyVisibility = 1f;
-        source = SdfExposureMeterSource.None;
-        Counters.Count(kind: Meters);
+        source = SdfCameraSampleSource.None;
+        Counters.Count(kind: CameraSamples);
 
         lock (m_gate) {
-            if (GpuTrace is not null) { return TryGpuMeter(forward: forward, fresh: fresh, light: light, luminance: out luminance, position: position, skyVisibility: out skyVisibility, source: out source); }
+            if (GpuTrace is not null) { return TryGpuCameraSample(position, fresh, light, out skyVisibility, out source); }
             if ((m_lighting is not { } lighting) || !m_windowValid) {
                 return false;
             }
@@ -1047,34 +1040,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     open += (sampleAtCamera.Sky[axis] / 6f);
                 }
                 total = 1f;
-                source = SdfExposureMeterSource.CameraTrace;
+                source = SdfCameraSampleSource.CameraTrace;
             } else {
-                source = SdfExposureMeterSource.Probes;
+                source = SdfCameraSampleSource.Probes;
             }
             for (var axis = 0; (axis < 6); axis++) { axes[axis] /= total; }
-            luminance = MeteredLuminance(forward: forward, light: axes);
             skyVisibility = Math.Clamp(max: 1f, min: 0f, value: ((SdfMeshIrradianceProbe.OpenGroundShare * open) / total));
             if (!light.IsEmpty) { axes.CopyTo(destination: light); }
 
             return true;
         }
-    }
-
-    // The meter's reading from the light a sample receives along its six axes: each axis's luminance weighted by the
-    // squared cosine of its angle to where the camera looks plus MeterSurround. The one reduction of the CPU and the GPU
-    // meter's answers.
-    private static float MeteredLuminance(ReadOnlySpan<Vector3> light, Vector3 forward) {
-        var sum = 0f;
-        var weights = 0f;
-
-        for (var axis = 0; (axis < 6); axis++) {
-            var ahead = MathF.Max(x: 0f, y: Vector3.Dot(vector1: Axes[axis], vector2: forward));
-            var facing = (MeterSurround + (ahead * ahead));
-
-            sum += (SdfPhotometry.LuminanceOf(color: light[axis]) * facing);
-            weights += facing;
-        }
-        return (sum / weights);
     }
     // A camera sample's hits are traced once per cell and geometry, at the camera's own position; its cubes are relit
     // from them when the lighting changes or the volume settles, whose bounce they read. A cell can straddle a partition:

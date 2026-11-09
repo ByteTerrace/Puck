@@ -344,6 +344,10 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
         declarations.Tuning(name: "SDF_REFERENCE_WHITE", value: SdfExposure.ReferenceWhite);
         declarations.Tuning(name: "SDF_SKY_PEAK_TARGET", value: SdfExposure.SkyPeakTarget);
+        declarations.Count(name: "SDF_EXPOSURE_METER_BINS", value: SdfExposure.MeterBins);
+        declarations.Real(name: "SDF_EXPOSURE_METER_LOWEST_STOP", value: SdfExposure.MeterLowestStop);
+        declarations.Real(name: "SDF_EXPOSURE_METER_BINS_PER_STOP", value: SdfExposure.MeterBinsPerStop);
+        declarations.Count(name: "SDF_EXPOSURE_METER_PIXEL_WEIGHT", value: SdfExposure.MeterPixelWeight);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
             value: SdfWorldPackage.MinimumNear

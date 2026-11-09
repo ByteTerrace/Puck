@@ -61,10 +61,9 @@ A. Engine limits on authoring [high], in the plan's
 
    The owner's gallery walkthrough added two remaining engine defects that every
    indoor exhibit shows:
-   - auto-exposure drifts while a player runs through an evenly lit room: the
-     meter reads light at the camera's position (`SdfMeshIrradiance.TryMeter`),
-     re-read at intervals, so walking gallery level 0 stepped it from 402 to
-     110 nits and moved EV100 by about one stop; pinning exposure steadied it;
+   - auto-exposure drifted while a player runs through an evenly lit room; the
+     exposure now meters each view's own image with an authored dead band
+     (`SdfExposure.Meter`, `SdfViewExposures`), awaiting the owner's walk;
    - indoor indirect light draws straight-edged triangular patches on floors and
      box faces, and concave carvings read flat; `world.indirect off` removes the
      patches but floods the roofed hall near-white, which is a defect of its own.
@@ -436,7 +435,7 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - Feel and look sittings: the Moth's walk, run, turn and lean values; the faerie;
   the board room; the lift panel's look and reach boxes; the gallery inspection
   lever's values; first-person feel in the lift and stairwell; the glass
-  exhibit on both backends; how indoor rooms read against daylight once the
+  exhibit on both backends; how indoor rooms read against daylight now that the
   image meter drives exposure ([lighting](#lighting-and-gi)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
@@ -804,7 +803,7 @@ The custom no-GC runtime port stays later work, on the
   field-query item above.
 - The endless fall's first visit: its first frames produce in pieces (the
   window feeds' first binding, `WriteOwedMeshes`, `PackDynamicTransforms`, the
-  exposure meter's camera trace), so trace at a finer interval before naming
+  camera sample's trace), so trace at a finer interval before naming
   one; the frames where the floor and ceiling windows first render at full size
   are slow; and some frames' `Present` blocks with the GPU busy (each painting
   draws the world). Measure GPU time per view (`world.counters gpu`) and render
@@ -1780,10 +1779,6 @@ by `world.view.pick`.
   an 18,000-nit sky moved the wall from mint to a cool sky tint), judged with
   `world.toon` both off and on, since the cel default tints the indirect light
   by its shadow band.
-- [low] `world.indirect off` leaves auto exposure metering the probes (view 0
-  read 15.272 nits before and after the toggle) while the frame turns white at
-  EV 4.5 in the devices room: the lever's fallback ambient lights an interior
-  as if it stood under the open sky, and the meter does not follow it.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
@@ -2206,7 +2201,7 @@ document values bind by copying only the paths to their references
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary (the
 relief-contact highs are [certified field contact](#certified-field-contact)) ·
-Next: the [terrain pass](terrain-pass.md#order-of-work) step 1 (the image meter),
+Next: the [terrain pass](terrain-pass.md#order-of-work) step 1's remaining checks (the image meter has landed),
 with steps 2, 3 and 6 and step 4's bound fix in parallel; step 5 is the
 certified-contact packet and step 8 closes. The measured state is in the
 [plan](valley-and-moons.md#phase-1-the-valley-as-built).
@@ -2217,7 +2212,7 @@ certified-contact packet and step 8 closes. The measured state is in the
 - At `valley-slope` on Vulkan (a fresh World, bakes still pending at the
   capture) the frame is blown out to white around the Moth with every view at
   `meter=none source=held` (EV 11.5 plus 2.5); the Direct3D 12 capture of the
-  same pose read normally. The image meter (terrain pass step 1) owns it;
+  same pose read normally. The image meter has replaced that probe meter; re-check the pose under it, and
   check whether Vulkan only shows it before its bakes settle.
 - A scoped static creation's instance bound is a sphere about the creation's
   origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
@@ -2826,12 +2821,12 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 the [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work
-(the GPU trace/relight, selection, publication and camera meter are implemented):
+(the GPU trace/relight, selection, publication and camera sample are implemented):
 attribute the remaining lockstep relight cost under a moving sun and the outdoor
 CPU-reference discrepancy, then light a cold area from the coarser
-levels or the sky term the moment a view arrives (shading-side); the exposure
-meter is the [terrain pass](terrain-pass.md#exposure-at-its-cause)'s step 1, and
-the coverage, enclosure and wrapped-diffuse findings follow it. The
+levels or the sky term the moment a view arrives (shading-side), which the
+image meter shows as real changes of the picture while a fast walk outruns the
+window; the coverage, enclosure and wrapped-diffuse findings follow. The
 [illumination plan](illumination.md) holds the research round's decisions and
 the order they land in, the graphics architecture plan redesigns its step 3
 and owns the coarse levels' connectivity visibility (G3), and the
@@ -2932,8 +2927,8 @@ the fixed poses and the approaches already rejected.
   value in the relight, then author the switch as a lane.
 - [medium] A camera sample is relit on the frame thread, under the volume's
   gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
-  from `TryMeter`), outside the relight budget: the debug world's forty-odd
-  screen-camera views meter by camera sample, so each lighting capture relights
+  from `TrySampleCamera`), outside the relight budget: the debug world's forty-odd
+  screen-camera views read camera samples, so each lighting capture relights
   them on the frame thread (`camera-relights` counts them). Move them into the
   worker's batches.
 - [medium · duplicate] Each lighting capture renders a 64×64 sky map on the
@@ -2986,14 +2981,14 @@ the fixed poses and the approaches already rejected.
   be a `commands` row or a binding. A rule effect that writes a row's advance
   rate would make it one.
 - The Deck leg of step 0 is unmeasured.
-- [medium] A surface no published probe answers is lit by the exposure meter's
-  camera sample (`sdfMeshAnswers`, [mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)).
+- [medium] A surface no published probe answers is lit by the view's camera
+  sample (`sdfMeshAnswers`, [mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)).
   Re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the
   valley summit on both backends after a `debug.go` cut. Its diffuse light is
   the sample's six-axis RGB light (`meterLight`), read about the normal as a
-  probe's cube; its reflection still takes the open share and the grey metered
+  probe's cube; its reflection still takes the open share and the sample's grey mean
   luminance.
-- [low] The meter's open-sky share (`airLight`) reads about 0.42 on the open
+- [low] The camera sample's open-sky share (`airLight`) reads about 0.42 on the open
   lawn at noon (`world.exposure`, the boot's first views), where the meter's
   `SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE` scaling means it to read one. It
   scales the atmosphere's in-scatter and the camera sample's reflected sky; check the
@@ -3001,9 +2996,8 @@ the fixed poses and the approaches already rejected.
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white
   sun key, hard black shadows with no sky fill, no rim and no aerial haze. A
   lighting-direction pass (sky colour and fill, sun colour and height, shadow
-  softness, haze) with the owner, after exposure meters; the
-  [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the
-  image meter.
+  softness, haze) with the owner, now that the image meters exposure; the
+  [terrain pass](terrain-pass.md) covers materials, haze and far shadows.
 - [medium] After bake-scale, member normals stay unit length while root normals
   receive the inverse scale, so a triangle spanning root and animated-member
   vertices interpolates a lighting that changes with body scale
@@ -3984,9 +3978,9 @@ both runs.
   long-running World: an identical re-run of the same build on the same World
   put many stops past 2 %, and the GI counters differ with World history
   (`sdf.mesh-gi.camera-traces`), so a cross-build comparison through it cannot
-  separate a change from lighting history. A cut now meters fresh at the camera
-  (`TryMeter(fresh:)`), so the cut's exposure no longer depends on history; the
-  probe reading still depends on which cells the trace has cached. The tour
+  separate a change from lighting history. A cut now snaps the exposure to the first image reading rendered after it
+  (`SdfViewExposures`), so the cut's exposure no longer depends on history; the
+  picture itself still depends on which cells the trace has cached. The tour
   reads `world.exposure` at each held tick (`SweepStillResult.Exposure`); the
   paired tour on one `--attach`ed World confirms whether the remaining
   difference is the probe cache's.

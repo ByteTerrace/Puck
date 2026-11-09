@@ -10812,7 +10812,7 @@
               "default": null
             },
             "local": {
-              "description": "The share of the local adaptation, in [0, 1]: how far each surface\u0027s exposure moves from the view\u0027s toward what its own surroundings meter in the irradiance volume, within four stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure and the irradiance volume on.",
+              "description": "The share of the local adaptation, in [0, 1]: how far each surface\u0027s exposure moves from the view\u0027s toward what its own illumination would meter against the view\u0027s image meter, within six stops either way, so a dim ceiling beside a sunlit window lifts and the sunlit ground seen through the window compresses, as the eye adapts across a scene. Zero exposes the whole view alike; absent is zero. Read only with an automatic exposure.",
               "type": [
                 "number",
                 "null"
@@ -10871,6 +10871,38 @@
                   "additionalProperties": false
                 }
               ]
+            },
+            "band": {
+              "description": "The automatic exposure\u0027s dead band, in stops, in [0, 4]: the exposure holds while the meter reads within this far of the reading it last settled on, and follows the meter once a reading leaves the band. Absent is zero, which follows every change.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "low": {
+              "description": "The percentile, in [0, 1), below which the image meter leaves the darkest pixels out. Absent is zero.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "high": {
+              "description": "The percentile, above Low and at most one, above which the image meter leaves the brightest pixels out. Absent is one.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "center": {
+              "description": "How far the image meter weights the image toward its centre, in [0, 1]: a pixel counts 1 \u2212 Center \u00B7 r\u00B2, r its distance from the centre over the half diagonal. Absent is zero, every pixel alike.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             }
           },
           "additionalProperties": false,
