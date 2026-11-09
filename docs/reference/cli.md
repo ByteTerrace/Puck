@@ -2416,8 +2416,10 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   body's pose at its tick, `off course` when the body stood further than
   `tolerance` (0.5 m) from the spawn point named after the exhibit, and the
   mesh audit of its prototype (`puck mesh audit --cpu`, one run per stop, its
-  transcript beside the stills), red for any fold, flipped triangle, open or
-  non-manifold edge or uncovered crossing. `presented` frames take a presented
+  transcript beside the stills), its metrics (`score`, `folds`, `flipped`,
+  `slivers`, `open`, `nonmanifold`, `uncovered`) coloured by the tour's `audit`
+  rules, written as signal rules are; a tour without them audits nothing.
+  `presented` frames take a presented
   burst instead of a settled still. A route stop also reports `host.frames` over
   its timeline, which lockstep and the held captures make no frame-time reading.
 - **Scenarios** run the plan's `scenarios` paths or file patterns (the default

@@ -105,6 +105,14 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
             }
         }
 
+        foreach (var rule in ((plan.Tour.Audit is { } audit) ? audit.RedRules.Concat(second: audit.AmberRules) : [])) {
+            if (!SweepRule.TryParse(rule: out var parsed, text: rule) || !SweepMeshAudit.Metrics.Contains(value: parsed.Metric)) {
+                error = $"the tour's audit rule '{rule}' is not '<metric> <op> <value>' over {string.Join(separator: ", ", values: SweepMeshAudit.Metrics)}";
+
+                return false;
+            }
+        }
+
         names.Clear();
 
         foreach (var stop in plan.Tour.Stops) {
@@ -250,9 +258,23 @@ public sealed record SweepSignal(
 /// <param name="CellWidth">The width a still is scaled to on a contact sheet.</param>
 /// <param name="Stops">The stops, in order.</param>
 /// <param name="Note">The tour's explanatory note.</param>
-public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops, string? Note = null) {
+/// <param name="Audit">The rules a capture's exhibit is judged by over its prototype's mesh audit
+/// (<see cref="SweepMeshAudit.Metrics"/>), or <see langword="null"/> to audit nothing.</param>
+public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops, string? Note = null, SweepAuditRules? Audit = null) {
     /// <summary>A tour with no stops.</summary>
     public static SweepTour Empty { get; } = new(AmberFraction: 0.02, CellWidth: 480, Columns: 4, Frame: [], LevelTolerance: 16, Prelude: [], Reset: [], Settle: 45, Stops: []);
+}
+/// <summary>The rules an exhibit's mesh audit is coloured by, each <c>&lt;metric&gt; &lt;op&gt; &lt;value&gt;</c> over
+/// <see cref="SweepMeshAudit.Metrics"/>.</summary>
+/// <param name="Red">Rules any one of which makes the capture red.</param>
+/// <param name="Amber">Rules any one of which makes the capture amber.</param>
+public sealed record SweepAuditRules(IReadOnlyList<string>? Red = null, IReadOnlyList<string>? Amber = null) {
+    /// <summary>Gets the red rules, empty when the plan names none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> RedRules => (Red ?? []);
+    /// <summary>Gets the amber rules, empty when the plan names none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> AmberRules => (Amber ?? []);
 }
 /// <summary>One stop of the tour: lines that pose the body and camera, then a settled capture.</summary>
 /// <param name="Name">The still's name and file name.</param>

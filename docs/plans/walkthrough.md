@@ -87,7 +87,7 @@ eight-frame presented burst mid-stride.
 
 | Defect | Caught by | How |
 |---|---|---|
-| Sawtooth and slivers on `shape-pipe-subtraction` and `shape-groove-subtraction` | Mechanical | The stop's mesh audit (`puck mesh audit --cpu --prototype …` over the row's prototypes) finds folds and flipped triangles in both prototypes' surfaces, where the smooth blends have none, so both stills are red with the counts beside them. |
+| Sawtooth and slivers on `shape-pipe-subtraction` and `shape-groove-subtraction` | Mechanical | The stop's mesh audit (`puck mesh audit --cpu --prototype …` over the row's prototypes) finds folds and flipped triangles in both prototypes' surfaces, and the tour's audit rules (`worlds/debug/sweep.json`: red for a flipped triangle, an open or non-manifold edge or an uncovered crossing, amber for a fold) turn both stills red with the counts beside them. The same rules turn the xor, subtraction, intersection, groove union and the chamfered subtraction and intersection red too: the audit finds the same defect class there, which the owner's walk did not name. |
 | A plaque whose text overflows its plinth face | A reviewer | The still beside the plaque's authored text: the reviewer reads the rendered lines against the text and names a lost glyph or a line broken inside a word. No mechanical check exists yet (step 6 below). |
 | The floor's triangular light patches | A reviewer | Each still shows the floor in front of the plinth under the walker's view; nothing reads the floor's lighting mechanically (step 6). |
 | A walker off its route | Mechanical | `off course` per still and at the arrival. |

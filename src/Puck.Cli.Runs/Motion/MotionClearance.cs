@@ -9,7 +9,6 @@ using Puck.World;
 using Puck.World.Client;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
-using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Motion;
 
@@ -68,30 +67,12 @@ public sealed class MotionClearance : IMotionClearance {
     public static bool TryCreate(string worldPath, out MotionClearance? clearance, out string error) {
         clearance = null;
 
-        var fullPath = Path.GetFullPath(path: worldPath);
-
-        // A package folder names its entry document in its manifest.
-        if (Directory.Exists(path: fullPath)) {
-            try {
-                using var manifest = System.Text.Json.JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(path1: fullPath, path2: "manifest.json")));
-                var entry = manifest.RootElement.GetProperty(propertyName: "entry").GetString();
-                var candidate = Path.Combine(path1: fullPath, path2: entry!);
-
-                fullPath = (File.Exists(path: candidate) ? candidate : $"{candidate}.puck");
-            } catch (Exception exception) when ((exception is IOException or System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException or ArgumentNullException)) {
-                error = $"the package '{fullPath}' names no entry document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-        }
-
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var reason)) {
-            error = $"'{fullPath}' failed to load: {reason}";
+        if (!CliWorldDocuments.TryLoad(definition: out var definition, fullPath: out var fullPath, path: worldPath, reason: out var reason)) {
+            error = $"'{fullPath}': {reason}";
 
             return false;
         }
 
-        var definition = admission!.Definition;
         var usable = WorldPlacementStamper.Queryable(definition: definition, placements: definition.Placements);
 
         var all = new SdfProgramBuilder();

@@ -85,10 +85,10 @@ public sealed record SweepSignalResult(string Name, string Leg, string Line, str
 /// <param name="Exhibit">The exhibit a capture inside a stop's timeline frames, or <see langword="null"/> for a stop's own still.</param>
 /// <param name="Text">The text the exhibit's creation carries as authored (a plinth's label and plaque): what the
 /// still should show and what to look for, for a reviewer to set beside the pixels.</param>
-/// <param name="Audit">The mesh audit's reading of the exhibit's prototype: its score and topology defects.</param>
+/// <param name="Audit">The mesh audit's metrics for the exhibit's prototype (<see cref="SweepMeshAudit.Metrics"/>).</param>
 /// <param name="Frames">The <c>host.frames</c> reading over a route stop's timeline, reported and never judged: lockstep
 /// and settled captures hold frames, so it is no frame-time measurement.</param>
-public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction, string? Motion = null, string? Exposure = null, string? Exhibit = null, IReadOnlyList<string>? Text = null, string? Audit = null, IReadOnlyDictionary<string, string>? Frames = null);
+public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction, string? Motion = null, string? Exposure = null, string? Exhibit = null, IReadOnlyList<string>? Text = null, IReadOnlyDictionary<string, string>? Audit = null,IReadOnlyDictionary<string, string>? Frames = null);
 /// <summary>The tour's stills and sheets.</summary>
 /// <param name="LevelTolerance">The channel difference beyond which a pixel counts as changed.</param>
 /// <param name="AmberFraction">The changed fraction beyond which a still is amber.</param>

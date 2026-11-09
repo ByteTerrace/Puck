@@ -215,7 +215,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
             if (!pinned) {
                 status = SweepStatus.Red;
-            } else if (((ulong)(played!.Settle ?? tour.Settle) > (2UL * ArrivalMargin)) &&!WaitNear(reasons: reasons, tick: (captureTick - ArrivalMargin))) {
+            } else if (((ulong)(played!.Settle ?? tour.Settle) > (2UL * ArrivalMargin)) && !WaitNear(reasons: reasons, tick: (captureTick - ArrivalMargin))) {
                 status = SweepStatus.Red;
             }
 
@@ -421,8 +421,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         var spawns = world.Run(script: "world.row spawnPoints").Output;
         var exhibits = captures.Select(selector: entry => ((entry.Capture.Exhibit is { } id) ? SweepExhibit.Read(exhibit: id, spawns: spawns, world: world) : null)).ToArray();
-        var audit = ((Routes is null)
-            ? new Dictionary<string, SweepAuditFinding>(comparer: StringComparer.Ordinal)
+        var audit = (((Routes is null) || (tour.Audit is null))
+            ? new Dictionary<string, IReadOnlyDictionary<string, string>>(comparer: StringComparer.Ordinal)
             : SweepMeshAudit.Run(
                 budget: Routes.Budget,
                 prototypes: exhibits.Select(selector: static exhibit => exhibit?.Prototype).OfType<string>().Distinct(comparer: StringComparer.Ordinal).ToArray(),
@@ -441,7 +441,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var shot = Ran(command: line, log: log, tick: (start + (ulong)capture.At));
             string? relative = null;
             double? changed = null;
-            string? summary = null;
+            IReadOnlyDictionary<string, string>? metrics = null;
 
             if (File.Exists(path: file)) {
                 relative = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
@@ -476,23 +476,21 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                     status = SweepStatus.Red;
                 }
             }
-            if ((exhibit?.Prototype is { } prototype) && audit.TryGetValue(key: prototype, value: out var finding)) {
-                if (!finding.Measured) {
-                    reasons.Add(item: $"the mesh audit reported no surface for {prototype}");
+            if ((tour.Audit is { } rules) && (exhibit?.Prototype is { } prototype)) {
+                if (!audit.TryGetValue(key: prototype, value: out metrics)) {
+                    reasons.Add(item: $"unmeasured: the mesh audit reported no surface for {prototype}");
                     status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
                 } else {
-                    summary = string.Create(provider: CultureInfo.InvariantCulture, handler: $"score {finding.Score:0.0}{((finding.Defects.Count == 0) ? string.Empty : $"; {string.Join(separator: ", ", values: finding.Defects)}")}");
+                    var judged = new List<string>();
 
-                    if (finding.Defects.Count > 0) {
-                        reasons.Add(item: $"mesh audit: {string.Join(separator: ", ", values: finding.Defects)}");
-                        status = SweepStatus.Red;
-                    }
+                    status = SweepEvidence.Judge(amber: rules.AmberRules, metrics: metrics, reasons: judged, red: rules.RedRules, status: status);
+                    reasons.AddRange(collection: judged.Select(selector: static reason => $"mesh audit {reason}"));
                 }
             }
 
             progress.WriteLine(value: $"sweep: still {name} {status}");
             results.Add(item: new SweepStillResult(
-                Audit: summary,
+                Audit: metrics,
                 Capture: (shot ?? string.Empty).Trim(),
                 ChangedFraction: changed,
                 Exhibit: capture.Exhibit,

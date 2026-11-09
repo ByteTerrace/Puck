@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-using Puck.Abstractions;
 using Puck.Cli.Motion;
 using Puck.World.Transpiler.Composition;
 
@@ -207,100 +206,9 @@ public sealed record SweepExhibit(string Exhibit, string? Prototype, IReadOnlyLi
         return new SweepExhibit(Exhibit: exhibit, Prototype: prototype, Spawn: spawn, Text: text);
     }
 }
-/// <summary>The mesh audit's verdict on the prototypes a route's captures name (<c>puck mesh audit --cpu</c>): each
-/// prototype's surface groups, their score and their topology defects, read from the audit's own report.</summary>
-public static partial class SweepMeshAudit {
-    /// <summary>Audits prototypes in one run of this CLI's <c>puck mesh audit --cpu</c>, which bakes each group offline
-    /// through the bake's own lattices and measures the mesh against its field.</summary>
-    /// <param name="world">The world document or package.</param>
-    /// <param name="prototypes">The prototypes.</param>
-    /// <param name="repositoryRoot">The working directory.</param>
-    /// <param name="budget">The sweep's budget, which bounds the run.</param>
-    /// <param name="transcript">The file the audit's whole output is written to.</param>
-    /// <returns>Each prototype's findings, worst defect first; a prototype the audit printed nothing for maps to a
-    /// reason it was not measured.</returns>
-    public static IReadOnlyDictionary<string, SweepAuditFinding> Run(string world, IReadOnlyCollection<string> prototypes, string repositoryRoot, SuiteBudget budget, string transcript) {
-        var findings = new Dictionary<string, SweepAuditFinding>(comparer: StringComparer.Ordinal);
-
-        if (prototypes.Count == 0) {
-            return findings;
-        }
-
-        string[] arguments = [SweepCommand.CliEntry, "mesh", "audit", "--world", PuckPaths.Normalize(path: world), "--cpu", "--top", "1", "--worst", "0", "--prototype", .. prototypes];
-        string output;
-
-        try {
-            var run = CliProcess.RunCaptured(
-                arguments: arguments,
-                cancellationToken: budget.Token,
-                fileName: "dotnet",
-                input: string.Empty,
-                started: static process => ChildProcessJob.Assign(process: process),
-                timeout: Timeout.InfiniteTimeSpan,
-                workingDirectory: repositoryRoot
-            );
-
-            output = (run.Stdout + run.Stderr);
-        } catch (Exception exception) when ((exception is OperationCanceledException or InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            output = $"puck mesh audit did not run: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-        }
-
-        File.WriteAllText(contents: output, path: transcript);
-
-        string? current = null;
-        var scores = new Dictionary<string, double>(comparer: StringComparer.Ordinal);
-        var defects = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
-
-        foreach (var line in output.Split(separator: '\n')) {
-            if (GroupPattern().Match(input: line) is { Success: true } group) {
-                current = group.Groups["prototype"].Value;
-                scores[current] = Math.Max(val1: scores.GetValueOrDefault(key: current), val2: double.Parse(provider: CultureInfo.InvariantCulture, s: group.Groups["score"].Value));
-                _ = defects.TryAdd(key: current, value: []);
-
-                continue;
-            }
-            if ((current is not null) && TopologyPattern().Match(input: line) is { Success: true } topology) {
-                foreach (var name in new[] { "folds", "flipped", "open", "nonmanifold", "uncovered" }) {
-                    var count = int.Parse(provider: CultureInfo.InvariantCulture, s: topology.Groups[name].Value);
-
-                    if (count > 0) {
-                        defects[current].Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{count} {Spelling(name: name)}"));
-                    }
-                }
-                current = null;
-            }
-        }
-
-        foreach (var prototype in prototypes) {
-            findings[prototype] = (scores.TryGetValue(key: prototype, value: out var score)
-                ? new SweepAuditFinding(Defects: defects[prototype], Measured: true, Score: score)
-                : new SweepAuditFinding(Defects: [], Measured: false, Score: null));
-        }
-
-        return findings;
-    }
-
-    private static string Spelling(string name) => name switch {
-        "open" => "open edges",
-        "nonmanifold" => "non-manifold edges",
-        "uncovered" => "uncovered crossings",
-        _ => name,
-    };
-
-    [GeneratedRegex(pattern: @"^group \d+ instance \S+ .+? \((?<prototype>[^)]+)\): \d+ triangles, .*score (?<score>\d+(?:\.\d+)?)", options: RegexOptions.CultureInvariant)]
-    private static partial Regex GroupPattern();
-    [GeneratedRegex(pattern: @"topology: (?<folds>\d+) folds, (?<flipped>\d+) flipped, \d+ slivers, (?<open>\d+) open edges, (?<nonmanifold>\d+) non-manifold edges; surface: \d+ crossings, (?<uncovered>\d+) uncovered", options: RegexOptions.CultureInvariant)]
-    private static partial Regex TopologyPattern();
-}
 /// <summary>What a tour needs to play route stops beyond its World: where routes and the world resolve, and the
 /// sweep's budget for the mesh audit it runs on what the captures frame.</summary>
 /// <param name="Budget">The sweep's budget.</param>
 /// <param name="RepositoryRoot">The repository root, which a route's source is relative to.</param>
 /// <param name="World">The world document or package the World booted, which the mesh audit reads.</param>
 public sealed record SweepRouteContext(SuiteBudget Budget, string RepositoryRoot, string World);
-/// <summary>One prototype's mesh audit.</summary>
-/// <param name="Measured">Whether the audit reported a surface group for it.</param>
-/// <param name="Score">The worst group's score, or <see langword="null"/> when unmeasured.</param>
-/// <param name="Defects">The topology defects its groups carry: folds, flipped triangles, open and non-manifold edges,
-/// uncovered crossings; empty when it has none.</param>
-public sealed record SweepAuditFinding(bool Measured, double? Score, IReadOnlyList<string> Defects);

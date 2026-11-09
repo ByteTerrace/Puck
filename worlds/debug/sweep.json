@@ -88,6 +88,10 @@
     "amberFraction": 0.02,
     "columns": 4,
     "cellWidth": 480,
+    "audit": {
+      "red": ["flipped > 0", "open > 0", "nonmanifold > 0", "uncovered > 0"],
+      "amber": ["folds > 0"]
+    },
     "stops": [
       { "name": "finding-wall-slivers", "group": "findings", "note": "White slivers along the Moth's wall-side silhouette (walkthrough: indirect light).", "lines": ["body.pose 10.67 2.32 39.33 156 0 0"] },
       { "name": "finding-wall-slivers-indirect", "group": "findings", "note": "The same pose in the indirect view.", "lines": ["body.pose 10.67 2.32 39.33 156 0 0", "world.debug-view indirect"] },
