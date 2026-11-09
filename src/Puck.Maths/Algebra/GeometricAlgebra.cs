@@ -489,7 +489,7 @@ public readonly struct GeometricAlgebra : IEquatable<GeometricAlgebra> {
         hash.Add(value: ((uint)NegativeCount));
         hash.Add(value: ((uint)DegenerateCount));
 
-        return unchecked((int)(hash.Value ^ (hash.Value >> 32)));
+        return unchecked((int)PackedIntPair.FoldXor(value: hash.Value));
     }
     /// <summary>Projects a multivector onto a single grade, zeroing every blade of a different grade.</summary>
     /// <param name="value">The multivector to project.</param>
@@ -723,6 +723,6 @@ public struct Multivector : IEquatable<Multivector> {
             hash.Add(value: this[i].Value);
         }
 
-        return unchecked((int)(hash.Value ^ (hash.Value >> 32)));
+        return unchecked((int)PackedIntPair.FoldXor(value: hash.Value));
     }
 }

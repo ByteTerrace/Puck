@@ -13,7 +13,6 @@ namespace Puck.World.Authoring;
 /// simulation state).
 /// </summary>
 public static class CreationStampSampling {
-    private static uint FoldSeed(uint seed, ulong worldSeed) => unchecked((uint)(seed ^ ((uint)worldSeed) ^ ((uint)(worldSeed >> 32))));
     private static FixedQ4816 GridHalfExtent(FixedQ4816 cellSize, int count) => ((cellSize * FixedQ4816.FromInteger(value: count)) / FixedQ4816.FromInteger(value: 2));
 
     /// <summary>The worst-case, seed-independent cell count a Noise region could ever admit — width x depth, the
@@ -30,8 +29,8 @@ public static class CreationStampSampling {
         val2: 0
     ));
     /// <summary>Resolves a Noise region's admitted-cell local offsets (Y = 0), centered on the placement origin —
-    /// fixed-point hash-lattice fBm over the cell index, threshold-admitted, the placement twin of
-    /// <c>FieldLattice.ApplyNoiseFill</c>. One instance per admitted cell, at the cell's center.</summary>
+    /// fixed-point hash-lattice fBm (<see cref="Pcg3dLatticeNoise.Fbm01"/>) over the cell index, threshold-admitted, the
+    /// placement twin of <c>FieldLattice.ApplyNoiseFill</c>. One instance per admitted cell, at the cell's center.</summary>
     /// <param name="cellSize">The local grid's cubic cell edge, world units.</param>
     /// <param name="width">Cells along the placement's local +X.</param>
     /// <param name="depth">Cells along the placement's local +Z.</param>
@@ -53,10 +52,7 @@ public static class CreationStampSampling {
             val1: 1,
             val2: octaves
         );
-        var hashSeed = FoldSeed(
-            seed: seed,
-            worldSeed: worldSeed
-        );
+        var hashSeed = (seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var half = (cellSize / FixedQ4816.FromInteger(value: 2));
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
@@ -70,32 +66,13 @@ public static class CreationStampSampling {
 
         for (var z = 0; (z < effectiveDepth); z++) {
             for (var x = 0; (x < effectiveWidth); x++) {
-                // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream —
-                // the SAME construction FieldLattice.ApplyNoiseFill sums.
-                var amplitude = FixedQ4816.One;
-                var total = FixedQ4816.Zero;
-                var weight = FixedQ4816.Zero;
-                var cells = frequency;
-
-                for (var octave = 0; (octave < effectiveOctaves); octave++) {
-                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
-                        cellX: x,
-                        cellZ: z,
-                        noiseCells: Math.Max(
-                            val1: 1,
-                            val2: cells
-                        ),
-                        seed: unchecked((hashSeed + (((uint)octave) * 0x9E3779B9u)))
-                    ));
-                    weight += amplitude;
-                    amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
-                    cells = Math.Max(
-                        val1: 1,
-                        val2: (cells >> 1)
-                    );
-                }
-
-                var n = (total / weight);
+                var n = Pcg3dLatticeNoise.Fbm01(
+                    cellX: x,
+                    cellZ: z,
+                    frequency: frequency,
+                    octaves: effectiveOctaves,
+                    seed: hashSeed
+                );
 
                 if (n < threshold) {
                     continue;
@@ -141,10 +118,7 @@ public static class CreationStampSampling {
         );
         var blocksX = ((effectiveWidth + (effectiveSpacing - 1)) / effectiveSpacing);
         var blocksZ = ((effectiveDepth + (effectiveSpacing - 1)) / effectiveSpacing);
-        var hashSeed = FoldSeed(
-            seed: seed,
-            worldSeed: worldSeed
-        );
+        var hashSeed = (seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
             count: effectiveWidth

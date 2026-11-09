@@ -92,7 +92,7 @@ public struct Pcg32XshRr : IDrawGenerator {
         var highWord = stateBits0To13 | (stateBits14To17 << 14) | (stateBits18To26 << 18) | (((uint)rotation) << 27);
         var lowWord = stateLow27 | (stateBits27To31 << 27);
 
-        return (((ulong)highWord) << 32) | lowWord;
+        return PackedIntPair.Pack(high: highWord, low: lowWord);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private uint Sample(uint exclusiveHigh) =>

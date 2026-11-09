@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick;
 
@@ -902,7 +903,7 @@ public sealed partial class Arm7Tdmi {
             var product = (((long)((int)cpu.m_gpr[rm])) * ((int)multiplier));
 
             if (accumulate) {
-                product += ((long)((((ulong)cpu.m_gpr[rdHigh]) << 32) | cpu.m_gpr[rdLow]));
+                product += ((long)PackedIntPair.Pack(high: cpu.m_gpr[rdHigh], low: cpu.m_gpr[rdLow]));
             }
 
             result = ((ulong)product);
@@ -910,12 +911,12 @@ public sealed partial class Arm7Tdmi {
             result = (((ulong)cpu.m_gpr[rm]) * multiplier);
 
             if (accumulate) {
-                result += (((ulong)cpu.m_gpr[rdHigh]) << 32) | cpu.m_gpr[rdLow];
+                result += PackedIntPair.Pack(high: cpu.m_gpr[rdHigh], low: cpu.m_gpr[rdLow]);
             }
         }
 
-        cpu.m_gpr[rdLow] = ((uint)result);
-        cpu.m_gpr[rdHigh] = ((uint)(result >> 32));
+        cpu.m_gpr[rdLow] = PackedIntPair.Low(value: result);
+        cpu.m_gpr[rdHigh] = PackedIntPair.High(value: result);
 
         if (setFlags) {
             cpu.m_cpsr = (cpu.m_cpsr & ~(FlagN | FlagZ))

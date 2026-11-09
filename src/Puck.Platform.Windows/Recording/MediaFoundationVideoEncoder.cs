@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Recording;
+using Puck.Maths;
 using static Puck.Platform.Windows.Recording.MfEncoder;
 
 namespace Puck.Platform.Windows.Recording;
@@ -256,23 +257,23 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         ));
         Check(hr: outputType.SetUINT64(
             guidKey: ref frameSizeKey,
-            unValue: PackU32Pair(
+            unValue: PackedIntPair.Pack(
                 high: ((uint)width),
                 low: ((uint)height)
             )
         ));
         Check(hr: outputType.SetUINT64(
             guidKey: ref frameRateKey,
-            unValue: PackU32Pair(
+            unValue: PackedIntPair.Pack(
                 high: ((uint)frameRate),
-                low: 1
+                low: 1U
             )
         ));
         Check(hr: outputType.SetUINT64(
             guidKey: ref parKey,
-            unValue: PackU32Pair(
-                high: 1,
-                low: 1
+            unValue: PackedIntPair.Pack(
+                high: 1U,
+                low: 1U
             )
         ));
         Check(hr: outputType.SetUINT32(
@@ -318,23 +319,23 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         ));
         Check(hr: inputType.SetUINT64(
             guidKey: ref frameSizeKey,
-            unValue: PackU32Pair(
+            unValue: PackedIntPair.Pack(
                 high: ((uint)width),
                 low: ((uint)height)
             )
         ));
         Check(hr: inputType.SetUINT64(
             guidKey: ref frameRateKey,
-            unValue: PackU32Pair(
+            unValue: PackedIntPair.Pack(
                 high: ((uint)frameRate),
-                low: 1
+                low: 1U
             )
         ));
         Check(hr: inputType.SetUINT64(
             guidKey: ref parKey,
-            unValue: PackU32Pair(
-                high: 1,
-                low: 1
+            unValue: PackedIntPair.Pack(
+                high: 1U,
+                low: 1U
             )
         ));
         Check(hr: inputType.SetUINT32(
@@ -673,5 +674,4 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
         return sample;
     }
-    private static ulong PackU32Pair(uint high, uint low) => (((ulong)high) << 32) | low;
 }
