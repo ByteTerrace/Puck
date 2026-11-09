@@ -2037,11 +2037,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             Relight(feedback: feedback, hits: probe.HitWords, layout: layout, lighting: lighting, lights: lights.Lights(index: index), local: lights.Local(index: index),
                 lows: lows, origin: origin, radiance: lights.Radiance(index: index), reuseLocal: reuseLocal, scene: scene, sky: lights.SkyLight(index: index));
-            // A probe that moved past the convergence bound keeps the bounce iteration going (Work, Drain).
-            probe = (probe with { Moved = (candidate.Trace || (previous.Shading is null) || !Settled(after: lights.Radiance(index: index), before: previous.Radiance)) });
+            probe = (probe with { Moved = Moves(trace: candidate.Trace, previous: previous, radiance: lights.Radiance(index: index), sky: lights.SkyLight(index: index)) });
         }
         return probe;
     }
+    // Whether a relight keeps the bounce iteration going (Work, Drain): a fresh trace, a probe with no earlier relight, or
+    // a change past the convergence bound in either cube a later relight reads about its hits (Incoming: the radiance and
+    // the sky light). Convergence is a fixed point of everything a relight reads, so a sweep that changes a sky-light
+    // cube alone (an open probe under a new sky, whose radiance has no hit to move) still owes the sweep in which the
+    // probes that gather it relight. The one rule for the CPU and the GPU relight.
+    private static bool Moves(bool trace, ProbeData? previous, ReadOnlySpan<Vector3> radiance, ReadOnlySpan<Vector3> sky) =>
+        (trace || (previous is not { Shading: not null } before) || !Settled(after: radiance, before: before.Radiance) || !Settled(after: sky, before: before.SkyLight));
     // Whether a relight left a cube within ConvergedShare of the one before it in every colour channel of every axis, or
     // within ConvergedFloor nits where a channel is dark: a change of colour at one luminance still moves it.
     private static bool Settled(ReadOnlySpan<Vector3> after, ReadOnlySpan<Vector3> before) {
