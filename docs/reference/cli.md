@@ -1018,8 +1018,8 @@ canary step echoes each canary's `PASS`/`FAIL` verdict as it lands, and a wait f
 host capacity names what holds it back: the process holding the GPU, named again
 when it changes, or the CPU and memory reading.
 
-Run from a CLI copy outside the checkout, because the build rewrites
-`src/Puck.Cli/bin/Release/net11.0`. GPU work runs serially on a machine with no
+Run from a CLI copy outside the checkout, because the build rewrites the
+CLI project's own Release output. GPU work runs serially on a machine with no
 competing GPU work.
 
 Exit codes: 0 every step passed, 1 a step failed, 2 refused (invalid record,

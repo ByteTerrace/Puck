@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using Puck.Maths;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
@@ -428,7 +429,7 @@ public sealed class BrowserSession {
     }
     private Dictionary<long, CellValue> Snapshot() {
         var layout = m_arena.Layout;
-        var snapshot = new Dictionary<long, CellValue>();
+        var snapshot = new Dictionary<long, CellValue>(comparer: PackedIntPairComparer.Instance);
 
         for (var ordinal = 0; (ordinal < layout.RowCount); ordinal++) {
             if (layout[ordinal].HostOwned) {

@@ -26,8 +26,8 @@ orders, verifying a change by building and running it, and fixing a defect at it
   the BCL call it rests on, and the shared home first (`Puck.Maths` for numerics, hashing and
   comparers). The bake-collapse lane searched for "divisor", found none, and wrote a private
   reciprocal divisor that `PrimeExtensions` already carried privately under another name; a search
-  for `ulong.MaxValue /` or `Math.BigMul` finds both. A general technique you do write goes in its
-  shared home, public, not `private` beside your caller.
+  for `ulong.MaxValue /` or `Math.BigMul` now finds their shared `ReciprocalDivisor32`. A general technique
+  you do write goes in its shared home, public, not `private` beside your caller.
 
 ## Build and run
 

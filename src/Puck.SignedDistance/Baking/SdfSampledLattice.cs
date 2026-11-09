@@ -1,4 +1,5 @@
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -282,17 +283,19 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly int* m_materials;
     private readonly int m_count;
 
-    private ReadOnlySpan<float> Values => new(pointer: m_values, length: m_count);
-    private ReadOnlySpan<int> Materials => new(pointer: m_materials, length: m_count);
+    private ReadOnlySpan<int> Materials => new(length: m_count, pointer: m_materials);
+    private ReadOnlySpan<float> Values => new(length: m_count, pointer: m_values);
 
     private readonly OwnedBuffer<Vector3> m_gradients;
 
     private int m_factor = 1;
     // Division by the fine lattice's row length, its rows per slab and m_factor (FineCoordinates, FineCell), set with
     // m_factor: the fine-sample scans divide every key they read.
-    private FineDivisor m_byFineRow;
-    private FineDivisor m_byFineColumn;
-    private FineDivisor m_byFactor;
+    private ReciprocalDivisor32 m_byFineRow;
+    private ReciprocalDivisor32 m_byFineColumn;
+    private ReciprocalDivisor32 m_byFactor;
+    private int m_fineRowLength;
+    private int m_fineColumnLength;
 
     private readonly OwnedBuffer<bool> m_measured;
     // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
@@ -319,9 +322,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
-
     // Each searched crossing edge's root, in m_crossingKeys' order, and each such edge's index there by its CrossingKey.
     private CrossingRoot[] m_crossingRoots = [];
+
     private readonly Dictionary<long, int> m_crossingRootIndex = [];
     private readonly OwnedBuffer<long> m_pendingCrossings;
 
@@ -907,7 +910,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var block = ((side * side) * side);
 
             m_cellBlocks.Resize(length: measured.Length, clear: false, preserve: false);
-            m_blockSlots.Resize(length: checked(measuredCount * block), clear: false, preserve: false);
+            m_blockSlots.Resize(clear: false, length: checked((measuredCount * block)), preserve: false);
 
             var cellSpan = m_cellBlocks.GetSpan();
             var slotSpan = m_blockSlots.GetSpan();
@@ -947,18 +950,22 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     }
                 }
             }
-            m_fineKeys.Resize(length: samples, clear: false, preserve: false);
+            m_fineKeys.Resize(clear: false, length: samples, preserve: false);
             var keys = m_fineKeys.GetSpan();
-            for (var z = 0; z < cellsZ; z++) {
-                for (var y = 0; y < cellsY; y++) {
-                    for (var x = 0; x < cellsX; x++) {
+
+            for (var z = 0; (z < cellsZ); z++) {
+                for (var y = 0; (y < cellsY); y++) {
+                    for (var x = 0; (x < cellsX); x++) {
                         var cellBlock = cellSpan[CellIndex(x: x, y: y, z: z)];
+
                         if (cellBlock < 0) { continue; }
-                        var at = cellBlock * block;
-                        for (var lz = 0; lz < side; lz++) {
-                            for (var ly = 0; ly < side; ly++) {
-                                for (var lx = 0; lx < side; lx++, at++) {
+                        var at = (cellBlock * block);
+
+                        for (var lz = 0; (lz < side); lz++) {
+                            for (var ly = 0; (ly < side); ly++) {
+                                for (var lx = 0; (lx < side); lx++, at++) {
                                     var slot = slotSpan[at];
+
                                     if (slot < 0) { continue; }
                                     keys[slot] = (((x * split) + lx) + (fineX * (((y * split) + ly) + (fineY * ((z * split) + lz)))));
                                 }
@@ -974,6 +981,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         int EarlierHolder(Span<int> cellSpan, Span<int> slotSpan, int split, int x, int y, int z, int lx, int ly, int lz) {
             var side = (split + 1);
             var block = ((side * side) * side);
+
             var (lowX, highX) = ((((lx == 0) && (x > 0)) ? -1 : 0), (((lx == split) && ((x + 1) < cellsX)) ? 1 : 0));
             var (lowY, highY) = ((((ly == 0) && (y > 0)) ? -1 : 0), (((ly == split) && ((y + 1) < cellsY)) ? 1 : 0));
             var (lowZ, highZ) = ((((lz == 0) && (z > 0)) ? -1 : 0), (((lz == split) && ((z + 1) < cellsZ)) ? 1 : 0));
@@ -1003,10 +1011,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
         var fineSamples = m_fineKeys.Length;
+
         m_fineValues.Resize(fineSamples);
         m_fineMaterials.Resize(fineSamples);
 
-        m_points.Resize(length: fineSamples, clear: false, preserve: false);
+        m_points.Resize(clear: false, length: fineSamples, preserve: false);
 
         var points = m_points.GetSpan();
         var fine = ContourCell;
@@ -1019,7 +1028,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return m_points.Memory;
     }
-
     /// <summary>Returns the most fine samples <see cref="Refine"/> measures in a lattice: every cell split
     /// <paramref name="factor"/> times along each axis, less its coarse corners, at most <see cref="MaxFineSamples"/>; zero
     /// for a factor that refines nothing.</summary>
@@ -1032,11 +1040,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         if (factor < 2) { return 0; }
 
         var cells = ((((long)Math.Max(val1: 1, val2: (samplesX - 1))) * Math.Max(val1: 1, val2: (samplesY - 1))) * Math.Max(val1: 1, val2: (samplesZ - 1)));
-        var perCell = ((((long)factor + 1) * (factor + 1)) * (factor + 1)) - 8;
+        var perCell = ((((((long)factor) + 1) * (factor + 1)) * (factor + 1)) - 8);
 
         return ((int)Math.Min(val1: MaxFineSamples, val2: (cells * perCell)));
     }
-
     /// <summary>Returns, per sample of a lattice, whether it is one of a pair along an axis that a sheet or gap thinner
     /// than the spacing passes between: the four samples along the line are of one sign, the field falls toward the pair
     /// from both sides and the falls, extended, meet strictly below the surface between them, as a sheet's do by half
@@ -1365,7 +1372,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         Array.Resize(array: ref m_pendingRoots, newSize: kept);
 
         // Two trials a root, the root's first then its second.
-        m_points.Resize(length: (2 * kept), clear: false, preserve: false);
+        m_points.Resize(clear: false, length: (2 * kept), preserve: false);
 
         var points = m_points.GetSpan();
 
@@ -1758,7 +1765,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     for (var du = -1; (du <= 0); du++) {
                         for (var dv = -1; (dv <= 0); dv++) {
                             // The sample's neighbours on the face: a step up the axis where the face starts at the sample.
-                            if (((differs & (1 << ((2 * u) + du + 1))) == 0) || ((differs & (1 << ((2 * v) + dv + 1))) == 0)) { continue; }
+                            if (((differs & (1 << (((2 * u) + du) + 1))) == 0) || ((differs & (1 << (((2 * v) + dv) + 1))) == 0)) { continue; }
                             corner[0] = x;
                             corner[1] = y;
                             corner[2] = z;
@@ -1924,11 +1931,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // The four signs on an X face, in the low-X bits of a corner mask. Adjacent fine cells in a row share
         // this exact face. Signs are fixed after CloseSheets, and the row keeps the face only until its next cell.
         int Face(int x, int y, int z, int stride) {
-            var key = x + (fineX * (y + (fineY * z)));
-            var dy = fineX * stride;
-            var dz = fineX * fineY * stride;
-            return (FineInside(key) ? 1 : 0) | (FineInside(key + dy) ? 4 : 0) |
-                (FineInside(key + dz) ? 16 : 0) | (FineInside(key + dy + dz) ? 64 : 0);
+            var key = (x + (fineX * (y + (fineY * z))));
+            var dy = (fineX * stride);
+            var dz = ((fineX * fineY) * stride);
+
+            return (FineInside(key: key) ? 1 : 0) | (FineInside(key: (key + dy)) ? 4 : 0) |
+                (FineInside(key: (key + dz)) ? 16 : 0) | (FineInside(key: ((key + dy) + dz)) ? 64 : 0);
         }
         // Adds a cell's sign-changing edges in the original cell/axis/corner order.
         void AddCell(int x, int y, int z, int stride, int mask) {
@@ -1963,23 +1971,26 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             for (var y = 0; (y < cellsY); y++) {
                 for (var x = 0; (x < cellsX); x++) {
                     if (!((factor > 1) && m_refined[(x + (cellsX * (y + (cellsY * z))))])) {
-                        var mask = Face(x * factor, y * factor, z * factor, factor) |
-                            (Face((x + 1) * factor, y * factor, z * factor, factor) << 1);
-                        AddCell(stride: factor, x: (x * factor), y: (y * factor), z: (z * factor), mask: mask);
+                        var mask = Face(stride: factor, x: (x * factor), y: (y * factor), z: (z * factor)) |
+                            (Face(stride: factor, x: ((x + 1) * factor), y: (y * factor), z: (z * factor)) << 1);
+
+                        AddCell(mask: mask, stride: factor, x: (x * factor), y: (y * factor), z: (z * factor));
 
                         continue;
                     }
 
                     for (var fz = (z * factor); (fz < ((z + 1) * factor)); fz++) {
                         for (var fy = (y * factor); (fy < ((y + 1) * factor)); fy++) {
-                            var left = Face(x * factor, fy, fz, 1);
-                            for (var fx = (x * factor); (fx < ((x + 1) * factor)); fx++) {
-                                var right = Face(fx + 1, fy, fz, 1);
-                                var mask = left | (right << 1);
-                                left = right;
-                                AddCell(stride: 1, x: fx, y: fy, z: fz, mask: mask);
+                            var left = Face(stride: 1, x: (x * factor), y: fy, z: fz);
 
-                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: (byte)mask)); }
+                            for (var fx = (x * factor); (fx < ((x + 1) * factor)); fx++) {
+                                var right = Face(stride: 1, x: (fx + 1), y: fy, z: fz);
+                                var mask = left | (right << 1);
+
+                                left = right;
+                                AddCell(mask: mask, stride: 1, x: fx, y: fy, z: fz);
+
+                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: ((byte)mask))); }
                             }
                         }
                     }
@@ -2252,30 +2263,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     }
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {
-        var row = m_byFineRow.Divide(value: key);
-        var z = m_byFineColumn.Divide(value: row);
+        var row = ((int)m_byFineRow.Divide(value: ((uint)key)));
+        var z = ((int)m_byFineColumn.Divide(value: ((uint)row)));
 
-        return ((key - (row * m_byFineRow.Divisor)), (row - (z * m_byFineColumn.Divisor)), z);
+        return ((key - (row * m_fineRowLength)), (row - (z * m_fineColumnLength)), z);
     }
     private void Divide(int factor) {
-        m_byFineRow = new FineDivisor(divisor: (((m_samplesX - 1) * factor) + 1));
-        m_byFineColumn = new FineDivisor(divisor: (((m_samplesY - 1) * factor) + 1));
-        m_byFactor = new FineDivisor(divisor: factor);
-    }
-    // Division of a non-negative int by a fixed positive one as a multiply (Lemire, Kaser and Kurz, "Faster Remainder by
-    // Direct Computation", 2019: with c = floor((2^64 - 1) / d) + 1, n / d = floor(c * n / 2^64) for every 32-bit n and
-    // d > 1), exact, so FineCoordinates and FineCell read the same coordinates the operator gives.
-    private readonly struct FineDivisor {
-        private readonly ulong m_multiplier;
-
-        public FineDivisor(int divisor) {
-            Divisor = divisor;
-            m_multiplier = ((divisor > 1) ? ((ulong.MaxValue / ((ulong)divisor)) + 1UL) : 0UL);
-        }
-
-        public int Divisor { get; }
-
-        public int Divide(int value) => ((Divisor == 1) ? value : ((int)Math.BigMul(a: m_multiplier, b: ((ulong)(uint)value), low: out _)));
+        m_fineRowLength = (((m_samplesX - 1) * factor) + 1);
+        m_fineColumnLength = (((m_samplesY - 1) * factor) + 1);
+        m_byFineRow = new ReciprocalDivisor32(divisor: checked((uint)m_fineRowLength));
+        m_byFineColumn = new ReciprocalDivisor32(divisor: checked((uint)m_fineColumnLength));
+        m_byFactor = new ReciprocalDivisor32(divisor: checked((uint)factor));
     }
     // The coarse cell a fine sample interpolates in and its position there, each in [0, 1].
     private (int X, int Y, int Z, float U, float V, float W) Interpolant(int x, int y, int z) {
@@ -2294,9 +2292,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // and the sample's place in it, 0 through m_factor along each axis.
     private (int X, int Y, int Z, int LX, int LY, int LZ) FineCell(int x, int y, int z) {
         var factor = m_factor;
-        var cx = Math.Min(val1: m_byFactor.Divide(value: x), val2: (m_samplesX - 2));
-        var cy = Math.Min(val1: m_byFactor.Divide(value: y), val2: (m_samplesY - 2));
-        var cz = Math.Min(val1: m_byFactor.Divide(value: z), val2: (m_samplesZ - 2));
+        var cx = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)x))), val2: (m_samplesX - 2));
+        var cy = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)y))), val2: (m_samplesY - 2));
+        var cz = Math.Min(val1: ((int)m_byFactor.Divide(value: ((uint)z))), val2: (m_samplesZ - 2));
 
         return (cx, cy, cz, (x - (cx * factor)), (y - (cy * factor)), (z - (cz * factor)));
     }
