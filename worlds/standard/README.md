@@ -64,6 +64,10 @@ as its own (`toon: celStyle`) and a world names one as the default every other m
 read, through which a seat hands a game a value no other seat may read (a sealed bid, a vote, a whisper, an order),
 and which a game's own rule collects. The games in [`../games/`](../games/README.md) use it.
 
+`rotations.puck` is a library of rotations as the quaternions a shape row spells (`turn`, `turned`, `turnThen`,
+`inverseTurn`), and `outlines.puck` one of convex profile outlines (`growOutline`, which moves every edge of a clockwise
+outline outward, as a paint covering a dilated blade needs).
+
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.

@@ -1690,7 +1690,12 @@ by `world.view.pick`.
   crosses two groups, so the glance takes one motion owner or a crease
   (PUCK122) until the moving-blend design above lands, and the extreme poses
   are frame-checked. Its markings are parented paints, which ride the
-  parent's slot once the creation is animated. Iterate live with
+  parent's slot once the creation is animated, except that the gloss
+  highlight is one body-parented stroke reaching over the crown: a glance
+  leaves its crown part behind unless it is split into a head paint, and the
+  plumage slot already draws the eight paints a slot holds
+  (`SdfAppearance.PaintTableVectors` also caps a paint's convex outline at
+  eight vertices). Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
 - [high] On a static placement, a shape with a warp (`flare`, `shear`,

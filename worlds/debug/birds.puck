@@ -16,12 +16,12 @@
 // items, the visual bar packet): the body, wings and legs in one group, the head with its bill and eyes in another, the
 // tail in a third.
 import "../standard/rotations"
+import "../standard/outlines"
 
 let swallowPlumage = 0
-let swallowFlight = 1
-let swallowTail = 2
-let swallowEye = 3
-let swallowBill = 4
+let swallowTail = 1
+let swallowEye = 2
+let swallowBill = 3
 
 let swallowBodyGroup = 1
 let swallowHeadGroup = 2
@@ -38,12 +38,11 @@ let swallowHeadAt = [0, 0.048, 0.023]
 // The breast: under the body's front, along its pitch (body-local [0, -0.008, 0.012]).
 let swallowBreastAt = [0, swallowBodyAt[1] + turned(swallowPitch, [0, -0.008, 0.012])[1], swallowBodyAt[2] + turned(swallowPitch, [0, -0.008, 0.012])[2]]
 
-// The plumage colours: the steel-blue back, the near-black blue of the flight feathers (wings and tail), the gloss band
-// and its graded edge, the chestnut and the buff.
+// The plumage colours: the steel-blue back, the near-black blue of the flight feathers (wings and tail), the gloss
+// highlight, the chestnut and the buff.
 let swallowSteel = "#253B52"
 let swallowSteelDeep = "#131D2B"
 let swallowGloss = "#44658A"
-let swallowGlossEdge = "#314B69"
 let swallowChestnut = "#943C22"
 let swallowBuff = "#D6A266"
 
@@ -125,9 +124,8 @@ function swallowWingRootAt(side) = map(
 // The crease in a blade's own profile: the line through its root point (the inner wing's crease point, the flight
 // feathers' origin) where the other blade's plane cuts it, as the profile X it moves per unit of profile Y. It is the
 // other blade's normal turned into this blade's frame, n, read as -n.y / n.x.
-function swallowConjugate(q) = [0 - q[0], 0 - q[1], 0 - q[2], q[3]]
-function swallowCreaseLean(own, other) = 0 - turned(swallowConjugate(own), turned(other, swallowAxisZ))[1] /
-  turned(swallowConjugate(own), turned(other, swallowAxisZ))[0]
+function swallowCreaseLean(own, other) = 0 - turned(inverseTurn(own), turned(other, swallowAxisZ))[1] /
+  turned(inverseTurn(own), turned(other, swallowAxisZ))[0]
 
 // The inner wing: its bend a rounded front (half an ellipse about `swallowBendAt`) at the shoulder, high on the flank,
 // its upper edge along the back and its lower edge falling to the crease.
@@ -162,12 +160,67 @@ function swallowWingProfile(side) = [
   [swallowWingBottom * swallowCreaseLean(swallowOuterWingTurn(side), swallowInnerWingTurn(side)), swallowWingBottom]
 ]
 
+// The wing's dark feathers are painted over the plumage the blades share with the body, so their edge is drawn crisp
+// at the hit wherever the blades meet the body, never left to the bake's per-vertex material across a blend's fillet,
+// which frays into blotches. Each blade carries a paint: a convex outline in its own frame, grown past the blades'
+// rounded edges and projected through the blade (a paint's outline holds at most eight vertices,
+// SdfAppearance.PaintTableVectors). The inner wing's is its bend, rounded by the paint's own corner radius, back past
+// where the flight feathers' paint begins; the flight feathers' is their outline with its front carried forward over
+// the inner wing's rear, that part turned into their frame.
+function swallowInnerInOuter(side, v) = turned(
+  inverseTurn(swallowOuterWingTurn(side)),
+  turned(swallowInnerWingTurn(side), [v[0] - swallowWingCrease, v[1], 0])
+)
+let swallowWingFill = 0.004
+let swallowWingPaintJoin = 0.018
+let swallowWingPaintGrow = swallowWingRound + 0.0004
+let swallowWingPaintDepth = 0.005
+function swallowInnerWingOutline(side) = concat(
+  [[swallowWingPaintJoin + 0.005, swallowWingTop], [swallowWingPaintJoin + 0.005, swallowWingBottom]],
+  map(
+    range(0, 6),
+    i => [
+      swallowBendAt[0] + swallowBendRadii[0] * cosine((250 - 32 * i) * radiansPerDegree),
+      swallowBendAt[1] + swallowBendRadii[1] * sine((250 - 32 * i) * radiansPerDegree)
+    ]
+  )
+)
+function swallowOuterWingOutline(side) = concat(
+  [swallowInnerInOuter(side, [swallowWingPaintJoin, swallowWingTop])],
+  map(range(1, 5), i => swallowWingProfile(side)[i]),
+  [swallowInnerInOuter(side, [swallowWingPaintJoin, swallowWingBottom])]
+)
+
+function swallowWingPaints(side) = [
+  {
+    parent: $"innerWing{side.name}"
+    type: "Prism"
+    scale [1, 1, swallowWingPaintDepth]
+    profile {
+      kind: "Convex"
+      vertices: growOutline(swallowInnerWingOutline(side), swallowWingPaintGrow)
+      cornerRadius: 0.3
+    }
+    color: swallowSteelDeep
+  }
+  {
+    parent: $"wing{side.name}"
+    type: "Prism"
+    scale [1, 1, swallowWingPaintDepth]
+    profile {
+      kind: "Convex"
+      vertices: growOutline(swallowOuterWingOutline(side), swallowWingPaintGrow)
+    }
+    color: swallowSteelDeep
+  }
+]
+
 template swallowWing(side) {
   shape Prism $"innerWing{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
     smooth: 0.0025
-    material: swallowFlight
+    material: swallowPlumage
     position: swallowShoulderAt(side)
     rotation: swallowInnerWingTurn(side)
     scale [1, 1, swallowWingDepth]
@@ -181,8 +234,8 @@ template swallowWing(side) {
   shape Prism $"wing{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.0025
-    material: swallowFlight
+    smooth: swallowWingFill
+    material: swallowPlumage
     position: swallowWingRootAt(side)
     rotation: swallowOuterWingTurn(side)
     scale [1, 1, swallowWingDepth]
@@ -365,69 +418,60 @@ prototypes {
       name: "swallow"
       schema: "puck.creation.v1"
       palette [
-        // The plumage of the body and head, held values under a soft specular, with its markings painted on in order:
-        // the gloss band along the back and the crown (a wide edge value under a narrower core, so the band grades), the
-        // buff underparts, then the chestnut throat and the forehead blaze joined to the bill. What the buff and the
-        // throat leave between them across the breast is the breast band.
+        // The plumage of the body, head and wings, held values under a soft specular, with its markings painted on in
+        // order: the gloss highlight, the buff underparts, the wings' dark feathers, then the chestnut throat and the
+        // forehead blaze joined to the bill. What the buff and the throat leave between them across the breast is the
+        // breast band. The highlight is one stroke along the dorsal line in the body's frame, from the rump over the
+        // back (where it swells) to the crown, held just under the surface: it shows where the back and the crown round
+        // up into it and lets the nape's hollow between them go.
         {
           color: swallowSteel
           specular: 0.02
           roughness: 0.75
-          paints [
-            {
-              parent: "body"
-              type: "Ellipsoid"
-              position [0, 0.0165, 0.002]
-              scale [0.0048, 0.006, 0.032]
-              color: swallowGlossEdge
-            }
-            {
-              parent: "body"
-              type: "Ellipsoid"
-              position [0, 0.0175, 0.004]
-              scale [0.0026, 0.0045, 0.025]
-              color: swallowGloss
-            }
-            {
-              parent: "head"
-              type: "Ellipsoid"
-              position [0, 0.009, -0.001]
-              scale [0.0038, 0.003, 0.007]
-              color: swallowGlossEdge
-            }
-            {
-              parent: "head"
-              type: "Ellipsoid"
-              position [0, 0.0095, -0.001]
-              scale [0.002, 0.0022, 0.005]
-              color: swallowGloss
-            }
-            {
-              parent: "body"
-              type: "Ellipsoid"
-              position [0, -0.032, -0.01]
-              scale [0.05, 0.03, 0.055]
-              color: swallowBuff
-            }
-            {
-              parent: "head"
-              type: "Ellipsoid"
-              position [0, -0.0098, 0.0068]
-              scale [0.0062, 0.0076, 0.008]
-              color: swallowChestnut
-            }
-            {
-              parent: "head"
-              type: "Ellipsoid"
-              position [0, -0.0004, 0.0096]
-              scale [0.0048, 0.0028, 0.0042]
-              color: swallowChestnut
-            }
-          ]
+          paints: concat(
+            [
+              {
+                parent: "body"
+                type: "Sweep"
+                curve {
+                  a [0, 0.0135, -0.024]
+                  b [0, 0.0178, 0.008]
+                  c [0, 0.0128, 0.0445]
+                  radiusStart: 0.0012
+                  radiusEnd: 0.0018
+                  bulge: 0.0012
+                }
+                color: swallowGloss
+              }
+              {
+                parent: "body"
+                type: "Ellipsoid"
+                position [0, -0.032, -0.01]
+                scale [0.05, 0.03, 0.055]
+                color: swallowBuff
+              }
+            ],
+            swallowWingPaints(swallowSides[0]),
+            swallowWingPaints(swallowSides[1]),
+            [
+              {
+                parent: "head"
+                type: "Ellipsoid"
+                position [0, -0.0098, 0.0068]
+                scale [0.0062, 0.0076, 0.008]
+                color: swallowChestnut
+              }
+              {
+                parent: "head"
+                type: "Ellipsoid"
+                position [0, -0.0004, 0.0096]
+                scale [0.0048, 0.0028, 0.0042]
+                color: swallowChestnut
+              }
+            ]
+          )
         }
-        // The wings' flight feathers, near black against the back.
-        { color: swallowSteelDeep, specular: 0.02, roughness: 0.75 }
-        // The tail, as the wings, with its white spots.
+        // The tail, near black as the wings are, with its white spots.
         {
           color: swallowSteelDeep
           specular: 0.02

@@ -1,0 +1,26 @@
+// Outlines as the vertex lists a convex profile spells, [[x, y], ...] wound clockwise: an outline grown outward, as a
+// paint that must cover a dilated or rounded shape grows that shape's own outline by its dilation.
+
+// The outward unit normal of the edge from `a` to `b` of a clockwise outline.
+function outlineEdgeNormal(a, b) = [
+  (a[1] - b[1]) / squareRoot((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])),
+  (b[0] - a[0]) / squareRoot((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]))
+]
+
+// A vertex `c` moved so both its edges, with outward normals `before` and `after`, move out by `distance`.
+function outlineMiter(c, before, after, distance) = [
+  c[0] + distance * (before[0] + after[0]) / (1 + before[0] * after[0] + before[1] * after[1]),
+  c[1] + distance * (before[1] + after[1]) / (1 + before[0] * after[0] + before[1] * after[1])
+]
+
+// A clockwise convex outline with every edge moved outward by `distance`. A sharp corner's vertex moves farther than
+// `distance` (by the inverse cosine of half its turn), as the grown edges meet there.
+function growOutline(outline, distance) = map(
+  range(0, length(outline)),
+  i => outlineMiter(
+    outline[i],
+    outlineEdgeNormal(outline[floorModulo(i + length(outline) - 1, length(outline))], outline[i]),
+    outlineEdgeNormal(outline[i], outline[floorModulo(i + 1, length(outline))]),
+    distance
+  )
+)

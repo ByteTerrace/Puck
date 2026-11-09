@@ -30,3 +30,7 @@ function turnThen(inner, outer) = [
   outer[3] * inner[2] + outer[0] * inner[1] - outer[1] * inner[0] + outer[2] * inner[3],
   outer[3] * inner[3] - outer[0] * inner[0] - outer[1] * inner[1] - outer[2] * inner[2]
 ]
+
+// The turn that undoes a unit rotation (its conjugate): turned(inverseTurn(q), v) takes a vector from the frame q turns
+// into back to the frame it was authored in.
+function inverseTurn(rotation) = [0 - rotation[0], 0 - rotation[1], 0 - rotation[2], rotation[3]]
