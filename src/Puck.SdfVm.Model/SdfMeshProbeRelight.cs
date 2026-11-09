@@ -25,6 +25,13 @@ public static class SdfMeshProbeRelight {
     public const int RecordInputWord = PreviousWord + OutputWords;
     /// <summary>Threads per selection group.</summary>
     public const int SelectGroupSize = 64;
+    /// <summary>The thread groups one probe's relight spreads over, each shading <see cref="SdfMeshProbeTrace.GroupSize"/>
+    /// of its hit texels, one a lane, and every slice's share of the light visibility rays, so a probe takes one texel's
+    /// light loop rather than one lane's several.</summary>
+    public const int Slices = ((SdfMeshProbeTrace.HitCount + SdfMeshProbeTrace.GroupSize) - 1) / SdfMeshProbeTrace.GroupSize;
+    /// <summary>One slice's partial relight, which the combine pass sums: six RGB varying sums, six local sums, then the
+    /// visibility bits the slice set and those it cleared.</summary>
+    public const int PartialWords = 36 + (2 * SdfMeshIrradianceProbe.LightWords);
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
     public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>Six axis luminances, sky visibility and source/trace flags in one camera-meter answer.</summary>

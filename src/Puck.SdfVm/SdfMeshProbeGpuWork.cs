@@ -17,6 +17,18 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly Slot[] m_slots = new Slot[SdfGpuWork.SlotCount];
     private readonly Lock m_gate = new();
     private readonly Queue<Job> m_pending = new();
+    // The measured GPU cost of each kind's unit (UnitsOf), indexed by JobKind: what TryTake charges a job and what sizes
+    // trace and relight jobs to background work's share of a frame. Complete measures them on the recording thread; the
+    // coordinator reads them as it cuts jobs.
+    private readonly SdfGpuWorkRate[] m_rates = [
+        new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
+        new(priorSecondsPerUnit: 1e-8),
+        new(priorSecondsPerUnit: 1e-8),
+        new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
+        new(priorSecondsPerUnit: 1e-8),
+    ];
+    // The coordinator's answer scratch for one trace job of a trace cut into several (Trace).
+    private uint[]? m_traceJobAnswer;
     private bool m_disposed;
     private bool m_stopping;
     private GpuRegion? m_sceneRegion;
@@ -68,12 +80,34 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // The answer of a job that is given `reuse` is `reuse` itself, or a larger array when it is too small: the caller keeps
     // the returned array for its next job and reads only the rows its origins name, never past them, since the words beyond
     // are an earlier job's.
+    // Every trace is cut into consecutive jobs of at most TraceOriginsPerJob origins, each answered before the next is
+    // submitted, so no trace job's measured cost exceeds background work's share of a frame however many origins the
+    // caller hands over. One coordinator calls this at a time.
     internal uint[] Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, uint[] cacheSlots, uint hitCapacity, uint[]? reuse = null) {
-        return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity, Reuse = reuse });
+        var perJob = TraceOriginsPerJob;
+        if (origins.Length <= perJob) {
+            return Submit(new Job(scene.Acquire(), origins) { CacheSlots = cacheSlots, HitCapacity = hitCapacity, Reuse = reuse });
+        }
+        var words = (origins.Length * SdfMeshProbeDepth.HitWords) + 1;
+        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : new uint[words];
+        for (var start = 0; (start < origins.Length); start += perJob) {
+            var count = Math.Min(val1: perJob, val2: (origins.Length - start));
+            var part = Submit(new Job(scene.Acquire(), origins.Slice(start: start, length: count)) {
+                CacheSlots = cacheSlots[start..(start + count)], HitCapacity = hitCapacity, Reuse = m_traceJobAnswer,
+            });
+            m_traceJobAnswer = part;
+            part.AsSpan(start: 0, length: (count * SdfMeshProbeDepth.HitWords)).CopyTo(answer.AsSpan(start: (start * SdfMeshProbeDepth.HitWords)));
+        }
+        return answer;
     }
+    // The origins one trace job holds at most: those whose measured cost fits background work's share of a frame.
+    private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
+    // The predicted rays one relight job holds at most (SdfMeshIrradiance.RelightRaysPerJob bounds it whatever the rate):
+    // those whose measured cost fits background work's share of a frame. A probe predicted past it goes alone.
+    internal long RelightRaysWithinShare => m_rates[(int)JobKind.Relight].UnitsWithin(most: SdfMeshIrradiance.RelightRaysPerJob, seconds: SdfGpuWork.FrameShareSeconds);
     // The origins and input are read before this returns, so a caller may overwrite the arrays its memories view at once.
-    // `rays` is the job's predicted ray count (SdfMeshIrradiance.RelightRaysPerJob bounds it), which its GPU time is
-    // estimated from until its timestamps measure it.
+    // `rays` is the job's predicted ray count (RelightRaysWithinShare bounds it), which its GPU time is estimated from at
+    // the measured rate until its timestamps measure it.
     internal Result Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
         int volumeWords, in Deltas updates, uint hitCapacity, long rays, uint[]? reuse = null) {
         var job = new Job(scene.Acquire(), origins) {
@@ -152,7 +186,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 m_pending.Dequeue();
                 m_inFlight = true;
                 job = pending;
-                estimatedSeconds = pending.Destinations.Length * 1e-8;
+                estimatedSeconds = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
                 return true;
             }
             if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version)) {
@@ -196,7 +230,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             m_pending.Dequeue();
             m_inFlight = true;
             job = pending;
-            estimatedSeconds = ((pending.Rays > 0) ? (pending.Rays * 1e-8) : (pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8)));
+            estimatedSeconds = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
             return true;
         }
     }
@@ -219,9 +253,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             slot.Origins?.Dispose();
             slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "origins", index: recording.Slot), sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
         }
-        if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4) {
+        // A relight's slices write their partial sums behind the results and the fault word, where the readback never
+        // reaches (sdf-probe-relight, sdf-probe-combine).
+        var partialBytes = relight ? (ulong)query.Origins.Length * SdfMeshProbeRelight.Slices * SdfMeshProbeRelight.PartialWords * 4 : 0UL;
+        if (slot.Hits is null || slot.Hits.SizeBytes < bytes + 4 + partialBytes) {
             slot.Hits?.Dispose();
-            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hits", index: recording.Slot), sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hits", index: recording.Slot), sizeBytes: bytes + 4 + partialBytes, usage: GpuBufferUsage.Storage);
         }
         slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "identities", index: recording.Slot), sizeBytes: 8, usage: GpuBufferUsage.Storage);
         if (query.Meter) {
@@ -305,7 +342,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set,
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
-        if (relight) { recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0); }
+        if (relight) {
+            recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            var combine = m_tables.Pipeline(SdfKernel.ProbeCombine);
+            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: combine.Handle);
+            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: combine.LayoutHandle);
+            recorder.Dispatch(command, (uint)query.Origins.Length, 1, 1);
+        }
         else { recorder.Dispatch(commandBufferHandle: command,
             groupCountX: (uint)(query.Meter ? query.Origins.Length : query.Selection ? (query.Origins.Length + SdfMeshProbeRelight.SelectGroupSize - 1) / SdfMeshProbeRelight.SelectGroupSize : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
         recording.CopyToReadback(slot.Hits, bytes + 4);
@@ -404,7 +450,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
         }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
-        if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
+        if (readback.GpuSeconds is { } seconds) {
+            var kind = KindOf(query);
+            m_rates[(int)kind].Observe(seconds: seconds, units: UnitsOf(query));
+            m_volume.Counters.Add(kind switch {
+                JobKind.Meter => SdfMeshIrradiance.GpuMeterNanoseconds,
+                JobKind.Select => SdfMeshIrradiance.GpuSelectNanoseconds,
+                JobKind.Trace => SdfMeshIrradiance.GpuTraceNanoseconds,
+                _ => SdfMeshIrradiance.GpuRelightNanoseconds,
+            }, (long)(seconds * 1e9));
+        }
         if (query.Meter) {
             for (var i = SdfMeshProbeRelight.MeterOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.MeterOutputWords) {
                 if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
@@ -423,10 +478,21 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.TrySetCanceled();
     }
     public GpuQueueCategory Category => GpuQueueCategory.Probe;
+    // The kinds of probe job, each with its own measured rate (m_rates, in this order).
+    private enum JobKind { Trace, Relight, Select, Meter, Commit }
+    private static JobKind KindOf(Job query) => (query.CommitSource is not null) ? JobKind.Commit : query.Meter ? JobKind.Meter :
+        query.Selection ? JobKind.Select : (query.Lighting is not null) ? JobKind.Relight : JobKind.Trace;
+    // The units a job's rate is measured in: a relight's predicted rays (none for a job of invalid probes alone, which
+    // measures nothing), a commit's destinations, and every other kind's origins.
+    private static long UnitsOf(Job query) => KindOf(query) switch {
+        JobKind.Commit => query.Destinations.Length,
+        JobKind.Relight => query.Rays,
+        _ => query.Origins.Length,
+    };
     public string Describe(object job) {
         if (job is SceneChunk chunk) { return FormattableString.Invariant($"scene-chunk word={chunk.Word} words={chunk.Count}"); }
         var query = (Job)job;
-        var kind = (query.CommitSource is not null) ? "commit" : query.Meter ? "meter" : query.Selection ? "select" : (query.Lighting is not null) ? "relight" : "trace";
+        var kind = KindOf(query).ToString().ToLowerInvariant();
         var lights = ((query.Lighting is { Length: > 0 } rows) ? FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}") : string.Empty);
         return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}{((kind == "relight") ? DescribeRelight(query) : string.Empty)}");
     }
