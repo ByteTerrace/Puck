@@ -172,8 +172,8 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// along the light from the receivers' reach before it to the far side of the cascade's sphere (no receiver reading the
     /// cascade lies past it), grown across the light by the receivers' reach and by the chord a light turned by up to
     /// <paramref name="turn"/> sweeps over that length, and cut along the light into boxes about as long as they are
-    /// wide. A receiver outside every box reads none of the caster in the cascade, in any of its layers (depth, exit or
-    /// optical), while the light stays within <paramref name="turn"/> of the cascade's.</summary>
+    /// wide. A receiver outside every box reads none of a caster inside the sphere in the cascade, in any of its layers
+    /// (depth, exit or optical), while the light stays within <paramref name="turn"/> of the cascade's.</summary>
     /// <param name="cascade">The cascade's light camera.</param>
     /// <param name="center">The caster sphere's center, in world space.</param>
     /// <param name="radius">The caster sphere's radius, in world units.</param>
@@ -191,7 +191,9 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         var sphere = (cascade.Position + (forward * (cascade.Far - cascade.HalfHeight)));
         var toSphere = (sphere - center);
         var start = -(radius + reach);
-        var end = (MathF.Max(x: start, y: ((Vector3.Dot(vector1: toSphere, vector2: forward) + cascade.HalfHeight) + (toSphere.Length() * turn))) + reach);
+        // A caster anywhere inside the sphere sees the cascade's sphere at most a radius farther, which a turned light
+        // sweeps by that much more.
+        var end = (MathF.Max(x: start, y: ((Vector3.Dot(vector1: toSphere, vector2: forward) + cascade.HalfHeight) + ((toSphere.Length() + radius) * turn))) + reach);
         var length = (end - start);
         var across = ((radius + reach) + (length * turn));
         var count = (int)Math.Clamp(value: MathF.Ceiling(x: (length / MathF.Max(x: (2f * across), y: 1.0e-6f))), min: 1f, max: boxes.Length);

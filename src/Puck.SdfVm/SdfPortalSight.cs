@@ -29,32 +29,41 @@ internal sealed class SdfPortalSight {
         // The sight frame the version was first asked on, and the latest frame it was asked on.
         public long Asked;
         public long Touched;
-        // The latest completed answer: the version and camera it was captured for, and whether every box was hidden.
+        // The latest completed answer: the recording it came from, the version and camera it was captured for, and
+        // whether every box was hidden; and whether the version's first answer has yet to be read by an ask.
+        public long DoneSequence = long.MinValue;
         public long DoneVersion = long.MinValue;
         public CameraSnapshot DoneCamera;
         public bool DoneHidden;
+        public bool LatencyOwed;
     }
 
-    // What one recording captured: its epoch and frame, each screen's query, and each group's version and query range.
+    // What one recording captured: its epoch and sequence, each screen's query, and each group's version and query range.
     internal sealed class Captured {
         internal readonly Query?[] Screens = new Query?[SdfPortalSight.Screens];
         internal readonly List<(Group Group, long Version, CameraSnapshot Camera, int First, int Count)> Groups = [];
         internal long Epoch;
+        internal long Sequence;
         internal int Queries;
     }
 
     private readonly Query?[] m_queries = new Query?[Screens];
     private readonly Query?[] m_hidden = new Query?[Screens];
+    // The recording each screen's answer came from: completions arrive in slot order, not recording order, so only a
+    // newer recording's answer replaces an older one's.
+    private readonly long[] m_screenDone = new long[Screens];
     private readonly Dictionary<long, Group> m_groups = [];
     private readonly List<long> m_retired = [];
     private readonly List<SdfMeshOcclusion> m_readers = [];
     private SdfWorldView? m_view;
     private object? m_program;
     private long m_epoch;
+    private long m_sequence;
     private long m_frame;
     private int m_latency = -1;
 
-    // The frames from a group version's first ask to its first completed answer, the latest measured; -1 before one.
+    // The frames from a group version's first ask to the ask that first reads its answer, the latest measured; -1 before
+    // one.
     internal int LatencyFrames => m_latency;
     // The queries the next capture holds, which sizes the recorder's buffers.
     internal int QueryCount {
@@ -73,11 +82,12 @@ internal sealed class SdfPortalSight {
     }
     // Asks whether a group's boxes are hidden from the view, and keeps the group captured. A version or camera that
     // differs from the group's request replaces it (its boxes copied), so it answers false until a recording captured for
-    // that version and camera completes.
+    // that version and camera completes. A group left unasked past RetireFrames starts again as a new group, whatever its
+    // answer, so evidence never outlives a gap in its asks; captures of the old group no longer apply to it.
     internal bool Hidden(long key, long version, in CameraSnapshot camera, ReadOnlySpan<SdfMeshBox> boxes) {
-        if (!m_groups.TryGetValue(key, out var group)) {
+        if (!m_groups.TryGetValue(key, out var group) || ((m_frame - group.Touched) > RetireFrames)) {
             group = new Group(key);
-            m_groups.Add(key, group);
+            m_groups[key] = group;
         }
         if ((group.Version != version) || (group.Camera != camera)) {
             group.Version = version;
@@ -86,8 +96,13 @@ internal sealed class SdfPortalSight {
             boxes.CopyTo(group.Boxes);
             group.Count = boxes.Length;
             group.Asked = m_frame;
+            group.LatencyOwed = false;
         }
         group.Touched = m_frame;
+        if (group.LatencyOwed) {
+            group.LatencyOwed = false;
+            m_latency = (int)Math.Min(m_frame - group.Asked, int.MaxValue);
+        }
 
         return group.DoneHidden && (group.DoneVersion == version) && (group.DoneCamera == camera);
     }
@@ -98,15 +113,16 @@ internal sealed class SdfPortalSight {
             Array.Clear(m_queries);
             m_groups.Clear();
             Lapse();
-            m_epoch++;
             m_view = view;
             m_program = program;
         }
     }
-    // Forgets every completed answer: the view rendered a frame no sight test ran on, so no answer describes what it shows.
+    // Forgets every completed answer, and every answer still in flight (a new epoch): the view rendered a frame no sight
+    // test ran on, so no answer describes what it shows.
     internal void Lapse() {
         Array.Clear(m_hidden);
         foreach (var group in m_groups.Values) { group.DoneHidden = false; }
+        m_epoch++;
     }
     internal void Attach(SdfMeshOcclusion reader) => m_readers.Add(reader);
     internal void Detach(SdfMeshOcclusion reader) {
@@ -119,6 +135,7 @@ internal sealed class SdfPortalSight {
     internal int Capture(Span<Vector4> rows, Captured captured, in CameraSnapshot camera) {
         captured.Groups.Clear();
         captured.Epoch = m_epoch;
+        captured.Sequence = ++m_sequence;
         for (var index = 0; index < Screens; index++) {
             var query = m_queries[index] is { } requested && requested.Camera == camera ? requested : (Query?)null;
             captured.Screens[index] = query;
@@ -159,26 +176,27 @@ internal sealed class SdfPortalSight {
 
         return next;
     }
-    // Applies a completed recording's verdicts (nonzero: the box may show): a screen's to the query still asked, a group's
-    // to the group still held, as its latest answer for the version and camera captured.
+    // Applies a completed recording's verdicts (nonzero: the box may show), each only over an answer from an older
+    // recording of the same epoch: a screen's to the query still asked, a group's to the group still held, as its latest
+    // answer for the version and camera captured.
     internal void Complete(Captured captured, ReadOnlySpan<uint> visible) {
         if (captured.Epoch != m_epoch) { return; }
         for (var index = 0; index < Screens; index++) {
-            if (captured.Screens[index] == m_queries[index]) {
+            if ((captured.Screens[index] == m_queries[index]) && (captured.Sequence > m_screenDone[index])) {
+                m_screenDone[index] = captured.Sequence;
                 m_hidden[index] = visible[index] == 0 ? captured.Screens[index] : null;
             }
         }
         foreach (var (group, version, camera, first, count) in captured.Groups) {
-            if (!m_groups.TryGetValue(group.Key, out var held) || !ReferenceEquals(held, group)) { continue; }
+            if (!m_groups.TryGetValue(group.Key, out var held) || !ReferenceEquals(held, group) || (captured.Sequence <= group.DoneSequence)) { continue; }
 
             var hidden = true;
 
             for (var index = first; index < (first + count); index++) {
                 hidden &= (visible[index] == 0u);
             }
-            if ((group.DoneVersion != version) && (version == group.Version)) {
-                m_latency = (int)Math.Min(m_frame - group.Asked, int.MaxValue);
-            }
+            group.LatencyOwed |= ((group.DoneVersion != version) && (version == group.Version));
+            group.DoneSequence = captured.Sequence;
             group.DoneVersion = version;
             group.DoneCamera = camera;
             group.DoneHidden = hidden;

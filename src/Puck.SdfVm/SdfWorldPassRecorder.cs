@@ -861,6 +861,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var framebuffer = m_framebuffers[0];
         var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
         var occlusion = ((count > 0) ? m_occlusion : null);
+        if (count == 0) { m_occlusion?.Idle(); }
         var twoPhase = (occlude && !IsGlass && (!IsShadowCascade || (m_part == SdfWorldPackage.Parts.ShadowFar && m_inputs.Length > 0)));
         var entryLateFramebuffer = m_entryLateFramebuffers.Length > 0 ? m_entryLateFramebuffers[0] : lateFramebuffer;
         var shadowGlassFramebuffer = HasShadowOptical ? m_shadowGlassFramebuffers[0] : null;

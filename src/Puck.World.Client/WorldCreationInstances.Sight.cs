@@ -9,8 +9,8 @@ namespace Puck.World.Client;
 // (RateReach about its root) widened by a sweep, and the receivers its shadow can reach in each of the view's cascades
 // that keeps it (SdfMeshBox.ShadowReach), every receiver being a camera sample of that view. A group is built once, from
 // an anchor, and asked again unchanged while the anchor still holds the registration: the same instance and camera, the
-// current reach box inside the anchor's, every cascade keeping it now one the anchor's shadow group covers, each such
-// cascade's light within SightTurnRadians of the anchor's and its extent unchanged. The sweep covers the reach's growth
+// current reach sphere inside the anchor's, every cascade keeping it now one the anchor's shadow group covers, each such
+// cascade's light within SightTurnRadians of the anchor's, its extent unchanged and its receivers' reach no wider. The sweep covers the reach's growth
 // and the root's motion over the sight's latency, so an anchor outlives the latency it waits on. Every path here keeps
 // demand on unknown evidence: no sight, no instance for a view, an unmeasured speed, a read of the pose, unknown cascades,
 // or a group with no completed answer for its version and camera.
@@ -66,6 +66,7 @@ public sealed partial class WorldCreationInstances {
         public int Cascades;
         public readonly Vector3[] Forward = new Vector3[SightCascades];
         public readonly float[] Extent = new float[SightCascades];
+        public readonly float[] ShadowReach = new float[SightCascades];
         public readonly SdfMeshBox[] Reach = new SdfMeshBox[1];
         public SdfMeshBox[] Shadow = [];
         public int ShadowCount;
@@ -77,6 +78,12 @@ public sealed partial class WorldCreationInstances {
         latency = -1;
 
         var speed = ((live.BodyIndex is not null) ? SdfUpdateRateTiers.BodyPartSpeed : (live.PartSpeed * placementScale));
+
+        // A root that follows its body through dynamics draws where the follower stands, which may trail the body's
+        // position or overshoot it by as far: the queried sphere holds both.
+        if (live.HasRootDynamics) {
+            radius += Vector3.Distance(value1: center, value2: live.FollowedPosition);
+        }
         var frameSeconds = ((m_rateFrameSeconds > 0f) ? m_rateFrameSeconds : (1f / SdfUpdateRateTiers.EveryFrameHertz));
         var rootSpeed = ((live.SightPack == (m_packCount - 1L)) ? (Vector3.Distance(value1: center, value2: live.SightCenter) / frameSeconds) : float.PositiveInfinity);
 
@@ -160,9 +167,9 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
-        var offset = Vector3.Abs(value: (center - anchor.Center));
-
-        if ((MathF.Max(x: offset.X, y: MathF.Max(x: offset.Y, y: offset.Z)) + radius) > anchor.Radius) {
+        // The sphere, not the reach cube, is what the shadow group was swept from (SdfMeshBox.ShadowReach holds the
+        // receivers of any sphere inside it), and inside the sphere is inside the cube.
+        if ((Vector3.Distance(value1: center, value2: anchor.Center) + radius) > anchor.Radius) {
             return false;
         }
 
@@ -173,7 +180,7 @@ public sealed partial class WorldCreationInstances {
             if (shadow.View != view) {
                 continue;
             }
-            if (((anchor.Cascades & (1 << order)) != 0) && ((Vector3.Dot(vector1: shadow.Cascade.Forward, vector2: anchor.Forward[order]) < turned) || (shadow.Cascade.HalfHeight != anchor.Extent[order]))) {
+            if (((anchor.Cascades & (1 << order)) != 0) && ((Vector3.Dot(vector1: shadow.Cascade.Forward, vector2: anchor.Forward[order]) < turned) || (shadow.Cascade.HalfHeight != anchor.Extent[order]) || (shadow.Reach > anchor.ShadowReach[order]))) {
                 return false;
             }
 
@@ -203,6 +210,7 @@ public sealed partial class WorldCreationInstances {
             if ((cascades & (1 << order)) != 0) {
                 anchor.Forward[order] = shadow.Cascade.Forward;
                 anchor.Extent[order] = shadow.Cascade.HalfHeight;
+                anchor.ShadowReach[order] = shadow.Reach;
 
                 var cut = SdfMeshBox.ShadowReach(boxes: m_sightCut, cascade: shadow.Cascade, center: center, radius: radius, reach: shadow.Reach, turn: SightTurnRadians);
 

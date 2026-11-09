@@ -30,6 +30,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private readonly string m_part;
     private readonly IGpuStorageBuffer?[] m_candidates;
     private readonly List<IGpuBuffer>[] m_retired;
+    // The shared buffers recordings replaced since the last submission. A submitted recording's slot takes them
+    // (Submitted): its completion covers every earlier submission on the one queue, so it is the first proof that their
+    // last users finished. An abandoned recording leaves them here for the next submission, since its own slot's fence
+    // proves only that slot's older submission.
+    private readonly List<IGpuBuffer> m_replaced = [];
     private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
     private IGpuBuffer? m_visible;
@@ -80,12 +85,19 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         sight?.Attach(this);
     }
 
+    // A recording of the pass that stages no draws runs no sight test, so the view's earlier answers lapse.
+    public void Idle() => m_sight?.Lapse();
+
     // The candidates staged for the frame.
     public uint CandidateCount => m_count;
 
-    internal void Submitted(int slot) => m_sightCopies.Submitted(slot: slot);
+    internal void Submitted(int slot) {
+        m_retired[slot].AddRange(collection: m_replaced);
+        m_replaced.Clear();
+        m_sightCopies.Submitted(slot: slot);
+    }
     // The node proved the slot's previous submission complete: one queue completed every earlier submission too, so the
-    // buffers a recording into this slot replaced are read by nothing left and are disposed, and its sight copy is read.
+    // buffers replaced before that submission are read by nothing left and are disposed, and its sight copy is read.
     internal void Completed(int slot) {
         foreach (var buffer in m_retired[slot]) {
             // A recording that never submitted left its seed uncopied; the visible set starts cleared instead.
@@ -333,6 +345,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_counts?.Dispose();
         m_depth?.Dispose();
         foreach (var slot in m_retired) { foreach (var buffer in slot) { buffer.Dispose(); } }
+        foreach (var buffer in m_replaced) { buffer.Dispose(); }
     }
 
     // The pyramid's levels for a render extent: halved, rounded up, until a level is 1x1.
@@ -378,7 +391,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         if ((m_visible is null) || (visibleRecords < capacity)) {
             m_seedVisible = m_visible;
-            if (m_visible is { } previous) { m_retired[m_slot].Add(item: previous); }
+            if (m_visible is { } previous) { m_replaced.Add(item: previous); }
             m_visible = null;
             m_visible = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion visible"),
@@ -388,7 +401,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             m_visibleCleared = false;
         }
         if ((m_draws is null) || (m_capacity < capacity)) {
-            if (m_draws is { } previous) { m_retired[m_slot].Add(item: previous); }
+            if (m_draws is { } previous) { m_replaced.Add(item: previous); }
             m_draws = null;
             m_capacity = (uint)GpuCapacity.Grown(current: m_capacity, required: capacity, ceiling: uint.MaxValue, divisor: 1);
             m_draws = m_buffers.CreateDeviceLocal(
@@ -400,7 +413,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         // Counts are cleared every recording, so a grown buffer carries nothing over.
         if ((m_counts is { } counts) && (counts.SizeBytes < CountsBytesOf(queries: m_sightCapacity))) {
-            m_retired[m_slot].Add(item: counts);
+            m_replaced.Add(item: counts);
             m_counts = null;
         }
         m_counts ??= m_buffers.CreateDeviceLocal(
@@ -418,7 +431,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         }
 
         if ((m_depth is null) || (m_depth.SizeBytes < depthBytes)) {
-            if (m_depth is { } previous) { m_retired[m_slot].Add(item: previous); }
+            if (m_depth is { } previous) { m_replaced.Add(item: previous); }
             m_depth = null;
             m_depth = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion depth"),

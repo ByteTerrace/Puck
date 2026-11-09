@@ -1135,9 +1135,12 @@ by its fence share is GPU back-pressure, not CPU work.
   view two groups per rated creation, its swept reach box and the receivers its shadow can reach in each
   keeping cascade (`SdfMeshBox.ShadowReach`, tested against the camera pyramid, since receivers are the
   view's own samples), and `RateOf` takes `SdfUpdateRateTiers.OccludedHertz` when every view hides both,
-  never a hold. A group answers only for the version and exact camera it was captured for; a mesh
-  recording with occlusion off lapses every answer (`SdfPortalSight.Lapse`). `world.rates` prints
-  `(occluded,latency=Nf)` beside such a body.
+  never a hold. A group answers only for the version and exact camera it was captured for, and only a
+  newer recording's answer replaces an older one's (completions arrive in slot order); a mesh recording
+  with occlusion off or no draws lapses every answer, those in flight included (`SdfPortalSight.Lapse`
+  opens a new epoch), and a group unasked past its retirement starts again. A buffer the occlusion
+  replaces retires at the completion of the next submitted recording, never of an abandoned one's slot
+  (`SdfMeshOcclusion.Submitted`). `world.rates` prints `(occluded,latency=Nf)` beside such a body.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there
