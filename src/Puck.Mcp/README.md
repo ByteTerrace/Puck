@@ -98,17 +98,26 @@ of `src/Puck.Cli`. A linked worktree with no build of its own uses its main
 checkout's build, and a checkout with no build at all builds `src/Puck.Cli`
 first (one build at a time per checkout), so the first start on a fresh clone
 takes as long as that build. It never runs the installed `puck`, which keeps
-the commit it was installed at. It bootstraps the small application stub under
-`.claude/mcp-install`, then publishes the completed CLI build into a local
-`development` channel with that install's own development key. The normal
-attestation verifier, `UpdateService`, `IUpdateStager` and `IUpdateApplier`
-install and activate its complete file inventory. No publisher key or network
-release is involved. A successful CLI build writes `puck-build-ready` only
-after its output is complete; its timestamp names the development version.
+the commit it was installed at. The build activates itself
+(`puck mcp --prepare-install`): it installs the application stub it carries,
+and the stub's configuration, under `.claude/mcp-install`, then publishes the
+completed CLI build into a local `development` channel with that install's own
+development key. The normal attestation verifier, `UpdateService`,
+`IUpdateStager` and `IUpdateApplier` install and activate its complete file
+inventory. No publisher key or network release is involved. A successful CLI
+build writes `puck-build-ready` only after its output is complete; its
+timestamp names the development version.
 
-The stub launches a persistent stdio front. Before a call it follows the
-completed build through the same release chain and opens a backend through the
-stub when the activated version changes. The client keeps its connection and
+The stub launches a persistent stdio front. The front and its stub outlive every
+build they serve, so neither interprets the install's release record: when a
+call finds a new `puck-build-ready` stamp, the front runs that build's own
+`--prepare-install` once and reads the activated version from its standard
+output, so the record, the stub (a running stub's image is moved aside, not
+overwritten) and the worker the stub launches next all come from one build. A
+refused build is not offered again until the next stamp. The front opens a
+backend through the stub when the activated version changes. A backend that
+dies before it answers names its exit code and its last standard-error lines
+(a stub or registration refusal) in the call's error. The client keeps its connection and
 receives a tool-list notification. Earlier backends retain their own Worlds,
 process streams and leases; stops are routed to the backend that started the
 named World. The front checks superseded backends once a second and disposes one

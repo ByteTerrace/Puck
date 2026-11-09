@@ -388,8 +388,7 @@ public sealed partial class SdfMeshIrradiance {
                 row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));
                 MemoryMarshal.Cast<uint, Vector3>(row.Slice(SdfMeshProbeRelight.SkyOutputWord, 18)).CopyTo(lights.SkyLight(i));
                 var candidate = candidates[first + i];
-                probes[i] = probe with { Moved = candidate.Trace || !m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ||
-                    previous.Shading is null || !Settled(lights.Radiance(i), previous.Radiance) };
+                probes[i] = probe with { Moved = Moves(candidate.Trace, m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ? previous : null, lights.Radiance(i), lights.SkyLight(i)) };
             }
         } catch { output.Dispose(); throw; }
         return output;
