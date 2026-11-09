@@ -1026,6 +1026,21 @@ Remaining:
   with about 60 % of the cube's excess at 30°; an oriented box in the surface's
   frame removes it. Either costs more box
   walks per unproved query, which are few (0 to 12 a tick at the rim).
+- **[medium] A body at a hard subtraction's convex crease is unproved.** All of
+  the headless sweep's `physics.contact.field-unproved` comes from one walker
+  (`range-walker-10`, `worlds/debug/range.puck`) on the river channel's bank
+  (`riverChannel`, `worlds/standard/water.puck`: a ground box less tapered prism
+  cuts that rise `reach` above it). Over the cut, `max(box, −cut)` reads the box
+  term, the height over a ground plane the cut removed, and the walker rests
+  where that reading equals its reach. The proof's box touches that plane, so
+  its interval's lower end sits at the point slack below zero, and the surface
+  solve's ray meets the slant or bed past the reach, or no crossing within
+  twice the reach where the cut's cap stands in open air. The body is clear by
+  millimetres to centimetres. A proof needs a bound that follows the crease
+  (the box split where `max` changes operand, or the cut's analytic surface
+  read across the crease) rather than one box per core piece. The ground snap's
+  bracket (`FixedSupportDistance.TryBracket`) counts every probe, so the total
+  follows the walker's path and swings by thousands when a pose moves by a raw.
 - **[medium] Box and ellipsoid bodies solve from their centre**
   (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:580`): the
   support along the measured normal, not the volume's own nearest point. Cover
@@ -1929,15 +1944,6 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
 
-- [high] `world.reload` is refused on the debug world: "Rebuild payload is
-  21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
-  documented edit-then-reload loop does not work on the proving ground. The
-  cap is `WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`,
-  and reload ships the whole composed definition. A reload should send what
-  changed (the edit-to-running bar wants that anyway), never a larger cap
-  alone. A look lane comparing two palette styles had to boot a second World
-  for each comparison because of it.
-
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
 a shading-only creation edit keeps the arena, the rules and the population, and
@@ -2002,6 +2008,11 @@ document values bind by copying only the paths to their references
   allocation capture of the edit iteration names what it still allocates beyond
   a quiet tick's; then narrow the validation as `TryValidateTouchedStateRows`
   narrows a state write, to the edited row and the checks that read a palette.
+  Reload's wire is now a keyed document delta (`WorldReloadDelta`); its sender
+  still serializes and diffs whole trees, and the server reconstructs and
+  validates the whole candidate before the existing reload rebuild. Include
+  those allocations in the same attribution and retain its whole-reload state
+  semantics when narrowing the work.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew, though `WorldDocument.NameStateEdit` then restores every row
   it did not name to the installed declaration (a neutral `world.row.set
@@ -4010,7 +4021,10 @@ hang, then the pre-`main` language findings.
   world, agents authoring from prompts) hit walls or reach for clumsy forms".
   The walls sit in the language plan's S11 audit, this section and the
   sdf-authoring skill's evals. Start the one page under `docs/plans/` those
-  three link to, and move the walls recorded here into it. Owner: lead.
+  three link to, and move the walls recorded here into it; the modeling walls
+  are already listed in
+  [modeling authoring](modeling-authoring.md#1-the-engine-limits-authors-met),
+  the page's first section. Owner: lead.
 - [medium] A record-like table of fixed fields states its room by counting
   them. Work pricing reads declarations only, so a table a rule folds or a
   search keys on is priced at the engine's cell ceiling until it declares a
@@ -5245,6 +5259,11 @@ read one. The plans that keep open items:
 - [UI](ui.md#open-items): step 1's remainder, then steps 3 to 6 behind the
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.
+- [Modeling authoring](modeling-authoring.md#5-implementation-slices): the
+  engine limits authors met with their owners and steps (a static placement's
+  dropped `twist`, Convex rounding, the paint outline cap, a fold's detail),
+  the `mirror` block, rotation builtins and `relativeTo` placement as slices
+  S1 to S3, the preview compare and named anchors after them.
 - [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the unbuilt
   refusal arrangements and the crossing and restore variants, dormant while
   test requirements are suspended.

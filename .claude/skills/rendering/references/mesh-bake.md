@@ -510,7 +510,10 @@ laws exercise that boundary.
 - **Materials are point-sampled, not taken from the lattice.** Each final
   quad's quarters and vertices are sampled through `sdfMeshBakePoints` (a staged
   World table the residency writes before the upload); a quad whose quarters
-  disagree splits into them, and one whose vertices disagree is cut along the
+  disagree splits into them, taking one vertex at the middle of each of its
+  edges that the triangle across the edge splits at too (found by position, so a
+  cut's boundary point that landed on an end counts), leaving no T-junction for
+  the audit to count as an open edge, and one whose vertices disagree is cut along the
   boundary its edges' bisection finds (`SdfMeshMaterialCut`). A material
   boundary only lies on the surface within one group: two groups' shapes meet
   as crossing meshes, whatever their materials.

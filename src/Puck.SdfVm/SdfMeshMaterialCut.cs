@@ -13,6 +13,9 @@ namespace Puck.SdfVm;
 /// <see cref="Rounds"/> more rounds for the point its material changes, and each triangle splits along the line between the
 /// points on its edges, so a boundary follows its true place to a thirty-second of an edge rather than stepping in half
 /// cells. An edge's point is shared by both triangles across it, so the boundary is one unbroken line.</para>
+/// <para>A quartered quad puts a vertex at the middle of each of its edges, and the triangle across such an edge splits
+/// at the same middle, so no mesh edge ends at a vertex inside another triangle's edge: the mesh holds no T-junction at a
+/// quartered edge, whichever of its neighbours is cut.</para>
 /// <para>A crease splits a vertex into copies at one place with their own normals (<see cref="SdfContour.SplitAtCreases"/>).
 /// The copies are one site: the site's material is sampled once, along the normal of the vertex the contour placed, and an
 /// edge between two sites is searched once, whichever copies its triangles name, so the faces either side of a crease cut
@@ -35,6 +38,9 @@ internal sealed class SdfMeshMaterialCut {
     private readonly SdfContour m_contour;
     // Each vertex's site: the first vertex at its place, which the crease copies appended after it share.
     private readonly int[] m_site;
+    // The site at each contour vertex's position, which a vertex the cut adds at that position (a boundary point that
+    // lands on an end) answers to as well.
+    private readonly Dictionary<Vector3, int> m_siteAt;
 
     private int[] m_quarters = [];
     private int[] m_vertices = [];
@@ -51,12 +57,11 @@ internal sealed class SdfMeshMaterialCut {
     /// <summary>Initializes a new instance of the <see cref="SdfMeshMaterialCut"/> class.</summary>
     /// <param name="contour">The contour, split at its creases, in the frame its group bakes in.</param>
     public SdfMeshMaterialCut(SdfContour contour) {
-        var first = new Dictionary<Vector3, int>(capacity: contour.VertexCount);
-
         m_contour = contour;
+        m_siteAt = new Dictionary<Vector3, int>(capacity: contour.VertexCount);
         m_site = new int[contour.VertexCount];
         for (var vertex = 0; (vertex < m_site.Length); vertex++) {
-            m_site[vertex] = (first.TryAdd(key: Position(vertex: vertex), value: vertex) ? vertex : first[Position(vertex: vertex)]);
+            m_site[vertex] = (m_siteAt.TryAdd(key: Position(vertex: vertex), value: vertex) ? vertex : m_siteAt[Position(vertex: vertex)]);
         }
     }
 
@@ -232,6 +237,28 @@ internal sealed class SdfMeshMaterialCut {
             return vertex;
         }
 
+        // A quartered quad's edge middles, one vertex per pair of corner vertices, and the site pairs of the edges they
+        // split: the triangle across such an edge takes the middle too (the pass after the quads), so the quartering
+        // leaves no T-junction, which the audit and the preview would count as an open edge. The position is the midpoint
+        // of the sites in site order, so a copy made for a crease's other side lands at the same bits and welds to it; the
+        // normal is the pair's own, so the copy shades its own face.
+        var middles = new Dictionary<(uint Low, uint High), uint>();
+        var quartered = new HashSet<(int Low, int High)>();
+
+        uint Middle(uint a, uint b) {
+            var key = ((a < b) ? (a, b) : (b, a));
+
+            if (!middles.TryGetValue(key: key, value: out var vertex)) {
+                var sites = Key(a: m_siteAt[positions[(int)a]], b: m_siteAt[positions[(int)b]]);
+
+                vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: Vector3.Lerp(value1: Position(vertex: sites.Low), value2: Position(vertex: sites.High), amount: 0.5f));
+                middles.Add(key: key, value: vertex);
+                if (sites.Low != sites.High) { quartered.Add(item: sites); }
+            }
+
+            return vertex;
+        }
+
         Span<int> triangle = stackalloc int[3];
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
@@ -279,16 +306,48 @@ internal sealed class SdfMeshMaterialCut {
 
             uint At(Vector2 at) => Add(normal: Bilinear(a: n0, at: at, b: n1, c: n2, d: n3), point: Bilinear(a: p0, at: at, b: p1, c: p2, d: p3));
 
-            var ab = At(at: new Vector2(x: 0.5f, y: 0f));
-            var bc = At(at: new Vector2(x: 1f, y: 0.5f));
-            var cd = At(at: new Vector2(x: 0.5f, y: 1f));
-            var da = At(at: new Vector2(x: 0f, y: 0.5f));
+            var ab = Middle(a: (uint)corners[0], b: (uint)corners[1]);
+            var bc = Middle(a: (uint)corners[1], b: (uint)corners[2]);
+            var cd = Middle(a: (uint)corners[2], b: (uint)corners[3]);
+            var da = Middle(a: (uint)corners[3], b: (uint)corners[0]);
             var center = At(at: new Vector2(x: 0.5f, y: 0.5f));
 
             Quad(a: ((uint)corners[0]), b: ab, c: center, d: da, material: quarter[0]);
             Quad(a: ab, b: ((uint)corners[1]), c: bc, d: center, material: quarter[1]);
             Quad(a: center, b: bc, c: ((uint)corners[2]), d: cd, material: quarter[2]);
             Quad(a: da, b: center, c: cd, d: ((uint)corners[3]), material: quarter[3]);
+        }
+
+        // Every triangle holding a quartered edge whole splits at the edge's middle, and its halves go back on the stack,
+        // since a triangle can hold two such edges. An end is found by its position, not its index: a boundary point that
+        // lands on an end of its edge is a vertex of its own at that site. A quarter's own triangles hold no such edge:
+        // each of their edges ends at a middle or the centre.
+        if (quartered.Count > 0) {
+            var pending = new Stack<int>(capacity: (indices.Count / 3));
+
+            for (var at = ((indices.Count / 3) - 1); (at >= 0); at--) { pending.Push(item: at); }
+            while (pending.TryPop(result: out var at)) {
+                for (var side = 0; (side < 3); side++) {
+                    var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
+
+                    if (!m_siteAt.TryGetValue(key: positions[(int)u], value: out var siteU) || !m_siteAt.TryGetValue(key: positions[(int)v], value: out var siteV) || !quartered.Contains(item: Key(a: siteU, b: siteV))) {
+                        continue;
+                    }
+
+                    var w = indices[((3 * at) + ((side + 2) % 3))];
+                    var middle = Middle(a: u, b: v);
+
+                    indices[(3 * at)] = u;
+                    indices[((3 * at) + 1)] = middle;
+                    indices[((3 * at) + 2)] = w;
+                    indices.Add(item: middle); indices.Add(item: v); indices.Add(item: w);
+                    triangleMaterials.Add(item: triangleMaterials[at]);
+                    pending.Push(item: at);
+                    pending.Push(item: ((indices.Count / 3) - 1));
+
+                    break;
+                }
+            }
         }
 
         return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray());

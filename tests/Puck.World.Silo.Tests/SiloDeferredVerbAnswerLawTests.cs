@@ -129,7 +129,8 @@ public sealed class SiloDeferredVerbAnswerLawTests {
         var refused = Principal.Addon(name: "unGranted");
         var reloadRequest = new WorldRebuildRequest(
             ContentHash: "published",
-            Definition: fixture.Server.Definition,
+            Definition: null,
+            Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, fixture.Server.Definition),
             Force: false,
             Kind: WorldRebuildKind.Reload,
             Origin: new WorldRebuildOrigin.Store(Owner: Guid.Empty, World: SafeName.Parse(candidate: "row"))

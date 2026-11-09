@@ -467,6 +467,22 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 **Paths resolve beside the document** that names them (`WorldDocumentPaths`);
 shipped engine content resolves through `PuckPaths.Shipped`.
 
+**Reload travels as a delta.** `world.reload` compiles the current source, then
+`WorldReloadDelta.Create` diffs the installed declarations with `WorldDocumentBasis.Diff`
+and proves the merge reproduces the target. Only the keyed patch, authority document
+version, base/result fingerprints, directory and source pin cross the submission wire;
+the Rebuild cap stays 16 MiB. The server reconstructs and validates before enqueue,
+then rechecks the base at ordered apply. `world.reload.stale-base` names an intervening
+install or another activation; `world.reload.base-mismatch` and
+`world.reload.target-mismatch` name disagreeing content. Retry by issuing a fresh
+reload. The success echo prints patch and complete payload bytes. Reload still uses
+the ordinary rebuild's state, input, journal and replay semantics; a wire delta is
+not a presentation-only mutation. Whole-document serialization, reconstruction and
+validation still allocate at this boundary (the next edit-to-running work item).
+For a live stdin driver, send an immediate read (`world.status` or `world.row`)
+after `world.reload` before waiting for its deferred answer: the following read
+is the session's drain barrier, including while startup's script backlog is held.
+
 **An import names; the named file decides what it brings.** `import "skies"`,
 never `import "skies.puck"` (PUCK121). A module library (a source emitting no
 document) hands its `let`s and templates to the compile; anything else is a

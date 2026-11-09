@@ -105,7 +105,13 @@ same change.
 - **Work is counted, not timed.** `physics.contact`
   (`FixedStaticContactWork`), `physics.sweep` (`FixedContactSweepWork`) and
   `physics.bodies` are deterministic work sources; read them with
-  `world.counters` before and after a change.
+  `world.counters` before and after a change. `physics.contact.field-unproved`
+  counts every field solve that proved nothing, the ground snap's bracket
+  probes included, so a body standing at an unprovable feature adds several a
+  tick and the total follows that body's path: a change that moves one pose by
+  a raw can move a sweep's total by thousands. Before calling such a delta a
+  bounds regression, run the same poses through both builds and compare each
+  outcome and box interval ([the crease item](../../../docs/plans/open-items.md#certified-field-contact)).
 - **Scale reaches every contact query.** A body's `Scale` multiplies its
   collider volumes for world contact, body pairs, events, the adjacency
   sweep's local side and rigid probing alike.

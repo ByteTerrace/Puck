@@ -389,6 +389,12 @@ public sealed partial class WorldDocument {
         }
         var priorDefinition = m_definition;
 
+        if (request.Delta is { } delta &&
+            (preparationFailure ?? delta.RefuseBase(m_definition, Host.DocumentVersion)) is { } deltaFailure) {
+            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: deltaFailure, verb: verb);
+            return false;
+        }
+
         // THE CAS RESOLUTION, FIRST — before any refusal gate, so a rebuild the door goes on to refuse below is
         // still taped and reproduces as the identical refusal on replay (RebuildTap's own remarks).
         //   Reset: the candidate is THIS DRIVE'S OWN current base (m_base) — live or replay, always freshly read
@@ -859,6 +865,10 @@ public sealed partial class WorldDocument {
         }
 
         var message = $"{verb} applied — base is {origin}, journal cleared";
+        if (request.Delta is { } appliedDelta &&
+            WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
+            message += $", delta={appliedDelta.Patch.Length} bytes payload={payload.Length} bytes";
+        }
 
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
