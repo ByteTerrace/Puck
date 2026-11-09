@@ -26,10 +26,15 @@ public readonly record struct SdfToon {
     public float Threshold { get; init; }
     /// <summary>The full width of the soft band transition.</summary>
     public float Softness { get; init; }
-    /// <summary>The share of each direct light, per linear RGB channel, that its shade side keeps (form and cast shadow
-    /// alike) wherever the light reaches the surface's surroundings: the painted shadow colour. Sky and bounced light are
-    /// not tinted.</summary>
+    /// <summary>The share of its lit colour, per linear RGB channel, a surface keeps on a light's shade side (form and
+    /// cast shadow alike) wherever the light reaches the surface's surroundings: the light restored at the band's lit
+    /// cosine together with the sky and bounced light that light owns, times this tint. Its luminance is the step's held
+    /// value and its chroma the painted shadow's hue; the lit side is the continuous response.</summary>
     public Vector3 ShadowTint { get; init; }
+    /// <summary>The radius, in metres, of the form the band reads: the band's normal is the surface's shape at this
+    /// radius and its shadow is filtered over it, so relief smaller than it neither speckles nor rags the step; zero
+    /// reads the pixel's neighbourhood alone.</summary>
+    public float FormRadius { get; init; }
     /// <summary>The outline radius at close range, in output pixels.</summary>
     public float OutlineWidth { get; init; }
     /// <summary>The distance at which the outline radius halves.</summary>
@@ -38,12 +43,6 @@ public readonly record struct SdfToon {
     public float OutlineNormal { get; init; }
     /// <summary>The linear colour multiplying an inked surface.</summary>
     public Vector3 OutlineTint { get; init; }
-    /// <summary>The highlight's angular radius, as one minus its half-vector cosine.</summary>
-    public float SpecularSize { get; init; }
-    /// <summary>The exposure gain applied to reflected material light, in stops.</summary>
-    public float Exposure { get; init; }
-    /// <summary>The peak-preserving shoulder strength on reflected material light; zero disables compression.</summary>
-    public float Shoulder { get; init; }
     /// <summary>How the band treats a light's shadow visibility.</summary>
     public SdfToonBand Band { get; init; }
 
@@ -52,15 +51,15 @@ public readonly record struct SdfToon {
     public float Mode => (Enabled ? ((Band == SdfToonBand.Combined) ? 2f : 1f) : 0f);
 
     /// <summary>Writes the style's four kernel rows, laid out as the pass block's toon members and a material's rows 22
-    /// to 25: bands (mode, threshold, softness, specular size), shadow (tint, exposure gain), outline (width,
-    /// halving distance, crease cosine, shoulder) and ink (tint, <paramref name="inkW"/>).</summary>
+    /// to 25: bands (mode, threshold, softness, form radius), shadow (tint, zero), outline (width, halving distance,
+    /// crease cosine, zero) and ink (tint, <paramref name="inkW"/>).</summary>
     /// <param name="mode">The mode word: <see cref="Mode"/> for a world's default, or a material's own encoding.</param>
     /// <param name="inkW">The ink row's fourth component.</param>
     /// <param name="rows">Receives the four rows; at least four long.</param>
     public void WriteRows(float mode, float inkW, Span<Vector4> rows) {
-        rows[0] = new(mode, Threshold, Softness, SpecularSize);
-        rows[1] = new(ShadowTint, MathF.Pow(x: 2f, y: Exposure));
-        rows[2] = new(OutlineWidth, OutlineDistance, OutlineNormal, Shoulder);
+        rows[0] = new(mode, Threshold, Softness, FormRadius);
+        rows[1] = new(ShadowTint, 0f);
+        rows[2] = new(OutlineWidth, OutlineDistance, OutlineNormal, 0f);
         rows[3] = new(OutlineTint, inkW);
     }
     /// <summary>Gets whether every value lies in its admitted range (<see cref="Refusals"/> is empty).</summary>
@@ -73,7 +72,7 @@ public readonly record struct SdfToon {
         var ranges = new (string Name, float Value, float Min, float Max)[] {
             ("threshold", Threshold, 0f, 1f), ("softness", Softness, .001f, .5f), ("outlineWidth", OutlineWidth, 0f, 4f),
             ("outlineDistance", OutlineDistance, .1f, 1000f), ("outlineNormal", OutlineNormal, 0f, .95f),
-            ("specularSize", SpecularSize, .001f, .25f), ("exposure", Exposure, -4f, 4f), ("shoulder", Shoulder, 0f, 2f),
+            ("formRadius", FormRadius, 0f, 10f),
             ("shadowTint[0]", ShadowTint.X, 0f, 1f), ("shadowTint[1]", ShadowTint.Y, 0f, 1f), ("shadowTint[2]", ShadowTint.Z, 0f, 1f),
             ("outlineTint[0]", OutlineTint.X, 0f, 1f), ("outlineTint[1]", OutlineTint.Y, 0f, 1f), ("outlineTint[2]", OutlineTint.Z, 0f, 1f),
         };

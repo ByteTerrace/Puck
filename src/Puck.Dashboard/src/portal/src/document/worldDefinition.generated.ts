@@ -4273,9 +4273,13 @@ export type ShapeNullable10 = {
    */
   softness?: number | null;
   /**
-   * The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].
+   * The share of its lit colour a surface keeps on a light's shade side, the step's held value and the painted shadow's hue, three linear RGB values in [0, 1].
    */
   shadowTint?: unknown;
+  /**
+   * The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel's neighbourhood alone.
+   */
+  formRadius?: number | null;
   /**
    * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
    */
@@ -4292,18 +4296,6 @@ export type ShapeNullable10 = {
    * Outline multiplier, three linear RGB values in [0, 1].
    */
   outlineTint?: unknown;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number | null;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number | null;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number | null;
   /**
    * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.
    */
@@ -5337,9 +5329,13 @@ export type ToonStyleDocument = {
    */
   softness?: number | null;
   /**
-   * The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].
+   * The share of its lit colour a surface keeps on a light's shade side, the step's held value and the painted shadow's hue, three linear RGB values in [0, 1].
    */
   shadowTint?: DocumentVector3;
+  /**
+   * The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel's neighbourhood alone.
+   */
+  formRadius?: number | null;
   /**
    * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
    */
@@ -5356,18 +5352,6 @@ export type ToonStyleDocument = {
    * Outline multiplier, three linear RGB values in [0, 1].
    */
   outlineTint?: DocumentVector3;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number | null;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number | null;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number | null;
   /**
    * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.
    */

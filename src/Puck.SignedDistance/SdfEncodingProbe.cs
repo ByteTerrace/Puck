@@ -200,8 +200,7 @@ public static class SdfEncodingProbe {
                     Toon: new SdfToon {
                         Enabled = true, Band = SdfToonBand.Combined, Threshold = v[83], Softness = v[84],
                         ShadowTint = new Vector3(x: v[85], y: v[86], z: v[87]), OutlineWidth = v[88], OutlineDistance = v[89],
-                        OutlineNormal = v[90], OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]), SpecularSize = v[94],
-                        Exposure = v[95], Shoulder = v[96],
+                        OutlineNormal = v[90], OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]), FormRadius = v[94],
                     },
                     Flow: new SdfFlow(
                         Velocity: new Vector3(x: v[103], y: v[104], z: v[105]),

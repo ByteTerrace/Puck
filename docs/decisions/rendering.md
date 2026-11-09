@@ -156,12 +156,18 @@ owner ruled the second (a style per material, not one look per world).
   by that identity, and the rule that any other body in front of a wrapped
   receiver shadows it while its own body shadows it only by a second chord;
   this entry is rewritten when it lands.
-- **The band shapes the light, not the shadow.** A cel style bands a light's
-  cosine and keeps its visibility as a separate factor,
-  `band(cosine) × visibility`, so the filtered penumbra keeps its softness and
-  colour. `band(cosine × visibility)` stays as an authored shape for the harder
-  look. Rim lights, the environment reflection and ambient occlusion stay in the
-  cel response as in the continuous one; a style never discards a term.
+- **The lit side is continuous; the step is of the whole light.** A cel style
+  leaves a lit pixel exactly as the continuous response shades it, every term
+  kept, and decides only where each direct light's shade side begins: a band of
+  the light's cosine on the surface's form (a macro normal at an authored
+  radius) and, for `band: Combined`, of its filtered shadow. On the shade side
+  the surface shows the colour it would have lit, the light restored at the
+  band's lit cosine together with the share of the sky and bounce that light
+  owns, times the style's tint. A step of the direct key alone leaves the shade
+  side's value to the fill, which outdoors nearly matches the lit side, so it
+  reads as a hue shift; a step of the whole light is one darker, coloured value
+  under any fill. The step reaches as far as the light reaches the surface's
+  surroundings, so a room the light never enters keeps its continuous light.
 - **A style is material data.** One lighting path with a style response per
   material: a palette row's `toon` opts its material in (or out, with
   `enabled: false`), every other material inherits the world's default

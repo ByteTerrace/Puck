@@ -10909,7 +10909,7 @@
               "default": null
             },
             "shadowTint": {
-              "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
+              "description": "The share of its lit colour a surface keeps on a light\u0027s shade side, the step\u0027s held value and the painted shadow\u0027s hue, three linear RGB values in [0, 1].",
               "default": null,
               "title": "DocumentVector3",
               "anyOf": [
@@ -10927,6 +10927,14 @@
                   "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                 }
               ]
+            },
+            "formRadius": {
+              "description": "The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel\u0027s neighbourhood alone.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "outlineWidth": {
               "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
@@ -10971,30 +10979,6 @@
                   "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                 }
               ]
-            },
-            "specularSize": {
-              "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "exposure": {
-              "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "shoulder": {
-              "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
             },
             "band": {
               "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
@@ -32814,7 +32798,7 @@
                           "default": null
                         },
                         "shadowTint": {
-                          "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
+                          "description": "The share of its lit colour a surface keeps on a light\u0027s shade side, the step\u0027s held value and the painted shadow\u0027s hue, three linear RGB values in [0, 1].",
                           "default": null,
                           "title": "DocumentVector3",
                           "anyOf": [
@@ -32832,6 +32816,14 @@
                               "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                             }
                           ]
+                        },
+                        "formRadius": {
+                          "description": "The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel\u0027s neighbourhood alone.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         },
                         "outlineWidth": {
                           "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
@@ -32876,30 +32868,6 @@
                               "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                             }
                           ]
-                        },
-                        "specularSize": {
-                          "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "exposure": {
-                          "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "shoulder": {
-                          "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
                         },
                         "band": {
                           "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
@@ -32961,7 +32929,7 @@
                                 "default": null
                               },
                               "shadowTint": {
-                                "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
+                                "description": "The share of its lit colour a surface keeps on a light\u0027s shade side, the step\u0027s held value and the painted shadow\u0027s hue, three linear RGB values in [0, 1].",
                                 "default": null,
                                 "title": "DocumentVector3",
                                 "anyOf": [
@@ -32979,6 +32947,14 @@
                                     "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                                   }
                                 ]
+                              },
+                              "formRadius": {
+                                "description": "The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel\u0027s neighbourhood alone.",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
                               },
                               "outlineWidth": {
                                 "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
@@ -33023,30 +32999,6 @@
                                     "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
                                   }
                                 ]
-                              },
-                              "specularSize": {
-                                "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "exposure": {
-                                "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
-                              },
-                              "shoulder": {
-                                "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null
                               },
                               "band": {
                                 "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",

@@ -16,15 +16,14 @@ namespace Puck.World.Authoring;
 /// on, which a style with every value then bands with.</param>
 /// <param name="Threshold">Diffuse band threshold in [0, 1].</param>
 /// <param name="Softness">Full terminator width in [0.001, 0.5].</param>
-/// <param name="ShadowTint">The share of each direct light its shade side keeps, the painted shadow colour, three
-/// linear RGB values in [0, 1].</param>
+/// <param name="ShadowTint">The share of its lit colour a surface keeps on a light's shade side, the step's held value
+/// and the painted shadow's hue, three linear RGB values in [0, 1].</param>
+/// <param name="FormRadius">The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it
+/// neither speckles nor rags the step; zero reads the pixel's neighbourhood alone.</param>
 /// <param name="OutlineWidth">Close outline radius in output pixels, in [0, 4]; zero disables outlines.</param>
 /// <param name="OutlineDistance">Distance in metres at which the outline radius halves, in [0.1, 1000].</param>
 /// <param name="OutlineNormal">Crease normal cosine in [0, 0.95].</param>
 /// <param name="OutlineTint">Outline multiplier, three linear RGB values in [0, 1].</param>
-/// <param name="SpecularSize">Highlight size as one minus the half-vector cosine, in [0.001, 0.25].</param>
-/// <param name="Exposure">Reflected-light exposure compensation in stops, in [-4, 4].</param>
-/// <param name="Shoulder">Hue-preserving highlight compression in [0, 2]; zero disables it.</param>
 /// <param name="Band">How the band treats a light's shadow visibility: <see cref="SdfToonBand.Visibility"/> (the
 /// default) keeps the penumbra, <see cref="SdfToonBand.Combined"/> steps it into a held shape.</param>
 public sealed record ToonStyleDocument(
@@ -32,13 +31,11 @@ public sealed record ToonStyleDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Threshold = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Softness = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? ShadowTint = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FormRadius = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? OutlineWidth = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? OutlineDistance = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? OutlineNormal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? OutlineTint = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? SpecularSize = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exposure = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Shoulder = null,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfToonBand>))] SdfToonBand Band = SdfToonBand.Visibility
 ) {
     /// <summary>Gets whether the style bands: <see cref="Enabled"/>, or true when it is absent.</summary>
@@ -52,10 +49,9 @@ public sealed record ToonStyleDocument(
     /// <returns>The style.</returns>
     public SdfToon ToToon() => new() {
         Enabled = IsOn, Threshold = (Threshold ?? 0f), Softness = (Softness ?? 0f),
-        ShadowTint = (ShadowTint ?? Vector3.Zero), OutlineWidth = (OutlineWidth ?? 0f),
+        ShadowTint = (ShadowTint ?? Vector3.Zero), FormRadius = (FormRadius ?? 0f), OutlineWidth = (OutlineWidth ?? 0f),
         OutlineDistance = (OutlineDistance ?? 0f), OutlineNormal = (OutlineNormal ?? 0f),
-        OutlineTint = (OutlineTint ?? Vector3.Zero), SpecularSize = (SpecularSize ?? 0f), Exposure = (Exposure ?? 0f),
-        Shoulder = (Shoulder ?? 0f), Band = Band,
+        OutlineTint = (OutlineTint ?? Vector3.Zero), Band = Band,
     };
     /// <summary>Resolves a world's default style and the live lever's override; neither affects simulation state.</summary>
     /// <param name="toon">The document's <c>render.toon</c>, or <see langword="null"/> when the world authors none.</param>
@@ -82,13 +78,11 @@ public sealed record ToonStyleDocument(
         if (Threshold is null) { yield return "threshold"; }
         if (Softness is null) { yield return "softness"; }
         if (ShadowTint is null) { yield return "shadowTint"; }
+        if (FormRadius is null) { yield return "formRadius"; }
         if (OutlineWidth is null) { yield return "outlineWidth"; }
         if (OutlineDistance is null) { yield return "outlineDistance"; }
         if (OutlineNormal is null) { yield return "outlineNormal"; }
         if (OutlineTint is null) { yield return "outlineTint"; }
-        if (SpecularSize is null) { yield return "specularSize"; }
-        if (Exposure is null) { yield return "exposure"; }
-        if (Shoulder is null) { yield return "shoulder"; }
     }
     // The field a refusal of SdfToon.Refusals names: its first word, less a component index.
     private static string FieldOf(string refusal) {

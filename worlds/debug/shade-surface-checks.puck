@@ -1,5 +1,5 @@
 // Execution witnesses: wrapped backfaces under a blocker, lane-turned normals,
-// the standard cel phases, and local flow on rotated static glass copies.
+// the standard cel style, and local flow on rotated static glass copies.
 schema: "puck.world.definition.v1"
 basis: "shade-checks"
 documentId: "shade-surface-checks"
@@ -47,7 +47,7 @@ prototypes {
   prototype "shade-sphere" {
     document {
       schema: "puck.creation.v1"
-      palette [celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celStyle)]
+      palette [{ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celStyle }]
       shape Sphere "sphere" {
         position [0, 1, -3]
         scale [1, 1, 1]

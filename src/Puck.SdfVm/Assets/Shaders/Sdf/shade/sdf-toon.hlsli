@@ -1,17 +1,18 @@
 // Cel material response in scene luminance. Screens and sky never call this module.
 // A cel style is per material (SdfToon): a material that authors one carries it in its rows 22 to 25, and every other
 // material inherits the world's default style from the pass block (render.toon, which world.toon overrides). Both are
-// laid out alike: bands (mode, threshold, softness, specular size), shadow (tint, exposure gain), outline (width in
-// output pixels, halving distance, crease cosine, shoulder) and ink (tint; the pass block's w is the render grid the
-// outline width scales by). The mode is 0 for off (a material's own -1, so its zero still means inherit), 1 for the band
-// shaping the light's cosine with its shadow visibility kept as it was filtered, 2 for the band also stepping that
-// visibility (SdfToonBand).
+// laid out alike: bands (mode, threshold, softness, form radius), shadow (tint), outline (width in output pixels, halving
+// distance, crease cosine) and ink (tint; the pass block's w is the render grid the outline width scales by). The mode is
+// 0 for off (a material's own -1, so its zero still means inherit), 1 for the band shaping the light's cosine with its
+// shadow visibility kept as it was filtered, 2 for the band also stepping that visibility (SdfToonBand).
 //
-// A light's banded share is band = step(cosine) x shadow, and the light reaches the surface as
-// light x (band + (1 - band) x region x tint): its lit side takes the light whole, and its shade side, form shadow and
-// cast shadow alike, keeps the tint's share of it, the painted shadow colour, as far as the light reaches the region
-// around the surface at all (sdfToonRegion). Sky and bounced light are added as they are, so a room no direct light
-// reaches shades as it would continuously and only a light's own shadow takes the tint.
+// The lit side is the continuous response, untouched: a style never darkens, desaturates or compresses the key. Each
+// direct light's band, b = step(cosine) x shadow, read on the surface's form (its macro normal and form-filtered shadow,
+// sdfToonForm) decides where the light's shade side begins; there the surface shows the colour it would have lit, the
+// light restored at the band's lit cosine and at full visibility together with the share of the sky and bounced light
+// that light owns, times the tint: one darker, coloured step of the surface's whole light rather than of the key alone
+// (sdfToonShade). A light's step reaches only as far as the light reaches the surface's surroundings (its region): a
+// form or cast shadow in the open air steps, and a room the light never enters keeps its continuous light.
 #ifndef SHADE_SDF_TOON_HLSLI
 #define SHADE_SDF_TOON_HLSLI
 
@@ -21,7 +22,8 @@
 static const float SdfToonShadowBlockPixels = 64.0;
 
 // A style as a pixel shades with it: the authored rows; the band softness, widened at this pixel to what the surface
-// resolves; the width of the shadow step for each shadow slot, in visibility; and the normal the band reads.
+// resolves; the width of the shadow step for each shadow slot, in visibility; the form the band reads (its normal and
+// each slot's shadow visibility filtered over it); and whether the surface stands in the open air.
 struct SdfToonStyle {
     float4 bands;
     float4 shadow;
@@ -29,11 +31,12 @@ struct SdfToonStyle {
     float3 ink;
     float2 shadowStep;
     float3 normal;
+    float4 shadows;
     float open;
 };
 
 // The style a material shades with: its own when it authors one, else the world's default, as authored. A pixel that
-// shades with it widens it first (sdfToonResolve).
+// shades with it reads its form first (sdfToonResolve).
 SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     SdfToonStyle style;
     bool own = (material.toonBands.x != 0.0);
@@ -46,25 +49,23 @@ SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     style.outline.x *= passGroup.toonInk.w;
     style.shadowStep = float2(1.0, 1.0);
     style.normal = float3(0.0, 0.0, 0.0);
+    style.shadows = float4(1.0, 1.0, 1.0, 1.0);
     style.open = 0.0;
     return style;
 }
 
 bool sdfToonEnabled(SdfToonStyle style) { return style.bands.x > 0.0; }
 
-// The style at one pixel. The band reads `bandNormal`, the surface's normal averaged over the pixel's neighbourhood
-// (sdfToonGather): a cosine stepped on a normal that turns within a pixel or two (a rock's relief, a baked surface's
-// fine detail) draws speckle, which the average leaves to the albedo and the continuous terms. Its softness widens to
-// the larger of what the authored value draws and what the surface resolves: `spread`, how far the normals in that
-// neighbourhood part (their mean's shortfall from unit length, as a cosine change), so a terminator over a normal that
-// varies faster than the pixels spans them instead of stepping between neighbours and crawling as the camera or the
-// sun moves; and `triangleSpread`, how far the hit triangle's vertex normals part (sdfMeshNormalSpread), since between
-// them the cosine is only interpolated and a sharper step follows the triangle's edges. `shadowTexels` is each shadow
+// The style at one pixel, given its form (sdfToonForm): the normal the band reads and the shadow visibilities it steps.
+// The band's softness widens to the larger of the authored value and how fast the band's cosine changes across a
+// pixel: `spread`, how far the normals about the pixel part as a cosine change across it, over the form's radius in
+// pixels, since a normal read over that many pixels turns that many times more slowly. `shadowTexels` is each shadow
 // slot's cascade texel in pixels at the surface (sdfToonShadowTexels): the shadow step keeps at least a pixel's width of
 // penumbra, and keeps all of it as the texel grows toward SdfToonShadowBlockPixels.
-SdfToonStyle sdfToonResolve(SdfToonStyle style, float3 bandNormal, float spread, float triangleSpread, float2 shadowTexels) {
-    style.normal = bandNormal;
-    style.bands.z = max(style.bands.z, min(max(spread, triangleSpread), 1.0));
+SdfToonStyle sdfToonResolve(SdfToonStyle style, float3 formNormal, float4 formShadows, float formPixels, float spread, float2 shadowTexels) {
+    style.normal = formNormal;
+    style.shadows = formShadows;
+    style.bands.z = max(style.bands.z, min(spread / max(formPixels, 1.0), 1.0));
     float2 resolved = max(0.5 / max(shadowTexels, 1.0e-3), shadowTexels / SdfToonShadowBlockPixels);
     style.shadowStep = saturate(max(style.bands.zz, resolved));
     return style;
@@ -83,8 +84,8 @@ float sdfToonShadowWidth(SdfToonStyle style, int lightIndex) {
 }
 
 // A light's banded share at a cosine (a wrapped one included) under its filtered shadow visibility. Mode 1 keeps the
-// visibility as the cascades' filter left it; mode 2 steps it about one half over `width`, so a cast shadow is a held
-// shape with a soft edge no sharper than the cascade resolves.
+// visibility as the filter left it; mode 2 steps it about one half over `width`, so a cast shadow is a held shape with a
+// soft edge no sharper than the cascade resolves.
 float sdfToonBand(SdfToonStyle style, float cosine, float visibility, float width) {
     float shadow = saturate(visibility);
     if (style.bands.x > 1.5) {
@@ -95,37 +96,62 @@ float sdfToonBand(SdfToonStyle style, float cosine, float visibility, float widt
 }
 
 // The share of the sky above a surface its probes see open (sdfMeshIrradianceAt, about straight up) at which the surface
-// counts as in the open air: a cast shadow there, under a tree or in a building's shadow on the lawn, keeps the shade
-// side's tint as a form shadow does, while a room, which sees almost no sky, does not. The probes sit a storey cell apart,
-// so the share varies in broad soft patches; a share past this one reads as open air whole, so those patches never print.
+// counts as in the open air: a cast shadow there, under a tree or in a building's shadow on the lawn, steps as a form
+// shadow does, while a room, which sees almost no sky, keeps its continuous light. The probes sit a storey cell apart, so
+// the share varies in broad soft patches; a share past this one reads as open air whole, so those patches never print.
 static const float SdfToonOpenSky = 0.25;
 float sdfToonOpen(float skyVisibility) {
     return smoothstep(0.0, SdfToonOpenSky, skyVisibility);
 }
 
-// What a light delivers at a surface per unit of its strength: the whole on the lit side, the tint's share on the shade
-// side as far as `region`, the share of the light reaching the surface's surroundings, goes.
-float3 sdfToonShare(SdfToonStyle style, float band, float region) {
-    return (band + ((1.0 - band) * saturate(region)) * style.shadow.rgb);
+// One light's cel step at a surface (SdfLightResponse.toon...): `light` is what the light delivers at unit cosine and
+// full visibility (its colour, strength, reach and the occlusion the continuous response keeps), `cosine` the band's on
+// the form's normal, `band` the light's banded share and `region` how far the light reaches the surface's surroundings.
+// The light's restored diffuse is the light at the band's lit cosine (the cosine itself, or the threshold where the
+// form turns past it), so a shade side shows a held colour; `shade` is how far the step applies, the band's shade share
+// within the region; `potential` the light's luminance within the region, by which it owns a share of the fill.
+struct SdfToonLight {
+    float3 restored;
+    float shade;
+    float potential;
+};
+SdfToonLight sdfToonLight(SdfToonStyle style, float3 light, float cosine, float band, float region) {
+    SdfToonLight step;
+    float reached = saturate(region);
+    step.restored = light * max(cosine, style.bands.y);
+    step.shade = ((1.0 - saturate(band)) * reached);
+    step.potential = (dot(light, SDF_LUMINANCE) * reached);
+    return step;
 }
 
-float3 sdfToonSpecular(SdfToonStyle style, SdfMaterialData material, float3 normal, float3 view, float3 light, float radiance, float band) {
-    float3 halfway = light + view;
-    float lengthSquared = dot(halfway, halfway);
-    float cosine = dot(normal, halfway * rsqrt(max(lengthSquared, 1.0e-8)));
-    float size = style.bands.w * lerp(0.5, 1.5, material.roughness);
-    // A narrow analytic edge survives subpixel movement without an unbounded GGX peak.
-    float highlight = smoothstep(1.0 - size, 1.0 - size + min(size * 0.15, 0.003), cosine);
-    float3 reflectance = lerp(material.specular.xxx, material.albedo, material.metal);
-    float gain = (1.0 - 0.75 * material.roughness) * 2.0;
-    return reflectance * (highlight * gain * radiance * band);
+// The lights' cel steps summed over a walk (sdfToonAdd), and the change they make to the diffuse light a surface reflects
+// (sdfToonShade).
+struct SdfToonSteps {
+    // Each light's step on its own direct light: shade x (tint x restored - diffuse).
+    float3 direct;
+    // Each light's shade share of its potential, and the potentials summed.
+    float shaded;
+    float potential;
+    // Each light's step on the light the local adaptation meters: shade x (restored - diffuse).
+    float3 metered;
+};
+SdfToonSteps sdfToonStepsStart() {
+    return (SdfToonSteps)0;
 }
-
-// Compress all channels by the same factor, preserving paint chroma. Emission is added afterwards.
-float3 sdfToonExpose(SdfToonStyle style, float3 reflected) {
-    float3 exposed = max(reflected, 0.0) * (passGroup.exposure * style.shadow.w);
-    float peak = max(exposed.r, max(exposed.g, exposed.b));
-    return exposed / ((1.0 + peak * style.outline.w) * max(passGroup.exposure, 1.0e-12));
+void sdfToonAdd(inout SdfToonSteps steps, SdfToonStyle style, SdfToonLight step, float3 diffuse) {
+    steps.direct += (step.shade * ((style.shadow.rgb * step.restored) - diffuse));
+    steps.shaded += (step.shade * step.potential);
+    steps.potential += step.potential;
+    steps.metered += (step.shade * (step.restored - diffuse));
+}
+// The change to the diffuse light (before albedo) that turns the continuous response into the cel one, given `fill`, the
+// sky and bounced light the surface receives. A light owns the share of the fill its potential holds of the lights'
+// summed potential, or of the fill itself where the fill outshines every light (a room lit mostly by bounce keeps most of
+// its fill whatever one lamp's band says), and its shade side keeps the tint's share of its direct light and of that
+// fill: where one light reaches alone, the shade side is the tint times the whole light the surface would have lit.
+float3 sdfToonShade(SdfToonStyle style, SdfToonSteps steps, float3 fill) {
+    float owned = (steps.shaded / max(max(steps.potential, dot(fill, SDF_LUMINANCE)), 1.0e-6));
+    return (steps.direct + ((style.shadow.rgb - 1.0) * (fill * owned)));
 }
 
 #endif

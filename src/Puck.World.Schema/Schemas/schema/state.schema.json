@@ -1066,7 +1066,15 @@
                             },
                             "shadowTint": {
                               "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                              "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
+                              "description": "The share of its lit colour a surface keeps on a light\u0027s shade side, the step\u0027s held value and the painted shadow\u0027s hue, three linear RGB values in [0, 1].",
+                              "default": null
+                            },
+                            "formRadius": {
+                              "description": "The radius in metres, in [0, 10], of the form the band reads, so relief smaller than it neither speckles nor rags the step; zero reads the pixel\u0027s neighbourhood alone.",
+                              "type": [
+                                "number",
+                                "null"
+                              ],
                               "default": null
                             },
                             "outlineWidth": {
@@ -1096,30 +1104,6 @@
                             "outlineTint": {
                               "$ref": "./common.schema.json#/$defs/DocumentVector3",
                               "description": "Outline multiplier, three linear RGB values in [0, 1].",
-                              "default": null
-                            },
-                            "specularSize": {
-                              "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
-                            },
-                            "exposure": {
-                              "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
-                            },
-                            "shoulder": {
-                              "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
                               "default": null
                             },
                             "band": {

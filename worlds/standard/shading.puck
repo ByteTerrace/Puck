@@ -7,38 +7,6 @@ function shadeLane(index) = index == 0 ? lanes.slot0 : index == 1 ? lanes.slot1 
 shade template plain() { surface { albedo = material.albedo } }
 shade template paint(color) { surface { albedo = mix(material.albedo, color, paint.coverage) } }
 
-// The engine's cel response (shade/sdf-toon.hlsli) as a program: a light's band steps its cosine and, combined, its
-// filtered shadow visibility; the lit side takes the light whole and the shade side the tint's share of it, as far as the
-// light reaches the surface's surroundings (a directional's probe share; a point light's reach already holds its own).
-// The engine instead counts a surface under open sky as reached, reads the band's cosine on a neighbourhood normal and
-// widens the steps to what the surface and the cascade resolve, which a program cannot yet read.
-function celStep(value, threshold, softness) = smoothstep(threshold - max(softness * 0.5, 0.0005), threshold + max(softness * 0.5, 0.0005), saturate(value))
-function celShadow(visibility, softness, combined) = combined ? smoothstep(0.5 - max(softness * 0.5, 0.0005), 0.5 + max(softness * 0.5, 0.0005), saturate(visibility)) : saturate(visibility)
-shade template cel(threshold, softness, shadowTint, specularSize, exposureStops, shoulder, structural combined = 0) {
-  light {
-    let point = light.kind == uint(2)
-    let direct = (light.kind == uint(0)) + point
-    let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
-    let band = celStep(cosine, threshold, softness) * (point ? 1 : celShadow(light.visibility, softness, combined))
-    let region = point ? 1 : light.probeShare
-    let reach = point ? light.reach * light.probeShare * light.occlusion : 1
-    let share = [band, band, band] + shadowTint * ((1 - band) * region)
-    diffuse = direct ? light.color * share * (light.weight * reach) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])
-    let halfway = light.direction - surface.rayDirection
-    let halfway = halfway / sqrt(max(dot(halfway, halfway), 0.00000001))
-    let size = specularSize * mix(0.5, 1.5, surface.roughness)
-    let highlight = smoothstep(1 - size, 1 - size + min(size * 0.15, 0.003), dot(surface.normal, halfway))
-    let reflectance = mix([surface.specular, surface.specular, surface.specular], surface.albedo, surface.metal)
-    specular = direct ? light.color * reflectance * (highlight * (1 - 0.75 * surface.roughness) * 2 * light.weight * reach * band) : [0,0,0]
-  }
-  compose {
-    let reflected = (surface.albedo * (compose.radiance + compose.indirect) + compose.environment + compose.rim + compose.specular) * compose.attenuation * compose.adaptation
-    let exposed = max(reflected, 0) * (compose.exposure * pow(2, exposureStops))
-    let peak = max(exposed.x, max(exposed.y, exposed.z))
-    color = exposed / ((1 + peak * shoulder) * max(compose.exposure, 0.000000000001)) + surface.albedo * surface.emissive
-  }
-}
-
 shade template inset(origin, rotation, depth, ior, softness, amplitude, frequency, phase,
   color0, color1, color2, color3, radius0, radius1, radius2, radius3) {
   surface {

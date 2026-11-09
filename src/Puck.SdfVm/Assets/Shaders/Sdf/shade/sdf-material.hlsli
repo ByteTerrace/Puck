@@ -270,6 +270,13 @@ float3 sdfMaterialEnvironmentBrdf(float3 f0, float roughness, float nDotV) {
 // diffuse terms — a float3 so colored lights tint the surface); each light's GGX and clearcoat lobe is its own response
 // (sdfLightResponse), added after the shade. The emissive is a luminance in nits the albedo tints. KEEP IN SYNC across
 // every caller (passes/sdf-light-stage.hlsli).
+float sdfMaterialSheenGain(SdfMaterialData material, float3 normal, float3 rayDirection) {
+    if (material.sheen <= 0.0) {
+        return 1.0;
+    }
+    float fresnel = pow(saturate(1.0 - saturate(dot(normal, -rayDirection))), SdfSheenFresnelExponent);
+    return (1.0 + (material.sheen * fresnel));
+}
 float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection) {
     float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
     float3 color = (diffuseAlbedo * diffuse);
@@ -278,12 +285,13 @@ float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal,
         color += (material.albedo * material.emissive);
     }
 
-    if (material.sheen > 0.0) {
-        float fresnel = pow(saturate(1.0 - saturate(dot(normal, -rayDirection))), SdfSheenFresnelExponent);
-        color += (color * (material.sheen * fresnel));
-    }
-
-    return color;
+    return (color * sdfMaterialSheenGain(material, normal, rayDirection));
+}
+// What a change of `diffuse` light changes in the shade above (sdfMaterialShade), its emission left out: the shade is
+// linear in the light, so a change it never saw (the cel step's, which can darken) adds through the same lambert and
+// sheen terms.
+float3 sdfMaterialDiffuse(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection) {
+    return ((material.albedo * (1.0 - material.metal)) * diffuse * sdfMaterialSheenGain(material, normal, rayDirection));
 }
 
 #endif

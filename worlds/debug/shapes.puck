@@ -16,6 +16,7 @@
 // (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
 // the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
 // to. This file is a library: debug.puck and hall.puck expand its templates and lets.
+import "../standard/shading"
 import "../standard/styles"
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
@@ -1450,7 +1451,7 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL STYLE",
         extra: [
-          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celInkStyle)
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celInkStyle }
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: continuousStyle }
         ],
         note: "left: the standard's inked cel style; right: continuous"
@@ -1472,7 +1473,7 @@ template surfacePrototypes() {
       exhibit(
         label: "CEL HARD",
         extra: [
-          celMaterial({ color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }, celHardStyle)
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celHardStyle }
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: continuousStyle }
         ],
         note: "left: the hardest band, a near-step terminator; right: continuous"

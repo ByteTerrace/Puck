@@ -586,50 +586,67 @@ render {
 }
 ```
 
-The views pass steps each direct light's diffuse cosine about `threshold`,
-and the light reaches the surface as
-`light × (band + (1 − band) × region × shadowTint)`: the lit side takes the
-light whole, and the shade side, form and cast shadow alike, keeps
-`shadowTint`'s share of it, the painted shadow colour, as far as the light
-reaches the surface's surroundings. For a directional that region is whether
-the surface stands in the open air: the share of the sky above it the
-irradiance volume's probes see (`sdfToonOpen`), so a form or cast shadow
-outdoors, under a tree or beside a building, keeps the tint, and a room the
-sun never enters does not. The cascades cannot answer it, since the inner face
-of a building's outer wall is that wall's own exit from the light; without the
-volume their visibility stands in. A point light's reach already holds its
-traced visibility. The surface pass queries a cel material's shadows on every
-side (`sdfMaterialShadowDemand`), because the band's neighbourhood normal can
-face the light where the pixel's own normal does not. Sky and bounced light add as they do in the continuous
-response, untinted, so a room lit only by bounce keeps its exposure and the
-lit-to-shade step outdoors is the tint the author chose rather than the
-sky-to-sun ratio. The local adaptation meters each light without its band or
-shadow step (`SdfLightResponse.metered`), so it stays continuous across the
-terminator and a cast shadow's edge and never flattens the step.
+A lit pixel is the continuous response, every term of it: a style never
+darkens, desaturates or compresses the key. The views pass steps each direct
+light's diffuse cosine about `threshold` on the surface's form (below), and
+where a light's band turns to its shade side, form and cast shadow alike, the
+surface shows the colour it would have lit times `shadowTint`: that light
+restored at the band's lit cosine (the cosine itself, or `threshold` where the
+form turns past it) and at full visibility, together with the share of the
+sky, bounced light and authored fill the light owns. A light owns the fill in
+proportion to its strength over the larger of all the stepped lights'
+strength and the fill's own, so outdoors the sun owns the whole of it and a
+room lit mostly by bounce keeps most of its fill whatever one lamp's band
+says. The step is therefore one darker value of the surface's whole light,
+`shadowTint`'s luminance (about one half in the standard's `celStyle`), in
+`shadowTint`'s hue, whatever the fill: a step of the key alone would leave the
+shade side's value to the sky and bounce, which outdoors nearly matches the
+lit side.
+
+A light steps only as far as it reaches the surface's surroundings. For a
+directional that region is whether the surface stands in the open air: the
+share of the sky above it the irradiance volume's probes see (`sdfToonOpen`),
+so a form or cast shadow outdoors, under a tree or beside a building, steps,
+and a room the sun never enters keeps its continuous light. The cascades
+cannot answer it, since the inner face of a building's outer wall is that
+wall's own exit from the light; without the volume their visibility stands
+in. A point light's reach already holds its traced visibility. The surface
+pass queries a cel material's shadows on every side
+(`sdfMaterialShadowDemand`), because the band's form normal can face the light
+where the pixel's own normal does not. The local adaptation meters a shade
+side's restored light, so the adaptation never lifts the step away.
 
 `band: Visibility` (the default) multiplies the band by the shadow
-visibility the cascades' filter left, keeping its penumbra; `band: Combined`
-steps that visibility about one half too, so a cast shadow is a held shape.
-The shadow step is never sharper than the style's softness, a pixel, or what
-the cascade resolves: once a cascade texel, stretched by the receiver's slope
-to the light, spans many pixels (`SdfToonShadowBlockPixels`), the step keeps
-the whole filtered penumbra, so a far cascade on ground the light grazes
-does not print its texel grid as blocks.
+visibility the filters left, keeping its penumbra; `band: Combined` steps that
+visibility about one half too, so a cast shadow is a held shape. The shadow
+step is never sharper than the style's softness, a pixel, or what the cascade
+resolves: once a cascade texel, stretched by the receiver's slope to the
+light, spans many pixels (`SdfToonShadowBlockPixels`), the step keeps the
+whole filtered penumbra, so a far cascade on ground the light grazes does not
+print its texel grid as blocks.
 
-The band's cosine reads the surface's normal averaged over the pixel and its
-eight neighbours on the same surface, so relief finer than a pixel or two
-(a rock's lumps, a baked surface's detail) does not speckle the band and is
-left to the paint and the continuous terms. `softness` is the band's full
-cosine width, widened at each pixel to what the surface resolves: how far the
-normals of that neighbourhood part, the cosine's change across the pixel
-(mean curvature times footprint), and how far the hit triangle's vertex
-normals part (`sdfMeshNormalSpread`), between which the cosine is only
-interpolated, so a terminator never snaps along a coarse mesh's triangle
-edges. Specular lobes become bounded patches: `specularSize` is one minus
-their half-vector cosine, with a narrow soft edge, banded by the same step.
-The banded lights shade the paint flat, metals included; the rim lights, the
-environment reflection and ambient occlusion stay in the cel response as they
-are in the continuous one.
+The band reads the surface's form at `formRadius` metres (`sdfToonForm`), so
+relief smaller than that (a rock's lumps, a baked surface's detail) neither
+speckles the band nor rags its terminator, and is left to the continuous
+terms. The form's normal is derived from positions: the chords from the pixel
+to the surface about one radius away along each screen axis, whose cross
+product turns with the surface's large shape and only by a relief's height
+over the radius. Each side takes the farthest of three taps (the radius, its
+half, its quarter) that continues the pixel's surface, so a silhouette or a
+body in front is never read and a part smaller than the radius reads over the
+size it has; where the two sides' chords turn apart, at a corner between two
+faces, the side nearer the pixel's own plane stands alone, so a box keeps each
+face's normal to its edge. The form's shadow averages the pixel's filtered
+visibility with each such tap's, so the band steps the shadow a form casts
+rather than the one each bump casts. A surface far enough that the radius
+spans under two pixels reads its eight neighbours' mean normal. `softness` is
+the band's full cosine width, widened at each pixel to what the surface
+resolves: how far the neighbourhood's normals part, the cosine's change across
+the pixel (mean curvature times footprint), and how far the hit triangle's
+vertex normals part (`sdfMeshNormalSpread`), each over the form's radius in
+pixels, since a normal read over that many pixels turns that many times more
+slowly. The rim lights, the specular lobes, the environment reflection and
+ambient occlusion stay as the continuous response has them.
 
 Ink marks silhouettes and creases, each by a measure that grows smoothly with
 the edge rather than a threshold test, so jittered samples move the line a
@@ -648,19 +665,20 @@ integer-width jumps. `outlineTint` multiplies reflected colour. The ink is
 part of the lit surface before temporal reprojection and atmosphere, so
 existing motion, disocclusion and history clipping apply.
 
-`exposure` is reflected-light compensation in stops. `shoulder` compresses
-the exposed RGB peak with one common multiplier, retaining paint chroma
-before the world's authored tonemap. Emission is added after both this
-compression and ink. Bound displays and portal pictures bypass the cel
-response, and sky stays in its existing pass. A portal's destination shades
-its own surfaces once; the consuming view does not posterise the picture.
+Ink darkens reflected light only; a material's self-emission shows through it.
+Bound displays and portal pictures bypass the cel response, and sky stays in
+its existing pass. A portal's destination shades its own surfaces once; the
+consuming view does not posterise the picture.
 
 There is no additional dispatch, image or history allocation: the work is
 in `sdf.world$views` and reported with that pass's counters. A cel-styled
 opaque hit reads its eight neighbouring depths and normals once for the band's
-normal and an ink of up to one render pixel, eight more for each further ring
-an inked radius above one needs, and its triangle's three vertex normals. A
-material shading continuously skips the cel response and all of these reads.
+neighbourhood normal and an ink of up to one render pixel, eight more for each
+further ring an inked radius above one needs, its triangle's three vertex
+normals, and for its form up to twelve more depths, normals and shadow words
+(three a side on each screen axis, stopping at the first that continues the
+surface). A material shading continuously skips the cel response and all of
+these reads.
 A material's own style is four rows of its material record (rows 22 to 25,
 laid out as the pass block's `toonBands`, `toonShadow`, `toonOutline` and
 `toonInk`; `SdfToon.WriteRows` writes both), all zero to inherit the world's

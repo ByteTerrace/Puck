@@ -554,33 +554,44 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `world.toon` overrides live) through the pass block's toon members. Both are
   written by `SdfToon.WriteRows` and read by `sdfToonStyle`
   (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
-  A light reaches a cel surface as `light × (band + (1 − band) × region × tint)`
-  (`sdfToonShare`): the tint is a direct light's shade-side share, never a
-  multiplier on sky or bounced light, so an interior lit by bounce keeps its
-  exposure; `region` is the open sky the probes see above the surface
-  (`sdfToonOpen`). The light's probe share printed the probe cells as soft
-  patches across open walls, and the cascades' visibility lit the inner face of
-  an outer wall (its own exit from the light). The surface pass queries a cel
-  material's shadows on every side (`sdfMaterialShadowDemand`): the band's
-  neighbourhood normal faces the light past the pixel's own terminator, and an
-  unqueried slot there lit a line of full key light along every edge.
-  `band: Combined` steps the filtered visibility too, at a width
-  `sdfToonResolve` keeps at or above what the cascade texel resolves at the
-  receiver (`sdfToonShadowTexels`, through the shared `sdfMeshCascadeHolding`
-  in `frame/sdf-shadow-cascades.hlsli`); a blocky cast shadow is that width's.
-  The band reads the neighbourhood normal `sdfToonGather` averages, and its
-  softness widens to that neighbourhood's normal spread, curvature × footprint
-  and the hit triangle's vertex-normal spread (`sdfMeshNormalSpread`); a
-  speckled or faceted terminator is that widening's, not the style's. The local
-  adaptation meters `SdfLightResponse.metered`, which leaves the band out, so it
-  never flattens the step. `sdf-toon-outline.hlsli` reads depth/normal edges in
-  views, before temporal resolve, at the pixel's own style's width: a
-  silhouette is a step of a share of the viewing distance and a crease two
-  opposite neighbours turned apart, so a raised plate's edge draws none; ink at
-  a plate or paint boundary is those measures', not the style's. The standard's
-  `cel` shade program mirrors the response without the neighbourhood normal,
-  the widening or the open-air region, which no stamp input carries yet. Keep screen pictures, portal pictures, sky and self-emission
-  out of both the banding and ink. Nested worlds take the live enable override
+  The lit side is the continuous response, every term of it (`sdfLightResponse`
+  computes it whatever the style): a cel style never darkens, desaturates or
+  compresses the key. Each directional and point light also returns its step
+  (`SdfToonLight`: its diffuse restored at the band's lit cosine and full
+  visibility, its shade share `(1 − band) × region`, its potential), the walk
+  sums them (`sdfToonAdd`), and the stage adds `sdfToonShade` through
+  `sdfMaterialDiffuse` after the indirect and fill terms: on a light's shade
+  side the surface shows `tint ×` (the restored light plus the share of the sky,
+  bounce and authored fill that light owns, by its potential over the larger of
+  the lights' summed potential and the fill's luminance). The step is of the
+  whole light, so it reads under a strong fill: a step of the direct key alone
+  leaves a shade face near its lit value, and a lit side that drops the cosine
+  lights grazing faces (a window jamb, a blind's edge) with the whole key.
+  The local adaptation meters the shade side's restored light
+  (`SdfToonSteps.metered`), so the step survives it. `region` is the open sky
+  the probes see above the surface (`sdfToonOpen`): a room the light never
+  enters keeps its continuous light. The light's probe share printed the probe
+  cells as soft patches across open walls, and the cascades' visibility lit the
+  inner face of an outer wall (its own exit from the light). The surface pass
+  queries a cel material's shadows on every side (`sdfMaterialShadowDemand`):
+  the band's form normal faces the light past the pixel's own terminator.
+  The band reads the form (`sdfToonForm`): a normal derived from position
+  chords about `formRadius` metres away on each screen axis (a ladder of three
+  taps per side that stays on the pixel's surface, one side alone across a
+  crease) and each slot's shadow averaged with those taps' own, so relief below
+  the radius neither speckles nor rags the step. `band: Combined` steps the
+  filtered visibility too, at a width `sdfToonResolve` keeps at or above what
+  the cascade texel resolves at the receiver (`sdfToonShadowTexels`, through the
+  shared `sdfMeshCascadeHolding` in `frame/sdf-shadow-cascades.hlsli`); a blocky
+  cast shadow is that width's. The softness widens to the neighbourhood's
+  normal spread, curvature × footprint and the hit triangle's vertex-normal
+  spread (`sdfMeshNormalSpread`), over the form's radius in pixels.
+  `sdf-toon-outline.hlsli` reads depth/normal edges in views, before temporal
+  resolve, at the pixel's own style's width: a silhouette is a step of a share
+  of the viewing distance and a crease two opposite neighbours turned apart, so
+  a raised plate's edge draws none; ink at a plate or paint boundary is those
+  measures', not the style's. Keep screen pictures, portal pictures, sky and
+  self-emission out of both the banding and ink. Nested worlds take the live enable override
   but retain their own document styles. The tuning belongs to the lighting
   cadence signature, never the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its

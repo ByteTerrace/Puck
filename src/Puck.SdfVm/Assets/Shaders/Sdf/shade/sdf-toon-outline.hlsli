@@ -1,6 +1,7 @@
-// What a cel style reads of a pixel's neighbours in the visibility records: its ink and the normal its band reads. Ink
-// belongs to the foreground surface, before temporal reprojection and atmosphere. Never ink a screen's picture or a
-// portal image: the view beyond has already shaded its own surfaces and their silhouettes.
+// What a cel style reads of a pixel's neighbours in the visibility records: its ink and the form its band reads (the
+// surface's macro normal and its shadow visibility filtered over that form, sdfToonForm). Ink belongs to the foreground
+// surface, before temporal reprojection and atmosphere. Never ink a screen's picture or a portal image: the view beyond
+// has already shaded its own surfaces and their silhouettes.
 //
 // Ink marks two edges, each as a measure that grows smoothly with the edge's strength rather than a test, so a jittered
 // sample on either side of a threshold moves the ink a little instead of switching it, and the temporal resolve
@@ -28,6 +29,7 @@ struct SdfToonNeighbour {
     float t;
     float3 position;
     float3 normal;
+    uint record;
 };
 SdfToonNeighbour sdfToonNeighbour(SdfPixel p, int2 offset) {
     SdfToonNeighbour n = (SdfToonNeighbour)0;
@@ -36,6 +38,7 @@ SdfToonNeighbour sdfToonNeighbour(SdfPixel p, int2 offset) {
     n.inside = (all(pixel >= 0) && all(pixel < dims));
     if (!n.inside) { return n; }
     uint record = worldVisibilityRecord(uint2(pixel), p.viewIndex);
+    n.record = record;
     n.t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
     n.sky = (n.t >= p.farDistance);
     if (n.sky) { return n; }
@@ -116,6 +119,106 @@ SdfToonGathered sdfToonGather(SdfToonStyle style, SdfPixel p, SdfSurfaceSample s
         g.ink = ((width <= 1.0) ? (innerInk * width) : lerp(innerInk, outerInk, frac(width)));
     }
     return g;
+}
+
+// The form a cel band reads: the surface's shape at the style's form radius (bands.w, metres), so relief smaller than
+// that radius (a rock's lumps, a baked surface's detail) neither speckles the band nor rags its terminator. The normal is
+// derived from positions, not averaged from normals: the chords from the pixel to the surface points about one form
+// radius away along each screen axis, whose cross product turns with the surface's large shape and only by a relief's
+// height over the radius (a normal average turns with every bump's slope). Each side takes the farthest of three taps
+// (the radius, its half and its quarter) that continues the pixel's surface: within SdfToonFormPlane of its plane, as a
+// slope over the chord, and within SdfToonFormReach radii, so a silhouette or a body standing in front is never read, and
+// a part smaller than the radius reads over the radius it has. Where the two sides' chords turn apart (a corner between
+// two faces) the side nearer the pixel's plane stands alone, so a box's face keeps its own normal to its edge; where they
+// agree, the chord across both reads. A pixel nearer than two pixels to its form's scale reads the neighbourhood normal.
+// The shadow visibilities average the pixel's filtered ones with each tap's own past the views filter's window, so the
+// band steps the shadow a form casts rather than the one each bump casts.
+static const float SdfToonFormMaxPixels = 48.0;
+static const float SdfToonFormPlane = 0.7;
+static const float SdfToonFormReach = 4.0;
+static const float SdfToonFormAgree = 0.9;
+static const int SdfToonFormFilterPixels = 3;
+
+struct SdfToonForm {
+    float3 normal;
+    float4 shadows;
+    float pixels;
+};
+
+// One side's chord along a screen direction: the farthest tap of the ladder on the pixel's surface, false when none is.
+// A tap past the views filter's window adds its own shadow visibilities to the sums.
+bool sdfToonFormSide(SdfPixel p, float3 surfacePoint, float3 reference, int2 direction, float pixels, float worldRadius,
+    out float3 chord, inout float4 shadowSum, inout float4 shadowWeight) {
+    chord = float3(0.0, 0.0, 0.0);
+    [unroll]
+    for (int rung = 0; rung < 3; rung++) {
+        int offset = max(1, (int)round(pixels / float(1 << rung)));
+        SdfToonNeighbour n = sdfToonNeighbour(p, direction * offset);
+        if (n.inside && !n.sky) {
+            float3 delta = (n.position - surfacePoint);
+            float distance = length(delta);
+            if ((distance > 1.0e-5) && (abs(dot(delta, reference)) <= (SdfToonFormPlane * distance))
+                && (distance <= (SdfToonFormReach * worldRadius))) {
+                chord = delta;
+                if (offset >= SdfToonFormFilterPixels) {
+                    uint word = sdfVisibilityRecordBuffer[n.record + SdfVisibilityShadowWord];
+                    float4 queried = sdfShadowQueried(word);
+                    shadowSum += (queried * sdfUnpackShadowVisibility(word));
+                    shadowWeight += queried;
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+// The surface's tangent along a screen axis from its two sides' chords, false when neither side continues the surface.
+bool sdfToonFormTangent(SdfPixel p, float3 surfacePoint, float3 reference, int2 axis, float pixels, float worldRadius,
+    out float3 tangent, inout float4 shadowSum, inout float4 shadowWeight) {
+    float3 ahead;
+    float3 behind;
+    bool hasAhead = sdfToonFormSide(p, surfacePoint, reference, axis, pixels, worldRadius, ahead, shadowSum, shadowWeight);
+    bool hasBehind = sdfToonFormSide(p, surfacePoint, reference, -axis, pixels, worldRadius, behind, shadowSum, shadowWeight);
+    behind = -behind;
+    tangent = (hasAhead ? ahead : behind);
+    if (hasAhead && hasBehind) {
+        float3 a = normalize(ahead);
+        float3 b = normalize(behind);
+        tangent = ((dot(a, b) > SdfToonFormAgree) ? (ahead + behind)
+            : ((abs(dot(a, reference)) <= abs(dot(b, reference))) ? ahead : behind));
+    }
+    return (hasAhead || hasBehind);
+}
+// The pixel's form, given its neighbourhood normal `reference` (sdfToonGather) and its filtered shadow visibilities.
+SdfToonForm sdfToonForm(SdfToonStyle style, SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, float3 reference, float4 shadows) {
+    SdfToonForm form;
+    form.normal = reference;
+    form.shadows = shadows;
+    form.pixels = 1.0;
+    float footprint = max(p.pixelFootprint * s.t, 1.0e-6);
+    float pixels = min(style.bands.w / footprint, SdfToonFormMaxPixels);
+    if (pixels < 2.0) {
+        return form;
+    }
+    float worldRadius = (pixels * footprint);
+    float4 shadowSum = (2.0 * shadows);
+    float4 shadowWeight = float4(2.0, 2.0, 2.0, 2.0);
+    float3 across;
+    float3 down;
+    bool hasAcross = sdfToonFormTangent(p, surfacePoint, reference, int2(1, 0), pixels, worldRadius, across, shadowSum, shadowWeight);
+    bool hasDown = sdfToonFormTangent(p, surfacePoint, reference, int2(0, 1), pixels, worldRadius, down, shadowSum, shadowWeight);
+    bool measured = ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled());
+    form.shadows = (measured ? (shadowSum / shadowWeight) : shadows);
+    if (hasAcross && hasDown) {
+        float3 normal = cross(across, down);
+        float length2 = dot(normal, normal);
+        if (length2 > 1.0e-12) {
+            normal *= rsqrt(length2);
+            form.normal = ((dot(normal, reference) < 0.0) ? -normal : normal);
+            form.pixels = pixels;
+        }
+    }
+    return form;
 }
 
 #endif

@@ -9,37 +9,31 @@
 // A style is on unless it says `enabled: false`: `continuousStyle` keeps a material continuous under a banded world. Every
 // field is the engine's `render.toon` field, and a world overrides one with `celStyle with { softness: 0.2 }`.
 //
-// The look is the painted one of the selected direction (docs/game/art/valley-and-gallery.md): a bright lit band that
-// shows each paint at its own value, and one shade step a cool lavender below it, the coloured shadow of the canyon
-// panels, where a rock's lit orange turns mauve rather than brown. The tint is the share of a light its shade side keeps
-// (form and cast shadow alike) wherever that light reaches the surface's surroundings; sky and bounced light add as they
-// are, so a room no direct light reaches keeps its exposure. A low threshold keeps most of a lit form in the lit band,
-// so a boulder half turned from the sun still shows both. `exposure` and `shoulder` hold the lit band's whites below
-// white while leaving mid tones where the continuous response puts them.
+// The look is the painted one of the selected direction (docs/game/art/valley-and-gallery.md): the lit side shows each
+// paint exactly as the continuous light does, and one held step below it, the coloured shadow of the canyon panels, where
+// a rock's lit orange turns mauve rather than brown. On a light's shade side a surface shows the colour it would have lit
+// (that light at the band's lit cosine, with the sky and bounce it owns) times `shadowTint`: its luminance, about one
+// half, is the step's value, and its cool violet the shadow's hue, so the step reads on scenery under a strong fill. A
+// low threshold keeps most of a lit form in the lit band, so a boulder half turned from the sun still shows both.
+//
+// The band reads the surface's form at `formRadius`, so a cliff's or a boulder's relief (smaller than that) neither
+// speckles the step nor rags its terminator, while a box keeps its faces to their edges and a part smaller than the radius
+// reads over the size it has.
 //
 // `celStyle` steps the shadow visibility too (`band: Combined`), so a cast shadow is a held painted shape, as in The Wind
 // Waker, with an edge no sharper than its cascade resolves. It draws no ink: the direction's panels separate forms by
 // value and colour, not line. `celInkStyle` adds a dark warm line at silhouettes and creases, for an author who wants
 // one; `celHardStyle` is the hardest band, for comparing: a near-step terminator and heavier ink.
 
-import "shading"
-// `combined` is the program's spelling of the style's `band` (1 for Combined, which every style here bands with); a shade
-// program argument cannot read the enum.
-function celMaterial(base, style, combined = 1) = base with {
-  toon: style
-  shade: cel(style.threshold, style.softness, style.shadowTint, style.specularSize, style.exposure, style.shoulder, combined)
-}
 let celStyle = {
   threshold: 0.2
   softness: 0.08
-  shadowTint [0.3, 0.32, 0.5]
+  shadowTint [0.52, 0.47, 0.72]
+  formRadius: 0.6
   outlineWidth: 0
   outlineDistance: 12
   outlineNormal: 0.5
   outlineTint [0.22, 0.15, 0.2]
-  specularSize: 0.025
-  exposure: 0
-  shoulder: 0.2
   band: Combined
 }
 
@@ -50,7 +44,6 @@ let celHardStyle = celStyle with {
   softness: 0.02
   outlineWidth: 2
   outlineTint [0.1, 0.07, 0.09]
-  specularSize: 0.02
 }
 
 let continuousStyle = { enabled: false }

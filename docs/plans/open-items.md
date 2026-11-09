@@ -1887,14 +1887,13 @@ reported until it does.
   programs, the debug world, never records the plain pair; a world with none never records the interpreter
   pair). Making the pair a demand (`SdfWorldPipelines.AcquiredOnDemand`, as the binned kernels are) needs the
   frame that first lacks or gains an active program to wait on its pipeline without a stall.
-- [medium] Cel shading has two implementations: the views kernel's response
-  (`shade/sdf-toon.hlsli`, `sdfLightResponse`'s toon branches) and the
-  standard's `cel` program (`worlds/standard/shading.puck`), which mirrors it
-  but cannot read the band's neighbourhood normal (`sdfToonGather`), the
-  per-pixel widening (`sdfToonResolve`) or the open-air region (`sdfToonOpen`),
-  since no stamp input carries them. Section 3.10 of
-  the memo deletes the HLSL banding once a world default can name a program;
-  until then both change together, and the stamp needs those inputs first.
+- [medium] Cel shading is engine code (`shade/sdf-toon.hlsli`, the toon steps
+  `sdfLightResponse` returns and `sdfToonShade` applies), which section 3.10 of
+  the memo moves into a standard program once a world default can name one. A
+  program cannot express it yet: the stamp carries neither the band's form
+  (`sdfToonForm`), the per-pixel widening (`sdfToonResolve`) nor the open-air
+  region (`sdfToonOpen`), and the compose phase receives no per-light step sums
+  (`SdfToonSteps`), which the whole-light step needs after the fold.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
   with identical arithmetic (window-2's disassembly); cost only, needs a GPU
   timing of `place` to show whether the driver removes them.

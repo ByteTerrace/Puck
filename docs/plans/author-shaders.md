@@ -386,10 +386,10 @@ look once and the engine runs its parts where the stage needs them:
    its loop today (`sdfMaterialShade`, the indirect and environment terms, the
    emissive and attenuation composition). Cel shading needs this phase: its
    banding reads each light's cosine and visibility in the light phase
-   (`sdfToonBand`, `sdfToonSpecular`), and it tints the indirect light, flattens
-   the paint and exposes the result after the fold (the `toon` branches of
-   `sdfLightStage`); a surface-only program cannot express it, which is
-   finding 2 of the review.
+   (`sdfToonBand`, `sdfToonLight`), and after the fold it turns each light's
+   shade side to the tint's share of the light restored together with the
+   indirect light that light owns (`sdfToonShade` in `sdfLightStage`); a
+   surface-only program cannot express it, which is finding 2 of the review.
 
 What stays engine code around the phases: the paints' shape dispatch (a
 `shape` op's operand), the irradiance gather, the shadow filter, the cel
