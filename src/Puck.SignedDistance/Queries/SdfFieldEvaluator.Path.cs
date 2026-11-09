@@ -14,14 +14,17 @@ public sealed partial class SdfFieldEvaluator {
     // the one before it, as sdfConvexPolygon2D walks them, or a path's compiled edges in their own order.
     private interface IEdges {
         int Count { get; }
+
         (FixedVector2 A, FixedVector2 B) this[int index] { get; }
     }
     private readonly struct PolygonEdges(FixedVector2[] vertices) : IEdges {
         public int Count => vertices.Length;
+
         public (FixedVector2 A, FixedVector2 B) this[int index] => (vertices[index], vertices[((index == 0) ? (vertices.Length - 1) : (index - 1))]);
     }
     private readonly struct PathEdges(PathEdgeFixed[] edges) : IEdges {
         public int Count => edges.Length;
+
         public (FixedVector2 A, FixedVector2 B) this[int index] => (edges[index].A, edges[index].B);
     }
     // One compiled path edge, pre-converted once, with the stroke's radius at each end.
@@ -84,32 +87,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return (negate ? -d : d);
     }
-    // e·e at the squared scale of the raws.
-    private static Int128 Square(FixedVector2 e) => ((((Int128)e.X.Value) * e.X.Value) + (((Int128)e.Y.Value) * e.Y.Value));
-    // FixedVector2.SegmentParameter (the point side's edge parameter) over a box: the one rounding of the exact w·e / e·e
-    // is monotone in w·e, which is linear in the box's coordinates, so its ends are the parameters at the least and
-    // greatest w·e, each the sum of the per-axis extreme products. Unbounded coordinates leave the whole clamp range.
-    private static FixedInterval EdgeParameterBounds(FixedInterval wx, FixedInterval wy, FixedVector2 e) {
-        if (wx.IsUnbounded || wy.IsUnbounded) {
-            return new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One);
-        }
-
-        var square = Square(e: e);
-        var (xLow, xHigh) = Extremes(lower: wx.Lower.Value, upper: wx.Upper.Value, factor: e.X.Value);
-        var (yLow, yHigh) = Extremes(lower: wy.Lower.Value, upper: wy.Upper.Value, factor: e.Y.Value);
-
-        return new FixedInterval(
-            lower: FusedArithmetic.ClampedUnitQuotient(denominator: square, numerator: (xLow + yLow)),
-            upper: FusedArithmetic.ClampedUnitQuotient(denominator: square, numerator: (xHigh + yHigh))
-        );
-
-        static (Int128 Low, Int128 High) Extremes(long lower, long upper, long factor) {
-            var first = (((Int128)lower) * factor);
-            var second = (((Int128)upper) * factor);
-
-            return ((first <= second) ? (first, second) : (second, first));
-        }
-    }
     // The signed distance to the convex hull of the disks of radius ra about a and rb about b: the larger disk alone when
     // it holds the other, else the taper's two tangents between the caps.
     private static FixedQ4816 SdfPathStrokeEdge(FixedVector2 p, FixedVector2 a, FixedVector2 b, FixedQ4816 ra, FixedQ4816 rb) {
@@ -153,7 +130,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return SdfExtrudeChamfer2D(c: FixedQ4816.Zero, distance2D: distance2D, halfDepth: halfDepth, z: p.Z);
     }
-
     // The exact edge-list field over a box: the least distance enclosed edge by edge, and the crossing parity followed
     // while every edge's three tests keep one answer over the box; once one does not, the sign is either, and the bound is
     // the hull of both.
@@ -168,7 +144,7 @@ public sealed partial class SdfFieldEvaluator {
             var e = (b - a);
             var wx = (p.X - Point(value: a.X));
             var wy = (p.Y - Point(value: a.Y));
-            var t = EdgeParameterBounds(e: e, wx: wx, wy: wy);
+            var t = FixedInterval.SegmentParameter(segment: e, x: wx, y: wy);
             var bx = (wx - (Point(value: e.X) * t));
             var by = (wy - (Point(value: e.Y) * t));
 
@@ -209,8 +185,10 @@ public sealed partial class SdfFieldEvaluator {
 
         static bool Wide(FixedInterval interval) => ((FixedQ4816.Abs(value: interval.Lower) > StrokeFrameLimit) || (FixedQ4816.Abs(value: interval.Upper) > StrokeFrameLimit));
     }
+
     // The farthest coordinate a stroke's box rule answers at: a point of a wider box could not be read without overflow.
     private static readonly FixedQ4816 StrokeFrameLimit = FixedQ4816.FromInteger(value: (1L << 30));
+
     private static FixedInterval PathBounds(IntervalVector3 p, in CompiledInstruction instruction) {
         var edges = (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction."));
         var profile = new IntervalVector2(X: p.X, Y: p.Y);

@@ -4360,6 +4360,18 @@ Owner: maths lane · ordinary · Next: the segment durations' wire double (`Worl
 `WorldCommand.EnqueueSegment.Seconds` through `FromDouble`), then the float
 duration fields' schema migration.
 
+- [medium] Physics lane: `FixedDynamicBodyContacts.ClosestDelta`
+  (`src/Puck.Physics/FixedDynamicBodyContacts.cs`) still forms carrier-rounded
+  Q48.16 dot products before its segment-pair divisions. With a sphere core
+  at `(0.001, 0, 0)` and a capsule core from the origin to `(0.002, 0, 0)`,
+  both squared lengths round to zero and the returned delta is `(66, 0, 0)`
+  raws instead of zero; overlap and contact can miss the pair. This was
+  reproduced by the fixedpoint-pass CPU probe. Replace the whole segment-pair
+  solve with full-width arithmetic, including its interior/interior quartic
+  quotient and endpoint clamps; reusing `FixedVector3.SegmentParameter` only
+  in the degenerate branches leaves the general defect. Verify short,
+  crossing, parallel and extreme-coordinate pairs against exact geometry.
+
 - [low] `Pcg3dLatticeNoise.ScatterPoint`
   (`src/Puck.Maths/Sampling/Pcg3dLatticeNoise.cs:115`) reduces a stateless hash
   with `hash % inset`, a bias of inset/2^32; and a lattice's boot-time paint

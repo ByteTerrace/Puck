@@ -1075,6 +1075,12 @@ keeps `2⁻¹⁶` of its absolute value: for centimetre lengths, whose products 
 few dozen raws, that is a few bits, and a field built on them reads a
 millimetre of noise.
 
+`FixedInterval.SegmentParameter` encloses the same rounded parameter over a
+2D or 3D box. Its two corners are selected by the segment's component signs
+and evaluated by the point kernel: linearity, clamping and rounding preserve
+their order. It never narrows the squared length to the carrier, including for
+tiny and zero segments, and propagates an unbounded coordinate interval.
+
 ### `FixedSymmetricSolve`
 
 Scale-free symmetric apply, solve, and invert kernels for 2×2 and 3×3 systems,
