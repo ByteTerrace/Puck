@@ -664,7 +664,7 @@ public sealed partial class StateArena {
             var entry = m_journal[index];
 
             m_restoreJournalLimit = index;
-            Restore(entry: entry);
+            Restore(entry: entry, components: ((entry.Column == ArenaColumn.Vector) ? m_journal.Components(entry: entry) : default));
             m_restoreJournalLimit = -1;
             BumpGeneration(
                 column: entry.Column,
@@ -788,23 +788,24 @@ public sealed partial class StateArena {
         );
 
         if (row >= 0) {
-            MarkRowVersion(rowOrdinal: row, changesRecorded: true);
+            MarkRowVersion(changesRecorded: true, rowOrdinal: row);
             // A value/clock write retains its key. Membership, order and policy writes may remove an old readable
             // key, so their carrier names the whole row rather than trying to classify the key after deletion.
-            var keyed = column is ArenaColumn.Number or ArenaColumn.Text or ArenaColumn.Vector or
+            var keyed = (column is ArenaColumn.Number or ArenaColumn.Text or ArenaColumn.Vector or
                 ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or
                 ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or
-                ArenaColumn.Behavior or ArenaColumn.Observation;
-            ChangedKeys.Mark(row, keyed ? KeyAtSlot(m_layout[row], index).Ordinal : -1);
+                ArenaColumn.Behavior or ArenaColumn.Observation);
+
+            ChangedKeys.Mark(row, (keyed ? KeyAtSlot(layout: m_layout[row], slot: index).Ordinal : -1));
             if (!keyed) { DisclosureRevision++; }
         }
     }
     private void MarkRowVersion(int rowOrdinal, bool changesRecorded = false) {
         m_deliveryRows[rowOrdinal] = true;
-        if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
+        if (!changesRecorded) { MarkDisclosureRow(row: rowOrdinal); }
         if (m_rowChangeStamp[rowOrdinal] != m_changeEpoch) {
             m_rowChangeStamp[rowOrdinal] = m_changeEpoch;
-            BumpRowVersion(rowOrdinal: rowOrdinal, changesRecorded: true);
+            BumpRowVersion(changesRecorded: true, rowOrdinal: rowOrdinal);
         }
     }
     private void MarkDisclosureRow(int row) { ChangedKeys.Mark(row); DisclosureRevision++; }

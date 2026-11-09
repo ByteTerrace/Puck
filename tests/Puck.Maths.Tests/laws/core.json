@@ -829,7 +829,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "The fold is order-sensitive (ab differs from ba). Packed zero lanes and byte spans preserve the scalar byte fold anchored by the published vectors: lengths 0 through 129, an all-zero span or a nonzero byte at every position, a nonempty prefix, and every split boundary across that domain. Zero uint and ulong lanes equal twelve scalar zero bytes.",
+        "Subject": "The fold is order-sensitive (ab differs from ba). Packed zero lanes and byte spans preserve the scalar byte fold anchored by the published vectors: lengths 0 through 129, an all-zero span or a nonzero byte at every position, a nonempty prefix, and every split boundary across that domain. Zero uint and ulong lanes equal twelve scalar zero bytes. Character spans, including zero, non-ASCII and surrogate code units, equal their explicit little-endian uint bytes across split and empty spans; strings prefix those same bytes with their uint length.",
         "Against": "",
         "Shared": "",
         "Citation": "",
