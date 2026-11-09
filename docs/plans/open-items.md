@@ -4543,6 +4543,19 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] The agent harness and embeddings are unexercised by the debug world
+  (the owner asked that both be exercised). No `agent.harness` participant is
+  configured in `worlds/debug`, and the only embedding space is in the
+  `rule-faults-tests.puck` fixture. Build them as features that load the systems
+  as real use does: a lobby guide run by `Puck.World.AgentHarness` (affordances,
+  observation, approved motion) that walks visitors to places; a "where is
+  something" question answered by ranking places by embedding similarity
+  (authored descriptions locked with `puck embed`, the visitor's text embedded
+  outside the tick by the host service); and an agent playtest participant that
+  tours the world and reports what it cannot reach or read. The engine wiring
+  runs on the `puck-fixture` generator and a stub chat client; real-model runs
+  need an Azure OpenAI chat and embedding deployment, which the owner sets up.
+
 - [medium] `world.decisions` reports 0 policies in the debug world's boot
   instance, so the pond's decisions may not be running there (seen by the
   rule-faults step 7 lane on a headless boot; unchecked). Read why before
