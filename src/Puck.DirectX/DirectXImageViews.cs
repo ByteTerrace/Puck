@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.Maths;
 
 namespace Puck.DirectX;
 
@@ -76,17 +77,17 @@ public static class DirectXImageViews {
 
     // The low 32 bits hold the slot index plus one, so no handle is zero; the high 32 bits hold the slot's generation.
     private static nint Pack(int index, uint generation) =>
-        unchecked((nint)((((long)generation) << 32) | ((long)((uint)(index + 1)))));
+        unchecked((nint)PackedIntPair.Pack(high: generation, low: ((uint)(index + 1))));
     // The slot a handle names while the slot's generation still matches it and the slot holds a view.
     private static bool TryIndex(nint handle, out int index) {
-        var bits = ((long)handle);
+        var bits = unchecked((ulong)handle);
 
-        index = (unchecked((int)((uint)bits)) - 1);
+        index = (unchecked((int)PackedIntPair.Low(value: bits)) - 1);
 
         return (
             (index >= 0) &&
             (index < Views.Count) &&
-            (Generations[index] == unchecked((uint)(bits >> 32))) &&
+            (Generations[index] == PackedIntPair.High(value: bits)) &&
             (Views[index] is not null)
         );
     }

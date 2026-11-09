@@ -231,7 +231,7 @@ public sealed class WorldEventFeed {
             if (m_collisionPairKeys[index] == m_collisionPairKeys[(index - 1)]) {
                 var key = m_collisionPairKeys[index];
 
-                throw new InvalidOperationException(message: $"event feed checkpoint duplicates overlap pair ({((int)(key >> 32))}, {((int)((uint)key))}).");
+                throw new InvalidOperationException(message: $"event feed checkpoint duplicates overlap pair ({((int)PackedIntPair.High(value: key))}, {((int)PackedIntPair.Low(value: key))}).");
             }
         }
 
@@ -309,8 +309,8 @@ public sealed class WorldEventFeed {
 
         for (var ordinal = 0; (ordinal < pairCount); ordinal++) {
             var key = m_collisionPairKeys[ordinal];
-            var a = ((int)(key >> 32));
-            var b = ((int)((uint)key));
+            var a = ((int)PackedIntPair.High(value: key));
+            var b = ((int)PackedIntPair.Low(value: key));
             var retained = (
                 (policy.MaxPairsPerBody > 0) &&
                 (m_collisionDegrees[a] < policy.MaxPairsPerBody) &&
@@ -478,8 +478,8 @@ public sealed class WorldEventFeed {
         );
         for (var ordinal = 0; (ordinal < transitionCount); ordinal++) {
             var transition = m_collisionTransitions[ordinal];
-            var a = ((int)(transition.Key >> 32));
-            var b = ((int)((uint)transition.Key));
+            var a = ((int)PackedIntPair.High(value: transition.Key));
+            var b = ((int)PackedIntPair.Low(value: transition.Key));
 
             m_edges.Add(item: new WorldEventEdge(
                 Family: (transition.Now
@@ -680,7 +680,7 @@ public sealed class WorldEventFeed {
             );
         }
     }
-    private static ulong CollisionPairKey(int a, int b) => (((ulong)((uint)a)) << 32) | ((uint)b);
+    private static ulong CollisionPairKey(int a, int b) => PackedIntPair.Pack(high: ((uint)a), low: ((uint)b));
     // The shared latched-transition body every per-tick edge-detection pass (collision overlap, region containment,
     // seat occupancy) follows: skip when `now` agrees with `latch`, else store `now` into `latch` and emit
     // `onSet`/`onClear`. `latch` names a bool[] slot at every call site except the collision pass's HashSet-backed

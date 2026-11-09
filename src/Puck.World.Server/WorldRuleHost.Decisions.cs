@@ -559,11 +559,11 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
     }
 
     /// <inheritdoc/>
-    public long CaptureBinding() => (((long)m_boundLeft) << 32) | ((uint)m_boundRight);
+    public long CaptureBinding() => PackedIntPair.Pack(high: m_boundLeft, low: m_boundRight);
     /// <inheritdoc/>
     public void ApplyBinding(long binding) {
-        m_boundLeft = ((int)(binding >> 32));
-        m_boundRight = ((int)binding);
+        m_boundLeft = PackedIntPair.High(value: binding);
+        m_boundRight = PackedIntPair.Low(value: binding);
     }
 
     // A decision's own effect sequence is one firing, exactly as a rule's is.
