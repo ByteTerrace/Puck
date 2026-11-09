@@ -312,11 +312,11 @@ public sealed class HandheldAttachLawTests {
         Assert.Null(@object: returned.Attach);
         Assert.Equal(
             expected: 0f,
-            actual: returned.Position.Value.X
+            actual: WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: returned, worldSeed: 0UL).Position.X
         );
         Assert.Equal(
             expected: 1.08f,
-            actual: returned.Position.Value.Y
+            actual: WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: returned, worldSeed: 0UL).Position.Y
         );
     }
     [Fact]

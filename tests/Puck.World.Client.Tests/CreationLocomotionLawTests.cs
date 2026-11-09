@@ -97,7 +97,7 @@ public sealed class CreationLocomotionLawTests {
             Driver: "stride",
             Window: new Vector2(x: from, y: to),
             SwingWeight: 0f,
-            Replant: new CreationReplantDocument(Distance: 0.05f, Seconds: 0.1f, Height: 0.05f)
+            Replant: new CreationReplantDocument(Distance: 0.05f, Height: 0.05f, Seconds: 0.1f)
         ),
         Target: new CreationEffectorTargetDocument(
             Direction: -Vector3.UnitY,
@@ -135,8 +135,8 @@ public sealed class CreationLocomotionLawTests {
                 When: [CreationDriverDocument.TokenMoving]
             )],
             Effectors: [
-                Foot(align: align, name: "foot-left", side: "left", from: 0f, to: 3.14f),
-                Foot(align: align, name: "foot-right", side: "right", from: 3.14f, to: 6.28f),
+                Foot(align: align, from: 0f, name: "foot-left", side: "left", to: 3.14f),
+                Foot(align: align, from: 3.14f, name: "foot-right", side: "right", to: 6.28f),
             ]
         );
     }
@@ -155,7 +155,7 @@ public sealed class CreationLocomotionLawTests {
         var pool = new WorldCreationInstances();
 
         client.PublishStaticField(field: new SdfFieldEvaluator(program: FloorProgram()));
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: WorldLook.Implicit)],
             creations: [creation],
             dynamics: [],
@@ -243,7 +243,7 @@ public sealed class CreationLocomotionLawTests {
             pose: frame => (((frame < 60) ? (left90 * (0.05f * frame)) : (left90 * 3f)), 0f)
         );
 
-        Assert.Equal(expected: MathF.PI, actual: phase, precision: 3);
+        Assert.Equal(actual: phase, expected: MathF.PI, precision: 3);
         // Without the kinematics the signal reads zero.
         Assert.Equal(expected: 0f, actual: Phase(drivers: [Driver(signal: CreationDriverDocument.SignalTravelDirection)], frames: 30, pose: frame => ((left90 * (0.05f * frame)), 0f)));
     }
@@ -266,7 +266,7 @@ public sealed class CreationLocomotionLawTests {
             }
         );
 
-        Assert.InRange(actual: lateral, low: 6f, high: 10f);
+        Assert.InRange(actual: lateral, high: 10f, low: 6f);
 
         var start = Phase(
             drivers: [Driver(signal: CreationDriverDocument.SignalForwardAcceleration)],
@@ -288,7 +288,7 @@ public sealed class CreationLocomotionLawTests {
     /// one tracks the signal exactly. An angle followed across its ±π seam eases the short way round.</summary>
     [Fact]
     public void ADynamicsRowTrailsTheSignalAndSettles() {
-        DynamicsRow[] rows = [new DynamicsRow(Name: "turn", Frequency: 2f, Damping: 0.6f, Response: 0f)];
+        DynamicsRow[] rows = [new DynamicsRow(Damping: 0.6f, Frequency: 2f, Name: "turn", Response: 0f)];
         IReadOnlyList<CreationDriverDocument> followed = [Driver(dynamics: "turn", signal: CreationDriverDocument.SignalTurnRate)];
         var kinematics = new WorldGaitKinematics();
 
@@ -300,7 +300,7 @@ public sealed class CreationLocomotionLawTests {
         var early = Phase(drivers: followed, frames: 14, kinematics: kinematics, pose: Turning);
         var exact = Phase(drivers: [Driver(signal: CreationDriverDocument.SignalTurnRate)], frames: 14, kinematics: new WorldGaitKinematics(), pose: Turning);
 
-        Assert.Equal(expected: 1f, actual: exact, precision: 3);
+        Assert.Equal(actual: exact, expected: 1f, precision: 3);
         Assert.True(condition: (early < 0.5f), userMessage: $"early {early}");
 
         var settled = new WorldGaitKinematics();
@@ -316,7 +316,7 @@ public sealed class CreationLocomotionLawTests {
 
         var wrapped = seam.Follow(deltaSeconds: Frame, index: 0, period: (2f * MathF.PI), target: -3.1f);
 
-        Assert.InRange(actual: wrapped, low: 3.09f, high: 3.2f);
+        Assert.InRange(actual: wrapped, high: 3.2f, low: 3.09f);
         Assert.Equal(expected: (4f * MathF.PI), actual: WorldGaitKinematics.Period(cadence: -2f, signal: CreationDriverDocument.SignalTravelDirection), precision: 4);
         Assert.Equal(expected: 0f, actual: WorldGaitKinematics.Period(cadence: 2f, signal: CreationDriverDocument.SignalTurnRate));
         // An unresolved row, and a frame with no time, leave the eased motion where it was.
@@ -345,11 +345,11 @@ public sealed class CreationLocomotionLawTests {
         var integrating = (Legs() with { Drivers = [Driver(dynamics: "turn", signal: CreationDriverDocument.SignalPlanarTravel) with { Name = "stride" }] });
         var empty = (Legs() with { Drivers = [Driver(dynamics: " ", signal: CreationDriverDocument.SignalTurnRate) with { Name = "stride" }] });
         var replant = (Legs() with {
-            Effectors = [Foot(align: 1.5f, name: "foot-left", side: "left", from: 0f, to: 3f) with {
+            Effectors = [Foot(align: 1.5f, from: 0f, name: "foot-left", side: "left", to: 3f) with {
                 Plant = new CreationPlantDocument(
                     Driver: "stride",
                     Window: new Vector2(x: 0f, y: 3f),
-                    Replant: new CreationReplantDocument(Distance: 0f, Seconds: 3f, Height: -1f)
+                    Replant: new CreationReplantDocument(Distance: 0f, Height: -1f, Seconds: 3f)
                 ),
             }],
         });
@@ -369,10 +369,10 @@ public sealed class CreationLocomotionLawTests {
         var world = CreationFixtures.RigWorld(creation: followed);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: world, reason: out var reason));
-        Assert.Contains(expectedSubstring: "dynamics 'turn' names no declared dynamics row", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "dynamics 'turn' names no declared dynamics row");
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: (world with { DynamicsRaw = [.. world.Dynamics, new DynamicsRow(Name: "turn", Frequency: 2f, Damping: 0.6f, Response: 0f)] }),
+                definition: (world with { DynamicsRaw = [.. world.Dynamics, new DynamicsRow(Damping: 0.6f, Frequency: 2f, Name: "turn", Response: 0f)] }),
                 reason: out var controlReason
             ),
             userMessage: controlReason
@@ -456,7 +456,7 @@ public sealed class CreationLocomotionLawTests {
         var position = Vector3.Zero;
         var tick = 0UL;
 
-        Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: (ReferenceEquals(transforms, alignedTransforms) ? aligned : plain).BodyShapePose(0, (Boot - 1)).Orientation, value: Vector3.UnitY);
+        Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: (ReferenceEquals(objA: transforms, objB: alignedTransforms) ? aligned : plain).BodyShapePose(bodyIndex: 0, shapeIndex: (Boot - 1)).Orientation, value: Vector3.UnitY);
         void Step() {
             Advance(client: alignedClient, pool: aligned, position: position, tick: tick, transforms: alignedTransforms, yaw: 0f);
             Advance(client: plainClient, pool: plain, position: position, tick: tick, transforms: plainTransforms, yaw: 0f);
@@ -475,8 +475,8 @@ public sealed class CreationLocomotionLawTests {
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: alignedTransforms)) < 1e-4f), userMessage: $"aligned up {Up(transforms: alignedTransforms)}");
         Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: plainTransforms)) > 0.05f), userMessage: $"control up {Up(transforms: plainTransforms)}");
         Assert.True(
-            condition: (Vector3.Distance(value1: aligned.BodyShapePose(0, (Boot - 1)).Position, value2: plain.BodyShapePose(0, (Boot - 1)).Position) < 1e-4f),
-            userMessage: $"aligned {aligned.BodyShapePose(0, (Boot - 1)).Position}, control {plain.BodyShapePose(0, (Boot - 1)).Position}"
+            condition: (Vector3.Distance(value1: aligned.BodyShapePose(bodyIndex: 0, shapeIndex: (Boot - 1)).Position, value2: plain.BodyShapePose(bodyIndex: 0, shapeIndex: (Boot - 1)).Position) < 1e-4f),
+            userMessage: $"aligned {aligned.BodyShapePose(bodyIndex: 0, shapeIndex: (Boot - 1)).Position}, control {plain.BodyShapePose(bodyIndex: 0, shapeIndex: (Boot - 1)).Position}"
         );
         Assert.Null(@object: Rig(pool: plain).Effectors[0].Align);
 

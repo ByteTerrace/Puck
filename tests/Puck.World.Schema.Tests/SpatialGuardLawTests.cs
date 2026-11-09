@@ -6,6 +6,26 @@ namespace Puck.World.Schema.Tests;
 
 /// <summary>Locks bounded spatial fingerprints to the actual compiled volume envelope and explicit input selection.</summary>
 public sealed class SpatialGuardLawTests {
+    [Fact]
+    public void ASpatialOnlyGuardTracksTheSeedOfADealtScatterSlotInsideTheSameCensus() {
+        var template = Box("rack", 0) with {
+            Distribution = new WorldDistribution(new WorldDistributionRegion.Scatter(1, 8, 8, 4),
+                new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0)),
+            Deal = new WorldPlacementDeal("cards"),
+            Spatial = null,
+        };
+        var child = WorldPlacementDeal.Child(id: "rack/card", prototype: "marker", slot: 0, template: template) with { Spatial = Box("shape", 0).Spatial };
+        var before = Definition(template, child) with { Generation = new WorldGenerationDefaults(WorldSeed: 1) };
+        var after = Enumerable.Range(2, 64).Select(seed => before with { Generation = new WorldGenerationDefaults(WorldSeed: (ulong)seed) })
+            .First(candidate => candidate.PlacementFrames[child.Id].FixedPosition != before.PlacementFrames[child.Id].FixedPosition);
+        var region = Region(-10, -10, 10, 10);
+
+        Assert.Equal(WorldDefinitionFingerprint.SpatialRows(definition: before, region: region).Select(selector: row => row.Id),
+            WorldDefinitionFingerprint.SpatialRows(definition: after, region: region).Select(selector: row => row.Id));
+        Assert.NotEqual(before.PlacementFrames[child.Id].FixedPosition, after.PlacementFrames[child.Id].FixedPosition);
+        Assert.NotEqual(WorldDefinitionFingerprint.ComputeSpatial(definition: before, region: region), WorldDefinitionFingerprint.ComputeSpatial(definition: after, region: region));
+    }
+
     private static WorldPlacement Box(
         string id,
         float x,

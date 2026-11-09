@@ -387,23 +387,13 @@ public static class WorldDefinitionRows {
         : [WorldLook.Implicit]
     );
     /// <summary>Resolves a placement's WORLD-space transform through <see cref="WorldDefinition.PlacementFrames"/> —
-    /// the composed frame every consumer of a placement's transform reads instead of its own Position/YawDegrees.
-    /// Falls back to <paramref name="placement"/>'s own authored Position/YawDegrees when the table carries no entry
-    /// for it (an ad hoc placement outside <paramref name="definition"/>'s own rows).</summary>
+    /// the composed frame every consumer of a placement's transform reads. An ad hoc or edited row resolves against
+    /// the same parent and surface context as declared rows, including its scale and dealt slot.</summary>
     public static CompiledPlacementFrame ResolvedFrame(WorldDefinition definition, WorldPlacement placement) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: placement);
 
-        return (definition.PlacementFrames.TryGetValue(
-            key: placement.Id,
-            value: out var frame
-        )
-            ? frame
-            : new CompiledPlacementFrame(
-                Position: placement.Position,
-                YawDegrees: placement.YawDegrees
-            )
-        );
+        return WorldPlacementStamp.ResolveFrame(definition: definition, row: placement);
     }
     /// <summary>Resolves a placement's composed world position (see <see cref="ResolvedFrame"/>).</summary>
     public static System.Numerics.Vector3 ResolvedPosition(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(

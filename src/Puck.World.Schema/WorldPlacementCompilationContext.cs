@@ -11,54 +11,63 @@ namespace Puck.World;
 
 public static partial class WorldPlacementStamp {
     private sealed partial class CompilationContext {
-        private readonly Dictionary<string, WorldPlacement> m_rows = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, WorldPrototype> m_creations = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, WorldPlacement> m_rows = new(comparer: StringComparer.Ordinal);
+        private readonly Dictionary<string, WorldPrototype> m_creations = new(comparer: StringComparer.Ordinal);
+
         private readonly IReadOnlyDictionary<string, CompiledPlacementFrame> m_authored;
-        private readonly Dictionary<WorldPlacement, CompiledPlacementFrame> m_frames = new(ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<WorldPlacement, CompiledPlacementStamp> m_stamps = new(ReferenceEqualityComparer.Instance);
-        private readonly HashSet<WorldPlacement> m_resolvingFrames = new(ReferenceEqualityComparer.Instance);
-        private readonly HashSet<WorldPlacement> m_resolvingStamps = new(ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<IReadOnlyList<string>, FieldEntry> m_fields = new(TargetComparer.Instance);
+
+        private readonly Dictionary<WorldPlacement, CompiledPlacementFrame> m_frames = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<WorldPlacement, CompiledPlacementStamp> m_stamps = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly HashSet<WorldPlacement> m_resolvingFrames = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly HashSet<WorldPlacement> m_resolvingStamps = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<IReadOnlyList<string>, FieldEntry> m_fields = new(comparer: TargetComparer.Instance);
+
         private readonly ulong m_seed;
         private readonly int m_revision;
+
         public object Gate { get; } = new();
+
         public IReadOnlyDictionary<string, CompiledPlacementFrame> FrameTable { get; }
 
         public CompilationContext(WorldPlacementsSection section, IReadOnlyList<WorldPrototype> creations, ulong seed, int revision) {
             m_seed = seed; m_revision = revision;
-            m_authored = WorldPlacementFrameCompilation.Resolve(section, seed);
+            m_authored = WorldPlacementFrameCompilation.Resolve(section: section, worldSeed: seed);
             var projected = false;
-            foreach (var row in section.Rows ?? []) {
+
+            foreach (var row in (section.Rows ?? [])) {
                 if (row is null) { continue; }
-                _ = m_rows.TryAdd(row.Id, row); projected |= row.Surface is not null;
+                _ = m_rows.TryAdd(key: row.Id, value: row); projected |= (row.Surface is not null);
             }
-            foreach (var creation in creations) { _ = m_creations.TryAdd(creation.Id, creation); }
-            FrameTable = projected ? new LazyFrames(this) : m_authored;
+            foreach (var creation in creations) { _ = m_creations.TryAdd(key: creation.Id, value: creation); }
+            FrameTable = (projected ? new LazyFrames(owner: this) : m_authored);
         }
         private static bool SingleRoot(WorldPlacement row) => row.Distribution is null && row.Mirror is null && row.Deal is null;
         private bool Owned(WorldPlacement row) => m_rows.TryGetValue(row.Id, out var declared) && ReferenceEquals(row, declared);
-        private CompiledPlacementFrame Authored(WorldPlacement row) => Owned(row)
-            ? m_authored.GetValueOrDefault(row.Id, CompiledPlacementFrame.FromAuthored(row))
-            : CompiledPlacementFrame.FromAuthored(row);
+        private CompiledPlacementFrame Authored(WorldPlacement row) => (Owned(row: row)
+            ? m_authored.GetValueOrDefault(row.Id, WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed))
+            : WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed));
         private CompiledPlacementFrame BaseFrame(WorldPlacement row) {
             if (row.Parent is not { Length: > 0 } parentId || !m_rows.TryGetValue(parentId, out var parent)) { return Authored(row); }
             var parentFrame = FrameOf(parent);
             if (Owned(row) && parentFrame == Authored(parent)) { return Authored(row); }
             return WorldPlacementFrameCompilation.Compose(parentFrame, parent, row, m_seed);
         }
-        private CompiledPlacementFrame FrameOf(WorldPlacement row) {
-            if (m_frames.TryGetValue(row, out var held)) { return held; }
-            if (row.Surface is not null && SingleRoot(row)) {
+
+        public CompiledPlacementFrame FrameOf(WorldPlacement row) {
+            if (m_frames.TryGetValue(key: row, value: out var held)) { return held; }
+            if ((row.Surface is not null) && SingleRoot(row: row)) {
                 // As with ordinary invalid parent chains, frame inspection is best-effort for unvalidated
                 // documents. Descriptor validation is the refusing gate; geometry admission never bypasses it.
-                if (!TryDescriptor(row, out _, out _)) { return Authored(row); }
+                if (!TryDescriptor(descriptor: out _, reason: out _, row: row)) { return Authored(row: row); }
                 return StampOf(row).Frame;
             }
-            if (!m_resolvingFrames.Add(row)) { throw new InvalidOperationException($"placement '{row.Id}' has a cyclic frame dependency."); }
+            if (!m_resolvingFrames.Add(item: row)) { throw new InvalidOperationException(message: $"placement '{row.Id}' has a cyclic frame dependency."); }
             try {
-                var frame = BaseFrame(row);
-                m_frames[row] = frame; return frame;
-            } finally { m_resolvingFrames.Remove(row); }
+                var frame = BaseFrame(row: row);
+
+                if (Owned(row: row)) { m_frames[row] = frame; }
+                return frame;
+            } finally { m_resolvingFrames.Remove(item: row); }
         }
         public CompiledPlacementStamp StampOf(WorldPlacement row, CompiledPlacementFrame? frameOverride = null) {
             var owned = Owned(row) && frameOverride is null;
@@ -167,14 +176,16 @@ public static partial class WorldPlacementStamp {
             }
             instances = accepted.ToArray(); ordinals = indices.ToArray(); WorldBootWork.Count(WorldBootWork.SurfacePlans);
         }
+
         private sealed class LazyFrames(CompilationContext owner) : IReadOnlyDictionary<string, CompiledPlacementFrame> {
             public int Count => owner.m_rows.Count;
             public IEnumerable<string> Keys => owner.m_rows.Keys;
             public IEnumerable<CompiledPlacementFrame> Values {
                 get { foreach (var row in owner.m_rows.Values) { yield return this[row.Id]; } }
             }
+
             public CompiledPlacementFrame this[string key] {
-                get { lock (owner.Gate) { return owner.FrameOf(owner.m_rows[key]); } }
+                get { lock (owner.Gate) { return owner.FrameOf(row: owner.m_rows[key]); } }
             }
             public bool ContainsKey(string key) => owner.m_rows.ContainsKey(key);
             public bool TryGetValue(string key, out CompiledPlacementFrame value) {

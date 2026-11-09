@@ -52,11 +52,11 @@ public sealed class WorldStateDocumentValuesLawTests {
         Assert.Same(expected: definition.StateRaw, actual: bound.StateRaw);
         Assert.Same(expected: live, actual: bound.Placements[0].Position.Binder);
         Assert.Null(@object: definition.Placements[0].Position.Binder);
-        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: bound.Placements[0].Position.Value);
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: bound.PlacementFrames[bound.Placements[0].Id].Position);
 
         var again = WorldStateDocumentValues.BindLive(definition: bound, live: live);
 
-        Assert.NotSame(expected: bound, actual: again);
+        Assert.NotSame(actual: again, expected: bound);
         Assert.Same(expected: bound.PlacementsRaw, actual: again.PlacementsRaw);
     }
     [Fact]
@@ -91,13 +91,12 @@ public sealed class WorldStateDocumentValuesLawTests {
     public void ABoundValueReadsTheArenaItsServerHoldsWhenItIsRead() {
         var first = Placed(spot: "[1,2,3]");
         var live = new WorldLiveValues(clock: static () => ArenaTime.Origin) { Arena = WorldStateReader.Seed(definition: first) };
-        var position = WorldStateDocumentValues.BindLive(definition: first, live: live).Placements[0].Position;
+        var bound = WorldStateDocumentValues.BindLive(definition: first, live: live);
 
-        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: position.Value);
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 1f, y: 2f, z: 3f), actual: bound.PlacementFrames[bound.Placements[0].Id].Position);
         live.Arena = WorldStateReader.Seed(definition: Placed(spot: "[4,5,6]"));
-        Assert.Equal(expected: new System.Numerics.Vector3(x: 4f, y: 5f, z: 6f), actual: position.Value);
+        Assert.Equal(expected: new System.Numerics.Vector3(x: 4f, y: 5f, z: 6f), actual: bound.PlacementFrames[bound.Placements[0].Id].Position);
     }
-
     [Fact]
     public void CachedShapesDoNotCacheMutableContentsAndCyclesTerminate() {
         var first = new Node();

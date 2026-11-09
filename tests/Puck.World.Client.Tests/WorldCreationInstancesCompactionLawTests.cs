@@ -45,7 +45,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
         );
         return builder.Build();
     }
-    private static void Reconcile(WorldCreationInstances pool, WorldPrototype creation, params int[] bodies) => pool.Reconcile(
+    private static void Reconcile(WorldCreationInstances pool, WorldPrototype creation, params int[] bodies) => pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
         placements: [],
         creations: [creation],
         dynamics: [],
@@ -152,7 +152,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
 
         Reconcile(
             pool,
-            Creation(solid, cutter) with { Document = Creation(solid, cutter).Document with { Frames = [new FrameDocument("rest", [])] } },
+            Creation(solid, cutter) with { Document = Creation(solid, cutter).Document with { Frames = [new FrameDocument(Name: "rest", Transforms: [])] } },
             0
         );
         var group = Assert.Single(collection: Emit(pool: pool).Instances);
@@ -208,7 +208,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
             WorldLook.Implicit
         ) };
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [row], worldSeed: 0UL),
             bodyStamps: bodies,
             creations: [creation],
             dynamics: [],
@@ -220,7 +220,11 @@ public sealed class WorldCreationInstancesCompactionLawTests {
         );
 
         // Changing the row's ownership also retires an already-registered placement copy.
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [row with { Inhabit = new WorldPlacementInhabit(
+                    "display",
+                    null,
+                    Puck.World.Protocol.IntentSource.Idle
+                ) }], worldSeed: 0UL),
             [row with { Inhabit = new WorldPlacementInhabit(
                     "display",
                     null,
@@ -231,7 +235,11 @@ public sealed class WorldCreationInstancesCompactionLawTests {
             bodies
         );
         Assert.Single(collection: Emit(pool: pool).Instances);
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [row with { Inhabit = new WorldPlacementInhabit(
+                    "display",
+                    null,
+                    Puck.World.Protocol.IntentSource.Idle
+                ) }], worldSeed: 0UL),
             [row with { Inhabit = new WorldPlacementInhabit(
                     "display",
                     null,
@@ -272,7 +280,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
         );
         var initial = Emit(pool: pool);
 
-        Assert.Single(initial.Instances);
+        Assert.Single(collection: initial.Instances);
         Assert.Equal(SlotBase, initial.Instances[0].Slot);
         Reconcile(
             pool,
@@ -281,7 +289,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
         );
         var grown = Emit(pool: pool);
 
-        Assert.Single(grown.Instances);
+        Assert.Single(collection: grown.Instances);
         Assert.Equal(SlotBase, grown.Instances[0].Slot);
         Assert.Equal(
             1,

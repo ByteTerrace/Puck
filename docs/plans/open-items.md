@@ -2049,13 +2049,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · parented frames] Two consumers read a parented placement's
-  `position` as world space instead of composing its frame
-  (`WorldPlacementFrameCompilation.Compose`): an animated placement with a
-  parent draws at its stored position (`WorldCreationInstances`, the animated
-  instance path), and `world.nudge` with a captured reference frame
-  (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
-  change and now cover dealt children too. Route both through the one resolver.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.

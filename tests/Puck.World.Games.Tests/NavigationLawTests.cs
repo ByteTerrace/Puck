@@ -589,11 +589,11 @@ public sealed partial class NavigationLawTests {
             ));
             fixture.Step();
             Assert.Equal(
-                expected: new DocumentVector3(
+                expected: ((WorldPlacementTranslation)new DocumentVector3(
                     x: 0f,
                     y: 2f,
                     z: 0f
-                ),
+                )),
                 actual: fixture.Server.Definition.Placements.Single(predicate: placement => (placement.Id == "navigation-floor")).Position
             );
         }

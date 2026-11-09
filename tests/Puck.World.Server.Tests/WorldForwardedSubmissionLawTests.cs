@@ -65,8 +65,8 @@ public sealed class WorldForwardedSubmissionLawTests {
         using var fixture = Fixtures.FreshServer(definition: (document with {
             CreationsRaw = [crate],
             PlacementsRaw = (document.PlacementsRaw! with { Rows = [placed] }),
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("hidden"), CellKind.Int,
-                Capacity: 4, CellVisibility: true, Cells: [new StateCell(CellName.Parse("secret"), CellValue.Int(7))])]),
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse(candidate: "hidden"), CellKind.Int,
+                Capacity: 4, CellVisibility: true, Cells: [new StateCell(CellName.Parse(candidate: "secret"), CellValue.Int(value: 7))])]),
         }));
         var reservation = fixture.Server.ReserveTransfer(request: new WorldTransferReservationRequest(
             Border: "seam",
@@ -137,15 +137,16 @@ public sealed class WorldForwardedSubmissionLawTests {
         var verdict = Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: answers));
 
         Assert.True(condition: verdict.Outcome.Applied, userMessage: verdict.Outcome.Detail);
-        Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: fixture.Server.Definition.Placements)!.Position), expected: ((Vector3)moved.Position));
+        Assert.Equal(actual: (WorldPlacementFrameCompilation.LocalFrame(null, WorldDefinitionRows.FindPlacement(id: "crate1", placements: fixture.Server.Definition.Placements)!, 0UL, out _).Position), expected: (WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: moved, worldSeed: 0UL).Position));
         foreach (var key in new[] { "secret", "absent" }) {
             answers.Clear();
-            Assert.True(WorldLocalForwardedAuthority.TryApplySubmission(fixture.Server, Source, in Traveler,
-                new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveStateCell(traveler, "hidden", key)),
-                Guid.NewGuid(), answers.Add, out reason), reason);
-            Assert.Empty(answers);
+            Assert.True(condition: WorldLocalForwardedAuthority.TryApplySubmission(fixture.Server, Source, in Traveler,
+                new WorldSubmissionPayload.Mutation(new WorldMutation.RemoveStateCell(Key: key, Principal: traveler, Row: "hidden")),
+                Guid.NewGuid(), answers.Add, out reason), userMessage: reason);
+            Assert.Empty(collection: answers);
             fixture.Step();
-            var refused = Assert.IsType<WorldSubmissionResult.Mutation>(Assert.Single(answers)).Outcome;
+            var refused = Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: answers)).Outcome;
+
             Assert.Equal(WorldRecipientMutations.NotDisclosedCode, refused.Code);
             Assert.Equal($"'hidden' is not disclosed to {traveler.Describe()}", refused.Detail);
         }
