@@ -16,13 +16,12 @@ let mothHeadPivot = [0, 1.745, 0.2]
 let mothHeadSoftness = 2.1
 
 // The blink frame's poses in the head's unscaled frame, [id, x, y, z]: each closed lid forward over its eye, each open
-// eye's white, opening, iris, pupil, upper lid and lash back inside the face. A creation places each at its own
+// eye's white, iris, pupil, upper lid and lash back inside the face. A creation places each at its own
 // head as at + (v - mothHeadPivot) * s.
 let mothBlinkPose = [
   [284, 0.07656, 1.74842, 0.21045]
   [285, 0.03356, 1.74842, 0.23245]
   [41, 0.07656, 1.74842, 0.06945]
-  [42, 0.07656, 1.74842, 0.06945]
   [43, 0.07456, 1.74842, 0.11045]
   [44, 0.07456, 1.74842, 0.11545]
   [47, 0.02956, 1.74842, 0.09645]
@@ -30,7 +29,6 @@ let mothBlinkPose = [
   [286, -0.07656, 1.74842, 0.21045]
   [287, -0.11956, 1.74842, 0.23245]
   [57, -0.07656, 1.74842, 0.06945]
-  [58, -0.07656, 1.74842, 0.06945]
   [59, -0.07456, 1.74842, 0.11045]
   [60, -0.07456, 1.74842, 0.11545]
   [63, -0.02956, 1.74842, 0.09645]
@@ -147,8 +145,8 @@ template mothHairLock(name, id, a, b, c, radiusStart, radiusEnd, s, at, parentNa
   }
 }
 
-// One eye: a carved socket in the face, a white clipped to an almond opening, iris, pupil, the upper lid, a lash flick
-// and the brow; the catchlights and the lid lines on the white are paints. `side` is 1 for her left (+X) and -1 for her right.
+// One eye: a carved almond socket in the face, a white sphere that shows only through it, iris, pupil, the upper lid, a
+// lash flick and the brow; the catchlights and the lid lines on the white are paints. `side` is 1 for her left (+X) and -1 for her right.
 template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, iris, pupil, hair) {
   shape Prism $"socket-{name}" {
     id: baseId
@@ -172,19 +170,6 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
     group: eyeGroup
     parent: parentName
     exponent: 2
-  }
-
-  shape Prism $"eyeOpening-{name}" {
-    id: baseId + 2
-    position: map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.048, 0.033, 0.065], v => v * s)
-    material: white
-    blend: "Intersection"
-    group: eyeGroup
-    parent: parentName
-    profile {
-      kind: "Ellipse"
-    }
   }
 
   shape Superellipsoid $"iris-{name}" {

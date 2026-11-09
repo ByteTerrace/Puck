@@ -491,7 +491,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
   ] {
     shape Prism $"{layer.name}-{side}" {
       id: idBase + layer.ids[0]
-      position [sx * 0.37, 1.455, 0.02]
+      position [sx * 0.385, 1.455, 0.045]
       rotation: prismMirror(sx, [0, 0, 0, 1])
       scale [0.14 + layer.grow, 0.2 + layer.grow, 0.16 + layer.grow]
       material: layer.material
@@ -502,7 +502,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
 
     shape Superellipsoid $"{layer.name}Dome-{side}" {
       id: idBase + layer.ids[1]
-      position [sx * 0.35, 1.42, 0.02]
+      position [sx * 0.365, 1.42, 0.045]
       scale [0.25 + layer.grow, 0.33 + layer.grow, 0.2 + layer.grow]
       material: layer.material
       blend: "SmoothIntersection"
@@ -516,7 +516,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
     // chamfered front edge, so from the side the plates lean forward and down. It reads the same from either side.
     shape Prism $"{layer.name}Profile-{side}" {
       id: idBase + layer.ids[2]
-      position [sx * 0.37, 1.455, 0.02]
+      position [sx * 0.385, 1.455, 0.045]
       rotation [0, diagonal, 0, diagonal]
       scale [0.16 + layer.grow, 0.2 + layer.grow, 0.3]
       material: layer.material
@@ -531,7 +531,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
   for (band, b) in [{ name: "shoulderCap", id: 212, y: 1.6, h: 0.075 }, { name: "shoulderBand", id: 209, y: 1.465, h: 0.042 }] {
     shape Box $"{band.name}Span-{side}" {
       id: idBase + band.id
-      position [sx * 0.37, band.y, 0.02]
+      position [sx * 0.385, band.y, 0.045]
       rotation [0.10363, -sx * 0.01364, -sx * 0.12981, 0.98601]
       scale [0.3, band.h, 0.3]
       material: skin
