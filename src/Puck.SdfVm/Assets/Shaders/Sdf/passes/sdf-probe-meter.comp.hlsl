@@ -2,7 +2,7 @@
 #define SDF_PROBE_RESULT_STRIDE SDF_PROBE_METER_OUTPUT_WORDS
 #include "../shade/sdf-probe-lighting.hlsli"
 
-groupshared float meterAxis[6 * SDF_PROBE_GROUP_SIZE];
+groupshared float3 meterLight[6 * SDF_PROBE_GROUP_SIZE];
 groupshared float meterSky[6 * SDF_PROBE_GROUP_SIZE];
 groupshared float meterWeight[SDF_PROBE_GROUP_SIZE];
 groupshared uint meterBack[SDF_PROBE_GROUP_SIZE];
@@ -12,8 +12,9 @@ float3 meterNormal(uint axis) {
     normal[axis / 2] = (axis & 1) == 0 ? 1 : -1;
     return normal;
 }
-float meterLuminance(float3 value) { return dot(value, SDF_LUMINANCE); }
-// KEEP IN SYNC with TryMeter: eight unobstructed fine probes, otherwise a sample at the camera itself.
+// KEEP IN SYNC with TryMeter: eight unobstructed fine probes, otherwise a sample at the camera itself. The answer is the
+// light the sample receives along each axis, RGB (SdfMeshProbeRelight.MeterOutputWords), then its sky visibility and
+// its flags.
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     sdfProbeLightingSetup();
@@ -23,7 +24,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     meterWeight[lane] = 0;
     meterBack[lane] = 0;
     [unroll] for (uint axis = 0; axis < 6; axis++) {
-        meterAxis[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
+        meterLight[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
         meterSky[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
     }
     if (lane < 8) {
@@ -46,7 +47,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
                 [unroll] for (uint axis = 0; axis < 6; axis++) {
                     float sky; float3 radiance; float3 skyLight;
                     sdfMeshIrradianceProbe(address, meterNormal(axis), sky, radiance, skyLight);
-                    meterAxis[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * meterLuminance(radiance + skyLight);
+                    meterLight[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * (radiance + skyLight);
                     meterSky[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * sky;
                 }
             }
@@ -79,7 +80,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             }
             [unroll] for (uint axis = 0; axis < 6; axis++) {
                 float weight = ray.w * max(0, dot(ray.xyz, meterNormal(axis)));
-                meterAxis[axis * SDF_PROBE_GROUP_SIZE + lane] += weight * meterLuminance(radiance);
+                meterLight[axis * SDF_PROBE_GROUP_SIZE + lane] += weight * radiance;
                 meterSky[axis * SDF_PROBE_GROUP_SIZE + lane] += weight * sky;
             }
         }
@@ -91,18 +92,21 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         for (uint i = 0; i < SDF_PROBE_GROUP_SIZE; i++) { back += meterBack[i]; }
         float open = 0;
         [unroll] for (uint axis = 0; axis < 6; axis++) {
-            float value = 0, sky = 0;
+            float3 value = 0;
+            float sky = 0;
             for (uint i = 0; i < SDF_PROBE_GROUP_SIZE; i++) {
-                value += meterAxis[axis * SDF_PROBE_GROUP_SIZE + i];
+                value += meterLight[axis * SDF_PROBE_GROUP_SIZE + i];
                 sky += meterSky[axis * SDF_PROBE_GROUP_SIZE + i];
             }
             float divisor = total > 0 ? total : sdfProbeLighting[9 + axis / 4][axis % 4];
             sky /= divisor;
             value /= divisor;
-            sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + axis] = asuint(value);
+            [unroll] for (uint channel = 0; channel < 3; channel++) {
+                sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + 3 * axis + channel] = asuint(value[channel]);
+            }
             open += sky / 6;
         }
-        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + 6] = asuint(saturate(SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE * open));
-        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + 7] = (total > 0 ? 1 : back / (float)SDF_PROBE_HIT_COUNT <= SDF_MESH_IRRADIANCE_INSIDE_SHARE ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
+        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + SDF_PROBE_METER_OUTPUT_WORDS - 2] = asuint(saturate(SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE * open));
+        sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + SDF_PROBE_METER_OUTPUT_WORDS - 1] = (total > 0 ? 1 : back / (float)SDF_PROBE_HIT_COUNT <= SDF_MESH_IRRADIANCE_INSIDE_SHARE ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
     }
 }

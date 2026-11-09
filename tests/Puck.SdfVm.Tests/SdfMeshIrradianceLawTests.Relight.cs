@@ -192,7 +192,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CameraOnlyTwinkleDoesNotProjectOrAdvanceConvergedLighting(bool grid) {
+    public void CameraOnlyTwinkleDoesNotCaptureOrAdvanceConvergedLighting(bool grid) {
         var sky = UniformSky(new Vector3(0.01f, 0.02f, 0.1f));
         _ = sky.Add(label: "camera stars", parameters: new SdfSkyStars { Brightness = 2f }, visibility: SdfSkyVisibility.Camera);
         var gains = new SdfIndirectGains(Lights: 0, Emission: 0, Screens: 0, Sky: 1, Feedback: 0);
@@ -214,7 +214,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
             sky.First<SdfSkyStars>().TwinklePhase = tick * 0.1f;
             refresh.Invoke(volume, [frame, layout]);
         }
-        Assert.Equal(1, volume.Counters.Read(SdfMeshIrradiance.EnvironmentProjections));
+        Assert.Equal(1, volume.Counters.Read(SdfMeshIrradiance.SkyCaptures));
         Assert.Equal(initialVersion, version.GetValue(volume));
     }
 

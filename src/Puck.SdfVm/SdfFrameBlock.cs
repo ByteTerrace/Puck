@@ -64,6 +64,7 @@ public static partial class SdfFrameBlock {
     private static readonly int ExposeShare = Offset(member: SdfWorldPackage.ExposeShare);
     private static readonly int AirLight = Offset(member: SdfWorldPackage.AirLight);
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
+    private static readonly int MeterLight = Offset(member: SdfWorldPackage.MeterLight);
     private static readonly int LocalAdaptation = Offset(member: SdfWorldPackage.LocalAdaptation);
     private static readonly int SkyPeakLuminance = Offset(member: SdfWorldPackage.SkyPeakLuminance);
     private static readonly int FlowClock = Offset(member: SdfWorldPackage.FlowClock);
@@ -235,6 +236,10 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
+        Span<Vector4> meterLight = stackalloc Vector4[6];
+
+        tables.Exposures?.LightOf(view: view, rows: meterLight);
+        for (var axis = 0; (axis < 6); axis++) { WriteVector4(block: block, offset: (MeterLight + (axis * 16)), value: meterLight[axis]); }
         WriteSingle(block: block, offset: LocalAdaptation, value: ((frame.Exposure.Mode == SdfExposureMode.Auto) ? Math.Clamp(value: frame.Exposure.Local, min: 0f, max: 1f) : 0f));
         WriteSingle(block: block, offset: SkyPeakLuminance, value: (tables.Exposures?.SkyPeakLuminance ?? 0f));
         WriteSingle(block: block, offset: FlowClock, value: FlowClockOf(frame: frame));
