@@ -86,11 +86,11 @@ let glassRow = ["shape-glass"]
 let styleRow = ["shape-cel", "shape-cel-hard"]
 let motionRow = [
   "motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend",
-  "motion-carve", "motion-mirror", "motion-polar"
+  "motion-carve", "motion-mirror", "motion-polar", "motion-nod", "motion-three"
 ]
 let motionRowB = [
   "motion-paint", "motion-inset", "motion-twist", "motion-bend", "motion-pulse", "motion-cells", "motion-volume",
-  "motion-ik", "motion-frames"
+  "motion-ik", "motion-frames", "motion-seam-paint"
 ]
 let warpRow = [
   "shape-warp", "shape-displace", "shape-elongate", "shape-jitter", "shape-jitter-tumble", "shape-log-sphere",
@@ -554,6 +554,9 @@ template galleryState() {
     cells = 1
     volume = 1
     ik = 1
+    nod = 1
+    three = 1
+    seamPaint = 1
   }
 
   table galleryInputs {
@@ -1953,11 +1956,9 @@ template motionPrototypes() {
       exhibit(label: "PARENT CHAIN", extra: [accent])
     }
   }
-  // The sphere slides along the side of the still box, through a smooth union. The group bakes at the pose its program
-  // arrived in and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves away, until
-  // the clock pauses and the group bakes again at the held pose. The sphere stays partly outside the box over the whole
-  // slide: a sphere the bake found inside the box would bake into no surface and never draw.
-  allow PUCK122 "the exhibit shows the stretched seam of a moving smooth union"
+  // The sphere slides along the side of the still box, through a smooth union, inside the blend's admitted envelope
+  // (D at most half the smooth radius): the group bakes once at rest and skins the fillet, each vertex in it blending
+  // the two shapes' motions by its share, so the fillet follows the slide.
   prototype "motion-smooth-blend" {
     document {
       clockDriver(key: "blend", cadence: 1.2)
@@ -1978,11 +1979,15 @@ template motionPrototypes() {
           {
             driver: "clock"
             axis [1, 0, 0]
-            amplitude: 0.15
+            amplitude: 0.06
           }
         ]
       }
-      exhibit(label: "MOVING BLEND", extra: [accent])
+      exhibit(
+        label: "MOVING BLEND",
+        extra: [accent],
+        note: "a skinned fillet: the sphere slides 6 cm and the fillet stretches with it, never tearing, stepping or popping"
+      )
     }
   }
   // The same pair stamped statically, its sphere placed by the galleryInputs probe cell: each write re-emits the creation
@@ -2004,8 +2009,8 @@ template motionPrototypes() {
       exhibit(label: "STATE BLEND", extra: [accent])
     }
   }
-  // A cutter sliding across the face of a still box: a cut face keeps the slot of the shape it shapes.
-  allow PUCK122 "the exhibit shows the stretched seam of a moving cut"
+  // A cutter sliding across the face of a still box through a smooth subtraction, inside the envelope: the bowl's
+  // floor rides the cutter and its soft rim blends the two motions, so the cut follows the tool.
   prototype "motion-carve" {
     document {
       clockDriver(key: "carve", cadence: 1.2)
@@ -2016,20 +2021,110 @@ template motionPrototypes() {
         scale [0.3, 0.3, 0.3]
       }
       shape Sphere "cutter" {
-        blend: Subtraction
+        blend: SmoothSubtraction
         group: 1
         material: accentMaterial
         position [0, 1.25, 0.3]
         scale [0.2, 0.2, 0.2]
+        smooth: 0.1
         slides [
           {
             driver: "clock"
             axis [1, 0, 0]
-            amplitude: 0.3
+            amplitude: 0.045
           }
         ]
       }
-      exhibit(label: "MOVING CUT", extra: [accent])
+      exhibit(
+        label: "MOVING CUT",
+        extra: [accent],
+        note: "a smooth cut by a sliding tool: the orange bowl follows the cutter and its soft rim stretches, never tearing"
+      )
+    }
+  }
+  // A head nodding on a still neck through a smooth union: the swing about the neck's top stays inside the envelope,
+  // so the throat's fillet skins, blending the head's turn into the neck.
+  prototype "motion-nod" {
+    document {
+      clockDriver(key: "nod", cadence: 1.1)
+      shape Capsule "neck" {
+        group: 1
+        material: exhibitMaterial
+        position [0, 1.1, 0]
+        scale [0.05, 0.18, 0.05]
+      }
+      shape Sphere "head" {
+        blend: SmoothUnion
+        group: 1
+        material: accentMaterial
+        position [0, 1.42, 0.02]
+        scale [0.13, 0.13, 0.13]
+        smooth: 0.08
+        swings [
+          {
+            driver: "clock"
+            axis [1, 0, 0]
+            amplitude: 0.16
+            pivot [0, 1.3, 0]
+          }
+        ]
+      }
+      exhibit(
+        label: "NODDING BLEND",
+        extra: [accent],
+        note: "a head nods on its neck: the throat fillet bends with the nod, no crack, spike or fold at either extreme"
+      )
+    }
+  }
+  // Two lobes swing on a still body, all three smoothly blended where they meet: a vertex there takes a third owner's
+  // share, which two influences cannot hold, so the bake refuses the skin and bakes each owner's part rigid.
+  prototype "motion-three" {
+    document {
+      clockDriver(key: "three", cadence: 1.3)
+      shape Sphere "body" {
+        group: 1
+        material: exhibitMaterial
+        position [0, 1.18, 0]
+        scale [0.14, 0.14, 0.14]
+      }
+      shape Sphere "left" {
+        blend: SmoothUnion
+        group: 1
+        material: accentMaterial
+        position [-0.1, 1.36, 0]
+        scale [0.09, 0.09, 0.09]
+        smooth: 0.1
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.06
+            pivot [0, 1.3, 0]
+          }
+        ]
+      }
+      shape Sphere "right" {
+        blend: SmoothUnion
+        group: 1
+        material: accentMaterial
+        position [0.1, 1.36, 0]
+        scale [0.09, 0.09, 0.09]
+        smooth: 0.1
+        swings [
+          {
+            driver: "clock"
+            axis [0, 0, 1]
+            amplitude: 0.06
+            phase: 3.14159
+            pivot [0, 1.3, 0]
+          }
+        ]
+      }
+      exhibit(
+        label: "THREE OWNERS",
+        extra: [accent],
+        note: "three moving owners meet: the bake splits them into rigid parts, so expect creases where they join, never tears"
+      )
     }
   }
   // A folded shape may not swing, but it rides its parent: the symmetry plane yaws with the hinge.
@@ -2154,6 +2249,48 @@ template motionPrototypesB() {
             ]
           }
         ]
+      )
+    }
+  }
+  // A painted stripe crossing a skinned fillet between a still box and a sliding sphere, one material on both. A vertex
+  // wholly one shape's shades in that shape's frame, so the stripe holds on the box and on the sphere; a blended vertex
+  // still shades in its first member's frame until moving-blends step 4 maps material coordinates through the skin.
+  prototype "motion-seam-paint" {
+    document {
+      clockDriver(key: "seamPaint", cadence: 1.2)
+      shape Box "anchor" {
+        group: 1
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      shape Sphere "visitor" {
+        blend: SmoothUnion
+        group: 1
+        material: accentMaterial
+        position [0.35, 1.2, 0]
+        scale [0.18, 0.18, 0.18]
+        smooth: 0.15
+        slides [
+          {
+            driver: "clock"
+            axis [0, 1, 0]
+            amplitude: 0.06
+          }
+        ]
+      }
+      exhibit(
+        label: "PAINT ACROSS A SEAM",
+        extra: [
+          {
+            color: "#E8E4DA"
+            roughness: 0.5
+            paints [
+              { parent: "anchor", type: "Plane", position [0, 0, 0], stroke: 0.025, color: "#E4572E" }
+            ]
+          }
+        ],
+        note: "expected to fail until step 4: the stripe holds on box and sphere but slides across the fillet as the sphere moves"
       )
     }
   }

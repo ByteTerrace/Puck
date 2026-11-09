@@ -269,8 +269,8 @@ for the moving ones; the rows' arrays in `shapes.puck` list them in order, and
 | Sweeps and facets | 1, 17 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
 | Blends | 1, 25 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
 | Folds | 1, 33 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
-| Motion | 2, 17 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving cut, moving mirror fold, moving polar fold |
-| Motion II | 2, 25 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames |
+| Motion | 2, 17 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving smooth cut, moving mirror fold, moving polar fold, nodding blend, three moving owners |
+| Motion II | 2, 25 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames, paint across a moving seam |
 | Warps II | 2, 33 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
 | Forms | 3, 17 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
 | Surfaces | 3, 25 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
@@ -311,7 +311,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | SmoothUnion, SmoothSubtraction, SmoothIntersection | `shape-smooth-union`, `-subtraction`, `-intersection` |
 | ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
 | GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
-| Blends between moving shapes (pooled `group`) | `motion-smooth-blend`, `motion-carve` |
+| Blends between moving shapes (pooled `group`): a skinned smooth union, a skinned smooth subtraction, a swing, three owners split rigid, a paint across a seam | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint` |
 | StairsUnion, StairsSubtraction (`steps`), Morph (`morph { lane, from, to }`) | `shape-stairs-union`, `shape-stairs-subtraction`, `shape-morph`: each composes at the pop of a scope the shape opens for itself, inside its creation's or group's scope too; a static placement reads the morph's lane as zero, halfway through its −1..1 window |
 
 ### Per-shape facets
@@ -372,12 +372,14 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | Path | Exhibit |
 |---|---|
 | Swing, `linear` wave (rigid rotation) | `motion-spin`, `motion-polar` |
-| Swing, `sine` about a pivot | `motion-rock`, `motion-paint`, `motion-inset`, `motion-cells`, `motion-volume` |
+| Swing, `sine` about a pivot | `motion-rock`, `motion-paint`, `motion-inset`, `motion-cells`, `motion-volume`, `motion-nod`, `motion-three` |
 | Swing, `halfSine` and `constant` waves | `motion-chain` (lower arm), `motion-twist` (the lean) |
-| Slide (translation) | `motion-slide`, `motion-smooth-blend`, `motion-carve`, `motion-pulse` |
+| Slide (translation) | `motion-slide`, `motion-smooth-blend`, `motion-carve`, `motion-pulse`, `motion-seam-paint` |
 | `parent` chains | `motion-chain`, `motion-mirror`, `motion-polar` |
-| A moving shape through a smooth blend with a still one | `motion-smooth-blend` |
-| A moving cutter | `motion-carve` |
+| A moving shape through a smooth blend with a still one, skinned | `motion-smooth-blend` (a slide), `motion-nod` (a swing) |
+| A moving cutter through a smooth subtraction, skinned | `motion-carve` |
+| Three moving owners meeting in one blend: the split fallback | `motion-three` |
+| A paint across a skinned seam | `motion-seam-paint`, expected to fail until [moving blends](../../docs/plans/moving-blends.md) step 4 |
 | Mirrored and folded shapes in motion | `motion-mirror`, `motion-polar` |
 | Paints and an inset on a moving surface | `motion-paint`, `motion-inset` |
 | Effector (IK) with a `state` target | `motion-ik` |
@@ -452,8 +454,9 @@ replicates, journals, undoes and reads back like any other row.
 
 A rate change re-bases the clock at the value it had reached, so the poses
 continue without a jump. The keys are `spin`, `rock`, `slide`, `chain`,
-`blend` (motion-smooth-blend), `carve`, `mirror`, `polar`, `paint`, `inset`,
-`twist`, `bend`, `pulse`, `cells`, `volume` and `ik`. `motion-spin` and
+`blend` (motion-smooth-blend), `carve`, `mirror`, `polar`, `nod`, `three`,
+`paint`, `inset`, `twist`, `bend`, `pulse`, `cells`, `volume`, `ik` and
+`seamPaint` (motion-seam-paint). `motion-spin` and
 `motion-polar` switch at once rather than easing, since easing the weight of a
 linear wave sweeps the whole accumulated angle. `motion-frames` replays on the
 render clock, eight 60 Hz frames a pose, and answers none of these controls;
@@ -468,8 +471,8 @@ render clock, eight 60 Hz frames a pose, and answers none of these controls;
 | `tint` | `shape-state-color`'s colour | `world.state.cell.set galleryInputs tint #3A7BD5` |
 
 A `probe` write re-emits the creation and rebakes its seam exactly, where
-`motion-smooth-blend` bakes its seam once and skins it: put the two side by side
-to tell a skinning stretch from a bake defect. A `reach` or `tint` write moves
+`motion-smooth-blend` bakes its seam once at rest and skins it: put the two side
+by side to tell a skinned fillet from a freshly baked one. A `reach` or `tint` write moves
 no geometry and rebakes nothing.
 
 A shape parameter that is a plain number (a `smooth` radius, a `twist` rate, an
@@ -503,20 +506,33 @@ Each recipe frames a row's first three exhibits; move the x of both points by
   the motion row 60 ticks apart differ in 436 of 1,152,000 pixels, mostly the
   flow volume (which animates on the render clock); two running ones 30 ticks
   apart differ in 17,394.
-- **Moving blend seam.** `view.override camera look 33.4 10.95 14.2 33.4 10.25 17`,
-  `world.debug-view normals`: the smooth seam between `motion-smooth-blend`'s
-  box and sphere stretches as the sphere slides away from the pose it baked in.
-  Pause or scrub `galleryClock` and the group bakes again at the held pose
-  half a second later (`world.wait 30`, `world.wait bakes 60`, then capture).
-  The pause is a `world.row.set`, a document edit whose new program keeps every
-  moving group's skinned mesh, as a scrub after it (`world.state.cell.set
-  galleryClock $value 1.3`) does, so only the settle rebake moves the seam (`sdf.mesh-settle.queued` and `done` count it). Compare against
-  `motion-state-blend` at x = 36 with `galleryInputs probe` at the same offset.
-  `world.counters sdf.mesh-settle` read twice while the clock runs shows
-  `moving` climbing and `queued` still.
-- **Moving cut.** `motion-carve` at x = 38.6: the carved face rides the cutter's
-  slot, so `world.debug-view motion` shows it moving with the cutter while the
-  rest of the box stays still.
+- **Moving blend seams.** `view.override camera look 33.4 10.95 14.2 33.4 10.25 17`,
+  `world.debug-view normals`: `motion-smooth-blend`'s fillet stretches with the
+  sliding sphere, its normals bending smoothly through the band, with no tear,
+  step or pop at either end of the slide. Step x to 46.4 for `motion-nod` (the
+  throat bends with the nod) and 49 for `motion-three`. Each blend sits inside
+  its admitted envelope (`puck compile --validate` prints PUCK122 only for a
+  group that creases), so each bakes once at rest and skins:
+  `world.counters sdf.mesh-skin` counts the blend band's vertices under
+  `blended-vertices`, and `puck mesh audit --cpu --prototype <exhibit>` prints
+  root, rigid-member and blend-zone vertices. `motion-three`'s third owner
+  takes more than a 1/64 share where the three meet, so its bake refuses the
+  skin and bakes each owner's part rigid: creases where they join, never a
+  tear, and the audit scores the missing fillet as off-surface error against
+  the blended field. Raise the clock's rate
+  (`perSecondNumerator` 6) to see a whole cycle in a 60-frame presented burst.
+- **Moving cut.** `motion-carve` at x = 38.6: the smooth bowl's floor rides the
+  cutter's slot and its soft rim blends the two, so `world.debug-view motion`
+  shows the bowl moving with the cutter while the rest of the box stays still.
+  A hard cut across owners has no share to skin: its group creases, and the
+  partitioned box keeps the cut where the cutter rests
+  (`CreationMotionPlan.Borrows`).
+- **Paint across a moving seam.** `motion-seam-paint` at x = 46.4 on the z 25
+  row: one stripe crosses box, fillet and sphere. On the box and the sphere it
+  holds; on the fillet's blended band it shades in the box's frame, so it
+  slides across the band as the sphere moves. That is expected until [moving
+  blends](../../docs/plans/moving-blends.md) step 4 maps material coordinates
+  through the skin, and the plaque says so.
 - **Folds in motion.** `motion-mirror` and `motion-polar` at x = 41.2 and 43.8: the
   mirrored wing pair and the eight blades must stay whole and symmetric through
   the swing; a copy that lags, tears or vanishes is the folded slot losing its
@@ -566,7 +582,7 @@ field, in millimetres, and what the exhibit's score is made of:
 | Erode (LaneErode), creation noise (NoiseDisplace) | `shape-erode`, `shape-noise` | 0.05, 0.27 | correct |
 | Smooth, chamfer, groove, pipe blends | `shape-smooth-*`, `-chamfer-*`, `-groove-*`, `-pipe-*` | 0.1 to 0.5 | correct; creases score as normal error at hard seams |
 | Subtraction, intersection, xor | `shape-blend-*` | 0.2 to 0.7 | correct; `shape-blend-union` bakes 48 open edges where box and sphere meet (open) |
-| Moving blends, twist, bend | `motion-smooth-blend`, `motion-twist`, `motion-bend` | 0.15 to 0.4 | correct at their baked pose; PUCK122 and the settle rebake cover the motion |
+| Moving blends, twist, bend | `motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-twist`, `motion-bend` | 0.15 to 0.4 | correct at rest; the blends skin inside their envelopes, and `puck mesh audit --pose` measures a posed skin against its posed field |
 | Domain warp, sine relief, elongate, jitter, log sphere, stairs, morph | `shape-warp` and the rest of the z 69 row | CPU bake only until the owner's World boots this document | field correct by `SdfRenderOpsLawTests` and `SeamBlendLawTests`; see the GPU capture list under open items |
 
 ## Known defects the gallery shows
@@ -584,10 +600,9 @@ Each of these was seen in a Direct3D 12 capture of the gallery or in
   clusters inside the lattice at tumbled boxes' corners rather than at the
   clip.
 
-- **Moving blends stretch while they move.** `motion-smooth-blend` and
-  `motion-carve` join shapes that move independently (PUCK122 names each at
-  authoring time, and they acknowledge it with `allow`) and skin one baked seam
-  while they run: the seam stretches. Paused or scrubbed, the pose settles and
-  the group bakes again there within about a second (`world.counters
-  sdf.mesh-settle`). `motion-pulse` gives the core and each petal a group of
-  its own, so its petals slide clear of the core with no seam to stretch.
+- **A paint swims across a blended seam.** `motion-seam-paint`'s stripe
+  slides across the fillet's blended band while it holds on the box and the
+  sphere: a blended vertex's material layers still shade in its first owner's
+  frame ([moving blends](../../docs/plans/moving-blends.md) step 4).
+  `motion-pulse` gives the core and each petal a group of its own, so its
+  petals slide clear of the core with no seam to stretch.

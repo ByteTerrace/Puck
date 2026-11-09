@@ -33,7 +33,7 @@ public sealed class CreationMotionPlan {
             }
         }
         Owners = owners.ToArray();
-        var rejected = CreationMotion.MovingBlends(document: document).Where(predicate: blend => !CreationMotion.Envelope(blend: blend, document: document).Admitted).Select(selector: blend => blend.Group).ToHashSet();
+        var rejected = CreationMotion.CreasedGroups(document: document);
         // A follower has no finite authored envelope. Partition its entire group by owner as well.
         var followedSlots = followed.Select(selector: index => ShapeSlots[index]).ToHashSet();
 

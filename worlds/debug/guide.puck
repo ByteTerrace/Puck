@@ -106,11 +106,13 @@ let guideCopy = {
   "motion-rock" { title: "ROCK", note: "A sine swing about a pivot." }
   "motion-slide" { title: "SLIDE", note: "A translation on the gallery clock." }
   "motion-chain" { title: "PARENT CHAIN", note: "A chain of parented swings." }
-  "motion-smooth-blend" { title: "MOVING BLEND", note: "A sphere sliding through a smooth union." }
+  "motion-smooth-blend" { title: "MOVING BLEND", note: "A skinned fillet stretching as the sphere slides." }
   "motion-state-blend" { title: "STATE BLEND", note: "The blend placed by state; each write rebakes." }
-  "motion-carve" { title: "MOVING CUT", note: "A cutter sliding across a still box." }
+  "motion-carve" { title: "MOVING CUT", note: "A smooth cut whose bowl follows a sliding tool." }
   "motion-mirror" { title: "MOVING MIRROR", note: "A mirrored shape riding a yawing hinge." }
   "motion-polar" { title: "MOVING POLAR", note: "A polar-folded blade spinning on its hub." }
+  "motion-nod" { title: "NODDING BLEND", note: "A head nodding; the throat fillet bends with it." }
+  "motion-three" { title: "THREE OWNERS", note: "Three moving owners: rigid parts, creased joins." }
   "motion-paint" { title: "MOVING PAINT", note: "Paints riding a swinging panel." }
   "motion-inset" { title: "MOVING INSET", note: "An eye inset that turns with its shape." }
   "motion-twist" { title: "TWIST", note: "A twist, drawn on the stamp-pool path." }
@@ -120,6 +122,7 @@ let guideCopy = {
   "motion-volume" { title: "MOVING VOLUME", note: "A plume riding a tilting nozzle." }
   "motion-ik" { title: "IK REACH", note: "A two-bone arm reaching for a state point." }
   "motion-frames" { title: "FRAMES", note: "Timeline frames stepped on the render clock." }
+  "motion-seam-paint" { title: "PAINT ACROSS A SEAM", note: "Expected to swim on the fillet until step 4." }
   "shape-warp" { title: "DOMAIN WARP", note: "A sphere warped by sines: a smooth wobble." }
   "shape-displace" { title: "SINE RELIEF", note: "A sine product added to a box's field." }
   "shape-elongate" { title: "ELONGATE", note: "A sphere elongated into an exact rounded slab." }
