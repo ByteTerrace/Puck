@@ -16,7 +16,6 @@ public sealed class PackedIntPairComparer : IEqualityComparer<long> {
     /// <returns>Whether the pairs are equal.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(long x, long y) => (x == y);
-
     /// <summary>Returns the high 32 bits of the packed word's Fibonacci product modulo 2^64.</summary>
     /// <param name="obj">The packed pair, with either signed or unsigned 32-bit halves.</param>
     /// <returns>A deterministic hash of the pair.</returns>

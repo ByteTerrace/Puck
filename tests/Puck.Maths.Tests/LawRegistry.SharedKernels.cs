@@ -133,15 +133,16 @@ internal static partial class LawRegistry {
             id: "integer.reciprocal-divisor32-vs-division",
             run: () => {
                 const string Id = "integer.reciprocal-divisor32-vs-division";
-                Laws.Claim(lawId: Id, claim: Subjects.ReciprocalDivisionBoundaries);
-                Laws.SweptClaim(lawId: Id, domain: ScalarDivision, tier: Tier.Default, width: 1, claim: Subjects.ReciprocalDivisionSample);
+
+                Laws.Claim(claim: Subjects.ReciprocalDivisionBoundaries, lawId: Id);
+                Laws.SweptClaim(claim: Subjects.ReciprocalDivisionSample, domain: ScalarDivision, lawId: Id, tier: Tier.Default, width: 1);
             }
         ),
         SweptCase(
-            id: "sampling.packed-int-pair-hash",
+            claim: Subjects.PackedPairHash,
             domain: BitMix64,
-            width: 1,
-            claim: Subjects.PackedPairHash
+            id: "sampling.packed-int-pair-hash",
+            width: 1
         ),
         ClaimCase(
             claim: SharedKernelClaims.PiConstantsVsMachin,

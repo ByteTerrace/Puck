@@ -141,13 +141,17 @@ public static class SdfMeshCollapse {
         // neighbour's for a link refusal, and the level's budget for a measured one. Commit stamps every old fan endpoint.
         // No cached result ever accepts a collapse.
         private readonly int[] m_revisions;
+
         // Keyed by the directed edge (from, to) and holding the two revisions it was refused at, each packed high then low.
         private readonly Dictionary<long, long> m_rejected = new(comparer: PackedIntPairComparer.Instance);
+
         private int m_revision;
         private int m_budget;
+
         // Midpoint searches are shared only while PrepareFrom's source fan is unchanged. A search may stop once its
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
         private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
+
         private readonly int[] m_stamp;
         private readonly byte[] m_kind;
         private readonly int[] m_slideTargets;
@@ -172,10 +176,10 @@ public static class SdfMeshCollapse {
         private readonly List<(int Sample, int Other, double Distance)> m_lineChoices = [];
         private readonly List<double> m_strays = [];
         private readonly List<Source> m_sources = [];
+
         private int m_source;
         private bool m_sourcesListed;
         private bool m_linesListed;
-
         private int m_laidCount;
 
         // Lines' scratch: each fan triangle's corner and the places after it, and per place the first triangle whose
@@ -183,14 +187,18 @@ public static class SdfMeshCollapse {
         private int[] m_ringCorner = new int[16];
         private int[] m_ringNext = new int[16];
         private int[] m_ringAfter = new int[16];
+
         private readonly int[] m_afterFirst;
         private readonly int[] m_afterCount;
+
         private int[] m_fanCorner = new int[16];
         private int[] m_fanNext = new int[16];
         private int[] m_fanAfter = new int[16];
         private int[] m_fanTwin = new int[16];
+
         // Scratch for Kind's current fan only; every endpoint it reads is cleared before indexing that fan.
         private readonly (int Outgoing, int Incoming)[] m_fanEdges;
+
         private Candidate[] m_measured = new Candidate[16];
         private OriginalTriangle[] m_previous = new OriginalTriangle[16];
         private int[] m_laid = new int[16];
@@ -423,18 +431,21 @@ public static class SdfMeshCollapse {
             return taken;
         }
         private bool Refused(int from, int to) {
-            if (!m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) || ((int)(rejected >> 32) != m_revisions[from])) { return false; }
+            if (!m_rejected.TryGetValue(key: Directed(from: from, to: to), value: out var rejected) || (((int)(rejected >> 32)) != m_revisions[from])) { return false; }
 
-            var low = (int)rejected;
+            var low = ((int)rejected);
 
             return ((low == AnyRevision) || (low == m_revisions[to]) || (low == MeasuredAt(budget: m_budget)));
         }
         // The neighbour word of a refusal the level's distance and normal budgets decided: below every other word.
         private static int MeasuredAt(int budget) => (AnyRevision - budget);
+
         // The neighbour revision a refusal that never read the neighbour's fan records; no revision is negative.
         private const int AnyRevision = -1;
+
         private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure }
-        private static long Directed(int from, int to) => ((((long)from) << 32) | ((uint)to));
+
+        private static long Directed(int from, int to) => (((long)from) << 32) | ((uint)to);
         // Lists a place's alive triangles: the pass's list less those a collapse this pass removed.
         private List<int> Alive(int place, List<int> fan) {
             fan.Clear();
@@ -456,7 +467,7 @@ public static class SdfMeshCollapse {
                     _ = Kind(penalize: false, place: place);
                     m_targetPlaces.AddRange(collection: m_features);
                 } else {
-                    m_targetPlaces.AddRange(source: (ReadOnlySpan<int>)m_slideTargets.AsSpan(start: (SlideTargets * place), length: count));
+                    m_targetPlaces.AddRange(source: ((ReadOnlySpan<int>)m_slideTargets.AsSpan(length: count, start: (SlideTargets * place))));
                 }
 
                 return;
@@ -548,6 +559,7 @@ public static class SdfMeshCollapse {
             for (var at = 0; (at < count); at++) {
                 ref var next = ref m_fanEdges[m_fanNext[at]];
                 ref var after = ref m_fanEdges[m_fanAfter[at]];
+
                 next.Outgoing = ((next.Outgoing == -1) ? at : -2);
                 after.Incoming = ((after.Incoming == -1) ? at : -2);
             }
@@ -559,6 +571,7 @@ public static class SdfMeshCollapse {
                 // fan. Those quadrics also price a locked place as a collapse target.
                 if ((edge.Outgoing < 0) || (edge.Incoming < 0)) { return Locked; }
                 var incoming = edge.Incoming;
+
                 m_fanTwin[at] = incoming;
 
                 var corner = m_fanCorner[at];
@@ -605,7 +618,7 @@ public static class SdfMeshCollapse {
             var count = m_features.Count;
 
             m_slideCounts[place] = ((count <= SlideTargets) ? count : -1);
-            if (count <= SlideTargets) { CollectionsMarshal.AsSpan(list: m_features).CopyTo(destination: m_slideTargets.AsSpan(start: (SlideTargets * place), length: SlideTargets)); }
+            if (count <= SlideTargets) { CollectionsMarshal.AsSpan(list: m_features).CopyTo(destination: m_slideTargets.AsSpan(length: SlideTargets, start: (SlideTargets * place))); }
 
             return Slides;
         }
@@ -667,6 +680,7 @@ public static class SdfMeshCollapse {
                 if ((vertex != fromFirst) && (vertex != fromSecond)) { return Outcome.Refused; }
 
                 ref readonly var old = ref original.Surface;
+
                 var (ax, ay, az, bx, by, bz, cx, cy, cz) = (old.Ax, old.Ay, old.Az, old.Bx, old.By, old.Bz, old.Ex, old.Ey, old.Ez);
                 var (ox, oy, oz) = original.Face;
                 var moved = (corner - (3 * triangle));
@@ -703,6 +717,7 @@ public static class SdfMeshCollapse {
         // reverse checks; Pass stops trying neighbours immediately after the first commit changes it.
         private void PrepareFrom(int place) {
             var fan = Alive(fan: m_from, place: place);
+
             m_reverseEdges.Clear();
             // The source fan's lines and tracked samples are the same for every neighbour tried, so the first that needs
             // them lists them.
@@ -719,6 +734,7 @@ public static class SdfMeshCollapse {
             m_stampValue++;
             for (var index = 0; (index < fan.Count); index++) {
                 var triangle = fan[index];
+
                 var (corner, next, after) = Around(place: place, triangle: triangle);
                 var (ax, ay, az, bx, by, bz, ex, ey, ez) = Positions(triangle: triangle);
                 var face = Cross(ax: ax, ay: ay, az: az, bx: bx, by: by, bz: bz, cx: ex, cy: ey, cz: ez);
@@ -770,6 +786,7 @@ public static class SdfMeshCollapse {
                 }
             }
         }
+
         // A source fan triangle as it stands: its geometry, face normal and its length, its corners' normal sum, and the
         // collapsing place's corner in it with the places after that corner in winding order.
         private struct OriginalTriangle {
@@ -779,6 +796,7 @@ public static class SdfMeshCollapse {
             public Vector3 NormalSum;
             public int Corner, Next, After;
         }
+
         // Bounds how far each triangle Measure laid out strays from the mesh's own surface: its centroid's and its edge
         // midpoints' distance to the nearest triangle of its material about the collapsing place as it stands, plus that
         // triangle's own bound. A surface sample is measured to the nearest triangle alone, so a triangle no sample needs
@@ -793,6 +811,7 @@ public static class SdfMeshCollapse {
                 // Shared edges establish the maximum first. The centroid often needs only one witness below it.
                 for (var order = 0; (order < 4); order++) {
                     var point = ((order + 1) % 4);
+
                     var (px, py, pz) = point switch {
                         0 => (candidate.Cx, candidate.Cy, candidate.Cz),
                         1 => ((0.5 * (candidate.Ax + candidate.Bx)), (0.5 * (candidate.Ay + candidate.By)), (0.5 * (candidate.Az + candidate.Bz))),
@@ -807,6 +826,7 @@ public static class SdfMeshCollapse {
                     };
                     var key = (edge, candidate.Material);
                     var next = 0;
+
                     if ((point != 0) && m_reverseEdges.TryGetValue(key: key, value: out var cached)) {
                         nearest = cached.Distance;
                         next = cached.Next;
@@ -814,7 +834,7 @@ public static class SdfMeshCollapse {
 
                     // An upper witness no greater than the maximum already measured cannot change that maximum.
                     // Otherwise finish the exact nearest search, resuming in the same order after any cached prefix.
-                    for (var oldAt = next; (nearest > bound) && (oldAt < fan.Count); oldAt++) {
+                    for (var oldAt = next; ((nearest > bound) && (oldAt < fan.Count)); oldAt++) {
                         next = (oldAt + 1);
                         ref readonly var old = ref m_previous[oldAt].Surface;
 
@@ -872,8 +892,8 @@ public static class SdfMeshCollapse {
                     continue;
                 }
                 // A non-manifold edge: every twin in fan order.
-                for (var twin = 0; (twins > 1) && (twin < count); twin++) {
-                    if (m_ringAfter[twin] == next) { Line(at: at, into: into, twin: twin, fan: fan); }
+                for (var twin = 0; ((twins > 1) && (twin < count)); twin++) {
+                    if (m_ringAfter[twin] == next) { Line(at: at, fan: fan, into: into, twin: twin); }
                 }
             }
         }
@@ -1000,6 +1020,7 @@ public static class SdfMeshCollapse {
                 // material. Its own corner is a zero-distance witness without a nearest search.
                 if ((laid >= 0) && (source.Own != Vector3.Zero)) {
                     ref readonly var retained = ref m_measured[laid];
+
                     if ((source.Vertex == retained.Va) || (source.Vertex == retained.Vb) || (source.Vertex == retained.Vc)) {
                         m_samples.Add(item: source.Sample);
                         m_choices.Add(item: (retained.Triangle, 0.0));
@@ -1027,6 +1048,7 @@ public static class SdfMeshCollapse {
 
             return true;
         }
+
         // A sample tracked to a triangle of the source fan, laid out for Measure: the fan index of its triangle, its vertex
         // and place's position, its normal and that normal's length, and its material.
         private struct Source {
@@ -1035,6 +1057,7 @@ public static class SdfMeshCollapse {
             public Vector3 Own;
             public uint Material;
         }
+
         // Measures a sample against one laid-out triangle of its material, keeping it where it is the nearest within the
         // bounds yet. A triangle wholly beyond the bound, or farther than the nearest yet, is not measured.
         private void Offer(int at, in Source source, double error, double cosine, ref int best, ref double bestDistance, ref double bestCosine) {
@@ -1071,6 +1094,7 @@ public static class SdfMeshCollapse {
                 if (m_laid[index] < 0) { continue; }
 
                 var corner = (3 * triangle);
+
                 var (a, b, c) = (m_corners[corner], m_corners[(corner + 1)], m_corners[(corner + 2)]);
                 var (pa, pb, pc) = (m_cornerPlace[corner], m_cornerPlace[(corner + 1)], m_cornerPlace[(corner + 2)]);
 
@@ -1104,8 +1128,12 @@ public static class SdfMeshCollapse {
                     Cy = cy,
                     Cz = cz,
                     Radius = (radius * (1.0 + 1e-9)),
-                    Pa = pa, Pb = pb, Pc = pc,
-                    Va = a, Vb = b, Vc = c,
+                    Pa = pa,
+                    Pb = pb,
+                    Pc = pc,
+                    Va = a,
+                    Vb = b,
+                    Vc = c,
                     Na = m_normals[a],
                     Nb = m_normals[b],
                     Nc = m_normals[c],
@@ -1145,6 +1173,7 @@ public static class SdfMeshCollapse {
             var dz = ((((u * candidate.Az) + (v * candidate.Bz)) + (w * candidate.Ez)) - pz);
 
             var distance = Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz)));
+
             if (distance > limit) { return (distance, -1.0); }
 
             var (na, nb, nc) = (candidate.Na, candidate.Nb, candidate.Nc);
