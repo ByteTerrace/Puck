@@ -32,9 +32,12 @@ by researcher; **[opened]** means this memo reopened the code or document at
 the integration tip it was written against and the words are pasted from the
 tool output; **[search summary]** is an external fact Argon knew only from a
 search summary, kept only where the mechanism is uncontested; **[inference]**
-is this memo's reasoning; **[hypothesis]** is a prediction nothing has measured.
-A number carries the command that produced it. Durable citations are by
-symbol; a `file:line` is a lead at this revision.
+is this memo's reasoning; **[hypothesis]** is a prediction nothing has measured;
+**[review]** marks a decision the adversarial review of the first draft (Codex
+Astra, sixteen findings F01 to F16) changed, each answered one by one in
+[the answers to the review](#answers-to-the-review). A number carries the
+command that produced it. Durable citations are by symbol; a `file:line` is a
+lead at this revision.
 
 ## Summary
 
@@ -49,19 +52,28 @@ forest far away. The three researchers agree on the baseline every bar device
 runs (compute selection and ordinary indirect raster) and disagree on what to
 build first. The evidence settles it: **levels of detail are derived from the
 field, not collapsed from the mesh**, as an unbounded chain the one contouring
-makes at coarser cells with error measured against the field; **a skinned draw
-is bounded exactly by its members' rest boxes under their live transforms**,
-read from the slot table the kernel already has; **a hierarchy above the draw
-is contoured from the field too** (one proxy per distant creation, one parent
-per chunked union, one parent per stand of static copies), each a closed
-replacement the kernel chooses by the same pixel rule, so the forest's far
-field is a region of the field and not an impostor atlas or an authored HLOD;
-**the finest tier becomes a cache baked on demand** at what the views resolve,
-which is virtual geometry from the field; and **clusters inside a draw,
-compute micropolygon raster, mesh shaders and virtual shadow maps are
-watched**, each with the measurement that admits it, because the floor, the
-skinned gap and the far field dominate at MMO scale and none of those four
-touches them. Borrowed techniques win where they are better (the two-phase
+makes at coarser cells, each level offset outward by its budget so a joint
+between independently levelled groups never opens and a thin part survives,
+its error measured in world units both ways against the field's surface by
+bracketed witnesses and raised for every material or normal region it loses,
+and ending in an empty level whose error is the group's own extent; **a skinned
+group's levels are contoured per member**, each piece riding one slot, so the
+error measured at rest holds in every pose; **a skinned draw is bounded exactly
+by its members' rest boxes under their live transforms**, read from the slot
+table the kernel already has; **a hierarchy above the draw is contoured from
+the field too** (per-member pieces and, where the motion program bounds the
+pose, one proxy per distant creation; one parent per chunked union; one parent
+per stand of static copies), one parent per render class, each a closed
+replacement the kernel chooses by the same pixel rule and each triangle naming
+the child it came from, so the forest's far field is a region of the field and
+not an impostor atlas or an authored HLOD, kept where it beats the shared
+prototype path on bytes, bake work and frame cost; **the finest tier becomes a
+cache baked on demand** at what the views resolve, with the detail it owes
+bounded and reported, which is virtual geometry from the field; and **clusters
+inside a draw, compute micropolygon raster, mesh shaders and virtual shadow
+maps are watched**, each with the measurement that admits it, because the
+floor, the skinned gap and the far field dominate at MMO scale and none of
+those four touches them. Borrowed techniques win where they are better (the two-phase
 depth pyramid, order-preserving compaction and buckets from the visibility
 plan, meshoptimizer and Nanite's group-replacement contract as the reference
 for any cluster hierarchy, the texel rule for shadow levels); the Puck-native
@@ -147,10 +159,18 @@ corrected both from the code, and this memo reopened each fact below.
 - **Posing ignores occlusion.** `WorldCreationInstances.Shown` keeps a body
   posing while any rate view's `camera.MaySee` or any cascade's `cull.Keeps`
   keeps its sphere **[opened]**, and the occlusion result the kernel writes
-  per draw (`sdfMeshOcclusionVisibleRW[draw]`, `state.x`) is read back only
-  for session views (`SdfPortalSight.Occluded`). The frame-bar packet records
-  the consequence ([open items](open-items.md#engine-job-system), the CPU item):
-  at flight B the motion gallery's exhibits pose at 60 Hz behind the stairwell
+  per draw (`sdfMeshOcclusionVisibleRW[draw]`, `state.x`) is read back by
+  nothing. What is read back is `SdfPortalSight`'s own queries **[opened]**:
+  the kernel's sight step tests "Four rows per screen" against the same
+  pyramid through `sdfOcclusionMaySee` and writes one word per query at
+  `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadSight` hands that range
+  back once the slot completes, and `SdfPortalSight` applies a result only to
+  the query and camera it was captured for ("Unknown, changed and retired
+  observations always keep demand"). It is a reusable per-query box test with
+  a completion seam, not per-draw evidence (F15 **[review]**); D6 builds on it
+  as such. The frame-bar packet records the consequence of posing without
+  occlusion ([open items](open-items.md#engine-job-system), the CPU item): at
+  flight B the motion gallery's exhibits pose at 60 Hz behind the stairwell
   wall.
 - **Chunks are the only spatial partition.** `SdfMeshChunks.Side = 8f`,
   `WholeTriangles = 131_072`, `MostChunks = 64` **[opened]**; every piece's open
@@ -222,9 +242,10 @@ mechanism is uncontested across the three records. Where they disagreed:
 2. **Whether skinned levels come from a member-aware collapse (Argon) or the
    field (Claude).** Both agree on the bounds ([D2](#d2-bounds-for-skinned-and-multi-slot-draws)).
    On levels, a member-aware collapse inherits the chain's floor and the fine
-   mesh's defects; a field level is contoured from the field and skinned by
-   the same points round level 0 is ([D1](#d1-the-unit-of-detail)). Argon's
-   variant stays as the fallback if G1 rejects field levels.
+   mesh's defects; a field level is contoured from the field per member, each
+   piece riding one slot, so its rest error holds posed
+   ([D1](#d1-the-unit-of-detail), the error contract). Argon's variant stays
+   as the fallback if G1 rejects field levels.
 3. **Whether a coarse envelope costs "zero extra GPU dispatches" (Argon).**
    Argon proposed downsampling the final lattice already in CPU memory. The
    bake's coarse lattices are sampled without gradients
@@ -268,8 +289,9 @@ mechanism is uncontested across the three records. Where they disagreed:
 8. **Occlusion-aware posing.** Argon and Claude: read the kernel's visible set
    back into the rate decision. Codex's caution: a camera-hidden body may still
    cast a shadow or supply a pose to another consumer **[record]**. Decided as
-   one more reason a body is "not shown", under the contract frustum entry
-   already has ([D6](#d6-the-hosts-work-per-moved-body)).
+   a per-body sight query on the swept reach box, whose evidence lowers a body
+   to the slowest nonzero tier and never holds it, with every shadow layer's
+   demand read from the receiver test ([D6](#d6-the-hosts-work-per-moved-body)).
 9. **The restaging.** Claude: a rigid dynamic draw should read its slot as a
    member does, so a moved body restages slots, not records; Codex: the
    premise of 3,100 is stale and V1's compaction owns the GPU side. Both hold;
@@ -302,35 +324,132 @@ carries the level above a 24-bit draw index (`SdfKernelInterfaces.MeshLevelShift
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 1a. Field-derived levels: level k is the group's field contoured again by the one contouring on a lattice of cell `c0 * 2^k`, continued until a level holds a handful of triangles or the group vanishes; error measured against the field both ways (mesh to surface by value over gradient at each level vertex, centroid and edge midpoint, as `SdfSampledLattice.PassesBetween` already measures; surface to mesh by each level-0 vertex's distance to the level's triangles through a triangle hierarchy of the kind `SdfMeshIrradianceScene` builds), raised to the finer level's so the kernel's walk stays monotonic | A coarse lattice drops sub-cell parts, closes sub-cell holes and merges near parts by itself, which a collapse refuses at locked places; a level is not inherited from level 0, so the nose's defects do not block it; the field answers distance where a simplifier tracks displacement (Bevy's author calls perceptual simplification "very much an unsolved problem", Claude **[record]**, opened) | Crossings, contour and answer per surface cell of each coarse lattice, about a third of one level's surface work for the whole chain (geometric series; Claude **[record]**, a lead); a re-contoured level carries its own vertices, a geometric tail on the coarse side; a skinned group's coarse vertices need the points round that assigns members | A coarse level point-samples materials at its own cell, so a material region under a cell vanishes (acceptable only where the level's error is sub-pixel); a thin part vanishes at a coarse cell with a vanishing error as large as the part, which the dilated variant answers (1d) |
+| 1a. Field-derived levels: level k is the group's field contoured again by the one contouring on a lattice of cell `c0 * 2^k`, at the iso-value that offsets the surface outward by the level's budget (so a level grows and never retreats), continued until a level is empty; its error measured in world units against the field's surface both ways by bracketed witnesses and raised for every material or normal region the level loses and every part that vanishes ([the error contract](#the-error-contract)), then raised to the finer level's so the kernel's walk stays monotonic; a skinned group's levels contoured per member, each piece riding one slot | A coarse lattice drops sub-cell parts, closes sub-cell holes and merges near parts by itself, which a collapse refuses at locked places; a level is not inherited from level 0, so the nose's defects do not block it; the field answers distance where a simplifier tracks displacement (Bevy's author calls perceptual simplification "very much an unsolved problem", Claude **[record]**, opened); an offset is one iso-value for a field and a hard problem for a mesh | Crossings, contour and answer per surface cell of each coarse lattice (about a third of one level's surface work for the chain's contours, a geometric series; Claude **[record]**, a lead), plus the oracle's bracket walks (several field evaluations per witness) and the reverse hierarchy per level, which the first draft left out of the estimate (**[review]**); a re-contoured level carries its own vertices, a geometric tail on the coarse side; per-member pieces draw interior surfaces where members overlap | The offset closes a deliberate sub-pixel gap at the distance where it is sub-pixel; a level that loses a material stripe or a corrugation's normals is held back until that region is sub-pixel, which is pessimistic for shading detail no geometric level can carry ([watched](#rejected-and-watched), appearance filtering) |
 | 1b. A deeper collapse chain (Argon's `CellShares = 8f, NormalDegrees = 45f`, unlocking corners) | Reuses the landed collapse | Cheap to try | The far cascade item tried four levels to 128 cells and the card back made no level past the second; the oak reached 1,440 **[opened]** (open items); topology never changes, so a tree's branches never merge into a crown |
 | 1c. A cluster LOD DAG over the merged mesh (Nanite's group-lock-simplify-recluster, meshoptimizer's `clodBuild`) | Proven at scale for dense static meshes; a complete replacement cut with group-coherent hysteresis (Codex **[record]**, opened) | A builder, a BVH, a cut selector and history keyed by group; a deep hierarchy accumulates boundary density under chunk seam locks; QEM is a priority, not an error (Codex **[record]**) | Aggregates ("riddled with holes ... leaves and grass", Nanite 2021, cited by [visibility](visibility.md#rejected-and-watched)); its error is the simplifier's displacement, not the field's distance; it inherits level 0's defects as 1b does |
-| 1d. 1a with a dilated variant: where a level would lose a part whose vanishing error exceeds the dilation `d`, contour `f - d` instead at error `d`, the smaller error winning | An offset surface is one subtraction for a field and a hard problem for a mesh; the field-native analogue of Nanite's aggregate voxels, which switch representation "if doing so would result in lower error than using triangles" (Epic, experimental; Claude **[record]**, opened) | One more contour per level where it applies | A dilated opaque crown overstates coverage where gaps are sub-pixel: whether it reads as the reference is a capture question **[hypothesis]** |
+| 1d. 1a without the offset, dilating only where a level would lose a part, and recording the dilation `d` as that level's error (the first draft's dilated variant) | The field-native analogue of Nanite's aggregate voxels, which switch representation "if doing so would result in lower error than using triangles" (Epic, experimental; Claude **[record]**, opened) | One more contour per level where it applies | Two touching closed groups levelled independently can each retreat under a pixel and open a slit wider than one between them (F05 **[review]**); `d` is an offset in field units, not world units, so for a field that is no true distance the recorded error is wrong by the field's slope (F03 **[review]**: `SdfSampledLattice.PassesBetween`'s own comment names "a scope, a flare, a non-uniform scale" as fields that change "by less, or more, than a step's length over a step" **[opened]**); a dilated opaque crown overstates a sparse canopy's coverage **[hypothesis]** |
 
-**Favoured.** 1a with 1d, for closed groups first (every creation group and
-every unchunked static group); chunked unions keep their collapse levels until
-D3's union parent stands above them. **Strongest case against:** the chain's
-bake cost on the one-minute bar and its storage are estimates, and the field
-is not a true distance, so the measured error is value over gradient, not a
-certified Hausdorff distance. Both are what G1 measures before anything lands
-in a running World.
+#### The error contract
 
-**Decided.** A level is contoured from the field, and the chain continues until
-nothing is left to draw. The invariant: *every level's recorded error bounds its
-distance from the field both ways and is at least the finer level's*, enforced
-in one place, the bake's `Land` stage, which measures each level against the
-field before it records it and refuses a level that fails; the selection
-kernel's monotonic walk consumes that guarantee and nothing else. The guarantee
-stops at what finite samples can see: a thin feature between samples is the
-audit's uncovered-surface lattice to catch, not the level's. Rests on the
-owner's one-pixel ruling (a coarser level is drawn where its recorded error
-projects to at most one display pixel), the one-contouring rule (the same
-mesher on a coarser lattice is not a second mesher), and the derived-product
-ruling (a level is part of the group's cached mesh, keyed by its geometry and
-the bake identity). The visibility plan's V3c, "Field-derived levels only as a
-bake experiment on large static unions", is superseded by this decision and
-amended to point here. Material point-sampling at a coarse cell is admitted
-because the level is drawn only where its error is sub-pixel.
+The first draft's oracle was value over gradient, a first-order root estimate
+that bounds nothing for a nonlinear field, and its reverse direction measured
+only level-0 vertices (F04 **[review]**); `SdfSampledLattice.PassesBetween`,
+which it named as the existing measure, is a boolean sheet-or-gap heuristic
+over neighbouring falls **[opened]**, not a distance. The contract below is
+what `Land` measures and records for each level, in world units, so that the
+field's scale never enters a recorded error (F03 **[review]**):
+
+- **Mesh to surface.** The witnesses are the level's vertices, triangle
+  centroids and edge midpoints, and over any triangle larger than the level's
+  cell a grid of points at that cell's spacing. From each witness the oracle
+  walks along the field's gradient direction toward the surface in steps no
+  longer than the level's budget until the field changes sign, then bisects
+  the bracket to the tolerance `τ` (a sixteenth of the group's finest cell).
+  The surface passes through the bracket, so the distance from the witness to
+  the bracketed point is an upper bound on its distance to the surface by
+  construction, whatever the field's slope. A witness that finds no crossing
+  within twice the budget refuses the level. The program's Lipschitz factor
+  (`SdfProgram`'s Lipschitz analysis) gives `|f| / L` as a certified lower
+  bound, printed beside the upper bound as a check on the bracket; the
+  first-order estimate is used for nothing.
+- **Surface to mesh.** The witnesses are level 0's vertices and a grid over
+  its triangles at the level's cell spacing, each bracketed onto the field's
+  surface the same way, so level 0's own contour error does not enter. Each
+  witness's distance to the level's nearest triangle is the exact
+  point-to-triangle distance through the triangle hierarchy
+  `SdfMeshIrradianceScene.TryNearestSurface` already walks **[opened]**. A
+  witness inside the group's whole field by more than `τ` lies on an interior
+  surface (a per-member piece's face inside another member) and is excluded.
+- **Enclosure.** A level is contoured at the iso-value that offsets the
+  surface outward by its budget, with the iso-value converted from world
+  units by the lattice's measured slope (`SdfSampledLattice.SurfaceSlope`
+  **[opened]**) only to aim the contour; the check is geometric: a surface
+  witness that lies outside the level's mesh (on the nearest triangle's outer
+  side) by more than `τ` refuses the level. A level therefore never retreats
+  inside the true surface, so two closed groups that touch or overlap at level
+  0 still touch or overlap at every level, whichever levels the kernel picks
+  for each (F05 **[review]**). The residual at a joint is overlap, hidden
+  inside both solids; a deliberate gap narrower than the budget closes, at
+  the distance where it is sub-pixel.
+- **Attribute error.** Each surface witness carries level 0's material there;
+  its distance to the nearest level triangle *of that material* is its
+  material error, as the collapse measures ("within the level's error of a
+  triangle of its own material", `SdfMeshCollapse` **[opened]**). A witness
+  whose normal differs from the level's interpolated normal at the nearest
+  point by more than the collapse's widest angle (`SdfMeshCollapse.NormalDegrees`'
+  last entry) is normal-mismatched. Witnesses of one material the level does
+  not carry within the budget, and normal-mismatched witnesses, are grouped
+  into connected runs over level 0's triangle adjacency, and each run's
+  half-diagonal is the error it contributes. A flat sign loses its stripe only
+  where the stripe is sub-pixel; a corrugation whose ridges are under the cell
+  but whose slopes exceed the angle holds its level back until the whole
+  corrugated face is sub-pixel (F02 **[review]**). That pessimism is real and
+  is the price of shading detail no geometric level carries; the remedy is
+  appearance filtering at coarse levels ([watched](#rejected-and-watched)),
+  and G1 prints the three components apart so the lead sees which binds.
+- **Vanished parts and the terminal level.** A connected component of level 0
+  with no level triangle within the budget of any of its witnesses contributes
+  its own half-diagonal, not its distance to whatever surface remains (a tree
+  beside a wall is as wrong as the tree is tall, not as far as the wall is).
+  The chain continues to the first empty lattice, or until the cell exceeds the
+  group's extent and the lattice is `FinalMinimum` samples across the box, where
+  an empty level is appended; the empty level records the group's half-diagonal
+  as its error and zero vertices, so `sdfSelectionLevel` selects it by the same
+  walk and `sdfOcclusionEmit` writes its zero-vertex command as it writes any
+  rejected candidate's (F06 **[review]**). A group is drawn as nothing exactly
+  where its whole extent projects under a pixel; the stand parent (D3) stands
+  above a forest's trees long before that.
+- **Skinned groups.** A multi-member group's level is contoured per member:
+  the member's own shapes, sampled through a lattice whose selector names them
+  alone, in the member's slot frame, so every vertex of the piece rides that
+  one slot. A rigid transform with the draw's scale preserves distances up to
+  `SdfMeshBox.Stretch`, so the error measured at rest between the piece and
+  the member's level-0 surface holds in every pose. The first draft's
+  recontoured union skinned by the points-round winner has no such property:
+  a hand resting on the torso at rest is assigned to the torso and left behind
+  when the arm extends, at a recorded error that stays sub-pixel (F01
+  **[review]**). A smooth blend's fillet between two members belongs to
+  neither piece and is measured as the pieces' error against the union surface;
+  the joint's tear under motion is level 0's own ("torn moving seams", the
+  rendering skill's visual-bar note) and a level reproduces it to within its
+  error, no worse.
+- **Recorded error.** The largest of the two geometric directions, the material
+  runs, the normal runs and the vanished components, raised to the finer
+  level's.
+- **Where the guarantee stops.** At the witness spacing (the level's cell), the
+  bracket tolerance `τ`, and features thinner than level 0's own sampling,
+  which no witness of either direction sees. The audit's missing-crossings
+  measure (`SdfMeshAudit`, "where the field's zero set has no triangle near
+  it" **[opened]**, its `MissingCrossings`) runs on every level and is part of
+  the acceptance, not a separate lattice the level may ignore.
+
+**Favoured.** 1a, for closed groups first (every creation group and every
+unchunked static group); chunked unions keep their collapse levels until D3's
+union parent stands above them. **Strongest case against:** the chain's bake
+cost on the one-minute bar and its storage are estimates, and the oracle's
+bracket walks and reverse hierarchy are work the collapse never does. Both are
+what G1 measures, under one accounting scope (the whole bake path, final
+lattice included, since `SdfMeshCollapse.Levels` samples nothing itself),
+before anything lands in a running World.
+
+**Decided.** A level is contoured from the field at an outward offset, and the
+chain continues to an empty level. The invariant: *every level's recorded
+error bounds, in world units, the distance from each of its witnesses to the
+field's surface and from each surface witness to the level, encloses the
+surface, covers every material or normal region and every part the level
+loses, and is at least the finer level's*, enforced in one place, the bake's
+`Land` stage, which measures each level by [the error contract](#the-error-contract)
+before it records it and refuses a level that fails; the selection kernel's
+monotonic walk consumes that guarantee and nothing else. The guarantee stops
+where the contract says. Rests on the owner's one-pixel ruling (a coarser level
+is drawn where its recorded error projects to at most one display pixel), the
+one-contouring rule (the same mesher on a coarser lattice at another iso-value
+is not a second mesher), and the derived-product ruling (a level is part of the
+group's cached mesh, keyed by its geometry and the bake identity). The
+visibility plan's V3c, "Field-derived levels only as a bake experiment on large
+static unions", is superseded by this decision and amended to point here.
+Material point-sampling at a coarse cell is admitted only because the
+attribute error holds a level back until the region it loses is sub-pixel.
 
 ### D2. Bounds for skinned and multi-slot draws
 
@@ -362,8 +481,12 @@ under their live transforms. The invariant: *every box the kernel tests
 encloses every position the vertex resolver can emit for that draw*, enforced
 at the one door that builds selection rows (the record writer for rigid draws,
 the kernel's slot-carried union for membered ones); `unboxed` ceases to exist
-as a flag, so no caller can draw past the test. With D1 the coarse levels of a
-skinned group are skinned by the same points round and the draw gains levels.
+as a flag, so no caller can draw past the test. The box bounds where a vertex
+can be, never how far the level's surface is from the detailed one: that is
+D1's per-member contract, and the two are separate guarantees (F01
+**[review]**). With D1 the coarse levels of a skinned group are per-member
+pieces riding the same slots, so the draw gains levels whose error holds in
+every pose.
 Rests on the raster decision's "no box at all for a skinned draw whose vertices
 the GPU places", which this replaces with a box the GPU places too, and on the
 authored-motion ruling of V2c (a bound derived from the program where it can be,
@@ -388,7 +511,7 @@ answers each vertex's winning slot in a points round and stores
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 3a. Field-contoured parents, chosen by the kernel as alternatives to their children: the **creation proxy** (a creation's groups unioned into one coarse contour at rest, each vertex skinned rigidly to the slot whose shape wins there, so the Moth becomes one draw with the D1 chain's triangles; per-slot proxies as the middle tier); the **union parent** (a chunked union contoured at a coarse cell as one closed draw replacing every chunk at once, so no parent ever meets a chunk edge); the **stand parent** (a region of the field over many static copies, the far field of a forest). The kernel draws a parent when its error projects under a pixel, else its children, with the parent's error raised over its children's coarsest so the cut is monotonic; a parent's record names its children's record range so the kernel skips them without a host walk | Every piece exists: unions over instances, the points round, the pixel rule; a parent is a closed replacement and needs no boundary locking, where a cluster DAG locks group borders (Kapoulkine, Claude **[record]**, opened); Codex's own analysis that a per-prototype DAG cannot merge a region **[record]** | A new group kind spanning instances; a kernel rule for alternatives and a record range; a bake cost per parent of one coarse contour | Rigid per-vertex skinning of a coarse proxy stretches across members as it does across a blend seam today; under a pixel it should not show **[hypothesis]**, capture-judged. Coverage of a sparse canopy (see 3d) |
+| 3a. Field-contoured parents, chosen by the kernel as alternatives to their children, one parent per render class: the **creation proxy** (the middle tier is D1's per-member pieces at a coarser cell, one draw per slot, so the Moth's 174 draws become its slots' count; the top tier, one rigid draw of the creation's union at rest, is admitted only where the motion program bounds how far any part moves from the root, and records that bound plus its rest error, so a creation with no derived bound stops at its per-member pieces); the **union parent** (a chunked union contoured at a coarse cell as one closed draw replacing every chunk at once, so no parent ever meets a chunk edge); the **stand parent** (a region of the field over many static copies, the far field of a forest). A parent is contoured over children of one render class (opaque with opaque, glass with glass; a displaced group never joins a parent), so a glass dome over an opaque dial yields an opaque parent that keeps the dial and a glass parent that keeps the dome. Every parent triangle names its source child in a per-triangle table beside `TriangleMaterials`, answered by the same points round that answers materials, so a pick on a parent resolves to the child. The kernel draws a parent when its error projects under a pixel, else its children, with the parent's error raised over its children's coarsest so the cut is monotonic; a parent's record names its children's record range so the kernel skips them without a host walk | Every piece exists: unions over instances, the points round, the pixel rule, the render-class partition (`SdfMeshBakeGroup` already refuses to merge a static run with a glass instance or a displacement **[opened]**, and `WorldRigidAssets` emits a mixed creation's glass and opaque shapes as separate surfaces **[opened]**); a parent is a closed replacement and needs no boundary locking, where a cluster DAG locks group borders (Kapoulkine, Claude **[record]**, opened); Codex's own analysis that a per-prototype DAG cannot merge a region **[record]**; the surface pass already names the triangle a pixel shows, which `sdfMeshMaterial(draw, triangleIndex)` reads **[opened]** | A new group kind spanning instances; a kernel rule for alternatives and a record range; a source table per parent and a pick resolver that takes the triangle beside the identity (`SdfDressedPickMap.Resolve` takes the packed identity alone today **[opened]**); a bake cost per parent of one coarse contour per render class; a stand parent is unique geometry derived from its arrangement, so it trades the prototype sharing V1 compacts for fewer draws, and a moved tree re-derives its cell's parents | The one-draw creation proxy needs a derived motion bound (V2c) and is not admitted without one; a stand parent can lose to shared coarse prototypes on bytes, bake work or frame cost at the Deck (F11 **[review]**), which G7 measures and which falls back to the shared path; coverage of a sparse canopy (see 3d) |
 | 3b. Authored HLOD (Simplygon, UE World Partition HLOD; Argon **[search summary]**) | Shipped in open worlds | Authoring per cell; a second asset the author owns | Puck authors fields, not proxies; the engine would carry a proxy the field could derive, which "builds it twice" (AGENTS.md) |
 | 3c. Octahedral impostors or billboard clouds (Argon **[search summary]**; Epic's Impostor Baker cited by [visibility](visibility.md#rejected-and-watched)) | Cheap per instance | An atlas per species, a capture pass, a parallax shader | A second representation for shading, picking, reprojection and the visibility record; baked colour where Puck shades from a material identity and the bake "point-samples a quad's winning material" **[opened]** (decisions); no occlusion pyramid contribution without depth output |
 | 3d. A hybrid mesh-volume far tier measuring filtered occupancy, silhouette and normal/material distributions from the field (Codex **[record]**; Epic's experimental voxel clusters) | Represents partial coverage a surface cannot | A second raster bin and shading model | Unqualified; its visual validity is a capture question; "Never treat an SDF's sign as an adequate opacity filter" (Codex **[record]**) |
@@ -397,15 +520,39 @@ answers each vertex's winning slot in a points round and stores
 **Strongest case against:** a stand parent is one opaque surface, and a
 canopy seen from the overlook is partly transparent; where the overlook reads
 wrong against the reference at sub-pixel error, 3d is the answer, not a looser
-pixel rule.
+pixel rule. And a stand parent is unique geometry: thousands of irregularly
+placed trees with real gaps between them make a parent of many disconnected
+components that keeps much of the trees' triangles while duplicating each
+species' coarse geometry across every region and parent level, where the
+shared prototype path draws one coarse mesh many times through V1's buckets.
+Fewer draws is not the bar; the dense-landscape plan's L5 closes "frame,
+memory, bake and edit bars" **[opened]**, and the far field must pass them.
 
 **Decided.** The hierarchy above a draw is contoured from the field: creation
 proxy, union parent, stand parent, each a closed replacement the kernel chooses
-by the one-pixel rule with monotonic error. The invariant: *a parent and its
-children are never both drawn in one pass*, enforced in the kernel's one
-selection step, which decides a parent's record and its children's range
-together. Static far-field marching stays rejected (the frame "does not
-interpret SDF programs", [decisions](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs)):
+by the one-pixel rule with monotonic error. Three invariants, each enforced at
+one door: *a parent and its children are never both drawn in one pass*, in the
+kernel's one selection step, which decides a parent's record and its children's
+range together; *a parent replaces children of one render class and never
+hides a surface of another class* (F09 **[review]**), in the bake's grouping,
+which forms a parent over one class's children as it forms a static run today;
+and *every parent triangle names the child it came from* (F10 **[review]**), in
+the parent's own mesh (its source table), so a pick resolves to the child
+whether or not the child's product is resident, and a seam triangle names the
+child the points round's winner at its centroid belongs to. The far field is
+admitted by cost as well as by look (F11 **[review]**): G7 compares the stand
+parent against the shared prototype path at D1's coarsest levels under V1's
+compaction, on resident bytes (parents and children together, under the
+library's one budget), cold and incremental derivation (one moved tree), per
+pass classification work and raster vertices, and frame cost on the Deck's
+leg; where the parent loses, the far field is the shared path, and a parent
+over a *repeated* arrangement (the dense landscape's authored clusters) is
+shared like a prototype, a Puck-native assembly hierarchy that keeps sharing
+where arrangements repeat. The creation proxy's one-draw tier rests on V2c's
+derived motion bound and is never admitted on a measured reach alone, which
+is a lower bound on motion, not a bound. Static far-field marching stays
+rejected (the frame "does not interpret SDF programs",
+[decisions](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs)):
 a marched far volume would be a second representation for shading, picking and
 reprojection, where a contoured parent keeps the one raster path. Rests on the
 one-pixel ruling and on "representations are chosen by measured cost"
@@ -447,9 +594,17 @@ cut, portal-clipped and bent geometry. The bounds invariant Codex states is
 adopted for the day it lands: *every cluster bound encloses every position its
 resolver can emit*, enforced at the derived cluster product and one bound-refit
 door; cones are disabled under deformation, two-sidedness or glass until
-proven, and never copied into the shadow entry, exit or optical passes. Normal
-cones are watched for the cascades, which have no occlusion of their own
-(Claude **[record]**). Rests on "fundamentals, driven by features" (a feature
+proven, and never copied into the shadow exit or optical passes. The first
+draft said normal cones were worth measuring first on "the cascades, which
+have no occlusion of their own" (Claude **[record]**); that premise is false
+at this revision (F14 **[review]**): the far cascade rejects casters whose
+receivers are hidden (`sdfReceiverMayShadow`) and runs the two-phase entry
+test against its own pyramid (`sdfOcclusionMaySee` in the late step), both
+**[opened]** in `sdf-mesh-occlusion.comp.hlsl`, and its exit and optical
+layers are selected by box and receiver alone by design. The population a
+cone could thin is the entry layer of the near and second cascades, which
+have box-only selection; the exit layer draws faces turned from the light and
+would lose what it exists to hold. Rests on "fundamentals, driven by features" (a feature
 that stresses a large mesh partly in view admits the step) and on "one
 implementation" (clusters extend `SdfMeshOcclusion`'s selection, never a second
 indirect path).
@@ -505,18 +660,28 @@ per draw per pass and is read back for session views (`SdfPortalSight`).
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 6a. Rigid dynamic draws read their slot: a draw riding a slot resolves its vertices through the slot's live and previous transforms as a member does, and the kernel moves a slot-frame rest box by that transform; a moved body restages its slots' transform rows, not its groups' records (the Moth's 174 records become 42 slots) | The mesh pass already binds the slot table and reads live and previous transforms for members (`sdfMeshWorldPosition` **[opened]**); V2b's "a moved slot updates its instances' transforms in place" with the transform's one home on the GPU (Claude **[record]**) | A shader change in the three vertex resolvers; the selection rows derived from slots (D2's door); picking and reprojection read the slot | Unverified: whether transform rows upload by change, and the carry, scale and clip words of a body straddling a portal **[record]** (Claude); the straddle adds instances carrying the other clip plane under V1, which keeps the slot shared |
-| 6b. Occlusion as one more reason a body is not shown: a body whose draws' boxes no pass kept or saw last frame (camera views by `state.x`, cascades by receiver and entry visibility) and whose pose nothing else read (`PoseReadPack`) is "not shown" for `RateOf`, exactly as a body outside every frustum is today, so it takes the tier `BodyHertz` gives an unshown body | The evidence exists per pass on the GPU; a bit per draw per pass is small (Argon **[record]**, arithmetic); the frustum case already accepts a one-frame-late first pose and the tiers already bound it by part speed (`SdfUpdateRateTiers.BodyHertz` **[opened]**) | A readback of visible bits per pass through the slot-completion seam `SdfPortalSight` uses | Codex's caution: a camera-hidden body may cast a visible shadow or supply a pose to a part consumer; both are already in the decision (`Shown` tests cascades; `PoseReadPack` records consumers) and the occlusion evidence only narrows "kept by a cascade" to "kept and not rejected by its receivers or entry depth" |
+| 6a. Rigid dynamic draws read their slot: a draw riding a slot resolves its vertices through the slot's live and previous transforms as a member does, and the kernel moves a slot-frame rest box by that transform; a moved body restages its slots' transform rows, not its groups' records (the Moth's 174 records become 42 slots) | The mesh pass already binds the slot table and reads live and previous transforms for members (`sdfMeshWorldPosition` **[opened]**); V2b's "a moved slot updates its instances' transforms in place" with the transform's one home on the GPU (Claude **[record]**) | A shader change in the three vertex resolvers; the selection rows derived from slots (D2's door); picking and reprojection read the slot | Transform rows already upload by change **[opened]**: `SdfWorldTables.FramePreparation` packs "the rows the frame's moved set owes" and `WriteDynamicTransform` owes a row only when the region's `Write` reports it changed, so the first draft's doubt is closed from the source (the review confirmed the same **[review]**). Still unverified: the carry, scale and clip words of a body straddling a portal **[record]** (Claude); the straddle adds instances carrying the other clip plane under V1, which keeps the slot shared |
+| 6b. Occlusion as evidence that a body is shown nowhere, read per body, not per draw: each rated body submits one query per view, its reach box (`RateReach`: the rest reach widened by `MotionReach`, the farthest any pack has posed a part **[opened]**) swept by its part speed over the readback latency, through the same sight step `SdfPortalSight` dispatches today, and a cascade's evidence is its receiver test on that box; a body no view's query sees, no cascade's receivers keep and no consumer read (`PoseReadPack`) takes the slowest nonzero body tier (`SdfUpdateRateTiers.BodyTiers` ends at 5 **[opened]**), never `HeldHertz` | The sight step is exactly this test for portal slabs and already has the completion seam and the stale-result policy ("Unknown, changed and retired observations always keep demand" **[opened]**); the reach box is already what the frustum test rates by (`BodyPixelsPerMetre` over "the sphere it reaches" **[opened]**); the tier floor bounds how stale a hidden body's pose can be to the tier's period plus the latency, where a zero-Hz hold is unbounded and wakes with a continuity cut (`WorldCreationInstances.Rates`: a held body's "next full pack is a continuity cut, as a teleport's is" **[opened]**) | A growable query list in the sight step (its capacity is `MaxScreenSurfaces` today), a receiver-box query in the cascade's kernel, and one word per body per view read back on slot completion | Codex's caution (F07 **[review]**): a camera-hidden body may still contribute to a cascade's exit or optical layer, which the kernel emits from `kept` alone ("Entry visibility (was/visible) must never remove a potential second surface" **[opened]**), so the first draft's "receiver and entry visibility" was wrong evidence; receiver-kept is the right evidence for every layer. The hold's staleness (F08 **[review]**): the pyramid is a completed earlier frame's, so a result is applied only to the camera it was captured for, a missing or stale result keeps demand, and the swept reach box, not the held pose's tight member boxes, is what the pyramid tests, so a limb that would swing out of cover makes its box visible before it does |
 | 6c. Leave posing to frustum evidence; let the job system hold unseen work | The job system's first value is "holds unseen work" ([plans](README.md)) | None here | "Unseen" needs the evidence 6b supplies; without it the scheduler holds nothing behind a wall |
 
 **Favoured.** 6a and 6b. **Decided.** A rigid dynamic draw reads its slot, and
-occlusion joins frustum and cascade evidence in the one rate decision. The
-invariant for 6b: *a held body is one no pass showed any draw of last frame and
-no consumer read*, enforced in `RateOf`, the one door every rated body passes;
-the one-frame lag at reappearance is the same the frustum case has and the
-tiers bound. Rests on the update-rate ruling (a reduced rate switches only
-where a held update jumps by at most two pixels for the speed it is sized for)
-and on V2b. The frame-bar packet's CPU item owns 6b's landing.
+occlusion joins frustum and cascade evidence in the one rate decision, as a
+tier floor rather than a hold. The invariant for 6b: *a body rated below its
+frustum tier by occlusion is one whose swept reach box no view's completed
+query saw, no cascade's receivers kept and no consumer read, and it is rated
+at the slowest nonzero tier, never held*, enforced in `RateOf`, the one door
+every rated body passes, which reads sight results only through
+`SdfPortalSight`'s camera-and-epoch match. What the two-pixel rule does and
+does not cover (F08 **[review]**): the tiers bound an update's step by part
+speed for a body something shows; an occluded body's pose is at most one
+tier period plus the readback latency stale when it reappears, and that first
+frame shows a pose that old, as a camera cut shows a held body's held pose
+for one frame today. The latency is counted in G5 (frames between a query's
+submission and its result), and `HeldHertz`, whose wake is a continuity cut,
+stays reserved for the evidence that already earns it (no frustum, no
+cascade, no consumer). Rests on the update-rate ruling, on `SdfPortalSight`'s
+existing stale-result policy, and on V2b. The frame-bar packet's CPU item owns
+6b's landing.
 
 ### D7. The detail budget
 
@@ -538,10 +703,27 @@ nothing reads the screen.
 a cap: the finest tier is a cache tier identified from its inputs (group
 geometry, tier), baked on demand and reported as owed. The invariant: *what the
 frame draws is always a complete tier of the group*, enforced by the residency's
-publication door (a tier publishes whole or not at all). The budget surface is
-`world.budget` per creation: triangles per level and tier, bytes resident,
-tiers owed, beside `puck creation stats`. Rests on the derived-product ruling
-and the no-ceiling decision.
+publication door (a tier publishes whole or not at all). That invariant keeps
+holes and dangling addresses out; it bounds no debt (F12 **[review]**), so the
+debt has its own contract: the *owed error* of a group is its resident tier's
+cell in display pixels at the nearest demanding view, and the *owed interval*
+is the frames from the demand to the tier's publication; `world.residency`
+reports both per group and their worst over a window, and the admitted
+degradation is one tier below demand (two cells per pixel) for at most the
+landing budget's frames, which G8 measures on a cut, an approach and a retreat,
+and with a portal's view demanding at once. Demand is read ahead: each view's
+eye is advanced by the camera program's bound over the landing interval (V2c's
+derived bound where the camera is authored, the measured speed otherwise), and
+a visible portal's view demands as the root does, so a tier is usually resident
+before the view resolves it. A demand that leaves a view's reach before it
+lands is cancelled, a tier is demanded only after its resolution has held for
+a few frames (no thrash at a boundary), and the in-flight set (bakes running,
+landings staged, old and new products live together) is bounded by the
+library's one byte budget beside the cache claims, never by a second account.
+The budget surface is `world.budget` per creation: triangles per level and
+tier, bytes resident, tiers owed, owed error and interval, beside
+`puck creation stats`. Rests on the derived-product ruling and the no-ceiling
+decision.
 
 ### D8. Shadows
 
@@ -567,12 +749,25 @@ the [high] far-cascade item).
 
 **Favoured.** 8a now, 8b with D4, 8c rejected for now. **Decided.** Shadow
 levels come from the chain by the texel rule; caster culling tightens with D2
-and D4; no shadow cache or page pool is built while the sun moves and the
-meadow blows. What would change it: a cascade's measured work dominated by
-static redraw with unchanged projections ([visibility V5](visibility.md#v5-multi-view-and-shadow-work)),
-and a page identity that includes light projection, geometry and deformation
-incarnation, level and layer (Codex **[record]**). The transmission plan's
-identity peel is unaffected.
+and D4; no shadow cache is built while the sun moves and the meadow blows.
+Caching and sparse paging are two benefits with two admissions (F13
+**[review]**): a cache pays only where static redraw with unchanged
+projections dominates a cascade ([visibility V5](visibility.md#v5-multi-view-and-shadow-work)),
+with a page identity that includes light projection, geometry and deformation
+incarnation, level and layer (Codex **[record]**), and the day program and
+wind refuse it today; a page pool that allocates and rasterizes only the
+texels receivers demand pays wherever demand is sparse, whether or not every
+page is dirty, and a moving sun does not refuse it. Puck already computes the
+demand: `sdf-caster-receivers.hlsli` reprojects every covered camera sample
+into light-space occupancy cells for the far cascade. The admission measure
+for a paging experiment is the occupied share of each cascade's texels, read
+from that mask under the moving sun, the meadow's wind, a narrow portal view
+and a sparse-receiver view (the lead's measurement window, no build); a far
+cascade whose receivers occupy a small share of its map in representative
+views briefs the experiment, which pages all three layers together with the
+filter footprint's margin (`SdfMeshCull.ShadowFilterTexels`) and is judged by
+texels written and bytes against the full-layer cascade. Until that measure is
+read, 8c stays rejected. The transmission plan's identity peel is unaffected.
 
 ### D9. Streaming
 
@@ -599,7 +794,11 @@ GPU-visible address and every selected cut names a fully installed product and
 stays valid until every reader finishes*, enforced by the residency's
 publication and fence-lifetime door extended to tiers; GPU feedback is
 asynchronous, bounded, deduplicated and prioritized by display error, and the
-host never waits on it. Rests on the residency decision and the host-primitives
+host never waits on it. Arrival quality is D7's contract (owed error and
+interval, lookahead, cancellation, one in-flight budget), measured by G8, since
+the address-lifetime invariant here says nothing about latency (F12
+**[review]**). A tier's identity stays input-only: the camera that demanded it
+never enters the key. Rests on the residency decision and the host-primitives
 ruling (no spinning on feedback).
 
 ### D10. Hardware reach
@@ -646,9 +845,10 @@ the detail problem is where the source pays:
   Virtual texturing's idea applied to geometry (D7): a tier is a fact in the
   geometry key, so it is baked on demand, cached, prewarmed in a player's build
   and never recorded as truth. A triangle asset's finest level is its import.
-- **Rigid per-vertex skinning makes exact bounds and proxies cheap.** Each
+- **Rigid per-vertex skinning makes exact bounds and posed error cheap.** Each
   vertex rides one slot, so a member box under a live transform is exact (D2),
-  and a creation proxy is skinned by the points round that skins level 0 (D3).
+  and a level contoured per member keeps its rest error in every pose, since a
+  rigid transform preserves distances (D1, D3).
 - **A parent is a closed region of one field.** A union parent or a stand
   parent needs no boundary locking because it replaces its children whole; a
   cluster DAG locks every group border (D3).
@@ -671,12 +871,14 @@ discipline (install before publish, coarse fallback resident) as D9's model.
 | Deeper collapse chain, member-aware collapse | Rejected as the chain; member-aware collapse kept as G1's fallback | The collapse stops at locked places and two cells (`CellShares` **[opened]**; the card back and the oak, open items) | G1 rejecting field levels on error, defects or cost |
 | Nanite-style cluster LOD DAG | Watch (was watched in [visibility](visibility.md#rejected-and-watched)) | Aggregates, a second builder beside the contouring, displacement as error; D1's chain reaches the same end from the field | D4's experiment showing visible triangles high because a draw's levels stop while it is partly in view |
 | Meshlets inside a draw (flat clusters) | Watch, first experiment written (D4) | No bar device is shown geometry-bound; tiny instanced parts can cost more in metadata than they save | A large partly visible draw measured geometry-bound on the 2060 or at the Deck's resolution after D1 to D3, with V1 landed |
-| Normal-cone culling | Watch | Nanite found it not worthwhile after occlusion; meshoptimizer and NanoMesh keep it (Codex **[record]**, opened) | Clusters adopted; the cascades, which have no occlusion of their own, are the first place to measure |
+| Normal-cone culling | Watch | Nanite found it not worthwhile after occlusion; meshoptimizer and NanoMesh keep it (Codex **[record]**, opened) | Clusters adopted; the first place to measure is the near and second cascades' entry layers, which have box-only selection (the far cascade already rejects by receivers and entry depth, and the exit and optical layers must keep faces turned from the light; F14 **[review]**) |
+| Appearance filtering at coarse levels (normal variance into roughness, material coverage into a blend) | Watch | D1's attribute error holds a level back until a region of lost normals or material is sub-pixel, which is correct and pessimistic for shading detail no geometry carries (F02 **[review]**) | G1 showing the normal or material component binding the chain on real content (a corrugated or striped face held at level 0 past where its geometry allows), which briefs a filtered-attribute level whose shading, not its geometry, carries the detail |
 | Mesh and amplification shaders | Enhancement, not baseline (D10) | No enablement on either backend; Deck Proton leg unqualified | A measured win over the compute list on each device, with automatic fallback |
 | Compute micropolygon raster, 64-bit atomics | Enhancement, last (D10) | A second rasterizer; unmeasured on any bar device | Residual fine triangles shown to dominate setup after D1 to D4 and V4 |
 | Work graphs | Enhancement on the 4070 only | [visibility](visibility.md#rejected-and-watched) | Unchanged |
-| Virtual shadow maps, cascade caching | Rejected for now (D8) | The day program and wind erase the cache; three layers to page consistently | Static redraw with unchanged projections measured dominating a cascade |
-| Octahedral impostors, billboard clouds | Rejected (D3) | A second representation for shading, picking and reprojection; baked colour against material identity shading | Nothing; a field-contoured parent is the far field |
+| Shadow cascade caching | Rejected for now (D8) | The day program and wind erase the cache; three layers to page consistently | Static redraw with unchanged projections measured dominating a cascade |
+| Sparse shadow pages without caching | Rejected until measured (D8) | Page tables, pools and indirection for all three layers against an unmeasured saving | The receiver mask's occupied share of a cascade's texels measured small under the moving sun, wind, a portal view and sparse receivers (F13 **[review]**) |
+| Octahedral impostors, billboard clouds | Rejected (D3) | A second representation for shading, picking and reprojection; baked colour against material identity shading | The stand parent and the shared prototype path both failing the dense landscape's L5 bars on the Deck, and the hybrid far tier failing them too (F11 **[review]**) |
 | Authored HLOD proxies | Rejected (D3) | The field derives what an author would hand-build | Nothing |
 | Field marching for the far field | Rejected (stands) | [decisions](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs) | Nothing |
 | Hybrid mesh-volume far tier (filtered occupancy, voxel clusters) | Watch | Partial coverage of a sparse canopy is real; the representation and its raster bin are unqualified | The overlook's stand parents failing the reference at sub-pixel error |
@@ -696,21 +898,24 @@ as noted.
 
 | Step | Lands | Check on `worlds/debug` | Success line |
 |---|---|---|---|
-| **G1. Field-levels audit mode** (offline; brief-ready below) | A field-levels mode in the CPU bake that `puck mesh audit --cpu` drives (`MeshCpuBake`, `SdfMeshPathBake.Land`), printing per group and level: triangles, the two-sided field error, open edges and flips from the audit's own measures, samples and taps, and the land thread's cycles | `puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu --field-levels` and the same on one chunked union of `worlds/debug/hall.puck`, against the collapse on the same groups | Adopt field levels for closed groups when (a) at equal or fewer triangles every level's error is no worse and the chain continues past level 2, the Moth's coarsest total falling by an order of magnitude from 238,235; (b) no level adds open edges or flips beyond level 0's; (c) the chain's samples and land cycles do not exceed the collapse's. Any failed clause names the fallback (Argon's member-aware collapse for skinned groups) or the fix |
-| G2. Field levels in the bake and region | Levels contoured from the field for closed groups, their own vertices laid after the merged ones (a representation change to `SdfMeshLevel`), skinned groups' levels through the points round, `SdfMeshCollapse` kept only for chunked unions, the dilated variant where it wins | `world.counters gpu pass sdf.world$mesh` vertices with the Moth at boom 1.5, 4.2 and 12 m and at 50 and 100 m under `world.detail auto`, against today's build; captures from every side at each distance; `puck mesh audit` clean on the levelled groups; cold-bake stage seconds per backend | Vertices fall at every distance past 4.2 m with captures meeting the reference; the cold bake stays within the bar or the owner's call on tiers is taken first |
-| G3. Member boxes and `unboxed` retired | Per-member rest boxes in the mesh and record; the kernel's union under live slots; the host twin for the rate decision; `unboxed` deleted | Camera facing away from the falls and the garden crowd: membered draws' vertices in `world.counters gpu` fall to zero when off-frustum or occluded, and they select levels 1 and 2 at distance; `world.view.pick` on a bent limb still names it; a cascade still shadows a hidden body onto a visible receiver | No membered draw drawn in a pass that cannot show it; no missed surface in a presented burst of a walking Moth and a portal straddle |
-| G4. Slot-resolved rigid draws (V2b's design) | A rigid dynamic draw reads its slot's live and previous transforms; selection rows derived from the slot's rest box; transform rows uploaded by change | `dotnet-trace` of the frame thread at flight B: `sdf.instances records.changed` falls from about two thousand to the moved slots' count; `world.debug-view motion` still on a moving body; a straddling body clipped on both sides at `debug.go portals` | Records restaged per moved body equal its slots, not its groups |
-| G5. Occlusion-aware rate hold (the frame-bar CPU item) | A visible bit per draw per pass read back through the slot-completion seam; `RateOf` treats an unshown-by-every-pass body as not shown | Flight B facing the motion gallery through the stairwell wall: `world.rates` lists the exhibits at `Held`; stepping into the gallery shows them posed on their first visible frame within the tiers' bound | Held bodies behind the wall; no pose jump beyond two pixels at reappearance in a presented burst |
-| G6. Creation proxy and union parent | The alternatives rule in the kernel (a parent's record names its children's range), proxies contoured at rest and skinned by the points round, union parents above chunked unions | The Moth at 50 and 100 m draws one record; `world.counters gpu` draws and vertices at the garden crowd from the lawn; the hall's unions from the forest pose at (47.80, 0.02, -116.84); captures against the reference; a parent and its children never both drawn (a count per pass) | Draws per distant creation fall to one; the hall's far draws fall to its parents; captures meet the reference |
-| G7. Stand parents for the forest (dense landscapes L4's far field) | A bake group over many static copies contoured as one region, with the dilated variant where coverage asks | `view.override layout three-quarter` then `view.override camera forest-overview`, and `body.pose spawn:forest 0` looking south: draws, vertices and cascade vertices against G6's build; captures from the overlook and the road against the reference; the nested forest view's own counts | The overlook's far belt draws as parents at sub-pixel error and reads as a forest; if it does not, the hybrid far tier is briefed, not the pixel rule loosened |
-| G8. Demand-bounded tiers | The tier fact in the geometry key, the finest tier baked on demand, `world.residency` reporting tiers owed, `world.budget` per creation | Spawn in the studio and walk to the Moth's face at boom 1.5 m: the next tier lands and the counter clears; the cold bake from an empty store on both backends | Cold-bake seconds against today's with the owner's answer on what counts; no view ever refused, only owed |
+| **G1. Field-levels audit mode** (offline; brief-ready below) | A field-levels mode in the CPU bake that `puck mesh audit --cpu` drives (`MeshCpuBake`, `SdfMeshPathBake.Land`), printing per group and level: triangles, the three error components of [the error contract](#the-error-contract) (geometric both ways, material runs, normal runs, vanished components) and the recorded error, the Lipschitz lower bound beside the bracketed upper bound, the enclosure check, the audit's open edges, flips and missing crossings on each level, field evaluations (contour samples and oracle brackets apart), and the land thread's cycles, over the whole bake path for both the chain and the collapse | `puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu --field-levels` and the same on one chunked union of `worlds/debug/hall.puck` and on a flat multi-material face (a signed or striped placement of the debug world, chosen by the lane), against the collapse on the same groups; the Moth's skinned groups through per-member pieces | Adopt field levels for closed groups when (a) at equal or fewer triangles every level's recorded error is no worse than the collapse's measured error and the chain continues past level 2 to an empty level, the Moth's coarsest nonempty total falling by an order of magnitude from 238,235; (b) no level adds open edges, flips or missing crossings beyond level 0's, and every level passes enclosure; (c) the chain's field evaluations and land cycles over the whole bake path do not exceed the collapse path's by more than the chain's extra levels justify in triangles saved (the lane states the ratio it found; the lead rules); (d) on the striped face the material component, not the geometric one, is what holds the level back. Any failed clause names the fallback (Argon's member-aware collapse for skinned groups) or the fix |
+| G2. Field levels in the bake and region | Levels contoured from the field for closed groups at the outward offset, their own vertices laid after the merged ones (a representation change to `SdfMeshLevel`, which gains zero-vertex terminal levels), skinned groups' levels as per-member pieces, `SdfMeshCollapse` kept only for chunked unions | `world.counters gpu pass sdf.world$mesh` vertices with the Moth at boom 1.5, 4.2 and 12 m and at 50 and 100 m under `world.detail auto`, against today's build; captures from every side at each distance, and of a walking Moth with an arm extended and a hand on the torso at 12 and 50 m (the F01 witness); captures of two touching closed placements across their level transitions (the F05 witness); `puck mesh audit` clean on the levelled groups; cold-bake stage seconds per backend | Vertices fall at every distance past 4.2 m with captures meeting the reference, no slit at a joint and no limb left behind; the cold bake stays within the bar or the owner's call on tiers is taken first |
+| G3. Member boxes and `unboxed` retired | Per-member rest boxes in the mesh and record; the kernel's union under live slots; the host twin for the rate decision; `unboxed` deleted | Camera facing away from the falls and the garden crowd: membered draws' vertices in `world.counters gpu` fall to zero when off-frustum or occluded and return when the camera turns; `world.view.pick` on a bent limb still names it; a cascade still shadows a hidden body onto a visible receiver | Bounds alone (F16 **[review]**): no membered draw drawn in a pass that cannot show it, no missed surface in a presented burst of a walking Moth and a portal straddle. Membered draws selecting levels 1 and 2 at distance is the G2+G3 integration check, run when both have landed |
+| G4. Slot-resolved rigid draws (V2b's design) | A rigid dynamic draw reads its slot's live and previous transforms; selection rows derived from the slot's rest box | `dotnet-trace` of the frame thread at flight B: `sdf.instances records.changed` falls from about two thousand to the moved slots' count; `world.debug-view motion` still on a moving body; a straddling body clipped on both sides at `debug.go portals` | Records restaged per moved body equal its slots, not its groups |
+| G5. Occlusion-aware rate floor (the frame-bar CPU item) | The sight step's query list grown past `MaxScreenSurfaces` and fed one swept reach box per rated body per view; a receiver-box query in the cascade kernel; `RateOf` rating a body no query saw, no receiver kept and no consumer read at the slowest nonzero tier | Flight B facing the motion gallery through the stairwell wall: `world.rates` lists the exhibits at the floor tier, with the query latency in frames printed beside; stepping into the gallery in a presented burst; a body behind the wall whose shadow falls on the lit stair, and one whose glass or back surface feeds the far cascade's exit or optical layer, still posing at its shadow's rate; a camera cut onto a hidden body | Bodies behind the wall at the floor tier; no exhibit's presented pose older than one floor period plus the counted latency; every body a cascade's receivers keep rated as shown; a cut keeps demand until the first result for the new camera |
+| G6. Creation proxy and union parent | The alternatives rule in the kernel (a parent's record names its children's range), per-member pieces as the proxy's middle tier, the one-draw tier only where V2c's bound exists, parents per render class with a per-triangle source table, `SdfDressedPickMap.Resolve` taking the triangle, union parents above chunked unions | The Moth at 50 and 100 m draws its slots' count of records, and one per render class where its motion bound is derived; `world.counters gpu` draws and vertices at the garden crowd from the lawn; the hall's unions from the forest pose at (47.80, 0.02, -116.84); a glass-over-opaque creation (the lift's cab, or an exhibit the lane chooses) captured at parent distance against its children; `world.view.pick` on a parent naming the same child as a pick on the children at the same pixel; a parent and its children never both drawn (a count per pass) | Draws per distant creation fall to its slots, and to one per render class where admitted; the hall's far draws fall to its parents; no surface of one class lost behind a parent of another; picks agree; captures meet the reference |
+| G7. Stand parents for the forest (dense landscapes L4's far field) | A bake group over many static copies contoured as one region per render class, with a source table; the shared prototype path at D1's coarsest levels under V1's buckets as the comparison | `view.override layout three-quarter` then `view.override camera forest-overview`, and `body.pose spawn:forest 0` looking south: draws, vertices, candidates and cascade vertices against the shared path's; resident bytes of parents and children together (`world.residency`); cold derivation of the belt's parents and the re-derivation one moved tree costs; captures from the overlook and the road against the reference; the nested forest view's own counts; the frame cost on the Deck's leg in the lead's window | The overlook's far belt draws as parents at sub-pixel error and reads as a forest, and the parents beat the shared path on bytes, derivation and frame cost; where they read wrong the hybrid far tier is briefed, where they cost more the far field is the shared path (with parents shared over repeated arrangements), and the pixel rule is never loosened |
+| G8. Demand-bounded tiers | The tier fact in the geometry key, the finest tier baked on demand with lookahead, cancellation and the one in-flight budget, `world.residency` reporting tiers owed with each group's owed error and interval, `world.budget` per creation | Spawn in the studio and walk to the Moth's face at boom 1.5 m, retreat, and cut back; open a portal onto a second demanding view: owed error and interval per group over the walk, peak resident and in-flight bytes, and the lead's produce-work window; the cold bake from an empty store on both backends | Owed error never worse than one tier below demand for longer than the landing budget's frames on any of the four runs; peak bytes under the library's budget; cold-bake seconds against today's with the owner's answer on what counts; no view ever refused, only owed |
 | G9. Clusters inside a draw (D4's experiment) | Flat clusters of the chosen level on V1's buckets, behind a lever | The terrain sector and the hall shell from inside, on the 2060 or at the Deck's resolution: candidates, survivors, pyramid tests, rejected triangles, reference writes; moving, cut, portal-clipped and bent geometry captured | Kept only if it removes measured geometry-bound work without a missed surface, a swapped pick or a stale bound |
 
 G1 and G3 share no files and run beside V2a and V1a; G2 waits on G1; G4 is
 V2b and lands where the visibility plan places it; G5 waits on nothing but the
-readback seam; G6 waits on G2 and G3; G7 on G6; G8 on G2; G9 on V1b and a
+sight step it grows; G6 waits on G2 and G3, and its one-draw tier on V2c; G7
+on G6 and on V1's buckets for its comparison; G8 on G2; G9 on V1b and a
 measurement. The visibility plan's table keeps V3a and V3b; V3c is replaced by
-G1 and G2.
+G1 and G2. Beside the steps, one measurement with no build: the far cascade's
+receiver-mask occupancy under the moving sun and wind (D8), read in the
+lead's window.
 
 ### G1, the first step, as a brief
 
@@ -718,22 +923,36 @@ Offline, load-independent, no GPU, no lease. Add a field-levels mode to the CPU
 bake under `puck mesh audit --cpu` (the audit drives `MeshCpuBake`, which runs
 `SdfMeshPathBake` on the CPU evaluator). In `Land`, after the planar merge, for
 a closed group: contour the group's field again at `c0 * 2^k` for `k = 1, 2,
-...` through `SdfSampledLattice` and `SdfDualContouring` (no second mesher),
-until a level holds under a few dozen triangles or is empty; measure each
-level's error both ways against the field (value over gradient at level
-vertices, centroids and edge midpoints; level-0 vertex distance to the level's
-triangles through a triangle hierarchy); raise each error to the finer level's;
-run the audit's open-edge and flip measures on each level; count samples, taps
-and the land thread's cycles. Print per group and level. Run it on the Moth and
-on one chunked union of the hall, beside the collapse's levels on the same
-groups. The success line is the table's: (a), (b) and (c) together adopt field
-levels for closed groups; a failed clause names what it rejects. Nothing lands
-in a running World in G1; its deliverable is the measurement and the mode.
-Systems it reuses, by name: `SdfSampledLattice`, `SdfDualContouring`,
-`SdfSampledLattice.PassesBetween`, `SdfMeshAudit`, `SdfMeshIrradianceScene`'s
-triangle hierarchy, `SdfMeshPathBake.Land`, `MeshCpuBake`. What it must not do:
-write a second mesher, change the selection kernel, or touch the store's
-identity (the mode is offline).
+...` through `SdfSampledLattice` and `SdfDualContouring` (no second mesher), at
+the iso-value that offsets the surface outward by the level's budget
+(`SdfSampledLattice.SurfaceSlope` converts the budget to field units to aim
+the contour), until the lattice is empty or its cell exceeds the group's
+extent, then append the empty level with the group's half-diagonal as its
+error. For a multi-member group, contour per member through a lattice whose
+selector names that member's shapes alone, in the member's slot frame. Measure
+each level by [the error contract](#the-error-contract): bracketed witnesses
+from the level to the surface and from level 0's surface to the level (the
+nearest triangle through `SdfMeshIrradianceScene.TryNearestSurface`'s
+hierarchy), the enclosure check, material and normal runs over level 0's
+adjacency with `SdfMeshCollapse.NormalDegrees`' widest angle, vanished
+components, the Lipschitz lower bound beside each upper bound; raise each
+recorded error to the finer level's; run the audit's open-edge, flip and
+missing-crossings measures on each level; count field evaluations (contour
+samples and oracle brackets apart) and the land thread's cycles over the whole
+bake path, for the chain and for the collapse alike. Print per group and
+level, the error's components apart. Run it on the Moth (its skinned groups
+per member), on one chunked union of the hall, and on a flat multi-material
+placement the lane chooses, beside the collapse's levels on the same groups.
+The success line is the table's: (a) to (d) together adopt field levels for
+closed groups; a failed clause names what it rejects. Nothing lands in a
+running World in G1; its deliverable is the measurement and the mode. Systems
+it reuses, by name: `SdfSampledLattice` (its `SurfaceSlope`),
+`SdfDualContouring`, `SdfMeshAudit` (its `MissingCrossings`),
+`SdfMeshIrradianceScene.TryNearestSurface`'s triangle hierarchy,
+`SdfProgram`'s Lipschitz analysis, `SdfMeshCollapse.NormalDegrees`,
+`SdfMeshPathBake.Land`, `MeshCpuBake`. What it must not do: write a second
+mesher, use value over gradient as a distance, change the selection kernel, or
+touch the store's identity (the mode is offline).
 
 ### The reproduction
 
@@ -748,10 +967,12 @@ Summed over the 180 `group` lines (an `awk` over the `triangles,` field) the
 forced level 2 holds 238,235 triangles, and the done line prints
 `level2=238235`; the face's groups print `nose: 24045 triangles`, `eye-left:
 9143`, `eye-right: 9102`, `face: 2218` and `pupil-left: 562`, Claude's table
-exactly. Claude's own sums ran 449 higher at every level (a counting
-difference in its `awk`, not a bake difference); the levels are a pure function
-of the mesh, so the two runs agree where they count the same lines. The run's
-full output is in the lane's commit.
+exactly. Claude's own sums ran 449 higher at every level; this memo attributes
+that to a counting difference in its `awk` rather than a bake difference
+**[inference]**, since the levels are a pure function of the mesh and the two
+runs agree on every group line compared, but the attribution is unverified
+(the review noted the same). The run's summary is in the lane's commit; the
+raw group output was not kept.
 
 ## The owner call
 
@@ -805,10 +1026,56 @@ whichever lane next touches its file:
   G2 to G7 admits G9; one bound on triangle setup after G9 and V4 admits the
   compute rasterizer as an enhancement.
 - The overlook's stand parents failing the reference at sub-pixel error admits
-  the hybrid far tier, briefed with filtered occupancy measured from the field.
+  the hybrid far tier, briefed with filtered occupancy measured from the field;
+  their losing to the shared prototype path on bytes, derivation or Deck frame
+  cost makes the shared path the far field, with parents kept only over
+  repeated arrangements.
+- G1 showing the material or normal component binding the chain on real
+  content briefs appearance filtering at coarse levels.
 - A cascade dominated by static redraw with unchanged projections reopens
-  cascade caching (V5) and, behind it, page-based shadow storage.
+  cascade caching (V5); the receiver mask's occupied share measured small
+  under the moving sun briefs sparse shadow pages without caching.
+- G5's counted query latency exceeding a floor tier's period on the bar
+  devices reopens the floor tier's choice (a higher floor, or a host-side
+  test of the reach box against a reduced pyramid).
 - The owner's reading of the cold-bake bar sets what G8 must fit.
+
+## Answers to the review
+
+The adversarial review of the first draft (Codex Astra; findings-only, argued
+from the source at the integration tip, nothing run) raised sixteen findings.
+Each is answered here with what it changed; every code premise the review
+cited was reopened for this revision and held. None is dismissed outright;
+where this memo keeps part of the first draft's position, the row says why.
+
+| Finding | Answer |
+|---|---|
+| F01 (high). Rest-space error does not survive independent skinning: a coarse vertex assigned to a member other than the surface it approximates, or a triangle spanning members, carries limb-sized posed error at a sub-pixel recorded error | Accepted. D1's skinned levels are contoured per member, each piece riding one slot, so rest error holds posed; D3's one-draw creation proxy is admitted only with V2c's derived motion bound added to its error, and a creation without one stops at per-member pieces. G2 gains the extended-arm and hand-on-torso witness |
+| F02 (high). Geometric error cannot authorize deleting material or normal features | Accepted. The error contract adds material runs (distance to a triangle of the witness's own material, as the collapse measures) and normal runs (the collapse's widest angle), each contributing its run's extent; G1 prints the components apart and tests a striped face. The pessimism this brings for sub-pixel shading detail is named and appearance filtering is watched |
+| F03 (high). `f - d` is a field-unit offset, not a world-unit distance, for a field that is no true distance | Accepted. The offset's iso-value is aimed through the lattice's measured slope and the recorded error is always measured in world units by bracketed witnesses; `d` is never an error |
+| F04 (high). Value over gradient is a first-order estimate, the reverse direction measured only level-0 vertices, and `PassesBetween` is not a distance oracle | Accepted. The contract brackets each witness to the surface along the gradient (an upper bound by construction), adds grid witnesses over large triangles and over level-0 triangles, projects surface witnesses onto the true surface so level 0's own contour error does not enter, and makes the audit's missing-crossings measure part of acceptance. `PassesBetween` is cited only for what it is |
+| F05 (high). Closed groups levelled independently can open a slit at a joint | Accepted. Every level is offset outward by its budget and the enclosure check refuses a level that retreats, so touching groups keep touching at every level; the residual is hidden overlap. G2 gains the touching-placements witness |
+| F06 (medium). The terminating empty level has no finite error | Accepted. The empty level records the group's half-diagonal and zero vertices, selected by the same walk; a vanished component records its own half-diagonal, not its distance to what remains; the chain's growth and stop are stated |
+| F07 (high). Entry invisibility cannot stop posing for exit and optical contributors | Accepted. A cascade's evidence in the rate decision is its receiver test on the body's reach box, the same evidence the kernel emits every layer from; entry visibility is not used |
+| F08 (high). A zero-Hz occlusion hold has no bounded wake and no guaranteed next-frame feedback | Accepted in substance. Occlusion lowers a body to the slowest nonzero tier and never holds it, so staleness is bounded by the tier's period plus the counted latency; the query is the swept reach box, not the held pose's boxes, so a limb emerging from cover is seen before it emerges; results apply only to their camera and a missing result keeps demand. The first draft's claim that the tiers bound the wake to two pixels is withdrawn; what the first presented frame shows is stated |
+| F09 (high). A creation-wide union destroys mixed opaque and glass surfaces | Accepted. A parent is contoured over children of one render class, one parent per class, and a displaced group joins none; G6 captures a glass-over-opaque creation |
+| F10 (medium). A stand parent loses the child identity picking needs | Accepted. Every parent triangle names its source child in a per-triangle table answered by the points round, and the pick resolver takes the triangle beside the identity; G6 checks pick equivalence |
+| F11 (medium). The forest decision has no cost-based fallback or sharing contract | Accepted. G7 compares the stand parent against the shared prototype path on bytes, derivation (cold and one moved tree), classification, raster and Deck frame cost; a losing parent yields to the shared path, parents over repeated arrangements stay shared, and impostors' reopening condition names the case where every field-derived far tier fails L5's bars |
+| F12 (medium). Demand tiers can pass G8 while visibly coarse or spiking | Accepted. D7 gains owed error and owed interval with an admitted degradation (one tier below demand for at most the landing budget), lookahead demand from the camera program's bound, cancellation, hysteresis and one in-flight budget; G8 measures a cut, an approach, a retreat and a portal's concurrent demand |
+| F13 (medium). VSM admission tests only cache reuse | Accepted. D8 separates caching (still refused while the sun and wind move) from sparse paging, whose admission measure is the receiver mask's occupied share of a cascade's texels, read in the lead's window with no build |
+| F14 (low). The cone opportunity rested on a false premise about the cascades | Accepted. The far cascade's receiver rejection and entry occlusion are stated; the first population to measure is the near and second cascades' entry layers, never the exit or optical layers |
+| F15 (low). Session sight readback is not per-draw visibility readback | Accepted. The pipeline section describes `SdfPortalSight` as the per-query slab test and completion seam it is, and D6 builds on it as such (one query per body) rather than on per-draw bits |
+| F16 (low). G3's success line needed G2's levels | Accepted. G3 is bounds-only; level selection on membered draws is the G2+G3 integration check |
+
+The review also recorded that the complete chain's cost includes the oracle's
+reverse walks and hierarchy construction, which the first draft's one-third
+estimate left out, and that G1's accounting needs one scope since the collapse
+samples nothing itself; both are now in D1's cost column and G1's clause (c).
+Its confirmations (the kernel can read the slot table; member rest boxes under
+live transforms enclose their vertices; transform rows upload by change; D5's
+contract is sound; input-derived tier identity is right; the depth-less
+impostor prohibition does not exist; no mesh-shader or int64 path exists) are
+carried where each bears.
 
 ## Sources
 
