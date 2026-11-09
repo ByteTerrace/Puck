@@ -55,7 +55,7 @@ public static class MeshCommand {
         var aimOption = new Option<string>(name: "--field-aim") { DefaultValueFactory = static _ => "local", Description = "How --field-levels converts a level's offset to field units to aim its contour: local, by each sample's own slope, or lattice, by the lattice's median slope. The oracle measures where either landed." };
         aimOption.AcceptOnlyFromAmong("local", "lattice");
         var command = new Command(
-            description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
+            description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, smooth vertices' shading normals against the gradient at the vertex (rough), folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
         ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption, levelOption, fieldLevelsOption, aimOption };
 
@@ -272,7 +272,7 @@ public static class MeshCommand {
             return;
         }
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {report.Triangles} triangles, {report.Vertices} vertices, cell {Millimetres(metres: report.Cell)} mm, score {report.Score:0.0}\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {report.Triangles} triangles, {report.Vertices} vertices, cell {Millimetres(metres: report.Cell)} mm, score {report.Score:0.0}{((outcome.Mesh is { } mesh) ? $", box centre {Point(point: outcome.ToWorld(arg: ((mesh.PositionLow + mesh.PositionHigh) * 0.5f)))}" : string.Empty)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  off surface (mm): vertex {Statistic(statistic: report.VertexError, scale: 1000f)} | centroid {Statistic(statistic: report.CentroidError, scale: 1000f)} | midpoint {Statistic(statistic: report.MidpointError, scale: 1000f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");

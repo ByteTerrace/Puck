@@ -671,7 +671,7 @@ public static class SdfMeshAudit {
 
         return errors;
     }
-    private static Vector3 Unit(Vector3 normal) => ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero);
+    private static Vector3 Unit(Vector3 normal) => VectorFunctions.NormalizeOr(fallback: Vector3.Zero, value: normal);
     /// <summary>Reads a field's unit gradient at a point in its frame.</summary>
     /// <param name="field">The field.</param>
     /// <param name="point">The point, in metres.</param>
