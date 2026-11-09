@@ -67,11 +67,8 @@ let creamUndercoat = [
   { threshold: 0.38, surface { color: "#5B5D63", roughness: 0.52, metal: 0.55 } }
 ]
 
-// The reference's recessed heel jets point 55 degrees below rearward horizontal.
-// The cylinder's -Y cap and the lens's -Z face share (0, -sin(55), -cos(55));
-// the exhaust volume inherits the lens frame, so it leaves along the same axis.
-let bootNozzleRotation = [0.3007058, 0, 0, 0.9537170]
-let bootLensRotation = [-0.4617486, 0, 0, 0.8870108]
+// The heel light faces back and 20 degrees down: its cylinders' -Y caps face (0, -sin(20), -cos(20)).
+let heelLensRotation = [0.57358, 0, 0, 0.81915]
 let bootPlanOutline = [[-0.82, -1], [-1, -0.3], [-0.9, 0.72], [-0.64, 1], [0.64, 1], [0.9, 0.72], [1, -0.3], [0.82, -1]]
 
 let archBackOutline = [
@@ -215,22 +212,22 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
   for (layer, k) in [{ name: "podShell", material: violetPod, grow: 0 }, { name: "podBand1", material: shinCream, grow: 0.008, y: 1.475, h: 0.045 }, { name: "podBand2", material: shinCream, grow: 0.008, y: 1.28, h: 0.05 }] {
     shape Prism $"{layer.name}-{side}" {
       id: baseId + 2 + 3 * k
-      position [sx * 0.175, 1.33, -0.235]
-      rotation: prismMirror(-sx, [0, 0, 0, 1])
-      scale [0.14 + layer.grow, 0.3 + layer.grow, 0.095 + layer.grow]
+      position [sx * 0.19, 1.31, -0.24]
+      rotation: prismMirror(sx, [0, 0, 0, 1])
+      scale [0.165 + layer.grow, 0.33 + layer.grow, 0.1 + layer.grow]
       material: layer.material
       group: groupId + k
       parent: $"pod-{side}"
-      profile { kind: "Convex", vertices: podOutline, cornerRadius: 0.12 }
+      profile { kind: "Convex", vertices: podOutline, cornerRadius: 0.16 }
     }
 
     shape Superellipsoid $"{layer.name}Dome-{side}" {
       id: baseId + 3 + 3 * k
-      position [sx * 0.175, 1.33, -0.175]
-      scale [0.195 + layer.grow, 0.37 + layer.grow, 0.155 + layer.grow]
+      position [sx * 0.19, 1.31, -0.175]
+      scale [0.225 + layer.grow, 0.41 + layer.grow, 0.165 + layer.grow]
       material: layer.material
       blend: "SmoothIntersection"
-      smooth: 0.014
+      smooth: 0.02
       group: groupId + k
       parent: $"pod-{side}"
       exponent: 2
@@ -238,10 +235,10 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
 
   }
 
-  for (band, b) in [{ name: "podBand1", y: 1.475, h: 0.045 }, { name: "podBand2", y: 1.28, h: 0.05 }] {
+  for (band, b) in [{ name: "podBand1", y: 1.47, h: 0.048 }, { name: "podBand2", y: 1.26, h: 0.055 }] {
     shape Box $"{band.name}Span-{side}" {
       id: baseId + 7 + 3 * b
-      position [sx * 0.175, band.y, -0.235]
+      position [sx * 0.19, band.y, -0.24]
       rotation [0, 0, -sx * 0.10453, 0.99452]
       scale [0.3, band.h, 0.2]
       material: shinCream
@@ -255,7 +252,7 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
   // The cap's small dark opening, a rounded recess in its back face; the cut takes the cutter's near-black.
   shape Box $"podOpening-{side}" {
     id: baseId + 4
-    position [sx * 0.155, 1.565, -0.3]
+    position [sx * 0.17, 1.565, -0.3]
     scale [0.032, 0.022, 0.03]
     material: jet
     blend: "Subtraction"
@@ -269,9 +266,9 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
   // flight mode (lane 2); the exhaust volume leaves the mouth along the same axis.
   shape Cylinder $"nozzle-{side}" {
     id: baseId + 12
-    position [sx * 0.136, 1.1234, -0.2653]
+    position [sx * 0.1365, 1.0886, -0.2733]
     rotation: nozzleRotation
-    scale [0.045, 0.04, 0.045]
+    scale [0.06, 0.045, 0.06]
     material: charcoal
     parent: $"pod-{side}"
     rounding: 0.008
@@ -279,9 +276,9 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
 
   shape Cylinder $"nozzleGlow-{side}" {
     id: baseId + 13
-    position [sx * 0.1212, 1.0918, -0.2775]
+    position [sx * 0.1197, 1.0527, -0.2872]
     rotation: nozzleRotation
-    scale [0.033, 0.009, 0.033]
+    scale [0.045, 0.01, 0.045]
     material: bootCyan
     parent: $"pod-{side}"
     rounding: 0.006
@@ -289,9 +286,9 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
 
   shape Cylinder $"nozzleCore-{side}" {
     id: baseId + 14
-    position [sx * 0.12, 1.0892, -0.2785]
+    position [sx * 0.1181, 1.0493, -0.2885]
     rotation: nozzleRotation
-    scale [0.013, 0.007, 0.013]
+    scale [0.018, 0.008, 0.018]
     material: thrusterGlow
     parent: $"pod-{side}"
   }
@@ -314,12 +311,12 @@ template hoodEar(side, sx, idBase) {
   for (part, k) in [
     { name: "earMount", material: skin, r: 0.088, h: 0.02, out: 0.29 }
     { name: "earCover", material: violet, r: 0.068, h: 0.012, out: 0.304 }
-    { name: "earRing", material: brass, r: 0.054, h: 0.004, out: 0.313 }
-    { name: "earButton", material: violet, r: 0.046, h: 0.004, out: 0.315 }
+    { name: "earRing", material: brass, r: 0.054, h: 0.008, out: 0.312 }
+    { name: "earButton", material: violet, r: 0.046, h: 0.009, out: 0.316 }
   ] {
     shape Cylinder $"{part.name}-{side}" {
       id: idBase + 1 + k
-      position [sx * part.out * 0.951, 1.77, -0.03 + part.out * 0.309]
+      position [sx * part.out * 0.951, 1.77, -0.012 + part.out * 0.309]
       rotation [0.2192, 0, -sx * 0.6718, 0.7071]
       scale [part.r, part.h, part.r]
       material: part.material
@@ -445,60 +442,58 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
     exponent: softness
   }
 
-  // The shoulder stack (sheets 01 and 02): two thick plates sloping down and out over a round charcoal pivot that
-  // shows under the upper plate's inner end, all riding the upper arm. Each plate is its side outline, a rounded
-  // rectangle that domes over the shoulder front and back, extruded along the slope with 45-degree chamfers on its
-  // ends, so it reads flat-faced and thick from the front and rounded from the side. The upper plate's inner end
-  // stays outboard of the hood as the arm swings.
-  shape Superellipsoid $"shoulderPivot-{side}" {
+  // The shoulder stack (sheets 01 and 02): three thick plates fanned round the shoulder joint like a pauldron, a
+  // lavender plate sloping down and out over the top, an ivory band, and a lavender plate hanging down the outside of
+  // the upper arm, each flat-faced with chamfered edges and drooping at front and back so the stack wraps the arm. A
+  // charcoal pivot disc with a raised boss sits in front of the joint under the top plate. All ride the upper arm; the
+  // top plate's inner end stays outboard of the hood as the arm swings.
+  shape Cylinder $"shoulderPivot-{side}" {
     id: idBase + 150
-    position [sx * 0.24, 1.485, 0.03]
-    scale [0.066, 0.066, 0.066]
+    position [sx * 0.265, 1.46, 0.085]
+    rotation [0.6124, 0, -sx * 0.3536, 0.7071]
+    scale [0.07, 0.02, 0.07]
     material: charcoal
     parent: $"upperArm-{side}"
-    exponent: 2.5
+    rounding: 0.008
   }
 
   shape Cylinder $"shoulderPivotCap-{side}" {
     id: idBase + 155
-    position [sx * 0.2675, 1.485, 0.0776]
+    position [sx * 0.2775, 1.46, 0.1067]
     rotation [0.6124, 0, -sx * 0.3536, 0.7071]
-    scale [0.045, 0.012, 0.045]
-    material: gunmetal
+    scale [0.042, 0.012, 0.042]
+    material: charcoal
     parent: $"upperArm-{side}"
-    rounding: 0.004
+    rounding: 0.006
   }
 
-  shape Prism $"shoulderSlab-{side}" {
-    id: idBase + 151
-    position [sx * 0.372, 1.55, -0.005]
-    rotation [0.12279, sx * 0.69636, -sx * 0.12279, 0.69636]
-    scale [0.165, 0.07, 0.14]
-    material: violetBand
-    parent: $"upperArm-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.85 }
-    chamfer: 0.035
+  for (plate, k) in [
+    { name: "shoulderSlab", id: 151, material: violetBand, at [0.3607, 1.575, -0.005], q [0, 0, -0.24192, 0.9703], size [0.1, 0.05, 0.16] }
+    { name: "shoulderBand", id: 158, material: skin, at [0.422, 1.531, -0.002], q [0, 0, -0.48481, 0.87462], size [0.085, 0.04, 0.165] }
+    { name: "shoulderSlabLower", id: 152, material: violetBand, at [0.458, 1.4, 0], q [0, 0, -0.69466, 0.71934], size [0.11, 0.05, 0.17] }
+  ] {
+    shape Prism $"{plate.name}-{side}" {
+      id: idBase + plate.id
+      position [sx * plate.at[0], plate.at[1], plate.at[2]]
+      rotation [0, 0, sx * plate.q[2], plate.q[3]]
+      scale: plate.size
+      material: plate.material
+      parent: $"upperArm-{side}"
+      profile { kind: "RoundedRectangle", cornerRadius: 0.3 }
+      chamfer: 0.018
+      shear { linear: 0, quadratic: -1.2, cubic: 0, target: 1, driver: 2 }
+    }
   }
 
-  shape Prism $"shoulderSlabLower-{side}" {
-    id: idBase + 152
-    position [sx * 0.392, 1.395, 0]
-    rotation [0.07391, sx * 0.70323, -sx * 0.07391, 0.70323]
-    scale [0.155, 0.085, 0.13]
-    material: violetBand
-    parent: $"upperArm-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.6 }
-    chamfer: 0.03
-  }
-
-  // The elbow piston in front of the elbow, inside the bend (sheet 02): a rod hung from a lug on the upper arm and a
-  // cylinder rising out of the gauntlet's top on the forearm. Each turns about its own lug by the share of the elbow's
-  // bend that keeps the two on one line (elbowSwings), so the rod slides into the cylinder as the elbow bends.
+  // The elbow piston in the inside of the bend (sheet 02): a rod hung from an eye on the upper arm and a cylinder
+  // rising from an eye seated on the gauntlet's top, on the forearm. Each turns about its own eye by the share of the
+  // elbow's bend that keeps the two on one line (elbowSwings), so the rod slides into the cylinder as the elbow bends.
+  // A charcoal hinge disc with a boss caps the elbow's outer side on its lateral axis.
   shape Cylinder $"elbowLug-{side}" {
     id: idBase + 154
-    position [sx * 0.317, 1.328, 0.088]
+    position [sx * 0.317, 1.33, 0.088]
     rotation [0, 0, -sx * 0.642, 0.767]
-    scale [0.026, 0.02, 0.026]
+    scale [0.026, 0.018, 0.026]
     material: charcoal
     parent: $"upperArm-{side}"
     rounding: 0.006
@@ -506,48 +501,70 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
 
   shape Cylinder $"elbowRod-{side}" {
     id: idBase + 156
-    position [sx * 0.3266, 1.2691, 0.0898]
-    rotation [-0.01591, 0, sx * 0.09283, 0.99555]
-    scale [0.012, 0.06, 0.012]
+    position [sx * 0.3266, 1.2771, 0.0904]
+    rotation [-0.02097, 0, sx * 0.08389, 0.99625]
+    scale [0.012, 0.055, 0.012]
     material: steel
     parent: $"upperArm-{side}"
     rounding: 0.003
-    swings: elbowSwings(sx, stride, [sx * 0.317, 1.328, 0.088], 0.4357)
+    swings: elbowSwings(sx, stride, [sx * 0.317, 1.33, 0.088], 0.3557)
+  }
+
+  shape Cylinder $"elbowHinge-{side}" {
+    id: idBase + 162
+    position [sx * 0.41, 1.233, 0.004]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.05, 0.016, 0.05]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.006
+  }
+
+  shape Cylinder $"elbowHingeCap-{side}" {
+    id: idBase + 163
+    position [sx * 0.4297, 1.2365, 0.004]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.03, 0.01, 0.03]
+    material: charcoal
+    parent: $"upperArm-{side}"
+    rounding: 0.005
   }
 
   shape Superellipsoid $"forearm-{side}" {
     id: idBase + 159
     position [sx * 0.3706, 1.0524, 0.0024]
     rotation [-0.08495, sx * 0.400689, -sx * 0.033242, 0.911661]
-    scale [0.1, 0.2, 0.105]
+    scale [0.07, 0.19, 0.07]
     material: charcoal
     parent: $"upperArm-{side}"
     exponent: 2.6
     swings: elbowSwings(sx, stride, [sx * 0.336, 1.2201, 0.004], 1)
   }
 
-  // The heavy gauntlet (sheet 01): as wide as the shoulder stack and covering the forearm from under the elbow to the
-  // wrist, a flat-faced block with rounded corners and chamfered front and back edges, faced square to the body rather
-  // than the forearm's twist, so its outer face and its vents look straight out.
+  // The heavy gauntlet (sheets 01 and 02): as wide as the shoulder stack, a slanted ivory tube along the forearm from
+  // under the elbow to the wrist, its rounded section extruded with chamfered ends, lavender on its inner side (paint)
+  // and open at the wrist, where the hand comes out of the cuff. It is faced square to the body rather than the
+  // forearm's twist, so its outer face and its vents look straight out.
   shape Prism $"bracer-{side}" {
     id: idBase + 160
-    position [sx * 0.372, 1.035, 0.012]
-    rotation [-0.0915, 0, 0, 0.9958]
-    scale [0.125, 0.175, 0.13]
+    position [sx * 0.37, 0.995, 0.012]
+    rotation [-0.75162, -sx * 0.15601, 0, 0.64088]
+    scale [0.12, 0.13, 0.165]
     material: gauntlet
     group: groupBase + 16
     parent: $"forearm-{side}"
-    profile { kind: "RoundedRectangle", cornerRadius: 0.35 }
-    chamfer: 0.03
+    profile { kind: "RoundedRectangle", cornerRadius: 0.45 }
+    chamfer: 0.035
   }
 
-  shape Box $"bracerMouth-{side}" {
+  shape Cylinder $"bracerMouth-{side}" {
     id: idBase + 161
-    position [sx * 0.379697, 0.474186, 0.104559]
-    rotation [-0.08495, sx * 0.400689, -sx * 0.033242, 0.911661]
-    scale [0.4, 0.4, 0.4]
-    material: skin
-    blend: "Subtraction"
+    position [sx * 0.395, 0.8746, 0.0343]
+    rotation [-0.09011, 0, sx * 0.10091, 0.99081]
+    scale [0.085, 0.05, 0.085]
+    material: charcoal
+    blend: "SmoothSubtraction"
+    smooth: 0.008
     group: groupBase + 16
     parent: $"forearm-{side}"
   }
@@ -564,13 +581,24 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
 
   shape Cylinder $"elbowCylinder-{side}" {
     id: idBase + 153
-    position [sx * 0.3398, 1.2069, 0.0919]
-    rotation [-0.01591, 0, sx * 0.09283, 0.99555]
-    scale [0.023, 0.065, 0.023]
+    position [sx * 0.3366, 1.2142, 0.0929]
+    rotation [-0.02097, 0, sx * 0.08389, 0.99625]
+    scale [0.023, 0.05, 0.023]
     material: pistonSteel
     parent: $"forearm-{side}"
     rounding: 0.006
-    swings: elbowSwings(sx, stride, [sx * 0.352, 1.142, 0.094], -0.5643)
+    swings: elbowSwings(sx, stride, [sx * 0.345, 1.165, 0.095], -0.6443)
+  }
+
+  shape Cylinder $"elbowFoot-{side}" {
+    id: idBase + 206
+    position [sx * 0.345, 1.165, 0.095]
+    rotation [0, 0, -sx * 0.642, 0.767]
+    scale [0.026, 0.018, 0.026]
+    material: charcoal
+    parent: $"forearm-{side}"
+    rounding: 0.006
+    swings: elbowSwings(sx, stride, [sx * 0.345, 1.165, 0.095], -0.6443)
   }
 
   shape Superellipsoid $"palm-{side}" {
@@ -850,23 +878,32 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     rounding: 0.012
   }
 
-  shape Superellipsoid $"shin-{side}" {
+  // The greave (sheet 01): flat-faced and flaring from under the knee to a wide foot, the intersection of a front
+  // trapezoid and a side trapezoid with rounded edges, its arch over the instep lined lavender where the boot runs in.
+  shape Prism $"shin-{side}" {
     id: idBase + 180
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.105, 0.36, 0.112]
+    scale [0.21, 0.3, 0.24]
     material: shinViolet
     group: groupBase + 18
     parent: $"thigh-{side}"
-    exponent: 4.5
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
+    profile { kind: "Trapezoid" }
+    taper: 0.5
     swings: kneeSwings(sx, stride, [sx * 0.19, 0.7465, 0], 1)
+  }
+
+  shape Prism $"shinSide-{side}" {
+    id: idBase + 970
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.225, 0.3, 0.25]
+    material: shinViolet
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 18
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
   }
 
   shape Box $"shinEnds-{side}" {
@@ -874,271 +911,101 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     position [sx * 0.2, 0.407, 0.0125]
     scale [0.3, 0.302, 0.4]
     material: shinViolet
-    blend: "Intersection"
+    blend: "SmoothIntersection"
+    smooth: 0.01
     group: groupBase + 18
     parent: $"shin-{side}"
-  }
-
-  shape Superellipsoid $"shinCavity-{side}" {
-    id: idBase + 182
-    position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.083, 0.42, 0.09]
-    material: charcoal
-    blend: "Subtraction"
-    group: groupBase + 18
-    parent: $"shin-{side}"
-    exponent: 4.5
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
   }
 
   shape Prism $"shinArch-{side}" {
     id: idBase + 183
     position [sx * 0.2, 0.0458, 0.075]
     rotation [-0.342, 0, 0, 0.9397]
-    scale [0.17, 0.12, 0.3]
-    material: charcoal
-    blend: "Subtraction"
+    scale [0.17, 0.085, 0.3]
+    material: shinViolet
+    blend: "SmoothSubtraction"
+    smooth: 0.008
     group: groupBase + 18
     parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices: archBackOutline
-    }
+    profile { kind: "Convex", cornerRadius: 0.07, vertices: archBackOutline }
   }
 
-  shape Prism $"shinArchBack-{side}" {
-    id: idBase + 964
-    position [sx * 0.2, 0.195, -0.25]
-    rotation [0, 0, 0, 1]
-    scale [0.152, 0.162, 0.19]
-    material: jet
-    blend: "Subtraction"
-    group: groupBase + 18
-    parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices [
-        [-1, -1]
-        [-1, 0]
-        [-0.809, 0.588]
-        [-0.309, 0.951]
-        [0.309, 0.951]
-        [0.809, 0.588]
-        [1, 0]
-        [1, -1]
-      ]
-    }
-  }
-
-
-  shape Superellipsoid $"archBand-{side}" {
+  // The ivory wrap band round the greave's foot (sheet 01): the greave's own shell a finger proud of it between two
+  // heights, so it reads as part of the greave with its edges showing depth, opened by the same arch over the instep.
+  shape Prism $"archBand-{side}" {
     id: idBase + 950
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.105, 0.36, 0.112]
+    scale [0.222, 0.312, 0.252]
     material: shinCream
     group: groupBase + 76
     parent: $"shin-{side}"
-    exponent: 4.5
-    dilate: 0.01
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Prism $"archBandSide-{side}" {
+    id: idBase + 971
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.237, 0.312, 0.262]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 76
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
   }
 
   shape Box $"archBandEnds-{side}" {
     id: idBase + 951
-    position [sx * 0.2, 0.407, 0.22]
-    scale [0.3, 0.302, 0.28]
-    material: shinCream
-    blend: "Intersection"
-    group: groupBase + 76
-    parent: $"shin-{side}"
-  }
-
-  shape Prism $"archBandOuter-{side}" {
-    id: idBase + 952
-    position [sx * 0.2, 0.0458, 0.075]
-    rotation [-0.342, 0, 0, 0.9397]
-    scale [0.212, 0.159, 0.3]
+    position [sx * 0.2, 0.215, 0.0125]
+    scale [0.3, 0.1, 0.4]
     material: shinCream
     blend: "SmoothIntersection"
-    smooth: 0.008
+    smooth: 0.006
     group: groupBase + 76
     parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices [
-        [-1, -1]
-        [-1, 0]
-        [-0.809, 0.588]
-        [-0.309, 0.951]
-        [0.309, 0.951]
-        [0.809, 0.588]
-        [1, 0]
-        [1, -1]
-      ]
-    }
-  }
-
-  shape Superellipsoid $"archBandHollow-{side}" {
-    id: idBase + 990
-    position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.083, 0.33, 0.09]
-    material: shinCream
-    blend: "SmoothSubtraction"
-    smooth: 0.008
-    group: groupBase + 76
-    parent: $"shin-{side}"
-    exponent: 4.5
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
   }
 
   shape Prism $"archBandInner-{side}" {
     id: idBase + 953
     position [sx * 0.2, 0.0458, 0.075]
     rotation [-0.342, 0, 0, 0.9397]
-    scale [0.159, 0.105, 0.3]
+    scale [0.176, 0.091, 0.3]
     material: shinCream
     blend: "SmoothSubtraction"
-    smooth: 0.004
+    smooth: 0.006
     group: groupBase + 76
     parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices [
-        [-1, -1]
-        [-1, 0]
-        [-0.809, 0.588]
-        [-0.309, 0.951]
-        [0.309, 0.951]
-        [0.809, 0.588]
-        [1, 0]
-        [1, -1]
-      ]
-    }
+    profile { kind: "Convex", cornerRadius: 0.07, vertices: archBackOutline }
   }
 
-  shape Superellipsoid $"archBandBack-{side}" {
-    id: idBase + 966
-    position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.105, 0.36, 0.112]
-    material: shinCream
-    group: groupBase + 80
-    parent: $"shin-{side}"
-    exponent: 4.5
-    dilate: 0.01
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
-  }
-
-  shape Box $"archBandBackEnds-{side}" {
-    id: idBase + 967
-    position [sx * 0.2, 0.407, -0.16]
-    scale [0.3, 0.302, 0.1]
-    material: shinCream
-    blend: "Intersection"
-    group: groupBase + 80
-    parent: $"shin-{side}"
-  }
-
-  shape Prism $"archBandBackOuter-{side}" {
-    id: idBase + 968
-    position [sx * 0.2, 0.195, -0.2125]
-    rotation [0, 0, 0, 1]
-    scale [0.19, 0.205, 0.225]
-    material: shinCream
-    blend: "SmoothIntersection"
-    smooth: 0.006
-    group: groupBase + 80
-    parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices [
-        [-1, -1]
-        [-1, 0]
-        [-0.809, 0.588]
-        [-0.309, 0.951]
-        [0.309, 0.951]
-        [0.809, 0.588]
-        [1, 0]
-        [1, -1]
-      ]
-    }
-  }
-
-  shape Prism $"archBandBackInner-{side}" {
-    id: idBase + 969
-    position [sx * 0.2, 0.195, -0.2125]
-    rotation [0, 0, 0, 1]
-    scale [0.148, 0.158, 0.226]
-    material: shinCream
-    blend: "SmoothSubtraction"
-    smooth: 0.004
-    group: groupBase + 80
-    parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.07
-      vertices [
-        [-1, -1]
-        [-1, 0]
-        [-0.809, 0.588]
-        [-0.309, 0.951]
-        [0.309, 0.951]
-        [0.809, 0.588]
-        [1, 0]
-        [1, -1]
-      ]
-    }
-  }
-
-  shape Superellipsoid $"sidePanel-{side}" {
+  // The ivory side panel on the greave's outer face, with its vent pair (paint), likewise the shell a finger proud of
+  // it within the panel's pentagon.
+  shape Prism $"sidePanel-{side}" {
     id: idBase + 954
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.105, 0.36, 0.112]
+    scale [0.222, 0.312, 0.252]
     material: shinCream
     group: groupBase + 77
     parent: $"shin-{side}"
-    exponent: 4.5
-    dilate: 0.01
-    flare {
-      amount: 1
-      bulge: 0
-      span: 0.56
-      top: 0.28
-      axis: 1
-      startScale: 1
-    }
+    profile { kind: "Trapezoid" }
+    taper: 0.5
+  }
+
+  shape Prism $"sidePanelSide-{side}" {
+    id: idBase + 972
+    position [sx * 0.2, 0.4265, 0.0125]
+    rotation [0, sx * diagonal, 0, diagonal]
+    scale [0.237, 0.312, 0.262]
+    material: shinCream
+    blend: "SmoothIntersection"
+    smooth: 0.02
+    group: groupBase + 77
+    parent: $"shin-{side}"
+    profile { kind: "Trapezoid" }
+    taper: 0.5
   }
 
   shape Prism $"sidePanelCut-{side}" {
@@ -1151,11 +1018,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     smooth: 0.012
     group: groupBase + 77
     parent: $"shin-{side}"
-    profile {
-      kind: "Convex"
-      vertices: shinPanelOutline
-      cornerRadius: 0.12
-    }
+    profile { kind: "Convex", vertices: shinPanelOutline, cornerRadius: 0.12 }
   }
 
   shape Sweep $"shinCore-{side}" {
@@ -1233,8 +1096,8 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
 
 
 
-  // A sloping cream instep under the fitted ankle arch, a raised violet toe cap,
-  // and separate forefoot tread and heel cheeks follow the boot reference.
+  // The boot (sheet 02): one lavender piece from heel to toe with a raised toe cap on one charcoal sole under toe and
+  // heel; a flush round cyan light sits low on the greave's back above the heel.
   shape Prism $"boot-{side}" {
     id: idBase + 195
     position [sx * 0.2, 0.1875, 0.0775]
@@ -1328,19 +1191,6 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     parent: $"boot-{side}"
   }
 
-  // Clearance follows the nozzle axis through the instep and rubber ankle.
-  shape Cylinder $"bootJetClearance-{side}" {
-    id: idBase + 1340
-    position [sx * 0.2, 0.169638, -0.212769]
-    rotation: bootNozzleRotation
-    scale [0.12, 0.24, 0.12]
-    material: violet
-    blend: "Subtraction"
-    group: groupBase + 21
-    parent: $"boot-{side}"
-    rounding: 0.008
-  }
-
   shape Superellipsoid $"ankle-{side}" {
     id: idBase + 192
     position [sx * 0.2, 0.17, 0.06]
@@ -1351,18 +1201,6 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     group: groupBase + 127
     parent: $"boot-{side}"
     exponent: 2
-  }
-
-  shape Cylinder $"ankleJetClearance-{side}" {
-    id: idBase + 1341
-    position [sx * 0.2, 0.169638, -0.212769]
-    rotation: bootNozzleRotation
-    scale [0.12, 0.24, 0.12]
-    material: charcoal
-    blend: "Subtraction"
-    group: groupBase + 127
-    parent: $"ankle-{side}"
-    rounding: 0.008
   }
 
   shape Prism $"toe-{side}" {
@@ -1406,9 +1244,9 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
   }
   shape Prism $"sole-{side}" {
     id: idBase + 201
-    position [sx * 0.2, 0.03, 0.204]
+    position [sx * 0.2, 0.03, 0.14]
     rotation [diagonal, 0, 0, diagonal]
-    scale [0.18, 0.2, 0.03]
+    scale [0.18, 0.27, 0.03]
     material: charcoal
     parent: $"boot-{side}"
     profile {
@@ -1418,142 +1256,34 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     }
   }
 
-  shape Prism $"heelCheek-inner-{side}" {
-    id: idBase + 1301
-    position [sx * 0.085, 0.09, -0.135]
-    rotation: prismMirror(sx, [0, -0.7071068, 0, 0.7071068])
-    scale [0.115, 0.09, 0.052]
-    material: violet
-    blend: "Union"
-    group: groupBase + 129
-    parent: $"boot-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.18
-      sides: 6
-      vertices [
-        [-1, -0.8]
-        [-1, 0.22]
-        [-0.3, 0.84]
-        [0.55, 0.55]
-        [1, -0.1]
-        [0.85, -0.8]
-      ]
-    }
-  }
-
-  shape Cylinder $"heelCheekClearance-inner-{side}" {
-    id: idBase + 1342
-    position [sx * 0.2, 0.169638, -0.212769]
-    rotation: bootNozzleRotation
-    scale [0.12, 0.24, 0.12]
-    material: violet
-    blend: "SmoothSubtraction"
-    smooth: 0.012
-    group: groupBase + 129
-    parent: $"heelCheek-inner-{side}"
-    rounding: 0.008
-  }
-
-  shape Prism $"heelCheek-outer-{side}" {
-    id: idBase + 1300
-    position [sx * 0.315, 0.09, -0.135]
-    rotation: prismMirror(sx, [0, -0.7071068, 0, 0.7071068])
-    scale [0.115, 0.09, 0.052]
-    material: violet
-    blend: "Union"
-    group: groupBase + 130
-    parent: $"boot-{side}"
-    profile {
-      kind: "Convex"
-      cornerRadius: 0.18
-      sides: 6
-      vertices [
-        [-1, -0.8]
-        [-1, 0.22]
-        [-0.3, 0.84]
-        [0.55, 0.55]
-        [1, -0.1]
-        [0.85, -0.8]
-      ]
-    }
-  }
-
-  shape Cylinder $"heelCheekClearance-outer-{side}" {
-    id: idBase + 1343
-    position [sx * 0.2, 0.169638, -0.212769]
-    rotation: bootNozzleRotation
-    scale [0.12, 0.24, 0.12]
-    material: violet
-    blend: "SmoothSubtraction"
-    smooth: 0.012
-    group: groupBase + 130
-    parent: $"heelCheek-outer-{side}"
-    rounding: 0.008
-  }
-
-  shape Cylinder $"heelHousing-{side}" {
+  shape Cylinder $"heelBezel-{side}" {
     id: idBase + 202
-    position [sx * 0.2, 0.245, -0.16]
-    rotation: bootNozzleRotation
-    scale [0.106, 0.052, 0.106]
-    material: gunmetal
-    group: groupBase + 121
-    parent: $"boot-{side}"
-    rounding: 0.014
-  }
-
-  shape Cylinder $"heelRing-{side}" {
-    id: idBase + 203
-    position [sx * 0.2, 0.2089573, -0.1852374]
-    rotation: bootNozzleRotation
-    scale [0.098, 0.014, 0.098]
-    material: steel
-    group: groupBase + 121
-    parent: $"boot-{side}"
-    rounding: 0.008
-  }
-
-  shape Cylinder $"heelBore-{side}" {
-    id: idBase + 1302
-    position [sx * 0.2, 0.1917551, -0.1972825]
-    rotation: bootNozzleRotation
-    scale [0.076, 0.043, 0.076]
-    material: jet
-    group: groupBase + 121
-    blend: "Subtraction"
+    position [sx * 0.2, 0.19, -0.2195]
+    rotation: heelLensRotation
+    scale [0.05, 0.012, 0.05]
+    material: charcoal
+    parent: $"shin-{side}"
     rounding: 0.004
-    parent: $"boot-{side}"
   }
 
-  shape Cylinder $"heelInset-{side}" {
-    id: idBase + 204
-    position [sx * 0.2, 0.2245212, -0.1743394]
-    rotation: bootNozzleRotation
-    scale [0.074, 0.01, 0.074]
-    material: jet
-    parent: $"boot-{side}"
-    rounding: 0.003
-  }
-
-  shape Superellipsoid $"heelLight-{side}" {
+  shape Cylinder $"heelLight-{side}" {
     id: idBase + 205
-    position [sx * 0.2, 0.2155105, -0.1806488]
-    rotation: bootLensRotation
-    scale [0.058, 0.058, 0.013]
+    position [sx * 0.2, 0.1886, -0.2235]
+    rotation: heelLensRotation
+    scale [0.036, 0.012, 0.036]
     material: bootCyan
-    parent: $"boot-{side}"
-    exponent: 2
+    parent: $"shin-{side}"
+    rounding: 0.006
   }
 
-  shape Superellipsoid $"heelCore-{side}" {
+  shape Cylinder $"heelCore-{side}" {
     id: idBase + 980
-    position [sx * 0.2, 0.2089573, -0.1852374]
-    rotation: bootLensRotation
-    scale [0.028, 0.028, 0.011]
+    position [sx * 0.2, 0.1879, -0.2255]
+    rotation: heelLensRotation
+    scale [0.014, 0.012, 0.014]
     material: bootGlow
-    parent: $"boot-{side}"
-    exponent: 2
+    parent: $"shin-{side}"
+    rounding: 0.004
   }
 }
 
@@ -2351,7 +2081,7 @@ kits [
       speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
-    // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
+    // makes of the holds' 28:46 arc, a second press in the air jumps once more, and letting go while still rising cuts the
     // arc short. North or F switches flight mode.
     actions {
       jump {
@@ -2377,7 +2107,7 @@ kits [
           ]
         }
         // Leaving the ground without jumping (walking off a ledge) spends the ground jump, so the one left is the
-        // air jump her boot jets push.
+        // air jump.
         onFact [
           {
             fact: "Airborne"
@@ -2572,7 +2302,7 @@ prototypes {
             {
               parent: "sole-left"
               type: "Prism"
-              position [0, 0.02, 0.29]
+              position [0, 0.084, 0.29]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -2581,7 +2311,7 @@ prototypes {
             {
               parent: "sole-left"
               type: "Prism"
-              position [0, 0.022, -0.115]
+              position [0, 0.086, -0.115]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -2590,7 +2320,7 @@ prototypes {
             {
               parent: "sole-right"
               type: "Prism"
-              position [0, 0.02, 0.29]
+              position [0, 0.084, 0.29]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -2599,7 +2329,7 @@ prototypes {
             {
               parent: "sole-right"
               type: "Prism"
-              position [0, 0.022, -0.115]
+              position [0, 0.086, -0.115]
               rotation [0, diagonal, 0, diagonal]
               scale [0.0065, 0.0065, 0.3]
               profile { kind: "Ellipse" }
@@ -2723,8 +2453,7 @@ prototypes {
           emissive: 1200
           coat: 0
         }
-        // The left shoulder stack, in the lower plate's own frame: the upper plate all lavender, the lower one ivory above
-        // its lavender skirt.
+        // The left shoulder stack's lavender plates.
         {
           color: lavenderPlate
           toonSelect: mothStyles
@@ -2743,9 +2472,6 @@ prototypes {
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            { parent: "shoulderSlabLower-left", type: "Box", position [0, 0.06, 0], scale [0.2, 0.07, 0.25], color: ivoryPlate }
-          ]
         }
         {
           color: lavenderPlate
@@ -2765,9 +2491,6 @@ prototypes {
             under: lilacUndercoat
             deposit { color: "#807568", roughness: 0.85, metal: 0 }
           }
-          paints [
-            { parent: "shoulderSlabLower-right", type: "Box", position [0, 0.06, 0], scale [0.2, 0.07, 0.25], color: ivoryPlate }
-          ]
         }
         {
           color: lavenderPlate
@@ -3468,7 +3191,7 @@ prototypes {
       // behind it with dark headroom all round. The opening is open at the bottom, a horseshoe over the collar.
       shape Superellipsoid "helmet" {
         id: 23
-        position [0, 1.79, -0.03]
+        position [0, 1.79, -0.012]
         scale [0.295, 0.27, 0.26]
         material: violet
         group: 4
@@ -3509,24 +3232,26 @@ prototypes {
         ]
       }
 
+      // The bezel is rolled, a thick ring rounded front and back, and leans forward 6 degrees at the top over her face.
       shape Prism "helmetRim" {
         id: 27
-        position [0, 1.795, 0.168]
-        scale [0.252, 0.25, 0.064]
+        position [0, 1.795, 0.19]
+        rotation [0.05234, 0, 0, 0.99863]
+        scale [0.255, 0.252, 0.075]
         material: skin
         blend: "SmoothUnion"
-        smooth: 0.02
+        smooth: 0.035
         group: 4
         parent: "helmet"
         profile { kind: "Ellipse" }
-        rounding: 0.03
+        rounding: 0.05
       }
 
       // The hood's charcoal interior, the headroom round her face reading as its padded lining: the cut takes the
       // cutter's charcoal, and its rounded seam leaves no knife edge where it meets the face opening.
       shape Superellipsoid "helmetInner" {
         id: 24
-        position [0, 1.79, 0]
+        position [0, 1.79, 0.018]
         scale [0.228, 0.212, 0.2]
         material: charcoal
         blend: "SmoothSubtraction"
@@ -3538,7 +3263,8 @@ prototypes {
 
       shape Prism "helmetFaceOpening" {
         id: 25
-        position [0, 1.79, 0.28]
+        position [0, 1.79, 0.29]
+        rotation [0.05234, 0, 0, 0.99863]
         scale [0.196, 0.21, 0.2]
         material: charcoal
         // A rounded cut, so the rim and the interior meet the opening without a knife edge the bake would tear.
@@ -3833,7 +3559,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-left"
-          position [-0.102, -0.3647, -0.1679]
+          position [-0.1015, -0.3995, -0.1759]
           rotation: podNozzleRotationLeft
           halfExtent [0.15, 0.18, 0.15]
           axis: 0.36
@@ -3872,7 +3598,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-right"
-          position [0.102, -0.3647, -0.1679]
+          position [0.1015, -0.3995, -0.1759]
           rotation: podNozzleRotationRight
           halfExtent [0.15, 0.18, 0.15]
           axis: 0.36

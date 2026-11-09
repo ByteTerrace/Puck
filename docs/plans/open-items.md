@@ -1620,9 +1620,8 @@ by `world.view.pick`.
   (`thrusterGlow`, `thrusterCyan`) and the heel pilot lights (`bootCyan`,
   `bootGlow`) are fixed nits under an exposure that spans twelve stops, so a
   value that reads by day blows out to a white disc at night (the owner's
-  walkthrough) and one that holds at night vanishes by day; the heel jets'
-  flow volumes were a further 330,000 at the air jump. The nits are lowered
-  and the heel flow set to the pods' order, unverified at night. The fix at
+  walkthrough) and one that holds at night vanishes by day. The nits are
+  lowered, unverified at night. The fix at
   the cause is a world lane bound to the day cycle that dims every lamp's
   `emissiveLane` toward night, which `emissiveLane`'s one lane a slot cannot
   combine with the pods' flight lane today. Under night lighting her purple
@@ -3902,8 +3901,8 @@ movement-facing scheme returns.
   then selects a walking kit. Drain or refuse the overlay there.
 - [low · owner: play-feel lane] `dashPose` (`worlds/debug/avatars/moth.puck`)
   is one cell keyed `"0"`, so only body 0's dash drives the torso lean and pod
-  flare; a second seat's Moth dashes unlit. `airPose`, `airWings` and
-  `bootBoost` share the pattern; key all of them per body together.
+  flare; a second seat's Moth dashes unlit. `airPose` and `airWings` share
+  the pattern; key all of them per body together.
 - [low · owner: play-feel lane] `player.binding-bar model <value>`
   (`WorldBindingCommandModule.BindingBar.cs`) stores any text, and every value
   but `single` stacks (the `ModelCell` contract): `player.binding-bar model

@@ -28,11 +28,12 @@ side and at the chase camera:
   a plate is a superellipsoid of exponent 4 to 6 or a chamfered prism, never
   the body's exponent 2.1.
 - **The back is a flight pack flush to her back**, two pods beside a narrow
-  spine, each a stack of five shingled plates (a lavender cap with its dark
-  opening, ivory, lavender, ivory with a grey inset, the long lavender skirt) with one recessed nozzle under the
-  skirt's lip, the hanger under the hood behind the shoulder slabs and the lip
-  at the upper pelvis. A pod deeper than it is wide, or hanging to the thighs,
-  reads as a beach ball and fails.
+  spine, each one convex shell narrow at its domed cap, widest at the second
+  band and tapering down its outer side to a long lip, with two raised ivory
+  bands (the lower with a grey inset) and one nozzle tucked under the lip's
+  inner end, the hanger under the hood behind the shoulder slabs and the lip at
+  the upper pelvis. A flat-faced box, a pod deeper than it is wide, or one
+  hanging to the thighs fails.
 - **Lavender and ivory dominate**, dusty and warm (the owner source's
   `#b186b6` and a peach-cream, never white), with a small ochre collar and
   belt and restrained cyan lights; a light that blows out to a white disc at
@@ -215,17 +216,17 @@ for flared shins. Scoped subtraction and intersection isolate the hood opening,
 eye sockets, plate boundaries and ankle arches. The shin's ivory arch bands and
 side panels are fitted geometry. Detail that is colour rather than form is paint
 (`palette[].paints`), drawn crisp at the pixel and absent from the bake:
-the hood's ivory trim, the chest slab's lavender centre, the shoulder slabs'
-ivory bands, the gauntlets' lavender inner halves, the vent slot pairs on the
+the chest slab's lavender centre, the lower shoulder plate's ivory upper half,
+the gauntlets' lavender inner halves, the vent slot pairs on the
 outer faces of the gauntlets and shin panels, the boot seams, the mouth and
 nostrils, the eyes' catchlights, the grey insets on the pods' lower bands, and
 the upper lids and lashes where their tubes cross the eye whites. The near-ellipsoidal forms use
 exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
 the rebuilt world was verified at `stepScale 1`.
 
-The palette is the concept pack's: lavender plates authored `#744080`, which
-the studio's lighting renders at the owner's dusty `#B186B6`, and warm ivory
-plates authored `#F2C49A`. The colour-conversion path and the studio's light
+The palette is the concept pack's: lavender plates authored `lavenderPlate`, a
+light greyed lavender chosen so the studio's lighting lands it near the owner's
+dusty `#B186B6` rather than a plum, and warm ivory plates authored `ivoryPlate`. The colour-conversion path and the studio's light
 brighten and cool both, so judge a palette change from a capture, sampled
 against the sheet, never from the hex alone. The plates carry no wear: every
 plate's weathering floor is `plateWear`, 0, and lane 0 is constant.
@@ -236,8 +237,9 @@ about the face's front at eye level. The template scales every position, extent,
 curve, sweep radius and blend radius, and takes the creation's palette slots, so
 the off-suit pilot ([moth-pilot.md](moth-pilot.md)) wears it at the same scale. The mouth, nostril, catchlight and lid paints and the
 blink frame (`blinkPose`) live in the creation and scale by the same
-`headScale`. Her face sits forward at the hood's rim, in the key light, with the
-skin's wrap and warm fill raised so it reads lit inside the hood. The face is
+`headScale`. Her face sits recessed behind the hood's raised ivory bezel, with
+dark headroom round it, and the skin's wrap and warm fill raised so it reads lit
+inside the hood. The face is
 the character's charm, after sheet 03: a small soft nose (a gentle bridge and a
 rounded tip blended into the face's group, so it bakes as one surface with the
 face; a group of its own baked it on a sub-millimetre lattice into a frayed
@@ -247,9 +249,12 @@ scalp cut to a soft hairline and four tapering locks smoothly joined to it: a
 thick fringe swept from the parting on her left across her forehead to her right
 temple, a shorter one back to her left temple, and a lock down each side of her
 face. The fringe locks root inside the scalp, so nothing stands up from her
-crown on either form. The hood's charcoal interior is its own cut (the cutter's
+crown on either form. The hood is a wide dome, wider than it is tall, with a
+thick ivory bezel (`helmetRim`) standing forward round a horseshoe opening that
+is open over the collar. Its charcoal interior is its own cut (the cutter's
 material), rounded where it meets the face opening, which is itself a rounded
-cut, so the rim and the interior bake clean; the ochre collar stands forward
+cut, so the rim and the interior bake clean. Each ear disc (`hoodEar`) is broad
+and flush, faced out and a little forward so it reads as a disc from the front; the ochre collar stands forward
 round her neck. The braid roots under her right side lock as one smooth
 tapering sweep that becomes the plait below her jaw and leaves through the
 hood's front opening.
@@ -261,54 +266,56 @@ belt; the ochre collar stands above it at the neck. A lavender plate
 (`pelvicShield`) narrows below the belt, and its twin behind (`seatShield`)
 covers her seat between the pods' lips. The slab and flanks inherit the
 torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
-flight pack is the `flightPod` template, once a side: a charcoal core riding
-the torso, five plates and the nozzle parented to it in one union group, and
-its hinge on the torso under the hood; the narrow spine between the pods is one
-chamfered prism. Each pod is a shield 0.24 m wide from 1.0 to 1.6 m: a domed
-cap with its opening cut into its back, three flat-faced chamfered bands whose
-tops tip 14 degrees in toward her back so each lower edge stands proud over the
-plate below, and the skirt, whose lip tapers to a tip on the outer side over the
-nozzle, set square in its lower edge and aimed in, down and a little back.
+flight pack is the `flightPod` template, once a side: a charcoal mount riding
+the torso, with the shell, the two bands and the nozzle parented to it, and its
+hinge on the torso under the hood; the narrow spine between the pods is one
+chamfered prism. Each pod is about 0.28 m wide from 1.03 to 1.63 m: its rear
+outline (`podOutline`) extruded and domed by an ellipsoid into one convex
+lavender shell with the cap's small opening cut into its back. Each ivory band is
+the same shell a finger proud of it between two planes that slope down to the
+outer side, in its own group, so its edges show its depth without a seam in the
+shell. The nozzle is a charcoal barrel set square in the lip's underside, aimed
+in, down and a little back, its cyan lens softly lit at rest.
 
-Each shoulder is a stack of two thick slabs on a charcoal superellipsoid pivot,
-all riding the upper arm: flat-faced, round-edged superellipsoids (exponent 4)
-that a quadratic `shear` curves down over the shoulder at front and back, the
-upper slab lavender with an ivory band, the lower one, larger and further out,
-ivory above a lavender skirt. The upper slab's inner edge stays outboard of the
-hood through the gait and the flight splay. Each hip carries a large charcoal
-disc on the hip axis over an ivory guard, both riding the thigh; the thighs are
-bare charcoal.
+Each shoulder is a stack of two thick plates sloping down and out over a round
+charcoal pivot with a gunmetal cap that shows under the upper plate's inner end,
+all riding the upper arm. Each plate is its side outline, a rounded rectangle
+that domes over the shoulder at front and back, extruded along the slope with
+45-degree chamfers on its ends: the upper plate lavender, the lower one ivory
+above a lavender skirt. The upper plate's inner end stays outboard of the hood
+through the gait and the flight splay. Each hip carries an ivory guard, a large
+charcoal disc and a raised boss at the pelvis's front corner, faced out and
+forward so the disc reads round from the front and the side; the thighs are bare
+charcoal and swing behind them.
 
 The arm is a short upper arm, an elbow at 1.22 m and a long forearm, as on the
 sheets: the charcoal elbow joint shows between the shoulder stack and the
-gauntlet, a squared block from below the hinge to the wrist, faced square to the
-body rather than the forearm's twist. The gloved hands are a third larger than
+gauntlet, as wide as the shoulder stack: a flat-faced block with rounded
+corners and chamfered front and back edges from below the hinge to the wrist,
+faced square to the body rather than the forearm's twist. The elbow bends about
+its lateral axis. The gloved hands are a third larger than
 the first Moth's, scaled about the wrist.
 
-The pistons need no driver of their own. Each is a satin steel cylinder on the
-upper bone and a steel capsule rod on the lower bone, each aimed at the hinge,
-so at any bend they meet inside the joint ball and nothing stretches. The
-elbow's cylinder runs from under the shoulder stack and its rod from a lug on
-the gauntlet's top, inside the bend; the knee's converge behind the knee from
-lugs on the thigh and the greave's top.
+Each piston is a rod entering a cylinder, attached at both ends, and needs no
+driver of its own: a steel rod hangs from a charcoal lug on the upper bone and a
+satin steel cylinder rises from the lower bone (out of the gauntlet's top at the
+elbow, in front, inside the bend; out of the greave's top behind the knee's outer
+side). The forearm and shin swing by `elbowSwings` and `kneeSwings` at k = 1, and
+the rod and cylinder take the same swings scaled about their own lugs by the
+share of the bend that keeps them on one line, so the rod slides into the
+cylinder as the joint bends.
 
 The greaves flare straight from a narrow top under the knee to a wide foot,
 flat-faced (exponent 4.5, which their arch, back-band and side-panel shells
 share), under an octagonal chamfered ivory knee guard that rides the thigh and
 stands proud of the greave's lavender front. The boots are their own lavender blocks under the greave's
 ivory cuff: fitted ivory ankle arches, broad lavender insteps and toe caps on
-thick charcoal soles, and split heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
-boot's rest frame; its lens and exhaust share that axis. The cyan lens and pale
-core stay softly lit at rest. An axial clearance cut passes through the cream
-instep and rubber ankle behind the nozzle; the raised rear arch clears the barrel.
-The two lavender heel guards have softened concave cutouts. The existing airborne
-driver splays the outer guards 16 degrees and the inner guards 6 degrees, leaving
-space between the boots, and folds the centre tread 60 degrees forward,
-sliding it toward the toe, before the second-jump burst. They close again on
-landing. Nozzle, ankle and cutouts follow the boot so the passage stays aligned
-as it articulates. The [debug studio](../debug.md#avatar-studio) provides front,
-side, low rear and quarter views on a neutral platform, including `studio-jets`
-for the nozzle clearance study.
+thick charcoal soles, and split heel pads. The boots carry lights and never fire
+(the concept pack): each heel's recessed cyan lens, angled 55 degrees below
+rearward horizontal between two closed lavender heel guards, and each ankle
+hub's cyan lens in its charcoal bezel stay softly lit by day and at night. The
+[debug studio](../debug.md#avatar-studio) provides front, side, low rear and
+quarter views on a neutral platform.
 At close range the curved ankle trim still shows some uneven baked shading;
 `mesh audit` locates small folds at its clipped edges even though the mesh is
 closed. Judge the silhouette separately from that remaining surface defect.
@@ -332,11 +339,12 @@ closed lids in their place, using the existing scheduled `blink` state.
 The `flight` and `wings` drivers read `airPose` and `airWings`. Existing server
 rules and damped state responses provide takeoff and landing transitions. Each
 pod deploys approximately six degrees outward and four degrees aft. No extra
-fan blades deploy. Four bounded `flow` volumes supply animated translucent
-exhaust: two back pods use lane 1 and two heels use lane 3. Each pod's plume
+fan blades deploy. Two bounded `flow` volumes, one per pod on lane 1, supply
+the animated translucent exhaust, the only exhaust she makes. Each pod's plume
 leaves its nozzle along the nozzle's axis and widens to two and a half times its
-mouth over 0.36 m, short, as sheet 10 draws it. The pods' lens emission
-uses flight-mode lane 2; the boot pilot lights are independent of that lane.
+mouth over 0.36 m, short, as sheet 10 draws it. The pods' pale nozzle cores
+use flight-mode lane 2; their cyan lenses and the boot lights glow at rest
+whatever the lane. In flight mode her arms hang at her sides.
 Lane expressions use keyed state syntax, unlike the
 drivers' `state.airPose.$body` binding. Collision and movement controls remain
 the world kit's responsibility.

@@ -339,28 +339,15 @@ template mothHead(s, at, parentName, skin, white, iris, pupil, hair) {
     parent: parentName
   }
 
-  // A soft bridge and a rounded tip blended into the face's group, so the nose bakes on the face's lattice as one
-  // continuous surface; the nostrils are paints (mothNostrilPaints).
-  shape Superellipsoid "noseBridge" {
-    id: 36
-    position: map([0, 1.7134, 0.2328], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    rotation [-0.156434, 0, 0, 0.987688]
-    scale: map([0.0065, 0.019, 0.0065], v => v * s)
+  // A small soft nose, one rounded tip blended into the face's group, so it bakes on the face's lattice as one continuous
+  // surface; the nostrils are paints (mothNostrilPaints).
+  shape Superellipsoid "nose" {
+    id: 37
+    position: map([0, 1.6935, 0.2365], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+    scale: map([0.017, 0.014, 0.012], v => v * s)
     material: skin
     blend: "SmoothUnion"
     smooth: 0.02 * s
-    group: 6
-    parent: parentName
-    exponent: mothHeadSoftness
-  }
-
-  shape Superellipsoid "nose" {
-    id: 37
-    position: map([0, 1.6915, 0.2415], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
-    scale: map([0.016, 0.0125, 0.013], v => v * s)
-    material: skin
-    blend: "SmoothUnion"
-    smooth: 0.012 * s
     group: 6
     parent: parentName
     exponent: mothHeadSoftness

@@ -136,10 +136,8 @@ the low rear view; `view.override camera auto` restores the four distinct shots.
 `view.isolate off` restores the whole avatar.
 
 `view.override layout studio-jets` replaces the front pane with a closer rear
-quarter view of the nozzle and its clearance. The boot guards splay and the centre
-tread folds forward whenever the body is airborne; landing closes them. The
-nozzle's 55-degree downward angle is measured in the boot's rest frame, so the
-flight pose's bent knees also rotate the exhaust direction.
+quarter view of the heel light between its two heel guards; the boots carry
+lights and never fire.
 
 `view.isolate off`, `view.override camera auto` and
 `view.override layout studio-torso` show the torso in four simultaneous views:
