@@ -14,9 +14,9 @@ let headAt = [0, 1.735, 0.207]
 
 // The suit's two plate colours, from the concept pack: dusty lavender and a warm ivory, with the darker lavender of
 // a groove and the near-black of a vent slot.
-let lavenderPlate = "#846491"
+let lavenderPlate = "#926BA6"
 let ivoryPlate = "#E8B88C"
-let lavenderSeam = "#6A4F74"
+let lavenderSeam = "#755982"
 let ventSlot = "#2B2630"
 
 // Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's cel
@@ -85,7 +85,7 @@ let archBackOutline = [
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 // How far the trailing knee folds at the top of a stride, in radians.
-let kneeFold = 0.75
+let kneeFold = 0.6
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
 let diagonal = 0.7071068 // sin/cos of 45 degrees, the quarter-turn quaternion component
 let braidTwist = 0.247404 // sin of the braid's half-angle
@@ -808,7 +808,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
       {
         driver: "gait"
         axis [1, 0, 0]
-        amplitude: 0.55
+        amplitude: 0.45
         pivot [sx * 0.145, 1.0265, 0]
         wave: "sine"
         phase: stride
@@ -3612,7 +3612,7 @@ prototypes {
           speed: 1.5
           seed: 31
           steps: 40
-          intensity: 90000
+          intensity: 260000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
@@ -3651,7 +3651,7 @@ prototypes {
           speed: 1.5
           seed: 39
           steps: 40
-          intensity: 90000
+          intensity: 260000
           extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14

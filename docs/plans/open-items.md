@@ -1595,27 +1595,21 @@ by `world.view.pick`.
 - [high] Night is a void: a flat black sky with a few uniform dots, no moons
   (the valley brief has two), no gradient or horizon; auto exposure sits at its
   EV 2 floor, so the terrain is lit like dusk under it.
-- [high] The Moth (`worlds/debug/avatars/moth.puck`) is rebuilt to the bar
-  from [her concept pack](../game/art/moth-concept-pack/README.md): the owner
-  rules she "isn't sacred and would be vastly improved"; her sculpt, palette,
-  rig and bake cost carry no weight, and the guide's
-  [look intent](../../worlds/debug/avatars/moth.md#look-intent) names the
-  traits. Built in documents and judged on the CPU preview
-  (`puck mesh preview`) from every side: the flight pack (`flightPod`) is two
-  shingled shields at sheet 01's size, the shoulder slabs, gauntlets and chest
-  slab are flat-faced plates, the greaves flat-faced, the knee guards
-  octagonal chamfered slabs, and the nose bakes in the face's group. Judged on
-  Direct3D 12 (front, back, side, three-quarter above, rear below, hover,
-  off-suit, a walk at four phases, dusk with `world.toon` off and on, night)
-  and a Vulkan three-quarter and back, under the world lighting before the
-  toon-2 and gi-cast changes; a lavender seat plate behind and shorter knee
-  pistons followed on the CPU preview only. The shoulder slabs still read soft in profile (exponent-6
-  superellipsoids under a quadratic shear), and the boots' heel housings,
-  ankle hubs and cheeks are the old construction. The owner's walkthrough also found
-  nothing separating her from the background (no rim light or outline) and no
-  readable shadow under a hovering Moth: both are treatment and lighting
-  questions the toon lane's defaults and the night item decide, not her
-  sculpt.
+- [high] The Moth (`worlds/debug/avatars/moth.puck`) against
+  [her concept pack](../game/art/moth-concept-pack/README.md): the suit's
+  form, materials, lamps and motion passed the look-critic on the CPU preview
+  from every side and were captured windowed on Direct3D 12 and Vulkan (front,
+  back, both sides, three-quarter above, rear below, close face, chase, a walk
+  at six phases, hover with exhaust, dusk, night). What remains: her shared
+  head (`moth-head.puck`) reads young and toy-like, chinless with no jaw or
+  ears and about 5.5 heads tall against sheet 04's 6.4, and its eyes show dark
+  blobs and rim speckle in their groups; her walk is the kit's 5 m/s, a jog
+  whose stride lifts both feet; the small round lights and the pelvic plates
+  bake on coarse cells (the detail rule item below). The owner's walkthrough
+  also found nothing separating her from the background (no rim light or
+  outline) and no readable shadow under a hovering Moth: both are treatment
+  and lighting questions the toon lane's defaults and the night item decide,
+  not her sculpt.
 - [medium] The Moth's lights across the day: the pod nozzles' emissive
   (`thrusterGlow`, `thrusterCyan`) and the heel pilot lights (`bootCyan`,
   `bootGlow`) are fixed nits under an exposure that spans twelve stops, so a
@@ -1646,19 +1640,17 @@ by `world.view.pick`.
   box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
   one factor) would let one rule serve both; the static path also lacks the round
   section term, so its small spheres facet at 15 mm.
-- [medium] The Moth's pooled bake is 900,419 triangles (levels 276,793 and
-  153,009) over 157 groups
+- [medium] The Moth's pooled bake is 811,064 triangles (levels 135,954 and
+  66,832) over 175 groups
   (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`),
   down from 1,145,385 when blend groups first took the static union's lattice.
-  What remains is small parts baking on fine lattices: the eyes (25,800 each
-  at 1.2 mm), the bracers (30,900 each at 5.5 mm), the heel housings (29,400
-  each at 3.8 mm) and the ankle hubs (21,000 each at 2.5 mm). The cause is
-  unnamed: `WorldCreationInstances.PartDetail` declares no detail for a
-  cylinder and `SdfMeshPathBake.Lattice` keeps a final lattice at
-  `MinimumCell` (15 mm) or coarser, yet the cylinder groups refine to 2.5 to
-  3.8 mm. Measure her frame cost on the bar devices; if it
-  misses the bar, coarsen at the cause (the union's base spacing for a body, or
-  the level budget), never by returning blend groups to the 15 mm floor.
+  The eyes (25,800 each at 1.2 mm) are the largest remaining parts, while her
+  small cylinders now bake coarse: the heel lenses at 8.3 mm, their bezels at
+  12.0 mm and the ankle drums at 13.3 mm, so their round outlines facet in a
+  close view (the part-detail item above). Measure her frame cost on the bar
+  devices; if it misses the bar, coarsen at the cause (the union's base spacing
+  for a body, or the level budget), never by returning blend groups to the
+  15 mm floor.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
