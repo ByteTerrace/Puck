@@ -155,6 +155,25 @@ public static partial class CreationMotion {
 
         return $"blends ungrouped shape '{NameOf(document: document, index: shape)}' into the shapes before it by {(document.Shapes![shape].Blend ?? SdfBlendOp.Union)}: an animated creation bakes each ungrouped shape alone, so it draws as a hard union; give it and the shapes it blends into one group.";
     }
+    /// <summary>Returns whether a moving blend's group bakes as rigid pieces, a crease at the seam: the blend or another
+    /// moving blend of its group is outside its envelope (<see cref="Envelope"/>), so the pooled emitter partitions the
+    /// whole group by motion owner (<see cref="CreationMotionPlan"/>). A blend whose group skins draws its seam smoothly
+    /// and warrants no diagnostic.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="blend">One of the document's moving blends (<see cref="MovingBlends"/>).</param>
+    /// <returns><see langword="true"/> when the group creases.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static bool Creases(CreationDocument document, CreationMovingBlend blend) => CreasedGroups(document: document).Contains(item: blend.Group);
+    /// <summary>Returns the groups whose moving blends crease (<see cref="Creases"/>): each group holding a moving blend
+    /// outside its envelope.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns>The groups.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static HashSet<int> CreasedGroups(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        return [.. MovingBlends(document: document).Where(predicate: blend => !Envelope(blend: blend, document: document).Admitted).Select(selector: static blend => blend.Group)];
+    }
     /// <summary>Describes a moving blend for a diagnostic: the two shapes by name, what moves each, the group and the
     /// blend, and what the bake makes of it.</summary>
     /// <param name="document">The creation document.</param>
@@ -167,7 +186,7 @@ public static partial class CreationMotion {
         var envelope = Envelope(blend: blend, document: document);
         var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : ((envelope.Refusal is not null) ? "bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field" : $"bakes as a crease; widen smooth to at least {(2f * envelope.Displacement):G6} or reduce the motion to keep the blend"));
 
-        if (envelope.Admitted && MovingBlends(document: document).Any(predicate: other => ((other.Group == blend.Group) && !Envelope(blend: other, document: document).Admitted))) {
+        if (envelope.Admitted && Creases(blend: blend, document: document)) {
             outcome = "bakes as a crease because another seam in this group is outside its envelope";
         }
 

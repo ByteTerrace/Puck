@@ -71,6 +71,7 @@
     { "name": "memory", "line": "host.memory collect", "parse": "pairs", "compare": { "ws": "relative:0.25", "private": "relative:0.25", "heap": "relative:0.25" } },
     { "name": "bakes", "line": "world.wait bakes 110", "parse": "text", "leg": "windowed", "timeoutSeconds": 115, "red": ["text ~ not settled"], "compare": { "text": "none" } },
     { "name": "bake-counters", "line": "world.counters sdf.mesh-settle", "parse": "counters", "leg": "windowed", "red": ["sdf.mesh-settle.refused > 0"], "compare": { "*": "relative:0.25" } },
+    { "name": "skin-counters", "line": "world.counters sdf.mesh-skin", "parse": "counters", "leg": "windowed", "red": ["sdf.mesh-skin.blended-vertices < 1"], "compare": { "*": "relative:0.25" } },
     { "name": "gi-counters", "line": "world.counters sdf.mesh-gi", "parse": "counters", "leg": "windowed", "compare": { "*": "relative:0.25" } },
     { "name": "indirect", "line": "world.indirect", "parse": "text", "metrics": { "tier": "^\\[world\\.indirect: (off|medium|high)\\]$" }, "leg": "windowed", "compare": { "tier": "exact" } },
     { "name": "gpu-counters", "line": "world.counters gpu summary", "parse": "counters", "leg": "windowed", "compare": { "*": "relative:0.25" } },

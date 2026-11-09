@@ -242,14 +242,15 @@ public static class WorldSemanticValidator {
         }
     }
     /// <summary>Returns a warning for each blend of an animated creation's pooled groups that joins shapes moving
-    /// independently (<see cref="CreationMotion.MovingBlends"/>), naming the creation, the two shapes, what moves each
-    /// and the blend, its path first as a refusal's is.</summary>
+    /// independently (<see cref="CreationMotion.MovingBlends"/>) and whose group creases
+    /// (<see cref="CreationMotion.Creases"/>), naming the creation, the two shapes, the motion bound and the blend, its
+    /// path first as a refusal's is. A group that skins draws its seam smoothly and is not warned about.</summary>
     /// <param name="definition">The world.</param>
     /// <returns>The warnings, in prototype and shape order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<string> MovingBlends(WorldDefinition definition) => BlendWarnings(
         definition: definition,
-        warn: static document => CreationMotion.MovingBlends(document: document).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, document: document)))
+        warn: static document => CreationMotion.MovingBlends(document: document).Where(predicate: blend => CreationMotion.Creases(blend: blend, document: document)).Select(selector: blend => (blend.Shape, CreationMotion.Describe(blend: blend, document: document)))
     );
     /// <summary>Returns a warning for each ungrouped shape of an animated creation that declares a blend other than
     /// <c>Union</c> (<see cref="CreationMotion.UngroupedBlends"/>), which the pooled bake draws as a hard union, naming
