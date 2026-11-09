@@ -219,7 +219,10 @@ milestone. The owner requested its baseline and implementation plan, which
    while each boundary still needs the same full convergence.
 5. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
-   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
+   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)); beside it,
+   [virtual geometry](virtual-geometry.md#the-build-order)'s G1 (the offline
+   field-levels audit mode) and G3 (member boxes), which share no files with
+   V1 and V2.
 6. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
 7. [Bake proportional to change](#bake-proportional-to-change) [high, the
