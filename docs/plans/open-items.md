@@ -49,9 +49,8 @@ Owed at the integration tip, for whoever leads next:
 - the duplicate found at the cold-bake lane's landing, dispatched rather than
   left here: the reciprocal divisor and packed-pair comparer (refactoring
   campaign), and the branch-scoped duplicate check (agent tooling);
-- the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
-  bar from references, then its idle rig once the animated bake holds
-  ([the visual bar](#the-visual-bar)). Work whose correctness rests
+- the swallow's idle rig (`worlds/debug/birds.puck`) once the animated bake
+  holds ([the visual bar](#the-visual-bar)). Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -1604,17 +1603,14 @@ by `world.view.pick`.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
-- [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
-  world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
-  around the beak, teal breast band, cream belly, wings past a forked tail)
-  from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
-  drivers) then tore the throat, faceted the eyes and fragmented the tail on
-  the animated path (the item above). Rebuild it per the authoring skill's
-  "Making it read": references named first, one shaped body (`flare`,
-  `shear`), inset eyes, painted markings, detail two bake cells wide; meet the
-  bar static from every side; then the idle rig with each moving part in its
-  own group, frame-checked, after the animated-bake item. Iterate live with
+- [high] The swallow's idle rig (`worlds/debug/birds.puck`, on the reservoir
+  pavilion's rail by the pool, static): a head glance and a tail bob, after
+  the animated-bake item above (the anim-bake lane). Its moving parts already
+  sit in their own groups (body and wings, head with bill and eyes, tail);
+  the head's `SmoothUnion` into the breast crosses two groups, so the glance
+  takes one motion owner or a crease (PUCK122), and the extreme poses are
+  frame-checked. Its markings are parented paints, which ride the parent's
+  slot once the creation is animated. Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
 
