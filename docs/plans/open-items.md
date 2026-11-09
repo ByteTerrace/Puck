@@ -1690,7 +1690,9 @@ by `world.view.pick`.
   why a named world camera row does not replace the view.
 - [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
   world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
+  `debug.puck`. Its modeling joins the Moth's pair session with the owner (the
+  owner's ruling); seven agent passes did not converge, the last one against a
+  cited reference document kept unlanded on the swallow-7 lane's branch. Its static sculpt reached a readable silhouette (chestnut mask
   around the beak, teal breast band, cream belly, wings past a forked tail)
   from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
   drivers) then tore the throat, faceted the eyes and fragmented the tail on
