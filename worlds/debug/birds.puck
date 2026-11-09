@@ -66,39 +66,67 @@ function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
 
 let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 
-// One folded wing a side as the side view sees it, inset by its dilation: the bend is its rounded front at the origin, set
-// at the shoulder high on the flank under the back's edge; the upper edge runs along the back and the lower edge rakes
-// back from the bend, then sweeps up to the pointed tip 9.5 cm behind. Profile X runs back and Y up. The wing's pitch
-// turns the profile's down toward the bird's front, so a low point near the bend would sit forward of the shoulder: the
-// lower edge leaves the bend almost along X.
-let swallowWingRound = 0.0008
-let swallowWingProfile = [
-  [0.0, 0.0015], [0.004, 0.0035], [0.03, 0.004], [0.06, 0.002], [0.095, -0.0024], [0.0946, -0.0028], [0.07, -0.0075],
-  [0.045, -0.0105], [0.02, -0.0095], [0.006, -0.0045], [0.0005, -0.001]
-]
-// The bend's place: the upper flank at the base of the neck, with the blade's outer face a little proud of the body so it
-// reads along its whole length; its upper edge lies just over the back and meets it in a narrow blend, a rounded ledge
-// rather than a wide flat fillet.
-let swallowShoulder = [0.0104, 0.0335, 0.003]
-let swallowWingRoll = 10
+// A point in the body's own frame (X out to the bird's left, Y up the body, Z forward along it) placed in the creation.
+function swallowOnBody(v) = [v[0], swallowBodyAt[1] + turned(swallowPitch, v)[1], swallowBodyAt[2] + turned(swallowPitch, v)[2]]
 
-// The wing lies along the body's flank (the profile's X turned to point back), rolled so its upper edge leans in over
-// the back, yawed so the tips cross behind the rump, and pitched with the body so the tips ride above the hanging tail;
-// the right wing rides a little higher, so where the tips cross it lies over the left one rather than blending into it.
-function swallowWingTurn(sign) = turnThen(
-  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * swallowWingRoll)), turn(swallowAxisY, sign * 5)),
-  turn(swallowAxisX, (sign > 0) ? -36 : -32)
+// A folded wing a side is two blades, since one flat blade cannot follow a flank that swells and then tapers: the inner
+// wing (the coverts and secondaries) lies along the flank from the shoulder, its front yawed in so it tucks under the
+// back's outline, and the flight feathers start under its rear at the body's widest point and run back to the pointed
+// tip, yawed in so the tips cross behind the rump. Both are thin convex prisms grown by a dilation, their profile X
+// running back and Y up, inset by the dilation. A blade's pitch turns its profile's down toward the bird's front, so
+// the inner wing's lower edge leaves its rounded bend almost along X.
+let swallowWingRound = 0.0014
+let swallowWingDepth = 0.0001
+let swallowWingRoll = 14
+let swallowWingPitch = -34
+
+// A blade's turn: rolled so its upper edge leans in over the back, yawed by `yaw` (positive takes its rear in), and
+// pitched with the body; the right wing rides a little higher, so where the tips cross it lies over the left one.
+function swallowWingTurn(sign, yaw, lift) = turnThen(
+  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * swallowWingRoll)), turn(swallowAxisY, sign * yaw)),
+  turn(swallowAxisX, swallowWingPitch + lift + ((sign > 0) ? 0 : 4))
 )
 
+// The inner wing: its bend at the shoulder high on the flank, its rear edge under the flight feathers.
+let swallowInnerWingProfile = [
+  [0.0, 0.0015], [0.004, 0.0035], [0.034, 0.0038], [0.034, -0.0098], [0.02, -0.0095], [0.006, -0.0045],
+  [0.0005, -0.001]
+]
+let swallowShoulder = [0.0079, 0.0335, 0.003]
+let swallowInnerWingYaw = -3
+
+// The flight feathers: a front edge hidden under the inner wing, the upper edge along the back, the lower edge sweeping
+// up to the tip 6.5 cm behind; the root is in the body's frame.
+let swallowWingProfile = [
+  [0.0, 0.003], [0.03, 0.0035], [0.065, -0.0005], [0.0646, -0.0009], [0.04, -0.006], [0.015, -0.009], [0.0, -0.008]
+]
+let swallowWingAt = [0.0102, 0.0045, -0.012]
+let swallowWingYaw = 13
+
 template swallowWing(side) {
+  shape Prism $"innerWing{side.name}" {
+    group: swallowBodyGroup
+    blend: "SmoothUnion"
+    smooth: 0.0025
+    material: swallowFlight
+    position [side.sign * swallowShoulder[0], swallowShoulder[1], swallowShoulder[2]]
+    rotation: swallowWingTurn(side.sign, swallowInnerWingYaw, -2)
+    scale [1, 1, swallowWingDepth]
+    dilate: swallowWingRound
+    profile {
+      kind: "Convex"
+      vertices: swallowInnerWingProfile
+      cornerRadius: 0.001
+    }
+  }
   shape Prism $"wing{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.0015
+    smooth: 0.0025
     material: swallowFlight
-    position [side.sign * swallowShoulder[0], swallowShoulder[1], swallowShoulder[2]]
-    rotation: swallowWingTurn(side.sign)
-    scale [1, 1, 0.0009]
+    position: swallowOnBody([side.sign * swallowWingAt[0], swallowWingAt[1], swallowWingAt[2]])
+    rotation: swallowWingTurn(side.sign, swallowWingYaw, 2)
+    scale [1, 1, swallowWingDepth]
     dilate: swallowWingRound
     profile {
       kind: "Convex"
@@ -164,8 +192,8 @@ function swallowArc(degrees, lift) = [
 // curve's middle point where the two ends' tangents meet, splayed `splay` degrees off the bird's axis. Its radius keeps
 // it two bake cells thick at the finest spacing (WorldPlacementStamper.FinestDetail), and it sinks a little into the
 // rail so it grips rather than floats.
-let swallowToeRadius = 0.00135
-let swallowToeLift = 0.0006
+let swallowToeRadius = 0.0018
+let swallowToeLift = 0.001
 
 function swallowToePoint(side, splay, degrees, lift) = [
   side.sign * swallowFootAt[0] + side.sign * (swallowArc(degrees, lift)[0] - swallowFootAt[2]) * sine(splay * radiansPerDegree),
@@ -196,7 +224,7 @@ template swallowToe(side, name, splay, reach) {
       )
       c: swallowToeCurve(side, splay, reach, swallowToeLift)
       radiusStart: swallowToeRadius
-      radiusEnd: 0.001
+      radiusEnd: 0.0013
     }
   }
 }
@@ -320,7 +348,7 @@ prototypes {
         // The eyes: near black under a clear coat that holds a small highlight.
         { color: "#0D0908", specular: 0.04, roughness: 0.35, coat: 0.5 }
         // The bill, legs and feet.
-        { color: "#2A2523", specular: 0.04, roughness: 0.6 }
+        { color: "#1A1513", specular: 0.01, roughness: 0.95 }
       ]
       // One shaped body: a long near-ellipsoid along the body's axis, and the deep breast swelling under its front,
       // blended into it. Neither is warped: on a static placement a warped shape (a flare, a shear, bumps) bakes apart
@@ -360,17 +388,17 @@ prototypes {
         swallowTailHalf(side: side)
         swallowLeg(side: side)
       }
-      // The bill: a small flat dark wedge, wider than it is tall, tapering (the flare) to its point forward and a little
-      // down between the forehead blaze and the throat. Its shape turns half round so the flare, which narrows toward
-      // local -Z, narrows forward. It comes last: a warped shape bakes alone and so does the one after it, and the bill
-      // meets the head in a hard union anyway.
-      shape Superellipsoid "bill" {
+      // The bill: a small flat dark wedge, a wide triangle seen tip-on (a trapezoid prism with a narrow top, its ridge
+      // up and its gape below), tapering (the flare) to its point forward and a little down between the forehead blaze
+      // and the throat. Its shape turns half round so the flare, which narrows toward local -Z, narrows forward. It comes
+      // last: a warped shape bakes alone and so does the one after it, and the bill meets the head in a hard union anyway.
+      shape Prism "bill" {
         group: swallowHeadGroup
         material: swallowBill
         position [0, swallowHeadAt[1] - 0.0022, swallowHeadAt[2] + 0.0132]
         rotation: turnThen(turn(swallowAxisY, 180), turn(swallowAxisX, 8))
-        scale [0.0036, 0.002, 0.0048]
-        exponent: 2.2
+        scale [0.0038, 0.0019, 0.0048]
+        taper: 0.35
         flare {
           amount: -0.6
           bulge: 0
