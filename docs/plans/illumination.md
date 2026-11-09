@@ -28,13 +28,13 @@ for Puck, and no estimate for the Deck is extrapolated from the 2060.
 
 The research round read the code, and the plan rests on these facts:
 
-- A probe record is 235 words: six sky shares, an 18-half radiance ambient
-  cube, 128 static-light visibility bits, a relocation offset and a 12×12
-  octahedral first-hit map with curvature
+- A probe record (`SdfMeshIrradianceProbe.ProbeWords`) holds six sky shares,
+  an 18-half radiance ambient cube, 128 static-light visibility bits, a
+  relocation offset, an 18-half sky-light cube and a 12×12 octahedral first-hit
+  map with curvature
   ([mesh GI reference](../../.claude/skills/rendering/references/mesh-gi.md)).
-  The sky enters as a visibility share the views pass multiplies by the live
-  sky SH (`shade/sdf-mesh-irradiance.hlsli`, `sdfMeshIndirect`), so the sky
-  term already relights for free at zero bounces. The sun, the static point and
+  The sky enters as the sky-light cube the relight integrates from the open
+  rays (`shade/sdf-mesh-irradiance.hlsli`, `sdfMeshIndirect`). The sun, the static point and
   spot lights and every emissive surface are baked into the radiance cube at
   trace time, and later bounce sweeps bake the sky's colour too.
 - Since step 2 a probe is a hit buffer and a relight
@@ -103,12 +103,16 @@ what relighting every probe would cost and shows why a budget is needed.
 
 The sky term joins the split as a transfer, not a scalar. Six sky shares make
 a low western sky light an east-facing opening as if the sky were uniform about
-that axis. Each probe stores a normal-conditioned sky transfer (a transfer
-vector per ambient-cube axis, or the SH product followed by the cosine
-convolution) so that the live sky SH9 (`SdfSkyEnvironment` already projects
-nine coefficients) relights it correctly for every receiver normal. A single
-visibility vector dotted with the sky radiance omits the cosine term and is
-not enough. The idea is precomputed radiance
+that axis. Settled: since the probe holds its hits and relights on every
+lighting change (the sky included), the relight integrates the sky itself, each
+open ray carrying the sky's radiance about its own texel into a sky-light cube
+beside the radiance cube (`SdfMeshProbeDepth.SkyRadiance`,
+`SdfMeshIrradianceProbe.SkyLightWord`), which is the transfer evaluated exactly
+at the hit buffer's angular resolution, with the cosine term, and with no SH
+band limit at the horizon. A share times the hemisphere's SH irradiance had read
+a window low in a wall at about half its light (the window-room harness: 0.49
+of the path-traced floor) while the lawn bounce through the same window was
+exact, which tinted window-lit rooms toward the lawn. The idea is precomputed radiance
 transfer: Sloan, Kautz and Snyder, "Precomputed Radiance Transfer for
 Real-Time Rendering in Dynamic, Low-Frequency Lighting Environments",
 SIGGRAPH 2002, <https://www.cs.jhu.edu/~misha/ReadingSeminar/Papers/Sloan02.pdf>;
@@ -318,7 +322,7 @@ this plan:
    pass-block tuning joins the lighting cadence signature as it does now and
    never enters the bake closure.
 3. **GI feeds the style.** The band reads the lit surface after the volume,
-   the bent-normal AO and the sky transfer have supplied their light: the
+   the bent-normal AO and the sky-light cube have supplied their light: the
    shadow band's colour comes from the probes' indirect bounce and the sky
    tint along the bent normal, multiplied by the style's tint, rather than from
    a flat `ShadowTint` alone. A room's shadow band warms from its walls and a
@@ -433,7 +437,7 @@ the frame thread records, which J1 does not reorder.
 |---|---|---|---|
 | 0. The Deck leg ([step 0](#step-0-open-checks)) | rendering, with a Deck leg | Today's CPU trace and frame timed on the Deck at High | Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
 | 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
-| 2. Hits and relight (landed on the CPU but for the GPU relight, the sky transfer, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
+| 2. Hits and relight (landed on the CPU but for the GPU relight, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. GPU trace hits, as the [graphics architecture plan](graphics-architecture.md#g1-the-gpu-probe-trace-and-relight) designs it: G1 traces and relights over the uploaded scene hierarchy in compute on every device, G2 adds hardware ray query where it pays | rendering, GPU leg on both backends and the Deck | The trace-hits interface with G1's kernel and G2's ray query; rigid bodies cast; the CPU trace deleted once G1 holds on both backends | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against the CPU trace's; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides G2 |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather; the cel outline's check ([cel shading](#cel-shading), decision 4) | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; under a cel style with outlines on, a presented burst of eight frames at `debug.go meadow` shows no ink shimmer between frames beyond the blades' own motion, and at `debug.go portals` no ink on the paintings' pictures; `world.gpu-timing` of `surface` against today's on all three; stills at the gather stops compared tolerantly |
 | 5. Lights | rendering | The list measurement; LTC for screens, portal openings and authored rectangles; the local shadow residency with overload named | The device row with every screen on: specular on the floor in front of each screen; `world.counters gpu` views texels at 68 fixtures and at a scratch world with 680; a scratch world past the shadow residency names the deferred lights and shows no flicker; the frame bar at `debug.go devices` |
@@ -502,8 +506,6 @@ Open in step 2:
   hit, which needs the scene; the scene is on the CPU until step 3 puts the
   trace on the GPU, so the relight moves with it rather than reading cascades
   that cover 120 m. The meter stays a CPU read of the relit volume until then.
-- **The sky transfer with its cosine term** (decision 1): the probes still
-  carry six sky shares the views pass multiplies by the live sky SH.
 - **The per-probe rescale** of probes a relight has not reached during a
   transition.
 - **The lockstep relight under a moving sun**, which relights the whole window

@@ -264,9 +264,11 @@ in the frame.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
   probes about the shaded point once (`sdfMeshProbesAt`), pushed 5 cm along
   its normal, weighted trilinearly, by how far each lies in front of the
-  surface and by its depth visibility. The sky term is the live sky's irradiance over π under the
-  volume's sky visibility, so the sky can change without a retrace; the
-  reflected term adds as stored. The sum replaces the harmonic sky ambient and
+  surface and by its depth visibility. The sky term is each probe's sky-light
+  cube, which the relight integrates from the rays that missed every surface,
+  each carrying the sky's radiance about its own direction, so a window low in
+  a wall passes the horizon's light rather than the hemisphere's mean, and a
+  sky change relights without a retrace; the reflected term adds as stored. The sum replaces the harmonic sky ambient and
   the authored fill, under the `apply` intensity, tint and contact. A static
   point or spot light's visibility at the surface is the share of those probes
   whose centre sees it (`sdfMeshLightVisibility`), which scales its direct

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
@@ -329,6 +330,35 @@ public static class SdfMeshProbeDepth {
         }
         return SdfMeshProbeCoverage.Visibility(blocked: blocked, sheets: blockedSheets);
     }
+
+    /// <summary>Writes the sky's mean radiance over each hit texel's solid angle: what a ray of that texel that misses every
+    /// surface carries, so a probe's open rays integrate the sky they see rather than a share of its whole-hemisphere
+    /// irradiance. Each texel averages <see cref="SkySubsamples"/> squared directions of its octahedral cell, each weighted by
+    /// its solid angle, from the sky's environment map.</summary>
+    /// <param name="map">The sky environment map, <see cref="SdfSkyEnvironment.Texels"/> colours, row after row, in nits.</param>
+    /// <param name="texels">Receives one colour per hit texel, in nits; at least <see cref="HitCount"/> long.</param>
+    public static void SkyRadiance(ReadOnlySpan<Vector3> map, Span<Vector3> texels) {
+        for (var y = 0; (y < Size); y++) {
+            for (var x = 0; (x < Size); x++) {
+                var sum = Vector3.Zero;
+                var weights = 0.0;
+
+                for (var sy = 0; (sy < SkySubsamples); sy++) {
+                    for (var sx = 0; (sx < SkySubsamples); sx++) {
+                        var direction = SdfOctahedral.Decode(x: ((((x + ((sx + 0.5) / SkySubsamples)) * 2.0) / Size) - 1.0), y: ((((y + ((sy + 0.5) / SkySubsamples)) * 2.0) / Size) - 1.0));
+                        var norm = ((Math.Abs(value: direction.X) + Math.Abs(value: direction.Y)) + Math.Abs(value: direction.Z));
+                        var weight = ((norm * norm) * norm);
+
+                        sum += (SdfSkyEnvironment.Sample(direction: new Vector3(x: ((float)direction.X), y: ((float)direction.Y), z: ((float)direction.Z)), map: map) * ((float)weight));
+                        weights += weight;
+                    }
+                }
+                texels[(x + (Size * y))] = (sum / ((float)weights));
+            }
+        }
+    }
+    /// <summary>The sky samples along each axis of a hit texel's octahedral cell that <see cref="SkyRadiance"/> averages.</summary>
+    public const int SkySubsamples = 4;
 
     private static Vector3[] BuildDirections() {
         var directions = new Vector3[(Size * Size)];

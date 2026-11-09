@@ -15,8 +15,10 @@ public static class SdfMeshProbeRelight {
         (bound > 0 && age >= bound) || ((uint)sweep + (uint)phase) % (uint)interleave == 0;
     /// <summary>Two exact allocation-token words followed by the cached hit words.</summary>
     public const int CacheWords = 2 + SdfMeshProbeTrace.HitWords;
-    /// <summary>Six RGB radiance values, six local values and the visibility bits.</summary>
-    public const int OutputWords = 36 + SdfMeshIrradianceProbe.LightWords;
+    /// <summary>Six RGB radiance values, six local values, the visibility bits, then six RGB sky-light values.</summary>
+    public const int OutputWords = SkyOutputWord + 18;
+    /// <summary>The first word of a relight output's six RGB sky-light values.</summary>
+    public const int SkyOutputWord = 36 + SdfMeshIrradianceProbe.LightWords;
     /// <summary>Flags, allocation token, cache slot, the previous output, then the geometric record.</summary>
     public const int InputWords = RecordInputWord + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>The first word of the previous output a relight that reuses its local cube reads.</summary>
@@ -29,15 +31,21 @@ public static class SdfMeshProbeRelight {
     /// of its hit texels, one a lane, and every slice's share of the light visibility rays, so a probe takes one texel's
     /// light loop rather than one lane's several.</summary>
     public const int Slices = ((SdfMeshProbeTrace.HitCount + SdfMeshProbeTrace.GroupSize) - 1) / SdfMeshProbeTrace.GroupSize;
-    /// <summary>One slice's partial relight, which the combine pass sums: six RGB varying sums, six local sums, then the
-    /// visibility bits the slice set and those it cleared.</summary>
-    public const int PartialWords = 36 + (2 * SdfMeshIrradianceProbe.LightWords);
+    /// <summary>One slice's partial relight, which the combine pass sums: six RGB varying sums, six local sums, the
+    /// visibility bits the slice set and those it cleared, then six RGB sky-light sums.</summary>
+    public const int PartialWords = PartialSkyWord + 18;
+    /// <summary>The first word of a partial relight's six RGB sky-light sums.</summary>
+    public const int PartialSkyWord = 36 + (2 * SdfMeshIrradianceProbe.LightWords);
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
     public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>Six axis luminances, sky visibility and source/trace flags in one camera-meter answer.</summary>
     public const int MeterOutputWords = 8;
-    /// <summary>Float4 rows preceding materials: counts, sources, gains, three window pairs, axis totals and sky.</summary>
-    public const int HeaderRows = 20;
+    /// <summary>The first of the float4 rows holding the sky's radiance about each hit texel's ray, gain applied, zero when
+    /// the sky source is off: one row a texel.</summary>
+    public const int SkyRow = 11;
+    /// <summary>Float4 rows preceding materials: counts, sources, gains, three window pairs, axis totals and the sky's
+    /// radiance per hit texel.</summary>
+    public const int HeaderRows = SkyRow + SdfMeshProbeTrace.HitCount;
     /// <summary>Reflected RGB and wrap, then emitted RGB.</summary>
     public const int MaterialRows = 2;
     /// <summary>Position/direction and range, colour and weight, cone, then bounce/index/shadow/kind.</summary>
