@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
@@ -195,7 +196,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private readonly int[] m_generation = new int[EntityCapacity];
     private readonly string?[] m_placementId = new string?[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
-    private readonly bool[] m_seen = new bool[EntityCapacity];
+    // The slots the snapshot being delivered carried, and the slots the last snapshot carried: a slot's active flag and
+    // placement id are set only for slots added to m_seen, so a snapshot retires the slots of m_live it no longer
+    // carries and visits nothing else.
+    private readonly MarkedIndexSet m_seen = new();
+    private readonly MarkedIndexSet m_live = new();
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
     // Bumped on activation, a Teleport continuity, and an over-threshold Correction snap — every discontinuity a
     // presentation-side follower (a root/part second-order lag) must reseed across rather than chase.
@@ -903,7 +908,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        Array.Clear(array: m_seen);
+        m_seen.Clear();
 
         // Field and document row cells are state the snapshot carries beside the document; the mirror re-reads the
         // rows they moved.
@@ -922,7 +927,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         foreach (ref readonly var entry in snapshot.Entries.Span) {
             var index = entry.Index;
 
-            m_seen[index] = true;
+            _ = m_seen.Add(index: index);
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
@@ -1022,13 +1027,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var peers = 0;
         var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
-        for (var index = 0; (index < EntityCapacity); index++) {
-            if (!m_seen[index]) {
+        foreach (var index in m_live.Members) {
+            if (!m_seen.Contains(index: index)) {
                 m_active[index] = false;
                 m_placementId[index] = null;
-
-                continue;
             }
+        }
+
+        m_live.Clear();
+        foreach (var index in m_seen.Members) {
+            _ = m_live.Add(index: index);
 
             if (index >= PlayerRoster.MaxSlots) {
                 peers++;

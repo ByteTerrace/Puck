@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Cameras;
 using Puck.Maths;
@@ -315,7 +316,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_restoreCells = [];
     private uint[] m_restoreWords = [];
     private uint[] m_volume = [];
-    private readonly bool[] m_dirtySlots = new bool[MaxProbes];
     private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
     private readonly Stopwatch m_sceneClock = new();
@@ -548,7 +548,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_gpuMeter = null;
                 m_gpuMeterAskedOf = null;
                 m_changedSlots.Clear();
-                Array.Clear(m_dirtySlots);
                 foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
                 m_published = default;
                 // The new tables hold no table and the new service no feedback. The volume's words still hold every
@@ -595,7 +594,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (resizing) {
                 m_volume = new uint[(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)];
-                Array.Clear(array: m_dirtySlots);
                 m_changedSlots.Clear();
                 foreach (var level in m_levels) {
                     level.Cache.Clear();
@@ -833,7 +831,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (m_republishOwed || (level.Unwritten > 0) || ((level.Changed.Count == 0) && (level.Published == window))) { continue; }
             m_geometryWrote |= (m_tracedLanded || (level.Published != window));
-            m_changedSlots.AddRange(collection: level.Changed);
+            m_changedSlots.AddRange(source: level.Changed.Members);
             level.Changed.Clear();
             level.Published = window;
             m_wrote = true;
@@ -841,7 +839,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (m_changedSlots.Count > 0) {
             m_tracedLanded = false;
             write(obj: m_volume.AsMemory(length: (layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords), start: 0));
-            foreach (var slot in m_changedSlots) { m_dirtySlots[slot] = false; }
             m_changedSlots.Clear();
         }
 
@@ -1488,12 +1485,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A level's cell's slot words in the volume, marked changed for the level's next publication.
     private Span<uint> SlotWords(int level, (int X, int Y, int Z) cell, bool gpuWritten = false) {
         var slot = VolumeSlot(cell: cell, level: level);
-        if (GpuTrace is not null && !gpuWritten) { m_gpuDirty.Add(slot); }
+        if (GpuTrace is not null && !gpuWritten) { _ = m_gpuDirty.Add(index: slot); }
 
-        if (!m_dirtySlots[slot]) {
-            m_dirtySlots[slot] = true;
-            m_levels[level].Changed.Add(item: slot);
-        }
+        _ = m_levels[level].Changed.Add(index: slot);
         return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
     }
     // Composes a level's cached cell's slot words from its own sky shares, relit cubes, surface map and light visibility;
@@ -2850,7 +2844,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private sealed class Level(int index) {
         public int Index { get; } = index;
         public ProbeCache Cache { get; } = new();
-        public List<int> Changed { get; } = [];
+        public MarkedIndexSet Changed { get; } = new();
 
         public (int X, int Y, int Z) Low;
         public int Unwritten;
