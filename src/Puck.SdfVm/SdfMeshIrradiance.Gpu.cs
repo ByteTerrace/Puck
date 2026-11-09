@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
 
@@ -35,7 +36,7 @@ public sealed partial class SdfMeshIrradiance {
     }
     // SlotWords is the sole mutation door. A job consumes these deltas under the volume gate, then owns them until
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
-    private readonly HashSet<int> m_gpuDirty = [];
+    private readonly MarkedIndexSet m_gpuDirty = new();
     private uint[]? m_gpuVolume;
     // The worker's GPU scratch, grown and kept across its batches. Only the worker task's body touches it, and a worker
     // starts only once the last one completed, so it takes no gate; a job reads the origins, input and updates before
@@ -60,11 +61,7 @@ public sealed partial class SdfMeshIrradiance {
         m_republishOwed = false;
         for (var level = 0; level < m_levels.Length; level++) {
             var first = m_layout.OffsetOf(level: level);
-            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) {
-                if (m_dirtySlots[slot]) { continue; }
-                m_dirtySlots[slot] = true;
-                m_levels[level].Changed.Add(item: slot);
-            }
+            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) { _ = m_levels[level].Changed.Add(index: slot); }
         }
     }
 
@@ -354,7 +351,7 @@ public sealed partial class SdfMeshIrradiance {
                 GrowScratch(array: ref m_gpuUpdateAt, length: dirty);
                 GrowScratch(array: ref m_gpuUpdateData, length: (dirty * SdfMeshIrradianceProbe.ProbeWords));
                 var i = 0;
-                foreach (var slot in m_gpuDirty) {
+                foreach (var slot in m_gpuDirty.Members) {
                     var word = slot * SdfMeshIrradianceProbe.ProbeWords;
                     m_gpuUpdateAt[i] = word;
                     m_volume.AsSpan(word, SdfMeshIrradianceProbe.ProbeWords).CopyTo(m_gpuUpdateData.AsSpan(i * SdfMeshIrradianceProbe.ProbeWords, SdfMeshIrradianceProbe.ProbeWords));

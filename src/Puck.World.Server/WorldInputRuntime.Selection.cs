@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
@@ -15,7 +16,7 @@ public sealed partial class WorldInputRuntime {
     private int[] m_selectionRows = [];
 
     private readonly List<int> m_touchedBodies = [];
-    private readonly HashSet<int> m_touchedSeen = [];
+    private readonly MarkedIndexSet m_touchedSeen = new();
     private readonly List<Owner> m_touchedOwners = [];
 
     /// <summary>Collects the bodies whose selection registers the open state transaction touched: a body-state
@@ -41,7 +42,7 @@ public sealed partial class WorldInputRuntime {
         for (var index = 0; (index < m_touchedBodies.Count); index++) {
             var body = m_touchedBodies[index];
 
-            if (m_touchedSeen.Add(item: body)) { m_touchedBodies[kept++] = body; }
+            if (m_touchedSeen.Add(index: body)) { m_touchedBodies[kept++] = body; }
         }
         m_touchedBodies.RemoveRange(count: (m_touchedBodies.Count - kept), index: kept);
         return m_touchedBodies;

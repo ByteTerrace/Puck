@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.Commands;
 using Puck.Physics.Motion;
@@ -56,10 +57,7 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) { return m_inputs.TryGetValue(key: owner, value: out publication); }
     }
 
-    private int[] m_pendingRows = [];
-    private bool[] m_pendingNoted = [];
-
-    private int m_pendingCount;
+    private readonly MarkedIndexSet m_pending = new();
     private bool m_pendingEverything;
     private ArenaTime? m_stateTime;
 
@@ -212,21 +210,15 @@ public sealed class WorldSessionMirror : IClientSink {
     private long m_tickBits;
     private long m_engineTickBits;
 
-    private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
-    private readonly Quaternion[] m_previousOrientation = new Quaternion[EntityCapacity];
-    private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
-    private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
+    private readonly WorldPoseTable m_poses = new(capacity: EntityCapacity);
     private readonly float[] m_heading = new float[EntityCapacity];
     private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
-    private readonly string?[] m_placementId = new string?[EntityCapacity];
-    private readonly int[] m_poseEpoch = new int[EntityCapacity];
     private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
-    private readonly bool[] m_active = new bool[EntityCapacity];
-    private readonly bool[] m_seen = new bool[EntityCapacity];
+    // Written only under m_snapshotWriteGate (DeliverSnapshot and SeedRoute).
     // A route seed is written by the transfer/route thread while ordinary snapshots arrive on the observer task.
     // Serialize those two writers: the seqlock below protects readers from a torn image, but by itself does not
     // prevent two writers from interleaving their odd/even sequence increments and publishing a mixture.
@@ -268,11 +260,6 @@ public sealed class WorldSessionMirror : IClientSink {
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
-
-        for (var index = 0; (index < EntityCapacity); index++) {
-            m_previousOrientation[index] = Quaternion.Identity;
-            m_currentOrientation[index] = Quaternion.Identity;
-        }
     }
 
     /// <summary>Raised on the delivering thread after each delivered definition or state is published as
@@ -441,10 +428,10 @@ public sealed class WorldSessionMirror : IClientSink {
     }
     /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Quaternion CurrentOrientation(int index) => m_currentOrientation[index];
+    public Quaternion CurrentOrientation(int index) => m_poses.CurrentOrientation(index: index);
     /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 CurrentPosition(int index) => m_currentPosition[index];
+    public Vector3 CurrentPosition(int index) => m_poses.CurrentPosition(index: index);
 
     // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
     // repeated delivery allocates nothing.
@@ -511,13 +498,9 @@ public sealed class WorldSessionMirror : IClientSink {
     }
     /// <inheritdoc/>
     /// <remarks>Copies every kept field out of the borrowed <paramref name="snapshot"/> before returning (see this
-    /// type's own borrowed-snapshot remarks). Continuity mirrors <c>WorldClient.DeliverSnapshot</c>'s
-    /// snap-vs-interpolate split only — a newly active entity or a <see cref="EntityContinuityKind.Teleport"/> resets
-    /// both interpolation endpoints to the fresh pose so the first/next frame never streaks; a
-    /// <see cref="EntityContinuityKind.Carry"/> carries current into previous through the crossing and records it in
-    /// <see cref="Carries"/>; every other case
-    /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
-    /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
+    /// type's own borrowed-snapshot remarks). The pose endpoints follow <see cref="WorldPoseTable.TryAdmit"/> exactly as
+    /// <c>WorldClient</c>'s do, except that a <see cref="EntityContinuityKind.Correction"/>, which the boot client
+    /// eases with a decaying render-error offset this mirror does not reproduce, is ordinary double-buffering.</remarks>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (m_unread) { return; }
         lock (m_snapshotWriteGate) {
@@ -538,7 +521,7 @@ public sealed class WorldSessionMirror : IClientSink {
             }
 
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
-            Array.Clear(array: m_seen);
+            m_poses.Begin();
 
             foreach (ref readonly var entry in snapshot.Entries.Span) {
                 var index = entry.Index;
@@ -547,70 +530,38 @@ public sealed class WorldSessionMirror : IClientSink {
                     (((uint)index) >= EntityCapacity) ||
                     (preserveSeed && (seeded is { } preserved) && (index == preserved.Index) &&
                         (!string.Equals(
-                    a: snapshot.Authority,
-                    b: preserved.Authority,
-                    comparisonType: StringComparison.Ordinal
-                ) || (entry.Generation != preserved.Generation)))
+                            a: snapshot.Authority,
+                            b: preserved.Authority,
+                            comparisonType: StringComparison.Ordinal
+                        ) || (entry.Generation != preserved.Generation)))
                 ) {
                     continue;
                 }
 
-                m_seen[index] = true;
                 m_bodyColor[index] = entry.BodyColor;
                 m_kit[index] = entry.Kit;
                 m_look[index] = entry.Look;
                 m_catalogRig[index] = entry.CatalogRig;
-                m_placementId[index] = entry.PlacementId;
                 Volatile.Write(
                     location: ref m_generation[index],
                     value: entry.Generation
                 );
-
-                if (
-                    !Volatile.Read(location: ref m_active[index]) ||
-                    (entry.Continuity.Kind == EntityContinuityKind.Teleport)
-                ) {
-                    m_previousPosition[index] = entry.Position;
-                    m_previousOrientation[index] = entry.Orientation;
-                    m_poseEpoch[index]++;
-                } else if (entry.Continuity.Carried is { } carried) {
-                    // An in-place crossing: the previous pose rides the crossing, so the frame interpolates on from
-                    // where the body was, carried, and every latched consumer carries its own state the same way.
-                    m_previousPosition[index] = carried.Point(point: m_currentPosition[index]);
-                    m_previousOrientation[index] = carried.Attitude(attitude: m_currentOrientation[index]);
-                    Carries.Record(
-                        carry: carried,
-                        index: index
-                    );
-                } else {
-                    m_previousPosition[index] = m_currentPosition[index];
-                    m_previousOrientation[index] = m_currentOrientation[index];
-                }
-
-                m_currentPosition[index] = entry.Position;
-                m_currentOrientation[index] = entry.Orientation;
                 m_heading[index] = entry.Heading;
                 m_facts[index] = entry.Facts;
-                // The release write is the publication edge for every pose/color/look field above. A local instance
-                // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
-                // IsActive's acquire read makes the completed record visible before an emitter consumes it.
-                Volatile.Write(
-                    ref m_active[index],
-                    value: entry.Active
+                // The pose table publishes the entry's active flag last, after every field above, so a reader on
+                // another thread (a federated observer delivers on its socket task) that acquires IsActive sees the
+                // completed record.
+                _ = m_poses.TryAdmit(
+                    admission: out _,
+                    easeCorrections: false,
+                    entry: in entry
                 );
             }
 
-            for (var index = 0; (index < EntityCapacity); index++) {
-                if (
-                    !m_seen[index] &&
-                    (!preserveSeed || (seeded is not { } preserved) || (index != preserved.Index))
-                ) {
-                    Volatile.Write(
-                        ref m_active[index],
-                        value: false
-                    );
-                }
-            }
+            m_poses.Complete(preserved: ((preserveSeed && (seeded is { } kept))
+                ? kept.Index
+                : -1
+            ));
 
             _ = Interlocked.Exchange(
                 location1: ref m_tickBits,
@@ -674,7 +625,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 foreach (ref readonly var entry in snapshot.Entries.Span) {
                     if (
                         (((uint)entry.Index) < ((uint)EntityCapacity)) &&
-                        m_seen[entry.Index]
+                        m_poses.Admitted(index: entry.Index)
                     ) {
                         m_stateView.ApplyBodyState(
                             body: entry.Index,
@@ -742,26 +693,7 @@ public sealed class WorldSessionMirror : IClientSink {
             return;
         }
 
-        if (ordinal >= m_pendingNoted.Length) {
-            var capacity = Math.Max(
-                val1: (ordinal + 1),
-                val2: (m_pendingNoted.Length * 2)
-            );
-
-            Array.Resize(
-                array: ref m_pendingNoted,
-                newSize: capacity
-            );
-            Array.Resize(
-                array: ref m_pendingRows,
-                newSize: capacity
-            );
-        }
-
-        if (!m_pendingNoted[ordinal]) {
-            m_pendingNoted[ordinal] = true;
-            m_pendingRows[m_pendingCount++] = ordinal;
-        }
+        _ = m_pending.Add(index: ordinal);
     }
 
     /// <summary>Brings this mirror's state mirror up to the latest delivery and returns it: a definition delivery
@@ -777,25 +709,22 @@ public sealed class WorldSessionMirror : IClientSink {
             ArenaTime? time;
 
             lock (m_stampGate) {
-                count = m_pendingCount;
+                count = m_pending.Count;
 
                 if (m_followedRows.Length < count) {
                     Array.Resize(
                         array: ref m_followedRows,
-                        newSize: m_pendingRows.Length
+                        newSize: Math.Max(
+                            val1: count,
+                            val2: (m_followedRows.Length * 2)
+                        )
                     );
                 }
 
-                for (var index = 0; (index < count); index++) {
-                    var ordinal = m_pendingRows[index];
-
-                    m_followedRows[index] = ordinal;
-                    m_pendingNoted[ordinal] = false;
-                }
-
+                m_pending.Members.CopyTo(destination: m_followedRows);
+                m_pending.Clear();
                 everything = m_pendingEverything;
                 time = m_stateTime;
-                m_pendingCount = 0;
                 m_pendingEverything = false;
             }
 
@@ -847,20 +776,28 @@ public sealed class WorldSessionMirror : IClientSink {
     public float Heading(int index) => m_heading[index];
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public bool IsActive(int index) => Volatile.Read(location: ref m_active[index]);
+    public bool IsActive(int index) => m_poses.IsActive(index: index);
     /// <summary>Gets the placement an entity inhabits (<see cref="EntitySnapshot.PlacementId"/>).</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The placement id, or <see langword="null"/> when the entity inhabits none.</returns>
-    public string? PlacementId(int index) => m_placementId[index];
+    public string? PlacementId(int index) => m_poses.PlacementId(index: index);
     /// <summary>Gets an entity's pose epoch: it moves each time the entity becomes active or teleports, the two
     /// discontinuities a snapshot declares, as <c>WorldClient.PoseEpoch</c> does for the local world.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The epoch.</returns>
-    public int PoseEpoch(int index) => m_poseEpoch[index];
+    public int PoseEpoch(int index) => m_poses.PoseEpoch(index: index);
+    /// <summary>Resolves the lowest active entity index that inhabits a placement.</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="index">The entity index, or <c>-1</c> when none inhabits it.</param>
+    /// <returns><see langword="true"/> when an active entity inhabits the placement.</returns>
+    public bool TryInhabitantBody(string placementId, out int index) => m_poses.TryInhabitant(
+        index: out index,
+        placementId: placementId
+    );
 
     /// <summary>Gets the in-place portal crossings each entity has made, which a consumer that latched an entity's
     /// world-space pose carries it through, as <c>WorldClient.Carries</c> does for the local world.</summary>
-    public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
+    public WorldPoseCarries Carries => m_poses.Carries;
 
     /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
     /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
@@ -874,10 +811,10 @@ public sealed class WorldSessionMirror : IClientSink {
     );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Quaternion PreviousOrientation(int index) => m_previousOrientation[index];
+    public Quaternion PreviousOrientation(int index) => m_poses.PreviousOrientation(index: index);
     /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 PreviousPosition(int index) => m_previousPosition[index];
+    public Vector3 PreviousPosition(int index) => m_poses.PreviousPosition(index: index);
     /// <summary>Copies the wall-clock intervals between the most recent snapshot arrivals, oldest first: the evenness of
     /// the clock <see cref="InterpolationAlpha"/> presents by.</summary>
     /// <param name="milliseconds">The destination, in milliseconds; at most its length are copied.</param>
@@ -935,10 +872,6 @@ public sealed class WorldSessionMirror : IClientSink {
             var position = route.Position.ToVector3();
             var orientation = route.Orientation.ToQuaternion();
 
-            m_previousPosition[index] = position;
-            m_currentPosition[index] = position;
-            m_previousOrientation[index] = orientation;
-            m_currentOrientation[index] = orientation;
             // A route carries one attitude; its yaw is the heading.
             m_heading[index] = VectorFunctions.YawOf(attitude: orientation);
             m_bodyColor[index] = route.BodyColor;
@@ -961,9 +894,10 @@ public sealed class WorldSessionMirror : IClientSink {
                 location1: ref m_snapshotArrivalTimestamp,
                 value: Stopwatch.GetTimestamp()
             );
-            Volatile.Write(
-                ref m_active[index],
-                value: true
+            m_poses.Seed(
+                index: index,
+                orientation: orientation,
+                position: position
             );
             m_seededRouteEntity = route.Entity;
             m_seededRouteTick = route.Tick;

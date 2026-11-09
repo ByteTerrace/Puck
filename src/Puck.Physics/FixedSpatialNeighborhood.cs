@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -34,7 +35,7 @@ public readonly record struct FixedNeighborhoodWork(int CellLookups, int Candida
 public sealed class FixedSpatialNeighborhood {
     private readonly Cell[] m_cells;
     private readonly Point[] m_points;
-    private readonly bool[] m_seen;
+    private readonly MarkedIndexSet m_seen = new();
 
     private int m_cellCount;
     private int m_count;
@@ -52,7 +53,6 @@ public sealed class FixedSpatialNeighborhood {
         CellWidth = cellWidth;
         m_points = new Point[capacity];
         m_cells = new Cell[capacity];
-        m_seen = new bool[capacity];
     }
 
     /// <summary>Gets the allocated slot bound.</summary>
@@ -304,20 +304,19 @@ public sealed class FixedSpatialNeighborhood {
                 paramName: nameof(points)
             );
         }
-        Array.Clear(array: m_seen);
+        m_seen.Clear();
         for (var ordinal = 0; (ordinal < points.Length); ordinal++) {
             var point = points[ordinal];
 
             if (
                 (((uint)point.Index) >= ((uint)Capacity)) ||
-                m_seen[point.Index]
+                !m_seen.Add(index: point.Index)
             ) {
                 throw new ArgumentException(
                     message: "Neighborhood slots must be distinct and inside capacity.",
                     paramName: nameof(points)
                 );
             }
-            m_seen[point.Index] = true;
             m_points[ordinal] = new Point(
                 CellFor(position: point.Position),
                 point.Index,

@@ -176,12 +176,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // no camera dependency of its own.
     private readonly ulong[] m_lastSubmissionEpoch = new ulong[PlayerRoster.MaxSlots];
     private readonly ulong[] m_lastSubmissionTick = new ulong[PlayerRoster.MaxSlots];
-    // The double-buffered per-entity tick poses (the interpolation endpoints), the tick's palette/archetype image, and
-    // the per-entity correction easers. Sized to the table ceiling; inactive slots are simply unseen.
-    private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
-    private readonly Quaternion[] m_previousOrientation = new Quaternion[EntityCapacity];
-    private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
-    private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
+    // The double-buffered per-entity tick poses (the interpolation endpoints), active flags, placements and pose epochs
+    // (m_poses), the tick's palette/archetype image, and the per-entity correction easers. Sized to the table ceiling;
+    // inactive slots are simply unseen.
+    private readonly WorldPoseTable m_poses = new(capacity: EntityCapacity);
     private readonly Vector3[] m_color = new Vector3[EntityCapacity];
     // The kit row index per entity: the chase camera reads the framed body's collider through it.
     private readonly byte[] m_kit = new byte[EntityCapacity];
@@ -193,13 +191,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // seamless transfer may move the occupant to another slot without changing its implicit shape.
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
-    private readonly string?[] m_placementId = new string?[EntityCapacity];
-    private readonly bool[] m_active = new bool[EntityCapacity];
-    private readonly bool[] m_seen = new bool[EntityCapacity];
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
-    // Bumped on activation, a Teleport continuity, and an over-threshold Correction snap — every discontinuity a
-    // presentation-side follower (a root/part second-order lag) must reseed across rather than chase.
-    private readonly int[] m_poseEpoch = new int[EntityCapacity];
     // The per-frame resolved render poses (alpha-interpolated + eased) — what the frame source and anchors read.
     private readonly Vector3[] m_renderPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_renderOrientation = new Quaternion[EntityCapacity];
@@ -233,8 +225,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_stateMirror.Delivered += PublishDeliveredState;
 
         for (var index = 0; (index < EntityCapacity); index++) {
-            m_previousOrientation[index] = Quaternion.Identity;
-            m_currentOrientation[index] = Quaternion.Identity;
             m_renderOrientation[index] = Quaternion.Identity;
             m_easers[index].Reset();
         }
@@ -903,7 +893,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        Array.Clear(array: m_seen);
+        m_poses.Begin();
 
         // Field and document row cells are state the snapshot carries beside the document; the mirror re-reads the
         // rows they moved.
@@ -920,9 +910,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
+            if (!m_poses.TryAdmit(
+                admission: out var admission,
+                easeCorrections: true,
+                entry: in entry
+            )) {
+                continue;
+            }
+
             var index = entry.Index;
 
-            m_seen[index] = true;
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
@@ -933,80 +930,46 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             );
             m_catalogRig[index] = entry.CatalogRig;
             m_generation[index] = entry.Generation;
-            m_placementId[index] = entry.PlacementId;
 
-            if (!m_active[index]) {
-                // Newly active: both interpolation endpoints start at the spawn pose so the first frame never streaks.
-                m_previousPosition[index] = entry.Position;
-                m_previousOrientation[index] = entry.Orientation;
-                m_easers[index].Reset();
-                m_poseEpoch[index]++;
-            } else {
-                switch (entry.Continuity.Kind) {
-                    case EntityContinuityKind.Teleport:
-                        // Never interpolate across the jump; any in-flight correction offset is dropped with it.
-                        m_previousPosition[index] = entry.Position;
-                        m_previousOrientation[index] = entry.Orientation;
-                        m_easers[index].Reset();
-                        m_poseEpoch[index]++;
+            switch (admission.Step) {
+                case WorldPoseStep.Seeded:
+                    // Both endpoints now hold the fresh pose; any in-flight correction offset is dropped with the jump.
+                    m_easers[index].Reset();
 
-                        break;
-                    case EntityContinuityKind.Correction: {
-                            // Authority snapped: ease the render error (last drawn tick pose minus authority) to zero over
-                            // the window. Over-threshold corrections snap instead: the easer basis is the previous
-                            // snapshot, which may lag same-tick multi-pose batches past the server's own snap-escape check.
-                            var positionError = (m_currentPosition[index] - entry.Position);
+                    break;
+                case WorldPoseStep.Corrected: {
+                        // Authority snapped: ease the render error (last drawn tick pose minus authority) to zero over
+                        // the window. Over-threshold corrections snap instead: the easer basis is the previous
+                        // snapshot, which may lag same-tick multi-pose batches past the server's own snap-escape check.
+                        var positionError = (admission.PriorPosition - entry.Position);
 
-                            if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
-                                m_easers[index].Reset();
-                                m_poseEpoch[index]++;
-                            } else {
-                                m_easers[index].Begin(
-                                    positionError: positionError,
-                                    orientationError: Quaternion.Multiply(
-                                        value1: m_currentOrientation[index],
-                                        value2: Quaternion.Conjugate(value: entry.Orientation)
-                                    ),
-                                    seconds: entry.Continuity.Seconds
-                                );
-                            }
-
-                            m_previousPosition[index] = entry.Position;
-                            m_previousOrientation[index] = entry.Orientation;
-
-                            break;
-                        }
-                    case EntityContinuityKind.Carry: {
-                            // An in-place crossing: the previous pose and any in-flight correction ride the crossing,
-                            // so the frame interpolates on from where the body was, carried, and every consumer that
-                            // latched the body's pose carries it the same way (Carries).
-                            var carried = entry.Continuity.Carried!.Value;
-
-                            m_previousPosition[index] = carried.Point(point: m_currentPosition[index]);
-                            m_previousOrientation[index] = carried.Attitude(attitude: m_currentOrientation[index]);
-                            m_easers[index].Carry(carry: carried);
-                            Carries.Record(
-                                carry: carried,
-                                index: index
+                        if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
+                            m_easers[index].Reset();
+                            m_poses.Discontinue(index: index);
+                        } else {
+                            m_easers[index].Begin(
+                                positionError: positionError,
+                                orientationError: Quaternion.Multiply(
+                                    value1: admission.PriorOrientation,
+                                    value2: Quaternion.Conjugate(value: entry.Orientation)
+                                ),
+                                seconds: entry.Continuity.Seconds
                             );
-
-                            break;
                         }
-                    default:
-                        m_previousPosition[index] = m_currentPosition[index];
-                        m_previousOrientation[index] = m_currentOrientation[index];
 
                         break;
-                }
+                    }
+                case WorldPoseStep.Carried:
+                    // Any in-flight correction rides the crossing with the previous pose.
+                    m_easers[index].Carry(carry: entry.Continuity.Carried!.Value);
+
+                    break;
             }
 
-            m_currentPosition[index] = entry.Position;
-            m_currentOrientation[index] = entry.Orientation;
             // Keep the resolved pose meaningful in a headless composition, where no presentation frame calls
             // UpdateRenderPoses. A windowed frame replaces these with its interpolated/eased values before drawing.
             m_renderPosition[index] = entry.Position;
             m_renderOrientation[index] = entry.Orientation;
-            m_active[index] = true;
         }
 
         // A body's action state is likewise carried beside the document, on its entry.
@@ -1022,14 +985,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var peers = 0;
         var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
-        for (var index = 0; (index < EntityCapacity); index++) {
-            if (!m_seen[index]) {
-                m_active[index] = false;
-                m_placementId[index] = null;
-
-                continue;
-            }
-
+        m_poses.Complete();
+        foreach (var index in m_poses.Seen) {
             if (index >= PlayerRoster.MaxSlots) {
                 peers++;
             }
@@ -1112,7 +1069,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>Whether the entity is drawn this frame (present in the latest snapshot).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public bool IsActive(int index) => m_active[index];
+    public bool IsActive(int index) => m_poses.IsActive(index: index);
     /// <summary>The look row an entity wears: the delivered look table indexed by <see cref="LookIndex"/>, or the
     /// implicit single catalog look when the world authors no <c>looks</c> section, and for an index the delivered
     /// table cannot cover. The scene emitter and the part resolver read appearance through this one resolve, so a
@@ -1138,15 +1095,15 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The placement row this entity inhabits, or <see langword="null"/> for a seat/peer — the frame source
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public string? PlacementId(int index) => m_placementId[index];
+    public string? PlacementId(int index) => m_poses.PlacementId(index: index);
     /// <summary>The entity's pose-discontinuity counter — bumped on activation, a <see cref="EntityContinuityKind.Teleport"/>,
     /// and an over-threshold <see cref="EntityContinuityKind.Correction"/> snap. A presentation-side second-order
     /// follower reseeds whenever this changes, so it never chases across a jump.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public int PoseEpoch(int index) => m_poseEpoch[index];
+    public int PoseEpoch(int index) => m_poses.PoseEpoch(index: index);
 
     /// <inheritdoc/>
-    public WorldPoseCarries Carries { get; } = new(capacity: EntityCapacity);
+    public WorldPoseCarries Carries => m_poses.Carries;
 
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -1276,10 +1233,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var halfAngle = register.MaximumHalfAngleDegrees;
         var range = FixedQ4816.FromDouble(value: register.MaximumRange);
         var minimumDot = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: halfAngle));
-        var origin = FixedVector3.FromVector3(value: m_currentPosition[sourceBody]);
+        var origin = FixedVector3.FromVector3(value: m_poses.CurrentPosition(index: sourceBody));
         var forward = FixedVector3.FromVector3(value: Vector3.Transform(
             value: -Vector3.UnitZ,
-            rotation: m_currentOrientation[sourceBody]
+            rotation: m_poses.CurrentOrientation(index: sourceBody)
         ));
         var nearest = FixedQ4816.MaxValue;
         var found = -1;
@@ -1287,12 +1244,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         for (var index = 0; (index < EntityCapacity); index++) {
             if (
                 (index == sourceBody) ||
-                !m_active[index]
+                !m_poses.IsActive(index: index)
             ) {
                 continue;
             }
 
-            var candidate = FixedVector3.FromVector3(value: m_currentPosition[index]);
+            var candidate = FixedVector3.FromVector3(value: m_poses.CurrentPosition(index: index));
 
             if (
                 BodyTargetConeSense.Contains(
@@ -1321,31 +1278,15 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// pose lookup), or <see langword="false"/> when no active entity inhabits it.</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="index">The resolved 0-based entity index.</param>
-    public bool TryInhabitantBody(string placementId, out int index) {
-        for (var candidate = 0; (candidate < EntityCapacity); candidate++) {
-            if (
-                m_active[candidate] &&
-                string.Equals(
-                a: m_placementId[candidate],
-                b: placementId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                index = candidate;
-
-                return true;
-            }
-        }
-
-        index = -1;
-
-        return false;
-    }
+    public bool TryInhabitantBody(string placementId, out int index) => m_poses.TryInhabitant(
+        index: out index,
+        placementId: placementId
+    );
     /// <inheritdoc/>
     public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
         if (
             (((uint)anchorId) >= EntityCapacity) ||
-            !m_active[anchorId]
+            !m_poses.IsActive(index: anchorId)
         ) {
             anchor = default;
 
@@ -1367,19 +1308,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
     public void UpdateRenderPoses(float alpha) {
         for (var index = 0; (index < EntityCapacity); index++) {
-            if (!m_active[index]) {
+            if (!m_poses.IsActive(index: index)) {
                 continue;
             }
 
             var position = WorldPoseInterpolation.Position(
-                previous: m_previousPosition[index],
-                current: m_currentPosition[index],
+                previous: m_poses.PreviousPosition(index: index),
+                current: m_poses.CurrentPosition(index: index),
                 alpha: alpha
             );
             // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
             var orientation = WorldPoseInterpolation.Orientation(
-                previous: m_previousOrientation[index],
-                current: m_currentOrientation[index],
+                previous: m_poses.PreviousOrientation(index: index),
+                current: m_poses.CurrentOrientation(index: index),
                 alpha: alpha
             );
 

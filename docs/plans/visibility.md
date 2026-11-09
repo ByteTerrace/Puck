@@ -334,10 +334,13 @@ limit.
    the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
    `puck mesh audit` scores.
-3. **Field-derived coarse levels** only as a bake experiment on solid meshes:
-   contour the field at coarser cells for large static unions. They lose thin
-   features (a 2 mm blade vanishes at a coarse cell), and chunk seams would
-   need transition cells in place of today's locked seams.
+3. **Field-derived coarse levels** are decided and ordered in
+   [the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail): an
+   unbounded chain contoured from the field for closed groups first, each level
+   offset outward by its budget so joints never open and thin parts survive,
+   skinned groups contoured per member, and a field-contoured parent above a
+   chunked union in place of transition cells at its seams. Its G1 and G2
+   replace this plan's V3c.
 
 **Why:** fewer triangles cut bake time and GPU geometry together, and the
 coarsest level already keeps 6 % of the stored triangles
@@ -456,7 +459,7 @@ instance's identity and generation.
 |---|---|---|---|---|---|---|
 | V1 buckets | Commands scale with visible (geometry, level) pairs, not instances | Degrades toward one command per visible geometry: today's cost, never worse | Unchanged: chunks still cull a large union; instancing does nothing for one mesh | Instances carry their own slots; skinned draws still unboxed until bounded | Each view classifies with its own frustum, depth and history | Phase two does the work on the cut frame, as today |
 | V2 motion | Upload and posing scale with change, not with population | Unaffected | Unaffected | Authored presentation motion compiled and bounded; simulation-read poses stay on the CPU | One evaluation serves every view of the frame | A cut pays no extra posing |
-| V3 geometry | Fewer triangles per instance | Bake time falls per group | A simplifier pays most on large meshes; field levels only for solids | Rigid parts only; skinned meshes keep their merged mesh | Unaffected | Unaffected |
+| V3 geometry | Fewer triangles per instance | Bake time falls per group | A simplifier pays most on large meshes; field levels and a union parent for large unions ([virtual geometry](virtual-geometry.md)) | Member boxes and field levels skinned by the points round ([virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)) | Unaffected | Unaffected |
 | V4 raster | Overdrawn opaque fragments skip shading | Unaffected | Unaffected | Faded avatar keeps its pipeline | Per view | Unaffected |
 | V5 views | Classification shared across views | Unaffected | Light-space occlusion culls casters behind big occluders | Moving casters never treated as static | The gain grows with view count | A cut invalidates per-view history only |
 
@@ -466,9 +469,10 @@ compaction. A huge single object needs chunks or clusters, not instancing; one
 past the chunk limit draws whole. A camera cut, a portal crossing or a
 teleport makes phase one draw a stale set, so phase two carries that frame.
 Deep nesting multiplies classification per view until V5 shares it.
-Unboxed skinned draws are drawn in every pass at their merged level; a box
-from the members' slots (the union of the mesh's rest box under each member's
-transform) lets creatures cull, a small step beside V1.
+Unboxed skinned draws are drawn in every pass at their merged level; the
+union of each member's rest box under its live transform bounds them exactly,
+and [the virtual geometry plan](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)
+lands it as G3 beside V1.
 
 **The budget surface.** `world.budget` prints each residency's instance and
 geometry counts and their bytes. `world.counters gpu` gains per pass:
@@ -533,11 +537,11 @@ self-shadow mismatch. V1's check reads it in a presented burst at the meadow.
 | Technique | Verdict | Reason | What would change it |
 |---|---|---|---|
 | D3D12 work graphs | Not for the baseline; an upper-hardware candidate | Work Graphs 1.0 needs RDNA 3 on AMD (<https://gpuopen.com/microsoft-work-graphs-1-0-now-available/>); NVIDIA documents Ampere and Ada (<https://developer.nvidia.com/blog/advancing-gpu-driven-rendering-with-work-graphs-in-direct3d-12/>); neither the 2060 (Turing) nor the Deck (RDNA2) has them, and Vulkan has no equivalent, so the bar is met without them. On the 4070 they may enhance V1's compaction and bucketing once the baseline path holds (AGENTS.md, "Upper hardware enhances") | A settle-window measurement on the 4070 showing V1's GPU selection and compaction cost a share of the frame that work graphs would remove |
-| Mesh-shader meshlets | Watch | Turing and Ada support them (Kubisch, "Introduction to Turing Mesh Shaders", NVIDIA 2018, <https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/>) and RADV enables `VK_EXT_mesh_shader` on RDNA2 from Mesa 23.0 (<https://docs.mesa3d.org/relnotes/23.0.0.html>); Proton and actual driver bits are unqualified; Puck's backends have no mesh-shader path; blades are already one small draw each | M2 showing large partly visible meshes geometry-bound after V3 |
-| Nanite-style cluster LOD | Watch | Excellent for dense static meshes, poor for aggregates ("riddled with holes … leaves and grass", Karis, Stubbe and Wihlidal, SIGGRAPH 2021 Advances, <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf>); adds a bake stage on a bake already over its minute; Epic's assemblies (<https://dev.epicgames.com/documentation/unreal-engine/nanite-assemblies>) suggest a hierarchy for repeated foliage parts later | The valley's terrain and large shells geometry-bound after V3, with a build no slower than today's collapse |
-| Software rasterization | Watch | Nanite's needs 64-bit image atomics (Karis, above), unconfirmed on the bar devices; Bevy's author postpones it until the fundamentals are done (<https://jms55.github.io/posts/2024-11-14-virtual-geometry-bevy-0-15/>); it duplicates the raster path for one size class | M2 showing the 2060 or the Deck bound on triangle setup after V3 and V4 |
+| Mesh-shader meshlets | Watch; [virtual geometry D4 and D10](virtual-geometry.md#d4-clusters-inside-a-draw) hold the first experiment and the enablement gap | Turing and Ada support them (Kubisch, "Introduction to Turing Mesh Shaders", NVIDIA 2018, <https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/>) and RADV enables `VK_EXT_mesh_shader` on RDNA2 from Mesa 23.0 (<https://docs.mesa3d.org/relnotes/23.0.0.html>); Proton and actual driver bits are unqualified; Puck's backends have no mesh-shader path; blades are already one small draw each | M2 showing large partly visible meshes geometry-bound after V3 |
+| Nanite-style cluster LOD | Watch; [virtual geometry D1](virtual-geometry.md#d1-the-unit-of-detail) takes the level chain from the field instead | Excellent for dense static meshes, poor for aggregates ("riddled with holes … leaves and grass", Karis, Stubbe and Wihlidal, SIGGRAPH 2021 Advances, <https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf>); adds a bake stage on a bake already over its minute; Epic's assemblies (<https://dev.epicgames.com/documentation/unreal-engine/nanite-assemblies>) suggest a hierarchy for repeated foliage parts later | The valley's terrain and large shells geometry-bound after V3, with a build no slower than today's collapse |
+| Software rasterization | Watch; an enhancement in [virtual geometry D10](virtual-geometry.md#d10-hardware-reach) | Nanite's needs 64-bit image atomics (Karis, above), unconfirmed on the bar devices; Bevy's author postpones it until the fundamentals are done (<https://jms55.github.io/posts/2024-11-14-virtual-geometry-bevy-0-15/>); it duplicates the raster path for one size class | M2 showing the 2060 or the Deck bound on triangle setup after V3 and V4 |
 | SDF inscribed occluders | Watch | Helps only behind large solids, and needs certified containment in the rendered mesh (Puck-native combinations, above) | A shadow or portal workload where depth occlusion leaves most hidden work |
-| Impostors and HLOD proxies | Watch | Epic's Impostor Baker blends captured views (<https://dev.epicgames.com/documentation/en-us/unreal-engine/impostor-baker-plugin-in-unreal-engine>); the standard's trees are small opaque crowns whose coarsest level is already light, and an atlas adds texture and bake cost | The 400 m floor measured past the bar with V1 to V3 landed |
+| Impostors and HLOD proxies | Rejected in [virtual geometry D3](virtual-geometry.md#d3-a-hierarchy-above-the-draw), which contours the far field's parents from the field instead | Epic's Impostor Baker blends captured views (<https://dev.epicgames.com/documentation/en-us/unreal-engine/impostor-baker-plugin-in-unreal-engine>); an atlas is a second representation for shading, picking and reprojection, and bakes colour where Puck shades from a material identity | Nothing; a field-contoured parent is the far field |
 | Cone backface culling | Watch | Nanite found it not worthwhile since occlusion removes most backfacing clusters (Karis, above); a meshlet study measures useful rejection (Jensen et al., JCGT 12(2), 2023, <https://jcgt.org/published/0012/02/01/paper-lowres.pdf>) | Meshlets adopted |
 | Procedural blade expansion | Watch | A different look and a second geometry representation for the visibility record; Faber, Kuth, Meyer and Oberberger's mesh-shader grass gives counts, not timings (<https://gpuopen.com/learn/mesh_shaders/mesh_shaders-procedural_grass_rendering/>) | V2 and V3 landed and blades still geometry-bound |
 | A new visibility buffer with deferred materials | Reject | Puck already has one (above) | Nothing |
@@ -562,7 +566,7 @@ times are taken in the lead's settle windows, never by a lane under load.
 | V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
 | V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
 | V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
-| V3c. Field-derived levels | rendering, bake experiment | Coarse levels contoured from the field for large static unions only | Bake thread-seconds and audit scores against V3b's on the hall's unions; kept only if both win |
+| V3c. Field-derived levels | replaced by [virtual geometry](virtual-geometry.md#the-build-order) G1 and G2 | The field-levels audit mode, then field levels for closed groups | G1's success line on the Moth and one hall union; G2's vertex counts and captures |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
 | V5. Views and shadows | rendering | Classification shared across views; extend far-cascade culling to other cascades if measured; static caching only with receiver coverage preserved | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
