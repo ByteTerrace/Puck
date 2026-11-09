@@ -15,8 +15,6 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, uint meshDraw, float f
     coverage = 0.0;
     uint count = min(paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
     if ((count == 0u) || !sdfProgramRange(paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
-    float edge = max((0.5 * footprint), 1.0e-6);
-
     [loop] for (uint i = 0u; i < count; i++) {
         uint base = (paintFirst + (i * SDF_PAINT_VECTORS_PER_ENTRY));
         float4 frame = asfloat(sdfWords[base]);
@@ -24,9 +22,13 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, uint meshDraw, float f
         float4 slotCenter = asfloat(sdfWords[base + 6u]);
         uint slot = asuint(slotCenter.x);
         float3 p = layerPoint;
+        // The pixel's footprint in the units the paint's point is in: the draw frame's object space scales it.
+        float pixel = footprint;
 
         if (slot == SDF_PAINT_DRAW_FRAME) {
-            p = sdfMeshObjectPoint(sdfMeshRecord(meshDraw), worldPoint);
+            uint record = sdfMeshRecord(meshDraw);
+            p = sdfMeshObjectPoint(record, worldPoint);
+            pixel = sdfMeshObjectLength(record, footprint);
         } else if (slot != SDF_PAINT_WINNING_FRAME) {
             float4 slotRotation = sdfDynamicTransformRow((3u * slot) + 1u);
             if (dot(slotRotation, slotRotation) <= 0.0) continue;
@@ -34,7 +36,8 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, uint meshDraw, float f
         }
 
         float3 local = rotatePointByInverseQuaternion((p - frame.xyz), asfloat(sdfWords[base + 1u]));
-        if (any(abs(local - slotCenter.yzw) > (asfloat(sdfWords[base + 7u]).xyz + (colorStroke.w + footprint)))) continue;
+        if (any(abs(local - slotCenter.yzw) > (asfloat(sdfWords[base + 7u]).xyz + (colorStroke.w + pixel)))) continue;
+        float edge = max((0.5 * pixel), 1.0e-6);
         float4 scale = asfloat(sdfWords[base + 2u]);
         float3 primitivePoint = rotatePointByInverseQuaternion(local / scale.xyz, asfloat(sdfWords[base + 8u]));
         float d = (evaluateShape(asuint(frame.w), primitivePoint, asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);

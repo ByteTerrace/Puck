@@ -128,6 +128,14 @@ float3 sdfMeshObjectPoint(uint record, float3 world) {
 
     return float3((dot(placed, x) / max(dot(x, x), 1.0e-30)), (dot(placed, y) / max(dot(y, y), 1.0e-30)), (dot(placed, z) / max(dot(z, z), 1.0e-30)));
 }
+// A world length in a draw's object space, conservatively: divided by the carry's scale and the matrix's shortest row,
+// the axis a world length covers most of, so a pixel's footprint is never narrower in object units than along any axis.
+float sdfMeshObjectLength(uint record, float world) {
+    float carryScale = abs(asfloat(sdfMeshRegion[(record + SDF_MESH_CARRY_SCALE_WORD)]));
+    float shortest = min(length(sdfMeshRow(record, 0u)), min(length(sdfMeshRow(record, 1u)), length(sdfMeshRow(record, 2u))));
+
+    return (world / max((((carryScale != 0.0) ? carryScale : 1.0) * shortest), 1.0e-30));
+}
 // A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
 // drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.
 float sdfMeshClipDistance(uint record, float3 world) {
