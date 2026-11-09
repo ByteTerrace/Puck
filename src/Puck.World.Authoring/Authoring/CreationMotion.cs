@@ -11,9 +11,8 @@ namespace Puck.World.Authoring;
 public readonly record struct CreationMovingBlend(int Shape, int Other, int Group, SdfBlendOp Blend);
 /// <summary>
 /// What moves a creation's shapes, read off its document: whether it animates at all, and which shape's motion each
-/// shape inherits. An animated creation's shapes each ride a slot of their own in the stamp pool, and a pooled blend
-/// group bakes as one mesh whose vertices each ride one shape's slot, so a blend between shapes that move apart keeps
-/// the seam it baked with until the shapes settle (<c>Puck.SdfVm.SdfMeshSettle</c>).
+/// shape inherits. The pooled motion plan uses this reading to admit bounded rest-pose skins or partition a group
+/// into rigid owner fields. No presentation motion is applied to simulation state.
 /// </summary>
 public static partial class CreationMotion {
     /// <summary>Returns whether a creation animates: a driver or an inverse-kinematics effector moves it, or a timeline
@@ -56,7 +55,7 @@ public static partial class CreationMotion {
         }
     }
     /// <summary>Returns the shape whose own motion a shape inherits: the nearest of the shape and its parents that swings,
-    /// slides or lies on an effector's chain, or -1 when only the creation root moves it. Two shapes of one owner keep
+    /// slides, has timeline motion or lies on an effector's chain, or -1 when only the creation root moves it. Two shapes of one owner keep
     /// their places relative to each other under every driver and effector.</summary>
     /// <param name="document">The creation document.</param>
     /// <param name="parents">Each shape's parent (<see cref="ResolveParents"/>).</param>
@@ -71,7 +70,7 @@ public static partial class CreationMotion {
         while (index >= 0) {
             var shape = shapes[index];
 
-            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || FramesMove(document, index)) { return index; }
+            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || FramesMove(document: document, index: index)) { return index; }
             foreach (var effector in (document.Effectors ?? [])) {
                 if ((shape.Name is { } name) && effector.Chain.Contains(value: name.Value)) { return index; }
             }
@@ -86,7 +85,7 @@ public static partial class CreationMotion {
     /// creation that does not animate joins by no such blend, and an ungrouped shape's blend is
     /// <see cref="UngroupedBlends"/>'s.</summary>
     /// <param name="document">The creation document.</param>
-    /// <returns>The blends, one per joining shape naming the first earlier member it moves apart from, in shape
+    /// <returns>The blends, each joining shape paired with every earlier member it moves apart from, in shape
     /// order; empty when there is none.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<CreationMovingBlend> MovingBlends(CreationDocument document) {
@@ -111,7 +110,7 @@ public static partial class CreationMotion {
 
             if ((group == 0) || (blend == SdfBlendOp.Union)) { continue; }
             for (var earlier = 0; (earlier < index); earlier++) {
-                if (((shapes[earlier].Group ?? 0) == group) && ((owners[earlier] != owners[index]) || !FramesAlike(document: document, first: earlier, second: index))) {
+                if (((shapes[earlier].Group ?? 0) == group) && OwnersMoveApart(document, parents, owners[earlier], owners[index])) {
                     found.Add(item: new CreationMovingBlend(Blend: blend, Group: group, Other: earlier, Shape: index));
                 }
             }
@@ -165,9 +164,14 @@ public static partial class CreationMotion {
     public static string Describe(CreationDocument document, CreationMovingBlend blend) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var envelope = Envelope(document, blend);
-        var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : $"bakes as a crease; widen smooth to at least {2f * envelope.Displacement:G6} or reduce the motion to keep the blend");
-        return $"joins shape '{NameOf(document, blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document, blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {envelope.Smooth / 2f:G6}); {outcome}{(envelope.Refusal is { } reason ? $" ({reason})" : string.Empty)}.";
+        var envelope = Envelope(blend: blend, document: document);
+        var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : ((envelope.Refusal is not null) ? "bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field" : $"bakes as a crease; widen smooth to at least {(2f * envelope.Displacement):G6} or reduce the motion to keep the blend"));
+
+        if (envelope.Admitted && MovingBlends(document: document).Any(predicate: other => ((other.Group == blend.Group) && !Envelope(blend: other, document: document).Admitted))) {
+            outcome = "bakes as a crease because another seam in this group is outside its envelope";
+        }
+
+        return $"joins shape '{NameOf(document: document, index: blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(radians: envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {(envelope.Smooth / 2f):G6}); {outcome}{((envelope.Refusal is { } reason) ? $" ({reason})" : string.Empty)}.";
     }
     /// <summary>Returns a shape's name, or <c>#index</c> for an unnamed one.</summary>
     /// <param name="document">The creation document.</param>
@@ -180,22 +184,17 @@ public static partial class CreationMotion {
         return (document.Shapes![index].Name?.Value ?? $"#{index}");
     }
 
-    // What moves a shape, as a diagnostic phrase: a timeline frame, its own motion, the shape it inherits motion from,
-    // or the creation root.
-    private static string MotionOf(CreationDocument document, int index) {
-        var shapes = document.Shapes!;
+    private static bool OwnersMoveApart(CreationDocument document, int[] parents, int first, int second) {
+        if (first == second) { return false; }
+        bool Driven(int index) {
+            for (; (index >= 0); index = parents[index]) {
+                var shape = document.Shapes![index];
 
-        if (FramesMove(document: document, index: index)) { return "is posed by a timeline frame"; }
-
-        var parents = new int[shapes.Count];
-
-        ResolveParents(parents: parents, shapes: shapes);
-
-        var owner = Owner(document: document, index: index, parents: parents);
-
-        return ((owner < 0)
-            ? "rides the creation root"
-            : ((owner == index) ? "moves by its own swings, slides or effector" : $"moves with '{NameOf(document: document, index: owner)}'"));
+                if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || (document.Effectors ?? []).Any(predicate: e => ((shape.Name is { } name) && e.Chain.Contains(value: name.Value)))) { return true; }
+            }
+            return false;
+        }
+        return (Driven(index: first) || Driven(index: second) || !FramesAlike(document: document, first: first, second: second));
     }
     // Whether every timeline frame moves two shapes by one rigid motion from their authored poses, so the frames keep
     // their places relative to each other; a shape a frame does not pose holds its authored pose there.
@@ -215,6 +214,7 @@ public static partial class CreationMotion {
     }
     // The rigid motion a frame carries a shape by from its authored pose: the turn, then the shift after it.
     private static (Quaternion Turn, Vector3 Shift) FrameMotion(CreationDocument document, FrameDocument frame, int index) {
+        if (index < 0) { return (Quaternion.Identity, Vector3.Zero); }
         var shape = document.Shapes![index];
 
         foreach (var transform in (frame.Transforms ?? [])) {

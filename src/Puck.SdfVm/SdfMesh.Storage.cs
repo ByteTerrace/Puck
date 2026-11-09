@@ -62,7 +62,7 @@ public sealed partial record SdfMesh {
     public long StorageBytes => (m_payload?.Charged ?? ManagedBytes());
 
     private long ManagedBytes() {
-        var bytes = OwnArrayBytes(mesh: this, attributes: true);
+        var bytes = OwnArrayBytes(attributes: true, mesh: this);
 
         foreach (var chunk in Chunks) { bytes += OwnArrayBytes(attributes: false, mesh: chunk); }
         return bytes;
@@ -75,11 +75,10 @@ public sealed partial record SdfMesh {
         if (attributes) {
             bytes += ((((long)mesh.Positions.Length) + mesh.Normals.Length) * (3 * sizeof(float)));
             bytes += (((long)mesh.TriangleMaterials.Length) * sizeof(uint));
-            bytes += ((((long)mesh.Members.Length) * System.Runtime.CompilerServices.Unsafe.SizeOf<SdfMeshMember>()) + mesh.VertexMembers.Length + (12L * mesh.Influences.Length));
+            bytes += (((((long)mesh.Members.Length) * System.Runtime.CompilerServices.Unsafe.SizeOf<SdfMeshMember>()) + mesh.VertexMembers.Length) + (12L * mesh.Influences.Length));
         }
         return bytes;
     }
-
     // Whether the mesh's own vertices and triangles are its chunks', in order (SdfMeshChunks.Join), so the chunks can
     // be views of its storage.
     private bool JoinsChunks() {
@@ -124,7 +123,7 @@ public sealed partial record SdfMesh {
                 positions = shared.Copy(Positions, allocator);
                 normals = shared.Copy(Normals, allocator, out var normalsBlock);
                 materials = shared.Copy(TriangleMaterials, allocator);
-                restorable?.AddNormals(piece: -1, owner: shared, block: normalsBlock);
+                restorable?.AddNormals(block: normalsBlock, owner: shared, piece: -1);
                 var vertex = 0;
                 var triangle = 0;
 
@@ -155,7 +154,7 @@ public sealed partial record SdfMesh {
                 positions = payload.Copy(Positions, allocator);
                 normals = payload.Copy(Normals, allocator, out var normalsBlock);
                 materials = payload.Copy(TriangleMaterials, allocator);
-                restorable?.AddNormals(piece: 0, owner: payload, block: normalsBlock);
+                restorable?.AddNormals(block: normalsBlock, owner: payload, piece: 0);
             }
 
             return Restorable.Attach(restorable: restorable, mesh: new SdfMesh(
@@ -169,6 +168,7 @@ public sealed partial record SdfMesh {
             });
         } catch { payload.Release(cached: false); throw; }
     }
+
     // A piece's levels in an owner's storage, each level's indices registered with the storage that may let them go.
     private static SdfMeshLevel[] CopyLevels(IReadOnlyList<SdfMeshLevel> levels, IAllocator allocator, Payload owner, int piece, Restorable? restorable) {
         var copies = new SdfMeshLevel[levels.Count];
@@ -181,6 +181,7 @@ public sealed partial record SdfMesh {
         }
         return copies;
     }
+
     // A renumbered view of a published mesh: its geometry, its storage's restorable parts and its counts, with other
     // triangle materials and levels over the same indices. Nothing is validated or read, since the geometry was validated
     // when published and its normals and levels may be let go (SdfMesh.Restore.cs).
@@ -204,6 +205,7 @@ public sealed partial record SdfMesh {
         m_payload = payload;
         m_restorable = source.m_restorable;
     }
+
     // A palette variant shares the original immutable geometry under an explicit source claim. Only its remapped
     // material arrays are new physical allocations; renumbering must not duplicate positions, normals or indices, and a
     // chunked mesh's chunks view one renumbered copy of its triangle materials.
@@ -269,9 +271,10 @@ public sealed partial record SdfMesh {
         private readonly List<IDisposable> m_blocks = [];
         private readonly List<Payload> m_sources = [];
         private readonly List<Payload> m_parts = [];
-
         private int m_claims = 1;
+
         private int m_cached;
+
         private MemoryCategory m_category = MemoryCategory.Live;
 
         // The bytes this payload and its parts are charged, fixed once the mesh is published (Seal).
@@ -284,7 +287,7 @@ public sealed partial record SdfMesh {
             block.Resize(length, clear: false, preserve: false);
             return block;
         }
-        public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator) where T : unmanaged => Copy(source, allocator, out _);
+        public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator) where T : unmanaged => Copy(allocator: allocator, block: out _, source: source);
         public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator, out OwnedBuffer<T>? block) where T : unmanaged {
             block = null;
             if (source.IsEmpty) { return default; }
@@ -292,8 +295,10 @@ public sealed partial record SdfMesh {
             source.Span.CopyTo(destination: block.GetSpan());
             return block.Memory;
         }
+
         // The storage that may let go of some of this payload's blocks; detached before they are disposed.
         public Restorable? Restorable { get; set; }
+
         // A new payload built with this one: this one's first claim on it is the part's initial claim.
         public Payload Part(MemoryAccount.Owner owner) {
             var part = new Payload(owner: owner);
@@ -325,6 +330,7 @@ public sealed partial record SdfMesh {
         }
 
         private bool m_sealed;
+
         public void Acquire(bool cached) {
             lock (m_gate) {
                 ObjectDisposedException.ThrowIf(condition: (m_claims == 0), instance: this);
@@ -357,6 +363,7 @@ public sealed partial record SdfMesh {
                 } else { Classify(); }
             }
         }
+
         // Moves the charge between live and cached only when the kind of claim holding it changes, so a claim that
         // keeps its category never takes the account's lock.
         private void Classify() {

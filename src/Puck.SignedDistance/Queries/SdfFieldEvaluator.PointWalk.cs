@@ -292,7 +292,7 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfOp.PopField: {
                         var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
-                        influence?.Pop(instruction, savedFieldDistance, resultDistance);
+                        influence?.Pop(candidate: resultDistance, current: savedFieldDistance, instruction: instruction);
 
                         (resultDistance, resultMaterial) = PopScope(
                             candidateDistance: resultDistance,
@@ -304,7 +304,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.ShapeBlend: {
-                        var leaf = influence?.NextLeaf() ?? -1;
+                        var leaf = (influence?.NextLeaf() ?? -1);
                         // A pending LaneErode is consumed first, so it never reaches a later shape: a skipped shape is
                         // absent, and an eroded one's candidate grows by the erosion after its distance scale.
                         var erosion = laneErodeAmount;
@@ -328,7 +328,8 @@ public sealed partial class SdfFieldEvaluator {
                         var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
                             ? (instruction.Material + materialDelta)
                             : instruction.Material);
-                        influence?.Leaf(instruction, resultDistance, candidateDistance, leaf);
+
+                        influence?.Leaf(candidate: candidateDistance, current: resultDistance, instruction: instruction, owner: leaf);
 
                         // A union is Compose's strict less-than and its minimum, taken here without the blend switch.
                         if (instruction.Blend == ((uint)SdfBlendOp.Union)) {

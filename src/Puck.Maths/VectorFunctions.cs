@@ -10,6 +10,12 @@ namespace Puck.Maths;
 /// point through <see cref="FixedQ4816.FromDouble"/> or a vector door afterwards.
 /// </summary>
 public static class VectorFunctions {
+    /// <summary>Packs two values as IEEE binary16, low lane first, using the runtime's nearest-even conversion.</summary>
+    /// <param name="low">The low half, including its sign and any non-finite representation.</param>
+    /// <param name="high">The high half.</param>
+    /// <returns>The low binary16 bits followed by the high bits.</returns>
+    public static uint PackHalf2x16(float low, float high) =>
+        (uint)BitConverter.HalfToUInt16Bits((Half)low) | ((uint)BitConverter.HalfToUInt16Bits((Half)high) << 16);
     private const float UnormByteScale = 255f;
     private const float UnormShortScale = 65535f;
 

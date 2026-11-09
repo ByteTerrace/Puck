@@ -39,14 +39,14 @@ internal static class MeshFieldLevels {
         if (!(cell > 0f) || !SdfMeshAudit.TryEvaluator(field: out var auditField, program: program, refusal: out _)) { return null; }
 
         var work = new Work();
-        using var union = new Field(program, work);
+        using var union = new Field(program: program, work: work);
         var members = SdfMeshAudit.MemberFields(group: group, program: scene.Program);
         var pieceFields = new List<Field>();
         var pieces = new List<(ISdfMeshLevelField Field, byte Member)>();
 
         if (members.Count > 1) {
             for (var index = 0; (index < members.Count); index++) {
-                var piece = new Field(members[index].Field, work);
+                var piece = new Field(program: members[index].Field, work: work);
 
                 pieceFields.Add(item: piece);
                 pieces.Add(item: (piece, ((index == 0) ? SdfMesh.NoMember : (byte)(index - 1))));
@@ -76,7 +76,7 @@ internal static class MeshFieldLevels {
         inside = work.Inside;
         for (var level = 1; (level <= collapseCount); level++) {
             var surface = SdfMeshAudit.Surface(level: level, mesh: mesh);
-            var recorded = ((mesh.Chunks.Count > 0) ? mesh.Chunks.Where(predicate: chunk => (chunk.Levels.Count > 0)).Max(selector: chunk => chunk.Levels[Math.Min(val1: level, val2: chunk.Levels.Count) - 1].Error) : mesh.Levels[(level - 1)].Error);
+            var recorded = ((mesh.Chunks.Count > 0) ? mesh.Chunks.Where(predicate: chunk => (chunk.Levels.Count > 0)).Max(selector: chunk => chunk.Levels[(Math.Min(val1: level, val2: chunk.Levels.Count) - 1)].Error) : mesh.Levels[(level - 1)].Error);
             var error = levels.Measure(budget: recorded, cell: cell, finer: finer, level: surface, members: null, pieces: []);
 
             finer = error.Recorded;
@@ -89,7 +89,7 @@ internal static class MeshFieldLevels {
         // The levels' contours: the work a bake appending them pays.
         started = ThreadCycles.Now();
         inside = work.Inside;
-        var contoured = levels.Contour(allowance: (reference.Flipped, reference.OpenEdges), most: (int)(SdfMeshCollapse.KeptShare * follow.Triangles), pieces: pieces, preserveFeatures: preserve);
+        var contoured = levels.Contour(allowance: (reference.Flipped, reference.OpenEdges), most: ((int)(SdfMeshCollapse.KeptShare * follow.Triangles)), pieces: pieces, preserveFeatures: preserve);
         var contourCycles = ((ThreadCycles.Now() - started) - (work.Inside - inside));
         var contourEvaluations = work.Contour;
 
@@ -121,7 +121,7 @@ internal static class MeshFieldLevels {
             Field: field,
             Follow: follow,
             HalfDiagonal: levels.HalfDiagonal,
-            Lipschitz: string.Create(provider: CultureInfo.InvariantCulture, handler: $"step scale {union.StepScale:0.###}, lower/upper {levels.LowerOverUpper:0.###} at ({levels.LowerOverUpperWitness.At.X:0.####}, {levels.LowerOverUpperWitness.At.Y:0.####}, {levels.LowerOverUpperWitness.At.Z:0.####}) value {Mm(levels.LowerOverUpperWitness.Value)} mm upper {Mm(levels.LowerOverUpperWitness.Upper)} mm{(levels.Certified ? ", certified" : ", uncertified")}"),
+            Lipschitz: string.Create(provider: CultureInfo.InvariantCulture, handler: $"step scale {union.StepScale:0.###}, lower/upper {levels.LowerOverUpper:0.###} at ({levels.LowerOverUpperWitness.At.X:0.####}, {levels.LowerOverUpperWitness.At.Y:0.####}, {levels.LowerOverUpperWitness.At.Z:0.####}) value {Mm(metres: levels.LowerOverUpperWitness.Value)} mm upper {Mm(metres: levels.LowerOverUpperWitness.Upper)} mm{(levels.Certified ? ", certified" : ", uncertified")}"),
             Members: Math.Max(val1: 1, val2: members.Count),
             OracleCycles: oracleCycles,
             OracleEvaluations: work.Oracle,
@@ -133,7 +133,6 @@ internal static class MeshFieldLevels {
 
         return measured with { Shaded = Judge(group: measured, normals: true), Unshaded = Judge(group: measured, normals: false) };
     }
-
     /// <summary>Judges a group's field levels in order against the level each follows, the collapse's coarsest first:
     /// each level is kept or refused by the plan's clauses, and the chain ends at the first empty one.</summary>
     /// <param name="group">The measurement.</param>
@@ -147,8 +146,8 @@ internal static class MeshFieldLevels {
         var last = group.Follow;
 
         foreach (var row in group.Field) {
-            if (row.Error is not { } error || (row.Audit is not { } audit)) {
-                verdicts.Add(item: new Verdict(Error: last.Error, Kept: false, Level: row.Level, Measured: false, Reasons: row.Skipped ?? "empty", Triangles: 0));
+            if ((row.Error is not { } error) || (row.Audit is not { } audit)) {
+                verdicts.Add(item: new Verdict(Error: last.Error, Kept: false, Level: row.Level, Measured: false, Reasons: (row.Skipped ?? "empty"), Triangles: 0));
                 if (row.Skipped is "empty") { break; }
                 continue;
             }
@@ -163,9 +162,9 @@ internal static class MeshFieldLevels {
             if (audit.MissingCrossings > group.Reference.MissingCrossings) { reasons.Add(item: $"missing {audit.MissingCrossings}"); }
             if (error.Outside > 0) { reasons.Add(item: $"outside {error.Outside}"); }
             if (error.Refused > 0) { reasons.Add(item: $"refused {error.Refused}"); }
-            if (raised >= group.HalfDiagonal) { reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"dominated {Mm(raised)}>={Mm(group.HalfDiagonal)} mm")); }
+            if (raised >= group.HalfDiagonal) { reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"dominated {Mm(metres: raised)}>={Mm(metres: group.HalfDiagonal)} mm")); }
 
-            reasons.RemoveAll(match: reason => waived.Contains(value: reason[..reason.IndexOf(value: ' ', comparisonType: StringComparison.Ordinal)]));
+            reasons.RemoveAll(match: reason => waived.Contains(value: reason[..reason.IndexOf(comparisonType: StringComparison.Ordinal, value: ' ')]));
 
             var kept = (reasons.Count == 0);
 
@@ -175,20 +174,18 @@ internal static class MeshFieldLevels {
 
         return verdicts;
     }
-
     /// <summary>Returns which component of a level's error is largest: <c>geometric</c>, <c>material</c>,
     /// <c>normal</c> or <c>vanished</c>.</summary>
     /// <param name="error">The level's measurement.</param>
     /// <returns>The binding component.</returns>
     public static string Binds(SdfMeshLevelError error) =>
         new (string Name, float Value)[] { ("geometric", error.Geometric), ("material", error.Material.Largest), ("normal", error.Normal.Largest), ("vanished", error.Vanished.Largest) }.MaxBy(keySelector: static component => component.Value).Name;
-
     /// <summary>Writes one group's table.</summary>
     /// <param name="label">The group's label.</param>
     /// <param name="group">The measurement.</param>
     /// <param name="output">The report.</param>
     public static void Write(string label, Group group, StringBuilder output) {
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {label}: cell {Mm(group.Cell)} mm, half-diagonal {Mm(group.HalfDiagonal)} mm, members {group.Members}, surface witnesses {group.SurfaceWitnesses} ({group.SurfaceRefused} refused), {group.Lipschitz}\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {label}: cell {Mm(metres: group.Cell)} mm, half-diagonal {Mm(metres: group.HalfDiagonal)} mm, members {group.Members}, surface witnesses {group.SurfaceWitnesses} ({group.SurfaceRefused} refused), {group.Lipschitz}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  L0 merged: tris {group.Triangles} open {group.Reference.OpenEdges} flips {group.Reference.Flipped} missing {group.Reference.MissingCrossings}\n");
         foreach (var row in group.Collapse) { WriteRow(kind: "collapse", output: output, row: row, shaded: null, unshaded: null); }
         foreach (var row in group.Field) {
@@ -203,7 +200,7 @@ internal static class MeshFieldLevels {
     /// <param name="verdicts">The judgement (<see cref="Judge"/>).</param>
     /// <returns>The level's triangles and recorded error.</returns>
     public static (int Triangles, float Error) Floor(Group group, IReadOnlyList<Verdict> verdicts) =>
-        (verdicts.LastOrDefault(predicate: static verdict => verdict.Kept) is { } last) ? (last.Triangles, last.Error) : group.Follow;
+        ((verdicts.LastOrDefault(predicate: static verdict => verdict.Kept) is { } last) ? (last.Triangles, last.Error) : group.Follow);
     /// <summary>Returns whether a group's judged chain runs to where the field gives out: its coarsest contoured level
     /// that holds a mesh is kept, and only an empty lattice or the group's extent follows it, so the terminal level
     /// follows a kept one directly.</summary>
@@ -222,11 +219,11 @@ internal static class MeshFieldLevels {
     private static string Chain(Group group, IReadOnlyList<Verdict> verdicts) {
         var text = new StringBuilder();
 
-        text.Append(provider: CultureInfo.InvariantCulture, handler: $"{((group.Collapse.Count > 0) ? $"C{group.Collapse.Count}" : "L0")} {group.Follow.Triangles} ({Mm(group.Follow.Error)} mm)");
+        text.Append(provider: CultureInfo.InvariantCulture, handler: $"{((group.Collapse.Count > 0) ? $"C{group.Collapse.Count}" : "L0")} {group.Follow.Triangles} ({Mm(metres: group.Follow.Error)} mm)");
         foreach (var verdict in verdicts.Where(predicate: static verdict => verdict.Kept)) {
-            text.Append(provider: CultureInfo.InvariantCulture, handler: $" > F{verdict.Level} {verdict.Triangles} ({Mm(verdict.Error)} mm)");
+            text.Append(provider: CultureInfo.InvariantCulture, handler: $" > F{verdict.Level} {verdict.Triangles} ({Mm(metres: verdict.Error)} mm)");
         }
-        text.Append(provider: CultureInfo.InvariantCulture, handler: $" > empty ({Mm(group.HalfDiagonal)} mm)");
+        text.Append(provider: CultureInfo.InvariantCulture, handler: $" > empty ({Mm(metres: group.HalfDiagonal)} mm)");
 
         return text.ToString();
     }
@@ -252,14 +249,14 @@ internal static class MeshFieldLevels {
         var name = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{((kind == "field") ? "F" : "C")}{row.Level}");
 
         if (row.Error is not { } error) {
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {name} {kind}: cell {Mm(row.Cell)} tris 0 ({row.Skipped}){((row.Vanished > 0) ? $", {row.Vanished} components of {row.Whole} triangles vanished" : string.Empty)}\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {name} {kind}: cell {Mm(metres: row.Cell)} tris 0 ({row.Skipped}){((row.Vanished > 0) ? $", {row.Vanished} components of {row.Whole} triangles vanished" : string.Empty)}\n");
             return;
         }
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {name} {kind}: cell {Mm(row.Cell)} budget {Mm(row.Offset)} tris {row.Triangles} of {row.Whole} ({row.Vanished} vanished) error {Mm(error.Recorded)} binds {Binds(error: error)}");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | m>s max {Mm(error.MeshToSurface.Max)} p99 {Mm(error.MeshToSurface.P99)} lower {Mm(error.LowerMax)} (n {error.MeshToSurface.Count} refused {error.Refused} interior {error.Interior} lower>upper {error.LowerOverUpper})");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | s>m max {Mm(error.SurfaceToMesh.Max)} p99 {Mm(error.SurfaceToMesh.P99)} outside {error.Outside} ({Mm(error.OutsideMax)})");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | material {error.Material.Count}/{error.Material.Triangles} {Mm(error.Material.Largest)} normal {error.Normal.Count}/{error.Normal.Triangles} {Mm(error.Normal.Largest)} (nearest-only {error.NormalNearest.Count}/{error.NormalNearest.Triangles} {Mm(error.NormalNearest.Largest)}) vanished {error.Vanished.Count} {Mm(error.Vanished.Largest)}");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {name} {kind}: cell {Mm(metres: row.Cell)} budget {Mm(metres: row.Offset)} tris {row.Triangles} of {row.Whole} ({row.Vanished} vanished) error {Mm(metres: error.Recorded)} binds {Binds(error: error)}");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | m>s max {Mm(metres: error.MeshToSurface.Max)} p99 {Mm(metres: error.MeshToSurface.P99)} lower {Mm(metres: error.LowerMax)} (n {error.MeshToSurface.Count} refused {error.Refused} interior {error.Interior} lower>upper {error.LowerOverUpper})");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | s>m max {Mm(metres: error.SurfaceToMesh.Max)} p99 {Mm(metres: error.SurfaceToMesh.P99)} outside {error.Outside} ({Mm(metres: error.OutsideMax)})");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $" | material {error.Material.Count}/{error.Material.Triangles} {Mm(metres: error.Material.Largest)} normal {error.Normal.Count}/{error.Normal.Triangles} {Mm(metres: error.Normal.Largest)} (nearest-only {error.NormalNearest.Count}/{error.NormalNearest.Triangles} {Mm(metres: error.NormalNearest.Largest)}) vanished {error.Vanished.Count} {Mm(metres: error.Vanished.Largest)}");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $" | open {row.Audit?.OpenEdges} flips {row.Audit?.Flipped} folds {row.Audit?.Folds} missing {row.Audit?.MissingCrossings}/{row.Audit?.Crossings}");
         if (shaded is not null) { output.Append(provider: CultureInfo.InvariantCulture, handler: $" | (a,b) {shaded.Reasons} | without normals {unshaded?.Reasons}"); }
         output.Append(value: '\n');
@@ -280,7 +277,6 @@ internal static class MeshFieldLevels {
     /// <param name="Audit">The audit of the level as a mesh of its own, or <see langword="null"/>.</param>
     /// <param name="Skipped">Why the level holds no mesh, or <see langword="null"/>.</param>
     public sealed record Row(int Level, float Cell, float Offset, int Triangles, int Whole, int Vanished, SdfMeshLevelError? Error, SdfMeshAuditReport? Audit, string? Skipped);
-
     /// <summary>A field level's verdict under a judgement.</summary>
     /// <param name="Level">The field level.</param>
     /// <param name="Triangles">Its triangles.</param>
@@ -289,7 +285,6 @@ internal static class MeshFieldLevels {
     /// <param name="Kept">Whether it is kept.</param>
     /// <param name="Reasons"><c>kept</c>, or why it is refused or holds nothing.</param>
     public sealed record Verdict(int Level, int Triangles, float Error, bool Measured, bool Kept, string Reasons);
-
     /// <summary>One group's measurement.</summary>
     /// <param name="Cell">Level zero's contour cell, in metres.</param>
     /// <param name="HalfDiagonal">The group's half box diagonal, in metres: the terminal empty level's error.</param>
@@ -327,21 +322,24 @@ internal static class MeshFieldLevels {
             Inside += cycles;
         }
     }
-
     // CLI-only attribution around the engine's shared CPU sampler.
     private sealed class Field(SdfProgram program, Work work) : ISdfMeshLevelField, IDisposable {
-        private readonly SdfMeshCpuField m_field = new(program);
+        private readonly SdfMeshCpuField m_field = new(program: program);
+
         public float StepScale => m_field.StepScale;
+
         public void Dispose() => m_field.Dispose();
         public void Values(ReadOnlySpan<Vector3> points, Span<float> values, Span<int> materials, SdfMeshLevelWork kind) {
             var started = ThreadCycles.Now();
-            m_field.Values(points, values, materials, kind);
-            work.Count(kind, points.Length, ThreadCycles.Now() - started);
+
+            m_field.Values(materials: materials, points: points, values: values, work: kind);
+            work.Count(kind, points.Length, (ThreadCycles.Now() - started));
         }
         public void Gradients(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<Vector3> gradients, SdfMeshLevelWork kind) {
             var started = ThreadCycles.Now();
-            m_field.Gradients(points, spacing, values, gradients, kind);
-            work.Count(kind, 5L * points.Length, ThreadCycles.Now() - started);
+
+            m_field.Gradients(gradients: gradients, points: points, spacing: spacing, values: values, work: kind);
+            work.Count(kind, (5L * points.Length), (ThreadCycles.Now() - started));
         }
     }
 

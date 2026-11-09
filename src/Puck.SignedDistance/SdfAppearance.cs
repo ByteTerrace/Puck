@@ -379,7 +379,7 @@ public sealed class SdfAppearance {
                     y: BitConverter.UInt32BitsToSingle(value: ((uint)paints.Count)),
                     z: BitConverter.UInt32BitsToSingle(value: ((m.EmissiveLane is { } lane) ? (((uint)lane) + 1u) : 0u)),
                     w: BitConverter.UInt32BitsToSingle(value: ((m.Glass is { HasContact: true } contact)
-                        ? BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactReach)) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)contact.ContactCoverage))) << 16)
+                        ? VectorFunctions.PackHalf2x16(contact.ContactReach, contact.ContactCoverage)
                         : 0u))
                 )
             );

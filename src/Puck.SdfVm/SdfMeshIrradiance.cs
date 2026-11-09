@@ -1561,16 +1561,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         words[0] = (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag) | (probe.Invalid ? SdfMeshIrradianceProbe.InvalidFlag : 0u);
         for (var pair = 0; (pair < 3); pair++) {
-            words[(SdfMeshIrradianceProbe.SkyWord + pair)] = Pack(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
+            words[(SdfMeshIrradianceProbe.SkyWord + pair)] = VectorFunctions.PackHalf2x16(low: sky[(2 * pair)], high: sky[((2 * pair) + 1)]);
         }
         for (var pair = 0; (pair < 9); pair++) {
-            words[(SdfMeshIrradianceProbe.RadianceWord + pair)] = Pack(low: Channel(cube: radiance, index: (2 * pair)), high: Channel(cube: radiance, index: ((2 * pair) + 1)));
-            words[(SdfMeshIrradianceProbe.SkyLightWord + pair)] = Pack(low: Channel(cube: skyLight, index: (2 * pair)), high: Channel(cube: skyLight, index: ((2 * pair) + 1)));
+            words[(SdfMeshIrradianceProbe.RadianceWord + pair)] = VectorFunctions.PackHalf2x16(low: Channel(cube: radiance, index: (2 * pair)), high: Channel(cube: radiance, index: ((2 * pair) + 1)));
+            words[(SdfMeshIrradianceProbe.SkyLightWord + pair)] = VectorFunctions.PackHalf2x16(low: Channel(cube: skyLight, index: (2 * pair)), high: Channel(cube: skyLight, index: ((2 * pair) + 1)));
         }
         probe.Lights.CopyTo(destination: words.Slice(length: SdfMeshIrradianceProbe.LightWords, start: SdfMeshIrradianceProbe.LightsWord));
         // KEEP IN SYNC with sdfMeshProbeOffset.
-        words[SdfMeshIrradianceProbe.OffsetWord] = Pack(high: probe.Offset.Y, low: probe.Offset.X);
-        words[(SdfMeshIrradianceProbe.OffsetWord + 1)] = Pack(high: probe.Inside, low: probe.Offset.Z);
+        words[SdfMeshIrradianceProbe.OffsetWord] = VectorFunctions.PackHalf2x16(high: probe.Offset.Y, low: probe.Offset.X);
+        words[(SdfMeshIrradianceProbe.OffsetWord + 1)] = VectorFunctions.PackHalf2x16(high: probe.Inside, low: probe.Offset.Z);
         probe.Depth.CopyTo(destination: words[SdfMeshIrradianceProbe.DepthWord..]);
 
     }
@@ -1579,8 +1579,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return ((index % 3) switch { 0 => value.X, 1 => value.Y, _ => value.Z });
     }
-    private static uint Pack(float low, float high) =>
-        ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)low))) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)high))) << 16);
 
     /// <summary>Returns the key a cell's probe carries: each coordinate's low ten bits. KEEP IN SYNC with
     /// <c>sdfMeshIrradianceKey</c>.</summary>

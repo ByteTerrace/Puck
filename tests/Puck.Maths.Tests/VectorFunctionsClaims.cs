@@ -294,6 +294,8 @@ internal static class VectorFunctionsClaims {
         if (uv != 0xFFFF0001U) { return $"PackUnorm2x16 laid out 0x{uv:X8}, not u in the low half"; }
         if (VectorFunctions.PackUnorm2x16(uv: new Vector2(x: 0.5f, y: -1f)) != 32768U) { return "PackUnorm2x16 does not round 0.5 to 32768 and clamp below zero"; }
         if (VectorFunctions.PackUnorm2x16(uv: new Vector2(x: 2f, y: float.NaN)) != 0xFFFFU) { return "PackUnorm2x16 does not clamp above one and zero NaN"; }
+        if (VectorFunctions.PackHalf2x16(1f, -2f) != 0xC0003C00U) { return "PackHalf2x16 reversed the IEEE half lanes"; }
+        if (VectorFunctions.PackHalf2x16(-0f, float.PositiveInfinity) != 0x7C008000U) { return "PackHalf2x16 lost signed zero or infinity"; }
 
         return null;
     }

@@ -75,10 +75,10 @@ public static class SdfMeshPlanarMerge {
         var edges = new Dictionary<(int, int), (int First, int Second, int Count)>();
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
-            var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+            var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
             faces[triangle] = SdfMeshAudit.FaceNormal(a: positions[a], b: positions[b], c: positions[c]);
-            foreach (var (first, second) in (ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)]) {
+            foreach (var (first, second) in ((ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)])) {
                 var key = ((first < second) ? (first, second) : (second, first));
 
                 edges[key] = (edges.TryGetValue(key: key, value: out var held) ? (held.First, triangle, (held.Count + 1)) : (triangle, -1, 1));
@@ -106,7 +106,7 @@ public static class SdfMeshPlanarMerge {
         bool Fits(int triangle, int region, Vector3 normal, double offset, uint material, byte member) {
             if ((regionOf[triangle] >= 0) || (Vector3.Dot(vector1: faces[triangle], vector2: normal) < cosine) || (((materials.Length == 0) ? 0u : materials[triangle]) != material)) { return false; }
             for (var corner = 0; (corner < 3); corner++) {
-                var vertex = (int)indices[((3 * triangle) + corner)];
+                var vertex = ((int)indices[((3 * triangle) + corner)]);
                 var point = positions[vertex];
 
                 if (((siteRegion[site[vertex]] >= 0) && (siteRegion[site[vertex]] != region)) ||
@@ -123,10 +123,11 @@ public static class SdfMeshPlanarMerge {
 
             var region = planes.Count;
             var normal = faces[seed];
-            var (sa, sb, sc) = (positions[(int)indices[(3 * seed)]], positions[(int)indices[((3 * seed) + 1)]], positions[(int)indices[((3 * seed) + 2)]]);
+
+            var (sa, sb, sc) = (positions[((int)indices[(3 * seed)])], positions[((int)indices[((3 * seed) + 1)])], positions[((int)indices[((3 * seed) + 2)])]);
             var offset = (((VectorFunctions.DotWide(first: normal, second: sa) + VectorFunctions.DotWide(first: normal, second: sb)) + VectorFunctions.DotWide(first: normal, second: sc)) / 3.0);
             var material = ((materials.Length == 0) ? 0u : materials[seed]);
-            var member = ((members.Length == 0) ? SdfMesh.NoMember : members[(int)indices[(3 * seed)]]);
+            var member = ((members.Length == 0) ? SdfMesh.NoMember : members[((int)indices[(3 * seed)])]);
 
             if (!Fits(material: material, member: member, normal: normal, offset: offset, region: region, triangle: seed)) { continue; }
 
@@ -138,7 +139,7 @@ public static class SdfMeshPlanarMerge {
                 held.Add(item: triangle);
                 queue.Enqueue(item: triangle);
                 for (var corner = 0; (corner < 3); corner++) {
-                    var vertex = (int)indices[((3 * triangle) + corner)];
+                    var vertex = ((int)indices[((3 * triangle) + corner)]);
 
                     if (siteRegion[site[vertex]] < 0) {
                         siteRegion[site[vertex]] = region;
@@ -149,9 +150,9 @@ public static class SdfMeshPlanarMerge {
 
             Take(triangle: seed);
             while (queue.TryDequeue(result: out var triangle)) {
-                var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+                var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
-                foreach (var (first, second) in (ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)]) {
+                foreach (var (first, second) in ((ReadOnlySpan<(int, int)>)[(a, b), (b, c), (c, a)])) {
                     var edge = edges[((first < second) ? (first, second) : (second, first))];
                     var other = ((edge.First == triangle) ? edge.Second : edge.First);
 
@@ -169,8 +170,8 @@ public static class SdfMeshPlanarMerge {
         }
         if (planes.Count == 0) { return mesh; }
 
-        var moved = (Vector3[])positions.Clone();
-        var turned = (Vector3[])normals.Clone();
+        var moved = ((Vector3[])positions.Clone());
+        var turned = ((Vector3[])normals.Clone());
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             if (siteRegion[site[vertex]] < 0) { continue; }
@@ -179,7 +180,7 @@ public static class SdfMeshPlanarMerge {
             var point = positions[vertex];
             var off = (VectorFunctions.DotWide(first: normal, second: point) - offset);
 
-            moved[vertex] = new Vector3(x: (float)(point.X - (off * normal.X)), y: (float)(point.Y - (off * normal.Y)), z: (float)(point.Z - (off * normal.Z)));
+            moved[vertex] = new Vector3(x: ((float)(point.X - (off * normal.X))), y: ((float)(point.Y - (off * normal.Y))), z: ((float)(point.Z - (off * normal.Z))));
         }
         for (var at = 0; (at < indices.Length); at++) {
             if (regionOf[(at / 3)] >= 0) { turned[indices[at]] = planes[regionOf[(at / 3)]].Normal; }
@@ -203,7 +204,9 @@ public static class SdfMeshPlanarMerge {
         private readonly bool[] m_alive;
         private readonly int[] m_degree;
         private readonly int[] m_leave;
+
         private int m_removedTriangles;
+
         // Scratch every removal reuses.
         private readonly List<int> m_ring = [];
         private readonly List<int> m_polygon = [];
@@ -241,7 +244,7 @@ public static class SdfMeshPlanarMerge {
             m_degree = new int[vertices];
             m_leave = new int[vertices];
             for (var half = 0; (half < indices.Length); half++) {
-                m_corners[half] = (int)indices[half];
+                m_corners[half] = ((int)indices[half]);
                 m_degree[m_corners[half]]++;
                 m_leave[m_corners[half]] = half;
             }
@@ -266,7 +269,6 @@ public static class SdfMeshPlanarMerge {
 
         private static int Next(int half) => (((half % 3) == 2) ? (half - 2) : (half + 1));
         private static int Previous(int half) => (((half % 3) == 0) ? (half + 2) : (half - 1));
-
         // Each half-edge's twin: the one half-edge running the other way between its two vertices, where exactly one runs
         // each way; -1 at an open or non-manifold edge.
         private void Twins() {
@@ -364,7 +366,7 @@ public static class SdfMeshPlanarMerge {
                             (m_regionOf[other] >= 0) ||
                             ((materials.IsEmpty ? 0u : materials[other]) != material) ||
                             (!members.IsEmpty && (members[m_corners[(3 * other)]] != member)) ||
-                            (!m_mesh.Influences.IsEmpty && (m_mesh.Influences.Span[m_corners[3 * other]] != m_mesh.Influences.Span[m_corners[3 * seed]])) ||
+                            (!m_mesh.Influences.IsEmpty && (m_mesh.Influences.Span[m_corners[(3 * other)]] != m_mesh.Influences.Span[m_corners[(3 * seed)]])) ||
                             !Same(first: normals[m_corners[(3 * other)]], second: normal) ||
                             !OnPlane(plane: plane, positions: positions, triangle: other)
                         ) { continue; }
@@ -411,12 +413,11 @@ public static class SdfMeshPlanarMerge {
                 }
             }
             for (var site = 0; (site < vertices); site++) {
-                if ((named[site] >= 0) && (m_mesh.Influences.IsEmpty || !m_mesh.Influences.Span[named[site]].Blended)) { candidates.Add(item: (unchecked((uint)named[site] * 2654435761u), named[site])); }
+                if ((named[site] >= 0) && (m_mesh.Influences.IsEmpty || !m_mesh.Influences.Span[named[site]].Blended)) { candidates.Add(item: (unchecked((((uint)named[site]) * 2654435761u)), named[site])); }
             }
 
             return candidates;
         }
-
         // The half-edges leaving a vertex, counter-clockwise about it, when its triangles close one ring about it.
         private bool Ring(int vertex, List<int> ring) {
             var start = m_leave[vertex];
@@ -447,20 +448,21 @@ public static class SdfMeshPlanarMerge {
         // Whether a ring's triangles turn once about its vertex in their plane: a ring that winds twice is no hole to fill.
         private bool Turns(List<int> ring, int vertex) {
             var angle = 0.0;
-            var (cu, cw) = ((double)m_u[vertex], (double)m_w[vertex]);
+
+            var (cu, cw) = (((double)m_u[vertex]), ((double)m_w[vertex]));
 
             foreach (var half in ring) {
                 var b = m_corners[Next(half: half)];
                 var c = m_corners[Previous(half: half)];
+
                 var (bu, bw) = ((m_u[b] - cu), (m_w[b] - cw));
                 var (du, dw) = ((m_u[c] - cu), (m_w[c] - cw));
 
-                angle += Math.Atan2(y: ((bu * dw) - (bw * du)), x: ((bu * du) + (bw * dw)));
+                angle += Math.Atan2(x: ((bu * du) + (bw * dw)), y: ((bu * dw) - (bw * du)));
             }
 
             return (Math.Abs(value: (angle - (2.0 * Math.PI))) < 1.0);
         }
-
         // Ear-clips a simple polygon wound counter-clockwise in its plane into m_ears (positions in the polygon), each ear
         // wound counter-clockwise and holding no other vertex of the polygon, on its edges included. False when no such ear
         // remains.
@@ -488,6 +490,7 @@ public static class SdfMeshPlanarMerge {
 
                     if (Orient(a: polygon[before], b: polygon[ear], c: polygon[after]) > 0) {
                         var clear = true;
+
                         var (a, b, c) = (polygon[before], polygon[ear], polygon[after]);
                         var (lowU, highU) = (MathF.Min(x: m_u[a], y: MathF.Min(x: m_u[b], y: m_u[c])), MathF.Max(x: m_u[a], y: MathF.Max(x: m_u[b], y: m_u[c])));
                         var (lowW, highW) = (MathF.Min(x: m_w[a], y: MathF.Min(x: m_w[b], y: m_w[c])), MathF.Max(x: m_w[a], y: MathF.Max(x: m_w[b], y: m_w[c])));
@@ -527,7 +530,6 @@ public static class SdfMeshPlanarMerge {
         // Whether a point lies in the closed triangle a, b, c, its edges and corners included.
         private bool Holds(int a, int b, int c, int point) =>
             ((Orient(a: a, b: b, c: point) >= 0) && (Orient(a: b, b: c, c: point) >= 0) && (Orient(a: c, b: a, c: point) >= 0));
-
         // Fills a vertex's ring with the ears over the polygon about it.
         private void Replace(ReadOnlySpan<int> ring, ReadOnlySpan<int> outer, ReadOnlySpan<int> polygon, ReadOnlySpan<(int A, int B, int C)> ears) {
             var count = polygon.Length;
@@ -599,6 +601,7 @@ public static class SdfMeshPlanarMerge {
                 var ca = m_twins[Previous(half: half)];
                 var ad = m_twins[Next(half: twin)];
                 var db = m_twins[Previous(half: twin)];
+
                 var (p, q) = ((3 * (half / 3)), (3 * (twin / 3)));
 
                 m_corners[p] = a;
@@ -630,7 +633,6 @@ public static class SdfMeshPlanarMerge {
             m_twins[half] = twin;
             if (twin >= 0) { m_twins[twin] = half; }
         }
-
         // The merged mesh: the triangles alive in the pool, each in the place of a triangle its region held (so with that
         // triangle's material), in the pool's order, and the vertices they name, in theirs.
         private SdfMesh Build() {
@@ -649,7 +651,7 @@ public static class SdfMeshPlanarMerge {
                 if (!m_alive[triangle]) { continue; }
                 if (!materials.IsEmpty) { triangleMaterials[at] = materials[triangle]; }
                 for (var corner = 0; (corner < 3); corner++) {
-                    indices[((3 * at) + corner)] = (uint)m_corners[((3 * triangle) + corner)];
+                    indices[((3 * at) + corner)] = ((uint)m_corners[((3 * triangle) + corner)]);
                     remap[m_corners[((3 * triangle) + corner)]] = 0;
                 }
                 at++;
@@ -674,16 +676,14 @@ public static class SdfMeshPlanarMerge {
                 if (keptInfluences.Length > 0) { keptInfluences[remap[vertex]] = m_mesh.Influences.Span[vertex]; }
             }
             for (var index = 0; (index < indices.Length); index++) {
-                indices[index] = (uint)remap[(int)indices[index]];
+                indices[index] = ((uint)remap[((int)indices[index])]);
             }
 
             return new SdfMesh(indices: indices, members: m_mesh.Members, normals: keptNormals, positions: keptPositions, triangleMaterials: triangleMaterials, vertexMembers: keptMembers, influences: keptInfluences) { BakeCell = m_mesh.BakeCell };
         }
-
         private int Orient(int a, int b, int c) => SdfMeshPlanarMerge.Orient(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c]);
         private bool InCircle(int a, int b, int c, int d) => SdfMeshPlanarMerge.InCircle(ax: m_u[a], ay: m_w[a], bx: m_u[b], by: m_w[b], cx: m_u[c], cy: m_w[c], dx: m_u[d], dy: m_w[d]);
     }
-
     // A region's plane: its normal, the normal's dot product with the region's first vertex, and the larger of a metre and
     // that vertex's largest coordinate, which scales the tolerance.
     private readonly record struct Plane3(Vector3 Normal, double Offset, double Scale);
@@ -700,15 +700,15 @@ public static class SdfMeshPlanarMerge {
     }
     private static double Largest(Vector3 point) => Math.Max(val1: Math.Abs(value: point.X), val2: Math.Max(val1: Math.Abs(value: point.Y), val2: Math.Abs(value: point.Z)));
     private static bool Same(Vector3 first, Vector3 second) =>
-        (BitConverter.SingleToUInt32Bits(value: first.X) == BitConverter.SingleToUInt32Bits(value: second.X)) &&
+        ((BitConverter.SingleToUInt32Bits(value: first.X) == BitConverter.SingleToUInt32Bits(value: second.X)) &&
         (BitConverter.SingleToUInt32Bits(value: first.Y) == BitConverter.SingleToUInt32Bits(value: second.Y)) &&
-        (BitConverter.SingleToUInt32Bits(value: first.Z) == BitConverter.SingleToUInt32Bits(value: second.Z));
+        (BitConverter.SingleToUInt32Bits(value: first.Z) == BitConverter.SingleToUInt32Bits(value: second.Z)));
 
     // The unit roundoff of a double, and Shewchuk's first error bounds for the orientation and circle determinants
     // ("Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates", 1997).
     private const double Epsilon = 1.1102230246251565E-16;
-    private const double OrientBound = ((3.0 + (16.0 * Epsilon)) * Epsilon);
     private const double CircleBound = ((10.0 + (96.0 * Epsilon)) * Epsilon);
+    private const double OrientBound = ((3.0 + (16.0 * Epsilon)) * Epsilon);
 
     /// <summary>Returns the exact sign of the orientation of three points with float coordinates.</summary>
     /// <param name="ax">The first point's first coordinate.</param>
@@ -719,8 +719,8 @@ public static class SdfMeshPlanarMerge {
     /// <param name="cy">The third point's second coordinate.</param>
     /// <returns>1 when the points wind counter-clockwise, -1 when they wind clockwise, 0 when they are collinear.</returns>
     public static int Orient(float ax, float ay, float bx, float by, float cx, float cy) {
-        var left = (((double)ax - cx) * ((double)by - cy));
-        var right = (((double)ay - cy) * ((double)bx - cx));
+        var left = ((((double)ax) - cx) * (((double)by) - cy));
+        var right = ((((double)ay) - cy) * (((double)bx) - cx));
         var determinant = (left - right);
         double sum;
 
@@ -739,12 +739,13 @@ public static class SdfMeshPlanarMerge {
 
         return ExactOrient(ax: ax, ay: ay, bx: bx, by: by, cx: cx, cy: cy);
     }
+
     // Whether d lies certainly inside the circle through a, b and c, which wind counter-clockwise; false where rounding
     // leaves it in doubt, cocircular points included.
     private static bool InCircle(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {
-        var (adx, ady) = (((double)ax - dx), ((double)ay - dy));
-        var (bdx, bdy) = (((double)bx - dx), ((double)by - dy));
-        var (cdx, cdy) = (((double)cx - dx), ((double)cy - dy));
+        var (adx, ady) = ((((double)ax) - dx), (((double)ay) - dy));
+        var (bdx, bdy) = ((((double)bx) - dx), (((double)by) - dy));
+        var (cdx, cdy) = ((((double)cx) - dx), (((double)cy) - dy));
         var (bdxcdy, cdxbdy) = ((bdx * cdy), (cdx * bdy));
         var (cdxady, adxcdy) = ((cdx * ady), (adx * cdy));
         var (adxbdy, bdxady) = ((adx * bdy), (bdx * ady));
@@ -769,7 +770,7 @@ public static class SdfMeshPlanarMerge {
             (mantissas[at], exponents[at]) = Decompose(value: values[at]);
             if (mantissas[at] == 0) { continue; }
             lowest = Math.Min(val1: lowest, val2: exponents[at]);
-            highest = Math.Max(val1: highest, val2: (exponents[at] + (64 - BitOperations.LeadingZeroCount(value: (ulong)Math.Abs(value: mantissas[at])))));
+            highest = Math.Max(val1: highest, val2: (exponents[at] + (64 - BitOperations.LeadingZeroCount(value: ((ulong)Math.Abs(value: mantissas[at]))))));
         }
         if (lowest == int.MaxValue) { return 0; }
         if ((highest - lowest) <= 61) {
@@ -793,8 +794,8 @@ public static class SdfMeshPlanarMerge {
     // A finite float as an odd signed whole number times a power of two, or zero.
     private static (long Mantissa, int Exponent) Decompose(float value) {
         var bits = BitConverter.SingleToUInt32Bits(value: value);
-        var field = (int)((bits >> 23) & 0xFFu);
-        long mantissa = (bits & 0x7FFFFFu);
+        var field = ((int)((bits >> 23) & 0xFFu));
+        long mantissa = bits & 0x7FFFFFu;
         var exponent = -149;
 
         if (field != 0) {

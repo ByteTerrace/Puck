@@ -61,14 +61,14 @@ uint sdfMeshMemberEntry(uint record, uint vertex) {
     }
 
     uint skin = sdfMeshRegion[(record + SDF_MESH_SKIN_WORD)];
-    uint member = sdfMeshRegion[(((skin + 1u) + (SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin])) + 4u * vertex)];
+    uint member = sdfMeshRegion[(((skin + 1u) + (SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin])) + SDF_MESH_SKIN_VERTEX_WORDS * vertex)];
 
     return ((member == 255u) ? 0u : ((skin + 1u) + (SDF_MESH_MEMBER_WORDS * member)));
 }
 // Four words per vertex: first member, second member/share, gradient XY, gradient Z.
 uint sdfMeshInfluenceWord(uint record, uint vertex) {
     uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
-    return skin + 1u + SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin] + 4u * vertex;
+    return skin + 1u + SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin] + SDF_MESH_SKIN_VERTEX_WORDS * vertex;
 }
 uint sdfMeshSecondEntry(uint record, uint vertex) {
     uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
