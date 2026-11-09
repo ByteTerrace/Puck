@@ -352,8 +352,8 @@ What a first swallow taught, in the order it went wrong:
   motion owner, and check the extreme poses frame by frame.
 - **Judge every side.** A side view read right while the front showed a
   screaming face. Capture front, side, three-quarter, back and close, plus a
-  presented burst for motion, and send them to the `look-critic` agent; show
-  the owner only what passes.
+  presented burst for motion, and keep going while any of them shows a
+  defect. Work you can see fails is not shown as progress.
 - **Push a live edit as a row when `world.reload` is refused.** The debug
   world's rebuild exceeds the transport cap (open items), so compile the
   `.puck` and send the creation's document with

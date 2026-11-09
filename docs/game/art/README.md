@@ -76,14 +76,17 @@ into its guide. A look change is captured in the scene-read order (position,
 place guide, `world.view.pick` across the frame, the authored intent, then the
 pixels) from every side that matters: front, side, three-quarter, back and
 close, plus a presented burst through the extreme poses of anything that
-moves. The `look-critic` agent (`.claude/agents/look-critic.md`) judges those
-captures against the references and never sees the builder's account, under
-the headings above and the [concept art review](#concept-art-review)'s
-attachment, physical coherence, perspective and compositing checks. Any seam,
-tear, facet, fragment or unexplained shape fails; there is no pass with
-caveats. The work lands, and reaches the owner, only after a pass; a failure
-is a defect fixed at its cause, including the rendering feature or engine
-path the work needs.
+moves. The builder judges those captures against the references under the
+headings above and the [concept art review](#concept-art-review)'s
+attachment, physical coherence, perspective and compositing checks, and keeps
+iterating while it can see a defect. Any seam, tear, facet, fragment or
+unexplained shape fails; there is no pass with caveats, and work the builder
+knows fails is never presented as progress. The failure the bar exists for is
+not misjudging: it is knowing and showing anyway. Outside review (the
+`look-critic` agent, `.claude/agents/look-critic.md`, which judges captures
+against references without the builder's account) is a tool for a milestone
+or a real doubt, not a toll on every pass. A failure is a defect fixed at its
+cause, including the rendering feature or engine path the work needs.
 The lead puts current captures beside their references before the owner on a
 regular cadence ([orchestration](../../../.claude/skills/orchestration/SKILL.md#land-in-batches)).
 

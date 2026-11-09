@@ -365,14 +365,15 @@ changes and what the lane ran to show them working before merging
 
 ## Land in batches
 
-A look change lands only with a `look-critic` pass against
-[the visual bar](../../../docs/game/art/README.md#the-visual-bar): the lead
-sends its captures, picks and references, never the builder's account, and a
-failure goes back to the lane. This binds the lead's own work too: the lead
-shows the owner no visual result, mid-session or at its close, that the critic
-has not passed, and never presents a failing result as progress with caveats.
+A look change lands only when it meets
+[the visual bar](../../../docs/game/art/README.md#the-visual-bar) on its
+captures from every side. The builder holds itself to that and keeps
+iterating while it can see a defect; the lead checks a lane's captures before
+merging and sends a milestone or a doubtful case to the `look-critic` agent
+when fresh eyes pay for themselves, not every pass. The lead never shows the
+owner a result it knows fails, and never frames one as progress with caveats.
 A lead that iterated a creation in front of the owner and reported it as
-reading right while its seams tore and its eyes faceted is the case. The lead also keeps the bar in front
+reading right while it knew the throat tore and the eyes faceted is the case. The lead also keeps the bar in front
 of the owner: at the close of every session that touched a place, and at least
 once per milestone across the debug world's places, it publishes current
 captures beside their reference panels with the critic's verdicts, and queues

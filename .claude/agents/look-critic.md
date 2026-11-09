@@ -1,6 +1,6 @@
 ---
 name: look-critic
-description: "Read-only Opus 5.5 judge of a look change against the visual bar: given captures, picks and reference images, it passes or fails each heading. It never sees the builder's account. Not for code review (reviewer)."
+description: "Read-only Opus 5.5 judge of a look change against the visual bar, for a milestone or a real doubt: given captures, picks and references, it passes or fails each heading without the builder's account. Not for code review (reviewer)."
 model: claude-opus-5-5
 effort: high
 disallowedTools: Edit, Write, NotebookEdit, Agent, Bash, PowerShell
