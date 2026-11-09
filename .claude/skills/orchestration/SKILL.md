@@ -274,14 +274,20 @@ Duplicates kept arriving after every agent was told to watch for them, because
 nothing in the flow checked: lanes search by name and miss the copy under
 another name, a `private` helper looks local, parallel worktrees merge
 cleanly, and the lead trusted **Systems considered** and filed what it found.
-So the lead checks at landing. Before merging a writing lane, list the
-branch's new declarations (`git diff <integration>...<branch> -U0 -- '*.cs'`,
-added type and method lines), and for each general technique among them (a
-divisor, a hash, a comparer, a pool, a retry, a cache, a resolver, a CPU twin
-of a GPU kernel) run one technique search against its shared home. A hit goes
+So the lead checks at landing. Before merging a writing lane, run
+`puck scan --only duplicates --against <integration> --head <branch>` from a
+checkout of the integration tip. It lists the types and methods the branch adds
+or changes with the declarations elsewhere that carry the same technique under
+another name (shared constants, BCL markers, body shape), ranked, and flags the
+branch's `private` or `internal` helpers shaped like a general technique with the
+shared home to search
+([the check](../../../docs/reference/cli.md#the-branch-duplicate-check)). Read each hit
+and each flag, and for a general technique the scan cannot see (a resolver, a CPU
+twin of a GPU kernel) run one technique search against its shared home. A hit goes
 back to the lane before the merge, or, when the lane has ended, to the next
 wave's first lane; it is never only filed. The bake-collapse lane's private
-reciprocal divisor, a copy of the prime kernels' private one, is the case.
+reciprocal divisor, a copy of the prime kernels' private one, is the case the scan
+is validated on.
 
 A brief asks for the fix at the cause and never lists a stopgap as an
 acceptable direction (AGENTS.md: the proper fix is always preferred). A lane

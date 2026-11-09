@@ -135,7 +135,7 @@ half of these rules on every command, with no exemptions.
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against a release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
-| [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones, identity counters, exact cache keys. |
+| [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones, identity counters, exact cache keys, and a branch's duplicate techniques. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
@@ -2834,7 +2834,7 @@ Under Git Bash on Windows, export `MSYS_NO_PATHCONV=1` before passing a `--metri
 pointer: MSYS rewrites an argument starting with `/` into a Windows path, and
 `request` then refuses the pointer.
 
-Lanes record timing questions; the lead answers them on a quiet machine. `request` freezes the complete output directory of each `Puck.World.dll`, records the command, numeric metrics and decision criterion, and publishes the request in the main checkout's ignored measurement scratch, shared across worktrees beside the leases. It prints the complete directory; `MeasureCommand` owns its location. Rebuilding the source output or pruning its build store cannot change the copied pair. Use one artifact or commit per side; commit inputs are exported through `AffectedRevisionExport` and built through `WorldArtifactBuild`, including both shader formats, before publication.
+Lanes record timing questions; the lead answers them on a quiet machine. `request` freezes the complete output directory of each `Puck.World.dll`, records the command, numeric metrics and decision criterion, and publishes the request in the main checkout's ignored measurement scratch, shared across worktrees beside the leases. It prints the complete directory; `MeasureCommand` owns its location. Rebuilding the source output or pruning its build store cannot change the copied pair. Use one artifact or commit per side; commit inputs are exported through `RevisionExport` and built through `WorldArtifactBuild`, including both shader formats, before publication.
 
 ```sh
 puck measure request --name 'startup comparison' \
@@ -3399,7 +3399,8 @@ runs the selected analyzers over that one shared corpus, so a full sweep parses
 the tree a single time rather than once per analyzer.
 
 ```text
-puck scan [<root=src>] [--only comments,comment-smells,locks,clones,identity-counters,exact-keys]
+puck scan [<root=src>] [--only comments,comment-smells,locks,clones,identity-counters,exact-keys,duplicates]
+          [--against <ref> [--head <ref>]]
           [--output <dir>] [--grouped] [--max-per-chunk N]
           [--min-tokens N] [--min-statements N] [--min-expression-tokens N]
           [--no-blocks] [-h]
@@ -3413,9 +3414,51 @@ puck scan [<root=src>] [--only comments,comment-smells,locks,clones,identity-cou
 | `clones` | structurally identical code, Type-1/Type-2 fingerprinted, in four passes that each leave what an earlier one holds: whole type bodies (a helper type pasted into several files), callable bodies, nested blocks of at least `--min-statements` statements, and outermost expressions of at least `--min-expression-tokens` tokens (a formula copied into callers whose statements differ; `0` skips the pass). `--min-tokens` gates the first three, and `--no-blocks` drops the block pass. |
 | `identity-counters` | integer fields of the simulation projects (`Puck.State*`, `Puck.World.Server`, `Puck.World.Schema`) incremented to mint an identity (`mint`: the increment's value is used; `bump`: a statement increment of a field named for identity) that no checkpoint, snapshot or codec member of the same type mentions. |
 | `exact-keys` | exact comparisons of continuous inputs where a cache or memo decides: a key type (named as one, or a dictionary's or set's key) comparing float, vector or fixed-point members exactly (`key-type`), an equality of two float bit patterns (`bit-equality`), and an `==` against a remembered continuous field (`cached-compare`). |
+| `duplicates` | a branch's duplicate techniques, against the rest of the tree; runs only with `--against` ([below](#the-branch-duplicate-check)). |
 
 The [hazards page](../development/hazards.md) says which recurring defect each
 analyzer looks for and how its findings are triaged.
+
+### The branch duplicate check
+
+`puck scan --only duplicates --against <integration-ref>` is the landing check for
+duplicate code: a lane runs it before it hands back, and the lead runs it before
+it lands a lane. `clones` finds token-identical code over the whole tree, but most
+duplicates are one technique written again under other names (a reciprocal
+divisor, a Fibonacci-mix comparer), so this analyzer matches on what a technique
+cannot rename.
+
+It reads the lines the branch adds from git (`git diff` from the merge base of
+`--against` and the head, so work that landed on the base since the branch left
+it is not counted). By default the head is the working tree, so uncommitted edits
+and untracked files count; `--head <ref>` instead scans an export of that revision,
+so a past branch replays as it was. A **changed declaration** is a type whose name
+line the diff adds, or a method, constructor or operator any of whose lines it adds.
+Each is compared with the rest of the tree, and the records are:
+
+- `neighbour`: a declaration of the same kind that resembles the changed one, with
+  the `file:line` of both sides in the digest and in the record's `other` member,
+  ranked by `score`. The score sums the rarity (`ln((n + 1) / (df + 1))` over the
+  tree) of the technique facts the two share, 12 times the Jaccard similarity of
+  their shapes (the token stream with identifiers and long literals abstracted,
+  compared as five-token shingles), and up to 4 for how much of their fact sets
+  overlap. The facts are a numeric literal that is not a round number, a power of
+  two or a mask (`0x9E3779B97F4A7C15`); a BCL type or call only a technique reaches
+  for (`Math.BigMul`, `UInt128`, `Interlocked`, `ArrayPool<T>`,
+  `IEqualityComparer<long>`); and the reciprocal idioms `T.MaxValue / d` and
+  `T.MaxValue / d + 1`. A fact held by more than 60 declarations counts for
+  nothing. A candidate shows when its facts alone reach 8 or its shape reaches 0.4,
+  and each changed declaration keeps its five best.
+- `helper`: a changed declaration with no `public`, `protected` or `override`
+  modifier whose name or markers say divisor, hash, comparer, pool, random,
+  saturating or rounding arithmetic, retry or cache, and that is not already in the
+  category's shared home (`Puck.Maths` for the numeric, hash and comparer ones). The
+  record names the home and lists what it already holds that is nearest.
+
+Both are leads to read, never verdicts; detection is syntactic and shape
+comparison covers declarations of at least 24 tokens within a factor of four in
+size. A hit goes to the lane, or the next wave, before the merge. `--head` without
+`--against`, or `duplicates` without it, is a usage error.
 
 ### Output modes
 
