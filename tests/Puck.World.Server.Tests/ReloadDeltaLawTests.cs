@@ -7,14 +7,19 @@ namespace Puck.World.Server.Tests;
 public sealed class ReloadDeltaLawTests {
     [Fact]
     public void APaletteDeltaCrossesTheWireAndMatchesWholeDocumentReloadState() {
-        var world = Fixtures.BuildDocument();
+        var world = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var original = world.Creations[0];
+        original = CreationFixtures.Prototype(original.Document with { Palette = CreationFixtures.Grey }, original.Id);
+        world = world with { CreationsRaw = [original] };
         var recoloured = CreationFixtures.Prototype(original.Document with {
             Palette = [new("#6B8299", null, null, null)],
         }, original.Id);
+        Assert.True(recoloured.DiffersInShadingAlone(original));
         var target = world with { CreationsRaw = [recoloured, .. world.Creations.Skip(1)] };
         using var deltaWorld = Fixtures.FreshServer(world);
         using var wholeWorld = Fixtures.FreshServer(world);
+        deltaWorld.Step();
+        wholeWorld.Step();
         var hash = WorldDefinitionFileSource.ComputeContentHash(WorldDefinitionSerialization.Serialize(target));
         var delta = WorldReloadDelta.Create(deltaWorld.Server.Definition, deltaWorld.Server.DocumentVersion, target);
         var request = new WorldRebuildRequest(WorldRebuildKind.Reload, null, new WorldRebuildOrigin.File("palette.world.json"), false, hash, delta);
@@ -26,8 +31,8 @@ public sealed class ReloadDeltaLawTests {
         deltaWorld.Step();
         wholeWorld.Step();
         Assert.Equal("#6B8299", deltaWorld.Server.Definition.Creations[0].Document.Palette![0].Color);
-        var actual = WorldStateHashComposition.HashAuthoritative(deltaWorld.Server, 1);
-        var expected = WorldStateHashComposition.HashAuthoritative(wholeWorld.Server, 1);
+        var actual = WorldStateHashComposition.HashAuthoritative(deltaWorld.Server, 2);
+        var expected = WorldStateHashComposition.HashAuthoritative(wholeWorld.Server, 2);
         Assert.Equal(expected, actual);
         Console.WriteLine($"reload-delta parity: whole={expected:x16} delta={actual:x16} payload={bytes.Length}");
     }

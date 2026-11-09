@@ -422,8 +422,8 @@ public sealed class MachineContentFolderLawTests {
             Assert.Equal(expected: "../local/plain.rom", actual: after.Content);
         }
     }
-    // A reload submits the re-read document through the rebuild leaf, whose JSON holds no directory; the directory
-    // rides beside it, so the document's machines still resolve their relative content beside the file.
+    // A reload's delta carries the replacement directory beside its patch, so the reconstructed document's machines
+    // still resolve their relative content beside the file.
     [Fact]
     public void AReloadedDocumentResolvesItsMachineContentBesideItsFile() {
         using var root = Layout();
@@ -446,7 +446,8 @@ public sealed class MachineContentFolderLawTests {
                 frame: out var frame,
                 payload: new WorldSubmissionPayload.Rebuild(Value: new WorldRebuildRequest(
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: reread)),
-                    Definition: reread,
+                    Definition: null,
+                    Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, reread),
                     Force: true,
                     Kind: WorldRebuildKind.Reload,
                     Origin: new WorldRebuildOrigin.File(Path: Path.Combine(path1: root.PathOf(name: "world"), path2: "cabinet.world.json"))
@@ -456,7 +457,8 @@ public sealed class MachineContentFolderLawTests {
 
             var request = Assert.IsType<WorldSubmissionPayload.Rebuild>(@object: decoded).Value;
 
-            Assert.Equal(expected: reread.DocumentDirectory, actual: request.Definition!.DocumentDirectory);
+            Assert.Null(request.Definition);
+            Assert.Equal(expected: reread.DocumentDirectory, actual: request.Delta!.DocumentDirectory);
             fixture.Server.EnqueueRebuild(principal: Principal.Console, request: request);
             fixture.Step();
 
