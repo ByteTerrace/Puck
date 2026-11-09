@@ -1464,23 +1464,31 @@ public sealed partial class SdfMeshPathBake {
         var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
         var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
 
-        if (!(group.Detail > 0f) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
+        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
+
+        // A detail at or past the lattice's own spacing is one the lattice already resolves, as a union's member's is.
+        if (!(group.Detail > 0f) || (group.Detail >= coarse) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
             return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory);
         }
 
-        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
-
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / group.Detail))), min: 2, max: MaxDetailRefinement),
+            Factor = RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: group.Detail),
             Regions = [new SdfLatticeRegion(High: high, Low: low)],
         };
     }
+    // The fine cells along each axis a region whose own spacing is `spacing` asks a final lattice of `coarse` spacing to
+    // split a coarse cell into: the fewest that reach it, from two to `most`. The lattice splits each region cell the
+    // fewest times the finest region's factor divides into by a power of two that still reach its own
+    // (SdfSampledLattice.Refine).
+    private static int RegionFactor(float coarse, float spacing, int most) =>
+        Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / spacing))), min: 2, max: most);
     // The final lattice of a union of members (a static copy's run, a dynamic slot's several instances, or the parts a pooled
     // group declares), which keeps each member at the resolution its own final lattice would give it, in the group's frame
     // and alike for static and dynamic groups: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
     // UnionSamples and coarser where it does not, never coarser than the capped lattice over the union's box; a member
-    // whose own spacing stays finer than that by more than RegionRatio is a region its refinement measures at its own
-    // spacing (SdfSampledLattice.Refine). A member's own spacing is its bounding sphere's box at FinalSamples a side.
+    // whose own spacing stays finer than that by more than RegionRatio, or that declares a detail finer than it, is a
+    // region its refinement measures at its own factor (SdfSampledLattice.Refine), so one fine member refines no other
+    // member's box. A member's own spacing is its bounding sphere's box at FinalSamples a side.
     private static FinalLattice UnionFinal(Group group) {
         var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
@@ -1507,8 +1515,7 @@ public sealed partial class SdfMeshPathBake {
         var spacing = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
         var coarse = MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z));
         var regions = new List<SdfLatticeRegion>();
-        var target = float.PositiveInfinity;
-        var detailed = float.PositiveInfinity;
+        var factor = 0;
 
         foreach (var (_, radius, detail, low, high) in group.Members) {
             var own = ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius));
@@ -1517,18 +1524,22 @@ public sealed partial class SdfMeshPathBake {
             // slab's half thickness over a lattice finer than it) would only spend the refinement's sample budget on
             // surface the coarse contour holds, leaving the thin members that need it the coarse cell.
             if ((detail > 0f) ? (own >= coarse) : ((own * RegionRatio) >= coarse)) { continue; }
+
+            // Each member refines toward its own spacing, so one fine member refines no other member's box.
+            var ownFactor = RegionFactor(coarse: coarse, most: ((detail > 0f) ? MaxDetailRefinement : MaxRefinement), spacing: own);
+
             regions.Add(item: new SdfLatticeRegion(
                 High: Vector3.Min(value1: group.High, value2: high),
-                Low: Vector3.Max(value1: group.Low, value2: low)
+                Low: Vector3.Max(value1: group.Low, value2: low),
+                Factor: ownFactor
             ));
-            target = MathF.Min(x: target, y: own);
-            if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
+            factor = Math.Max(val1: factor, val2: ownFactor);
         }
 
         var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
+            Factor = factor,
             Regions = [.. regions],
         };
     }

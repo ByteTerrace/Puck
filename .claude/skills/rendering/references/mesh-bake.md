@@ -366,33 +366,62 @@ laws exercise that boundary.
   (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
   irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
-- **Static features declare their spacing.** `WorldPlacementStamper.StaticInstanceVisitor.ShapeDetail`
-  feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
-  geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
-  thickness or a rounded profile's radius, a thirty-second of a warped shape's
-  smallest half-extent, or a thirty-second of a cellular relief's wavelength. The tightest applies, at
-  placement scale, and none finer than 2 mm (`WorldPlacementStamper.FinestDetail`:
-  an 18 cm swallow's 3 mm wing blade, whose rounded corner asks 0.2 mm, bakes
-  30,000 triangles at that floor and 382,000 without it); a scoped creation keeps its tightest shape's spacing, or its
-  noise relief's (`CreationNoiseDocument.DetailSpacing`: a quarter of the
-  wavelength of the finest octave carrying a sixteenth of the amplitude) where
-  that is finer. Refinement stops at eight cells a coarse axis, and a scoped
-  creation's coarse lattice spans its bound sphere about the creation's origin,
-  so a terrain sector centred on its ring's centre bakes at 2.8 m, not its
-  declared 1.56 m (`docs/plans/valley-and-moons.md`).
-  A bound alone misses thin strands and leaves warped corners under-resolved.
-  In a static union a member's region is its own world-axis box where the
-  stamper knows one (`SdfInstanceRange.Box`, `CreationStampEmitter.ShapeStampBox`:
-  an unwarped, unfolded primitive), not its bound sphere's cube, which for a
-  48 m strip spans the whole slab it hangs from; and a member whose declared
-  detail is at or past the union's coarse spacing is no region at all
-  (`SdfMeshPathBake.UnionFinal`), since the lattice already resolves it.
-  Convex rounding reads the scaled polygon's inradius and extrusion clamp;
-  warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
-  an offset and may be zero while its radial extent remains positive. A plate
-  longer than eight of its half-thicknesses (a slab, a wall, a light strip)
-  declares its half thickness: a lattice sized by its length steps clean over
-  a sheet thinner than its cell, and the sheet bakes to nothing.
+- **Every shape declares its spacing by one rule.** `WorldShapeDetail.Of`
+  serves a static stamp's shape, a pooled blend group's part and an ungrouped
+  pooled shape alike, feeding `SdfInstanceRange.Detail` and
+  `SdfInstancePart.Detail`. A bound measures a shape's reach, not its smallest
+  feature, so each feature declares a spacing: a round section (a sphere's, an
+  ellipsoid's middle radius, a superellipsoid's tightened by its exponent, a
+  cylinder's or cone's, a capsule's, a torus's tube, a strand's thicker radius,
+  an elliptic profile's tightest bend, a rounded or convex profile's corner)
+  bakes at `SdfSampledLattice.RoundCell`, the finer of a third of its radius
+  (each cell turns under the contour's 25-degree crease split, so it shades
+  round) and the cell whose chord strays at most `SilhouetteError` (0.2 mm,
+  half a pixel at the closest camera) inside it, so a drum's or a lens's
+  outline is round, not a 30-gon. A rounding of 5 mm or more declares its
+  radius: a fillet about a cell wide otherwise contours as a staircase,
+  crease or face cell by cell (the Moth's seat plate), while a narrower one is
+  a crease the contour keeps sharp. A plate longer than eight of its
+  half-thicknesses declares its half thickness, and a folded shape its copies'
+  smallest half extent, since a lattice sized by its length or its copies'
+  span steps clean over the sheet. A shell declares a quarter of its
+  thickness, a warped shape a thirty-second of its smallest half extent and
+  cellular relief a thirty-second of its wavelength. The finest applies, at
+  placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`); a
+  part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
+  declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
+  its noise relief's (`CreationNoiseDocument.DetailSpacing`) where that is
+  finer; text declares `WorldPlacementStamper.TextDetail`. Refinement stops at
+  eight cells a coarse axis, and a scoped creation's coarse lattice spans its
+  bound sphere about the creation's origin, so a terrain sector centred on its
+  ring's centre bakes at 2.8 m, not its declared 1.56 m
+  (`docs/plans/valley-and-moons.md`). A declaration bounds refinement; the bake
+  decides its cost (next bullets): a detail at or past the lattice's own
+  spacing refines nothing, alone (`SdfMeshPathBake.OwnFinal`) or in a union
+  (`UnionFinal`). In a static union a member's region is its own world-axis box
+  where the stamper knows one (`SdfInstanceRange.Box`,
+  `CreationStampEmitter.ShapeStampBox`: an unwarped, unfolded primitive), not
+  its bound sphere's cube, which for a 48 m strip spans the whole slab it hangs
+  from. Convex rounding reads the scaled polygon's inradius and extrusion
+  clamp; extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
+  an offset and may be zero while its radial extent remains positive.
+- **A region refines only where its surface turns, and each region at its own
+  factor.** `SdfSampledLattice.Refine` takes a factor per region
+  (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own
+  (`SdfMeshPathBake.RegionFactor`), so one fine member refines no other
+  member's box, and the lattice's split is the finest region's. Inside a region
+  a cell refines only where the coarse samples' second differences show the
+  surface turning (`CurvedSplit`: a plane's field is affine and contours
+  exactly), each to the factor its curvature needs under `RoundCell`, never
+  past its region's. A cell's split is the refinement's own divided by a power
+  of two, so every split divides the finest; a measured cell of a coarser split
+  measures only its stride's grid of fine samples and interpolates the rest
+  inside each stride cell (`StrideHolder`, the finest holder of a shared face
+  answering for both sides), and the contour merges each stride cell's fine
+  vertices per connected piece, as it merges an unmeasured ring cell's
+  (`SdfDualContouring.Merge`), so its triangles follow its own split. The
+  value-only test cannot tell a sharp crease or a sub-cell fillet from a tight
+  turn, so a declared region still refines its creases.
 - **A tall union misses thin layers.** One static creation holding stacked
   floors bakes as one union whose lattice is sized by its height, so a 0.3 m
   slab between two samples never crosses and is dropped while it still
@@ -431,23 +460,6 @@ laws exercise that boundary.
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
-- **A body's round sections declare their spacing.** Every pooled instance
-  declares detail from its shapes' round sections (`WorldCreationInstances.BodyDetail`):
-  a strand's thicker radius, a capsule's, a sphere's, an ellipsoid's middle
-  radius (a superellipsoid's tightened by its exponent), or an elliptic prism's
-  tightest bend (an eye socket's carved rim follows it), over three cells, so
-  each cell turns about 19 degrees, under the contour's 25-degree crease split.
-  At `SdfMeshPathBake.MinimumCell` (15 mm) any section under 4.5 cm turns past
-  it and shades as flat facets: the Moth's fingers, hair locks and braid did.
-  A flattened ellipsoid, a box, another prism or a cylinder declares nothing (an edge
-  bends along its length alone, and the contour keeps it as a crease), and
-  neither does a detail of 15 mm or more. A shape alone (ungrouped, or a group of
-  one) refines its whole bound and drops a section finer than 2 mm
-  (`WorldPlacementStamper.FinestDetail`). A blend group's shape refines only its
-  own part (below) and bakes a finer section at that 2 mm floor
-  (`WorldCreationInstances.PartDetail`). Static placements keep `ShapeDetail`,
-  floored at the same 2 mm. `puck mesh audit --prototype <id> --cpu` prints each
-  group's triangles and cell before a boot.
 - **A pooled blend group bakes as a union of its parts.** Its one instance
   declares a part a shape (`SdfInstanceRange.Parts`, `SdfInstancePart`): the
   shape's box in its own slot's frame and its detail. The plan carries each box
@@ -460,11 +472,8 @@ laws exercise that boundary.
   way. Parts are hashed into the geometry by slot offset. Under `OwnFinal` an
   18 cm swallow's blend group bakes on a 15 mm lattice refined over its whole
   bound; under `UnionFinal` it starts at the 2.8 mm its static stamp's union
-  takes. `UnionFinal` takes one refinement factor for all its regions, the
-  finest member's, so one thin member refines every member's box: the reason
-  pooled parts declare `BodyDetail`'s round sections and not `ShapeDetail`'s
-  plate and rounded-profile terms, which put the Moth's suit at 4.7 M triangles
-  in place of 1.1 M.
+  takes, each member refined over its own box at its own factor. A folded
+  member's part is the cube about its slot's origin its copies reach.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
   its own instance on a slot after its shapes' that holds the root's pose
   (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their

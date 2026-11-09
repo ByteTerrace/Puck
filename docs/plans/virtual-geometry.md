@@ -686,10 +686,10 @@ existing stale-result policy, and on V2b. The frame-bar packet's CPU item owns
 ### D7. The detail budget
 
 **What must be decided.** What bounds the bake's detail: today the finest cell
-is derived from authored geometry alone (round sections over three cells,
-`WorldCreationInstances.BodyDetail`; floored at `WorldPlacementStamper.FinestDetail = 0.002f`
-**[opened]**), so the nose bakes at 0.5 mm whether a view can resolve it, and
-nothing reads the screen.
+is derived from authored geometry alone (one rule for every shape,
+`WorldShapeDetail.Of`, its round sections at `SdfSampledLattice.RoundCell`; floored at
+`WorldShapeDetail.FinestDetail` unless the part is thinner **[opened]**), so the nose bakes
+at its own spacing whether a view can resolve it, and nothing reads the screen.
 
 **Options.**
 

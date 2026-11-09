@@ -315,7 +315,7 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
     meter.
 23. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-24. [Bake detail](#bake-detail): measure the static round-section term.
+24. [Bake detail](#bake-detail): the flare's bound.
 25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
 26. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
@@ -1725,17 +1725,6 @@ by `world.view.pick`.
   [moving blends](moving-blends.md), which recommends a skinned seam (two members
   and the blend's weight a vertex, answered by the bake) and is reviewed before
   code.
-- [medium] One detail rule for static and pooled shapes. A static shape declares
-  `WorldPlacementStamper.ShapeDetail` (half thickness, rounded-profile corner,
-  shell, warp and relief terms); a pooled blend group's part declares only the
-  round-section and half-thickness terms (`WorldCreationInstances.PartDetail`),
-  and an ungrouped pooled shape only the round section (`BodyDetail`). The
-  static terms on the Moth's parts give 4.7 M triangles in place of 1.1 M,
-  because `SdfMeshPathBake.UnionFinal` refines every region by one factor, the
-  finest member's, so one member with a rounded corner refines every member's
-  box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
-  one factor) would let one rule serve both; the static path also lacks the round
-  section term, so its small spheres facet at 15 mm.
 - [medium] The Moth's pooled bake rose from 464,018 to 1,145,385 triangles
   (levels 393,043 and 238,235) when blend groups took the static union's lattice
   (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`).
@@ -3272,14 +3261,6 @@ fix pass on `lane/moving-blends`.
   `sdfMeshMemberLocal`, and docs that disagree with the code. A 60-frame
   presented glance on both backends follows the fixes.
 
-- Static placements' plain round shapes still bake at
-  15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
-  curvature term rebakes the world, so measure its cost first
-  (`puck mesh audit --cpu`). A dynamic group refines its whole bound toward its
-  finest member: `SdfMeshBakeGroup.PlanGroups` records per-member regions only
-  for static instances and merges every member's detail into one
-  `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
-  member declare its own detail.
 - [medium] A flare's field bound is loose: `SdfProgramBuilder.AxialProfile`
   builds in `1/maxS` and `SdfProgram.FlareOperatorNorm` bounds the shear term
   with the chain's whole reach times `maxS`, so a flared primitive's slope reads
@@ -3293,8 +3274,9 @@ fix pass on `lane/moving-blends`.
   bakes 4 open edges.
 - [low] A tapered tip thinner than about 1.5 bake cells does not bake (a
   swallow streamer ending at 0.3 to 0.7 mm radius stops 8 to 10 mm short at the
-  2 mm `WorldPlacementStamper.FinestDetail`), so a small creation cannot have a
-  needle point; a finer floor for small creations needs its cost measured.
+  2 mm `WorldShapeDetail.FinestDetail`, which a sweep's thicker radius sets), so a
+  small creation cannot have a needle point; a finer floor for small creations
+  needs its cost measured.
 
 ### Residency and streaming
 
@@ -4815,8 +4797,8 @@ ordinary · Next: new content and art on the owner's call.
     is a hard overlap or gap, the sheets' flared lilac shin, cuff, hinged knee
     guard and recessed cyan heel light are missing, and the heel needs a housing
     designed around the downward nozzle the air jump's plume leaves (the bake
-    detail these parts get is the
-    [mesh-bake packet's](#bake-detail)).
+    detail these parts get is the one rule's, `WorldShapeDetail.Of`, in the
+    [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)).
 - The suit toggle's handheld: only body 0 holds the brick (`pilotHold` declares
   the one key `"0"`); she holds it only while captured standing still, so a
   mirrored engagement that walks or carrying it about wants a hold pose that

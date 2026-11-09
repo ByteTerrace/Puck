@@ -229,10 +229,13 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     }
 }
 /// <summary>An axis-aligned box of a sampled lattice's frame whose surface <see cref="SdfSampledLattice.Refine"/> contours
-/// at the fine spacing.</summary>
+/// at a finer spacing than the lattice's own.</summary>
 /// <param name="Low">The box's lowest corner.</param>
 /// <param name="High">The box's highest corner.</param>
-public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
+/// <param name="Factor">The fine cells along each axis of a coarse cell the box asks for, at least two; zero asks for the
+/// refinement's own factor. A region asking for fewer than the refinement takes the fewest the refinement's own factor
+/// divides into by a power of two that still reach it (<see cref="SdfSampledLattice.Refine"/>).</param>
+public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High, int Factor = 0);
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
@@ -302,6 +305,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // closes sheets in.
     private readonly OwnedBuffer<bool> m_thin;
     private readonly OwnedBuffer<bool> m_refined;
+    // Per coarse cell a measured one, its stride: the fine cells along each axis one of its own fine cells spans, a power
+    // of two dividing m_factor (one for a cell measured at the full split). A measured cell measures the fine samples on its
+    // stride's grid, and every other fine sample it holds interpolates the stride cell around it (StrideHolder).
+    private readonly OwnedBuffer<int> m_strides;
     // Per coarse cell, the block of fine slots a measured cell holds (-1 for a cell not measured), and per block the slot
     // in m_fineValues of each of its (m_factor + 1)^3 fine samples, faces included (-1 at its coarse corners): FineSlot's
     // dense index of the measured fine samples.
@@ -392,6 +399,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_measured = new(allocator: allocator, observer: observer);
         m_thin = new(allocator: allocator, observer: observer);
         m_refined = new(allocator: allocator, observer: observer);
+        m_strides = new(allocator: allocator, observer: observer);
         m_fineKeys = new(allocator: allocator, observer: observer);
         m_gradientKeys = new(allocator: allocator, observer: observer);
         m_points = new(allocator: allocator, observer: observer);
@@ -408,7 +416,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <summary>Releases the lattice's owned workspaces after its contour and point borrows end.</summary>
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
-        m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_fineKeys.Dispose();
+        m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
         m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
@@ -439,14 +447,21 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose corner signs hold more than one
     /// surface patch, and
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
-    /// <paramref name="regions"/>.
+    /// <paramref name="regions"/> and whose samples show the surface turning (a plane's field is affine and contours
+    /// exactly), split no finer than its turn needs to contour smooth (<see cref="RoundCell"/>) or its regions ask.
+    /// <para>The essential cells split <paramref name="factor"/> times; a region cell splits the fewest times
+    /// <paramref name="factor"/> divides into by a power of two that reach what it needs, so each split divides the
+    /// finest. A cell of a coarser split measures the fine samples on its stride's grid and interpolates the rest inside
+    /// each stride cell, and its contour merges each stride cell's fine vertices per connected piece, so its triangles
+    /// follow its own split.</para>
     /// </summary>
     /// <param name="factor">The fine cells along each axis of a coarse cell, at least two; fewer when that many would
     /// measure more fine samples than the refinement's budget (<see cref="Refinement"/> reports the split taken).</param>
-    /// <param name="regions">The boxes, in the lattice's frame, whose surface is contoured at the fine spacing wherever
-    /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none. Where every
-    /// region's cells would measure more fine samples than the refinement's budget, the regions covering the fewest cells
-    /// are refined and the rest contour at the lattice's own spacing.</param>
+    /// <param name="regions">The boxes, in the lattice's frame, whose turning surface is contoured finer wherever the
+    /// samples put it, each at its own factor (<see cref="SdfLatticeRegion.Factor"/>): the parts of a union whose own
+    /// detail is finer than the lattice. Empty for none. Where every region's cells would measure more fine samples than
+    /// the refinement's budget, the regions covering the fewest cells are refined and the rest contour at the lattice's
+    /// own spacing.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, with weight one, in the order
     /// <see cref="AnswerRefinement"/> takes their answers; empty when no cell needs refining or even two fine cells a
     /// side would measure too many, and the lattice then contours at its own spacing. The memory is the lattice's, valid
@@ -620,6 +635,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         // Each region's cells the surface can enter: a corner lies within half the cell's diagonal of it.
         var regionCells = new List<int>[regions.Length];
+        // Each region cell's own factor: the most any region over it asks for, each no more than its surface's turn needs
+        // (CurvedSplit). Zero for a cell no region holds.
+        var wanted = new int[measured.Length];
 
         if (!regions.IsEmpty) {
             var reach = (0.5f * m_cell.Length());
@@ -627,6 +645,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             for (var r = 0; (r < regions.Length); r++) {
                 var region = regions[r];
                 var cellsOf = new List<int>();
+                var asked = ((region.Factor > 0) ? Math.Clamp(value: region.Factor, min: 2, max: factor) : factor);
                 var from = ((region.Low - m_origin) / m_cell);
                 var to = ((region.High - m_origin) / m_cell);
 
@@ -651,9 +670,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                             for (var offset = 0; (offset < 8); offset++) {
                                 nearest = MathF.Min(x: nearest, y: MathF.Abs(x: Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
                             }
-                            if (nearest <= reach) {
-                                cellsOf.Add(item: CellIndex(x: x, y: y, z: z));
-                            }
+                            if (nearest > reach) { continue; }
+
+                            // A cell whose surface the samples already hold flat refines nothing: its contour is exact.
+                            var need = Math.Min(val1: asked, val2: CurvedSplit(x: x, y: y, z: z));
+
+                            if (need < 2) { continue; }
+
+                            var cell = CellIndex(x: x, y: y, z: z);
+
+                            cellsOf.Add(item: cell);
+                            wanted[cell] = Math.Max(val1: wanted[cell], val2: need);
                         }
                     }
                 }
@@ -766,6 +793,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
         var countedCells = new bool[essential.Length];
+        var countedSplits = new int[essential.Length];
         var cellSamples = new int[essential.Length];
         var counted = 0L;
         var addedCells = new List<int>();
@@ -777,7 +805,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             Array.Clear(array: countedCells);
             counted = 0L;
             for (var cell = 0; (fits && (cell < mask.Length)); cell++) {
-                if (mask[cell]) { fits = Count(cell: cell, split: split); }
+                if (mask[cell]) { fits = Count(cell: cell, refinement: split); }
             }
             if (!fits) { continue; }
 
@@ -792,7 +820,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     if (mask[cell]) { continue; }
                     mask[cell] = true;
                     addedCells.Add(item: cell);
-                    if (!Count(cell: cell, split: split)) {
+                    if (!Count(cell: cell, refinement: split)) {
                         within = false;
                         break;
                     }
@@ -814,12 +842,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             if (served == order.Count) { break; }
         }
 
-        // Counts a cell's fine samples that are not coarse samples and that no counted cell holds (one sharing the face,
-        // edge or corner they lie on); false once the count passes MaxFineSamples.
-        bool Count(int cell, int split) {
+        // Counts a cell's fine samples, at its own split under `refinement` (CellSplit), that are not coarse samples and
+        // that no counted cell of the same split holds (one sharing the face, edge or corner they lie on); false once the
+        // count passes MaxFineSamples. A sample two cells of different splits share is counted by both, an overcount.
+        bool Count(int cell, int refinement) {
             var x = (cell % cellsX);
             var y = ((cell / cellsX) % cellsY);
             var z = (cell / (cellsX * cellsY));
+            var split = CellSplit(cell: cell, refinement: refinement);
             var fresh = 0;
 
             // Ownership depends only on which cell faces a sample touches. Count each of the 27 boundary/interior
@@ -841,10 +871,24 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
             countedCells[cell] = true;
+            countedSplits[cell] = split;
             cellSamples[cell] = fresh;
             counted += fresh;
 
             return (counted <= MaxFineSamples);
+        }
+        // The fine cells along each axis a cell splits into under a refinement of `refinement`: the refinement's own for a
+        // cell an essential test measures or no region holds, else the fewest `refinement` divides into by a power of two
+        // that still reach the most its regions ask for (wanted), so every split a lattice holds divides the next finer.
+        int CellSplit(int cell, int refinement) {
+            if (essential[cell] || (wanted[cell] == 0)) { return refinement; }
+
+            var reach = Math.Min(val1: wanted[cell], val2: refinement);
+            var stride = 1;
+
+            while (((refinement % (2 * stride)) == 0) && ((refinement / (2 * stride)) >= reach)) { stride *= 2; }
+
+            return (refinement / stride);
         }
         // Whether a counted cell besides cell (x, y, z) holds its fine sample (lx, ly, lz): a neighbour across each face the
         // sample lies on.
@@ -856,7 +900,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             for (var dz = lowZ; (dz <= highZ); dz++) {
                 for (var dy = lowY; (dy <= highY); dy++) {
                     for (var dx = lowX; (dx <= highX); dx++) {
-                        if (((dx | dy | dz) != 0) && countedCells[CellIndex(x: (x + dx), y: (y + dy), z: (z + dz))]) { return true; }
+                        if (((dx | dy | dz) != 0) && countedCells[CellIndex(x: (x + dx), y: (y + dy), z: (z + dz))] && (countedSplits[CellIndex(x: (x + dx), y: (y + dy), z: (z + dz))] == split)) { return true; }
                     }
                 }
             }
@@ -897,12 +941,20 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             refinedCount += (cell ? 1 : 0);
         }
 
+        // Each measured cell's stride: the fine cells of the finest split one of its own fine cells spans along each axis.
+        m_strides.Resize(length: measured.Length, clear: true, preserve: false);
+        for (var cell = 0; (cell < measured.Length); cell++) {
+            if (measured[cell]) { m_strides[cell] = (factor / CellSplit(cell: cell, refinement: factor)); }
+        }
+
         FineKeys(split: factor);
 
         // Numbers the fine samples in the order the cells, then each cell's samples, first reach them, and indexes each
-        // measured cell's block of (split + 1)^3 slots (FineSlot), -1 at its coarse corners. A sample on a cell's face, edge
-        // or corner takes the slot of the earliest measured cell holding it: each holder past the cell along an axis where
-        // the sample lies on the cell's face, at the sample's place in it.
+        // measured cell's block of (split + 1)^3 slots (FineSlot), -1 at its coarse corners and at a place off its stride's
+        // grid no holder measures. A cell measures the places on its own stride's grid. A sample on a cell's face, edge or
+        // corner is one slot for every measured cell holding it: a cell takes the slot an earlier holder gave it, and a cell
+        // measuring a sample no earlier holder measured gives every earlier holder its new slot. Each holder lies past the
+        // cell along an axis where the sample lies on the cell's face, at the sample's place in it.
         void FineKeys(int split) {
             var fineX = ((cellsX * split) + 1);
             var fineY = ((cellsY * split) + 1);
@@ -929,6 +981,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                         cellSpan[cell] = blocks;
 
                         var at = (blocks++ * block);
+                        var stride = m_strides[cell];
 
                         for (var lz = 0; (lz < side); lz++) {
                             for (var ly = 0; (ly < side); ly++) {
@@ -938,10 +991,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                                         continue;
                                     }
 
-                                    var held = EarlierHolder(cellSpan: cellSpan, lx: lx, ly: ly, lz: lz, slotSpan: slotSpan, split: split, x: x, y: y, z: z);
+                                    var held = EarlierHolder(cellSpan: cellSpan, lx: lx, ly: ly, lz: lz, slotSpan: slotSpan, split: split, x: x, y: y, z: z, given: -1);
 
-                                    if (held < 0) {
+                                    if ((held < 0) && ((lx % stride) == 0) && ((ly % stride) == 0) && ((lz % stride) == 0)) {
                                         held = samples++;
+                                        _ = EarlierHolder(cellSpan: cellSpan, lx: lx, ly: ly, lz: lz, slotSpan: slotSpan, split: split, x: x, y: y, z: z, given: held);
                                     }
                                     slotSpan[at] = held;
                                 }
@@ -977,8 +1031,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
         // The slot an earlier measured cell gave a sample of cell (x, y, z) at (lx, ly, lz), or -1: a holder steps -1
         // along an axis where the sample lies on the cell's low face, +1 where on its high face, and comes earlier in
-        // the cells' z, y, x order.
-        int EarlierHolder(Span<int> cellSpan, Span<int> slotSpan, int split, int x, int y, int z, int lx, int ly, int lz) {
+        // the cells' z, y, x order. Every earlier holder of a sample holds the same slot, so the first answers. With a
+        // `given` slot, every earlier holder takes it instead.
+        int EarlierHolder(Span<int> cellSpan, Span<int> slotSpan, int split, int x, int y, int z, int lx, int ly, int lz, int given) {
             var side = (split + 1);
             var block = ((side * side) * side);
 
@@ -993,9 +1048,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
                         var holder = cellSpan[CellIndex(x: (x + dx), y: (y + dy), z: (z + dz))];
 
-                        if (holder >= 0) {
-                            return slotSpan[((holder * block) + ((lx - (dx * split)) + (side * ((ly - (dy * split)) + (side * (lz - (dz * split)))))))];
-                        }
+                        if (holder < 0) { continue; }
+
+                        var place = ((holder * block) + ((lx - (dx * split)) + (side * ((ly - (dy * split)) + (side * (lz - (dz * split)))))));
+
+                        if (given < 0) { return slotSpan[place]; }
+                        slotSpan[place] = given;
                     }
                 }
             }
@@ -1146,6 +1204,52 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var t = Math.Clamp(max: 1f, min: 0f, value: (((value - after) + fallB) / (fallA + fallB)));
 
         return ((value - (fallA * t)) < (tolerance * reach));
+    }
+    /// <summary>Returns the spacing a surface turning at <paramref name="radius"/> contours smooth at: its radius over
+    /// <see cref="CellsPerRadius"/> cells, so each cell turns under the contour's crease split
+    /// (<see cref="SdfContour.SplitAtCreases"/>) and the surface shades round rather than as flat facets, or the cell whose
+    /// chord strays inside it by no more than <see cref="SilhouetteError"/> (a radius r contoured at cell c strays by about
+    /// c² / 8r), whichever is finer.</summary>
+    /// <param name="radius">The surface's radius of curvature, in world units.</param>
+    /// <returns>The spacing, in world units; zero for a radius that is not positive.</returns>
+    public static float RoundCell(float radius) =>
+        ((radius > 0f) ? MathF.Min(x: (radius / CellsPerRadius), y: MathF.Sqrt(x: ((8f * radius) * SilhouetteError))) : 0f);
+    /// <summary>The cells a round surface's radius spans at most where it contours smooth (<see cref="RoundCell"/>): each
+    /// cell then turns about 19 degrees, under the contour's 25-degree crease split.</summary>
+    public const float CellsPerRadius = 3f;
+    /// <summary>The farthest, in world units, a contour's chord strays inside a round surface where it contours smooth
+    /// (<see cref="RoundCell"/>): a fifth of a millimetre, about half a pixel at the closest a camera comes to a body,
+    /// about 0.4 m.</summary>
+    public const float SilhouetteError = 2.0e-4f;
+
+    // The fine cells along each axis a coarse cell's surface needs to contour smooth by its turn (RoundCell): the field's
+    // largest second difference along an axis at any of its corners, over that axis's step squared, is the surface's
+    // curvature across it, or past a crease its turn over a step. One for a cell its samples hold flat: a plane's field is
+    // affine, every second difference zero, and the coarse contour holds it exactly.
+    private int CurvedSplit(int x, int y, int z) {
+        var curvature = 0f;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            var (sx, sy, sz) = ((x + (corner & 1)), (y + ((corner >> 1) & 1)), (z + ((corner >> 2) & 1)));
+            var value = Values[Index(x: sx, y: sy, z: sz)];
+
+            if ((sx > 0) && ((sx + 1) < m_samplesX)) {
+                curvature = MathF.Max(x: curvature, y: (MathF.Abs(x: ((Values[Index(x: (sx - 1), y: sy, z: sz)] - (2f * value)) + Values[Index(x: (sx + 1), y: sy, z: sz)])) / (m_cell.X * m_cell.X)));
+            }
+            if ((sy > 0) && ((sy + 1) < m_samplesY)) {
+                curvature = MathF.Max(x: curvature, y: (MathF.Abs(x: ((Values[Index(x: sx, y: (sy - 1), z: sz)] - (2f * value)) + Values[Index(x: sx, y: (sy + 1), z: sz)])) / (m_cell.Y * m_cell.Y)));
+            }
+            if ((sz > 0) && ((sz + 1) < m_samplesZ)) {
+                curvature = MathF.Max(x: curvature, y: (MathF.Abs(x: ((Values[Index(x: sx, y: sy, z: (sz - 1))] - (2f * value)) + Values[Index(x: sx, y: sy, z: (sz + 1))])) / (m_cell.Z * m_cell.Z)));
+            }
+        }
+
+        if (!(curvature > 0f)) { return 1; }
+
+        var spacing = RoundCell(radius: (1f / curvature));
+        var coarse = MathF.Max(x: m_cell.X, y: MathF.Max(x: m_cell.Y, y: m_cell.Z));
+
+        return ((spacing >= coarse) ? 1 : (int)MathF.Min(x: 64f, y: MathF.Ceiling(x: (coarse / spacing))));
     }
     // The most the field changes per world unit between a coarse sample and any of its six neighbours: the scale of the
     // field there, which a step's change is measured against (PassesBetween).
@@ -1430,6 +1534,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         var crossed = 0;
+        Span<StrideCorner> strideCorners = stackalloc StrideCorner[8];
 
         for (var z = 0; (z < cellsZ); z++) {
             for (var y = 0; (y < cellsY); y++) {
@@ -1461,6 +1566,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
                             if (FineSlot(x: cx, y: cy, z: cz) >= 0) {
                                 Add(fx: cx, fy: cy, fz: cz);
+                            } else {
+                                // A corner off its measured cell's stride grid interpolates its stride cell's corners' gradients.
+                                var count = StrideCorners(x: cx, y: cy, z: cz, corners: strideCorners);
+
+                                foreach (var strideCorner in strideCorners[..count]) {
+                                    Add(fx: strideCorner.X, fy: strideCorner.Y, fz: strideCorner.Z);
+                                }
                             }
                         }
                     }
@@ -2312,18 +2424,23 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         if ((lx != 0) && (ly != 0) && (lz != 0)) { return -1; }
 
         for (var shift = 1; (shift < 8); shift++) {
-            var (ax, bx) = (((shift & 1) == 0) ? (cx, lx) : (((lx == 0) && (cx > 0)) ? ((cx - 1), factor) : (-1, 0)));
-            var (ay, by) = (((shift & 2) == 0) ? (cy, ly) : (((ly == 0) && (cy > 0)) ? ((cy - 1), factor) : (-1, 0)));
-            var (az, bz) = (((shift & 4) == 0) ? (cz, lz) : (((lz == 0) && (cz > 0)) ? ((cz - 1), factor) : (-1, 0)));
+            var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
 
-            if ((ax < 0) || (ay < 0) || (az < 0)) { continue; }
-
-            var block = m_cellBlocks[(ax + (cellsX * (ay + (cellsY * az))))];
-
-            if (block >= 0) { return m_blockSlots[((((block * side) * side) * side) + (bx + (side * (by + (side * bz)))))]; }
+            if ((cell >= 0) && (m_cellBlocks[cell] is var block and >= 0)) { return m_blockSlots[((((block * side) * side) * side) + (bx + (side * (by + (side * bz)))))]; }
         }
 
         return -1;
+    }
+    // The coarse cell holding the fine sample at place (lx, ly, lz) of cell (cx, cy, cz) one step back along each axis
+    // `shift`'s bits name (a sample on a cell's low face is also its lower neighbour's, at that neighbour's far face), and
+    // the sample's place in it; a cell of -1 where the sample lies on no such face or the step leaves the lattice.
+    private (int Cell, int LX, int LY, int LZ) Holder(int cx, int cy, int cz, int lx, int ly, int lz, int shift) {
+        var factor = m_factor;
+        var (ax, bx) = (((shift & 1) == 0) ? (cx, lx) : (((lx == 0) && (cx > 0)) ? ((cx - 1), factor) : (-1, 0)));
+        var (ay, by) = (((shift & 2) == 0) ? (cy, ly) : (((ly == 0) && (cy > 0)) ? ((cy - 1), factor) : (-1, 0)));
+        var (az, bz) = (((shift & 4) == 0) ? (cz, lz) : (((lz == 0) && (cz > 0)) ? ((cz - 1), factor) : (-1, 0)));
+
+        return (((ax < 0) || (ay < 0) || (az < 0)) ? (-1, 0, 0, 0) : ((ax + ((m_samplesX - 1) * (ay + ((m_samplesY - 1) * az)))), bx, by, bz));
     }
     // A measured fine sample's value by its slot: the value CloseSheets closed it at, or the one measured.
     private float MeasuredValue(int slot) {
@@ -2347,19 +2464,97 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         if (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) is var slot and >= 0) { return MeasuredValue(slot: slot); }
 
-        var (_, _, _, u, v, w) = Interpolant(x: x, y: y, z: z);
+        Span<StrideCorner> corners = stackalloc StrideCorner[8];
+        var count = StrideCorners(x: x, y: y, z: z, corners: corners);
+
+        if (count == 0) { return CoarseValue(x: x, y: y, z: z); }
+
+        var sum = 0f;
+
+        foreach (var corner in corners[..count]) {
+            var (gx, gy, gz) = (corner.X, corner.Y, corner.Z);
+
+            sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
+                ? Values[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
+                : ((FineSlot(x: gx, y: gy, z: gz) is var cornerSlot and >= 0) ? MeasuredValue(slot: cornerSlot) : CoarseValue(x: gx, y: gy, z: gz))));
+        }
+
+        return sum;
+    }
+    // The trilinear weight of a cell's corner (x | y << 1 | z << 2) at position (u, v, w) in the cell, each in [0, 1].
+    private static float CornerWeight(int corner, float u, float v, float w) =>
+        (((((corner & 1) == 1) ? u : (1f - u)) * ((((corner >> 1) & 1) == 1) ? v : (1f - v))) * ((((corner >> 2) & 1) == 1) ? w : (1f - w)));
+    // A fine sample's value as its coarse cell's corners interpolate it.
+    private float CoarseValue(int x, int y, int z) {
+        var (cx, cy, cz, u, v, w) = Interpolant(x: x, y: y, z: z);
         var sum = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = corner & 1;
-            var dy = (corner >> 1) & 1;
-            var dz = (corner >> 2) & 1;
-            var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
+            var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
 
             sum += (weight * Values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
         }
 
         return sum;
+    }
+    // The measured cell whose stride grid is finest among those holding a fine sample (a sample on a cell's face, edge or
+    // corner is held by every cell about it), that stride, and the sample's place in that cell, 0 through m_factor along
+    // each axis; a zero stride where no measured cell holds it. Every measured cell's stride divides every coarser one's,
+    // so the finest holder's stride cell about the sample is one every holder agrees on.
+    private (int Stride, int X, int Y, int Z, int LX, int LY, int LZ) StrideHolder(int x, int y, int z) {
+        (int Stride, int X, int Y, int Z, int LX, int LY, int LZ) best = default;
+
+        if (m_cellBlocks.Length == 0) { return best; }
+
+        var cellsX = (m_samplesX - 1);
+        var cellsY = (m_samplesY - 1);
+        var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
+
+        for (var shift = 0; (shift < 8); shift++) {
+            var (cell, bx, by, bz) = Holder(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz, shift: shift);
+
+            if ((cell < 0) || (m_cellBlocks[cell] < 0)) { continue; }
+
+            var stride = m_strides[cell];
+
+            if ((best.Stride == 0) || (stride < best.Stride)) { best = (stride, (cell % cellsX), ((cell / cellsX) % cellsY), (cell / (cellsX * cellsY)), bx, by, bz); }
+        }
+
+        return best;
+    }
+    // One corner of the stride cell an unmeasured fine sample interpolates in, in fine coordinates, and its trilinear
+    // weight there.
+    private readonly record struct StrideCorner(int X, int Y, int Z, float Weight);
+    // Writes the corners, of positive weight, of the stride cell a fine sample off its measured holder's stride grid
+    // interpolates in (StrideHolder's finest holder, so every holder of a shared face reads the same cell) and returns
+    // how many; zero where no measured holder of a stride past one holds the sample, which then interpolates its coarse
+    // cell. The corners lie on the holder's stride grid, so each is a coarse sample or a measured one.
+    private int StrideCorners(int x, int y, int z, Span<StrideCorner> corners) {
+        var holder = StrideHolder(x: x, y: y, z: z);
+
+        if (holder.Stride <= 1) { return 0; }
+
+        var (factor, stride) = (m_factor, holder.Stride);
+        var last = (factor - stride);
+        var (bx, by, bz) = (Math.Min(val1: ((holder.LX / stride) * stride), val2: last), Math.Min(val1: ((holder.LY / stride) * stride), val2: last), Math.Min(val1: ((holder.LZ / stride) * stride), val2: last));
+        var (u, v, w) = ((((float)(holder.LX - bx)) / stride), (((float)(holder.LY - by)) / stride), (((float)(holder.LZ - bz)) / stride));
+        var count = 0;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
+
+            if (weight == 0f) { continue; }
+            corners[count++] = new StrideCorner(
+                Weight: weight,
+                X: ((holder.X * factor) + bx + (dx * stride)),
+                Y: ((holder.Y * factor) + by + (dy * stride)),
+                Z: ((holder.Z * factor) + bz + (dz * stride))
+            );
+        }
+
+        return count;
     }
     // Whether a fine sample lies inside: FineValue's sign, kept per fine key once read, since the contour's corner masks
     // and CloseSheets' line scans read each sample's sign many times. AnswerRefinement clears the signs and CloseSample
@@ -2412,14 +2607,31 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             return measured;
         }
 
+        Span<StrideCorner> corners = stackalloc StrideCorner[8];
+        var count = StrideCorners(x: x, y: y, z: z, corners: corners);
+
+        if (count == 0) { return CoarseGradient(x: x, y: y, z: z); }
+
+        var sum = Vector3.Zero;
+
+        foreach (var corner in corners[..count]) {
+            var (gx, gy, gz) = (corner.X, corner.Y, corner.Z);
+
+            sum += (corner.Weight * ((((gx % factor) == 0) && ((gy % factor) == 0) && ((gz % factor) == 0))
+                ? m_gradients[Index(x: (gx / factor), y: (gy / factor), z: (gz / factor))]
+                : (m_fineGradients.TryGetValue(key: (gx + (fineX * (gy + (fineY * gz)))), value: out var cornerGradient) ? cornerGradient : CoarseGradient(x: gx, y: gy, z: gz))));
+        }
+
+        return sum;
+    }
+    // A fine sample's gradient as its coarse cell's corners' gradients interpolate it.
+    private Vector3 CoarseGradient(int x, int y, int z) {
         var (cx, cy, cz, u, v, w) = Interpolant(x: x, y: y, z: z);
         var sum = Vector3.Zero;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = corner & 1;
-            var dy = (corner >> 1) & 1;
-            var dz = (corner >> 2) & 1;
-            var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
+            var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
 
             sum += (m_gradients[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))] * weight);
         }
@@ -2437,6 +2649,18 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         if (FineSlot(x: fx, y: fy, z: fz) is var slot and >= 0) {
             return m_fineMaterials[slot];
+        }
+
+        // A sample off its measured cell's stride grid takes the nearest place on it.
+        var holder = StrideHolder(x: fx, y: fy, z: fz);
+
+        if (holder.Stride > 1) {
+            int Nearest(int place) => Math.Min(val1: ((((2 * place) + holder.Stride) / (2 * holder.Stride)) * holder.Stride), val2: factor);
+
+            var (gx, gy, gz) = (((holder.X * factor) + Nearest(place: holder.LX)), ((holder.Y * factor) + Nearest(place: holder.LY)), ((holder.Z * factor) + Nearest(place: holder.LZ)));
+
+            if (FineSlot(x: gx, y: gy, z: gz) is var nearest and >= 0) { return m_fineMaterials[nearest]; }
+            (fx, fy, fz) = (gx, gy, gz);
         }
 
         return Materials[Index(
@@ -2474,6 +2698,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
+        public int Stride(int x, int y, int z) => owner.m_strides[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool CoarseInside(int x, int y, int z) => (owner.Values[owner.Index(x: x, y: y, z: z)] < 0f);
         public int Corner(int x, int y, int z) => (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
         public bool Inside(int corner) => owner.FineInside(key: corner);
@@ -2543,7 +2768,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var dx = corner & 1;
                 var dy = (corner >> 1) & 1;
                 var dz = (corner >> 2) & 1;
-                var weight = ((((dx == 1) ? fx : (1f - fx)) * ((dy == 1) ? fy : (1f - fy))) * ((dz == 1) ? fz : (1f - fz)));
+                var weight = CornerWeight(corner: corner, u: fx, v: fy, w: fz);
 
                 if (weight != 0f) {
                     sum += (owner.FineGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz)) * weight);
