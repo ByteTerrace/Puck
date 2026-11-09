@@ -550,9 +550,8 @@ material with it; every other material inherits the world's default style,
 mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
 `shape-cel-hard` exhibits on level 3). The standard package authors styles as
 data in `worlds/standard/styles.puck` (`celStyle`, `celInkStyle`,
-`celTerrainStyle`, `celHardStyle`, `continuousStyle`): a row names one with
-`toon: celInkStyle` (the debug world's Moth) or `toon: celTerrainStyle` (its
-valley walls) and a world with `render { toon: celStyle }`, as the debug world does, and a
+`celHardStyle`, `continuousStyle`): a row names one with `toon: celInkStyle`
+and a world with `render { toon: celStyle }`, as the debug world does, and a
 variant is `celStyle with { softness: 0.2 }`. The engine holds no look of its own: a style that
 bands authors every value below, and validation names each one it leaves out;
 a style that says `enabled: false` needs none.
@@ -565,7 +564,7 @@ one), and with its `toon` while the cell names none. A command that writes the
 cell swaps the look; only the material's style rows change, so nothing bakes.
 The debug world's Moth reads her `mothStyle` row this way, and `moth.style
 Plain|Cel` swaps her between continuous shading and the standard's
-`celInkStyle`, which she boots with.
+`celStyle`, the world's own, which she boots with.
 
 `world.toon on|off|toggle` is the live lever over the world's default style.
 With no argument it echoes the choice. It uses the same render-section grant and
@@ -585,37 +584,63 @@ render {
 }
 ```
 
-The views pass bands each light's diffuse cosine and keeps its shadow
-visibility as a separate factor, `band(cosine) × visibility`, so the cascades'
-filtered penumbra keeps its softness and its colour under the band's edge
-(`band: Visibility`, the default). `band: Combined` bands the cosine and the
-visibility together, `band(cosine × visibility)`, the harder look in which a
-penumbra snaps to the band. Point lights retain their range, cone and probe
-visibility, with a banded diffuse cosine under ambient occlusion. A short soft
-terminator joins the two tones; `threshold` places it and `softness` is its
-full cosine width, widened at each pixel to at least the cosine's change across
-it (the surface's mean curvature times the pixel's footprint), so a small or
-distant curved shape's terminator spans a pixel rather than stepping between
-neighbours. Indirect light and sky ambient take the linear RGB
-`shadowTint`, with AO still affecting indirect light. Indoors that bounce is
-the whole of the light, so a tint far below unit luminance darkens a room the
-meter exposed for; the standard keeps its tint near unit luminance and lets it
-carry hue. This does not add
-unoccluded sunlight inside a shadowed room. Specular lobes become bounded
-patches: `specularSize` is one minus their half-vector cosine, with a narrow
-soft edge. The banded lights shade the paint flat, metals included; the rim
-lights, the environment reflection and ambient occlusion stay in the cel
-response as they are in the continuous one.
+The views pass steps each direct light's diffuse cosine about `threshold`,
+and the light reaches the surface as
+`light × (band + (1 − band) × region × shadowTint)`: the lit side takes the
+light whole, and the shade side, form and cast shadow alike, keeps
+`shadowTint`'s share of it, the painted shadow colour, as far as the light
+reaches the surface's surroundings. For a shadowing directional that region is
+the irradiance volume's traced share of the light about the surface
+(`sdfMeshLightVisibility`), so a shadowed room the sun never enters takes no
+tinted sunlight while a cast shadow on an open lawn takes it all; without the
+volume it is the cascades' visibility. A point light's reach already holds its
+traced visibility. Sky and bounced light add as they do in the continuous
+response, untinted, so a room lit only by bounce keeps its exposure and the
+lit-to-shade step outdoors is the tint the author chose rather than the
+sky-to-sun ratio. The local adaptation meters each light without its band or
+shadow step (`SdfLightResponse.metered`), so it stays continuous across the
+terminator and a cast shadow's edge and never flattens the step.
 
-Outlines compare the depth and normals of eight neighbouring visibility
-records, on the foreground side of silhouettes and at sharp creases. The
-tangent-plane depth comparison leaves sloping planes clear. `outlineWidth`
-is the close radius in output pixels, scaled to the current render grid;
-`outlineDistance` is the distance in metres at which it halves. Fractional
-radii interpolate two rings, avoiding integer-width jumps. `outlineNormal`
-is the crease cosine threshold; `outlineTint` multiplies reflected colour.
-The ink is part of the lit surface before temporal reprojection and
-atmosphere, so existing motion, disocclusion and history clipping apply.
+`band: Visibility` (the default) multiplies the band by the shadow
+visibility the cascades' filter left, keeping its penumbra; `band: Combined`
+steps that visibility about one half too, so a cast shadow is a held shape.
+The shadow step is never sharper than the style's softness, a pixel, or what
+the cascade resolves: once a cascade texel, stretched by the receiver's slope
+to the light, spans many pixels (`SdfToonShadowBlockPixels`), the step keeps
+the whole filtered penumbra, so a far cascade on ground the light grazes
+does not print its texel grid as blocks.
+
+The band's cosine reads the surface's normal averaged over the pixel and its
+eight neighbours on the same surface, so relief finer than a pixel or two
+(a rock's lumps, a baked surface's detail) does not speckle the band and is
+left to the paint and the continuous terms. `softness` is the band's full
+cosine width, widened at each pixel to what the surface resolves: how far the
+normals of that neighbourhood part, the cosine's change across the pixel
+(mean curvature times footprint), and how far the hit triangle's vertex
+normals part (`sdfMeshNormalSpread`), between which the cosine is only
+interpolated, so a terminator never snaps along a coarse mesh's triangle
+edges. Specular lobes become bounded patches: `specularSize` is one minus
+their half-vector cosine, with a narrow soft edge, banded by the same step.
+The banded lights shade the paint flat, metals included; the rim lights, the
+environment reflection and ambient occlusion stay in the cel response as they
+are in the continuous one.
+
+Ink marks silhouettes and creases, each by a measure that grows smoothly with
+the edge rather than a threshold test, so jittered samples move the line a
+little instead of switching it and the temporal resolve converges it to a
+coverage. A silhouette is a neighbour behind the pixel's tangent plane by
+one to three percent of the viewing distance, so a raised plate a few
+millimetres proud of its part stays part of that surface at any distance;
+only the near side inks. A crease is the two neighbours on opposite sides of
+the pixel turned apart by more than `outlineNormal` while both continue the
+pixel's surface, so a corner between two faces inks and a step between two
+parallel faces does not. A paint boundary changes neither depth nor normal
+and draws no line. `outlineWidth` is the close radius in output pixels,
+scaled to the current render grid; `outlineDistance` is the distance in
+metres at which it halves. Fractional radii interpolate two rings, avoiding
+integer-width jumps. `outlineTint` multiplies reflected colour. The ink is
+part of the lit surface before temporal reprojection and atmosphere, so
+existing motion, disocclusion and history clipping apply.
 
 `exposure` is reflected-light compensation in stops. `shoulder` compresses
 the exposed RGB peak with one common multiplier, retaining paint chroma
@@ -625,10 +650,11 @@ response, and sky stays in its existing pass. A portal's destination shades
 its own surfaces once; the consuming view does not posterise the picture.
 
 There is no additional dispatch, image or history allocation: the work is
-in `sdf.world$views` and reported with that pass's counters. An outlined
-opaque hit reads at most eight neighbouring depths and normals at a radius
-of one render pixel or less, sixteen above it. Width zero skips these reads;
-a material shading continuously skips the cel response and all outline reads.
+in `sdf.world$views` and reported with that pass's counters. A cel-styled
+opaque hit reads its eight neighbouring depths and normals once for the band's
+normal and an ink of up to one render pixel, eight more for each further ring
+an inked radius above one needs, and its triangle's three vertex normals. A
+material shading continuously skips the cel response and all of these reads.
 A material's own style is four rows of its material record (rows 22 to 25,
 laid out as the pass block's `toonBands`, `toonShadow`, `toonOutline` and
 `toonInk`; `SdfToon.WriteRows` writes both), all zero to inherit the world's

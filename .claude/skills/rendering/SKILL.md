@@ -553,16 +553,27 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `world.toon` overrides live) through the pass block's toon members. Both are
   written by `SdfToon.WriteRows` and read by `sdfToonStyle`
   (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
-  The band keeps visibility apart (`band(cosine) × visibility`) unless the style
-  says `band: Combined`; rim lights, the environment reflection and ambient
-  occlusion stay in the cel response. `sdfToonStyle` widens the authored
-  softness to the cosine's change across the pixel (mean curvature × footprint),
-  so a small or far curved shape's terminator spans a pixel instead of stepping
-  and crawling; a terminator that aliases is that widening's, not the style's.
-  The shadow tint multiplies sky ambient and indirect light, which is all of an
-  interior's light, so a tint far below unit luminance darkens rooms. `sdf-toon-outline.hlsli` reads
-  depth/normal edges in views, before temporal resolve, at the pixel's own
-  style's width. Keep screen pictures, portal pictures, sky and self-emission
+  A light reaches a cel surface as `light × (band + (1 − band) × region × tint)`
+  (`sdfToonShare`): the tint is a direct light's shade-side share, never a
+  multiplier on sky or bounced light, so an interior lit by bounce keeps its
+  exposure; `region` is a shadowing directional's probe share
+  (`sdfMeshLightVisibility`), the cascades' visibility without the volume.
+  `band: Combined` steps the filtered visibility too, at a width
+  `sdfToonResolve` keeps at or above what the cascade texel resolves at the
+  receiver (`sdfToonShadowTexels`, through the shared `sdfMeshCascadeHolding`
+  in `frame/sdf-shadow-cascades.hlsli`); a blocky cast shadow is that width's.
+  The band reads the neighbourhood normal `sdfToonGather` averages, and its
+  softness widens to that neighbourhood's normal spread, curvature × footprint
+  and the hit triangle's vertex-normal spread (`sdfMeshNormalSpread`); a
+  speckled or faceted terminator is that widening's, not the style's. The local
+  adaptation meters `SdfLightResponse.metered`, which leaves the band out, so it
+  never flattens the step. `sdf-toon-outline.hlsli` reads depth/normal edges in
+  views, before temporal resolve, at the pixel's own style's width: a
+  silhouette is a step of a share of the viewing distance and a crease two
+  opposite neighbours turned apart, so a raised plate's edge draws none; ink at
+  a plate or paint boundary is those measures', not the style's. The standard's
+  `cel` shade program mirrors the response without the neighbourhood normal,
+  the widening or the probe-share fallback, which no stamp input carries yet. Keep screen pictures, portal pictures, sky and self-emission
   out of both the banding and ink. Nested worlds take the live enable override
   but retain their own document styles. The tuning belongs to the lighting
   cadence signature, never the bake closure.

@@ -19,12 +19,12 @@ let ivoryPlate = "#F2C49A"
 let lavenderSeam = "#5E3468"
 let ventSlot = "#2B2630"
 
-// Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's inked
-// cel style by the mothStyle row, which changes only her materials' style rows and bakes nothing. She boots cel, the
-// selected direction's treatment, and her ink line separates her from the uninked scenery.
+// Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's cel
+// style by the mothStyle row, which changes only her materials' style rows and bakes nothing. She boots cel, the
+// selected direction's treatment, in the same style as the world around her.
 let mothStyles = {
   state: "state.mothStyle"
-  cases [continuousStyle, celInkStyle]
+  cases [continuousStyle, celStyle]
 }
 
 // The palette, by role. A slot number says nothing; a name says what the surface IS.
@@ -6827,7 +6827,7 @@ state {
   ]
 
   world {
-    // Her look (mothStyles): Plain shades every slot continuously, Cel with the standard's celInkStyle.
+    // Her look (mothStyles): Plain shades every slot continuously, Cel with the standard's celStyle, the world's own.
     slot mothStyle: MothStyle = 1
 
     row {

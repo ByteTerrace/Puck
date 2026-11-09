@@ -2,13 +2,14 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-/// <summary>How a cel style bands a light's diffuse response.</summary>
+/// <summary>How a cel style treats a light's shadow visibility beside the band it steps the light's cosine with.</summary>
 public enum SdfToonBand {
-    /// <summary>The band shapes the light's cosine and the shadow visibility multiplies it after:
-    /// <c>band(cosine) × visibility</c>, so a filtered penumbra keeps its softness and colour.</summary>
+    /// <summary>The visibility multiplies the band as the cascades' filter left it: <c>step(cosine) × visibility</c>, so
+    /// a cast shadow keeps its soft penumbra.</summary>
     Visibility = 0,
-    /// <summary>The band shapes the cosine and the visibility together: <c>band(cosine × visibility)</c>, the harder
-    /// look in which a penumbra snaps to the band's edge.</summary>
+    /// <summary>The visibility is stepped too: <c>step(cosine) × step(visibility)</c>, so a cast shadow is a held shape.
+    /// The visibility's step is never sharper than the style's softness, a pixel, or what the shadow cascade resolves at
+    /// the receiver, so a coarse cascade texel keeps its penumbra rather than printing the texel grid.</summary>
     Combined = 1,
 }
 
@@ -25,7 +26,9 @@ public readonly record struct SdfToon {
     public float Threshold { get; init; }
     /// <summary>The full width of the soft band transition.</summary>
     public float Softness { get; init; }
-    /// <summary>The shadow band's RGB reflectance relative to the lit band.</summary>
+    /// <summary>The share of each direct light, per linear RGB channel, that its shade side keeps (form and cast shadow
+    /// alike) wherever the light reaches the surface's surroundings: the painted shadow colour. Sky and bounced light are
+    /// not tinted.</summary>
     public Vector3 ShadowTint { get; init; }
     /// <summary>The outline radius at close range, in output pixels.</summary>
     public float OutlineWidth { get; init; }

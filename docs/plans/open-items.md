@@ -1868,6 +1868,14 @@ reported until it does.
   programs, the debug world, never records the plain pair; a world with none never records the interpreter
   pair). Making the pair a demand (`SdfWorldPipelines.AcquiredOnDemand`, as the binned kernels are) needs the
   frame that first lacks or gains an active program to wait on its pipeline without a stall.
+- [medium] Cel shading has two implementations: the views kernel's response
+  (`shade/sdf-toon.hlsli`, `sdfLightResponse`'s toon branches) and the
+  standard's `cel` program (`worlds/standard/shading.puck`), which mirrors it
+  but cannot read the band's neighbourhood normal (`sdfToonGather`), the
+  per-pixel widening (`sdfToonResolve`) or the directional region's fallback to
+  the cascades' visibility, since no stamp input carries them. Section 3.10 of
+  the memo deletes the HLSL banding once a world default can name a program;
+  until then both change together, and the stamp needs those inputs first.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s DXIL
   with identical arithmetic (window-2's disassembly); cost only, needs a GPU
   timing of `place` to show whether the driver removes them.

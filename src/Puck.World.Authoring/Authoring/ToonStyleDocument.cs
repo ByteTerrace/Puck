@@ -16,7 +16,8 @@ namespace Puck.World.Authoring;
 /// on, which a style with every value then bands with.</param>
 /// <param name="Threshold">Diffuse band threshold in [0, 1].</param>
 /// <param name="Softness">Full terminator width in [0.001, 0.5].</param>
-/// <param name="ShadowTint">Shadow-band reflectance, three linear RGB values in [0, 1].</param>
+/// <param name="ShadowTint">The share of each direct light its shade side keeps, the painted shadow colour, three
+/// linear RGB values in [0, 1].</param>
 /// <param name="OutlineWidth">Close outline radius in output pixels, in [0, 4]; zero disables outlines.</param>
 /// <param name="OutlineDistance">Distance in metres at which the outline radius halves, in [0.1, 1000].</param>
 /// <param name="OutlineNormal">Crease normal cosine in [0, 0.95].</param>
@@ -25,7 +26,7 @@ namespace Puck.World.Authoring;
 /// <param name="Exposure">Reflected-light exposure compensation in stops, in [-4, 4].</param>
 /// <param name="Shoulder">Hue-preserving highlight compression in [0, 2]; zero disables it.</param>
 /// <param name="Band">How the band treats a light's shadow visibility: <see cref="SdfToonBand.Visibility"/> (the
-/// default) keeps the penumbra, <see cref="SdfToonBand.Combined"/> snaps it to the band's edge.</param>
+/// default) keeps the penumbra, <see cref="SdfToonBand.Combined"/> steps it into a held shape.</param>
 public sealed record ToonStyleDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Enabled = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Threshold = null,

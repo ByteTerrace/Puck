@@ -7,6 +7,7 @@
 #ifdef SDF_SURFACE_PASS
 #include "../frame/sdf-mesh-pyramid.hlsli"
 #include "../frame/sdf-optical-depth.hlsli"
+#include "../frame/sdf-shadow-cascades.hlsli"
 
 // The screen-space occlusion's world radius, taps and strength. A tap occludes only past the cosine bias and the lift (a
 // height above the tangent plane in pixel footprints), which keep a tessellated curve's facets and a baked surface's
@@ -127,30 +128,6 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
 
     return saturate(1.0 - ((SdfMeshAoStrength * occlusion) / float(SdfMeshAoSamples)));
 }
-// One cascade's light camera, from the pass block's rows.
-struct SdfMeshCascade {
-    float3 position;
-    float halfHeight;
-    float3 right;
-    float aspect;
-    float3 up;
-    float near;
-    float3 forward;
-    float far;
-};
-SdfMeshCascade sdfMeshCascadeAt(uint cascade) {
-    uint row = (cascade * 4u);
-    float4 r0 = passGroup.meshShadowCascades[row];
-    float4 r1 = passGroup.meshShadowCascades[row + 1u];
-    float4 r2 = passGroup.meshShadowCascades[row + 2u];
-    float4 r3 = passGroup.meshShadowCascades[row + 3u];
-    SdfMeshCascade c;
-    c.position = r0.xyz; c.halfHeight = r0.w;
-    c.right = r1.xyz; c.aspect = r1.w;
-    c.up = r2.xyz; c.near = r2.w;
-    c.forward = r3.xyz; c.far = r3.w;
-    return c;
-}
 // The light-space depth of the nearest caster at a cascade texel, from one of the cascade's two layers: the depth, the
 // nearest face of either facing, where the light enters the first solid it crosses; or, when `exit`, the exit layer, the
 // nearest face turned from the light, where it leaves that solid. Each holds the shadow pipelines' reversed-Z
@@ -239,19 +216,15 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
             opticalPresent = (opticalPresent && all(drawn.position == c.position) && all(drawn.forward == c.forward));
             c = drawn;
         }
-        float texelWorld = ((2.0 * c.halfHeight) / texels);
+        float texelWorld = sdfMeshCascadeTexel(c);
         // A receiver facing the light offsets along its face's normal; one turned from it offsets straight toward the
         // light, which moves it off its own exit by the offset alone. Along its face's reversed normal the offset would
         // reach 1 / (n·l) times as far toward the light at a grazing angle and pass a blocker standing that close.
         float3 biased = (surfacePoint + ((exit ? -c.forward : face) * (parameters.z * texelWorld)));
-        float3 relative = (biased - c.position);
-        float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
+        float2 plane;
+        float depth;
 
-        // A cascade holds the casters between its near and far planes only; a receiver past its far plane (the floor far
-        // below a high camera's near slice) would read every empty texel's far depth as a blocker in front of it.
-        float depth = dot(relative, c.forward);
-
-        if (any(abs(plane) > 0.97) || (depth <= c.near) || (depth >= c.far)) {
+        if (!sdfMeshCascadeHolds(c, biased, plane, depth)) {
             continue;
         }
 

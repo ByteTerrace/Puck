@@ -9,19 +9,18 @@
 // A style is on unless it says `enabled: false`: `continuousStyle` keeps a material continuous under a banded world. Every
 // field is the engine's `render.toon` field, and a world overrides one with `celStyle with { softness: 0.2 }`.
 //
-// The look is the painted one of the selected direction (docs/game/art/valley-and-gallery.md): flat lit and shade
-// bands, the shade a warm cream rather than a cold blue, so cream and ochre stay warm in shade. The tint multiplies every
-// light a band leaves (the sky's ambient and the irradiance volume), so it is kept near unit luminance and only faintly
-// warm: an interior lit only by bounced light keeps its exposure, and a white room stays cream rather than pink.
-// `exposure` and `shoulder` hold a lit band below white while leaving mid tones where the continuous response puts them.
+// The look is the painted one of the selected direction (docs/game/art/valley-and-gallery.md): a bright lit band that
+// shows each paint at its own value, and one shade step a cool lavender below it, the coloured shadow of the canyon
+// panels, where a rock's lit orange turns mauve rather than brown. The tint is the share of a light its shade side keeps
+// (form and cast shadow alike) wherever that light reaches the surface's surroundings; sky and bounced light add as they
+// are, so a room no direct light reaches keeps its exposure. A low threshold keeps most of a lit form in the lit band,
+// so a boulder half turned from the sun still shows both. `exposure` and `shoulder` hold the lit band's whites below
+// white while leaving mid tones where the continuous response puts them.
 //
-// `celStyle`, the scenery's treatment, bands the cosine and the shadow together, so a cast shadow is a crisp painted
-// shape as in The Wind Waker rather than a soft penumbra, and draws no ink: the direction's panels separate forms by
-// value and colour, and an ink line at a fixed pixel width turns grass blades and lumpy terrain into scribble.
-// `celInkStyle` adds a warm dark ink line at silhouettes and creases, for characters and props that must stand out from
-// the scenery behind them. `celTerrainStyle` is for large relieved terrain: its lumpy normals and the far cascade's
-// coarse shadows cross a narrow band in blotches, so it keeps the penumbra under a wide terminator instead.
-// `celHardStyle` is the hardest band, for comparing: a near-step terminator and heavier ink.
+// `celStyle` steps the shadow visibility too (`band: Combined`), so a cast shadow is a held painted shape, as in The Wind
+// Waker, with an edge no sharper than its cascade resolves. It draws no ink: the direction's panels separate forms by
+// value and colour, not line. `celInkStyle` adds a dark warm line at silhouettes and creases, for an author who wants
+// one; `celHardStyle` is the hardest band, for comparing: a near-step terminator and heavier ink.
 
 import "shading"
 // `combined` is the program's spelling of the style's `band` (1 for Combined, which every style here bands with); a shade
@@ -31,25 +30,23 @@ function celMaterial(base, style, combined = 1) = base with {
   shade: cel(style.threshold, style.softness, style.shadowTint, style.specularSize, style.exposure, style.shoulder, combined)
 }
 let celStyle = {
-  threshold: 0.45
-  softness: 0.1
-  shadowTint [1, 0.93, 0.88]
+  threshold: 0.2
+  softness: 0.08
+  shadowTint [0.55, 0.58, 0.82]
   outlineWidth: 0
   outlineDistance: 12
-  outlineNormal: 0.65
-  outlineTint [0.16, 0.11, 0.14]
+  outlineNormal: 0.5
+  outlineTint [0.22, 0.15, 0.2]
   specularSize: 0.025
-  exposure: 0.5
-  shoulder: 0.65
+  exposure: 0.25
+  shoulder: 0.35
   band: Combined
 }
 
-let celInkStyle = celStyle with { outlineWidth: 1.5 }
-
-let celTerrainStyle = celStyle with { softness: 0.35, band: Visibility }
+let celInkStyle = celStyle with { outlineWidth: 1.25 }
 
 let celHardStyle = celStyle with {
-  threshold: 0.5
+  threshold: 0.3
   softness: 0.02
   outlineWidth: 2
   outlineTint [0.1, 0.07, 0.09]
