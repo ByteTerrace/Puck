@@ -5,6 +5,7 @@ namespace Puck.SignedDistance;
 public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBakesSeparately;
     private bool m_openInstanceBoundInSlotFrame;
+    private bool m_openInstanceRestPoseSkin;
     private SdfInstancePart[] m_openInstanceParts = [];
 
     /// <summary>Reads a registered material while composing local material frames.</summary>
@@ -172,7 +173,7 @@ public sealed partial class SdfProgramBuilder {
         );
         m_openInstanceBakesWithPrevious = bakesWithPrevious;
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
-        m_openInstanceBox = ((box is { } value && float.IsFinite(f: value.Low.X) && float.IsFinite(f: value.Low.Y) && float.IsFinite(f: value.Low.Z) && float.IsFinite(f: value.High.X) && float.IsFinite(f: value.High.Y) && float.IsFinite(f: value.High.Z) && (value.Low.X <= value.High.X) && (value.Low.Y <= value.High.Y) && (value.Low.Z <= value.High.Z)) ? box : null);
+        m_openInstanceBox = (((box is { } value) && float.IsFinite(f: value.Low.X) && float.IsFinite(f: value.Low.Y) && float.IsFinite(f: value.Low.Z) && float.IsFinite(f: value.High.X) && float.IsFinite(f: value.High.Y) && float.IsFinite(f: value.High.Z) && (value.Low.X <= value.High.X) && (value.Low.Y <= value.High.Y) && (value.Low.Z <= value.High.Z)) ? box : null);
 
         return this;
     }
@@ -197,7 +198,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="parts">The shapes the instance holds, each its box in its own slot's frame and its detail
     /// (<see cref="SdfInstanceRange.Parts"/>); <see langword="null"/> or empty for none. A part that is not valid
     /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null) {
+    /// <param name="restPoseSkin">Referenced slots carry rigid deltas from authored rest; bake them at identity.</param>
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null, bool restPoseSkin = false) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -214,6 +216,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
         m_openInstanceBakesSeparately = separateBake;
         m_openInstanceBoundInSlotFrame = boundInSlotFrame;
+        m_openInstanceRestPoseSkin = restPoseSkin;
         m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => part.IsValid)] : []);
 
         return this;
@@ -294,7 +297,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField, Parts = m_openInstanceParts });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField, Parts = m_openInstanceParts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
         ResetOpenInstance();
 
@@ -327,6 +330,7 @@ public sealed partial class SdfProgramBuilder {
             material: material
         ).EndInstance();
     }
+
     // Closes the open instance's per-emission state: the instance's first instruction, its box and the flags only
     // BeginInstanceDynamic sets. EndInstance and Clear both run it, so no emission inherits a previous one's.
     private void ResetOpenInstance() {
@@ -335,8 +339,10 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceHeightField = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
+        m_openInstanceRestPoseSkin = false;
         m_openInstanceParts = [];
     }
+
     /// <summary>Declares a static per-object instance with balanced begin/end handling around <paramref name="emit"/>.
     /// If <paramref name="emit"/> throws, the builder is left with the instance open and partial state — discard it
     /// (no builder path rolls back on a throw).</summary>

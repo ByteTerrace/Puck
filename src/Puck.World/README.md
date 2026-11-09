@@ -2370,7 +2370,10 @@ totals stay in the sum. It also registers `sdf.mesh-settle`, the settle rebakes
 of skinned blend groups (`SdfMeshSettle`) over every residency sharing the
 presentation's mesh library: groups queued, done and reused from the library,
 frames a drifted group waited while it moved or for the caps, and rebakes
-refused for meshing no surface. It registers `sdf.mesh-gi` too, the world
+refused for meshing no surface; and `sdf.mesh-skin` over the same library
+(`SdfMeshSkin`): each skinned mesh a bake group starts drawing and its vertices
+by vertex-stage path, riding the draw's slot, riding one moving member rigidly,
+or blending two. It registers `sdf.mesh-gi` too, the world
 residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
 the geometries they built and took from the scene they replaced, the triangles
 they built, and the probe sweeps traced. The

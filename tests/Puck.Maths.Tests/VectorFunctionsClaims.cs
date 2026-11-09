@@ -38,7 +38,7 @@ internal static class VectorFunctionsClaims {
                         return $"IsFinite({planar}) disagrees with componentwise float.IsFinite";
                     }
 
-                    foreach (var w in (ReadOnlySpan<float>)[1f, float.NaN, float.NegativeInfinity]) {
+                    foreach (var w in ((ReadOnlySpan<float>)[1f, float.NaN, float.NegativeInfinity])) {
                         var wide = new Vector4(w: w, x: x, y: y, z: z);
                         var wideExpected = (expected && float.IsFinite(f: w));
 
@@ -59,7 +59,7 @@ internal static class VectorFunctionsClaims {
     /// congruent to its input modulo 2π to within the input's own rounding, an angle already inside passes through
     /// exactly, −π maps to +π, and the non-finite inputs come back non-finite.</summary>
     public static string? AngleWrapsRangeAndCongruence() {
-        foreach (var angle in (ReadOnlySpan<double>)[0d, 1d, -1d, 3d, -3d, Math.PI, -Math.PI, (2d * Math.PI), (-2d * Math.PI), 10d, -10d, 1e6d, -1e6d, 3.5d, -3.5d, 1e-9d, -1e-9d]) {
+        foreach (var angle in ((ReadOnlySpan<double>)[0d, 1d, -1d, 3d, -3d, Math.PI, -Math.PI, (2d * Math.PI), (-2d * Math.PI), 10d, -10d, 1e6d, -1e6d, 3.5d, -3.5d, 1e-9d, -1e-9d])) {
             if (CheckWraps(angle: angle) is { } doubleFailure) { return doubleFailure; }
             if (CheckWraps(angle: ((float)angle)) is { } singleFailure) { return singleFailure; }
         }
@@ -72,6 +72,7 @@ internal static class VectorFunctionsClaims {
 
         return null;
     }
+
     private static string? CheckWraps<T>(T angle) where T : IFloatingPointIeee754<T> {
         var wrapped = VectorFunctions.WrapAngle(radians: angle);
         var turn = VectorFunctions.WrapTurn(radians: angle);
@@ -90,11 +91,12 @@ internal static class VectorFunctionsClaims {
 
         return null;
     }
+
     /// <summary>Smoothstep keeps the bits of the expression (t·t)·(3 − 2·t) in both precisions at a ladder of
     /// fractions, is exactly zero, one half and one at its three exact points, the edged form clamps and steps at equal
     /// edges, and Fract lands in [0, 1) with its complement an integer.</summary>
     public static string? EasingAndFract() {
-        foreach (var fraction in (ReadOnlySpan<double>)[0d, 0.125d, 0.25d, 0.3d, 0.5d, 0.7d, 0.75d, 0.875d, 1d]) {
+        foreach (var fraction in ((ReadOnlySpan<double>)[0d, 0.125d, 0.25d, 0.3d, 0.5d, 0.7d, 0.75d, 0.875d, 1d])) {
             var single = ((float)fraction);
             var expectedSingle = ((single * single) * (3f - (2f * single)));
             var expectedDouble = ((fraction * fraction) * (3d - (2d * fraction)));
@@ -113,12 +115,12 @@ internal static class VectorFunctionsClaims {
         if (VectorFunctions.Smoothstep(edge0: 2f, edge1: 1f, x: 1.5f) != 0.5f) { return "reversed edges do not reverse the curve"; }
         if ((VectorFunctions.Smoothstep(edge0: 1f, edge1: 1f, x: 0.5f) != 0f) || (VectorFunctions.Smoothstep(edge0: 1f, edge1: 1f, x: 1f) != 1f)) { return "equal edges are not a step"; }
 
-        foreach (var value in (ReadOnlySpan<double>)[0d, 0.25d, -0.25d, 1.75d, -1.75d, 123456.5d, -0.1d, 1e-9d]) {
+        foreach (var value in ((ReadOnlySpan<double>)[0d, 0.25d, -0.25d, 1.75d, -1.75d, 123456.5d, -0.1d, 1e-9d])) {
             var fract = VectorFunctions.Fract(x: value);
 
             if ((fract < 0d) || (fract >= 1d)) { return $"Fract({value}) = {fract} left [0, 1)"; }
             if (Math.Floor(d: (value - fract)) != (value - fract)) { return $"Fract({value}) leaves a non-integer complement"; }
-            if (VectorFunctions.Fract(x: ((float)value)) != ((float)value - MathF.Floor(x: ((float)value)))) { return $"single Fract({value}) is not x - floor(x)"; }
+            if (VectorFunctions.Fract(x: ((float)value)) != (((float)value) - MathF.Floor(x: ((float)value)))) { return $"single Fract({value}) is not x - floor(x)"; }
         }
 
         return null;
@@ -202,8 +204,8 @@ internal static class VectorFunctionsClaims {
         if (VectorFunctions.PitchOf(facing: -Vector3.UnitZ) != 0f) { return "facing -Z is not pitch zero"; }
         if (VectorFunctions.YawOf(attitude: Quaternion.Identity) != 0f) { return "the identity attitude is not yaw zero"; }
 
-        foreach (var yaw in (ReadOnlySpan<float>)[0f, 0.5f, -0.5f, 1.5f, -1.5f, 3f, -3f, 2.2f]) {
-            foreach (var pitch in (ReadOnlySpan<float>)[0f, 0.3f, -0.3f, 1.2f, -1.2f]) {
+        foreach (var yaw in ((ReadOnlySpan<float>)[0f, 0.5f, -0.5f, 1.5f, -1.5f, 3f, -3f, 2.2f])) {
+            foreach (var pitch in ((ReadOnlySpan<float>)[0f, 0.3f, -0.3f, 1.2f, -1.2f])) {
                 var heading = VectorFunctions.Heading(
                     pitch: pitch,
                     yaw: yaw
@@ -219,8 +221,9 @@ internal static class VectorFunctionsClaims {
                 if (MathF.Abs(x: VectorFunctions.WrapAngle(radians: (VectorFunctions.YawOf(facing: heading) - yaw))) > 1e-5f) { return $"YawOf(Heading({yaw}, {pitch})) does not recover the yaw"; }
                 if (MathF.Abs(x: (VectorFunctions.PitchOf(facing: heading) - pitch)) > 1e-5f) { return $"PitchOf(Heading({yaw}, {pitch})) does not recover the pitch"; }
 
-                foreach (var roll in (ReadOnlySpan<float>)[0f, 0.4f, -0.4f, 1.1f]) {
+                foreach (var roll in ((ReadOnlySpan<float>)[0f, 0.4f, -0.4f, 1.1f])) {
                     var attitude = Quaternion.Normalize(value: ((Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: yaw) * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: pitch)) * Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: roll)));
+
                     var (readYaw, readPitch, readRoll) = VectorFunctions.EulerOf(attitude: attitude);
 
                     if (MathF.Abs(x: VectorFunctions.WrapAngle(radians: (readYaw - yaw))) > 1e-4f) { return $"EulerOf does not recover yaw {yaw} (pitch {pitch}, roll {roll})"; }
@@ -248,11 +251,13 @@ internal static class VectorFunctionsClaims {
                 min: 0.0,
                 value: value
             );
+
             var (numerator, exponent) = Oracles.Binary64Rational(value: clamped);
             var productBits = Oracles.NearestBinary64Bits(
                 shift: exponent,
                 value: (numerator * 255)
             );
+
             var (productNumerator, productExponent) = Oracles.Binary64Rational(value: BitConverter.UInt64BitsToDouble(value: productBits));
 
             return ((byte)Oracles.RoundRationalTiesToEven(
@@ -261,7 +266,7 @@ internal static class VectorFunctionsClaims {
             ));
         }
 
-        foreach (var value in (ReadOnlySpan<double>)[0d, 1d, 0.5d, 0.25d, (1d / 510d), (3d / 510d), (5d / 510d), (254.5d / 255d), 0.3d, 0.7d, 1e-9d, -1d, 2d, 1e300d, -0d]) {
+        foreach (var value in ((ReadOnlySpan<double>)[0d, 1d, 0.5d, 0.25d, (1d / 510d), (3d / 510d), (5d / 510d), (254.5d / 255d), 0.3d, 0.7d, 1e-9d, -1d, 2d, 1e300d, -0d])) {
             if (VectorFunctions.ToUnorm8(value: value) != ExactUnorm8(value: value)) { return $"ToUnorm8(double {value:R}) is not the exact rounding {ExactUnorm8(value: value)}"; }
 
             var single = ((float)value);
@@ -294,6 +299,8 @@ internal static class VectorFunctionsClaims {
         if (uv != 0xFFFF0001U) { return $"PackUnorm2x16 laid out 0x{uv:X8}, not u in the low half"; }
         if (VectorFunctions.PackUnorm2x16(uv: new Vector2(x: 0.5f, y: -1f)) != 32768U) { return "PackUnorm2x16 does not round 0.5 to 32768 and clamp below zero"; }
         if (VectorFunctions.PackUnorm2x16(uv: new Vector2(x: 2f, y: float.NaN)) != 0xFFFFU) { return "PackUnorm2x16 does not clamp above one and zero NaN"; }
+        if (VectorFunctions.PackHalf2x16(1f, -2f) != 0xC0003C00U) { return "PackHalf2x16 reversed the IEEE half lanes"; }
+        if (VectorFunctions.PackHalf2x16(-0f, float.PositiveInfinity) != 0x7C008000U) { return "PackHalf2x16 lost signed zero or infinity"; }
 
         return null;
     }

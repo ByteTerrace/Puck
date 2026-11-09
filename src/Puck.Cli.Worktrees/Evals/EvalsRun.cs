@@ -86,7 +86,7 @@ public static partial class EvalsRun {
                exit code) and removes the frozen worktree.
 
             Models are full IDs (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5,
-            claude-fable-5-1). The judge defaults to the model under test; a judge of a weaker tier
+            claude-fable-5-2). The judge defaults to the model under test; a judge of a weaker tier
             is refused. A lane cannot run this verb (the session-launch hook refuses it, as it
             refuses claude); --dry-run and --help pass.
 

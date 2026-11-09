@@ -1,6 +1,7 @@
 # The walkthrough: the debug world played as a benchmark
 
-The owner's ruling ([the instrument](../decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
+The owner's ruling ([the instrument](../decisions/engine-design.md#the-debug-world-is-the-engines-instrument),
+[the scripted walkthrough](../decisions/engine-design.md#the-scripted-walkthrough)):
 one walkthrough visits every visual and every interaction, and agents drive and
 repeat it. The owner's specification for it: played as a player plays, with a
 controller driving the body through the world rather than a camera posed at
@@ -70,8 +71,8 @@ caught, not enforced:
 
 Gallery level 1's blend row: fourteen exhibits, 2.6 m apart along +X at
 z = 25. The program poses the body at `shape-blend-union`'s spawn point facing
-+Z, enters first person, recenters, looks down about 20 degrees with the right
-stick so each plinth's plaque stands in frame under its exhibit, then strafes
++Z, enters first person, recenters, looks down with the right stick held two ticks
+so each plinth's plaque stands in frame under its exhibit, then strafes
 with the left stick held at full deflection for the ticks of `blendRowHolds`
 (19, 19 and 18 in turn: a `for` over the list with a `repeat` of each hold) and
 rests 26 ticks before each exhibit, which keeps every rest within 0.13 m of its

@@ -80,6 +80,7 @@ public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float S
     public Vector3 WorstFacing { get; init; }
     /// <summary>Gets the field's unit gradient at its most severe sample; zero where the field is flat.</summary>
     public Vector3 WorstGradient { get; init; }
+
     /// <summary>Gets the unit direction its samples spread along most: the line an edge defect runs along.</summary>
     public Vector3 Axis { get; init; } = Vector3.UnitX;
     /// <summary>Gets positions of up to sixteen of its samples, spread over them, at which its shapes are named.</summary>
@@ -135,7 +136,6 @@ public sealed record SdfMeshAuditReport(
     IReadOnlyList<SdfMeshAuditCluster> Clusters,
     float Score
 );
-
 /// <summary>
 /// Measures a baked mesh against the field it was baked from: how far its vertices, centroids and edge midpoints lie off
 /// the field's surface, how far its triangles' normals stray from the field's gradient, where its triangles fold, flip,
@@ -157,7 +157,7 @@ public static class SdfMeshAudit {
         ArgumentOutOfRangeException.ThrowIfNegative(level);
         if (level == 0) { return mesh; }
         if (mesh.Chunks.Count > 0) {
-            return SdfMeshChunks.Join(mesh.Chunks.Select(chunk => Surface(mesh: chunk, level: level)).ToArray());
+            return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => Surface(level: level, mesh: chunk)).ToArray());
         }
         var selected = Math.Min(val1: level, val2: mesh.Levels.Count);
         var indices = ((selected == 0) ? mesh.Indices : mesh.Levels[(selected - 1)].Indices);
@@ -177,26 +177,31 @@ public static class SdfMeshAudit {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
         var remap = new int[mesh.Positions.Length];
+
         Array.Fill(array: remap, value: -1);
         var kept = new List<int>();
         var positions = new List<Vector3>();
         var normals = new List<Vector3>();
         var members = new List<byte>();
+        var influences = new List<SdfMeshInfluence>();
         var compact = new uint[indices.Length];
+
         for (var at = 0; (at < indices.Length); at++) {
             var vertex = ((int)indices[at]);
+
             if (remap[vertex] < 0) {
                 remap[vertex] = positions.Count;
                 kept.Add(item: vertex);
                 positions.Add(item: mesh.Positions.Span[vertex]);
                 if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[vertex]); }
                 if (!mesh.VertexMembers.IsEmpty) { members.Add(item: mesh.VertexMembers.Span[vertex]); }
+                if (!mesh.Influences.IsEmpty) { influences.Add(item: mesh.Influences.Span[vertex]); }
             }
             compact[at] = ((uint)remap[vertex]);
         }
         sources = [.. kept];
         return new SdfMesh(positions: positions.ToArray(), indices: compact, normals: normals.ToArray(), triangleMaterials: materials,
-            members: mesh.Members, vertexMembers: members.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
+            members: mesh.Members, vertexMembers: members.ToArray(), influences: influences.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
     /// <summary>Returns a triangle's unit face normal by its winding, or zero for a degenerate triangle (a height under a
     /// five-hundredth of its longest edge), whose corners are collinear to rounding and whose facing is noise.</summary>
@@ -206,7 +211,7 @@ public static class SdfMeshAudit {
     /// <returns>The face normal, or zero.</returns>
     public static Vector3 FaceNormal(Vector3 a, Vector3 b, Vector3 c) {
         var cross = Vector3.Cross(vector1: (b - a), vector2: (c - a));
-        var longest = MathF.Max(Vector3.DistanceSquared(value1: a, value2: b), MathF.Max(Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a)));
+        var longest = MathF.Max(x: Vector3.DistanceSquared(value1: a, value2: b), y: MathF.Max(x: Vector3.DistanceSquared(value1: b, value2: c), y: Vector3.DistanceSquared(value1: c, value2: a)));
 
         return ((((longest <= 0f) ? 0f : (cross.Length() / longest)) >= DegenerateRatio) ? Vector3.Normalize(value: cross) : Vector3.Zero);
     }
@@ -261,12 +266,17 @@ public static class SdfMeshAudit {
     /// <returns>The group's field.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="group"/> is
     /// <see langword="null"/>.</exception>
-    public static SdfProgram Field(SdfProgram program, SdfMeshBakeGroup group) {
+    /// <param name="poses">Optional current poses by slot offset for a posed skin audit, in the group's frame.</param>
+    public static SdfProgram Field(SdfProgram program, SdfMeshBakeGroup group, IReadOnlyDictionary<int, DynamicTransform>? poses = null) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: group);
 
-        return program.Excerpt(indices: group.InstructionIndices(program: program), rewrite: (_, instruction) => Posed(group: group, instruction: instruction));
+        return FieldOf(group: group, indices: group.InstructionIndices(program: program), poses: poses, program: program);
     }
+    // The field of the group's instructions at `indices` of `program`: the planned program's own indices, or every
+    // instruction of a skin source's copy of them (SdfMeshSkinSource).
+    internal static SdfProgram FieldOf(SdfProgram program, IReadOnlyList<int> indices, SdfMeshBakeGroup group, IReadOnlyDictionary<int, DynamicTransform>? poses) =>
+        program.Excerpt(indices: indices, rewrite: (_, instruction) => Posed(group: group, instruction: instruction, poses: poses));
     /// <summary>Returns each shape of a bake group alone: for every shape instruction, the point transforms of its chain
     /// since the chain's reset, posed as <see cref="Field"/> poses them, then the shape as a union and the field edits that
     /// follow it, so its field is that shape's own surface in the group's frame.</summary>
@@ -304,17 +314,19 @@ public static class SdfMeshAudit {
                 own.Add(item: indices[next]);
             }
             shapes.Add(item: (index, program.Excerpt(indices: own, rewrite: (source, instruction) => ((source == index)
-                ? [instruction with { Blend = (uint)SdfBlendOp.Union, Detail = false }]
+                ? [instruction with { Blend = ((uint)SdfBlendOp.Union), Detail = false }]
                 : Posed(group: group, instruction: instruction)))));
         }
 
         return shapes;
     }
     /// <summary>Returns each slot's own part of a bake group whose shapes ride several dynamic slots: the group's field
-    /// (<see cref="Field"/>) with every shape of another slot left out, each with the field edits that follow it, and the
-    /// first shape left in each field scope blended as a union. A shape rides the slot its chain's last dynamic transform
-    /// names since the chain's reset, or the group's own slot. A part's surface is that member's own: where another
-    /// member carved it or blended into it, the whole field differs.</summary>
+    /// (<see cref="Field"/>) with every surface shape of another slot left out, each with the field edits that follow it,
+    /// and the first shape left in each field scope blended as a union. A shape rides the slot its chain's last dynamic
+    /// transform names since the chain's reset, or the group's own slot. Every carving shape
+    /// (<see cref="SdfBoundAlgebra.Carves"/>) stays in every part at the pose the group's geometry keys its slot at, so a
+    /// carve or clip one member makes in another stays cut where the part rests; where another member blended into it,
+    /// the whole field differs.</summary>
     /// <param name="program">The program the group was planned from.</param>
     /// <param name="group">The group.</param>
     /// <returns>Each slot whose shapes the group holds and its part's field, the group's own slot first; a single entry
@@ -325,8 +337,25 @@ public static class SdfMeshAudit {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: group);
 
-        var indices = group.InstructionIndices(program: program);
+        return MemberFieldsOf(group: group, indices: group.InstructionIndices(program: program), program: program);
+    }
+    internal static IReadOnlyList<(int Slot, SdfProgram Field)> MemberFieldsOf(SdfProgram program, IReadOnlyList<int> indices, SdfMeshBakeGroup group) {
         var instructions = program.Instructions;
+        var slotOf = SlotWalk(group: group, indices: indices, instructions: instructions);
+        // A slot whose shapes only carve has no surface of its own and is no part; its carves stay in every part.
+        var slots = slotOf.Where(predicate: entry => !SdfBoundAlgebra.Carves(blend: ((SdfBlendOp)instructions[entry.Key].Blend))).Select(selector: static entry => entry.Value).Distinct().OrderBy(keySelector: other => ((other == group.Slot) ? int.MinValue : other)).ToArray();
+
+        if (slots.Length < 2) { return [(group.Slot, FieldOf(group: group, indices: indices, poses: null, program: program))]; }
+
+        return [.. slots.Select(selector: member => {
+            var (kept, first) = OwnPart(indices: indices, instructions: instructions, member: member, slotOf: slotOf);
+
+            return (member, program.Excerpt(indices: kept, rewrite: (source, instruction) => Posed(group: group, instruction: (first.Contains(item: source) ? (instruction with { Blend = ((uint)SdfBlendOp.Union) }) : instruction))));
+        })];
+    }
+    // The slot each shape instruction at `indices` rides, by instruction index, in stream order: the slot its chain's
+    // last dynamic transform names since the chain's reset, or the group's own.
+    internal static Dictionary<int, int> SlotWalk(SdfMeshBakeGroup group, IReadOnlyList<int> indices, IReadOnlyList<SdfInstruction> instructions) {
         var slotOf = new Dictionary<int, int>();
         var slot = group.Slot;
 
@@ -334,24 +363,15 @@ public static class SdfMeshAudit {
             var op = instructions[index].Op;
 
             if (op == SdfOp.ResetPoint) { slot = group.Slot; }
-            if (op == SdfOp.TransformDynamic) { slot = (int)instructions[index].Data0.X; }
-            if (op == SdfOp.ShapeBlend) { slotOf[index] = slot; }
+            if (op == SdfOp.TransformDynamic) { slot = ((int)instructions[index].Data0.X); }
+            if (op == SdfOp.ShapeBlend) { slotOf.Add(key: index, value: slot); }
         }
 
-        // A slot whose shapes only carve (subtract or intersect) has no surface of its own: its carving shapes the other
-        // members' surfaces in the whole field and is left out of every part.
-        var slots = slotOf.Where(predicate: entry => !Carves(blend: (SdfBlendOp)instructions[entry.Key].Blend)).Select(selector: static entry => entry.Value).Distinct().OrderBy(keySelector: other => ((other == group.Slot) ? int.MinValue : other)).ToArray();
-
-        if (slots.Length < 2) { return [(group.Slot, Field(group: group, program: program))]; }
-
-        return [.. slots.Select(selector: member => {
-            var (kept, first) = OwnPart(indices: indices, instructions: instructions, member: member, slotOf: slotOf);
-
-            return (member, program.Excerpt(indices: kept, rewrite: (source, instruction) => Posed(group: group, instruction: (first.Contains(item: source) ? (instruction with { Blend = (uint)SdfBlendOp.Union }) : instruction))));
-        })];
+        return slotOf;
     }
-    // The group's instruction indices less every shape of another slot and the field edits that follow it, and the
-    // shapes left first in their field scope, which blend into nothing.
+
+    // The group's instruction indices less every surface shape of another slot and the field edits that follow it, and
+    // the shapes left first in their field scope, which blend into nothing.
     private static (List<int> Kept, HashSet<int> First) OwnPart(IReadOnlyList<int> indices, IReadOnlyList<SdfInstruction> instructions, int member, Dictionary<int, int> slotOf) {
         var kept = new List<int>();
         var first = new HashSet<int>();
@@ -363,7 +383,7 @@ public static class SdfMeshAudit {
             var op = instructions[index].Op;
 
             if (op == SdfOp.ShapeBlend) {
-                dropping = (slotOf[index] != member);
+                dropping = ((slotOf[index] != member) && !SdfBoundAlgebra.Carves(blend: ((SdfBlendOp)instructions[index].Blend)));
             } else if (SdfOpRoles.Of(op: op) != SdfOpRole.Field) {
                 dropping = false;
             }
@@ -374,7 +394,7 @@ public static class SdfMeshAudit {
                 open = true;
             } else if ((op == SdfOp.PopField) && (empty.Count > 0)) {
                 open = (empty.Pop() && open);
-            } else if ((op == SdfOp.ShapeBlend) && open && !Carves(blend: (SdfBlendOp)instructions[index].Blend)) {
+            } else if ((op == SdfOp.ShapeBlend) && open && !SdfBoundAlgebra.Carves(blend: ((SdfBlendOp)instructions[index].Blend))) {
                 _ = first.Add(item: index);
                 open = false;
             }
@@ -382,8 +402,7 @@ public static class SdfMeshAudit {
 
         return (kept, first);
     }
-    // Whether a blend only removes from what it blends into: the subtraction and intersection families.
-    private static bool Carves(SdfBlendOp blend) => (SdfBoundAlgebra.IsSubtraction(blend: blend) || SdfBoundAlgebra.IsIntersection(blend: blend) || (blend == SdfBlendOp.PipeSubtraction));
+
     /// <summary>Measures a baked mesh against its group's field and names its worst clusters by its shapes' own
     /// fields.</summary>
     /// <param name="mesh">The mesh, in the group's frame.</param>
@@ -405,6 +424,7 @@ public static class SdfMeshAudit {
 
         var reference = mesh;
         var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: mesh.Indices.Span, welded: Weld(positions: mesh.Positions.Span)), positions: mesh.Positions.Span));
+
         mesh = Surface(mesh: mesh, level: options.Level);
         var positions = mesh.Positions.Span;
         var indices = mesh.Indices.Span;
@@ -433,14 +453,14 @@ public static class SdfMeshAudit {
         for (var triangle = 0; (triangle < triangles); triangle++) {
             var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
             var cross = Vector3.Cross(vector1: (b - a), vector2: (c - a));
-            var longest = MathF.Max(Vector3.DistanceSquared(value1: a, value2: b), MathF.Max(Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a)));
-            var centroid = ((a + b + c) / 3f);
+            var longest = MathF.Max(x: Vector3.DistanceSquared(value1: a, value2: b), y: MathF.Max(x: Vector3.DistanceSquared(value1: b, value2: c), y: Vector3.DistanceSquared(value1: c, value2: a)));
+            var centroid = (((a + b) + c) / 3f);
 
             var ratio = ((longest <= 0f) ? 0f : (cross.Length() / longest));
 
             slivers += ((ratio < SliverRatio) ? 1 : 0);
             faceNormals[triangle] = FaceNormal(a: a, b: b, c: c);
-            centroidErrors[triangle] = Off(field: field, flagged: flagged, cell: cell, point: centroid, threshold: threshold);
+            centroidErrors[triangle] = Off(cell: cell, field: field, flagged: flagged, point: centroid, threshold: threshold);
             var slope = Slope(field: field, point: centroid, step: options.GradientStep);
             var steepness = slope.Length();
 
@@ -475,7 +495,7 @@ public static class SdfMeshAudit {
                 var straying = Vector3.Zero;
 
                 for (var corner = 0; (corner < 3); corner++) {
-                    var unit = Unit(normal: normals[(int)indices[(3 * triangle) + corner]]);
+                    var unit = Unit(normal: normals[((int)indices[((3 * triangle) + corner)])]);
                     var angle = Angle(first: unit, second: gradients[triangle]);
 
                     if (angle > worst) {
@@ -485,7 +505,7 @@ public static class SdfMeshAudit {
                 }
                 shadingErrors[triangle] = worst;
                 if (worst > options.NormalDegrees) {
-                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: ((a + b + c) / 3f), Severity: (worst / 90f), Value: worst) { Facing = straying, Gradient = gradients[triangle] });
+                    flagged.Add(item: new Sample(Kind: SampleKind.Shaded, Position: (((a + b) + c) / 3f), Severity: (worst / 90f), Value: worst) { Facing = straying, Gradient = gradients[triangle] });
                 }
             }
 
@@ -494,7 +514,7 @@ public static class SdfMeshAudit {
             normalErrors[triangle] = degrees;
             flipped += (Flips(faceNormal: faceNormals[triangle], gradient: gradients[triangle], winding: winding) ? 1 : 0);
             if (degrees > options.NormalDegrees) {
-                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
+                flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: (((a + b) + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
         }
 
@@ -510,7 +530,7 @@ public static class SdfMeshAudit {
         foreach (var ((first, second), held) in edges) {
             var midpoint = ((positions[first] + positions[second]) * 0.5f);
 
-            midpointErrors[edge++] = Off(field: field, flagged: flagged, cell: cell, point: midpoint, threshold: threshold);
+            midpointErrors[edge++] = Off(cell: cell, field: field, flagged: flagged, point: midpoint, threshold: threshold);
             if (held.Count == 1) {
                 open++;
             } else if (held.Count > 2) {
@@ -567,9 +587,9 @@ public static class SdfMeshAudit {
             refusal = null;
 
             return true;
-        } catch (Exception exception) when (exception is ArgumentException or ArithmeticException) {
+        } catch (Exception exception) when ((exception is ArgumentException or ArithmeticException)) {
             var message = exception.Message;
-            var end = message.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
+            var end = message.IndexOf(comparisonType: StringComparison.Ordinal, value: ". ");
 
             field = null;
             refusal = $"{((exception is ArgumentException) ? "refused" : "failed")}: {((end < 0) ? message : message[..(end + 1)])}";
@@ -585,20 +605,21 @@ public static class SdfMeshAudit {
     public static float Distance(SdfFieldEvaluator field, Vector3 point) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        return (field.TryDistance(distance: out var distance, material: out _, position: Fixed(point: point)) ? (float)(double)distance : float.NaN);
+        return (field.TryDistance(distance: out var distance, material: out _, position: Fixed(point: point)) ? (float)((double)distance) : float.NaN);
     }
 
     // A dynamic transform as the translation and rotation the group posed its slot at; a shape as itself, detail or not.
-    private static IEnumerable<SdfInstruction> Posed(SdfMeshBakeGroup group, SdfInstruction instruction) {
+    private static IEnumerable<SdfInstruction> Posed(SdfMeshBakeGroup group, SdfInstruction instruction, IReadOnlyDictionary<int, DynamicTransform>? poses = null) {
         if (instruction.Op == SdfOp.ShapeBlend) { return [instruction with { Detail = false }]; }
         if (instruction.Op != SdfOp.TransformDynamic) { return [instruction]; }
-        if (!group.Geometry.Poses.TryGetValue(key: (int)instruction.Data0.X, value: out var pose)) { return []; }
+        if (!group.Geometry.Poses.TryGetValue(key: ((int)instruction.Data0.X), value: out var pose)) { return []; }
+        if ((poses is not null) && poses.TryGetValue(key: (((int)instruction.Data0.X) - group.Slot), value: out var current)) { pose = current; }
 
         var turn = Quaternion.Normalize(value: pose.Orientation);
 
         return [
             new SdfInstruction(Blend: 0u, Data0: new Vector4(value: pose.Position, w: 0f), Data1: Vector4.Zero, Material: 0u, Op: SdfOp.Translate, Shape: 0u),
-            new SdfInstruction(Blend: 0u, Data0: new Vector4(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W), Data1: Vector4.Zero, Material: 0u, Op: SdfOp.Rotate, Shape: 0u),
+            new SdfInstruction(Blend: 0u, Data0: new Vector4(w: turn.W, x: turn.X, y: turn.Y, z: turn.Z), Data1: Vector4.Zero, Material: 0u, Op: SdfOp.Rotate, Shape: 0u),
         ];
     }
     // The angle between two unit vectors, in degrees; a right angle where either is zero.
@@ -623,7 +644,7 @@ public static class SdfMeshAudit {
         var z = (Distance(field: field, point: (point + new Vector3(x: 0f, y: 0f, z: step))) - Distance(field: field, point: (point - new Vector3(x: 0f, y: 0f, z: step))));
         var slope = (new Vector3(x: x, y: y, z: z) / (2f * step));
 
-        return (float.IsFinite(f: slope.X) && float.IsFinite(f: slope.Y) && float.IsFinite(f: slope.Z)) ? slope : Vector3.Zero;
+        return ((float.IsFinite(f: slope.X) && float.IsFinite(f: slope.Y) && float.IsFinite(f: slope.Z)) ? slope : Vector3.Zero);
     }
     // Each smooth vertex's shading normal against the field's gradient at the vertex across RoughCells of a cell, in
     // degrees, one entry per welded position (NaN for a copy, a crease or a mesh with no normals), flagging those past
@@ -648,7 +669,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var step = MathF.Max(RoughStepFloor, (options.RoughCells * cell));
+        var step = MathF.Max(x: RoughStepFloor, y: (options.RoughCells * cell));
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             var normal = Unit(normal: normals[vertex]);
@@ -672,6 +693,7 @@ public static class SdfMeshAudit {
         return errors;
     }
     private static Vector3 Unit(Vector3 normal) => VectorFunctions.NormalizeOr(fallback: Vector3.Zero, value: normal);
+
     /// <summary>Reads a field's unit gradient at a point in its frame.</summary>
     /// <param name="field">The field.</param>
     /// <param name="point">The point, in metres.</param>
@@ -708,8 +730,9 @@ public static class SdfMeshAudit {
 
         return (open, nonManifold, openTriangles);
     }
+
     private static (Vector3 A, Vector3 B, Vector3 C) Corners(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) =>
-        (positions[(int)indices[(3 * triangle)]], positions[(int)indices[((3 * triangle) + 1)]], positions[(int)indices[((3 * triangle) + 2)]]);
+        (positions[((int)indices[(3 * triangle)])], positions[((int)indices[((3 * triangle) + 1)])], positions[((int)indices[((3 * triangle) + 2)])]);
     // Each vertex's first vertex at the same position: the contour splits a vertex at creases and material boundaries
     // into copies that share it.
     private static int[] Weld(ReadOnlySpan<Vector3> positions) {
@@ -732,8 +755,8 @@ public static class SdfMeshAudit {
 
         for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
             for (var corner = 0; (corner < 3); corner++) {
-                var a = welded[(int)indices[((3 * triangle) + corner)]];
-                var b = welded[(int)indices[((3 * triangle) + ((corner + 1) % 3))]];
+                var a = welded[((int)indices[((3 * triangle) + corner)])];
+                var b = welded[((int)indices[((3 * triangle) + ((corner + 1) % 3))])];
 
                 if (a == b) { continue; }
 
@@ -756,8 +779,9 @@ public static class SdfMeshAudit {
         }
         Array.Sort(array: lengths);
 
-        return lengths[(lengths.Length - 1) / 2];
+        return lengths[((lengths.Length - 1) / 2)];
     }
+
     internal static SdfMeshAuditStatistic Statistic(float[] values, float over) {
         var finite = values.Where(predicate: static value => float.IsFinite(f: value)).ToArray();
 
@@ -768,10 +792,11 @@ public static class SdfMeshAudit {
             Count: finite.Length,
             Max: finite[^1],
             Over: finite.Count(predicate: value => (value > over)),
-            P50: finite[(int)((finite.Length - 1) * 0.5)],
-            P99: finite[(int)((finite.Length - 1) * 0.99)]
+            P50: finite[((int)((finite.Length - 1) * 0.5))],
+            P99: finite[((int)((finite.Length - 1) * 0.99))]
         );
     }
+
     // The field's zero set on a lattice over the mesh's box: each lattice edge whose ends differ in sign holds a crossing,
     // refined by bisection and flagged where no triangle, of the mesh or of the accounted surface, lies within a cell of it.
     private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, SdfMesh? accounted) {
@@ -781,12 +806,12 @@ public static class SdfMeshAudit {
         var high = (mesh.PositionHigh + new Vector3(value: (3f * cell)));
 
         var extent = (high - low);
-        var spacing = MathF.Max((MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z)) / (Math.Max(options.MissingSamples, 2) - 1)), (1.5f * cell));
-        var dims = (X: ((int)MathF.Ceiling(extent.X / spacing) + 1), Y: ((int)MathF.Ceiling(extent.Y / spacing) + 1), Z: ((int)MathF.Ceiling(extent.Z / spacing) + 1));
-        var values = new float[(dims.X * dims.Y) * dims.Z];
+        var spacing = MathF.Max(x: (MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)) / (Math.Max(val1: options.MissingSamples, val2: 2) - 1)), y: (1.5f * cell));
+        var dims = (X: (((int)MathF.Ceiling(x: (extent.X / spacing))) + 1), Y: (((int)MathF.Ceiling(x: (extent.Y / spacing))) + 1), Z: (((int)MathF.Ceiling(x: (extent.Z / spacing))) + 1));
+        var values = new float[((dims.X * dims.Y) * dims.Z)];
 
         Vector3 PointAt(int x, int y, int z) => (low + (new Vector3(x: x, y: y, z: z) * spacing));
-        int At(int x, int y, int z) => (((z * dims.Y) + y) * dims.X) + x;
+        int At(int x, int y, int z) => ((((z * dims.Y) + y) * dims.X) + x);
 
         for (var z = 0; (z < dims.Z); z++) {
             for (var y = 0; (y < dims.Y); y++) {
@@ -829,9 +854,9 @@ public static class SdfMeshAudit {
         for (var z = 0; (z < dims.Z); z++) {
             for (var y = 0; (y < dims.Y); y++) {
                 for (var x = 0; (x < dims.X); x++) {
-                    if ((x + 1) < dims.X) { Edge(x0: x, y0: y, z0: z, x1: (x + 1), y1: y, z1: z, mesh: positions, corners: indices); }
-                    if ((y + 1) < dims.Y) { Edge(x0: x, y0: y, z0: z, x1: x, y1: (y + 1), z1: z, mesh: positions, corners: indices); }
-                    if ((z + 1) < dims.Z) { Edge(x0: x, y0: y, z0: z, x1: x, y1: y, z1: (z + 1), mesh: positions, corners: indices); }
+                    if ((x + 1) < dims.X) { Edge(corners: indices, mesh: positions, x0: x, x1: (x + 1), y0: y, y1: y, z0: z, z1: z); }
+                    if ((y + 1) < dims.Y) { Edge(corners: indices, mesh: positions, x0: x, x1: x, y0: y, y1: (y + 1), z0: z, z1: z); }
+                    if ((z + 1) < dims.Z) { Edge(corners: indices, mesh: positions, x0: x, x1: x, y0: y, y1: y, z0: z, z1: (z + 1)); }
                 }
             }
         }
@@ -841,11 +866,11 @@ public static class SdfMeshAudit {
     // The flagged samples joined into clusters, each sample with every other within a cell and a half (five millimetres
     // at the least), worst first; ties fall to the cluster nearest the frame's origin along x, then y, then z.
     private static List<SdfMeshAuditCluster> Cluster(List<Sample> flagged, float cell) {
-        var reach = MathF.Max((1.5f * cell), 0.005f);
+        var reach = MathF.Max(x: (1.5f * cell), y: 0.005f);
         var clusters = new SdfDisjointSet(count: flagged.Count);
         var buckets = new Dictionary<(int, int, int), List<int>>();
 
-        (int, int, int) Bucket(Vector3 point) => ((int)MathF.Floor(point.X / reach), (int)MathF.Floor(point.Y / reach), (int)MathF.Floor(point.Z / reach));
+        (int, int, int) Bucket(Vector3 point) => (((int)MathF.Floor(x: (point.X / reach))), ((int)MathF.Floor(x: (point.Y / reach))), ((int)MathF.Floor(x: (point.Z / reach))));
         int Root(int sample) => clusters.Find(element: sample);
 
         for (var sample = 0; (sample < flagged.Count); sample++) {
@@ -894,7 +919,7 @@ public static class SdfMeshAudit {
                 ) {
                     Rough = samples.Count(predicate: static sample => (sample.Kind == SampleKind.Rough)),
                     Axis = Spread(center: center, samples: samples),
-                    Probes = [.. Enumerable.Range(start: 0, count: Math.Min(samples.Length, ProbeCount)).Select(selector: probe => samples[(probe * samples.Length) / Math.Min(samples.Length, ProbeCount)].Position)],
+                    Probes = [.. Enumerable.Range(start: 0, count: Math.Min(val1: samples.Length, val2: ProbeCount)).Select(selector: probe => samples[((probe * samples.Length) / Math.Min(val1: samples.Length, val2: ProbeCount))].Position)],
                     Worst = samples.MaxBy(keySelector: static sample => sample.Severity).Position,
                     WorstFacing = samples.MaxBy(keySelector: static sample => sample.Severity).Facing,
                     WorstGradient = samples.MaxBy(keySelector: static sample => sample.Severity).Gradient,
@@ -974,7 +999,7 @@ public static class SdfMeshAudit {
                     .OrderBy(keySelector: MathF.Abs)
                     .ToArray();
 
-                return new SdfMeshAuditShape(Distance: ((distances.Length == 0) ? float.NaN : distances[(distances.Length - 1) / 2]), Name: named.Key);
+                return new SdfMeshAuditShape(Distance: ((distances.Length == 0) ? float.NaN : distances[((distances.Length - 1) / 2)]), Name: named.Key);
             })
             .Where(predicate: static shape => float.IsFinite(f: shape.Distance))
             .OrderBy(keySelector: static shape => MathF.Abs(x: shape.Distance))
@@ -1038,7 +1063,7 @@ public static class SdfMeshAudit {
                         foreach (var triangle in held) {
                             var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
 
-                            nearest = MathF.Min(nearest, Vector3.Distance(value1: point, value2: SdfMeshTriangle.Closest(p: point, a: a, b: b, c: c)));
+                            nearest = MathF.Min(x: nearest, y: Vector3.Distance(value1: point, value2: SdfMeshTriangle.Closest(a: a, b: b, c: c, p: point)));
                         }
                     }
                 }
@@ -1047,7 +1072,7 @@ public static class SdfMeshAudit {
             return nearest;
         }
 
-        private (int X, int Y, int Z) Cell(Vector3 point) => ((int)MathF.Floor(point.X / m_cellSize), (int)MathF.Floor(point.Y / m_cellSize), (int)MathF.Floor(point.Z / m_cellSize));
+        private (int X, int Y, int Z) Cell(Vector3 point) => (((int)MathF.Floor(x: (point.X / m_cellSize))), ((int)MathF.Floor(x: (point.Y / m_cellSize))), ((int)MathF.Floor(x: (point.Z / m_cellSize))));
 
     }
 }

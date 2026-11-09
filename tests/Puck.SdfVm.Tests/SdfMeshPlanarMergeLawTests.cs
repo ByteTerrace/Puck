@@ -12,8 +12,26 @@ namespace Puck.SdfVm.Tests;
 /// triangle that cannot merge.
 /// </summary>
 public sealed class SdfMeshPlanarMergeLawTests {
-    private const int Cells = 8;
+    [Fact]
+    public void ABlendZoneKeepsItsInteriorVerticesAndEveryTuple() {
+        var plane = Plane(material: static (_, _) => 0, member: static (_, _) => SdfMesh.NoMember);
+
+        foreach (var share in new ushort[] { 0, 32768 }) {
+            var tuple = SdfMeshSkinTuple.Of(first: SdfMesh.NoMember, gradient: Vector3.UnitX, second: 0, share: share).Influence;
+            var mesh = new SdfMesh(positions: plane.Positions, indices: plane.Indices, normals: plane.Normals, triangleMaterials: plane.TriangleMaterials,
+                members: plane.Members, vertexMembers: plane.VertexMembers, influences: Enumerable.Repeat(tuple, plane.Positions.Length).ToArray());
+            var merged = SdfMeshPlanarMerge.Merge(mesh: mesh);
+
+            Assert.All(merged.Influences.ToArray(), influence => Assert.Equal(actual: influence, expected: tuple));
+            if (share > 0) {
+                Assert.Equal(mesh.Positions.Length, merged.Positions.Length);
+                Assert.Equal(mesh.Indices.ToArray(), merged.Indices.ToArray());
+            } else { Assert.True(condition: (merged.Positions.Length < mesh.Positions.Length)); }
+        }
+    }
+
     private const float Cell = 0.25f;
+    private const int Cells = 8;
 
     [Fact]
     public void AGriddedCubeKeepsItsEdgesAndEmptiesItsFaces() {
@@ -23,7 +41,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
 
             // Each face is a polygon of the 4 x Cells vertices along its edges, which a polygon covers with two triangles
             // fewer.
-            Holds(before: cube, after: merged);
+            Holds(after: merged, before: cube);
             Assert.Equal(expected: (6 * ((4 * Cells) - 2)), actual: merged.TriangleCount);
             Assert.Equal(expected: (6 * (4 * Cells)), actual: merged.Positions.Length);
             Assert.Equal(expected: cube.BakeCell, actual: merged.BakeCell);
@@ -35,7 +53,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var merged = SdfMeshPlanarMerge.Merge(mesh: cube);
         var kept = merged.Positions.ToArray().ToHashSet();
 
-        Holds(before: cube, after: merged);
+        Holds(after: merged, before: cube);
         Assert.True(condition: (merged.TriangleCount > (6 * ((4 * Cells) - 2))));
 
         // Every vertex of a triangle whose corners carry differing normals stays at its place.
@@ -44,7 +62,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var indices = cube.Indices.Span;
 
         for (var triangle = 0; (triangle < cube.TriangleCount); triangle++) {
-            var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+            var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
             if ((normals[a] == normals[b]) && (normals[a] == normals[c])) { continue; }
             Assert.Contains(expected: positions[a], collection: kept);
@@ -61,7 +79,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var merged = SdfMeshPlanarMerge.Merge(mesh: plane);
         var kept = merged.Positions.ToArray();
 
-        Holds(before: plane, after: merged);
+        Holds(after: merged, before: plane);
         Assert.True(condition: (merged.TriangleCount < plane.TriangleCount));
         Assert.DoesNotContain(expected: plane.Positions.Span[((6 * (Cells + 1)) + 6)], collection: kept);
         Assert.Equal(expected: Mixed(mesh: plane), actual: Mixed(mesh: merged));
@@ -147,7 +165,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
     }
     // A grid of Cells by Cells cells, two triangles a cell wound about u then v.
     private static void Grid(List<Vector3> positions, List<Vector3> normals, List<uint> indices, Func<int, int, Vector3> point, Func<int, int, Vector3> normal, Func<int, int, uint> material, List<uint>? materials = null) {
-        var first = (uint)positions.Count;
+        var first = ((uint)positions.Count);
 
         for (var y = 0; (y <= Cells); y++) {
             for (var x = 0; (x <= Cells); x++) {
@@ -156,7 +174,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
             }
         }
 
-        uint At(int x, int y) => (first + (uint)((y * (Cells + 1)) + x));
+        uint At(int x, int y) => (first + ((uint)((y * (Cells + 1)) + x)));
 
         for (var y = 0; (y < Cells); y++) {
             for (var x = 0; (x < Cells); x++) {
@@ -167,7 +185,6 @@ public sealed class SdfMeshPlanarMergeLawTests {
     }
     // A move of an inside grid vertex within its cell, in binary fractions so positions stay exact; none on the grid's edge.
     private static float Jitter(bool on, int x, int y) => ((on && (x > 0) && (x < Cells) && (y > 0) && (y < Cells)) ? ((((((x * 7) + (y * 3)) % 5) - 2) * Cell) / 16f) : 0f);
-
     // The merge's whole contract on one mesh: kept vertices unmoved, area per material and normal, no edge opened, every
     // merged triangle wound along its normal.
     private static void Holds(SdfMesh before, SdfMesh after) {
@@ -196,7 +213,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var indices = after.Indices.Span;
 
         for (var triangle = 0; (triangle < after.TriangleCount); triangle++) {
-            var (a, b, c) = ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
+            var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
 
             if ((normals[a] != normals[b]) || (normals[a] != normals[c])) { continue; }
             Assert.True(condition: (Vector3.Dot(vector1: Vector3.Cross(vector1: (positions[b] - positions[a]), vector2: (positions[c] - positions[a])), vector2: normals[a]) > 0f));
@@ -209,7 +226,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var mixed = 0;
 
         for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
-            var (a, b, c) = (members[(int)indices[(3 * triangle)]], members[(int)indices[((3 * triangle) + 1)]], members[(int)indices[((3 * triangle) + 2)]]);
+            var (a, b, c) = (members[((int)indices[(3 * triangle)])], members[((int)indices[((3 * triangle) + 1)])], members[((int)indices[((3 * triangle) + 2)])]);
 
             mixed += (((a == b) && (b == c)) ? 0 : 1);
         }
@@ -225,8 +242,8 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var areas = new Dictionary<(uint, Vector3), double>();
 
         for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
-            var (a, b, c) = (positions[(int)indices[(3 * triangle)]], positions[(int)indices[((3 * triangle) + 1)]], positions[(int)indices[((3 * triangle) + 2)]]);
-            var normal = normals[(int)indices[(3 * triangle)]];
+            var (a, b, c) = (positions[((int)indices[(3 * triangle)])], positions[((int)indices[((3 * triangle) + 1)])], positions[((int)indices[((3 * triangle) + 2)])]);
+            var normal = normals[((int)indices[(3 * triangle)])];
             var key = ((materials.IsEmpty ? 0u : materials[triangle]), normal);
 
             areas[key] = (areas.GetValueOrDefault(key: key) + (0.5 * Vector3.Dot(vector1: Vector3.Cross(vector1: (b - a), vector2: (c - a)), vector2: normal)));
@@ -245,8 +262,8 @@ public sealed class SdfMeshPlanarMergeLawTests {
 
         for (var at = 0; (at < indices.Length); at++) {
             var triangle = (at / 3);
-            var bucket = ((materials.IsEmpty ? 0u : materials[triangle]), normals[(int)indices[(3 * triangle)]]);
-            var key = (bucket.Item1, bucket.Item2, positions[(int)indices[at]], positions[(int)indices[(((at % 3) == 2) ? (at - 2) : (at + 1))]]);
+            var bucket = ((materials.IsEmpty ? 0u : materials[triangle]), normals[((int)indices[(3 * triangle)])]);
+            var key = (bucket.Item1, bucket.Item2, positions[((int)indices[at])], positions[((int)indices[(((at % 3) == 2) ? (at - 2) : (at + 1))])]);
 
             counts[key] = (counts.GetValueOrDefault(key: key) + 1);
         }
@@ -260,8 +277,8 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var counts = new Dictionary<(Vector3, Vector3), int>();
 
         for (var at = 0; (at < indices.Length); at++) {
-            var from = positions[(int)indices[at]];
-            var to = positions[(int)indices[(((at % 3) == 2) ? (at - 2) : (at + 1))]];
+            var from = positions[((int)indices[at])];
+            var to = positions[((int)indices[(((at % 3) == 2) ? (at - 2) : (at + 1))])];
 
             counts[(from, to)] = (counts.GetValueOrDefault(key: (from, to)) + 1);
         }

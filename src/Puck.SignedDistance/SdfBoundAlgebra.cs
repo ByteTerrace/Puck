@@ -40,6 +40,12 @@ public static class SdfBoundAlgebra {
         SdfBlendOp.Subtraction or SdfBlendOp.SmoothSubtraction or SdfBlendOp.ChamferSubtraction or
         SdfBlendOp.GrooveSubtraction or SdfBlendOp.StairsSubtraction
     ));
+    /// <summary>Whether <paramref name="blend"/> only removes from what it blends into: an intersection or a subtraction
+    /// (<see cref="IsIntersection"/>, <see cref="IsSubtraction"/>), so the shape it blends has no surface of its own and
+    /// shapes only the surfaces accumulated before it.</summary>
+    /// <param name="blend">The blend.</param>
+    /// <returns><see langword="true"/> for a carving blend.</returns>
+    public static bool Carves(SdfBlendOp blend) => (IsIntersection(blend: blend) || IsSubtraction(blend: blend));
     /// <summary>Returns how far below the lesser of its operands' readings a blend's result may read, so that wherever
     /// the result reads at most a level <c>λ ≥ 0</c>, the lesser operand reads at most <c>λ</c> plus this: the outward
     /// growth a composed solid can have past its operands. A smooth union sags by at most a quarter of its radius, a

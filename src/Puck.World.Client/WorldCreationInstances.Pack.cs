@@ -92,7 +92,7 @@ public sealed partial class WorldCreationInstances {
         for (var index = 0; (index < shapes.Count); index++) {
             var shape = shapes[index];
 
-            reaches[index] = (((shape.Blend is { } blend) && (SdfBoundAlgebra.IsIntersection(blend: blend) || SdfBoundAlgebra.IsSubtraction(blend: blend)))
+            reaches[index] = (((shape.Blend is { } blend) && SdfBoundAlgebra.Carves(blend: blend))
                 ? -1f
                 : (CreationStampEmitter.ShapeReach(shape: shape) - ((shape.Domain is { Count: > 0 }) ? 0f : shape.Position.Length())));
         }

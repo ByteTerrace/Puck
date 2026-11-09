@@ -211,7 +211,7 @@ public sealed record ShapeDocument(
     public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
-    /// <see cref="SdfProgramBuilder.BendZ"/>'s remarks).</summary>
+    /// <see cref="SdfProgramBuilder.BendY"/>'s remarks).</summary>
     public const float MaxBend = 1.5f;
     /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp.</summary>
     public const float MaxDilate = 0.2f;
@@ -337,7 +337,7 @@ public sealed record CreationNoiseDocument(
 /// <param name="Mode"><c>engrave</c> (Subtraction — a carved recess) or <c>emboss</c> (Union — proud relief); null = emboss.</param>
 /// <param name="Material">The palette slot the letters shade with (null = 0).</param>
 /// <param name="Font">The world text catalog font name; null selects that catalog's default font.</param>
-/// <param name="MaxWidth">The greedy glyph-level wrap width, in the creation's own units (null = only explicit line
+/// <param name="MaxWidth">The greedy word wrap width, in the creation's own units (null = only explicit line
 /// feeds break lines). Must be positive when present.</param>
 /// <param name="Align"><c>left</c>, <c>center</c>, or <c>right</c> — how lines position against the block's widest
 /// line (null = left).</param>

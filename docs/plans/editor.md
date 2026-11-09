@@ -696,7 +696,7 @@ holds, so no capability is lost on the way.
 
 ## Open items
 
-- Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring.
+- Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring. The [w1-limits recommendation](modeling-authoring.md#17-non-uniform-scale-limit-10-recommendation-for-the-lead) preserves the authored surface and supplies bounded exact-distance lowerings; it is a recommendation, not a settled decision.
 
 What the plan still owes. A line is deleted when its work lands, never ticked;
 the [open items](open-items.md#next) rank the work packets drawn from it. E1,
@@ -740,11 +740,11 @@ bindings are authored in `worlds/standard/editor.puck`.
     kernel may walk the field for it.
   - Primitives that still lower to a bound or worse, which `creation.shape`
     reports and the gallery shows: a capsule, cone or torus scaled apart in X
-    and Z, a round cone scaled apart at all, and a polygon prism of more than
-    eight sides scaled apart in X and Y ride the generic `Scale` (gain min/max,
+    and Z, and a round cone scaled apart at all ride the generic `Scale` (gain min/max,
     refused by the fixed-point evaluator and so by solid contact; the gallery's
-    `shape-*-xz`, `shape-round-cone-xyz` and `shape-polygon-12-xy` read 0.5 to
-    0.33); an ellipsoid or sphere scaled apart is the exponent-2 superellipsoid
+    `shape-*-xz` and `shape-round-cone-xyz` read 0.5 to
+    0.33); regular polygons, including `shape-polygon-12-xy`, now lower their
+    scaled vertices to the exact ConvexPolygon field; an ellipsoid or sphere scaled apart is the exponent-2 superellipsoid
     gauge (gain about the smallest radius over the largest, contact admits it);
     a `Path` profile and a sweep certify no gain. Whether to iterate an exact
     distance, change the zero set or refuse such scales at authoring is the

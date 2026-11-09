@@ -1,7 +1,7 @@
 ---
 name: principal
-description: "Fable 5.1 lane for work where the strongest judgement changes the outcome: a design memo, an architecture, a design review, breaking a spiral, or a hard diagnosis or invariant-heavy implementation its brief justifies. Specified work: implementer."
-model: claude-fable-5-1
+description: "Fable 5.2 lane for work where the strongest judgement changes the outcome: a design memo, an architecture, a design review, breaking a spiral, or a hard diagnosis or invariant-heavy implementation its brief justifies. Specified work: implementer."
+model: claude-fable-5-2
 effort: high
 isolation: worktree
 disallowedTools: Agent
