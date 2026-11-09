@@ -263,9 +263,11 @@ public sealed partial class SdfMeshPathBake {
 
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
-    // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
-    // along each axis (SdfSampledLattice.Refine).
-    private const float FineCell = 0.005f;
+    /// <summary>The spacing, in metres, a final lattice's refined cells aim for where no member declares a detail
+    /// (<see cref="SdfInstanceRange.Detail"/>), floored by the group's tier (<see cref="SdfMeshTier"/>); the most fine cells
+    /// a coarse cell splits into along each axis is <c>MaxRefinement</c> (<see cref="SdfSampledLattice.Refine"/>).</summary>
+    public const float FineCell = 0.005f;
+
     private const int MaxRefinement = 4;
     // The most fine cells a coarse cell splits into along each axis when a member declares its own detail
     // (SdfInstanceRange.Detail), which the lattice's spacing does not reach at MaxRefinement.
@@ -456,7 +458,9 @@ public sealed partial class SdfMeshPathBake {
         var scope = EnterFrameGate();
 
         try {
+            FinishReplacements();
             Settle(frame: frame);
+            Retier(frame: frame);
             return new FrameAccess(owner: this, scope: scope);
         } catch { scope.Dispose(); throw; }
     }
@@ -971,6 +975,7 @@ public sealed partial class SdfMeshPathBake {
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
+            tier: Tiers(transforms: transforms),
             transforms: transforms
         );
 
@@ -1019,14 +1024,21 @@ public sealed partial class SdfMeshPathBake {
 
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
         // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
+        var tiers = Tiers(transforms: frame.DynamicTransforms);
+
         if (plan is not null) {
+            // A group that read a transform is planned again unless the previous program keeps it; a static group that
+            // read none is planned again only when the frame's demand moved its tier.
             _ = SdfMeshBakeGroup.Refresh(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
                 groups: plan,
                 program: program,
                 sampled: sampled,
-                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)),
+                stale: group => ((group.Dynamic || group.Geometry.ReadsSlots)
+                    ? !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old))
+                    : Retiered(group: group, tiers: tiers)),
+                tier: tiers,
                 transforms: frame.DynamicTransforms
             );
             m_groups.AddRange(collection: plan);
@@ -1036,6 +1048,7 @@ public sealed partial class SdfMeshPathBake {
                 farDistance: frame.FarDistance,
                 program: program,
                 sampled: sampled,
+                tier: tiers,
                 transforms: frame.DynamicTransforms
             ));
         }
@@ -1111,6 +1124,7 @@ public sealed partial class SdfMeshPathBake {
             program: m_program!,
             sampled: sampled,
             stale: static _ => false,
+            tier: Tiers(transforms: frame.DynamicTransforms),
             transforms: frame.DynamicTransforms
         );
 
@@ -1483,23 +1497,35 @@ public sealed partial class SdfMeshPathBake {
         var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
         var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
 
-        if (!(group.Detail > 0f) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
-            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory);
+        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
+        // The group's tier floors the spacing its detail asks: a view that resolves no finer cell is baked none.
+        var tierCell = SdfMeshTier.Cell(tier: group.Tier);
+        var detail = MathF.Max(x: group.Detail, y: tierCell);
+
+        // A detail at or past the lattice's own spacing is one the lattice already resolves, as a union's member's is.
+        if (!(group.Detail > 0f) || (detail >= coarse) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
+            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { TierCell = tierCell };
         }
 
-        var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
-
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / group.Detail))), min: 2, max: MaxDetailRefinement),
+            Factor = RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: detail),
             Regions = [new SdfLatticeRegion(High: high, Low: low)],
+            TierCell = tierCell,
         };
     }
+    // The fine cells along each axis a region whose own spacing is `spacing` asks a final lattice of `coarse` spacing to
+    // split a coarse cell into: the fewest that reach it, from two to `most`. The lattice splits each region cell the
+    // fewest times the finest region's factor divides into by a power of two that still reach its own
+    // (SdfSampledLattice.Refine).
+    private static int RegionFactor(float coarse, float spacing, int most) =>
+        Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / spacing))), min: 2, max: most);
     // The final lattice of a union of members (a static copy's run, a dynamic slot's several instances, or the parts a pooled
     // group declares), which keeps each member at the resolution its own final lattice would give it, in the group's frame
     // and alike for static and dynamic groups: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
     // UnionSamples and coarser where it does not, never coarser than the capped lattice over the union's box; a member
-    // whose own spacing stays finer than that by more than RegionRatio is a region its refinement measures at its own
-    // spacing (SdfSampledLattice.Refine). A member's own spacing is its bounding sphere's box at FinalSamples a side.
+    // whose own spacing stays finer than that by more than RegionRatio, or that declares a detail finer than it, is a
+    // region its refinement measures at its own factor (SdfSampledLattice.Refine), so one fine member refines no other
+    // member's box. A member's own spacing is its bounding sphere's box at FinalSamples a side.
     private static FinalLattice UnionFinal(Group group) {
         var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
@@ -1526,29 +1552,35 @@ public sealed partial class SdfMeshPathBake {
         var spacing = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
         var coarse = MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z));
         var regions = new List<SdfLatticeRegion>();
-        var target = float.PositiveInfinity;
-        var detailed = float.PositiveInfinity;
+        var factor = 0;
+        var tierCell = SdfMeshTier.Cell(tier: group.Tier);
 
         foreach (var (_, radius, detail, low, high) in group.Members) {
-            var own = ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius));
+            // The group's tier floors each member's own spacing: a view that resolves no finer cell is baked none.
+            var own = MathF.Max(x: ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius)), y: tierCell);
 
             // A member the lattice already resolves refines nothing: a declared detail at or past the coarse spacing (a
             // slab's half thickness over a lattice finer than it) would only spend the refinement's sample budget on
             // surface the coarse contour holds, leaving the thin members that need it the coarse cell.
             if ((detail > 0f) ? (own >= coarse) : ((own * RegionRatio) >= coarse)) { continue; }
+
+            // Each member refines toward its own spacing, so one fine member refines no other member's box.
+            var ownFactor = RegionFactor(coarse: coarse, most: ((detail > 0f) ? MaxDetailRefinement : MaxRefinement), spacing: own);
+
             regions.Add(item: new SdfLatticeRegion(
                 High: Vector3.Min(value1: group.High, value2: high),
-                Low: Vector3.Max(value1: group.Low, value2: low)
+                Low: Vector3.Max(value1: group.Low, value2: low),
+                Factor: ownFactor
             ));
-            target = MathF.Min(x: target, y: own);
-            if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
+            factor = Math.Max(val1: factor, val2: ownFactor);
         }
 
         var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
+            Factor = factor,
             Regions = [.. regions],
+            TierCell = tierCell,
         };
     }
     // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
@@ -1689,13 +1721,13 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
     // The fine cells along each axis a final lattice's coarse cell refines into at most: a union's own factor, or as many
-    // as reach FineCell, at most MaxRefinement.
+    // as reach FineCell floored by the group's tier, at most MaxRefinement.
     private static int FactorOf(FinalLattice final) {
         var cell = final.Lattice.Cell;
 
         return ((final.Factor > 0)
             ? final.Factor
-            : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / FineCell)))));
+            : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / MathF.Max(x: FineCell, y: final.TierCell))))));
     }
 
     // The workspace bytes a final lattice's bake holds at once, per lattice sample and per fine sample: the lattice's
@@ -2406,6 +2438,13 @@ public sealed partial class SdfMeshPathBake {
         // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }
+        // The tier the demand asked of the group at the latest frame (Retier), the frames in a row it has owed a finer
+        // tier than it draws, whether it is the finer tier's replacement of the group it replaces, and whether a finer
+        // tier's bake meshed nothing at the demanded tier, so none is tried until the demand asks another.
+        public int DemandedTier { get; set; }
+        public int OwedFrames { get; set; }
+        public bool Retiering { get; set; }
+        public bool RetierRefused { get; set; }
 
         // Takes the demand box from the planned box, once.
         public void TakeDemandBox() {
@@ -2474,6 +2513,8 @@ public sealed partial class SdfMeshPathBake {
         public int Factor { get; init; }
 
         public SdfLatticeRegion[] Regions { get; init; } = [];
+        // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
+        public float TierCell { get; init; }
     }
     private enum FinalStage {
         Refinement,

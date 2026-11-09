@@ -298,7 +298,13 @@ agent works in that mode by default, without asking:
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
   - The work comes first. Usage is worth keeping in mind, never a limit: a
-    stronger model is used wherever it pays for itself. A subscription nearing
+    stronger model is used wherever it pays for itself. Models are chosen
+    intelligently, never religiously (the owner's ruling): each lane's model
+    follows the factors that matter for it (how hard and open the work is, what
+    an undetected error costs, cost and speed per task rather than per token,
+    a reviewer from another family than the author, the environment the work
+    needs, and measured results on that kind of task), and no model is reserved
+    or conserved by standing rule. A subscription nearing
     its weekly cap changes no routing (the owner's ruling: the owner swaps
     subscriptions when one is reached). Parallelism is pushed
     smartly, and review, integration and fixing never run serially behind

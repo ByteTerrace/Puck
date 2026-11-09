@@ -52,7 +52,7 @@ and a check here.
 
 | # | Limit | What the code says | Defects it caused | Owner |
 |---|---|---|---|---|
-| 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | The brief names lane part-detail; no branch of that name exists at this tree, so the lead confirms the owner |
+| 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | Landed: one detail rule (`WorldShapeDetail.Of`) bounded by each view's demand ([bake detail bounded by demand](bake-demand-tiers.md)) |
 | 2 | Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
 | 3 | A smooth blend between parts that move apart tears | A blend inside its admitted envelope skins; one past it creases, and PUCK122 names it | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | Steps 1 to 3 landed; the gallery's moving-blend exhibits (`motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint`) keep them checked; step 4 is next |
 | 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | Delivered by w1-limits; section 1.3 |
@@ -76,7 +76,7 @@ lattice's spacing is never finer than MinimumCell, so a small part meshes at
 the detail a view resolves rather than at its own scale", with
 `if (gradients) { target = MathF.Max(x: target, y: MinimumCell); }`. A part
 refines below the floor only where its instance declares detail: a static
-shape through `WorldPlacementStamper.ShapeDetail`
+shape through `WorldShapeDetail.Of`
 (`src/Puck.World.Client/WorldPlacementStamper.cs:588-638`), which reads
 cellular relief, a sweep's radius, an onion, a rounded profile, a warp's
 smallest extent and `PlateDetail`'s half thickness, floored at
@@ -85,7 +85,7 @@ part through `PartDetail` (`src/Puck.World.Client/WorldCreationInstances.Emit.cs
 whose `SectionDetail` is a round section's radius over `CellsPerRadius`,
 "zero for none, or for one no finer than the bake's own lattice already is".
 A dynamic group then merges every member's detail into one box
-(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:379-386`):
+(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:379-381`):
 
 ```csharp
                 group.DetailLow = (first ? low : Vector3.Min(value1: group.DetailLow, value2: low));

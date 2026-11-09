@@ -32,10 +32,12 @@ public static class MeshCpuBake {
     /// <param name="groups">The groups to bake.</param>
     /// <param name="evaluations">Receives the field evaluations each group's lattices took by its selector (a gradient
     /// sample counting five, as the bake's taps do), or <see langword="null"/> to count none.</param>
+    /// <param name="tier">The tier each group bakes at (<see cref="SdfMeshPathBake.PlannedTier"/>); <see langword="null"/>
+    /// bakes each at its finest, the geometry's own detail.</param>
     /// <returns>Each baked group's mesh by its selector; a group with no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="groups"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null) {
+    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null, Func<SdfMeshBakeGroup, int>? tier = null) {
         ArgumentNullException.ThrowIfNull(argument: scene);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
@@ -45,7 +47,8 @@ public static class MeshCpuBake {
                 .Select(selector: group => (Group: group, Field: SdfMeshAudit.Field(group: group, program: scene.Program)))
                 .Where(predicate: static entry => SdfMeshAudit.TryEvaluator(field: out _, program: entry.Field, refusal: out _))
                 .ToDictionary(keySelector: static entry => entry.Group.Selector, elementSelector: static entry => entry.Field),
-            frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance }
+            frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance },
+            tier: tier
         );
     }
     /// <summary>Bakes the selected groups of a program.</summary>
@@ -53,15 +56,17 @@ public static class MeshCpuBake {
     /// <param name="fields">Each selected group's selector and its field (<see cref="SdfMeshAudit.Field"/>).</param>
     /// <param name="evaluations">Receives the field evaluations each group's lattices took by its selector, or
     /// <see langword="null"/> to count none.</param>
+    /// <param name="tier">The tier each group bakes at; <see langword="null"/> bakes each at its finest.</param>
     /// <returns>Each selected group's mesh by its selector; a group whose bake found no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="fields"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null) {
+    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null, Func<SdfMeshBakeGroup, int>? tier = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: fields);
 
         using var library = new SdfMeshLibrary();
-        var bake = new SdfMeshPathBake { Library = library, Residency = "cpu", Selection = fields.Keys.ToHashSet() };
+        // With no view the bake would plan every group at its coarsest tier; offline it bakes the tier asked, else the finest.
+        var bake = new SdfMeshPathBake { Library = library, PlannedTier = (tier ?? (static _ => 0)), Residency = "cpu", Selection = fields.Keys.ToHashSet() };
         using var dresser = new SdfMeshDresser(bake: bake);
 
         try {

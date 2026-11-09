@@ -147,9 +147,11 @@ public sealed class RestScene {
     }
     /// <summary>Plans the scene's bake groups as a World's first frame plans them.</summary>
     /// <param name="farDistance">The far distance the world renders to (<see cref="WorldRenderFarDistance.Resolve"/>).</param>
+    /// <param name="tier">The tier each group bakes at (<see cref="SdfMeshBakeGroup.Plan{T}"/>); <see langword="null"/>
+    /// plans each at its finest, the geometry's own detail.</param>
     /// <returns>The groups, in plan order.</returns>
-    public List<SdfMeshBakeGroup> Plan(float farDistance) =>
-        SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: Program, transforms: Transforms);
+    public List<SdfMeshBakeGroup> Plan(float farDistance, Func<SdfMeshBakeGroup, int>? tier = null) =>
+        SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: Program, tier: tier, transforms: Transforms);
     /// <summary>Returns the placement a group's first instance was emitted for, or <see langword="null"/> for a shared
     /// template, a body's group or anonymous world geometry.</summary>
     /// <param name="group">The bake group.</param>
