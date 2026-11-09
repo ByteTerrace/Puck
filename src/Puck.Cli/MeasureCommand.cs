@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions;
-using Puck.Cli.Affected;
 using Puck.Cli.Bench;
 using Puck.Confinement;
 
@@ -198,7 +197,7 @@ public static class MeasureCommand {
         if ((commit is null) == (inputTree is null)) { throw new ArgumentException(message: "Supply one commit or input tree."); }
         if (commit is not null) {
             if (!CliGit.TryResolveCommit(repository: checkout, resolved: out var revision, revision: commit)) { throw new ArgumentException(message: $"No commit {commit}."); }
-            using var export = AffectedRevisionExport.Create(checkout, revision, ["."]);
+            using var export = RevisionExport.Create(checkout, revision, ["."]);
 
             CliFiles.CopyDirectory(export.Root, target);
         } else {

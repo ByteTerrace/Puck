@@ -141,7 +141,7 @@ public sealed class StateVector : IEquatable<StateVector> {
     public static uint ComputeDigest(ReadOnlySpan<sbyte> components) {
         var hash = Fnv1aHash.Compute(values: MemoryMarshal.Cast<sbyte, byte>(span: components));
 
-        return ((uint)(hash ^ (hash >> 32)));
+        return PackedIntPair.FoldXor(value: hash);
     }
     /// <inheritdoc/>
     public bool Equals(StateVector? other) {

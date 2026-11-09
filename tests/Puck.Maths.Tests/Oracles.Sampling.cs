@@ -8,6 +8,40 @@ internal static partial class Oracles {
     private static readonly BigInteger Pcg3dLcgMultiplier = 1664525;
     private static readonly BigInteger Pcg3dLcgIncrement = 1013904223;
 
+    /// <summary>The fractal value noise <see cref="Pcg3dLatticeNoise.Fbm01"/> sums, formed in closed form per octave in
+    /// <see cref="BigInteger"/>: octave <c>k</c> reads the noise-cell edge <c>max(1, frequency &gt;&gt; k)</c> (the
+    /// subject halves it iteratively), the seed <c>seed + k·0x9E3779B9</c> reduced modulo <c>2³²</c>, and the amplitude
+    /// <c>2¹⁶ &gt;&gt; k</c>; each weighed term and the final quotient round to nearest, ties to even, once.</summary>
+    /// <param name="frequency">The first octave's noise-cell edge.</param>
+    /// <param name="octaves">The octave count, at least one.</param>
+    /// <param name="seed">The first octave's seed.</param>
+    /// <param name="octaveRaw">One octave's <see cref="Pcg3dLatticeNoise.ValueNoise01"/> raw at a noise-cell edge and a
+    /// seed: the one kernel the oracle shares with the subject, pinned by its own law.</param>
+    /// <returns>The weighted mean's raw.</returns>
+    public static BigInteger FractalValueNoise01Raw(int frequency, int octaves, uint seed, Func<int, uint, long> octaveRaw) {
+        var total = BigInteger.Zero;
+        var weight = BigInteger.Zero;
+
+        for (var octave = 0; (octave < octaves); octave++) {
+            var cells = Math.Max(
+                val1: 1,
+                val2: (frequency >> Math.Min(val1: octave, val2: 31))
+            );
+            var octaveSeed = WrapToUInt32(value: (((BigInteger)seed) + (((BigInteger)octave) * 0x9E3779B9)));
+            var amplitude = (((BigInteger)65536) >> octave);
+
+            total += RoundRationalTiesToEven(
+                numerator: (amplitude * octaveRaw(cells, octaveSeed)),
+                denominator: 65536
+            );
+            weight += amplitude;
+        }
+
+        return RoundRationalTiesToEven(
+            numerator: (total << 16),
+            denominator: weight
+        );
+    }
     /// <summary>Reduces an exact integer to the UNSIGNED 32-bit carrier — modulo <c>2³²</c> into <c>[0, 2³²)</c>.</summary>
     /// <param name="value">The exact value.</param>
     /// <returns>The wrapped word.</returns>

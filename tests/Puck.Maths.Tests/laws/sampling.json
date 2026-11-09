@@ -1255,6 +1255,36 @@
     ]
   },
   {
+    "Id": "sampling.pcg3d-lattice-fractal-noise-vs-octave-sum",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "Fbm01"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Fbm01 at 960 cells (edge and drawn, negative indices and seeds near the word boundary included) over noise-cell edges -3, 0, 1, 2, 5, 16, 33 and 1000 and 1, 2, 3, 4 and 8 octaves",
+        "Against": "the octaves' weighted mean formed in BigInteger: noise-cell edge max(1, frequency >> k) in closed form, seed plus k times 0x9E3779B9 reduced modulo 2^32, amplitude 2^16 >> k, each weighted term and the final quotient rounded to nearest ties to even once",
+        "Shared": "ValueNoise01, the identical member per octave: the leg pins the octave walk (edge halving, the seed step, the amplitude halving and the weighted division) that a world field-lattice Noise fill and a placement Noise region both sum through",
+        "Citation": "ValueNoise01 is pinned by sampling.pcg3d-lattice-noise-reference-and-corners against the public Pcg3d, which that law pins classically against the BigInteger reference",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Fbm01 stays inside [0, 1) at every one of those cells, one octave equals ValueNoise01 at the first octave's edge and seed, and zero and negative octave counts are refused",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.pcg3d-lattice-noise-reference-and-corners",
     "Tier": "Default",
     "Members": [

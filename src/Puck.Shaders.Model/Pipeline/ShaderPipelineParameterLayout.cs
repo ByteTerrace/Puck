@@ -374,8 +374,8 @@ public sealed class ShaderPipelineParameterLayout {
 
         WriteSingle(block: block, offset: m_pointer, value: values.Pointer.X);
         WriteSingle(block: block, offset: (m_pointer + 4), value: values.Pointer.Y);
-        WriteUInt32(block: block, offset: m_tick, value: unchecked((uint)tick));
-        WriteUInt32(block: block, offset: (m_tick + 4), value: ((uint)(tick >> 32)));
+        WriteUInt32(block: block, offset: m_tick, value: PackedIntPair.Low(value: tick));
+        WriteUInt32(block: block, offset: (m_tick + 4), value: PackedIntPair.High(value: tick));
         WriteSingle(block: block, offset: m_time, value: ((float)values.Time));
         WriteSingle(block: block, offset: m_timeDelta, value: ((float)values.TimeDelta));
         WriteUInt32(block: block, offset: m_frame, value: unchecked((uint)frame));

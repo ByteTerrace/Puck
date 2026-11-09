@@ -36,22 +36,9 @@ what it surfaces is fixed at the cause.
 
 Owed at the integration tip, for whoever leads next:
 
-- a quiet frame-p99 window for the frame bar, the machine to itself, now that
-  the frame-cpu-2 lane's allocation cuts have landed (its readings were not
-  quiet: spawn 50 of 1200 frames over 16.7 ms, flight B 63 of 878);
-- Codex reviews of the trust-boundary and GPU-lifetime changes that landed
-  without one: the deal displacement (`WorldPlacementFrameCompilation.LocalFrame`,
-  `WorldPlacementDeal.Reconcile`, `WorldStateDisclosure.Shown`) and the
-  vk-glass-loss lane's whole-target clear (`SdfWorldPassRecorder.RecordMesh`)
-  and device-address report (`VulkanDeviceAddressBindings`);
-- a look at glass and water under a roof on both backends, since glass now
-  gathers the irradiance probes (`SdfFrameBlock.WriteInto`);
-- the duplicate found at the cold-bake lane's landing, dispatched rather than
-  left here: the reciprocal divisor and packed-pair comparer (refactoring
-  campaign), and the branch-scoped duplicate check (agent tooling);
-- the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
-  bar from references, then its idle rig once the animated bake holds
-  ([the visual bar](#the-visual-bar)). Work whose correctness rests
+- a Vulkan look at glass under a roof, the pair of the Direct3D 12 look the
+  visual bar packet records (glass gathers the irradiance probes,
+  `SdfFrameBlock.WriteInto`), in the next batch window. Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -72,8 +59,8 @@ milestone. The owner requested its baseline and implementation plan, which
    bar]: the caldera water as its first proof (glacier, lake, falls, river,
    pool against the caldera pack), then the per-milestone review across every
    place.
-1. The frame bar [high]: 60 FPS at p99 is not met at the teal roof and, less
-   often, at flight B. The far cascade's cadence is settled: a
+1. The frame bar [high]: measured quiet, the studio and the meadow meet 60 FPS
+   at p99 and the teal roof and flight B do not. The far cascade's cadence is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -852,7 +839,7 @@ payload. Pausing after attachment does not reproduce the initial poses; see
   retained original vertices witness themselves, and rejected distances skip
   normal interpolation. Planar merging precedes spatial splitting so artificial
   seams do not keep flat contour rows through every level. The lattice divides
-  fine keys by multiplication (`SdfSampledLattice.FineDivisor`). A further
+  fine keys by multiplication (`ReciprocalDivisor32`). A further
   halving of the collapse needs fewer or cheaper acceptance checks per
   collapse (about five attempts a collapse, half refused by `Measure` at the
   removed vertex's own samples), not lower overhead.
@@ -1610,6 +1597,25 @@ by `world.view.pick`.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
+- [high] The hall's interiors read near black at noon. The exposure floor
+  (`worlds/debug/hall.puck`, `exposure.minimum`, EV 7 from dawn to dusk) holds
+  view 0 at EV 7 in the devices room, where the probes meter 9 to 15 nits and
+  the metered exposure with the authored compensation is about EV 4.5: about
+  two and a half stops under, so the walls, floor and devices read as murk.
+  The floor exists so the moonlit valley reads at night; a daytime floor that
+  clamps every dim interior is the wrong lever. Decide the interiors' look
+  (lamps, fill, or an exposure that meters them) against the gallery's
+  references, then judge every room.
+- [medium] The Humble Gaming Brick's atomic-orange glass shell
+  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as an
+  opaque deep red even at a pinned exposure that shows the room (EV 4.5): the
+  board, chips and cells behind it do not show through. On Direct3D 12 the
+  probe gather leaks no sky light into it under the roof (it reads as dim as
+  its surroundings, neither glowing nor black).
+- [low] `world.indirect off` leaves auto exposure metering the probes (view 0
+  read 15.272 nits before and after the toggle) while the frame turns white at
+  EV 4.5 in the devices room: the lever's fallback ambient lights an interior
+  as if it stood under the open sky, and the meter does not follow it.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
@@ -2050,16 +2056,6 @@ certified-contact packet and step 8 closes. The measured state is in the
   instance path), and `world.nudge` with a captured reference frame
   (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
   change and now cover dealt children too. Route both through the one resolver.
-- [medium · duplicate] Division by a reused divisor through a ceil(2^64/d)
-  high multiply exists twice, both private: `SdfSampledLattice.FineDivisor`
-  and `PrimeExtensions.QuotientCountWord32` (`Reciprocal`, `Divide`). Make one
-  public reciprocal divisor in `Puck.Maths` and move both callers onto it. Its
-  neighbour `SdfMeshCollapse.Collapser.MixedKey` is a private comparer for packed
-  `long` place pairs, whose default hash folds the halves together; any other
-  dictionary keyed by a packed pair collides the same way, so the comparer
-  belongs beside `InvertibleBitMix` where every such dictionary can share it.
-  The bake-collapse lane searched for a divisor and missed the prime kernel's
-  under its other name.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
@@ -4101,7 +4097,8 @@ brief's priorities ([security review](../development/security-review.md)).
   credential selection, with a bound-seat positive control and an unbound-link
   refusal case.
 
-- [medium, confirmed] Rejected payload selection (verified finding 2.1).
+- [medium, confirmed] Rejected payload selection (verified finding 2.1;
+  [the updater policy memo](updater-policy.md)).
   `StubInstall.RevertToLastGood` cancels the failed version's intent but records
   no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
   slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
@@ -4112,7 +4109,8 @@ brief's priorities ([security review](../development/security-review.md)).
   rollback, consult it at install selection and retention, and prove that rollout
   metadata progression cannot retry identical rejected content while changed
   payloads remain eligible. Keep this state separate from transient launch attempts.
-- [medium, confirmed] Revoked rollback candidate (verified finding 2.2).
+- [medium, confirmed] Revoked rollback candidate (verified finding 2.2;
+  [the updater policy memo](updater-policy.md)).
   `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
   does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
   revoked current as last-good; `StubDecisionTable.Decide` checks generations and
@@ -4741,22 +4739,14 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
-- [high] A mechanical duplicate check over a branch. The landing check in
-  [orchestration](../../.claude/skills/orchestration/SKILL.md#write-and-track-assignments)
-  is done by hand: list the branch's new declarations and search each general
-  technique against its shared home. `puck scan --only clones` finds token
-  clones over the whole tree, but most duplicates are the same technique in
-  other code (a reciprocal divisor, a frame resolver, a CPU twin of a GPU
-  kernel). Give the scan a branch scope (new declarations against a base), a
-  flag for `private` or `internal` helpers whose shape is a general technique,
-  and a near-neighbour pass (normalized bodies, shared constants and BCL calls)
-  against the rest of the tree; the lead and every lane run it before landing.
 - [medium] Capability indexes in the area skills. A skill's map answers "where
   is symbol X"; a duplicate is written when an agent asks "what does X" and no
   index answers. Give each area skill a capability table (`maths-usage`'s
-  Choose table is the model), starting with the areas where copies were found:
-  rendering (frame and placement resolution, CPU twins of kernels), the world
-  deal and placement code, and collections and comparers.
+  Choose table is the model; the rendering skill's "What already does it" is
+  the first), starting with the areas where copies were found: the world deal
+  and placement code, and collections and comparers. Rendering's table lists
+  what each mechanism does; extend it with the rows the next duplicate shows
+  it lacks.
 
 - [low] Five new area skills (state, physics, media, platform, dashboard) have
   ten capability eval cases that have not run, and seven sibling skills gained

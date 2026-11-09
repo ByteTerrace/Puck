@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>One column position a scope overwrote, with what it held before.</summary>
@@ -210,8 +212,8 @@ public sealed class ArenaJournal {
     /// <param name="entry">The entry to read.</param>
     /// <returns>The overwritten components.</returns>
     public ReadOnlySpan<sbyte> Components(ArenaJournalEntry entry) => m_components.AsSpan(
-        length: ((int)(entry.Number & 0xFFFFFFFFL)),
-        start: ((int)(entry.Number >> 32))
+        length: PackedIntPair.Low(value: entry.Number),
+        start: PackedIntPair.High(value: entry.Number)
     );
     /// <summary>Records one overwritten number.</summary>
     /// <param name="column">The column written.</param>
@@ -282,7 +284,7 @@ public sealed class ArenaJournal {
         Append(entry: new ArenaJournalEntry(
             Column: ArenaColumn.Vector,
             Index: index,
-            Number: (((long)m_componentLength) << 32) | ((uint)previous.Length),
+            Number: PackedIntPair.Pack(high: m_componentLength, low: previous.Length),
             Reference: null
         ));
 

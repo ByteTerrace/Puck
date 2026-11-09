@@ -11,6 +11,8 @@ internal sealed class ScanOptions {
     public const int DefaultMinStatements = 4;
     public const int DefaultMinTokens = 30;
 
+    // What --against selected, or null when the scan is not branch-scoped.
+    public BranchScope? Branch { get; init; }
     public bool Grouped { get; init; }
     public bool SingleStdout { get; init; }
 
@@ -31,6 +33,7 @@ internal sealed class ScanOptions {
     // Builds the options from the parsed command line, whose parser has already bounded every count. `repositoryRoot` is null when neither the artifacts default nor comment-smells
     // needed one, which is also the only case where `outDirectory` is guaranteed non-null.
     public static ScanOptions Create(
+        BranchScope? branch,
         bool grouped,
         int maxPerChunk,
         int minExpressionTokens,
@@ -42,6 +45,7 @@ internal sealed class ScanOptions {
         bool singleStdout
     ) =>
         new() {
+            Branch = branch,
             Grouped = grouped,
             IncludeBlocks = !noBlocks,
             MaxPerChunk = maxPerChunk,
@@ -65,6 +69,10 @@ internal sealed class ScanOptions {
             SingleStdout = singleStdout,
         };
 }
+// The lines a branch added, for the analyzers that judge what a branch wrote rather than the whole tree.
+// `Added` is keyed by repository-relative path with forward slashes; a corpus file's repository path is `PathPrefix` plus its
+// scan-root-relative display path.
+internal sealed record BranchScope(string Against, string Head, string PathPrefix, IReadOnlyDictionary<string, List<CliGitDiff.LineRange>> Added);
 internal interface ISourceAnalyzer {
     // Builds the analyzer's JSONL records and its grouped work-list over a shared corpus, and writes its
     // own one-line stderr digest. No file IO (the sink owns that), so the same corpus feeds every
