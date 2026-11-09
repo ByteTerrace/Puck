@@ -4,8 +4,6 @@ namespace Puck.World.Client;
 
 /// <summary>Actual creation posing work across the composed World, including authored placements; their surface probes count in <see cref="WorldFieldQueryWork"/>.</summary>
 public static class WorldCreationWork {
-    /// <summary>Bytes copied to retain the previous articulated pose before packing or carrying it.</summary>
-    public static WorkKind PreviousPoseBytes { get; } = new(name: "sdf.creations.previous-pose.bytes-copied", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Articulated pose packs, including packs retaining all their slots.</summary>
     public static WorkKind Packs { get; } = new(name: "sdf.creations.packs", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Live registrations considered by a pose pack.</summary>
@@ -36,5 +34,5 @@ public static class WorldCreationWork {
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations;
     /// the bodies and placements among the posed and held count in <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, Packs]);
 }

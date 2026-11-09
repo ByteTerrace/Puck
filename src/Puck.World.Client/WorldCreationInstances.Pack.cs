@@ -10,8 +10,6 @@ public sealed partial class WorldCreationInstances {
     private readonly WorldTransformOwners m_owners = new(capacity: 0);
     // The registration each pool entry was last packed for: a swapped registration repacks and parks its unused slots.
     private Registration?[] m_packedRegistrations = [];
-    // A registration's slots as they stood before its repack, which the moved set compares the repack against.
-    private DynamicTransform[] m_previousSlots = [];
     // Each pool entry's mesh draw as the last pack posed it (null for none), and the one list they compose, rewritten
     // in place under a new revision only in a pack that changed an entry: a pool at rest hands the engine what it already
     // packed, and a moving one allocates nothing once the list has grown to its stamps.
@@ -155,7 +153,6 @@ public sealed partial class WorldCreationInstances {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        var previousPoseBytes = 0L;
 
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (slotBase + RootSlotOffset(index: index));
@@ -207,7 +204,6 @@ public sealed partial class WorldCreationInstances {
             var shapeCount = (document.Shapes?.Count ?? 0);
 
             if (m_partSpheres.Length < shapeCount) { Array.Resize(array: ref m_partSpheres, newSize: shapeCount); }
-            if (m_previousSlots.Length < live.Slots) { Array.Resize(array: ref m_previousSlots, newSize: live.Slots); }
             // The root, the shapes, and the slot text baked apart rides (TextApart).
             var packedSlots = live.Slots;
 
@@ -239,10 +235,6 @@ public sealed partial class WorldCreationInstances {
                 rootPosition: rootPosition,
                 rootRotation: rootRotation
             ) || live.RateOwed) {
-                var previous = m_previousSlots.AsSpan(
-                    length: packedSlots,
-                    start: 0
-                );
                 // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
                 // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
                 var mayHold = (
@@ -259,25 +251,21 @@ public sealed partial class WorldCreationInstances {
                 }
 
                 var holds = (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale)));
-                // A held pose whose root has not moved moves no slot, so nothing is copied, carried or compared.
+                // A held pose whose root has not moved moves no slot, so nothing is carried or compared.
                 var (heldPosition, heldRotation) = (rootPosition, rootRotation);
                 var still = false;
+                // Whether this pack changed a slot: every write goes through SdfMovedTransforms.Write, which compares as
+                // it writes, so the pack keeps no copy of the slots it rewrites.
+                var slotsMoved = false;
 
                 if (holds) {
                     (heldPosition, heldRotation) = FollowHeldRoot(deltaSeconds: deltaSeconds, live: live, rootPosition: rootPosition, rootRotation: rootRotation);
                     still = HeldRootStill(root: in transforms[rootSlot], rootPosition: heldPosition, rootRotation: heldRotation);
                 }
-                if (!still) {
-                    transforms.Slice(
-                        length: previous.Length,
-                        start: rootSlot
-                    ).CopyTo(destination: previous);
-                    previousPoseBytes += ((long)previous.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<DynamicTransform>());
-                }
 
                 if (holds) {
                     if (!still) {
-                        CarryPose(
+                        slotsMoved = CarryPose(
                             live: live,
                             packedSlots: packedSlots,
                             rootPosition: heldPosition,
@@ -304,7 +292,7 @@ public sealed partial class WorldCreationInstances {
                     WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
                     WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
                     var elapsedSeconds = (live.RateSeconds + deltaSeconds);
-                    PackRegistration(
+                    slotsMoved = PackRegistration(
                         client: client,
                         deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
                         live: live,
@@ -330,9 +318,9 @@ public sealed partial class WorldCreationInstances {
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
                     moved: (!still && moved.Commit(
-                    previous: previous,
+                    count: packedSlots,
+                    moved: slotsMoved,
                     reseat: m_owners.Reseats(owner: index),
-                    slots: transforms,
                     start: rootSlot
                 )),
                     owner: index
@@ -395,7 +383,6 @@ public sealed partial class WorldCreationInstances {
         }
 
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
-        WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.PreviousPoseBytes, amount: previousPoseBytes);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
 
@@ -531,8 +518,8 @@ public sealed partial class WorldCreationInstances {
     }
     // Packs one live registration's root and shape slots, stepping its root follower by rootDeltaSeconds, this frame's,
     // and its drivers, effectors and part followers by deltaSeconds, which spans every frame since the registration's
-    // last full pack (a held pose's frames included, WorldCreationInstances.Rates).
-    private void PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, float rootDeltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
+    // last full pack (a held pose's frames included, WorldCreationInstances.Rates). Returns whether it changed a slot.
+    private bool PackRegistration(Span<DynamicTransform> transforms, IWorldStampSource client, Registration live, int rootSlot, int shapeCount, float deltaSeconds, float rootDeltaSeconds, Vector3 rootPosition, Quaternion rootRotation, float placementScale, Vector3 parkPosition) {
         // The pose-continuity watch is read for every body-rooted registration, not only a follower-bearing one: a
         // teleport or a reused body slot invalidates a latched contact point the same way it invalidates a follower —
         // the world point a foot was planted at belongs to where the body was.
@@ -666,7 +653,7 @@ public sealed partial class WorldCreationInstances {
                 placementScale *= size;
             }
         }
-        transforms[rootSlot] = new DynamicTransform(Lanes: lanes, Orientation: rootRotation, Position: rootPosition) { Scale = placementScale };
+        var slotsMoved = SdfMovedTransforms.Write(slot: rootSlot, table: transforms, value: new DynamicTransform(Lanes: lanes, Orientation: rootRotation, Position: rootPosition) { Scale = placementScale });
 
         var shapes = (document.Shapes ?? []);
         var poses = FramePoses(
@@ -786,13 +773,14 @@ public sealed partial class WorldCreationInstances {
             var shape = shapes[shapeIndex];
             var posed = live.ShapeTransforms[shapeIndex];
 
-            if (shape.Domain is { Count: > 0 }) { transforms[((rootSlot + owner) + 1)] = posed; continue; }
+            if (shape.Domain is { Count: > 0 }) { slotsMoved |= SdfMovedTransforms.Write(slot: ((rootSlot + owner) + 1), table: transforms, value: posed); continue; }
             var turn = Quaternion.Normalize(value: (posed.Orientation * Quaternion.Inverse(value: shape.Rotation.Value)));
 
-            transforms[((rootSlot + owner) + 1)] = new DynamicTransform(
+            slotsMoved |= SdfMovedTransforms.Write(slot: ((rootSlot + owner) + 1), table: transforms, value: new DynamicTransform(
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),
-                Orientation: turn, Lanes: lanes) { Scale = placementScale };
+                Orientation: turn, Lanes: lanes) { Scale = placementScale });
         }
 
+        return slotsMoved;
     }
 }
