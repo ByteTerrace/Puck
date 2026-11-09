@@ -28,7 +28,10 @@ heavily as looks. Three things follow for every agent:
 - **A creation built to push the engine is a probe, not the deliverable.** When
   it meets an engine limit, stop sculpting around it and fix the limit, or hand
   it back. Lanes modeling the Moth and the swallow polished nitpicks for rounds
-  while the engine limits behind them went unfixed.
+  while the engine limits behind them went unfixed. A brief for such a lane
+  states this stop rule in its own words and allows at most two look-critic
+  rounds per creation per wave; a third failure changes the approach or goes to
+  the owner.
 - **The gallery is the engine's self-test.** "Every single item in the gallery
   is meant to ensure that the engine is operating correctly". A change to a
   shared system is judged by whether the exhibits it reaches still read as

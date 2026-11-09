@@ -997,7 +997,7 @@ holds only what they leave out:
 | `implementer` | Sonnet 5.5 | high | own | `delegate` |
 | `reviewer` | Opus 5.5 | high | none | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
 | `specialist` | Opus 5.5 | high | own | `delegate` |
-| `principal` | Fable 5.1 | high | own | `delegate` |
+| `principal` | Fable 5.2 | high | own | `delegate` |
 
 Route each brief to the role that fits it, and say why in the brief: a brief
 with a known cause or a specified result goes to `implementer` even when it is
