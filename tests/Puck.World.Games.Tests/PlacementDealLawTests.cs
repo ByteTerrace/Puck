@@ -13,7 +13,7 @@ namespace Puck.World.Games.Tests;
 /// THE LAW: a placement carrying a deal facet is a template whose children follow its keyed row — one child per
 /// cell at the region's offsets, dealt through the ordinary mutation pipeline: a cell that arrives adds a child at
 /// the lowest free offset, a cell that leaves removes its child and moves no sibling, a variant row selects the
-/// prototype, an undo stays undone until the row moves, a replay reproduces the children on the same tick, and only
+/// prototype, undoing membership reprojects children, a replay reproduces the children on the same tick, and only
 /// the sweep may mint a child's id.
 /// </summary>
 [Collection(AllocationCollection.Name)]
@@ -110,12 +110,12 @@ public sealed partial class PlacementDealLawTests {
 
         return WorldPlacementFrameCompilation.LocalFrame(
             parent: WorldDefinitionRows.FindPlacement(id: TemplateId, placements: definition.Placements),
-            row: Child(server: server, key: key),
+            row: Child(key: key, server: server),
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL),
             inheritScale: out _
         ).FixedPosition;
     }
-    private static Vector3 Local(WorldServer server, string key) => LocalFixed(server: server, key: key).ToVector3();
+    private static Vector3 Local(WorldServer server, string key) => LocalFixed(key: key, server: server).ToVector3();
     private static Vector3 Offset(int slot) => new(
         x: (2f * slot),
         y: 0f,
@@ -134,7 +134,7 @@ public sealed partial class PlacementDealLawTests {
         values: Children(server: server).OrderBy(
             keySelector: child => child.Id,
             comparer: StringComparer.Ordinal
-        ).Select(selector: child => $"{child.Id}@{child.DealSlot}+{child.Position.Value}:{child.PrototypeId}")
+        ).Select(selector: child => $"{child.Id}@{child.DealSlot}+{WorldDefinitionRows.ResolvedPosition(definition: server.ExportDefinition(), placement: child)}:{child.PrototypeId}")
     );
 
     [Fact]
@@ -258,8 +258,8 @@ public sealed partial class PlacementDealLawTests {
                 actual: Local(server: fixture.Server, key: key)
             );
             Assert.Equal(
-                expected: Vector3.Zero,
-                actual: child.Position.Value
+                expected: ((WorldPlacementTranslation)Vector3.Zero),
+                actual: child.Position
             );
             Assert.Equal(
                 expected: TemplateId,
@@ -506,15 +506,16 @@ public sealed partial class PlacementDealLawTests {
     [Fact]
     public void UndoOfMembershipReprojectsChildren() {
         using var fixture = Fixtures.FreshServer(definition: Dealt("a", "b", "c"));
+
         fixture.Step();
-        Assert.Equal(3, Children(fixture.Server).Count);
+        Assert.Equal(3, Children(server: fixture.Server).Count);
         Assert.Equal(0, fixture.Server.JournalLength);
-        fixture.Server.EnqueueMutation(Upsert("d"));
+        fixture.Server.EnqueueMutation(Upsert(key: "d"));
         fixture.Step();
-        Assert.Equal(4, Children(fixture.Server).Count);
+        Assert.Equal(4, Children(server: fixture.Server).Count);
         fixture.Server.EnqueueUndo(1, Principal.Console);
         fixture.Step();
-        Assert.Equal(3, Children(fixture.Server).Count);
+        Assert.Equal(3, Children(server: fixture.Server).Count);
     }
     /// <summary>A recorded session whose cells arrive and leave on given ticks replays to the same children on the
     /// same ticks: the tape carries the cell writes, and the sweep re-derives the children from them.</summary>
@@ -796,6 +797,7 @@ public sealed partial class PlacementDealLawTests {
         );
         AssertRefusedNaming(definition: Marked(solid: new WorldSolid(Margin: 0f)), needle: "placements[2] carries solid");
     }
+
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,

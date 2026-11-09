@@ -40,6 +40,7 @@ public static partial class CreationCommand {
         var pool = new WorldCreationInstances();
 
         pool.Reconcile(
+            placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             placements: [],
             creations: [prototype],
             dynamics: [],

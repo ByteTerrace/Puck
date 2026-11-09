@@ -56,10 +56,10 @@ public sealed class WorldCreationInstancesRateLawTests {
         // A look whose root follows the body through a dynamics row, as the Moth's does.
         var follower = (WorldLook.Implicit with { Motion = (WorldLookMotion.Default with { Dynamics = "follow" }) });
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: (rootDynamics ? follower : WorldLook.Implicit))],
             creations: [creation],
-            dynamics: (rootDynamics ? [new DynamicsRow(Name: "follow", Frequency: 4f, Damping: 0.8f, Response: 0f)] : []),
+            dynamics: (rootDynamics ? [new DynamicsRow(Damping: 0.8f, Frequency: 4f, Name: "follow", Response: 0f)] : []),
             placements: []
         );
 
@@ -130,7 +130,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 9UL); tick++) {
             phases.Add(item: Walk(client: client, pool: pool, tick: tick, transforms: transforms));
             roots.Add(item: transforms[0].Position);
-            offsets.Add(item: (pool.BodyShapePose(0, 1).Position - transforms[0].Position));
+            offsets.Add(item: (pool.BodyShapePose(bodyIndex: 0, shapeIndex: 1).Position - transforms[0].Position));
         }
 
         // The first frame packs, the next three hold, the fifth packs the four frames' time at once, and so on.
@@ -165,7 +165,7 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 9UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
             roots.Add(item: transforms[0].Position);
-            offsets.Add(item: (pool.BodyShapePose(0, 1).Position - transforms[0].Position));
+            offsets.Add(item: (pool.BodyShapePose(bodyIndex: 0, shapeIndex: 1).Position - transforms[0].Position));
         }
 
         Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
@@ -223,7 +223,7 @@ public sealed class WorldCreationInstancesRateLawTests {
             roots.Add(item: transforms[0].Position.X);
 
             if (read) {
-                _ = pool.BodyShapePose(0, 1);
+                _ = pool.BodyShapePose(bodyIndex: 0, shapeIndex: 1);
             }
         }
 
@@ -249,8 +249,8 @@ public sealed class WorldCreationInstancesRateLawTests {
                 }
             }
 
-            Assert.All(collection: updates, action: frame => Assert.Equal(expected: 1, actual: (frame % 2)));
-            Assert.All(collection: updates.Zip(second: updates.Skip(count: 1)), action: pair => Assert.Equal(expected: period, actual: (pair.Second - pair.First)));
+            Assert.All(collection: updates, action: frame => Assert.Equal(actual: (frame % 2), expected: 1));
+            Assert.All(collection: updates.Zip(second: updates.Skip(count: 1)), action: pair => Assert.Equal(actual: (pair.Second - pair.First), expected: period));
         }
     }
     // A view the display shows none of, as a window out of every view's sight, rates nothing by what it holds: a body
@@ -305,13 +305,13 @@ public sealed class WorldCreationInstancesRateLawTests {
         for (var tick = 1UL; (tick <= 5UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
             codes.Add(item: ((SdfUpdateRateCode)pool.SlotRateCodes.Span[0]));
-            Assert.Single(pool.SlotRateCodes.ToArray());
+            Assert.Single(collection: pool.SlotRateCodes.ToArray());
         }
 
         var posed = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true);
         var held = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: false);
 
-        Assert.Equal(expected: [posed, held, held, held, posed], actual: codes);
+        Assert.Equal(actual: codes, expected: [posed, held, held, held, posed]);
 
         var reading = Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies));
 

@@ -318,6 +318,50 @@ public static class Pcg3dLatticeNoise {
 
         return sum;
     }
+    /// <summary>Samples fractal value noise over a cell index (XZ), Q48.16 throughout: the one construction a world
+    /// field-lattice Noise fill and a placement Noise region both sum. Octave <c>k</c> is <see cref="ValueNoise01"/> over a
+    /// noise-cell edge of <c>frequency</c> halved <c>k</c> times (floored at one cell), seeded <c>seed + k·</c><see
+    /// cref="HashStreamA"/>, and weighs the amplitude one halved <c>k</c> times (a raw shift); the sum is divided by the
+    /// weights' sum.</summary>
+    /// <param name="cellX">The cell index along X.</param>
+    /// <param name="cellZ">The cell index along Z.</param>
+    /// <param name="frequency">The first octave's noise-cell edge in lattice cells; below one reads as one.</param>
+    /// <param name="octaves">The octave count (at least 1).</param>
+    /// <param name="seed">The first octave's hash seed; a caller folds the world seed into it
+    /// (<see cref="PackedIntPair.FoldXor"/>).</param>
+    /// <returns>The weighted mean of the octaves, in <c>[0, 1)</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="octaves"/> is below one.</exception>
+    public static FixedQ4816 Fbm01(int cellX, int cellZ, int frequency, int octaves, uint seed) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: octaves
+        );
+
+        var amplitude = FixedQ4816.One;
+        var total = FixedQ4816.Zero;
+        var weight = FixedQ4816.Zero;
+        var cells = frequency;
+
+        for (var octave = 0; (octave < octaves); octave++) {
+            total += (amplitude * ValueNoise01(
+                cellX: cellX,
+                cellZ: cellZ,
+                noiseCells: Math.Max(
+                    val1: 1,
+                    val2: cells
+                ),
+                seed: unchecked((seed + (((uint)octave) * HashStreamA)))
+            ));
+            weight += amplitude;
+            amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
+            cells = Math.Max(
+                val1: 1,
+                val2: (cells >> 1)
+            );
+        }
+
+        return (total / weight);
+    }
     // The fades of the box's fractions within one cell along an axis: those of its two ends, clipped to the cell.
     private static (long Low, long High) Fades(long cell, FixedInterval extent) {
         var origin = (cell << FixedQ4816.FractionBitCount);

@@ -260,6 +260,11 @@ agent works in that mode by default, without asking:
     engine's systems stresses them as real use does (a rigged bird found the
     animated bake's coarser detail and torn moving seams), and the
     fundamental it surfaces is fixed at the cause as part of meeting the bar.
+    No current visual is sacred (the owner's ruling: the Moth "isn't sacred
+    and would be vastly improved. The same can be said of most in-game
+    visuals!"): any capture focused on something shows flaws at once, so a
+    creation, place or treatment is rebuilt to the bar whenever it fails it,
+    and its current cost or design is never kept for its own sake.
   - Tests never depend on commercial ROMs. A test or check stage runs on
     committed sources (homebrew and test cartridges); a commercial ROM is used
     only locally, by hand, and is never committed.

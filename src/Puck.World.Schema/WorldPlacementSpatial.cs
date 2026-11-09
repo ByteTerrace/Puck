@@ -148,6 +148,7 @@ public sealed class WorldSpatialQueryIndex {
             .ToImmutableArray();
         m_bvh = BuildLazily(volumes: m_volumes);
     }
+
     // The same volumes with some geometry replaced: nothing but the geometry changed, so the influence order and the
     // unsupported rows carry over, and the BVH builds only if a broadphase query asks for it.
     private WorldSpatialQueryIndex(WorldSpatialQueryIndex source, ImmutableArray<CompiledSpatialVolume> volumes, bool occupationMoved) {
@@ -634,6 +635,7 @@ public static class WorldSpatialQueryCompilation {
             return false;
         }
     }
+
     // Every frame resolves through the one parent-chain resolver, inside the narrowphase envelope.
     private static readonly Func<FixedQ4816, bool> NarrowphaseRange = WithinNarrowphaseRange;
     private static bool TryResolveFrame(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> byId,
@@ -842,6 +844,10 @@ public static class WorldSpatialQueryCompilation {
         if (section is null) {
             return Empty;
         }
+        // Bound parent translations and lattice steps move frames, beyond the volume-local refit below.
+        if (WorldPlacementFrameCompilation.HasLiveInputs(section: section)) {
+            return Compile(placements: section.Rows, worldSeed: worldSeed);
+        }
         if (!Cache.TryGetValue(key: section, value: out var entry) || (entry.WorldSeed != worldSeed)) {
             entry = Compiled(section: section, worldSeed: worldSeed);
             Cache.AddOrUpdate(key: section, value: entry);
@@ -919,6 +925,7 @@ public static class WorldSpatialQueryCompilation {
     /// <param name="placements">The document's placements.</param>
     /// <returns>The bound volume count.</returns>
     public static long BoundVolumeCount(IEnumerable<WorldPlacement> placements) => placements.Sum(selector: static placement => (placement.Spatial?.Count(predicate: static volume => ((volume.Shape.Center.Reference is not null) || (volume.Shape.HalfExtents.Reference is not null))) ?? 0));
+
     private sealed record BoundVolume(WorldPlacementSpatialVolume Authored, CompiledPlacementFrame Frame, int Slot, System.Numerics.Vector3 Center, System.Numerics.Vector3 HalfExtents);
     private sealed record CompiledIndex(WorldSpatialQueryIndex Index, BoundVolume[] Bound, ulong WorldSeed);
     // Hands a section's compiled index to a section whose rows differ from it only in their holding masks

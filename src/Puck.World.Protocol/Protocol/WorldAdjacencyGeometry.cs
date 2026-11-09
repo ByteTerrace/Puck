@@ -153,8 +153,10 @@ public static class WorldAdjacencyGeometry {
             );
 
             selected.Add(item: (placement with {
-                Position = resolved.Position,
+                Position = resolved.FixedPosition,
                 YawDegrees = resolved.YawDegrees,
+                Scale = resolved.Scale,
+                Parent = null,
             }));
         }
 

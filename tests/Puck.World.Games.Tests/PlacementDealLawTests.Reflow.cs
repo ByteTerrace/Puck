@@ -8,6 +8,35 @@ namespace Puck.World.Games.Tests;
 
 public sealed partial class PlacementDealLawTests {
     [Fact]
+    public void ReflowStoresTheExactDisplacementFromSlotThreeToZero() {
+        var document = ReflowDocument();
+        var template = document.Placements[0] with {
+            Distribution = Lattice() with {
+                Region = new WorldDistributionRegion.Lattice(
+                new System.Numerics.Vector3(x: (128f + (1f / 65536f)), y: 0, z: 0), 4, System.Numerics.Vector3.Zero, 1),
+            },
+        };
+        var child = WorldPlacementDeal.Child(template, WorldPlacementDeal.ChildId(key: "d", template: TemplateId), StoreCreation, 3);
+
+        document = document with {
+            StateRaw = document.StateRaw! with { World = [AccountsRow("d"), .. document.State.Where(predicate: row => (row.Name.Value != RowName))] },
+            PlacementRowsRaw = [template, child, .. Enumerable.Range(count: 3, start: 1).Select(selector: slot => new WorldPlacement(
+                $"block{slot}", StoreCreation, new System.Numerics.Vector3(x: (10 + (slot * (128f + (1f / 65536f)))), y: 0, z: 10), 0, 1,
+                Spatial: ReflowSpatial(pinned: true)))],
+        };
+        using var fixture = Fixtures.FreshServer(document);
+
+        fixture.Step();
+        Assert.True(condition: fixture.Server.TryPreviewReflow(TemplateId, Principal.Console, out var proposal, out var reason), userMessage: reason);
+        var moved = Assert.Single(collection: proposal!.Mutation.Mutations.OfType<WorldMutation.UpsertPlacement>()).Placement;
+
+        Assert.Equal(((WorldPlacementTranslation)new Puck.Maths.FixedVector3(X: Puck.Maths.FixedQ4816.FromRawBits(value: -25165827),
+            Y: Puck.Maths.FixedQ4816.Zero, Z: Puck.Maths.FixedQ4816.Zero)), moved.Position);
+        fixture.Server.EnqueueMutation(proposal.Mutation);
+        fixture.Step();
+        Assert.Equal(Puck.Maths.FixedVector3.Zero, LocalFixed(fixture.Server, "d"));
+    }
+    [Fact]
     public void ReflowBatchReplaysFromTheBootImageWithIdenticalLayoutAndPayment() {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
         using var fixture = Fixtures.FreshServer(ReflowDocument());
@@ -670,15 +699,15 @@ public sealed partial class PlacementDealLawTests {
         };
     }
     // The displacement that stands child exactly where the child dealt for key stands in the template's frame.
-    private static System.Numerics.Vector3 Over(WorldServer server, WorldPlacement child, string key) {
+    private static Puck.Maths.FixedVector3 Over(WorldServer server, WorldPlacement child, string key) {
         var definition = server.ExportDefinition();
 
         return WorldPlacementFrameCompilation.StoredPosition(
             parent: WorldDefinitionRows.FindPlacement(id: TemplateId, placements: definition.Placements),
             row: child,
-            localPosition: LocalFixed(server: server, key: key),
+            localPosition: LocalFixed(key: key, server: server),
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
-        ).ToVector3();
+        );
     }
     private static void OverlapChildren(WorldFixture fixture, bool pinned = false) {
         var a = Child(

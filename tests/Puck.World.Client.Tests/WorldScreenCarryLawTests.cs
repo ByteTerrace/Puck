@@ -33,7 +33,7 @@ public sealed class WorldScreenCarryLawTests {
     );
     private static CreationDocument Holder(string frame = "hold", string picture = "picture") => (CreationFixtures.Rig(
         drivers: [],
-        (CreationFixtures.Shape(type: SdfSolidPrimitive.Box, scale: PictureHalf) with {
+        (CreationFixtures.Shape(scale: PictureHalf, type: SdfSolidPrimitive.Box) with {
             Id = 1,
             Name = picture,
             Position = PictureAt,
@@ -54,7 +54,7 @@ public sealed class WorldScreenCarryLawTests {
         Source: new WorldLookSource.Creation(PrototypeId: "rig"),
         Scale: 1f,
         Motion: (WorldLookMotion.Default with {
-            Poses = poses.ToDictionary(keySelector: pose => pose, elementSelector: _ => $"state.{HeldRow}.$body"),
+            Poses = poses.ToDictionary(elementSelector: _ => $"state.{HeldRow}.$body", keySelector: pose => pose),
         })
     );
     private static WorldScreen CarriedScreen(WorldScreenCarry carry) => new(
@@ -97,7 +97,7 @@ public sealed class WorldScreenCarryLawTests {
         var client = ClientFixtures.Client(definition: world);
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL),
             bodyStamps: [new WorldCreationInstances.BodyStamp(BodyIndex: 0, Creation: creation, Scale: 1f, Look: world.Looks[0])],
             creations: world.Creations,
             dynamics: [],
@@ -156,7 +156,7 @@ public sealed class WorldScreenCarryLawTests {
         Assert.Equal(expected: PictureHalf.Y, actual: carried.HalfHeight, tolerance: 1e-6f);
         Assert.Equal(expected: 0f, actual: Vector3.Distance(value1: (turned + (normal * PictureHalf.Z)), value2: carried.Origin), tolerance: 1e-4f);
         Assert.Equal(expected: 1f, actual: Vector3.Dot(vector1: up, vector2: Vector3.UnitY), tolerance: 1e-4f);
-        Assert.Equal(expected: 1f, actual: Math.Abs(Vector3.Dot(vector1: normal, vector2: Vector3.UnitZ)), tolerance: 1e-4f);
+        Assert.Equal(expected: 1f, actual: Math.Abs(value: Vector3.Dot(vector1: normal, vector2: Vector3.UnitZ)), tolerance: 1e-4f);
 
         // The look draws the box in the screen's material: a build with the surface declared accepts it.
         var builder = new SdfProgramBuilder()

@@ -41,6 +41,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` | A per-call cumulative scan over floats |
 | A shuffle | `Pcg32XshRr.Shuffle` | `OrderBy(_ => random)` |
 | Spatial noise, per-cell randomness or a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`) | A per-call RNG; a second copy of the block formula |
+| Fractal (fBm) value noise over a 2D cell index: a noise fill, a patchy placement region | `Pcg3dLatticeNoise.Fbm01(cellX, cellZ, frequency, octaves, seed)`: halved edge and amplitude per octave, a `HashStreamA` seed step, the world seed folded into `seed` with `PackedIntPair.FoldXor` | A per-caller octave loop over `ValueNoise01`, which can drift from the other callers' |
 | A one-shot weighted pick | `WeightedSampler.SampleOnce` | A cumulative scan; a table built to be thrown away |
 | A 64-bit mix with an inverse | `InvertibleBitMix.Mix64` (SplitMix64's finalizer) | A hand-rolled multiply-xorshift |
 | Two 32-bit words packed into one `long` or `ulong` (a pair key, a LUID, a handle's generation over its index, a 64-bit value split into GPU words) | `PackedIntPair.Pack(high, low)`, `High`, `Low`: ints into a `long`, uints into a `ulong`, the low word zero-extended | `(((long)a) << 32) \| ((uint)b)` and `(int)(x >> 32)` written by hand: the signed high half and the zero-extended low half are each a place to differ |

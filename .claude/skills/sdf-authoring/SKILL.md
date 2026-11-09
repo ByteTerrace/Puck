@@ -188,7 +188,8 @@ budget but no extra scope depth. Groove and pipe blends reach deterministic
 field contact; panels and trims do not.
 
 In pooled emission, `group` collects interacting shapes into one instance and
-forwards their authored blends; ungrouped shapes use Union defaults. A group
+forwards their authored blends; ungrouped shapes use Union defaults, and PUCK131
+warns on an ungrouped shape whose authored blend is not `Union`. A group
 opens a shared scope when needed, and grouped shapes cannot carry panel, trims,
 or cells. Static emission ignores `group` and walks the list in order, so a
 group cannot keep a subtraction off its siblings on a static placement. The VM
@@ -333,18 +334,22 @@ What a first swallow taught, in the order it went wrong:
   place's guide first. Guessing numbers from memory took ten passes to reach a
   bird that still failed.
 - **Sculpt with the shaping vocabulary, not primitive soup.** A body is one
-  shaped mass (`Superellipsoid` with `flare` and `shear` for a teardrop), not
+  shaped mass (`Superellipsoid` with `flare` and `shear` for a teardrop, or on a
+  static placement unwarped masses blended together, below), not
   stacked ellipsoids; an eye is a palette `inset` under a cornea
   ([surface](references/surface.md#inset)), never a dark sphere, which reads
   as a chrome or faceted bead; markings are `paints`, not proud ellipsoids,
   which read as stickers or an open mouth from the front.
 - **Detail at least two bake cells wide.** A 3 mm leg vanishes from a static
-  bake (5 mm refined cell) and a 4 mm streamer fragments on the animated path,
-  which bakes coarser still. Make a thin part a flat blade, wider in one axis,
-  or leave it out. A tapering `flare` thins a pointed tip below the cell (the
-  swallow's flared wingtips frayed); a thin convex `Prism` grown by `dilate`
-  rounds every edge and keeps even its tip twice the dilation thick, which is
-  how the swallow's wings and streamers are made.
+  bake (5 mm refined cell) and a 4 mm streamer fragments. A pooled blend group
+  bakes on the same union lattice a static stamp of its shapes does, each shape
+  refined over its own box (`puck mesh audit --prototype <id> --cpu` prints the
+  cell), but a cone or plate declares no detail of its own there. Make a thin
+  part a flat blade, wider in one axis, or leave it out. A tapering `flare`
+  thins a pointed tip below the cell (the swallow's flared wingtips frayed); a
+  thin convex `Prism` grown by `dilate` rounds every edge and keeps even its tip
+  twice the dilation thick, which is how the swallow's wings and streamers are
+  made.
 - **On a static placement a warp splits the bake.** A shape with a `flare`,
   `shear`, `bumps` or another warp bakes alone and so does the shape after it
   (`WorldPlacementStamper.BakesAlone`), so smooth blends into it bake as
@@ -358,9 +363,10 @@ What a first swallow taught, in the order it went wrong:
   ([surface](references/surface.md#paints), Frames); an unparented paint is in
   world space there.
 - **Animating a creation changes its bake.** Drivers make the creation
-  animated and its shapes pooled: `group: 0` is ungrouped there, so every
-  `SmoothUnion` silently becomes a hard union and the head reads as a ball on
-  the body. Give every blended shape a group of 1 or more.
+  animated and its shapes pooled: `group: 0` is ungrouped there, and each
+  ungrouped shape bakes alone, so a `SmoothUnion` on it draws as a hard union
+  and the head reads as a ball on the body. PUCK131 names each such shape. Give
+  every blended shape a group of 1 or more.
 - **A blend across parts that move apart tears.** PUCK122 names it: a glancing
   head blended into the body in one group tore the throat into spikes
   mid-motion. Give each moving part its own group (a crease, no tear) or one

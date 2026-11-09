@@ -59,61 +59,69 @@ milestone. The owner requested its baseline and implementation plan, which
    bar]: the caldera water as its first proof (glacier, lake, falls, river,
    pool against the caldera pack), then the per-milestone review across every
    place.
-1. The frame bar [high]: 60 FPS steady state on the lead machine is not met at
-   p99. The far cascade's cadence is settled: a receiver-conditioned cascade's
-   coverage identity names the sample grid alone (`SdfWorldPasses.ReceiverSignatureOf`),
-   so it holds and splits under occlusion culling as it does box-only (it
-   rendered both layers on every frame of the live debug world before, since
-   the identity hashed the geometry signature and the jitter), and every timed
-   refresh splits over two frames whatever the frames' pace, so no frame draws
-   both far layers for the rate's sake and a slow frame is no longer held slow
-   by its own cascade. On the RTX 4070 at 1280×900 that took `shadow-far` from
-   4.4 to 2.2 ms at spawn, 3.4 to 1.8 at the teal roof, 2.0 to 1.4 at flight B
-   and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
-   of GPU at every one of those stops, under the bar with headroom; the frame
-   p50 sits at the display rate there. Measured quiet, the studio and the
-   meadow meet the bar at p99 and the teal roof and flight B do not; the teal
-   roof drops more than 1% of its frames to a doubled display period (lane
-   frame-teal). The frame thread's CPU side now
-   reads apart: `host.frames` splits produce into `produce-work` and
-   `produce-fence` (time blocked on submission fences) and prints the frame
-   thread's allocated bytes per iteration. A headless debug World's tick
-   allocates about 24 KB on the frame thread (p99 42 KB). Disclosure images are
-   shared by audience, never composed per sink: the debug world's 8.4 row
-   compositions a tick are the public rows one audience reads whole whose values
-   move every tick (the hydrology, glow, clock and watchdog rows), imaged
-   because `WorldDeliveryCursor.DeliveredRows` brings the definition identity
-   current after every delivered snapshot (the disclosure item below). Windowed
-   on the RTX 4070 (Direct3D 12) with `dotnet-trace` (gc-verbose, the GC
-   survival-and-movement keyword read against sampled allocation addresses, and
-   sampled thread time), what remains over 16.7 ms is:
+1. The frame bar [high]: measured quiet, the studio and the meadow meet 60 FPS
+   at p99 and the teal roof and flight B do not. The far cascade's cadence is settled: a
+   receiver-conditioned cascade's coverage identity names the sample grid alone
+   (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
+   two frames, so no frame draws both far layers for the rate's sake. `bench
+   frames` pauses authority at each stop, so its p99 reads the frame side alone;
+   a played frame also carries the tick. What remains, read with `host.frames`
+   (produce split into `produce-work` and `produce-fence`), `world.residency`'s
+   `gpu-work` line, `world.counters sdf.mesh-gi` and `dotnet-trace` sampled
+   thread time at both stops:
 
-   - A young collection, which the frame thread starts itself (it is the only
-     thread allocating small objects at volume): about 4 to 8 ms at a still
-     stop and 9 to 22 ms in the seconds after a move. Thread suspension is under
-     0.2 ms of it; the rest is marking through the cards of a 400 MB gen2 and a
-     2.2 GB large-object heap and copying what they keep alive, at a still spawn
-     about 1.1 MB through cards. The largest survivors are the disclosure
-     definition identities and what a move builds (meshes, draws, irradiance).
-   - GPU back-pressure, seen as `produce-fence` in `SdfWorldTables.SubmitUpload`:
-     the root view's passes take 12 to 14 ms (`views` 5.8 of it) beside the
-     beacon and session views, and the irradiance's relight and meter jobs share
-     the queue (`world.counters sdf.mesh-gi` at the teal roof: about 42 ms of
-     relight and 12 ms of meter GPU time a second, the lighting recaptured about
-     nine times a second as the sky moves). A deeper upload ring would hide a
-     spike, not remove it.
-   - A step frame whose tick runs long: the tick takes 5 to 9 ms (body contact
-     solves through `FixedFieldColliderContact`'s bounds about a fifth, rule
-     evaluation about a third, snapshot delivery about a tenth). Frames without
-     a step carry the rated work (body poses and their effector surface probes in
-     `WorldSurfaceQuery.March`, nested views, screens, the far cascade), which
-     the scheduler moves off step frames without a budget; their `produce-work`
-     p99 reads 9 to 15 ms at the stops below.
+   - Background GPU jobs longer than a frame's share, fixed for the irradiance
+     volume. The queue runs a background job whole before the frame submitted
+     after it, so a job's length, not the average `SdfGpuWork.GpuShare`, decides
+     how late that frame is. The volume's relight jobs were cut at a predicted-ray
+     bound sized against the device timeout (`SdfMeshIrradiance.RelightRaysPerJob`)
+     and charged at a fixed per-ray estimate that undercounted a shadow ray toward
+     a point light by more than an order of magnitude. Beside the teal room's
+     lamps a fresh probe's relight traces toward every one of them, and one probe
+     was one thread group, so a single probe's relight held the queue for about a
+     frame whatever the job's size, and the volume's fill after arrival submitted
+     such jobs a few times a second, seen as produce-fence and present stalls.
+     The relight now spreads each probe over `SdfMeshProbeRelight.Slices` groups,
+     one hit texel a lane, whose partial sums `sdf-probe-combine` adds into the
+     probe's output; jobs are cut to `SdfGpuWork.FrameShareSeconds` at each
+     kind's measured rate (`SdfGpuWorkRate`; `SdfMeshProbeGpuWork.Trace` cuts
+     traces itself and `SdfMeshProbeGpuWork.RelightRaysWithinShare` bounds
+     relights), the service is charged at the same rate, and its bank holds at
+     most one frame's share. `world.residency`'s `gpu-work` line counts the jobs
+     measured past the share (`over-frame-share`) and names the longest
+     (`most-job`); a queued measurement holds the timing question. A probe scene
+     upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
+     share against its `SdfGpuWork.UploadSecondsOf` estimate.
+   - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
+     lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
+     during play still submits jobs of several frames' length. Cutting them with
+     `SdfGpuWorkRate` changes the cold-bake bar's job count and needs its own
+     measured change.
+   - The volume's fill at a place with many point lights. A fresh probe's relight
+     traces every hit texel toward every shadowing point light in range
+     (`sdfProbeShade`), so filling the window beside the teal room's lamps spends
+     minutes of the background share, and indirect light there is stale for that
+     long after arrival. A per-light visibility the probe shares across its
+     texels, or culling lights by each hit's distance before the trace, would
+     cut it at the cause.
+   - The frame thread is CPU-bound at both stops: sampled thread time finds it
+     running almost the whole of every iteration. The tick (`WorldTick.StepCore`:
+     `WorldPopulation.AdvanceSimulated`, `WorldRuleHost.EvaluateWorldRules`,
+     `WorldTick.EmitSnapshot`) runs on the frame thread (`HostLoop.Run`) and takes
+     the largest share; then the frame's capture (`SdfWorldResidency.Capture`:
+     `WorldFramePresenter.CaptureFrame`, and `SdfCompositionFrameSource.PackTransforms`
+     through `WorldCreationInstances.PackRegistration`), table packing and screen
+     binding (`SdfWorldResidency.PrepareOnce`), and the upload's fence wait
+     (`SdfWorldTables.SubmitUpload`). Zero-fill and copies are a visible slice:
+     `HashSet<int>.Clear` in `WorldDeliveryRows.Advance`,
+     `WorldBody.CaptureIntegrationResidue` (beside the scoped replay's
+     `WorldScopedReplayRuntime.AfterTick`, whose `WorldPopulation.AppendContinuationHash`
+     encodes each scope body's checkpoint every tick the scope runs) and
+     `WorldInputOwner.TryAdmit`. Garbage collection
+     was not a factor in the traced windows. Rated work still lands on frames
+     without a step, so both kinds of frame sit near the budget and any jitter
+     misses it.
 
-   Readings at the lane's head (`host.frames` over 600 to 1200 iterations after
-   bakes settled and 150 ticks, a lightly loaded machine, not a timing claim):
-   spawn 50 of 1200 iterations over 16.7 ms (p99 23.6), the teal roof 7 of 1199
-   (p99 17.2), flight B 63 of 878 (p99 27.0), the meadow 38 of 899 (p99 19.1).
    `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect
    off` and the remaining 2.95 ms is the same indoors and out, the plain
@@ -1565,6 +1573,14 @@ by `world.view.pick`.
 - [high] Night is a void: a flat black sky with a few uniform dots, no moons
   (the valley brief has two), no gradient or horizon; auto exposure sits at its
   EV 2 floor, so the terrain is lit like dusk under it.
+- [high] The Moth (`worlds/debug/avatars/moth.puck`) is rebuilt to the bar
+  from [her concept pack](../game/art/moth-concept-pack/README.md): the owner
+  rules she "isn't sacred and would be vastly improved". Her current sculpt,
+  palette, rig and bake cost carry no weight; the pack's turnaround and
+  construction sheets are the standard, and the items below are parts of it.
+  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  triangles at parity with static detail; the rebuild sets her budget at the
+  cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
   under night lighting her purple and cream read as pink and mustard; nothing
   separates her from the background (no rim light or outline), and a hovering
@@ -1572,20 +1588,29 @@ by `world.view.pick`.
   no context.
 - [medium] The binding-bar overlay sits over the Moth's legs at the centre
   bottom of the screen in third person.
-- [high] The animated creation path cannot hold a sculpt's quality. A
-  creation with drivers bakes pooled and coarser than its static stamp: the
-  swallow drafted in a session baked cleanly static, then on gaining a
-  head glance and tail bob its eyes and back faceted and 4 mm tail streamers
-  broke into fragments. A blend across parts that move apart tears in motion
-  (PUCK122): the head's glance tore the throat into spikes. Find why the
-  pooled bake is coarser at the same projected size and give animated
-  creations the static bake's detail; make a moving part's blend hold (a
-  rebake per settled pose is not enough for continuous idle motion).
-- [high] Adding drivers silently changes a creation's look: animated shapes
-  bake pooled, where `group: 0` is ungrouped, so every `SmoothUnion` becomes a
-  hard union with no diagnostic. Warn (as PUCK122 does for moving blends) when
-  an animated creation carries a non-union blend on an ungrouped shape, or
-  make ungrouped shapes of one creation keep their authored blends.
+- [high] A blend across parts that move apart tears in motion (PUCK122): the
+  swallow's head glance tore the throat into spikes, and a rebake per settled
+  pose is not enough for continuous idle motion. The design is
+  [moving blends](moving-blends.md), which recommends a skinned seam (two members
+  and the blend's weight a vertex, answered by the bake) and is reviewed before
+  code.
+- [medium] One detail rule for static and pooled shapes. A static shape declares
+  `WorldPlacementStamper.ShapeDetail` (half thickness, rounded-profile corner,
+  shell, warp and relief terms); a pooled blend group's part declares only the
+  round-section and half-thickness terms (`WorldCreationInstances.PartDetail`),
+  and an ungrouped pooled shape only the round section (`BodyDetail`). The
+  static terms on the Moth's parts give 4.7 M triangles in place of 1.1 M,
+  because `SdfMeshPathBake.UnionFinal` refines every region by one factor, the
+  finest member's, so one member with a rounded corner refines every member's
+  box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
+  one factor) would let one rule serve both; the static path also lacks the round
+  section term, so its small spheres facet at 15 mm.
+- [medium] The Moth's pooled bake rose from 464,018 to 1,145,385 triangles
+  (levels 393,043 and 238,235) when blend groups took the static union's lattice
+  (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`).
+  Measure her frame cost on the bar devices; if it misses the bar, coarsen at
+  the cause (the union's base spacing for a body, or the level budget), never by
+  returning blend groups to the 15 mm floor.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
@@ -1612,13 +1637,13 @@ by `world.view.pick`.
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
 - [high] The swallow's idle rig (`worlds/debug/birds.puck`, on the reservoir
-  pavilion's rail by the pool, static): a head glance and a tail bob, after
-  the animated-bake item above (the anim-bake lane). Its moving parts already
-  sit in their own groups (body and wings, head with bill and eyes, tail);
-  the head's `SmoothUnion` into the breast crosses two groups, so the glance
-  takes one motion owner or a crease (PUCK122), and the extreme poses are
-  frame-checked. Its markings are parented paints, which ride the parent's
-  slot once the creation is animated. Iterate live with
+  pavilion's rail by the pool, static): a head glance and a tail bob. Its
+  moving parts already sit in their own groups (body, breast, wings and legs;
+  head with bill and eyes; tail); the head's `SmoothUnion` into the breast
+  crosses two groups, so the glance takes one motion owner or a crease
+  (PUCK122) until the moving-blend design above lands, and the extreme poses
+  are frame-checked. Its markings are parented paints, which ride the
+  parent's slot once the creation is animated. Iterate live with
   `world.row.set creations swallow document <json>` (compile the `.puck`
   first), since `world.reload` is refused on the debug world.
 - [high] On a static placement, a shape with a warp (`flare`, `shear`,
@@ -2057,13 +2082,6 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
-- [medium · parented frames] Two consumers read a parented placement's
-  `position` as world space instead of composing its frame
-  (`WorldPlacementFrameCompilation.Compose`): an animated placement with a
-  parent draws at its stored position (`WorldCreationInstances`, the animated
-  instance path), and `world.nudge` with a captured reference frame
-  (`WorldEditorCommandModule.Placement`). Both predate the dealt-displacement
-  change and now cover dealt children too. Route both through the one resolver.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
@@ -4571,6 +4589,11 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [low] `puck measure` has no verb to withdraw a queued request: a lane that
+  filed one against a build it later found wrong cannot take it back, so it
+  stays pending and an unfiltered `measure run` spends window time on it. Add
+  `measure withdraw <id> --reason <text>`, recorded beside the request as the
+  hand-edited withdrawals already are.
 - [medium] `puck_world_start` discards a build and asks for a restart when
   any file under the checkout changes mid-build, documentation included (a
   lane lost two builds to its own doc edits). Key the source state on what the

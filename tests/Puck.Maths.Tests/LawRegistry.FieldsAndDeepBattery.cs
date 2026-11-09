@@ -374,6 +374,10 @@ internal static partial class LawRegistry {
             id: "sampling.pcg3d-lattice-noise-reference-and-corners"
         ),
         ClaimCase(
+            claim: Subjects.Pcg3dLatticeFractalNoiseVersusOctaveSum,
+            id: "sampling.pcg3d-lattice-fractal-noise-vs-octave-sum"
+        ),
+        ClaimCase(
             claim: Subjects.LatticeNoiseFadeAndBoxBounds,
             id: "sampling.lattice-noise-fade-and-box-bounds"
         ),

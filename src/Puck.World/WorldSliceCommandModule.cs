@@ -49,6 +49,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     private const string SaveVerb = "world.slice.save";
     private const string Verb = "world.slice";
     private const string SaveForm = "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]";
+
     private static readonly CommandForms WorldSliceForms = CommandForms.Of(verb: Verb, "<x|y|z> <offset> <u> <v> <half> <path.png> [bands <m>] [res <n>]", "<placement> <x|y|z> <path.png> [offset <m>] [bands <m>] [res <n>]");
     private static readonly CommandForms WorldSliceSaveForms = CommandForms.Of(verb: SaveVerb, SaveForm);
 
@@ -98,11 +99,12 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return false;
             }
 
-            var position = ((Vector3)placement.Position);
+            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            var position = frame.Position;
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.PrototypeId);
             var reach = ((creation is null) ? 1f : PlacementReach(document: creation.EngineDocument));
 
-            half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: placement.Scale));
+            half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: frame.Scale));
             if (!float.IsFinite(f: half) || !(half > 0f)) {
                 refusal = CommandResult.Error(output: $"[{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>]");
                 return false;

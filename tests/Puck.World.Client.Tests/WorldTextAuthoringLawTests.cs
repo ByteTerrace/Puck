@@ -23,7 +23,7 @@ public sealed class WorldTextAuthoringLawTests {
         creation = creation with { Document = canonical.Document, HashRaw = canonical.Hash };
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL), placements: [], creations: [creation], dynamics: [], bodyStamps: [
             new WorldCreationInstances.BodyStamp(0, creation, 1f, WorldLook.Implicit),
         ]);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
@@ -47,7 +47,7 @@ public sealed class WorldTextAuthoringLawTests {
         var creation = TextCreationWithFrames();
         var pool = new WorldCreationInstances();
 
-        pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
+        pool.Reconcile(placementFrames: WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0UL), placements: [], creations: [creation], dynamics: [], bodyStamps: [
             new WorldCreationInstances.BodyStamp(0, creation, 2f, WorldLook.Implicit),
         ]);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });

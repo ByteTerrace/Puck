@@ -28,6 +28,8 @@
 #define SDF_PROBE_RECORD_INPUT_WORD               44u
 #define SDF_PROBE_RELIGHT_PREVIOUS_WORD           4u
 #define SDF_PROBE_SELECT_GROUP_SIZE               64u
+#define SDF_PROBE_RELIGHT_SLICES                  5u
+#define SDF_PROBE_RELIGHT_PARTIAL_WORDS           44u
 #define SDF_MESH_IRRADIANCE_CLEARANCE             0.1
 #define SDF_MESH_IRRADIANCE_INSIDE_SHARE          0.25
 #define SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE     2.0
