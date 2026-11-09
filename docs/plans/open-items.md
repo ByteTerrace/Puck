@@ -4563,6 +4563,11 @@ verb, then the launch and process lifecycles below, each as one change that
 gives its lifecycle an explicit state. Each item is read at the cited lines; a
 failing case marked "argued" is read from source, not run.
 
+- [low] `puck measure` has no verb to withdraw a queued request: a lane that
+  filed one against a build it later found wrong cannot take it back, so it
+  stays pending and an unfiltered `measure run` spends window time on it. Add
+  `measure withdraw <id> --reason <text>`, recorded beside the request as the
+  hand-edited withdrawals already are.
 - [medium] `puck_world_start` discards a build and asks for a restart when
   any file under the checkout changes mid-build, documentation included (a
   lane lost two builds to its own doc edits). Key the source state on what the
