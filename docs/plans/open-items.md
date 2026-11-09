@@ -1600,7 +1600,12 @@ by `world.view.pick`.
   rules she "isn't sacred and would be vastly improved". Her current sculpt,
   palette, rig and bake cost carry no weight; the pack's turnaround and
   construction sheets are the standard, and the items below are parts of it.
-  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  Her remaining modeling (suit, off-suit pilot and the shared head) waits for
+  a pair session with the owner (the owner's ruling: the agent rebuild
+  "deviated a bit from our intended look on her"); no lane models her until
+  then. The suit and pilot lanes' work is kept on their branches for that
+  session, unlanded. Engine defects her rebuild surfaced (per-part bake detail,
+  blends between moving parts) proceed on their own. The anim-bake change took her pooled bake from 464,018 to 1,145,385
   triangles at parity with static detail; the rebuild sets her budget at the
   cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
@@ -1685,7 +1690,9 @@ by `world.view.pick`.
   why a named world camera row does not replace the view.
 - [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
   world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
+  `debug.puck`. Its modeling joins the Moth's pair session with the owner (the
+  owner's ruling); seven agent passes did not converge, the last one against a
+  cited reference document kept unlanded on the swallow-7 lane's branch. Its static sculpt reached a readable silhouette (chestnut mask
   around the beak, teal breast band, cream belly, wings past a forked tail)
   from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
   drivers) then tore the throat, faceted the eyes and fragmented the tail on
