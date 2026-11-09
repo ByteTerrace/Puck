@@ -54,8 +54,10 @@ A. Engine limits on authoring [high], in the plan's
      ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
    - per-part bake detail: small round parts facet, thin parts shatter, and a
      folded shape takes its repeat extent's cell. One detail rule is built on
-     `lane/part-detail` but blocked on a cost bound (see
-     [Bake detail](#bake-detail));
+     `lane/part-detail`; the owner chose D7's demand budget as its cost bound,
+     so D7 is built with it (see [Bake detail](#bake-detail)). The gallery
+     shows it too: `shape-pipe-subtraction` and `shape-groove-subtraction`
+     (4 cm rim features) bake with sawtooth rims, slivers and torn edges;
    - blends between moving parts tear: steps 1 to 3 are built on
      `lane/moving-blends`, unlanded behind two high review findings (see
      [Bake detail](#bake-detail));
@@ -64,6 +66,22 @@ A. Engine limits on authoring [high], in the plan's
    - paint outlines cap at eight vertices behind a generic message, and
      compile does not check paint emission
      ([1.5](modeling-authoring.md#15-paint-outlines-limit-7)).
+
+   The owner's gallery walkthrough added three engine defects that every
+   indoor exhibit shows:
+   - auto-exposure drifts while a player runs through an evenly lit room: the
+     meter reads light at the camera's position (`SdfMeshIrradiance.TryMeter`),
+     re-read at intervals, so walking gallery level 0 stepped it from 402 to
+     110 nits and moved EV100 by about one stop; pinning exposure steadied it;
+   - indoor indirect light draws straight-edged triangular patches on floors and
+     box faces, and concave carvings read flat; `world.indirect off` removes the
+     patches but floods the roofed hall near-white, which is a defect of its own;
+   - plaque text overflows its plinth and wraps mid-word.
+A2. The scripted walkthrough
+   ([decision](../decisions/engine-design.md#the-scripted-walkthrough)): first a
+   slice over gallery level 1's blend row and one avatar-studio inspection stop,
+   which must catch the defects above unaided; then every place, exhibit,
+   interaction and creation.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
    answered; its windowed recipe is recorded on the
    [virtual geometry plan](virtual-geometry.md)'s G5 row.
@@ -81,7 +99,7 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
 | `lane/moving-blends` | moving blends steps 1 to 3 | a fix pass on MB-1 and MB-2 |
-| `lane/part-detail` | one bake detail rule for every path | the owner's cost bound |
+| `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
@@ -333,11 +351,10 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- The cost bound for one bake detail rule (`lane/part-detail`, see
-  [Bake detail](#bake-detail)): the rule rounds small parts but multiplies the
-  debug world's triangles about 8x through grass; D7's demand budget, a floor
-  relative to a creation's size, or round sections only where a turn is visible
-  at the creation's scale.
+- Whether the cold-bake bar (one minute per backend) counts detail tiers baked
+  on demand as a camera approaches, now that bake detail is bounded by D7's
+  demand budget (the owner's choice of cost bound for `lane/part-detail`;
+  [virtual geometry](virtual-geometry.md#d7-the-detail-budget)).
 - The Moth's and the swallow's look, in a pair session with the owner (both
   stopped by the owner's ruling); within it, gloves or bare hands on the
   off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
@@ -5338,6 +5355,20 @@ runs until the owner calls for qualification; then each is a packet.
 Ideas discussed with the owner and not yet queued. None starts until the owner
 reviews it and says so (the owner's ruling).
 
+- **A portal placed on a moon.** The owner's idea: take inspiration from
+  Portal's moon shot, but let a player put one portal on the ground and its pair
+  on the moon "and totally run with that instead of simply making it a set
+  piece". In Puck the moon in the sky is the moon one visits (its source world
+  shown as a `View` layer, [valley and moons](valley-and-moons.md)), so the
+  mechanic needs a portal pair opened at runtime by a player's action as an
+  authored rule, aim at a surface rendered at astronomical distance, and a
+  crossing between worlds with different gravity. Whether the moon admits a
+  visitor's portal is the moon's own grant, and whether a portal end needs the
+  surface reached by flight first is the author's rule.
+- **Authored exposure per place or world.** Raised in the gallery walkthrough
+  beside the metering fix: each place or world authors its exposure and the
+  engine blends at seams (a doorway, a portal), so adaptation into a dark room
+  is designed rather than accidental.
 - **Tonemapping.** One curve exists (`render.tonemap` `Filmic`: Uchimura's Gran
   Turismo fit, per RGB channel, SDR peak 1.0, in `place.comp.hlsl`), and the
   debug world authors none, so its sky, sun and emissives clip at white.
