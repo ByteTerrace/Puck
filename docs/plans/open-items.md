@@ -1922,15 +1922,6 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
 
-- [high] `world.reload` is refused on the debug world: "Rebuild payload is
-  21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
-  documented edit-then-reload loop does not work on the proving ground. The
-  cap is `WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`,
-  and reload ships the whole composed definition. A reload should send what
-  changed (the edit-to-running bar wants that anyway), never a larger cap
-  alone. A look lane comparing two palette styles had to boot a second World
-  for each comparison because of it.
-
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
 a shading-only creation edit keeps the arena, the rules and the population, and
@@ -1995,6 +1986,11 @@ document values bind by copying only the paths to their references
   allocation capture of the edit iteration names what it still allocates beyond
   a quiet tick's; then narrow the validation as `TryValidateTouchedStateRows`
   narrows a state write, to the edited row and the checks that read a palette.
+  Reload's wire is now a keyed document delta (`WorldReloadDelta`); its sender
+  still serializes and diffs whole trees, and the server reconstructs and
+  validates the whole candidate before the existing reload rebuild. Include
+  those allocations in the same attribution and retain its whole-reload state
+  semantics when narrowing the work.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew, though `WorldDocument.NameStateEdit` then restores every row
   it did not name to the installed declaration (a neutral `world.row.set

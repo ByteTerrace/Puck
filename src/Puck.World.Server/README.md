@@ -709,6 +709,29 @@ are checked against staged register values before installation, so a forbidden
 current tuple refuses the whole replacement. The `dirty` count in `world.status`
 is the journal length.
 
+Reload submissions carry a `WorldReloadDelta`, not the composed document. Its
+patch is the existing `WorldDocumentBasis.Diff` vocabulary (keyed refinements,
+deletions and list replacement where order changes); the sender proves its
+`TryMerge` round trip before submitting. The Rebuild payload cap remains 16 MiB.
+`WorldDocument.EnqueueRebuild` reconstructs from the authority's installed
+declarations, checks the exact `WorldDocumentVersion` and canonical base/result
+fingerprints, and proves neighbours before buffering. `ApplyRebuild` rechecks the
+base before any state or journal change, so an earlier queued install cannot
+silently change the meaning of the patch. The named refusals are
+`world.reload.stale-base` (version or activation), `world.reload.base-mismatch`
+and `world.reload.target-mismatch` (content). A malformed delta or invalid
+candidate also refuses without installation. Wire shape validation excludes a
+client-supplied reconstructed document on Reload; only the server fills it.
+The success echo prints delta and complete payload bytes.
+
+The reconstructed candidate then uses the same `ApplyRebuild` door as an
+in-process whole-document reload, preserving its simulation, input and journal
+semantics. Replay records the source pin and rereads that source, not the
+activation-specific patch. This transport change does not turn reload into
+`InstallKindOf`'s presentation mutation: reconstruction, serialization, full
+validation and the existing reload rebuild still allocate. Those are the next
+edit-to-running allocation work, separately from sending unchanged content.
+
 `host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
 journal growing for the life of the process, exactly as before the field
 existed; a positive depth makes `WorldServer.EnforceJournalDepth` fold the

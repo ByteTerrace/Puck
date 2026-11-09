@@ -323,11 +323,20 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return sourceWatch.Refuse(diagnostic: $"text assets refused: {reason}");
                 }
 
+                WorldReloadDelta delta;
+                try {
+                    // The delta names installed declarations. A recipient export contains tick values instead,
+                    // which are neither this base nor what a reload installs. This verb is operator-only.
+                    delta = WorldReloadDelta.Create(server.Configuration, server.DocumentVersion, loaded);
+                } catch (InvalidDataException exception) {
+                    return sourceWatch.Refuse(diagnostic: exception.Message);
+                }
                 return link.SubmitRebuild(
                     echoes: echoes,
                     request: new WorldRebuildRequest(
                         ContentHash: contentHash,
-                        Definition: loaded,
+                        Definition: null,
+                        Delta: delta,
                         Force: false,
                         Kind: WorldRebuildKind.Reload,
                         Origin: new WorldRebuildOrigin.File(Path: path)

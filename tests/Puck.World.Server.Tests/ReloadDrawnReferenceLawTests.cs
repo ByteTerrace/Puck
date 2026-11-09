@@ -102,7 +102,8 @@ public sealed class ReloadDrawnReferenceLawTests {
             principal: Principal.Console,
             request: new WorldRebuildRequest(
                 ContentHash: contentHash,
-                Definition: admission.Definition,
+                Definition: null,
+                Delta: WorldReloadDelta.Create(fixture.Server.Definition, fixture.Server.DocumentVersion, admission.Definition),
                 Force: false,
                 Kind: WorldRebuildKind.Reload,
                 Origin: new WorldRebuildOrigin.File(Path: path)
@@ -187,7 +188,7 @@ public sealed class ReloadDrawnReferenceLawTests {
 
         Assert.True(condition: answer.IsError);
         Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{Verb}: world.transport.codec-refused ");
-        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "'state.strideCadence' names a cell that holds no value");
+        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "kind requires");
         Assert.Equal(actual: registry.Submit(line: "wire.errors").Output, expected: "[wire.errors: 1 rejected]");
     }
 
