@@ -1573,6 +1573,14 @@ by `world.view.pick`.
 - [high] Night is a void: a flat black sky with a few uniform dots, no moons
   (the valley brief has two), no gradient or horizon; auto exposure sits at its
   EV 2 floor, so the terrain is lit like dusk under it.
+- [high] The Moth (`worlds/debug/avatars/moth.puck`) is rebuilt to the bar
+  from [her concept pack](../game/art/moth-concept-pack/README.md): the owner
+  rules she "isn't sacred and would be vastly improved". Her current sculpt,
+  palette, rig and bake cost carry no weight; the pack's turnaround and
+  construction sheets are the standard, and the items below are parts of it.
+  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  triangles at parity with static detail; the rebuild sets her budget at the
+  cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
   under night lighting her purple and cream read as pink and mustard; nothing
   separates her from the background (no rim light or outline), and a hovering

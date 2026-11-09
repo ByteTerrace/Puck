@@ -384,7 +384,11 @@ of the owner: at the close of every session that touched a place, and at least
 once per milestone across the debug world's places, it publishes current
 captures beside their reference panels with the critic's verdicts, and queues
 a look lane for the worst place. Look work is scheduled as fundamentals are,
-never left until the owner walks past it.
+never left until the owner walks past it. Every batch window also takes a few
+captures focused on something chosen at random (a creation, a room, a surface
+up close), because the owner's observation is that any such capture shows
+flaws at once; each flaw seen is filed in the visual bar packet or sent to a
+running look lane, the same as a sweep finding.
 
 The main checkout tracks the integration branch (the owner's ruling). Claude
 Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
