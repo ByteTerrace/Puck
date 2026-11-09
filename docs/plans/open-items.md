@@ -1956,8 +1956,12 @@ measured.
 
 - [high] `world.reload` is refused on the debug world: "Rebuild payload is
   21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
-  documented edit-then-reload loop does not work on the proving ground. A
-  reload should send what changed, not the whole rebuilt document.
+  documented edit-then-reload loop does not work on the proving ground. The
+  cap is `WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`,
+  and reload ships the whole composed definition. A reload should send what
+  changed (the edit-to-running bar wants that anyway), never a larger cap
+  alone. A look lane comparing two palette styles had to boot a second World
+  for each comparison because of it.
 
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
@@ -2034,12 +2038,6 @@ document values bind by copying only the paths to their references
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.
 
-- [high] `world.reload` cannot reload the debug world: it is refused with
-  `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
-  (`WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`); reload
-  ships the whole composed definition. Decide: a reload that sends what changed
-  (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
-  larger cap alone. Found in the lead's verification window.
 - The boot's `System.Text.Json` JIT is the source-generated context's own
   generic instantiations (`WorldJsonSourceContext` behind `WorldJsonContext`),
   not reflection: its metadata instantiates the serializer's generics once per
