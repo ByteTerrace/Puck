@@ -4092,7 +4092,8 @@ brief's priorities ([security review](../development/security-review.md)).
   credential selection, with a bound-seat positive control and an unbound-link
   refusal case.
 
-- [medium, confirmed] Rejected payload selection (verified finding 2.1).
+- [medium, confirmed] Rejected payload selection (verified finding 2.1;
+  [the updater policy memo](updater-policy.md)).
   `StubInstall.RevertToLastGood` cancels the failed version's intent but records
   no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
   slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
@@ -4103,7 +4104,8 @@ brief's priorities ([security review](../development/security-review.md)).
   rollback, consult it at install selection and retention, and prove that rollout
   metadata progression cannot retry identical rejected content while changed
   payloads remain eligible. Keep this state separate from transient launch attempts.
-- [medium, confirmed] Revoked rollback candidate (verified finding 2.2).
+- [medium, confirmed] Revoked rollback candidate (verified finding 2.2;
+  [the updater policy memo](updater-policy.md)).
   `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
   does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
   revoked current as last-good; `StubDecisionTable.Decide` checks generations and
