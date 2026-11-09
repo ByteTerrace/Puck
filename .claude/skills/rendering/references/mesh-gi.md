@@ -245,7 +245,7 @@ after the main residency's done line; a nested residency's done line is insuffic
   closest-hit ray per 12×12 octahedral texel at full reach, each hit an FP32
   distance (negative for a back face, infinity for a miss), its material and its
   normal's two signed octahedral bytes. Everything geometric derives from it:
-  the six sky shares (misses, weighted by each texel's solid angle,
+  the six sky shares (misses, weighted by each texel's solid angle and cosine,
   `SdfMeshProbeDepth.RayWeights`), the inside share (back faces), and the
   surface map views test receivers against (`SdfMeshProbeDepth.Surfaces`): the
   hits within `1.5 * sqrt(3) * spacing + NormalBias`, FP16 distance beside the
@@ -254,7 +254,19 @@ after the main residency's done line; a nested residency's done line is insuffic
   hits are traced once per geometry (a scene build, a layout or reach change, or
   a cell new to a window) and never for a light change.
 - A probe's light is a relight of its hits (`Relight`, `Shade`): the radiance
-  cube and the traced-light bits, shaded under the current lighting. The
+  cube, the sky-light cube and the traced-light bits, shaded under the current
+  lighting. Every texel whose ray missed carries the sky's mean radiance over
+  that texel's solid angle (`SdfMeshProbeDepth.SkyRadiance`, 4×4 samples of the
+  lighting capture's sky map, the sky gain applied; the relight's
+  `SdfMeshProbeRelight.SkyRow` table on the GPU) into the sky-light cube with
+  the same cosine weights as a hit, so the indirect light a receiver reads
+  (`sdfMeshIndirect`, `Incoming`) is the two cubes summed. The sky shares stay
+  geometric and weigh only the reflected environment and the meter's open share.
+  Never multiply a share by the hemisphere's SH irradiance for diffuse light:
+  the sky's radiance and its occlusion are correlated (the horizon is bright,
+  the ground below it is geometry, a window low in a wall sees the horizon), and
+  the product read a north window's light at about half the path-traced value
+  while reading the lawn through the same window exactly. The
   lighting version advances on a change of the directional or traced lights,
   the gains, the sources, the bounce switch, the scene's materials or the sky
   (the packed sky's key, then its projected irradiance). `render.indirect.lightingGrid`
@@ -483,10 +495,11 @@ after the main residency's done line; a nested residency's done line is insuffic
   function of those alone, never of bounce asynchronous frames left; the law
   `AConvergedLightingFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
   words with a warmed one's.
-- A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
-  packed first-hit surface words and 72 packed normal-gradient words.
-  Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
-  66.09375 MiB. The GPU runtime releases the CPU hit array once the batch is relit, keeping
+- A record is `SdfMeshIrradianceProbe.ProbeWords` words: the key, sky shares,
+  radiance cube, light bits, origin and sky-light cube before
+  `SdfMeshIrradianceProbe.DepthWord`, then the packed first-hit surface words and
+  packed normal-gradient words; `world.budget` and `world.probe` print the
+  table's bytes per tier. The GPU runtime releases the CPU hit array once the batch is relit, keeping
   depth/sky and diagnostic lighting (`ProbeBlock` and `LightBlock`); the CPU
   reference keeps the full hits too. `world.budget` derives the retained block
   cost from those types. A level's cache holds its window grown by the
