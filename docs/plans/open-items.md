@@ -4732,16 +4732,6 @@ Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
 
-- [high] A mechanical duplicate check over a branch. The landing check in
-  [orchestration](../../.claude/skills/orchestration/SKILL.md#write-and-track-assignments)
-  is done by hand: list the branch's new declarations and search each general
-  technique against its shared home. `puck scan --only clones` finds token
-  clones over the whole tree, but most duplicates are the same technique in
-  other code (a reciprocal divisor, a frame resolver, a CPU twin of a GPU
-  kernel). Give the scan a branch scope (new declarations against a base), a
-  flag for `private` or `internal` helpers whose shape is a general technique,
-  and a near-neighbour pass (normalized bodies, shared constants and BCL calls)
-  against the rest of the tree; the lead and every lane run it before landing.
 - [medium] Capability indexes in the area skills. A skill's map answers "where
   is symbol X"; a duplicate is written when an agent asks "what does X" and no
   index answers. Give each area skill a capability table (`maths-usage`'s

@@ -528,7 +528,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
     private static bool IsData(ExpressionSyntax expression) =>
         !expression.DescendantNodesAndSelf().Any(predicate: static node => node is BinaryExpressionSyntax or ConditionalExpressionSyntax or InvocationExpressionSyntax or ElementAccessExpressionSyntax or AssignmentExpressionSyntax or LambdaExpressionSyntax);
     // Whether a file is generator output, whose repetition is its generator's to remove.
-    private static bool IsGenerated(string relative, SyntaxNode root) =>
+    internal static bool IsGenerated(string relative, SyntaxNode root) =>
         relative.EndsWith(value: ".generated.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
         relative.EndsWith(value: ".g.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
         relative.EndsWith(value: ".designer.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
