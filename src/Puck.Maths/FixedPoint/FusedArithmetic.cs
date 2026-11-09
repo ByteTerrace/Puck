@@ -130,6 +130,63 @@ public static class FusedArithmetic {
         );
     }
 
+    /// <summary>Rounds <c>multiplicand · multiplier / divisor</c> to <see cref="FixedQ4816"/> exactly once, to nearest
+    /// with ties to even, wrapping on overflow as the carrier's operators do.</summary>
+    /// <param name="multiplicand">The first factor.</param>
+    /// <param name="multiplier">The second factor.</param>
+    /// <param name="divisor">The divisor; non-zero.</param>
+    /// <returns>The rounded quotient of the exact product.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
+    /// <remarks>The operator form <c>(x * y) / z</c> rounds the product to the carrier first, which keeps only
+    /// <c>2^-16</c> of the product's absolute value: for two centimetre lengths (a product near <c>1e-4</c>) that is a
+    /// few significant bits, and the division by a centimetre then multiplies the loss back up to a millimetre. Here
+    /// the whole product (at most <c>2^126</c>) is formed exactly and divided once.</remarks>
+    public static FixedQ4816 MultiplyDivide(FixedQ4816 multiplicand, FixedQ4816 multiplier, FixedQ4816 divisor) {
+        if (divisor.Value == 0L) {
+            throw new DivideByZeroException();
+        }
+
+        var product = Product(
+            left: multiplicand.Value,
+            right: multiplier.Value
+        );
+
+        // DivideProductSumCore rounds numerator / denominator · 2^16; carrying the divisor's raw at 2^16 more makes
+        // that the raw quotient x·y / z.
+        return FixedQ4816.FromRawBits(value: DivideProductSumCore(
+            denominatorMagnitude: (((UInt128)RawMagnitude(value: divisor.Value)) << FixedQ4816.FractionBitCount),
+            numerator: product,
+            resultNegative: (product.Negative ^ (divisor.Value < 0L))
+        ));
+    }
+
+    /// <summary>Rounds the exact quotient of two exact sums at one scale, clamped to <c>[0, 1]</c>, to
+    /// <see cref="FixedQ4816"/> once, to nearest with ties to even: the segment parameter a projection reads, with the
+    /// sums formed by the caller (an interval rule's extreme products, for one).</summary>
+    /// <param name="numerator">The exact signed numerator, at the denominator's scale (a sum of raw products).</param>
+    /// <param name="denominator">The exact denominator; zero or negative reads as zero.</param>
+    /// <returns>Zero when the numerator is not positive or the denominator is not positive, one when the numerator
+    /// reaches the denominator, and the rounded quotient otherwise.</returns>
+    public static FixedQ4816 ClampedUnitQuotient(Int128 numerator, Int128 denominator) =>
+        ((denominator <= Int128.Zero)
+            ? FixedQ4816.Zero
+            : ClampedUnitQuotient(denominator: ((UInt128)denominator), numerator: ((numerator < Int128.Zero), unchecked((UInt128)((numerator < Int128.Zero) ? -numerator : numerator)))));
+    /// <summary>Rounds the exact quotient of two exact product sums at one scale, clamped to <c>[0, 1]</c>, to
+    /// <see cref="FixedQ4816"/> once, to nearest with ties to even.</summary>
+    /// <param name="numerator">The signed numerator as sign plus magnitude.</param>
+    /// <param name="denominator">The non-negative denominator magnitude, at the numerator's scale.</param>
+    /// <returns>Zero when the numerator is not positive or the denominator is zero, one when the numerator reaches the
+    /// denominator, and the rounded quotient otherwise.</returns>
+    internal static FixedQ4816 ClampedUnitQuotient((bool Negative, UInt128 Magnitude) numerator, UInt128 denominator) {
+        if (numerator.Negative || (numerator.Magnitude == UInt128.Zero) || (denominator == UInt128.Zero)) {
+            return FixedQ4816.Zero;
+        }
+
+        return ((numerator.Magnitude >= denominator)
+            ? FixedQ4816.One
+            : FixedQ4816.FromRawBits(value: DivideProductSum(denominator: denominator, numerator: numerator)));
+    }
+
     // The exponent every mixed-scale kernel rounds at, formed in long so no combination of int extremes wraps it.
     internal static long MixedScaleShift(int fractionBitsOut, int first, int second) =>
         ((((long)fractionBitsOut) - first) - second);
