@@ -1143,6 +1143,7 @@
           "Puck.Cli.Runs": "[1.0.0, )",
           "Puck.Cli.Source": "[1.0.0, )",
           "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.Launcher.Stub": "[1.0.0, )",
           "Puck.Mcp": "[1.0.0, )",
           "Puck.World.Silo": "[1.0.0, )"
         }
@@ -1214,6 +1215,12 @@
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
           "Microsoft.Extensions.Hosting": "[10.*, )"
+        }
+      },
+      "puck.launcher.stub": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )"
         }
       },
       "puck.mcp": {

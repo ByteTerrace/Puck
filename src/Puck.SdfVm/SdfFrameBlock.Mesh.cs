@@ -53,7 +53,7 @@ public static partial class SdfFrameBlock {
     }
     /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>): whether views read
     /// it, then each level's window and spacing along each axis. A level not published writes zero spacing and views
-    /// then light as without that level; a surface no published level answers reads the open sky the view's camera
+    /// then light as without that level; a surface no published level answers reads the light the view's camera
     /// sample measured.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="volume">The volume's parameters.</param>

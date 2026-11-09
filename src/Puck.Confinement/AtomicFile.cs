@@ -246,6 +246,28 @@ public static class AtomicFile {
     /// <param name="contents">The complete text.</param>
     /// <returns>The unpublished write.</returns>
     public static PendingWrite StageAllText(string path, string contents) => StageAllBytes(path: path, bytes: Encoding.UTF8.GetBytes(s: contents));
+    /// <summary>Deletes the backups earlier replacements of <paramref name="path"/> left because their image was still
+    /// mapped (<c>&lt;file name&gt;.&lt;random&gt;.replaced.tmp</c>); a backup still mapped stays for a later call.</summary>
+    /// <param name="path">The destination whose backups are deleted.</param>
+    /// <returns>The number of backups deleted.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
+    public static int DeleteReplacedBackups(string path) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: path);
+        var destination = Path.GetFullPath(path: path);
+        var directory = Path.GetDirectoryName(path: destination)!;
+        var deleted = 0;
+
+        if (!Directory.Exists(path: directory)) { return 0; }
+        foreach (var backup in Directory.EnumerateFiles(path: directory, searchPattern: $"{Path.GetFileName(path: destination)}.*.replaced.tmp")) {
+            try {
+                File.Delete(path: backup);
+                deleted++;
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // Still mapped by a running image.
+            }
+        }
+        return deleted;
+    }
     /// <summary>Atomically replaces a file only when its bytes differ. An unreadable existing file propagates its error.</summary>
     /// <param name="path">The destination.</param>
     /// <param name="bytes">The complete new content.</param>

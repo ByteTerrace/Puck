@@ -89,4 +89,34 @@ public sealed partial class SdfMeshIrradianceLawTests {
             Assert.True(condition: (MathF.Abs(x: (read[channel] - expected[channel])) <= (0.03f * expected[channel])), userMessage: $"volume {read}, sky integral {expected}");
         }
     }
+
+    /// <summary>A converged volume's light under a sky does not depend on the sky it held before: one drained under a
+    /// 1000-nit sky and then under a 1005-nit one writes the words a fresh volume writes under the second, on the
+    /// standard's radiance grid and continuous. On the grid the two skies' projected irradiance snaps alike while the
+    /// radiance their rays carry does not, so a capture kept by the projection relit under the first sky's rays.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AConvergedSkyChangeRendersAsAFreshVolumeDoes(bool grid) {
+        var gains = new SdfIndirectGains(Emission: 0f, Feedback: 1f, Lights: 0f, Screens: 0f, Sky: 1f);
+        var first = Frame() with {
+            ConvergesLighting = true,
+            IndirectGains = gains,
+            IndirectLightingGrid = (grid ? new SdfIndirectLightingGrid(DirectionDegrees: 0f, Radiance: (1f / 64f)) : default),
+            IndirectSources = gains.Sources,
+            Lights = new SdfLights(),
+            Sky = UniformSky(color: new Vector3(value: 1000f)),
+        };
+        var second = first with { Sky = UniformSky(color: new Vector3(value: 1005f)) };
+        var history = Volume();
+        var relit = Array.Empty<uint>();
+        var fresh = Array.Empty<uint>();
+
+        _ = history.Stage(bakePending: false, frame: first, tier: SdfIndirectTier.Medium, write: _ => { });
+        _ = history.Stage(bakePending: false, frame: second, tier: SdfIndirectTier.Medium, write: memory => relit = memory.ToArray());
+        _ = Volume().Stage(bakePending: false, frame: second, tier: SdfIndirectTier.Medium, write: memory => fresh = memory.ToArray());
+
+        Assert.NotEmpty(collection: fresh);
+        Assert.Equal(expected: fresh, actual: relit);
+    }
 }

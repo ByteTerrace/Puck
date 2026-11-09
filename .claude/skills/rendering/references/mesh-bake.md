@@ -1057,12 +1057,21 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   and error thresholds retain level zero's bounds and cell; a coarser mesh
   must not buy a cleaner report by enlarging its error budget. `--images`
   draws the selected level too. The default still audits level zero.
-- **`--cpu --field-levels` measures field-derived levels beside the collapse.**
-  `SdfMeshFieldLevels` drives `SdfMeshPathBake.ContourLevel` (the bake's own
-  lattice, refinement, crossings, contour, field check, crease split, material
-  cut and planar merge on a coarser lattice at an outward iso-value) and is the
-  one place the plan's error contract is computed, for its own levels and the
-  collapse's alike. The answers go through `ISdfMeshLevelField`, which the CLI
+- **`--cpu --field-levels` measures field levels that follow the collapse.**
+  `SdfMeshFieldLevels.Contour` drives `SdfMeshPathBake.ContourLevel` (the
+  bake's own lattice, refinement, crossings, contour, field check, crease
+  split, material cut and planar merge on a coarser lattice at an outward
+  iso-value), coarsest first and down to the first level past the kept share
+  of the collapse's coarsest, flattening near-coplanar faces first
+  (`SdfMeshPlanarMerge.Flatten`: the field level's gradient normals differ in
+  their last bits, which the exact merge reads as separate faces) and
+  vanishing components that would flip or open an edge past level zero's
+  count. `SdfMeshFieldLevels.Measure` is the one place the plan's error
+  contract is computed, for field and collapse levels alike; a vanished
+  part's level-zero surface counts by its run's extent and is excused from
+  enclosure and from the audit's missing crossings (`SdfMeshAudit.Audit`'s
+  accounted surface). Flattening recovers little on an offset level: an
+  outward offset rounds every edge into a strip no planar merge takes. The answers go through `ISdfMeshLevelField`, which the CLI
   implements on `MeshCpuBake`'s sampler and the shared tap stencil
   (`SdfMeshBakeTaps`), counting evaluations by contour and oracle and the
   thread work inside them (`ThreadCycles`). A field whose level-zero brackets

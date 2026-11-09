@@ -148,25 +148,76 @@ public static class SdfMeshAudit {
         var selected = Math.Min(val1: level, val2: mesh.Levels.Count);
         var indices = ((selected == 0) ? mesh.Indices : mesh.Levels[(selected - 1)].Indices);
         var materials = ((selected == 0) ? mesh.TriangleMaterials : mesh.Levels[(selected - 1)].TriangleMaterials);
+
+        return Subset(indices: indices.Span, materials: materials, mesh: mesh, sources: out _);
+    }
+    /// <summary>Returns the triangles an index list names over a mesh's vertices as a mesh of their own, holding only the
+    /// vertices they reference, with their normals and members, and the mesh's members, cell and enclosure.</summary>
+    /// <param name="mesh">The mesh whose vertices <paramref name="indices"/> names.</param>
+    /// <param name="indices">Three of the mesh's vertex indices per triangle, at least one triangle.</param>
+    /// <param name="materials">One palette entry per triangle of <paramref name="indices"/>, or none.</param>
+    /// <param name="sources">Each kept vertex's index in <paramref name="mesh"/>.</param>
+    /// <returns>The subset mesh.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static SdfMesh Subset(SdfMesh mesh, ReadOnlySpan<uint> indices, ReadOnlyMemory<uint> materials, out int[] sources) {
+        ArgumentNullException.ThrowIfNull(argument: mesh);
+
         var remap = new int[mesh.Positions.Length];
         Array.Fill(array: remap, value: -1);
+        var kept = new List<int>();
         var positions = new List<Vector3>();
         var normals = new List<Vector3>();
         var members = new List<byte>();
         var compact = new uint[indices.Length];
         for (var at = 0; (at < indices.Length); at++) {
-            var vertex = ((int)indices.Span[at]);
+            var vertex = ((int)indices[at]);
             if (remap[vertex] < 0) {
                 remap[vertex] = positions.Count;
+                kept.Add(item: vertex);
                 positions.Add(item: mesh.Positions.Span[vertex]);
                 if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[vertex]); }
                 if (!mesh.VertexMembers.IsEmpty) { members.Add(item: mesh.VertexMembers.Span[vertex]); }
             }
             compact[at] = ((uint)remap[vertex]);
         }
+        sources = [.. kept];
         return new SdfMesh(positions: positions.ToArray(), indices: compact, normals: normals.ToArray(), triangleMaterials: materials,
             members: mesh.Members, vertexMembers: members.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
+    /// <summary>Returns a triangle's unit face normal by its winding, or zero for a degenerate triangle (a height under a
+    /// five-hundredth of its longest edge), whose corners are collinear to rounding and whose facing is noise.</summary>
+    /// <param name="a">The first corner.</param>
+    /// <param name="b">The second corner.</param>
+    /// <param name="c">The third corner.</param>
+    /// <returns>The face normal, or zero.</returns>
+    public static Vector3 FaceNormal(Vector3 a, Vector3 b, Vector3 c) {
+        var cross = Vector3.Cross(vector1: (b - a), vector2: (c - a));
+        var longest = MathF.Max(Vector3.DistanceSquared(value1: a, value2: b), MathF.Max(Vector3.DistanceSquared(value1: b, value2: c), Vector3.DistanceSquared(value1: c, value2: a)));
+
+        return ((((longest <= 0f) ? 0f : (cross.Length() / longest)) >= DegenerateRatio) ? Vector3.Normalize(value: cross) : Vector3.Zero);
+    }
+    /// <summary>Returns the way most of a mesh's triangles wind against a field: one where most face along its gradient,
+    /// minus one where most face against it.</summary>
+    /// <param name="faceNormals">Each triangle's face normal (<see cref="FaceNormal"/>).</param>
+    /// <param name="gradients">The field's unit gradient at each triangle's centroid, or zero where it is flat.</param>
+    /// <returns>The winding a triangle is judged against (<see cref="Flips"/>).</returns>
+    public static float Winding(ReadOnlySpan<Vector3> faceNormals, ReadOnlySpan<Vector3> gradients) {
+        var agree = 0L;
+
+        for (var triangle = 0; (triangle < faceNormals.Length); triangle++) {
+            agree += Math.Sign(value: Vector3.Dot(vector1: faceNormals[triangle], vector2: gradients[triangle]));
+        }
+
+        return ((agree < 0) ? -1f : 1f);
+    }
+    /// <summary>Returns whether a triangle faces against the field's gradient at its centroid, judged against the way
+    /// its mesh winds: the audit's flipped triangle. A degenerate triangle or a flat field judges nothing.</summary>
+    /// <param name="faceNormal">The triangle's face normal (<see cref="FaceNormal"/>).</param>
+    /// <param name="gradient">The field's unit gradient at its centroid.</param>
+    /// <param name="winding">The mesh's winding (<see cref="Winding"/>).</param>
+    /// <returns><see langword="true"/> when the triangle is flipped.</returns>
+    public static bool Flips(Vector3 faceNormal, Vector3 gradient, float winding) =>
+        ((faceNormal != Vector3.Zero) && (gradient != Vector3.Zero) && (Vector3.Dot(vector1: (winding * faceNormal), vector2: gradient) < 0f));
 
     // A crossing's position is refined by this many halvings of its lattice edge.
     private const int Bisections = 10;
@@ -321,10 +372,13 @@ public static class SdfMeshAudit {
     /// <param name="shapes">Each shape's name and own field (<see cref="ShapeFields"/>); shapes sharing a name answer
     /// as the nearest of them.</param>
     /// <param name="options">The thresholds.</param>
+    /// <param name="accounted">Surface the caller accounts for apart from the mesh (the parts a coarser level vanishes,
+    /// whose error records their own extent), in the mesh's frame: a crossing within a cell of it is not missing; or
+    /// <see langword="null"/>.</param>
     /// <returns>The report.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/>, <paramref name="field"/>,
     /// <paramref name="shapes"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
-    public static SdfMeshAuditReport Audit(SdfMesh mesh, SdfFieldEvaluator field, IReadOnlyList<(string Name, SdfFieldEvaluator Field)> shapes, SdfMeshAuditOptions options) {
+    public static SdfMeshAuditReport Audit(SdfMesh mesh, SdfFieldEvaluator field, IReadOnlyList<(string Name, SdfFieldEvaluator Field)> shapes, SdfMeshAuditOptions options, SdfMesh? accounted = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: shapes);
@@ -356,7 +410,6 @@ public static class SdfMeshAudit {
         var deficits = new float[triangles];
         var loose = new List<Vector3>();
         var slivers = 0;
-        var agree = 0L;
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
             var (a, b, c) = Corners(indices: indices, positions: positions, triangle: triangle);
@@ -367,7 +420,7 @@ public static class SdfMeshAudit {
             var ratio = ((longest <= 0f) ? 0f : (cross.Length() / longest));
 
             slivers += ((ratio < SliverRatio) ? 1 : 0);
-            faceNormals[triangle] = ((ratio >= DegenerateRatio) ? Vector3.Normalize(value: cross) : Vector3.Zero);
+            faceNormals[triangle] = FaceNormal(a: a, b: b, c: c);
             centroidErrors[triangle] = Off(field: field, flagged: flagged, cell: cell, point: centroid, threshold: threshold);
             var slope = Slope(field: field, point: centroid, step: options.GradientStep);
             var steepness = slope.Length();
@@ -377,11 +430,10 @@ public static class SdfMeshAudit {
             if ((steepness > 0f) && (steepness < options.LooseSlope)) {
                 loose.Add(item: centroid);
             }
-            agree += Math.Sign(value: Vector3.Dot(vector1: faceNormals[triangle], vector2: gradients[triangle]));
         }
 
         // The mesh winds one way; a triangle is judged against the way most of them wind.
-        var winding = ((agree < 0) ? -1f : 1f);
+        var winding = Winding(faceNormals: faceNormals, gradients: gradients);
         var flipped = 0;
         var normals = mesh.Normals.Span;
         var shadingErrors = new float[(normals.IsEmpty ? 0 : triangles)];
@@ -422,7 +474,7 @@ public static class SdfMeshAudit {
             var degrees = Angle(first: (winding * faceNormals[triangle]), second: gradients[triangle]);
 
             normalErrors[triangle] = degrees;
-            flipped += ((degrees > 90f) ? 1 : 0);
+            flipped += (Flips(faceNormal: faceNormals[triangle], gradient: gradients[triangle], winding: winding) ? 1 : 0);
             if (degrees > options.NormalDegrees) {
                 flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
@@ -450,7 +502,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var (crossings, missing) = Missing(cell: cell, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
+        var (crossings, missing) = Missing(accounted: accounted, cell: cell, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
         var clusters = Cluster(cell: cell, flagged: flagged)
             .Take(count: options.Clusters)
             .Select(selector: cluster => cluster with { Shapes = Nearest(count: options.Shapes, probes: cluster.Probes, shapes: shapes) })
@@ -653,8 +705,8 @@ public static class SdfMeshAudit {
         );
     }
     // The field's zero set on a lattice over the mesh's box: each lattice edge whose ends differ in sign holds a crossing,
-    // refined by bisection and flagged where no triangle lies within a cell of it.
-    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
+    // refined by bisection and flagged where no triangle, of the mesh or of the accounted surface, lies within a cell of it.
+    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, SdfMesh? accounted) {
         if ((positions.Length == 0) || !(cell > 0f)) { return (0, 0); }
 
         var low = (mesh.PositionLow - new Vector3(value: (3f * cell)));
@@ -677,6 +729,7 @@ public static class SdfMeshAudit {
         }
 
         var triangles = new TriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
+        var excused = ((accounted is null) ? null : new TriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
         var crossings = 0;
         var missing = 0;
 
@@ -699,7 +752,7 @@ public static class SdfMeshAudit {
             var nearest = triangles.Nearest(indices: corners, point: crossing, positions: mesh, reach: (4f * cell));
 
             crossings++;
-            if (nearest > cell) {
+            if ((nearest > cell) && ((excused is null) || (excused.Nearest(indices: accounted!.Indices.Span, point: crossing, positions: accounted.Positions.Span, reach: (4f * cell)) > cell))) {
                 missing++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Missing, Position: crossing, Severity: (nearest / cell), Value: nearest));
             }

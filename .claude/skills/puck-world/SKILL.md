@@ -255,7 +255,13 @@ loads their schemas lazily, so its brief says to read each tool's schema first
 Use the tools directly before writing a stdin process wrapper.
 The hook installs completed CLI builds through the launcher's signed local
 development channel under `.claude/mcp-install`. A persistent front follows
-activated builds without reconnecting the client; earlier backends retain
+activated builds without reconnecting the client. The front and the install's
+stub outlive every build, so a build always activates itself: on a new
+`puck-build-ready` stamp the front runs that build's own `--prepare-install`,
+which also installs the stub the build carries (moving a running stub's image
+aside), so the release record, the stub and the next worker come from one
+build. A worker that dies before it answers names its exit code and last
+stderr lines in the call's error. Earlier backends retain
 their World processes and route their stops until those Worlds and pending
 starts end, then retire once their in-flight calls finish. Session shutdown
 drains every remaining backend. Rebuild
@@ -275,7 +281,9 @@ sequence: `--prepare-install` then keeps the installed version and says
 `kept …`, and rebuilding `src/Puck.Cli` publishes a newer one. An install root
 from before the release record (`state/release-policy.json`) starts empty: the
 next activation installs over it, and its old version directories, which carry
-no valid install record, are kept until the root is deleted.
+no valid install record, are kept until the root is deleted. Every prune pass
+hashes each such directory under the install's leases, so delete that root once
+every session's front has stopped rather than keep it.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches
