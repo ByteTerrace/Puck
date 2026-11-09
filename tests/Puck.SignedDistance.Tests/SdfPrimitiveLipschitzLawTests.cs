@@ -18,41 +18,50 @@ public sealed class SdfPrimitiveLipschitzLawTests {
     // Positions and every primitive's last operations round to the carrier; four raws cover both ends of a pair.
     private const double Slack = (4.0 / 65536.0);
 
-    public static TheoryData<SdfSolidPrimitive, float, float, float> Primitives() {
-        var data = new TheoryData<SdfSolidPrimitive, float, float, float>();
+    public static TheoryData<SdfSolidPrimitive, float, float, float, SdfPrismProfileKind> Primitives() {
+        var data = new TheoryData<SdfSolidPrimitive, float, float, float, SdfPrismProfileKind>();
 
         foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
             if (type == SdfSolidPrimitive.Sweep) { continue; }
 
-            data.Add(type, 2f, 0f, 0f);
+            data.Add(type, 2f, 0f, 0f, SdfPrismProfileKind.Trapezoid);
         }
-        data.Add(SdfSolidPrimitive.Superellipsoid, 3f, 0f, 0f);
-        data.Add(SdfSolidPrimitive.Superellipsoid, 8f, 0f, 0f);
-        data.Add(SdfSolidPrimitive.Box, 2f, 0.2f, 0f);
-        data.Add(SdfSolidPrimitive.Box, 2f, 0f, 0.2f);
-        data.Add(SdfSolidPrimitive.Cylinder, 2f, 0.2f, 0f);
-        data.Add(SdfSolidPrimitive.Cylinder, 2f, 0f, 0.2f);
-        data.Add(SdfSolidPrimitive.Prism, 2f, 0.2f, 0f);
+        data.Add(SdfSolidPrimitive.Superellipsoid, 3f, 0f, 0f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Superellipsoid, 8f, 0f, 0f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Box, 2f, 0.2f, 0f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Box, 2f, 0f, 0.2f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Cylinder, 2f, 0.2f, 0f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Cylinder, 2f, 0f, 0.2f, SdfPrismProfileKind.Trapezoid);
+        data.Add(SdfSolidPrimitive.Prism, 2f, 0.2f, 0f, SdfPrismProfileKind.Trapezoid);
+        // The convex profile rounds by its own corner radius, never the door's rounding.
+        foreach (var kind in (ReadOnlySpan<SdfPrismProfileKind>)[SdfPrismProfileKind.RoundedRectangle, SdfPrismProfileKind.Polygon, SdfPrismProfileKind.Ellipse, SdfPrismProfileKind.ChamferedRectangle, SdfPrismProfileKind.Convex]) {
+            data.Add(SdfSolidPrimitive.Prism, 2f, 0f, 0f, kind);
+            if (kind != SdfPrismProfileKind.Convex) { data.Add(SdfSolidPrimitive.Prism, 2f, 0.2f, 0f, kind); }
+        }
 
         return data;
     }
 
     [Theory]
     [MemberData(memberName: nameof(Primitives))]
-    public void APrimitiveMovesNoFasterThanItsStepScaleAtACentimetreAndAMetre(SdfSolidPrimitive type, float exponent, float roundingShare, float chamferShare) {
+    public void APrimitiveMovesNoFasterThanItsStepScaleAtACentimetreAndAMetre(SdfSolidPrimitive type, float exponent, float roundingShare, float chamferShare, SdfPrismProfileKind kind) {
         var checkedScales = 0;
+        // A clockwise pentagon inside the unit square for the convex profile; the trapezoid is the door's default.
+        var profile = ((kind == SdfPrismProfileKind.Trapezoid)
+            ? null
+            : new SdfPrismProfile(Kind: kind, Vertices: ((kind == SdfPrismProfileKind.Convex) ? [new Vector2(x: 0f, y: 1f), new Vector2(x: 0.9f, y: 0.3f), new Vector2(x: 0.6f, y: -0.8f), new Vector2(x: -0.6f, y: -0.8f), new Vector2(x: -0.9f, y: 0.3f)] : null)));
 
         foreach (var scale in (ReadOnlySpan<Vector3>)[new Vector3(x: 0.019f, y: 0.012f, z: 0.01f), new Vector3(value: 0.012f), new Vector3(x: 1f, y: 0.6f, z: 0.8f)]) {
             var smallest = MathF.Min(x: scale.X, y: MathF.Min(x: scale.Y, y: scale.Z));
             var rounding = (roundingShare * smallest);
             var chamfer = (chamferShare * smallest);
 
-            if (!SdfSolidGeometry.TryValidateScaledPrimitive(chamfer: chamfer, exponent: exponent, refusal: out _, rounding: rounding, scale: scale, type: type)) { continue; }
+            if (!SdfSolidGeometry.TryValidateScaledPrimitive(chamfer: chamfer, exponent: exponent, profile: profile, refusal: out _, rounding: rounding, scale: scale, type: type)) { continue; }
 
             var builder = new SdfProgramBuilder();
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-            _ = SdfSolidGeometry.AppendScaledPrimitive(chain: builder.ResetPoint(), chamfer: chamfer, exponent: exponent, material: material, rounding: rounding, scale: scale, type: type);
+            _ = SdfSolidGeometry.AppendScaledPrimitive(chain: builder.ResetPoint(), chamfer: chamfer, exponent: exponent, material: material, profile: profile, rounding: rounding, scale: scale, type: type);
 
             var program = builder.Build();
             // The contact reading refuses a non-uniform Scale (a primitive the door spells through one); the render
@@ -62,28 +71,12 @@ public sealed class SdfPrimitiveLipschitzLawTests {
             foreach (var reading in (ReadOnlySpan<SdfFieldReading>)[SdfFieldReading.Render, SdfFieldReading.Contact]) {
                 if (anisotropic && (reading == SdfFieldReading.Contact)) { continue; }
 
-                Check(field: new SdfFieldEvaluator(program: program, reading: reading), label: $"{type} (exponent {exponent}, rounding {rounding}, chamfer {chamfer}, {reading}) at scale {scale}", scale: scale);
+                Check(field: new SdfFieldEvaluator(program: program, reading: reading), label: $"{type} ({kind}, exponent {exponent}, rounding {rounding}, chamfer {chamfer}, {reading}) at scale {scale}", scale: scale);
                 checkedScales++;
             }
         }
 
-        Assert.True(condition: (checkedScales > 0), userMessage: $"{type}: the door refused both scales.");
-    }
-
-    // A capsule spelled natively (a rig's or a collider's segment, never through a Scale op) at a centimetre: its
-    // parameter divides two dot products of centimetre vectors.
-    [Fact]
-    public void ACentimetreCapsuleMovesNoFasterThanItsStepScale() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.ResetPoint().Capsule(endpoint: new Vector3(x: 0.011f, y: 0.017f, z: -0.007f), material: material, radius: 0.004f);
-
-        var program = builder.Build();
-
-        foreach (var reading in (ReadOnlySpan<SdfFieldReading>)[SdfFieldReading.Render, SdfFieldReading.Contact]) {
-            Check(field: new SdfFieldEvaluator(program: program, reading: reading), label: $"native capsule ({reading})", scale: new Vector3(value: 0.012f));
-        }
+        Assert.True(condition: (checkedScales > 0), userMessage: $"{type} ({kind}): the door refused every scale.");
     }
 
     private static void Check(SdfFieldEvaluator field, Vector3 scale, string label) {

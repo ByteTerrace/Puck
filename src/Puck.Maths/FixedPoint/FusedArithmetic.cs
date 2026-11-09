@@ -160,8 +160,19 @@ public static class FusedArithmetic {
         ));
     }
 
+    /// <summary>Rounds the exact quotient of two exact sums at one scale, clamped to <c>[0, 1]</c>, to
+    /// <see cref="FixedQ4816"/> once, to nearest with ties to even: the segment parameter a projection reads, with the
+    /// sums formed by the caller (an interval rule's extreme products, for one).</summary>
+    /// <param name="numerator">The exact signed numerator, at the denominator's scale (a sum of raw products).</param>
+    /// <param name="denominator">The exact denominator; zero or negative reads as zero.</param>
+    /// <returns>Zero when the numerator is not positive or the denominator is not positive, one when the numerator
+    /// reaches the denominator, and the rounded quotient otherwise.</returns>
+    public static FixedQ4816 ClampedUnitQuotient(Int128 numerator, Int128 denominator) =>
+        ((denominator <= Int128.Zero)
+            ? FixedQ4816.Zero
+            : ClampedUnitQuotient(denominator: ((UInt128)denominator), numerator: ((numerator < Int128.Zero), unchecked((UInt128)((numerator < Int128.Zero) ? -numerator : numerator)))));
     /// <summary>Rounds the exact quotient of two exact product sums at one scale, clamped to <c>[0, 1]</c>, to
-    /// <see cref="FixedQ4816"/> once, to nearest with ties to even: the segment parameter a projection reads.</summary>
+    /// <see cref="FixedQ4816"/> once, to nearest with ties to even.</summary>
     /// <param name="numerator">The signed numerator as sign plus magnitude.</param>
     /// <param name="denominator">The non-negative denominator magnitude, at the numerator's scale.</param>
     /// <returns>Zero when the numerator is not positive or the denominator is zero, one when the numerator reaches the
