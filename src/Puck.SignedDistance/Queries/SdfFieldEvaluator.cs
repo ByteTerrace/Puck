@@ -1078,60 +1078,31 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // Sample 9 fixed candidates, then 5 rounds of halving-step compass probes either side of the running best —
     // deterministic, no trigonometry, converges toward the closest parameter on the centerline. See the KEEP-IN-SYNC
     // remark above for why this evaluator does not mirror the shader's closed-form cubic solve.
+    // Candidates are compared by their exact squared offsets (CompareLengthTo): a carrier-rounded squared distance is zero
+    // under four millimetres, so every candidate inside a thin tube tied with the first and the search kept the start,
+    // reading a point beside the tube's middle as the distance to its end.
     private static FixedQ4816 SdfSweepClosestT(FixedVector3 p, FixedVector3 a, FixedVector3 b, FixedVector3 c) {
         var bestT = FixedQ4816.Zero;
-        var bestDistanceSquared = (p - a).LengthSquared;
+        var bestOffset = (p - a);
 
-        for (var index = 0; (index < SweepSampleFractions.Length); index++) {
-            var t = SweepSampleFractions[index];
-            var distanceSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: t
-            )).LengthSquared;
+        void Consider(FixedQ4816 t) {
+            var offset = (p - SdfBezierPoint(a: a, b: b, c: c, t: t));
 
-            if (distanceSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceSquared;
+            if (offset.CompareLengthTo(other: bestOffset) < 0) {
+                bestOffset = offset;
                 bestT = t;
             }
+        }
+
+        for (var index = 0; (index < SweepSampleFractions.Length); index++) {
+            Consider(t: SweepSampleFractions[index]);
         }
 
         var step = SweepInitialStep;
 
         for (var round = 0; (round < 5); round++) {
-            var tPlus = FixedQ4816.Min(
-                x: FixedQ4816.One,
-                y: (bestT + step)
-            );
-            var distancePlusSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: tPlus
-            )).LengthSquared;
-
-            if (distancePlusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distancePlusSquared;
-                bestT = tPlus;
-            }
-
-            var tMinus = FixedQ4816.Max(
-                x: FixedQ4816.Zero,
-                y: (bestT - step)
-            );
-            var distanceMinusSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: tMinus
-            )).LengthSquared;
-
-            if (distanceMinusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceMinusSquared;
-                bestT = tMinus;
-            }
-
+            Consider(t: FixedQ4816.Min(x: FixedQ4816.One, y: (bestT + step)));
+            Consider(t: FixedQ4816.Max(x: FixedQ4816.Zero, y: (bestT - step)));
             step = (step * Half);
         }
 

@@ -116,7 +116,7 @@ internal static class MeshFieldLevels {
             CollapseCycles: collapseCycles,
             Field: field,
             HalfDiagonal: levels.HalfDiagonal,
-            Lipschitz: string.Create(provider: CultureInfo.InvariantCulture, handler: $"step scale {union.StepScale:0.###}, lower/upper {levels.LowerOverUpper:0.###}{(levels.Certified ? ", certified" : ", uncertified")}"),
+            Lipschitz: string.Create(provider: CultureInfo.InvariantCulture, handler: $"step scale {union.StepScale:0.###}, lower/upper {levels.LowerOverUpper:0.###} at ({levels.LowerOverUpperWitness.At.X:0.####}, {levels.LowerOverUpperWitness.At.Y:0.####}, {levels.LowerOverUpperWitness.At.Z:0.####}) value {Mm(levels.LowerOverUpperWitness.Value)} mm upper {Mm(levels.LowerOverUpperWitness.Upper)} mm{(levels.Certified ? ", certified" : ", uncertified")}"),
             Members: Math.Max(val1: 1, val2: members.Count),
             Reference: reference,
             SurfaceRefused: levels.SurfaceRefused,

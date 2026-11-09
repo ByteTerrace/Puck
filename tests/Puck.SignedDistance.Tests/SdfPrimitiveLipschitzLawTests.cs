@@ -79,6 +79,24 @@ public sealed class SdfPrimitiveLipschitzLawTests {
         Assert.True(condition: (checkedScales > 0), userMessage: $"{type} ({kind}): the door refused every scale.");
     }
 
+    // A lash-sized sweep, a 2 mm tube along a 1.6 cm curve, as a tube of one radius (the nearest-parameter search) and
+    // tapered (the sampled gap search). The scale the check samples about spans the curve.
+    [Theory]
+    [InlineData(0.002f, 0.002f)]
+    [InlineData(0.002f, 0.0008f)]
+    public void ACentimetreSweepMovesNoFasterThanItsStepScale(float radiusStart, float radiusEnd) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.ResetPoint().Sweep(a: Vector3.Zero, b: new Vector3(x: 0.0068f, y: 0.0041f, z: -0.0048f), bulge: 0f, c: new Vector3(x: 0.0129f, y: 0.0041f, z: -0.0095f), material: material, radiusEnd: radiusEnd, radiusStart: radiusStart, strandOffset: 0f, strands: 1, twist: 0f);
+
+        var program = builder.Build();
+
+        foreach (var reading in (ReadOnlySpan<SdfFieldReading>)[SdfFieldReading.Render, SdfFieldReading.Contact]) {
+            Check(field: new SdfFieldEvaluator(program: program, reading: reading), label: $"sweep {radiusStart}..{radiusEnd} ({reading})", scale: new Vector3(value: 0.012f));
+        }
+    }
+
     private static void Check(SdfFieldEvaluator field, Vector3 scale, string label) {
         var smallest = MathF.Min(x: scale.X, y: MathF.Min(x: scale.Y, y: scale.Z));
         var stepScale = (double)field.StepScale;

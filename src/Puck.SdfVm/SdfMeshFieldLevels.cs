@@ -168,14 +168,19 @@ public sealed class SdfMeshFieldLevels {
         var bracket = Bracket(field: field, normals: [.. witnessNormals.Select(selector: Unit)], points: [.. points], reach: (4f * cell), step: cell);
         var kept = new List<int>();
         var ratio = 0f;
+        var ratioWitness = (At: Vector3.Zero, Value: 0f, Upper: 0f);
 
         for (var witness = 0; (witness < points.Count); witness++) {
             if (!bracket.Found[witness]) { continue; }
             kept.Add(item: witness);
-            if (bracket.Upper[witness] > 0f) { ratio = MathF.Max(x: ratio, y: ((MathF.Abs(x: bracket.Value[witness]) * field.StepScale) / bracket.Upper[witness])); }
+
+            var lowerOverUpper = ((bracket.Upper[witness] > 0f) ? ((MathF.Abs(x: bracket.Value[witness]) * field.StepScale) / bracket.Upper[witness]) : 0f);
+
+            if (lowerOverUpper > ratio) { (ratio, ratioWitness) = (lowerOverUpper, (points[witness], bracket.Value[witness], bracket.Upper[witness])); }
         }
         SurfaceRefused = (points.Count - kept.Count);
         LowerOverUpper = ratio;
+        LowerOverUpperWitness = ratioWitness;
         Certified = ((field.StepScale > 0f) && (ratio <= 1f));
         m_surface = [.. kept.Select(selector: witness => bracket.Surface[witness])];
         m_owner = [.. kept.Select(selector: witness => owners[witness])];
@@ -196,6 +201,10 @@ public sealed class SdfMeshFieldLevels {
     /// the field's step scale) to the bracketed upper bound: above one, the step scale certifies nothing for this
     /// field.</summary>
     public float LowerOverUpper { get; }
+    /// <summary>Gets the level-zero witness where <see cref="LowerOverUpper"/> was read, so a failing step scale is traced
+    /// to the shape there: its position in the group's rest frame, the field's value there and the bracketed upper bound
+    /// on its distance to the surface, all in metres.</summary>
+    public (Vector3 At, float Value, float Upper) LowerOverUpperWitness { get; }
     /// <summary>Gets a value indicating whether the field's step scale held as a lower bound at every level-zero witness,
     /// so a closed group's finer levels may skip the samples a coarser one certifies far from the surface; otherwise every
     /// sample is answered.</summary>
