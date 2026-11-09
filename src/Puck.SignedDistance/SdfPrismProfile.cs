@@ -103,9 +103,10 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
     }
     /// <summary>Returns an owned profile with a convex polygon listed from its canonical first vertex.</summary>
     public SdfPrismProfile Canonicalize() {
-        if (Kind != SdfPrismProfileKind.Convex || Vertices is not { Count: > 0 } vertices) { return this; }
-        var start = CanonicalStart(vertices);
-        return this with { Vertices = Array.AsReadOnly(Enumerable.Range(0, vertices.Count).Select(i => vertices[(start + i) % vertices.Count]).ToArray()) };
+        if ((Kind != SdfPrismProfileKind.Convex) || (Vertices is not { Count: > 0 } vertices)) { return this; }
+        var start = CanonicalStart(vertices: vertices);
+
+        return this with { Vertices = Array.AsReadOnly(array: Enumerable.Range(0, vertices.Count).Select(selector: i => vertices[((start + i) % vertices.Count)]).ToArray()) };
     }
     /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon at any size: 3 to
     /// <see cref="MaxConvexVertices"/> finite points, no two coincident, no three collinear, and every consecutive edge

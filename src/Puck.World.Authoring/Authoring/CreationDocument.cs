@@ -211,7 +211,7 @@ public sealed record ShapeDocument(
     public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
-    /// <see cref="SdfProgramBuilder.BendZ"/>'s remarks).</summary>
+    /// <see cref="SdfProgramBuilder.BendY"/>'s remarks).</summary>
     public const float MaxBend = 1.5f;
     /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp.</summary>
     public const float MaxDilate = 0.2f;

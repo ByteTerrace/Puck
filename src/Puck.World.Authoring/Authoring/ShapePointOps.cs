@@ -60,14 +60,13 @@ public static class ShapePointOps {
 
         if (probeWorstCase) {
             // Worst-case reserves the widest declared bump list; every entry is otherwise identical for capacity
-            // purposes (each costs the same single instruction) — Push length feeds the reach probe below,
+            // purposes (each costs the same single instruction) — Push length feeds the caller's reach probe,
             // not the instruction count.
             for (var i = 0; (i < ShapeBumpDocument.MaxBumps); i++) {
                 chain = chain.GaussianPush(center: Vector3.Zero, radii: Vector3.One, push: new Vector3(value: ShapeBumpDocument.MaxPushMagnitude));
             }
         } else {
             foreach (var bump in (bumps ?? [])) {
-    
                 chain = chain.GaussianPush(
                     center: (bump.Center.Value * lengthScale),
                     radii: (bump.Radii.Value * lengthScale),
@@ -77,7 +76,6 @@ public static class ShapePointOps {
         }
 
         if (probeWorstCase || (warp is not null)) {
-
             chain = chain.DomainWarp(
                 amplitude: (probeWorstCase ? ShapeWarpDocument.MaxAmplitude : (warp!.Amplitude * lengthScale)),
                 frequency: (probeWorstCase ? new Vector3(value: ShapeWarpDocument.MaxFrequency) : (warp!.Frequency.Value / lengthScale))
@@ -85,7 +83,6 @@ public static class ShapePointOps {
         }
 
         if (probeWorstCase || (elongate is not null)) {
-
             chain = chain.Elongate(extents: (probeWorstCase ? new Vector3(value: ShapeDocument.MaxElongate) : (elongate!.Value * lengthScale)));
         }
 

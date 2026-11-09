@@ -144,16 +144,15 @@ Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
 
 Applied in this order on the local point: twist, bend, flare, shear, bumps,
 warp, elongate, erode, then the primitive, then the relief field ops
-(`displace`, `cells`) on the shape's rigid frame — but **only the pooled/body
-path emits twist and bend**. The static stamper's chain runs flare, shear, bumps and never emits
-either, so on a static placement both fields are inert: no refusal, and
-`creation stats` still prints a nonzero `twist:`/`bend:` count. Get a static
-curve from a `Sweep`, a profiled `Prism`, or `shear` instead.
+(`displace`, `cells`) on the shape's rigid frame. Static and pooled/body
+placements share `ShapePointOps.Apply` for the point operations; rates and
+lengths are in creation units before placement scale.
+
 
 | Field | Shape | Range |
 |---|---|---|
-| `twist` | scalar, radians per unit local Y; **body path only** | clamped ±3 |
-| `bend` | scalar, radians per unit local Y; **body path only** | clamped ±1.5 |
+| `twist` | scalar, radians per unit local Y | clamped ±3 |
+| `bend` | scalar, radians per unit local Y | clamped ±1.5 |
 | `flare` | `{ amount, bulge, span, top, axis, startScale }` | amount [−0.9, 4], bulge ±1, span > 0, axis 0..2 default 1 (Y), startScale (0, 5] |
 | `shear` | `{ linear, quadratic, cubic, target, driver }` | coefficients ±4; target and driver must be **distinct** axes in 0..2 |
 | `bumps` | up to 4 × `{ center, radii, push }` | push magnitude ≤ 2; radii floored at 0.001 |
@@ -312,6 +311,4 @@ as `scale authors <reason>` at `shapes[i].scale`. Common ones worth recognizing:
 
 Convex profiles admit separate `rounding` after their `cornerRadius` fillet;
 `SdfSolidGeometry.MaxRounding` gives the remaining inset and lift ceiling.
-Profiles default to sharp corners (`cornerRadius: 0`). Static and pooled
-placements share `ShapePointOps.Apply`: twist, bend, flare, shear, bumps, warp,
-then elongation, in creation units.
+Profiles default to sharp corners (`cornerRadius: 0`).

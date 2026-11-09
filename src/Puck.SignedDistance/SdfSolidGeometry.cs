@@ -186,12 +186,14 @@ public static class SdfSolidGeometry {
             smooth,
             detail: detail
         );
+
     /// <summary>The positive, nonzero magnitudes used by primitive emission and its canonical descriptors.</summary>
     public static Vector3 EffectiveScale(Vector3 scale) =>
         Vector3.Max(
             value1: Vector3.Abs(value: scale),
             value2: new Vector3(value: MinimumScale)
         );
+
     private static bool IsUniform(Vector3 scale) =>
         ((scale.X == scale.Y) && (scale.Y == scale.Z));
     private static void RequireTaper(float taper) {
@@ -1258,7 +1260,7 @@ public static class SdfSolidGeometry {
                     ),
                         // The same inset and lift ceiling ConvexProfile/ConvexPolygon emit, less the
                         // profile's own corner fillet. Separate rounding consumes the remaining room.
-                        SdfPrismProfileKind.Convex => ConvexRoundingCeiling(profile!, effectiveScale, lift),
+                        SdfPrismProfileKind.Convex => ConvexRoundingCeiling(lift: lift, profile: profile!, scale: effectiveScale),
                         SdfPrismProfileKind.Path => 0f,
                         // The trapezoid's ceiling is the builder's own: the narrower end's inset width reaching zero
                         // binds before the half-height does whenever the profile is thinner than it is tall.
@@ -1327,13 +1329,16 @@ public static class SdfSolidGeometry {
             y: inradius
         );
     }
+
     private static float ConvexRoundingCeiling(SdfPrismProfile profile, Vector3 scale, SdfLift lift) {
         var inradius = SdfProgramBuilder.ConvexPolygonInradius(
-            vertices: [.. profile.Vertices!.Select(vertex => vertex * new Vector2(scale.X, scale.Y))]);
+            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))]);
         var corner = SdfProgramBuilder.ClampRounding(lift: lift, liftAmount: scale.Z,
-            profileInradius: inradius, rounding: profile.CornerRadius * inradius);
-        return MathF.Max(0f, ((lift == SdfLift.Extrude) ? MathF.Min(inradius, scale.Z) : inradius) - corner);
+            profileInradius: inradius, rounding: (profile.CornerRadius * inradius));
+
+        return MathF.Max(x: 0f, y: (((lift == SdfLift.Extrude) ? MathF.Min(x: inradius, y: scale.Z) : inradius) - corner));
     }
+
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component's
     /// magnitude times the primitive's farthest surface point.</summary>
     /// <param name="type">The primitive.</param>

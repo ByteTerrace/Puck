@@ -21,6 +21,7 @@ namespace Puck.SignedDistance;
 public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Data1, IReadOnlyList<float> Table, Vector3 Scale, SdfSolidBounds Bound) {
     /// <summary>The primitive's point-frame rotation, after the residual scale and before its distance evaluation.</summary>
     public Quaternion Rotation { get; init; } = Quaternion.Identity;
+
     /// <summary>Relocates this descriptor's side-table reference into the caller's address space. A shade slice
     /// supplies a slice-relative vector; ordinary paint packing supplies its absolute vector.</summary>
     public Vector4 Data0At(int tableVector) => Type switch {
@@ -47,11 +48,11 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
     /// <returns>The captured shape.</returns>
     /// <exception cref="ArgumentException">The primitive emits something a paint cannot carry.</exception>
     public static SdfPaintShape Of(SdfSolidPrimitive type, Vector3 scale, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, SdfSweepParameters? curve = null) {
-        if (!Enum.IsDefined(type)) { throw new ArgumentException("Undefined paint primitive."); }
-        if (!SdfSolidGeometry.TryValidateScaledPrimitive(type, scale, out var refusal, taper, profile, lift, rounding, chamfer, exponent)) {
-            throw new ArgumentException("The paint primitive cannot be emitted: " + refusal);
+        if (!Enum.IsDefined(value: type)) { throw new ArgumentException(message: "Undefined paint primitive."); }
+        if (!SdfSolidGeometry.TryValidateScaledPrimitive(chamfer: chamfer, exponent: exponent, lift: lift, profile: profile, refusal: out var refusal, rounding: rounding, scale: scale, taper: taper, type: type)) {
+            throw new ArgumentException(message: ("The paint primitive cannot be emitted: " + refusal));
         }
-        if ((type == SdfSolidPrimitive.Sweep) != (curve is not null)) { throw new ArgumentException("A Sweep requires a curve, and only a Sweep carries one."); }
+        if ((type == SdfSolidPrimitive.Sweep) != (curve is not null)) { throw new ArgumentException(message: "A Sweep requires a curve, and only a Sweep carries one."); }
         if (profile is { Kind: SdfPrismProfileKind.Path }) {
             throw new ArgumentException(message: "A paint cannot cover a Path profile.", paramName: nameof(profile));
         }
@@ -129,7 +130,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         Enum.IsDefined(value: shape.Type) &&
         (shape.Table is not null) &&
         VectorFunctions.IsFinite(vector: shape.Scale) &&
-        float.IsFinite(shape.Rotation.LengthSquared()) && shape.Rotation.LengthSquared() >= 1e-12f &&
+        float.IsFinite(f: shape.Rotation.LengthSquared()) && (shape.Rotation.LengthSquared() >= 1e-12f) &&
         (shape.Scale.X > 0f) && (shape.Scale.Y > 0f) && (shape.Scale.Z > 0f) &&
         (shape.Bound.IsUnbounded || (VectorFunctions.IsFinite(vector: shape.Bound.Center) && VectorFunctions.IsFinite(vector: shape.Bound.HalfExtents) && (shape.Bound.HalfExtents.X >= 0f) && (shape.Bound.HalfExtents.Y >= 0f) && (shape.Bound.HalfExtents.Z >= 0f))) &&
         VectorFunctions.IsFinite(vector: paint.Origin) &&

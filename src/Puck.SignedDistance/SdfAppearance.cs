@@ -59,18 +59,20 @@ public sealed class SdfAppearance {
             var unshaded = SdfShadeReads.None;
             var emission = SdfShadeReads.None;
             var inherits = false;
+
             foreach (var material in m_materials) {
-                var reads = material.Flow is null ? SdfShadeReads.None : SdfShadeReads.Clock;
-                if (IsWorldLane(material.Weathering?.Lane) || IsWorldLane(material.Flow?.Lane) || IsWorldLane(material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
-                if (IsWorldLane(material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
+                var reads = ((material.Flow is null) ? SdfShadeReads.None : SdfShadeReads.Clock);
+
+                if (IsWorldLane(lane: material.Weathering?.Lane) || IsWorldLane(lane: material.Flow?.Lane) || IsWorldLane(lane: material.Flow?.CoverageLane)) { reads |= SdfShadeReads.WorldLanes; }
+                if (IsWorldLane(lane: material.EmissiveLane)) { emission |= SdfShadeReads.WorldLanes; }
                 layers |= reads;
-                if (material.Shade is { } shade) { authored |= shade.Reads; }
-                else { inherits = true; unshaded |= reads; }
+                if (material.Shade is { } shade) { authored |= shade.Reads; } else { inherits = true; unshaded |= reads; }
             }
             m_shadeReads = (layers, authored, unshaded, emission, inherits);
         }
         var cached = m_shadeReads.Value;
-        return cached.Emission | (programs ? cached.Authored | (cached.Inherits ? fallback?.Reads ?? cached.Unshaded : SdfShadeReads.None) : cached.Layers);
+
+        return cached.Emission | (programs ? cached.Authored | (cached.Inherits ? (fallback?.Reads ?? cached.Unshaded) : SdfShadeReads.None) : cached.Layers);
     }
 
     /// <summary>Initializes a new instance of the <see cref="SdfAppearance"/> class from a palette and its screen
@@ -136,6 +138,7 @@ public sealed class SdfAppearance {
     public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
     /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
     public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
+
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
     /// then each paint's <see cref="PaintVectorsPerEntry"/> and its variable side table. The one statement of the appearance section's size, which a
     /// capacity probe (<see cref="SdfProgramBuilder.MeasureCapacity"/>) reads without packing.</summary>
@@ -148,15 +151,14 @@ public sealed class SdfAppearance {
         var shades = 0;
 
         foreach (var material in materials) {
-            paints += (material.Paints?.Sum(static paint => PaintVectorsPerEntry + PaintSideVectors(paint)) ?? 0);
+            paints += (material.Paints?.Sum(selector: static paint => (PaintVectorsPerEntry + PaintSideVectors(paint: paint))) ?? 0);
             if (material.Shade is { } shade) { shades = checked((shades + ((shade.Words.Length + shade.ParameterWords.Length) / WordsPerVector))); }
         }
 
         return checked((((MaterialVectorsPerEntry * materials.Count) + paints) + shades));
     }
 
-    private static int PaintSideVectors(SdfPaint paint) => ((paint.Shape.Table.Count + WordsPerVector - 1) / WordsPerVector);
-
+    private static int PaintSideVectors(SdfPaint paint) => (((paint.Shape.Table.Count + WordsPerVector) - 1) / WordsPerVector);
     private static bool IsWorldLane(int? lane) => (lane >= SdfLanes.FirstWorld);
     private static SdfMaterial[] Snapshot(IReadOnlyList<SdfMaterial> materials) {
         var snapshot = new SdfMaterial[materials.Count];
@@ -338,8 +340,8 @@ public sealed class SdfAppearance {
     /// <param name="materialVector">The vector the material table starts at (the header's material offset).</param>
     internal void Pack(uint[] words, int materialVector) {
         var paintCursor = (materialVector + (MaterialVectorsPerEntry * m_materials.Length));
-        var tableCursor = checked(paintCursor + m_materials.Sum(static m => (m.Paints?.Count ?? 0) * PaintVectorsPerEntry));
-        var shadeCursor = checked(tableCursor + m_materials.Sum(static m => m.Paints?.Sum(PaintSideVectors) ?? 0));
+        var tableCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
+        var shadeCursor = checked((tableCursor + m_materials.Sum(selector: static m => (m.Paints?.Sum(selector: PaintSideVectors) ?? 0))));
         Span<Vector4> toonRows = stackalloc Vector4[4];
 
         for (var index = 0; (index < m_materials.Length); index++) {
@@ -385,7 +387,7 @@ public sealed class SdfAppearance {
             );
             foreach (var paint in paints) {
                 PackPaint(paint: paint, paintVector: paintCursor, tableVector: tableCursor, words: words);
-                tableCursor += PaintSideVectors(paint);
+                tableCursor += PaintSideVectors(paint: paint);
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {

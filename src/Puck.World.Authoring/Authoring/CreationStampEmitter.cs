@@ -521,7 +521,7 @@ public static partial class CreationStampEmitter {
     private static SdfProgramBuilder StampPrefix(SdfProgramBuilder builder, in StampFrame frame) {
         var chain = builder.ResetPoint();
 
-        if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot); }
+        if (frame.DynamicSlot is { } slot) { chain = chain.TransformDynamic(slot: slot); }
         chain = chain
             .Translate(offset: frame.Origin.ToVector3())
             .Rotate(rotation: frame.Rotation)
@@ -853,6 +853,7 @@ public static partial class CreationStampEmitter {
 
         EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
     }
+
     private static void EmitNoise(SdfProgramBuilder builder, in StampFrame frame, CreationNoiseDocument noise) {
         _ = StampPrefix(
             builder: builder,
@@ -867,6 +868,7 @@ public static partial class CreationStampEmitter {
             seed: (noise.Seed ?? 0u)
         );
     }
+
     /// <summary>Emits ONE shape of a creation under the stamp transform — the per-shape-instance form of
     /// <see cref="Emit"/>, for a stamper that gives each shape its own tight cull bound
     /// (<see cref="ShapeStampBound"/>) instead of one whole-creation instance.</summary>
@@ -1464,6 +1466,7 @@ public static partial class CreationStampEmitter {
         }
 
         var frame = StampFrame.Of(transform: transform);
+
         var (position, rotation) = ReflectedShapeTransformFixed(normal: frame.ReflectionNormal, shape: shape);
         var turn = (frame.Rotation * rotation).Normalize().ToQuaternion();
         var axisX = Vector3.Transform(value: (Vector3.UnitX * transform.Scale), rotation: turn);
@@ -1472,7 +1475,7 @@ public static partial class CreationStampEmitter {
         var center = (StampedPosition(frame: frame, local: position).ToVector3() + (((axisX * bounds.Center.X) + (axisY * bounds.Center.Y)) + (axisZ * bounds.Center.Z)));
         var raise = ((shape.Panel is { Depth: < 0f } panel) ? -panel.Depth : 0f);
         var widen = (((raise + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale);
-        var half = (((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen);
+        var half = ((((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen));
 
         return ((center - half), (center + half));
     }

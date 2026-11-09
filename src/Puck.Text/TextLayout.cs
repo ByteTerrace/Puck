@@ -118,7 +118,7 @@ public sealed class TextLayout {
 
         // Buffer only one word, preserving enrichment on each scalar. Measure with the same glyph
         // metrics and kerning used for placement, then choose the line before emitting any of it.
-        var word = new List<(TextEffectRune Rune, FontAtlasGlyph Glyph, float X)>();
+        List<(TextEffectRune Rune, FontAtlasGlyph Glyph, float X)>? word = null;
         var wordAdvance = 0f;
         var wordRight = 0f;
         var wordLeft = 0f;
@@ -126,53 +126,59 @@ public sealed class TextLayout {
         var pendingSpace = 0f;
 
         void Place(TextEffectRune enriched, FontAtlasGlyph glyph, bool splitLongWord) {
-            if (splitLongWord && ShouldWrapGlyph(glyph, cursorX, lineHasContent, scale, maxLineWidth)) {
+            if (splitLongWord && ShouldWrapGlyph(cursorX: cursorX, glyph: glyph, lineHasContent: lineHasContent, maxLineWidth: maxLineWidth, scale: scale)) {
                 StartNewLine();
             }
-            if (glyph.PlaneBounds is FontAtlasBounds planeBounds && glyph.AtlasBounds is FontAtlasBounds atlasBounds) {
-                var bounds = new FontAtlasBounds(Bottom: baselineY + planeBounds.Bottom * scale,
-                    Left: cursorX + planeBounds.Left * scale, Right: cursorX + planeBounds.Right * scale,
-                    Top: baselineY + planeBounds.Top * scale);
-                placements.Add(new TextGlyphPlacement(Atlas: atlas, AtlasBounds: atlasBounds,
-                    BaselineOrigin: new Vector2(cursorX, baselineY), Effect: enriched.Effect,
+            if ((glyph.PlaneBounds is FontAtlasBounds planeBounds) && (glyph.AtlasBounds is FontAtlasBounds atlasBounds)) {
+                var bounds = new FontAtlasBounds(Bottom: (baselineY + (planeBounds.Bottom * scale)),
+                    Left: (cursorX + (planeBounds.Left * scale)), Right: (cursorX + (planeBounds.Right * scale)),
+                    Top: (baselineY + (planeBounds.Top * scale)));
+
+                placements.Add(item: new TextGlyphPlacement(Atlas: atlas, AtlasBounds: atlasBounds,
+                    BaselineOrigin: new Vector2(x: cursorX, y: baselineY), Effect: enriched.Effect,
                     Glyph: glyph, PlaneBounds: bounds, Unicode: enriched.Rune.Value));
-                lineVisualLeft = MathF.Min(lineVisualLeft, bounds.Left);
-                lineVisualRight = MathF.Max(lineVisualRight, bounds.Right);
-                maxRight = MathF.Max(maxRight, bounds.Right);
+                lineVisualLeft = MathF.Min(x: lineVisualLeft, y: bounds.Left);
+                lineVisualRight = MathF.Max(x: lineVisualRight, y: bounds.Right);
+                maxRight = MathF.Max(x: maxRight, y: bounds.Right);
             }
-            cursorX += glyph.Advance * scale + tracking;
-            maxRight = MathF.Max(maxRight, cursorX);
+            cursorX += ((glyph.Advance * scale) + tracking);
+            maxRight = MathF.Max(x: maxRight, y: cursorX);
             lineHasContent = true;
         }
         void FlushWord() {
-            if (word.Count == 0) { return; }
-            var start = cursorX + pendingSpace;
-            var left = MathF.Min(lineVisualLeft, start + wordLeft);
-            if (maxLineWidth is float width && lineHasContent && start + wordRight - left > width) {
+            if (word is not { Count: > 0 }) { return; }
+            var start = (cursorX + pendingSpace);
+            if (previousUnicode is int boundary) {
+                start += (atlas.GetKerningAdjustment(leftUnicode: boundary, rightUnicode: word[0].Rune.Rune.Value) * scale);
+            }
+            var left = MathF.Min(x: lineVisualLeft, y: (start + wordLeft));
+
+            if ((maxLineWidth is float width) && lineHasContent && (((start + wordRight) - left) > width)) {
                 StartNewLine();
                 start = 0f;
             }
             // A single word wider than the whole line uses glyph breaks as a last resort.
-            var split = maxLineWidth is float limit && wordRight - wordLeft > limit;
+            var split = ((maxLineWidth is float limit) && ((wordRight - wordLeft) > limit));
+
             cursorX = start;
+            previousUnicode = null;
             foreach (var (enriched, glyph, x) in word) {
-                if (!split) { cursorX = start + x; }
-                else if (previousUnicode is int previous) {
-                    cursorX += atlas.GetKerningAdjustment(previous, enriched.Rune.Value) * scale;
+                if (!split) { cursorX = (start + x); } else if (previousUnicode is int previous) {
+                    cursorX += (atlas.GetKerningAdjustment(leftUnicode: previous, rightUnicode: enriched.Rune.Value) * scale);
                 }
-                Place(enriched, glyph, split);
+                Place(enriched: enriched, glyph: glyph, splitLongWord: split);
                 previousUnicode = enriched.Rune.Value;
             }
-            if (!split) { cursorX = start + wordAdvance; }
+            if (!split) { cursorX = (start + wordAdvance); }
             word.Clear();
             wordAdvance = wordRight = wordLeft = pendingSpace = 0f;
             wordPrevious = null;
-            previousUnicode = null;
         }
         try {
             while (runes.MoveNext()) {
                 var enriched = runes.Current;
                 var unicode = enriched.Rune.Value;
+
                 if (unicode == '\r') { continue; }
                 if (unicode == '\n') {
                     FlushWord();
@@ -181,28 +187,34 @@ public sealed class TextLayout {
                     continue;
                 }
                 if (maxLineWidth is null) {
-                    if (!atlas.TryGetGlyph(unicode, out var unwrapped)) { previousUnicode = null; continue; }
-                    if (previousUnicode is int previousUnwrapped) { cursorX += atlas.GetKerningAdjustment(previousUnwrapped, unicode) * scale; }
-                    Place(enriched, unwrapped, false);
+                    if (!atlas.TryGetGlyph(glyph: out var unwrapped, unicode: unicode)) { previousUnicode = null; continue; }
+                    if (previousUnicode is int previousUnwrapped) { cursorX += (atlas.GetKerningAdjustment(leftUnicode: previousUnwrapped, rightUnicode: unicode) * scale); }
+                    Place(enriched: enriched, glyph: unwrapped, splitLongWord: false);
                     previousUnicode = unicode;
                     continue;
                 }
-                if (Rune.IsWhiteSpace(enriched.Rune) && unicode is not (0xA0 or 0x202F)) {
+                if (Rune.IsWhiteSpace(value: enriched.Rune) && (unicode is not (0xA0 or 0x202F))) {
                     FlushWord();
-                    if (atlas.TryGetGlyph(unicode, out var space) && (lineHasContent || maxLineWidth is null)) {
-                        pendingSpace += space.Advance * scale + tracking;
+                    if (atlas.TryGetGlyph(glyph: out var space, unicode: unicode) && (lineHasContent || (maxLineWidth is null))) {
+                        if (previousUnicode is int beforeSpace) {
+                            pendingSpace += (atlas.GetKerningAdjustment(leftUnicode: beforeSpace, rightUnicode: unicode) * scale);
+                        }
+                        pendingSpace += ((space.Advance * scale) + tracking);
+                        previousUnicode = unicode;
+                    } else {
+                        previousUnicode = null;
                     }
                     continue;
                 }
-                if (!atlas.TryGetGlyph(unicode, out var glyph)) { wordPrevious = null; continue; }
-                if (wordPrevious is int previous) { wordAdvance += atlas.GetKerningAdjustment(previous, unicode) * scale; }
-                word.Add((enriched, glyph, wordAdvance));
+                if (!atlas.TryGetGlyph(glyph: out var glyph, unicode: unicode)) { wordPrevious = null; continue; }
+                if (wordPrevious is int previous) { wordAdvance += (atlas.GetKerningAdjustment(leftUnicode: previous, rightUnicode: unicode) * scale); }
+                (word ??= []).Add(item: (enriched, glyph, wordAdvance));
                 if (glyph.PlaneBounds is FontAtlasBounds bounds) {
-                    wordLeft = MathF.Min(wordLeft, wordAdvance + bounds.Left * scale);
-                    wordRight = MathF.Max(wordRight, wordAdvance + bounds.Right * scale);
+                    wordLeft = MathF.Min(x: wordLeft, y: (wordAdvance + (bounds.Left * scale)));
+                    wordRight = MathF.Max(x: wordRight, y: (wordAdvance + (bounds.Right * scale)));
                 }
-                wordAdvance += glyph.Advance * scale + tracking;
-                wordRight = MathF.Max(wordRight, wordAdvance - tracking);
+                wordAdvance += ((glyph.Advance * scale) + tracking);
+                wordRight = MathF.Max(x: wordRight, y: (wordAdvance - tracking));
                 wordPrevious = unicode;
             }
             FlushWord();
