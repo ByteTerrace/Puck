@@ -1600,7 +1600,12 @@ by `world.view.pick`.
   rules she "isn't sacred and would be vastly improved". Her current sculpt,
   palette, rig and bake cost carry no weight; the pack's turnaround and
   construction sheets are the standard, and the items below are parts of it.
-  The anim-bake change took her pooled bake from 464,018 to 1,145,385
+  Her remaining modeling (suit, off-suit pilot and the shared head) waits for
+  a pair session with the owner (the owner's ruling: the agent rebuild
+  "deviated a bit from our intended look on her"); no lane models her until
+  then. The suit and pilot lanes' work is kept on their branches for that
+  session, unlanded. Engine defects her rebuild surfaced (per-part bake detail,
+  blends between moving parts) proceed on their own. The anim-bake change took her pooled bake from 464,018 to 1,145,385
   triangles at parity with static detail; the rebuild sets her budget at the
   cause (base spacing, level budget) against the frame bar.
 - [medium] The Moth's boot jets are blown-out white discs with oversized bloom;
@@ -1685,7 +1690,9 @@ by `world.view.pick`.
   why a named world camera row does not replace the view.
 - [high] The swallow (`worlds/debug/birds.puck`, with its perch post and two
   world cameras) is a first draft that fails the bar and is not imported by
-  `debug.puck`. Its static sculpt reached a readable silhouette (chestnut mask
+  `debug.puck`. Its modeling joins the Moth's pair session with the owner (the
+  owner's ruling); seven agent passes did not converge, the last one against a
+  cited reference document kept unlanded on the swallow-7 lane's branch. Its static sculpt reached a readable silhouette (chestnut mask
   around the beak, teal breast band, cream belly, wings past a forked tail)
   from stacked ellipsoids and cones; its rig (a head glance and tail bob, time
   drivers) then tore the throat, faceted the eyes and fragmented the tail on
@@ -1924,8 +1931,12 @@ measured.
 
 - [high] `world.reload` is refused on the debug world: "Rebuild payload is
   21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
-  documented edit-then-reload loop does not work on the proving ground. A
-  reload should send what changed, not the whole rebuilt document.
+  documented edit-then-reload loop does not work on the proving ground. The
+  cap is `WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`,
+  and reload ships the whole composed definition. A reload should send what
+  changed (the edit-to-running bar wants that anyway), never a larger cap
+  alone. A look lane comparing two palette styles had to boot a second World
+  for each comparison because of it.
 
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):
@@ -2002,12 +2013,6 @@ document values bind by copying only the paths to their references
   from the presentation thread (`WorldLiveValues`); its memo is swapped whole,
   but the arena read itself is not synchronized with the tick.
 
-- [high] `world.reload` cannot reload the debug world: it is refused with
-  `PayloadTooLarge: Rebuild payload is 21701488 bytes; cap is 16777216`
-  (`WorldFrameCodec.MaxPayloadBytes` for `WorldSubmissionKind.Rebuild`); reload
-  ships the whole composed definition. Decide: a reload that sends what changed
-  (the edit-to-running bar wants that anyway) or a chunked rebuild; never a
-  larger cap alone. Found in the lead's verification window.
 - The boot's `System.Text.Json` JIT is the source-generated context's own
   generic instantiations (`WorldJsonSourceContext` behind `WorldJsonContext`),
   not reflection: its metadata instantiates the serializer's generics once per
