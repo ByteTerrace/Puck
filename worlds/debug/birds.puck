@@ -38,11 +38,12 @@ let swallowHeadAt = [0, 0.048, 0.023]
 // The breast: under the body's front, along its pitch (body-local [0, -0.006, 0.012]).
 let swallowBreastAt = [0, swallowBodyAt[1] + turned(swallowPitch, [0, -0.006, 0.012])[1], swallowBodyAt[2] + turned(swallowPitch, [0, -0.006, 0.012])[2]]
 
-// The plumage colours: the steel-blue back, a shade darker on the wings and tail, the gloss band, the chestnut and the
-// buff.
+// The plumage colours: the steel-blue back, the near-black blue of the flight feathers (wings and tail), the gloss band
+// and its graded edge, the chestnut and the buff.
 let swallowSteel = "#253B52"
-let swallowSteelDeep = "#1B2D42"
-let swallowGloss = "#5B82A8"
+let swallowSteelDeep = "#131D2B"
+let swallowGloss = "#44658A"
+let swallowGlossEdge = "#314B69"
 let swallowChestnut = "#943C22"
 let swallowBuff = "#D6A266"
 
@@ -53,7 +54,7 @@ let swallowBuff = "#D6A266"
 // One half of the forked tail, inset by its dilation: the inner edge runs from the fork's notch out to the streamer's
 // fine tip, the outer edge from the root straight back to it. Profile X runs out to the bird's side and Y back.
 let swallowTailRound = 0.0009
-let swallowTailProfile = [[0.003, 0.04], [0.0184, 0.112], [0.0188, 0.1116], [0.0075, -0.004], [0.0015, -0.004]]
+let swallowTailProfile = [[0.003, 0.03], [0.0135, 0.076], [0.0138, 0.0756], [0.0072, -0.004], [0.0015, -0.004]]
 
 // A profile mirrored across X, its order reversed so it still winds clockwise.
 function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
@@ -63,20 +64,20 @@ function swallowMirror(profile, sign) = (sign > 0) ? profile : map(
 
 let swallowSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 
-// One folded wing a side as the side view sees it, inset by its dilation: a shoulder buried in the body at the origin,
-// the upper edge along the back and the lower edge sweeping up to the pointed tip 11 cm behind. Profile X runs back and
+// One folded wing a side as the side view sees it, inset by its dilation: its leading edge starts behind the shoulder at the origin,
+// the upper edge along the back and the lower edge sweeping up to the pointed tip 9.5 cm behind. Profile X runs back and
 // Y up.
 let swallowWingRound = 0.0008
 let swallowWingProfile = [
-  [-0.005, -0.005], [0.006, 0.0025], [0.07, 0.0005], [0.112, -0.0026], [0.1116, -0.003], [0.075, -0.0068], [0.035, -0.0102],
-  [0.002, -0.0095]
+  [0.004, -0.006], [0.012, 0.0022], [0.06, 0.0005], [0.095, -0.0024], [0.0946, -0.0028], [0.064, -0.0064], [0.03, -0.0098],
+  [0.008, -0.0098]
 ]
 
-// The wing lies in the body's side plane (the profile's X turned to point back), rolled so its upper edge tucks over
+// The wing lies along the body's flank (the profile's X turned to point back), rolled a little so its upper edge lies over
 // the back, yawed so the tips cross behind the rump, and pitched with the body so the tips ride above the hanging tail;
 // the right wing rides a little higher, so where the tips cross it lies over the left one rather than blending into it.
 function swallowWingTurn(sign) = turnThen(
-  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * 30)), turn(swallowAxisY, sign * 5)),
+  turnThen(turnThen(turn(swallowAxisY, 90), turn(swallowAxisZ, sign * 18)), turn(swallowAxisY, sign * 5)),
   turn(swallowAxisX, (sign > 0) ? -36 : -32)
 )
 
@@ -84,9 +85,9 @@ template swallowWing(side) {
   shape Prism $"wing{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.006
+    smooth: 0.004
     material: swallowFlight
-    position [side.sign * 0.0068, 0.0355, 0.011]
+    position [side.sign * 0.0078, 0.031, 0.006]
     rotation: swallowWingTurn(side.sign)
     scale [1, 1, 0.0009]
     dilate: swallowWingRound
@@ -128,50 +129,54 @@ template swallowEyeBead(side) {
   }
 }
 
-// A leg a side: a short dark tarsus from the belly to the rail, its front toes along the rail's top and its hind toe
-// back toward the edge.
+// A leg a side under the body's centre: a short dark tarsus from the belly to the rail, two thin front toes splayed along
+// the rail's top and a hind toe reaching back over the rail's rounded pool-side edge.
+let swallowFootAt = [0.0038, 0.0011, -0.004]
+
 template swallowLeg(side) {
   shape Capsule $"leg{side.name}" {
     group: swallowBodyGroup
     material: swallowBill
-    position [side.sign * 0.0042, 0.0012, 0.004]
-    scale [0.0013, 0.02, 0.0013]
+    position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
+    scale [0.0011, 0.018, 0.0011]
   }
-  shape Capsule $"toes{side.name}" {
-    group: swallowBodyGroup
-    blend: "SmoothUnion"
-    smooth: 0.0015
-    material: swallowBill
-    position [side.sign * 0.0042, 0.0014, 0.003]
-    rotation: turn(swallowAxisX, 90)
-    scale [0.0014, 0.02, 0.0014]
+  for (splay, k) in [-14, 14] {
+    shape Capsule $"toe{side.name}{k}" {
+      group: swallowBodyGroup
+      blend: "SmoothUnion"
+      smooth: 0.001
+      material: swallowBill
+      position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
+      rotation: turnThen(turn(swallowAxisX, 90), turn(swallowAxisY, side.sign * splay))
+      scale [0.0009, 0.016, 0.0009]
+    }
   }
   shape Capsule $"hindToe{side.name}" {
     group: swallowBodyGroup
     blend: "SmoothUnion"
-    smooth: 0.0015
+    smooth: 0.001
     material: swallowBill
-    position [side.sign * 0.0042, 0.0014, 0.003]
-    rotation: turn(swallowAxisX, -90)
-    scale [0.0013, 0.012, 0.0013]
+    position [side.sign * swallowFootAt[0], swallowFootAt[1], swallowFootAt[2]]
+    rotation: turn(swallowAxisX, -100)
+    scale [0.0009, 0.012, 0.0009]
   }
 }
 
-// The white spots on a tail half's inner web, dashes along the feather painted through the blade so both faces show
-// them.
+// The white spots on a tail half's inner webs near the fork, dashes along the feathers painted through the blade so both
+// faces show them; the two halves' spots make a band across the fork.
 function swallowTailSpots(side) = [
   {
     parent: $"tail{side.name}"
     type: "Ellipsoid"
-    position [side.sign * 0.0088, 0.05, 0]
-    scale [0.0024, 0.005, 0.003]
+    position [side.sign * 0.0042, 0.018, 0]
+    scale [0.0016, 0.0032, 0.003]
     color: "#FFFFFF"
   }
   {
     parent: $"tail{side.name}"
     type: "Ellipsoid"
-    position [side.sign * 0.0122, 0.072, 0]
-    scale [0.0019, 0.0045, 0.003]
+    position [side.sign * 0.0062, 0.026, 0]
+    scale [0.0015, 0.003, 0.003]
     color: "#FFFFFF"
   }
 ]
@@ -182,26 +187,41 @@ prototypes {
       name: "swallow"
       schema: "puck.creation.v1"
       palette [
-        // The plumage of the body and head, with its markings painted on in order: the gloss band along the back and
-        // the crown, the buff underparts, then the chestnut throat and the forehead joined to the bill. What the buff
-        // and the throat leave between them across the breast is the breast band.
+        // The plumage of the body and head, held values under a soft specular, with its markings painted on in order:
+        // the gloss band along the back and the crown (a wide edge value under a narrower core, so the band grades), the
+        // buff underparts, then the chestnut throat and the forehead blaze joined to the bill. What the buff and the
+        // throat leave between them across the breast is the breast band.
         {
           color: swallowSteel
-          specular: 0.05
-          roughness: 0.5
+          specular: 0.02
+          roughness: 0.75
           paints [
             {
               parent: "body"
               type: "Ellipsoid"
+              position [0, 0.0165, 0.002]
+              scale [0.0048, 0.006, 0.032]
+              color: swallowGlossEdge
+            }
+            {
+              parent: "body"
+              type: "Ellipsoid"
               position [0, 0.0175, 0.004]
-              scale [0.0022, 0.0035, 0.026]
+              scale [0.0026, 0.0045, 0.025]
               color: swallowGloss
             }
             {
               parent: "head"
               type: "Ellipsoid"
+              position [0, 0.009, -0.001]
+              scale [0.0038, 0.003, 0.007]
+              color: swallowGlossEdge
+            }
+            {
+              parent: "head"
+              type: "Ellipsoid"
               position [0, 0.0095, -0.001]
-              scale [0.0018, 0.0022, 0.005]
+              scale [0.002, 0.0022, 0.005]
               color: swallowGloss
             }
             {
@@ -214,26 +234,26 @@ prototypes {
             {
               parent: "head"
               type: "Ellipsoid"
-              position [0, -0.0088, 0.0068]
-              scale [0.0062, 0.0078, 0.008]
+              position [0, -0.0098, 0.0068]
+              scale [0.0062, 0.0076, 0.008]
               color: swallowChestnut
             }
             {
               parent: "head"
               type: "Ellipsoid"
-              position [0, 0.0003, 0.0098]
-              scale [0.0042, 0.0028, 0.0032]
+              position [0, -0.0004, 0.0096]
+              scale [0.0048, 0.0028, 0.0042]
               color: swallowChestnut
             }
           ]
         }
-        // The wings, a shade deeper than the back.
-        { color: swallowSteelDeep, specular: 0.05, roughness: 0.5 }
+        // The wings' flight feathers, near black against the back.
+        { color: swallowSteelDeep, specular: 0.02, roughness: 0.75 }
         // The tail, as the wings, with its white spots.
         {
           color: swallowSteelDeep
-          specular: 0.05
-          roughness: 0.5
+          specular: 0.02
+          roughness: 0.75
           paints: concat(swallowTailSpots(swallowSides[0]), swallowTailSpots(swallowSides[1]))
         }
         // The eyes: near black under a clear coat that holds a small highlight.
@@ -250,7 +270,7 @@ prototypes {
         material: swallowPlumage
         position: swallowBodyAt
         rotation: swallowPitch
-        scale [0.0116, 0.0155, 0.041]
+        scale [0.0105, 0.0155, 0.041]
         exponent: 2.2
       }
       shape Superellipsoid "breast" {
@@ -260,26 +280,33 @@ prototypes {
         material: swallowPlumage
         position: swallowBreastAt
         rotation: swallowPitch
-        scale [0.0112, 0.0135, 0.016]
+        scale [0.0118, 0.0135, 0.016]
         exponent: 2.2
       }
-      // The head: a small, slightly flattened crown on the body's upper end, blended wide into the neck.
+      // The head: a small, slightly flattened crown on the body's upper end, narrower than the chest below it.
       shape Superellipsoid "head" {
         group: swallowHeadGroup
         blend: "SmoothUnion"
-        smooth: 0.006
+        smooth: 0.007
         material: swallowPlumage
         position: swallowHeadAt
-        scale [0.0095, 0.0092, 0.0108]
+        scale [0.0088, 0.0088, 0.0105]
         exponent: 2.2
       }
-      // The bill: a short dark cone pointing forward and a little down.
-      shape Cone "bill" {
+      // The bill: a small flat dark wedge, wider than it is tall, pointing forward and a little down between the forehead
+      // blaze and the throat.
+      shape Prism "bill" {
         group: swallowHeadGroup
         material: swallowBill
-        position [0, swallowHeadAt[1] - 0.002, swallowHeadAt[2] + 0.013]
+        position [0, swallowHeadAt[1] - 0.0022, swallowHeadAt[2] + 0.0085]
         rotation: turn(swallowAxisX, 98)
-        scale [0.003, 0.0048, 0.003]
+        scale [1, 1, 0.0014]
+        dilate: 0.0004
+        profile {
+          kind: "Convex"
+          vertices [[-0.0034, 0], [0, 0.0072], [0.0034, 0]]
+          cornerRadius: 0.05
+        }
       }
       for side in swallowSides {
         swallowEyeBead(side: side)
@@ -292,9 +319,9 @@ prototypes {
 }
 
 // On the reservoir pavilion's west rail (water-scenery.puck's `reservoir-pavilion`, its top at 1.22 m and its pool-side
-// edge at x -45.92), the feet 4 cm in from the edge where its rounded top flattens, facing east along the path, the tail
-// hanging over the pool.
-let swallowPerch = [-45.878, 1.22, -14.5]
+// edge at x -45.92), the feet where its rounded top flattens with the hind toes over the curve, facing east along the
+// path, the tail hanging over the pool.
+let swallowPerch = [-45.882, 1.22, -14.5]
 
 placements {
   placement "swallow" {
