@@ -1600,19 +1600,17 @@ by `world.view.pick`.
   rules she "isn't sacred and would be vastly improved"; her sculpt, palette,
   rig and bake cost carry no weight, and the guide's
   [look intent](../../worlds/debug/avatars/moth.md#look-intent) names the
-  traits. The first pass rebuilt what the chase camera reads most: the flight
-  pack is the `flightPod` template (five stepped plates on a core, one union
-  group a side, in place of forty-five clipped shapes and eight groups a
-  side), flush to her back; the shoulder slabs, gauntlets and chest slab are
-  flat-faced plates at the sheet's sizes, with lavender flank plates under the
-  arms; the spine is one prism. Judged on Direct3D 12 by day from the front,
-  right, back, three-quarter above and the chase camera; the pods were then
-  enlarged to the sheet's width, the shoulder stack lowered to her chin and
-  the ear discs stood proud of the hood, unverified by a capture. Still to
-  meet: the hip guards, knee guards and boots keep the old pillowy exponent;
-  the face is flat in profile; and no capture yet judges the off-suit form,
-  the hover and walk bursts, dusk and night, the three-quarter below, or a
-  Vulkan set. The owner's walkthrough also found
+  traits. Built in documents and judged on the CPU preview
+  (`puck mesh preview`) from every side: the flight pack (`flightPod`) is two
+  shingled shields at sheet 01's size, the shoulder slabs, gauntlets and chest
+  slab are flat-faced plates, the greaves flat-faced, the knee guards
+  octagonal chamfered slabs, and the nose bakes in the face's group. The
+  shoulder stack lowered to her chin, the ear discs stood proud and all of the
+  above wait on a windowed capture: by day from every side and at the chase
+  camera, the off-suit form, the hover and walk bursts, dusk and night, and a
+  Vulkan set. The shoulder slabs still read soft in profile (exponent-6
+  superellipsoids under a quadratic shear), and the boots' heel housings,
+  ankle hubs and cheeks are the old construction. The owner's walkthrough also found
   nothing separating her from the background (no rim light or outline) and no
   readable shadow under a hovering Moth: both are treatment and lighting
   questions the toon lane's defaults and the night item decide, not her
@@ -1648,14 +1646,17 @@ by `world.view.pick`.
   box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
   one factor) would let one rule serve both; the static path also lacks the round
   section term, so its small spheres facet at 15 mm.
-- [medium] The Moth's pooled bake is 916,712 triangles (levels 304,330 and
-  176,740) over 161 groups
+- [medium] The Moth's pooled bake is 899,445 triangles (levels 276,545 and
+  152,939) over 156 groups
   (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`),
   down from 1,145,385 when blend groups first took the static union's lattice.
-  What remains is small round sections driving fine cells: the face, eyes and
-  nose (about 140,000 triangles at 0.5 to 3.4 mm, right for a portrait and
-  waste at the chase camera), the heel housings (29,000 each at 3.8 mm), the
-  ankle hubs and the bracers. Measure her frame cost on the bar devices; if it
+  What remains is small parts baking on fine lattices: the eyes (25,800 each
+  at 1.2 mm), the bracers (30,900 each at 5.5 mm), the heel housings (29,400
+  each at 3.8 mm) and the ankle hubs (21,000 each at 2.5 mm). The cause is
+  unnamed: `WorldCreationInstances.PartDetail` declares no detail for a
+  cylinder and `SdfMeshPathBake.Lattice` keeps a final lattice at
+  `MinimumCell` (15 mm) or coarser, yet the cylinder groups refine to 2.5 to
+  3.8 mm. Measure her frame cost on the bar devices; if it
   misses the bar, coarsen at the cause (the union's base spacing for a body, or
   the level budget), never by returning blend groups to the 15 mm floor.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure

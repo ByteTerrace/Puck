@@ -28,8 +28,8 @@ side and at the chase camera:
   a plate is a superellipsoid of exponent 4 to 6 or a chamfered prism, never
   the body's exponent 2.1.
 - **The back is a flight pack flush to her back**, two pods beside a narrow
-  spine, each a stack of five stepped plates (lavender, ivory, lavender with a
-  grey inset, ivory, the long lavender skirt) with one recessed nozzle under the
+  spine, each a stack of five shingled plates (a lavender cap with its dark
+  opening, ivory, lavender, ivory with a grey inset, the long lavender skirt) with one recessed nozzle under the
   skirt's lip, the hanger under the hood behind the shoulder slabs and the lip
   at the upper pelvis. A pod deeper than it is wide, or hanging to the thighs,
   reads as a beach ball and fails.
@@ -217,9 +217,9 @@ side panels are fitted geometry. Detail that is colour rather than form is paint
 (`palette[].paints`), drawn crisp at the pixel and absent from the bake:
 the hood's ivory trim, the chest slab's lavender centre, the shoulder slabs'
 ivory bands, the gauntlets' lavender inner halves, the vent slot pairs on the
-outer faces of the gauntlets and shin panels, the boot seams, the mouth, the
-pods' plates, and the upper lids and lashes where their tubes cross the eye
-whites. The near-ellipsoidal forms use
+outer faces of the gauntlets and shin panels, the boot seams, the mouth and
+nostrils, the eyes' catchlights, the grey insets on the pods' lower bands, and
+the upper lids and lashes where their tubes cross the eye whites. The near-ellipsoidal forms use
 exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
 the rebuilt world was verified at `stepScale 1`.
 
@@ -234,13 +234,14 @@ Her head is the [`moth-head`](moth-head.puck) library's `mothHead` template,
 placed by `headAt` and scaled by `headScale` (0.7, about 0.27 m crown to chin)
 about the face's front at eye level. The template scales every position, extent,
 curve, sweep radius and blend radius, and takes the creation's palette slots, so
-the off-suit pilot ([moth-pilot.md](moth-pilot.md)) wears it at the same scale. The mouth and lid paints and the
+the off-suit pilot ([moth-pilot.md](moth-pilot.md)) wears it at the same scale. The mouth, nostril, catchlight and lid paints and the
 blink frame (`blinkPose`) live in the creation and scale by the same
 `headScale`. Her face sits forward at the hood's rim, in the key light, with the
 skin's wrap and warm fill raised so it reads lit inside the hood. The face is
-the character's charm, after sheet 03: a small soft nose (a gentle bridge in the
-face's group and a rounded tip with two wings in a group of their own, so it
-bakes on a lattice its own size rather than the face's 13 mm cells), almond eyes
+the character's charm, after sheet 03: a small soft nose (a gentle bridge and a
+rounded tip blended into the face's group, so it bakes as one surface with the
+face; a group of its own baked it on a sub-millimetre lattice into a frayed
+shell), almond eyes
 in softly rounded sockets, swept brows and a painted smile. Her black hair is a
 scalp cut to a soft hairline and four tapering locks smoothly joined to it: a
 thick fringe swept from the parting on her left across her forehead to her right
@@ -260,9 +261,13 @@ belt; the ochre collar stands above it at the neck. A lavender plate
 (`pelvicShield`) narrows below the belt. The slab and flanks inherit the
 torso's breathing and lean; the belt and pelvic plate inherit the pelvis. The
 flight pack is the `flightPod` template, once a side: a charcoal core riding
-the torso, five stepped plates and the nozzle parented to it in one union
-group, and its hinge on the torso under the hood; the narrow spine between the
-pods is one chamfered prism.
+the torso, five plates and the nozzle parented to it in one union group, and
+its hinge on the torso under the hood; the narrow spine between the pods is one
+chamfered prism. Each pod is a shield 0.24 m wide from 1.0 to 1.6 m: a domed
+cap with its opening cut into its back, three flat-faced chamfered bands whose
+tops tip 14 degrees in toward her back so each lower edge stands proud over the
+plate below, and the skirt, whose lip tapers to a tip on the outer side over the
+nozzle, set square in its lower edge and aimed in, down and a little back.
 
 Each shoulder is a stack of two thick slabs on a charcoal superellipsoid pivot,
 all riding the upper arm: flat-faced, round-edged superellipsoids (exponent 4)
@@ -287,8 +292,9 @@ the gauntlet's top, inside the bend; the knee's converge behind the knee from
 lugs on the thigh and the greave's top.
 
 The greaves flare straight from a narrow top under the knee to a wide foot,
-under an ivory knee guard that rides the thigh and stands proud of the greave's
-lavender front. The boots are their own lavender blocks under the greave's
+flat-faced (exponent 4.5, which their arch, back-band and side-panel shells
+share), under an octagonal chamfered ivory knee guard that rides the thigh and
+stands proud of the greave's lavender front. The boots are their own lavender blocks under the greave's
 ivory cuff: fitted ivory ankle arches, broad lavender insteps and toe caps on
 thick charcoal soles, and split heel pads. Each recessed heel jet points 55 degrees below rearward horizontal in the
 boot's rest frame; its lens and exhaust share that axis. The cyan lens and pale
@@ -327,9 +333,8 @@ rules and damped state responses provide takeoff and landing transitions. Each
 pod deploys approximately six degrees outward and four degrees aft. No extra
 fan blades deploy. Four bounded `flow` volumes supply animated translucent
 exhaust: two back pods use lane 1 and two heels use lane 3. Each pod's plume
-leaves its nozzle 55 degrees back from straight down and narrows to two and a
-half times its mouth, so in a straight-legged hover it passes behind the
-greaves rather than over the upper shins, as sheet 10 draws it. The pods' lens emission
+leaves its nozzle along the nozzle's axis and widens to two and a half times its
+mouth over 0.36 m, short, as sheet 10 draws it. The pods' lens emission
 uses flight-mode lane 2; the boot pilot lights are independent of that lane.
 Lane expressions use keyed state syntax, unlike the
 drivers' `state.airPose.$body` binding. Collision and movement controls remain
