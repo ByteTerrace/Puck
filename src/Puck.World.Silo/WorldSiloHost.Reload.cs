@@ -133,7 +133,8 @@ public sealed partial class WorldSiloHost {
                             correlation = row.Link.SubmitEnvelope(
                                 payload: new WorldSubmissionPayload.Rebuild(Value: new(
                                     ContentHash: hash,
-                                    Definition: definition,
+                                    Definition: null,
+                                    Delta: WorldReloadDelta.Create(row.Server.Definition, row.Server.DocumentVersion, definition),
                                     Force: false,
                                     Kind: WorldRebuildKind.Reload,
                                     Origin: origin.Store

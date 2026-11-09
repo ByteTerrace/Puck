@@ -23,6 +23,18 @@ public sealed partial class WorldDocument {
 
         string? preparationFailure = null;
 
+        // Only this authority reconstructs the wire delta. The candidate still crosses the ordinary neighbour,
+        // local validation and install doors. Keep its pins until ApplyRebuild rechecks the base after queuing.
+        if (request.Delta is { } delta) {
+            if (!principal.IsAuthority) {
+                preparationFailure = "world.reload requires the operator";
+            } else if (delta.TryPrepare(m_definition, Host.DocumentVersion, out var candidate, out var deltaReason)) {
+                request = request with { Definition = candidate };
+            } else {
+                preparationFailure = deltaReason;
+            }
+        }
+
         // A carried document is available at submission time, outside Step. Prove its neighbour claims here and carry
         // any refusal into the ordered tick-boundary decision; ApplyRebuild repeats only document-local checks.
         var rebuildNeighbours = ((request.Origin is WorldRebuildOrigin.File { Path: var candidatePath })
@@ -31,7 +43,7 @@ public sealed partial class WorldDocument {
         );
 
         if (
-            (request.Definition is { } supplied) &&
+            (preparationFailure is null) && (request.Definition is { } supplied) &&
             !WorldDefinitionValidator.TryValidate(
             definition: supplied,
             neighbours: rebuildNeighbours,
