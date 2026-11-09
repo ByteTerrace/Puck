@@ -106,7 +106,7 @@ float sdfMaterialShadowDemand(int material) {
     // light where the pixel's own normal does not, and an unqueried slot decodes as fully visible, which would light a
     // line of full key light along every edge and terminator.
     float toonMode = asfloat(sdfWords[materialBase + 22u]).x;
-    if ((toonMode > 0.0) || ((toonMode == 0.0) && (passGroup.toonBands.x > 0.0))) demand = -1.0;
+    if ((passGroup.toonBands.x >= 0.0) && ((toonMode > 0.0) || ((toonMode == 0.0) && (passGroup.toonBands.x > 0.0)))) demand = -1.0;
     return demand;
 }
 #endif

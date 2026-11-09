@@ -406,7 +406,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.toon",
-            description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            description: $"Cel shading, live: {WorldToonForms.Spelling}. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with. Off turns every style off, a material's own included, so one view compares continuous against cel; on restores each material's own style beside the default. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
             forms: WorldToonForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}{(settings.ToonStyled ? string.Empty : " (render.toon authors no complete style, so this world's default stays continuous)")}]");

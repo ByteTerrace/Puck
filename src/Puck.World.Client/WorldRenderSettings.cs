@@ -170,8 +170,8 @@ public sealed partial class WorldRenderSettings {
     /// one. The world's own views include every layout slot that names a camera; the camera views screens film and session
     /// views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
-    /// <summary>The live choice of the world's default cel style; until written it follows the document on reload. A
-    /// material with a style of its own keeps it either way.</summary>
+    /// <summary>The live choice of the world's default cel style; until written it follows the document on reload. Off
+    /// as written also turns off every material's own style (<see cref="Puck.SignedDistance.SdfToon.Suppressed"/>).</summary>
     public bool Toon { get => m_toonOverride ?? m_toonDefault; set { m_toonOverride = value; m_revision++; } }
     /// <summary>Whether the world authors a complete default style (<c>render.toon</c> with every value), which
     /// <see cref="Toon"/> switches; without one the world's default stays continuous whatever the lever says.</summary>

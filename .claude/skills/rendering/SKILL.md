@@ -592,7 +592,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   of the viewing distance and a crease two opposite neighbours turned apart, so
   a raised plate's edge draws none; ink at a plate or paint boundary is those
   measures', not the style's. Keep screen pictures, portal pictures, sky and
-  self-emission out of both the banding and ink. Nested worlds take the live enable override
+  self-emission out of both the banding and ink. `world.toon off` suppresses
+  every style, a material's own too (`SdfToon.Suppressed`, pass-block mode −1,
+  read by `sdfToonSuppressed`), so a continuous/cel pair is one World. Nested worlds take the live enable override
   but retain their own document styles. The tuning belongs to the lighting
   cadence signature, never the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its

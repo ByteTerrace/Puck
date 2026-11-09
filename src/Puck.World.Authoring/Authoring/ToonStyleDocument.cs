@@ -57,10 +57,11 @@ public sealed record ToonStyleDocument(
     /// <param name="toon">The document's <c>render.toon</c>, or <see langword="null"/> when the world authors none.</param>
     /// <param name="enabled">The session override, or <see langword="null"/> to follow the document.</param>
     /// <returns>The world's default style: on when the override or the document turns it on and the document authors
-    /// every value, and otherwise off, the default <see cref="SdfToon"/> when the world authors none.</returns>
+    /// every value, and otherwise off, the default <see cref="SdfToon"/> when the world authors none; an override of
+    /// false also suppresses every material's own style (<see cref="SdfToon.Suppressed"/>).</returns>
     public static SdfToon ResolveDefault(ToonStyleDocument? toon, bool? enabled = null) => ((toon is null)
-        ? default
-        : (toon.ToToon() with { Enabled = ((enabled ?? toon.IsOn) && toon.IsComplete) }));
+        ? new SdfToon { Suppressed = (enabled == false) }
+        : (toon.ToToon() with { Enabled = ((enabled ?? toon.IsOn) && toon.IsComplete), Suppressed = (enabled == false) }));
     /// <summary>Lists the style's values a document refuses, each named under <paramref name="path"/>: a value outside its
     /// range, and, for a style that bands, a value it leaves out.</summary>
     /// <param name="path">The style's document path, such as <c>render.toon</c>.</param>

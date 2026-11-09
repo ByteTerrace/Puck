@@ -35,8 +35,10 @@ struct SdfToonStyle {
     float open;
 };
 
-// The style a material shades with: its own when it authors one, else the world's default, as authored. A pixel that
+// The style a material shades with: its own when it authors one, else the world's default, as authored; none while the
+// world's default is suppressed (its mode minus one, the live world.toon off), which turns every style off. A pixel that
 // shades with it reads its form first (sdfToonResolve).
+bool sdfToonSuppressed() { return passGroup.toonBands.x < 0.0; }
 SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     SdfToonStyle style;
     bool own = (material.toonBands.x != 0.0);
@@ -45,7 +47,7 @@ SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     style.shadow = (own ? material.toonShadow : passGroup.toonShadow);
     style.outline = (own ? material.toonOutline : passGroup.toonOutline);
     style.ink = (own ? material.toonInk : passGroup.toonInk.rgb);
-    style.bands.x = max(style.bands.x, 0.0);
+    style.bands.x = (sdfToonSuppressed() ? 0.0 : max(style.bands.x, 0.0));
     style.outline.x *= passGroup.toonInk.w;
     style.shadowStep = float2(1.0, 1.0);
     style.normal = float3(0.0, 0.0, 0.0);

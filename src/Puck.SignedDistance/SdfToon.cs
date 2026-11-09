@@ -45,10 +45,15 @@ public readonly record struct SdfToon {
     public Vector3 OutlineTint { get; init; }
     /// <summary>How the band treats a light's shadow visibility.</summary>
     public SdfToonBand Band { get; init; }
+    /// <summary>Whether a world's default style also turns off every material's own style, so the whole view shades
+    /// continuously: the live <c>world.toon off</c>, which compares continuous against cel in one view. Only a world's
+    /// default reads it; a material's own style ignores it.</summary>
+    public bool Suppressed { get; init; }
 
-    /// <summary>Gets the style's mode word as the kernels read it (<c>shade/sdf-toon.hlsli</c>): zero when disabled,
-    /// one for <see cref="SdfToonBand.Visibility"/>, two for <see cref="SdfToonBand.Combined"/>.</summary>
-    public float Mode => (Enabled ? ((Band == SdfToonBand.Combined) ? 2f : 1f) : 0f);
+    /// <summary>Gets the style's mode word as the kernels read it (<c>shade/sdf-toon.hlsli</c>): minus one for a world
+    /// default that is <see cref="Suppressed"/>, zero when disabled, one for <see cref="SdfToonBand.Visibility"/>, two for
+    /// <see cref="SdfToonBand.Combined"/>.</summary>
+    public float Mode => (Suppressed ? -1f : (Enabled ? ((Band == SdfToonBand.Combined) ? 2f : 1f) : 0f));
 
     /// <summary>Writes the style's four kernel rows, laid out as the pass block's toon members and a material's rows 22
     /// to 25: bands (mode, threshold, softness, form radius), shadow (tint, zero), outline (width, halving distance,

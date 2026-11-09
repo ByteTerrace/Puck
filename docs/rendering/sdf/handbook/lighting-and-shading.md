@@ -570,9 +570,12 @@ Plain|Cel` swaps her between continuous shading and the standard's
 
 `world.toon on|off|toggle` is the live lever over the world's default style.
 With no argument it echoes the choice. It uses the same render-section grant and
-session-lever delivery as `world.ao`, and contributes no simulation state. A
-material with a style of its own keeps it whichever way the lever is set. The
-default starts on when `render.toon` is present and not `enabled: false`. A
+session-lever delivery as `world.ao`, and contributes no simulation state.
+`off` turns every style off, a material's own included (`SdfToon.Suppressed`,
+the pass block's mode of minus one), so one view compares continuous against
+cel; `on` bands with the default and every material's own style as authored. A
+document whose `render.toon` says `enabled: false` boots its default off but
+keeps materials' own styles. The default starts on when `render.toon` is present and not `enabled: false`. A
 world that authors no `render.toon`, or one without every value, has no default
 style for the lever to switch on. Until
 the live lever is used, reload follows the document default; afterwards the
