@@ -1647,16 +1647,32 @@ by `world.view.pick`.
   north-east corner (`view.override camera look 8.8 1.6 33.5 1.4 0.9 28`). It
   goes with `world.shadows off`, so it is the cascades' test at the
   wall-roof junction, not the probes.
-- [high] Lit interiors show the irradiance volume's artifacts at noon, the
-  same on Direct3D 12 and Vulkan. Down level 1's hall
-  (`view.override camera look 19 6.4 22 40 5.2 22`), dark spiky streaks fan
-  across the far ceiling, a bright smear runs along the south wall over the
-  PRIMITIVES row, and the floor is blotched. On the stairwell's treads, dark
-  wavy stains cross the steps. The lobby and the painting wing take a strong
-  green cast with soft-edged patches (the sunlit lawn through the entrance,
-  the garden painting's light in the wing). Attribute each with
-  `world.debug-view indirect` and `world.probe` against the corner and boundary
-  checks in the mesh-GI reference before changing light values.
+- [high] Lit interiors still show two of the irradiance volume's artifacts at
+  noon. Level 1's far-ceiling streaks, its south-wall smear and the stairwell's
+  green tint were the storey level answering past a camera-centred finest
+  window and are gone with the window ahead of the view
+  (`SdfMeshIrradiance.WindowAnchor`). What remains: faint wavy stains on the
+  stairwell's treads (`view.override camera look 12.6 3.8 39.3 13 4.9 35`) and
+  the floors' row blotches under the strips, which are the emitter sampling
+  item in the [Lighting and GI](#lighting-and-gi) packet; read `world.probe` on
+  a stain before attributing it.
+- [high] The debug world's whites take a yellow-green cast at noon because of
+  what it authors, not the volume (`world.probe`'s `indirect-sky` and
+  `indirect-bounce` at the gi-corner's back wall read 1.6, 2.6, 3.5 and 6881,
+  7640, 3739 nits; at its shaded outer face 387, 613, 831 and 9297, 10301, 5364,
+  with the GPU relight within 0.2% of the CPU reference). The caldera's sunlit
+  walls (`valley-<sector>`, 300 to 430 m high at 215 to 300 m, so a probe on
+  the floor sees the sky over about a sixth of its directions) and the lawn
+  (`lawnTurf` `#6C8A33`, about twice a real lawn's visible reflectance, its
+  blue a tenth of its green) outshine the clear-day sky (`dayCycle`, 10,000
+  nits with a 1,000-nit zenith, about half a real clear sky's diffuse light)
+  fifteen to one on a shaded wall. The devices room is teal walls
+  (`wonderWall` `#6FA6A8`) over a beige floor under warm strips, which bounces
+  green. A look call for the lead: darker, less saturated turf, a brighter day
+  sky, or both (in a CPU harness of a white wall on a lawn, turf `#4F6B2E` with
+  an 18,000-nit sky moved the wall from mint to a cool sky tint), judged with
+  `world.toon` both off and on, since the cel default tints the indirect light
+  by its shadow band.
 - [low] `world.indirect off` leaves auto exposure metering the probes (view 0
   read 15.272 nits before and after the toggle) while the frame turns white at
   EV 4.5 in the devices room: the lever's fallback ambient lights an interior
