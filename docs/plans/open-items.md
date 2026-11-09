@@ -1603,6 +1603,16 @@ by `world.view.pick`.
   north-east corner (`view.override camera look 8.8 1.6 33.5 1.4 0.9 28`). It
   goes with `world.shadows off`, so it is the cascades' test at the
   wall-roof junction, not the probes.
+- [high] Lit interiors show the irradiance volume's artifacts at noon, the
+  same on Direct3D 12 and Vulkan. Down level 1's hall
+  (`view.override camera look 19 6.4 22 40 5.2 22`), dark spiky streaks fan
+  across the far ceiling, a bright smear runs along the south wall over the
+  PRIMITIVES row, and the floor is blotched. On the stairwell's treads, dark
+  wavy stains cross the steps. The lobby and the painting wing take a strong
+  green cast with soft-edged patches (the sunlit lawn through the entrance,
+  the garden painting's light in the wing). Attribute each with
+  `world.debug-view indirect` and `world.probe` against the corner and boundary
+  checks in the mesh-GI reference before changing light values.
 - [low] `world.indirect off` leaves auto exposure metering the probes (view 0
   read 15.272 nits before and after the toggle) while the frame turns white at
   EV 4.5 in the devices room: the lever's fallback ambient lights an interior
