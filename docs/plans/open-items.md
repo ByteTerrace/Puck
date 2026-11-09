@@ -104,23 +104,51 @@ milestone. The owner requested its baseline and implementation plan, which
      long after arrival. A per-light visibility the probe shares across its
      texels, or culling lights by each hit's distance before the trace, would
      cut it at the cause.
-   - The frame thread is CPU-bound at both stops: sampled thread time finds it
-     running almost the whole of every iteration. The tick (`WorldTick.StepCore`:
-     `WorldPopulation.AdvanceSimulated`, `WorldRuleHost.EvaluateWorldRules`,
-     `WorldTick.EmitSnapshot`) runs on the frame thread (`HostLoop.Run`) and takes
-     the largest share; then the frame's capture (`SdfWorldResidency.Capture`:
-     `WorldFramePresenter.CaptureFrame`, and `SdfCompositionFrameSource.PackTransforms`
-     through `WorldCreationInstances.PackRegistration`), table packing and screen
-     binding (`SdfWorldResidency.PrepareOnce`), and the upload's fence wait
-     (`SdfWorldTables.SubmitUpload`). Zero-fill and copies are a visible slice:
-     `HashSet<int>.Clear` in `WorldDeliveryRows.Advance`,
-     `WorldBody.CaptureIntegrationResidue` (beside the scoped replay's
-     `WorldScopedReplayRuntime.AfterTick`, whose `WorldPopulation.AppendContinuationHash`
-     encodes each scope body's checkpoint every tick the scope runs) and
-     `WorldInputOwner.TryAdmit`. Garbage collection
-     was not a factor in the traced windows. Rated work still lands on frames
-     without a step, so both kinds of frame sit near the budget and any jitter
-     misses it.
+   - The frame thread's CPU work at both stops, read with `dotnet-trace` sampled
+     thread time, largest first:
+     - The tick runs on the frame thread (`HostLoop.Run` through
+       `FixedStepPump.Step`), so a frame that steps carries a whole tick: the
+       rules (`RuleEvaluator.EvaluateDue`), the bodies (`WorldPopulation.AdvanceSimulated`:
+       `WorldBody.ResolveProgramContacts`, the refusal snapshot), snapshot delivery
+       (`WorldTick.EmitSnapshot`), and the session instances
+       (`WorldInstanceHost.StepInstances`). Its full scans: `WorldRuleHost.DeriveFacts`
+       visits every population slot and `WorldDisclosureImages.Current` every
+       authored row on each pass. The scoped replay's
+       `WorldScopedReplayRuntime.AfterTick` encodes each scope body's checkpoint
+       every tick the scope runs (`WorldPopulation.AppendContinuationHash`). The
+       move off the frame thread is the presentation view's last cut
+       ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+     - The creations' effector surface probes (`WorldCreationInstances.ApplyEffectors`):
+       a probe whose inputs moved marches again (`WorldSurfaceQuery.Covers`
+       reuses bit-identical inputs only), and two thirds of its cost is the hit's
+       gradient, six exact walks (`SdfFieldEvaluator.TryFieldGradient`). A
+       four-tap tetrahedral difference, the GPU interpreter's form, would cut
+       every gradient consumer by a third; it moves contact normals, so it is a
+       measured change of the deterministic query, not a probe-local one.
+     - Mesh draw staging (`SdfWorldTables.StageChangedDraws`, through
+       `SdfWorldTables.StageMeshDraw`) and dressing (`SdfMeshDresser.Dress`),
+       already proportional to the draws that changed (`sdf.instances`'
+       `records.changed` is almost all of `records.compared`). What changes is
+       the posing the rates allow: a creation may hold only while no camera's
+       frustum and no cascade keeps its sphere (`WorldCreationInstances.Shown`),
+       and occlusion is not consulted, so at flight B, a view inside the
+       stairwell, the motion gallery's exhibits pose every frame (`world.rates`
+       lists them at 60 Hz); whether the stairwell hides them is for
+       `world.view.pick` to confirm. The mesh pass's occlusion result, which
+       `SdfPortalSight` already reads for session views, is the evidence that
+       would let them hold.
+     - View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
+       binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
+       `WorldScreenBinder.TryRippleOf`), each frame for every screen.
+     - The upload's fence wait (`SdfWorldTables.SubmitUpload` waits the previous
+       upload, `SdfWorldTables.FrameRingSize` slots) is GPU back-pressure, not
+       CPU work: it counts in `produce-fence`.
+
+     A zero-fill or copy share under a native call (`SpanHelpers.ZeroMemoryNative`,
+     `MemmoveNative`) can be the sampler's safe-point skid; read the caller's
+     loop and its counts before cutting one. Garbage collection was not a factor
+     in the traced windows. Rated work still lands on frames without a step, so
+     both kinds of frame sit near the budget and any jitter misses it.
 
    `views` now leads the root view at every stop
    (3.0 to 5.0 ms, of which the probe gather is 1.1 to 1.3 ms by `world.indirect

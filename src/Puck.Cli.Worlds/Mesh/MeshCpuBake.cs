@@ -29,6 +29,25 @@ public static class MeshCpuBake {
 
     private static readonly Vector3[] Taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
+    /// <summary>Bakes the groups of a rest scene whose field the evaluator reads; a group it refuses is left out.</summary>
+    /// <param name="scene">The rest scene the groups were planned from.</param>
+    /// <param name="farDistance">The far distance the world renders to.</param>
+    /// <param name="groups">The groups to bake.</param>
+    /// <returns>Each baked group's mesh by its selector; a group with no surface is absent.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="groups"/> is
+    /// <see langword="null"/>.</exception>
+    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups) {
+        ArgumentNullException.ThrowIfNull(argument: scene);
+        ArgumentNullException.ThrowIfNull(argument: groups);
+
+        return Bake(
+            fields: groups
+                .Select(selector: group => (Group: group, Field: SdfMeshAudit.Field(group: group, program: scene.Program)))
+                .Where(predicate: static entry => SdfMeshAudit.TryEvaluator(field: out _, program: entry.Field, refusal: out _))
+                .ToDictionary(keySelector: static entry => entry.Group.Selector, elementSelector: static entry => entry.Field),
+            frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance }
+        );
+    }
     /// <summary>Bakes the selected groups of a program.</summary>
     /// <param name="frame">The frame the bake takes its program, transforms and far distance from.</param>
     /// <param name="fields">Each selected group's selector and its field (<see cref="SdfMeshAudit.Field"/>).</param>

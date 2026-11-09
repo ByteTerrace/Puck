@@ -11,7 +11,8 @@ public readonly record struct WorldInputPublication(Principal Owner, int Body, i
     /// <summary>Discloses continuation only to its admitted owner, without allocating on steady delivery.</summary>
     public static ReadOnlyMemory<WorldInputPublication> ForOwner(ReadOnlyMemory<WorldInputPublication> publications, Principal owner,
         ref WorldInputPublication[] scratch) {
-        foreach (var publication in publications.Span) {
+        // By reference: a publication carries a whole baseline image, and the scan visits every owner's.
+        foreach (ref readonly var publication in publications.Span) {
             if (publication.Owner != owner) { continue; }
             if (scratch.Length == 0) { scratch = new WorldInputPublication[1]; }
             scratch[0] = publication;

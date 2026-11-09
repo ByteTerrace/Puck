@@ -139,6 +139,39 @@ public static class BitmapFont {
     /// <returns><see langword="true"/> when the pixel is set.</returns>
     public static bool IsSet(ReadOnlySpan<byte> glyph, int column, int row) =>
         (((glyph[row] >> column) & 1) != 0);
+    /// <summary>Draws text into an opaque RGBA8 image, one glyph cell <see cref="GlyphSize"/> times <paramref name="scale"/>
+    /// pixels wide from the last, each set glyph pixel a solid block; pixels outside the image are skipped.</summary>
+    /// <param name="rgba">The image's bytes, four a pixel, rows from the top, <paramref name="width"/> pixels a row.</param>
+    /// <param name="width">The image's width, in pixels.</param>
+    /// <param name="height">The image's height, in pixels.</param>
+    /// <param name="text">The text, one line.</param>
+    /// <param name="left">The text's left edge, in pixels.</param>
+    /// <param name="top">The text's top edge, in pixels.</param>
+    /// <param name="scale">The integer glyph scale, at least one.</param>
+    /// <param name="color">The four bytes written to each set pixel.</param>
+    public static void Draw(Span<byte> rgba, int width, int height, ReadOnlySpan<char> text, int left, int top, int scale, ReadOnlySpan<byte> color) {
+        var advance = (GlyphSize * scale);
+
+        for (var index = 0; (index < text.Length); index++) {
+            var glyph = Glyph(value: text[index]);
+
+            for (var gy = 0; (gy < GlyphSize); gy++) {
+                for (var gx = 0; (gx < GlyphSize); gx++) {
+                    if (!IsSet(column: gx, glyph: glyph, row: gy)) { continue; }
+
+                    for (var sy = 0; (sy < scale); sy++) {
+                        for (var sx = 0; (sx < scale); sx++) {
+                            var x = (((left + (index * advance)) + (gx * scale)) + sx);
+                            var y = ((top + (gy * scale)) + sy);
+
+                            if ((x < 0) || (y < 0) || (x >= width) || (y >= height)) { continue; }
+                            color[..4].CopyTo(destination: rgba[(((y * width) + x) * 4)..]);
+                        }
+                    }
+                }
+            }
+        }
+    }
     /// <summary>Returns the integer render scale for a requested cap height in pixels (at least one).</summary>
     /// <param name="pixelHeight">The requested cap height in pixels.</param>
     /// <returns>The integer scale factor.</returns>

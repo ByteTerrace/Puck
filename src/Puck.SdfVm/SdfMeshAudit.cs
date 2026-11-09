@@ -489,6 +489,31 @@ public static class SdfMeshAudit {
 
         return (field.TryFieldGradient(epsilon: FixedQ4816.FromDouble(value: step), gradient: out var gradient, position: Fixed(point: point)) ? gradient.ToVector3() : Vector3.Zero);
     }
+    /// <summary>Counts a mesh's open and non-manifold edges as <see cref="Audit"/> does, with no field: vertices at one
+    /// position are one, and an edge a single triangle holds is open.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns>The edges one triangle alone holds, the edges more than two triangles hold, and for each triangle whether
+    /// it holds an open edge.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static (int Open, int NonManifold, bool[] OpenTriangles) EdgeCounts(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(argument: mesh);
+
+        var edges = Edges(indices: mesh.Indices.Span, welded: Weld(positions: mesh.Positions.Span));
+        var openTriangles = new bool[mesh.TriangleCount];
+        var open = 0;
+        var nonManifold = 0;
+
+        foreach (var held in edges.Values) {
+            if (held.Count == 1) {
+                open++;
+                openTriangles[held.First] = true;
+            } else if (held.Count > 2) {
+                nonManifold++;
+            }
+        }
+
+        return (open, nonManifold, openTriangles);
+    }
     private static (Vector3 A, Vector3 B, Vector3 C) Corners(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) =>
         (positions[(int)indices[(3 * triangle)]], positions[(int)indices[((3 * triangle) + 1)]], positions[(int)indices[((3 * triangle) + 2)]]);
     // Each vertex's first vertex at the same position: the contour splits a vertex at creases and material boundaries

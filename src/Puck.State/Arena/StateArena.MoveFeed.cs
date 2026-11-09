@@ -7,8 +7,7 @@ public sealed partial class StateArena {
     // against pays one branch per moved row.
     private bool m_moveFeedOpen;
     private bool m_moveFeedAll;
-    private bool[] m_moveFeedMark = [];
-    private readonly List<int> m_moveFeedRows = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_moveFeedRows = new();
 
     /// <summary>Opens the moved-row feed for its one reader, the evaluator that walks a due list over this arena:
     /// from now on every row whose version moves is recorded until <see cref="DrainMovedRows"/> hands it over. The
@@ -16,7 +15,7 @@ public sealed partial class StateArena {
     public void OpenMoveFeed() {
         m_moveFeedOpen = true;
         m_moveFeedAll = true;
-        ClearMoveFeed();
+        m_moveFeedRows.Clear();
     }
     /// <summary>Hands every row whose version moved since the last drain to the caller and forgets them.</summary>
     /// <param name="into">The moved rows' catalog ordinals, appended.</param>
@@ -27,8 +26,8 @@ public sealed partial class StateArena {
 
         var all = m_moveFeedAll;
 
-        into.AddRange(collection: m_moveFeedRows);
-        ClearMoveFeed();
+        into.AddRange(source: m_moveFeedRows.Members);
+        m_moveFeedRows.Clear();
         m_moveFeedAll = false;
 
         return all;
@@ -38,28 +37,13 @@ public sealed partial class StateArena {
     private void BumpRowVersion(int rowOrdinal, bool changesRecorded = false) {
         if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
         m_rowVersions[rowOrdinal]++;
-        if (!m_moveFeedOpen) {
-            return;
-        }
-        if (rowOrdinal >= m_moveFeedMark.Length) {
-            Array.Resize(array: ref m_moveFeedMark, newSize: Math.Max(val1: (rowOrdinal + 1), val2: m_layout.RowCount));
-        }
-        if (!m_moveFeedMark[rowOrdinal]) {
-            m_moveFeedMark[rowOrdinal] = true;
-            m_moveFeedRows.Add(item: rowOrdinal);
-        }
+        if (m_moveFeedOpen) { m_moveFeedRows.Add(index: rowOrdinal); }
     }
     // Every version moved or restarted at once (adoption, a rebuilt store): the reader must take every row as moved.
     private void MarkEveryRowMoved() {
         ChangedKeys.Clear();
         for (var row = 0; row < m_layout.RowCount; row++) { MarkDisclosureRow(row); }
         m_moveFeedAll = true;
-        ClearMoveFeed();
-    }
-    private void ClearMoveFeed() {
-        foreach (var row in m_moveFeedRows) {
-            m_moveFeedMark[row] = false;
-        }
         m_moveFeedRows.Clear();
     }
 }

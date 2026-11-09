@@ -11,7 +11,7 @@ public sealed class WorldDeliveryCursor {
     private readonly Dictionary<string, ContentPin> m_rows = [];
     private readonly HashSet<int> m_metadataPrimers = [];
     // Advance's scratch: the rows a change can move, and the same in row order.
-    private readonly HashSet<int> m_affected = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_affected = new();
     private int[] m_ordered = [];
     private ContentPin? m_definition;
     private ContentPin? m_frame;
@@ -68,10 +68,10 @@ public sealed class WorldDeliveryCursor {
         string? audience = null;
         m_affected.Clear();
         view.Images.Affected(view, rows, m_affected);
-        m_affected.UnionWith(m_metadataPrimers);
+        foreach (var primer in m_metadataPrimers) { m_affected.Add(index: primer); }
         if (m_ordered.Length < m_affected.Count) { m_ordered = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)m_affected.Count)]; }
         var ordered = m_ordered.AsSpan(0, m_affected.Count);
-        m_affected.CopyTo(m_ordered);
+        m_affected.Members.CopyTo(ordered);
         ordered.Sort();
         foreach (var row in ordered) {
             var name = view.Arena.Rows[row].Name.Value;

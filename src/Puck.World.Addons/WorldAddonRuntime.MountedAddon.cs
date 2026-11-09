@@ -21,11 +21,11 @@ public sealed partial class WorldAddonRuntime {
             // Per-body query dispatch count THIS TICK — a query's subject is always a Body (ResolveQueries refuses
             // anything else as a stale handle before it reaches the budget check), so a body-indexed array is the
             // zero-alloc counter. Reset once per tick in StageBatch, beside AnswerCount.
-            DispatchCounts = new int[populationCapacity];
+            DispatchCounts = new Puck.Abstractions.Collections.MarkedIndexCounts(length: populationCapacity);
             EventCounts = new Dictionary<GrantSubject, int>();
             // The Drive twin of DispatchCounts — per-body act dispatch count THIS TICK, reset once per tick in
             // FoldActs (pump point 2 runs before StageBatch's own reset, which serves pump point 3's Observe meter).
-            DriveDispatchCounts = new int[populationCapacity];
+            DriveDispatchCounts = new Puck.Abstractions.Collections.MarkedIndexCounts(length: populationCapacity);
             Instance = instance;
             InstanceId = instanceId;
             // The host-owned copy destination for stage 5's pointer-safety read — sized to the payload ceiling so
@@ -109,11 +109,11 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's per-body Observe query dispatch count, indexed by body index — the meter
         /// <see cref="WorldGrants.TryGetBudget"/>'s per-row budget is charged against. Cleared once per tick in
         /// <c>StageBatch</c>, the same sweep that resets <see cref="AnswerCount"/>.</summary>
-        public int[] DispatchCounts { get; }
+        public Puck.Abstractions.Collections.MarkedIndexCounts DispatchCounts { get; }
         /// <summary>Gets this tick's per-body Drive act dispatch count, indexed by body index — the Drive twin of
         /// <see cref="DispatchCounts"/>. Cleared once per tick in <c>FoldActs</c>, since pump point 2 runs before
         /// <c>StageBatch</c>'s own reset.</summary>
-        public int[] DriveDispatchCounts { get; }
+        public Puck.Abstractions.Collections.MarkedIndexCounts DriveDispatchCounts { get; }
         /// <summary>Gets the world-event and memory-watch cells delivered across this mount's lifetime; diagnostic only.</summary>
         public ulong EventCellsDelivered { get; set; }
         /// <summary>Gets this tick's event-cell charge count by Observe subject. Cleared once per tick in
