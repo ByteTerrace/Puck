@@ -5,7 +5,7 @@ namespace Puck.Cli.Affected;
 /// <summary>
 /// The document source of a revision's tree: the composer every local load resolves through
 /// (<see cref="WorldDefinitionFileSource.LocalDocuments"/>) reads files, and a revision holds none, so the first read
-/// exports the trees the documents are authored in (<see cref="AffectedRevisionExport"/>) once, and every name and
+/// exports the trees the documents are authored in (<see cref="RevisionExport"/>) once, and every name and
 /// resolved name crosses between the repository's paths, which the tree speaks, and the export's. A world's
 /// <c>.puck</c> source recorded in a revision therefore composes exactly as it does in the working tree.
 /// </summary>
@@ -14,7 +14,7 @@ namespace Puck.Cli.Affected;
 /// <param name="documentTrees">The repository-relative trees the revision's documents and every file their compiles
 /// read are authored in, which the export holds.</param>
 internal sealed class AffectedRevisionDocuments(string root, string revision, IReadOnlyList<string> documentTrees) : IWorldDocumentSource, IDisposable {
-    private readonly Lazy<AffectedRevisionExport> m_export = new(valueFactory: () => AffectedRevisionExport.Create(paths: documentTrees, repository: root, revision: revision));
+    private readonly Lazy<RevisionExport> m_export = new(valueFactory: () => RevisionExport.Create(paths: documentTrees, repository: root, revision: revision));
     private readonly string m_root = Path.GetFullPath(path: root);
 
     private string Cross(string path, string from, string to) {

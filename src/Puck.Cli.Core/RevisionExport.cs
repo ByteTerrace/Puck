@@ -1,34 +1,26 @@
 using System.Formats.Tar;
 using System.Globalization;
 
-namespace Puck.Cli.Affected;
+namespace Puck.Cli;
 
 /// <summary>
 /// The one export of a revision's files to disk, for the readers that read files rather than git: the document
-/// composer (<see cref="AffectedRevisionDocuments"/>) and the base side of the compiled-world comparison
-/// (<see cref="AffectedCompiledWorlds"/>). It exports only the paths its caller names that the revision holds, never the
+/// composer (the affected verb's) and the base side of the compiled-world comparison
+/// (<c>AffectedCompiledWorlds</c>). It exports only the paths its caller names that the revision holds, never the
 /// whole repository: <c>git archive -o</c> writes them to a tar file in a run directory of its own, which is then
 /// extracted beside it, and every git run has its standard input closed and a bounded wait. A git run that does not
-/// finish within the bound, or exits nonzero, refuses the export by name (<see cref="AffectedRevisionExportRefusedException"/>).
+/// finish within the bound, or exits nonzero, refuses the export by name (<see cref="RevisionExportRefusedException"/>).
 /// <para>The archive is never read from git's standard output: a tar reader stops at the end-of-archive marker, before
 /// the padding git still writes to fill its last record, so git blocks on a full pipe while its caller waits for it to
 /// exit.</para>
 /// </summary>
-public sealed class AffectedRevisionExport : IDisposable {
+public sealed class RevisionExport : IDisposable {
     /// <summary>How long one git run of an export may take before the export is refused.</summary>
     public static readonly TimeSpan Bound = TimeSpan.FromMinutes(minutes: 2);
-    /// <summary>The trees a canary's world documents, the sources they lower from, and every file their compiles read
-    /// are authored in: what a revision's document composer needs exported.</summary>
-    public static IReadOnlyList<string> DocumentTrees { get; } = [
-        "tests/Puck.World.Canaries",
-        "tests/Puck.World.Verdicts",
-        "tests/Puck.Counters",
-        "worlds",
-    ];
 
     private readonly RunDirectory m_directory;
 
-    private AffectedRevisionExport(RunDirectory directory, string root) {
+    private RevisionExport(RunDirectory directory, string root) {
         m_directory = directory;
         Root = root;
     }
@@ -47,11 +39,11 @@ public sealed class AffectedRevisionExport : IDisposable {
                 timeout: bound
             ).GetAwaiter().GetResult();
         } catch (TimeoutException) {
-            throw new AffectedRevisionExportRefusedException(message: $"the export of {revision} is refused: git {arguments[0]} did not finish within {bound.TotalSeconds.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} s.");
+            throw new RevisionExportRefusedException(message: $"the export of {revision} is refused: git {arguments[0]} did not finish within {bound.TotalSeconds.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} s.");
         }
 
         if (run.ExitCode != 0) {
-            throw new AffectedRevisionExportRefusedException(message: $"the export of {revision} is refused: git {arguments[0]} exited {run.ExitCode}: {run.Stderr.Trim()}");
+            throw new RevisionExportRefusedException(message: $"the export of {revision} is refused: git {arguments[0]} exited {run.ExitCode}: {run.Stderr.Trim()}");
         }
 
         return run.Stdout;
@@ -64,9 +56,9 @@ public sealed class AffectedRevisionExport : IDisposable {
     /// left out.</param>
     /// <param name="bound">How long each git run may take; <see cref="Bound"/> when <see langword="null"/>.</param>
     /// <returns>The export, deleted when disposed.</returns>
-    /// <exception cref="AffectedRevisionExportRefusedException">A git run did not finish within the bound, or exited
+    /// <exception cref="RevisionExportRefusedException">A git run did not finish within the bound, or exited
     /// nonzero.</exception>
-    public static AffectedRevisionExport Create(string repository, string revision, IReadOnlyList<string> paths, TimeSpan? bound = null) {
+    public static RevisionExport Create(string repository, string revision, IReadOnlyList<string> paths, TimeSpan? bound = null) {
         var limit = (bound ?? Bound);
         var directory = RunDirectory.Create(prefix: "puck-affected-export-", keepOnFailure: false);
 
@@ -85,7 +77,7 @@ public sealed class AffectedRevisionExport : IDisposable {
                 File.Delete(path: archive);
             }
 
-            return new AffectedRevisionExport(directory: directory, root: root);
+            return new RevisionExport(directory: directory, root: root);
         } catch {
             directory.Dispose();
 
@@ -98,4 +90,4 @@ public sealed class AffectedRevisionExport : IDisposable {
 /// <summary>A revision's export could not be made: a git run it needed did not finish within its bound, or failed. The
 /// message names the revision, the git command and why.</summary>
 /// <param name="message">The refusal.</param>
-public sealed class AffectedRevisionExportRefusedException(string message) : Exception(message: message);
+public sealed class RevisionExportRefusedException(string message) : Exception(message: message);

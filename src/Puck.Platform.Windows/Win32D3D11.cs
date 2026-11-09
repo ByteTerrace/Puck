@@ -87,7 +87,7 @@ internal static unsafe class Win32D3D11 {
                 );
 
                 var description = adapter->GetDesc1();
-                var luid = (((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart;
+                var luid = GpuAdapterLuid.Pack(highPart: description.AdapterLuid.HighPart, lowPart: description.AdapterLuid.LowPart);
 
                 if (luid == adapterLuid) {
                     return adapter;

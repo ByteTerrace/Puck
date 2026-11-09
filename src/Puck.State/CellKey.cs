@@ -13,14 +13,14 @@ public readonly record struct CellKey {
     private readonly object? m_tableIdentity;
 
     internal CellKey(int ordinal, object tableIdentity, uint generation = 0) {
-        m_address = (((ulong)generation) << 32) | ((uint)checked((ordinal + 1)));
+        m_address = PackedIntPair.Pack(high: generation, low: ((uint)checked((ordinal + 1))));
         m_tableIdentity = tableIdentity;
     }
 
     /// <summary>Gets a value indicating whether this key was minted by a key table.</summary>
-    public bool IsValid => (((uint)m_address) != 0);
+    public bool IsValid => (PackedIntPair.Low(value: m_address) != 0);
     /// <summary>Gets the key's stable intern ordinal, or <c>-1</c> for the default invalid key.</summary>
-    public int Ordinal => (((int)((uint)m_address)) - 1);
+    public int Ordinal => (((int)PackedIntPair.Low(value: m_address)) - 1);
 
     internal bool BelongsTo(object tableIdentity) => ReferenceEquals(
         objA: m_tableIdentity,

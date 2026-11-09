@@ -107,7 +107,7 @@ public sealed class AffectedWorkingTree(string root) : IAffectedTree {
 /// <param name="root">The repository root.</param>
 /// <param name="revision">The revision.</param>
 /// <param name="documentTrees">The repository-relative trees its documents compose from
-/// (<see cref="AffectedRevisionExport.DocumentTrees"/> for the repository's canaries).</param>
+/// (<see cref="AffectedCommand.DocumentTrees"/> for the repository's canaries).</param>
 public sealed class AffectedRevisionTree(string root, string revision, IReadOnlyList<string> documentTrees) : IAffectedTree, IDisposable {
     private readonly AffectedRevisionDocuments m_documents = new(documentTrees: documentTrees, revision: revision, root: root);
     private readonly Lazy<string[]> m_files = new(valueFactory: () => [.. CliGit.Run(root, "ls-tree", "-r", "--name-only", revision).Stdout

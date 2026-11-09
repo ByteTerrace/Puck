@@ -48,7 +48,9 @@ public sealed unsafe class VulkanGpuObjectNaming(IVulkanDeviceContext deviceCont
         var device = deviceContext.LogicalDevice.Commands;
         var setName = device.SetDebugUtilsObjectNameExt;
 
-        device.AddressBindings?.Name(handle: unchecked((ulong)handle), name: name);
+        var objectType = ToVkObjectType(kind: kind);
+
+        device.AddressBindings?.Name(handle: unchecked((ulong)handle), name: name, objectType: objectType);
         if (setName is null) {
             return;
         }
@@ -69,7 +71,7 @@ public sealed unsafe class VulkanGpuObjectNaming(IVulkanDeviceContext deviceCont
             var info = new VkDebugUtilsObjectNameInfoExt {
                 ObjectHandle = unchecked((ulong)handle),
                 ObjectName = objectName,
-                ObjectType = ToVkObjectType(kind: kind),
+                ObjectType = objectType,
                 StructureType = StructureTypeDebugUtilsObjectNameInfo,
             };
 

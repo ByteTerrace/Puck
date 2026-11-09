@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using Puck.Maths;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
@@ -205,7 +206,7 @@ public sealed class BrowserSession {
     // A cell's identity across the before- and after-image of one judged tick: its row's catalog ordinal over its
     // key's intern ordinal. Both are stable for the life of a catalog, so a cell that moved position within its row
     // is still the same cell here.
-    private static long Identity(int rowOrdinal, CellKey key) => (((long)rowOrdinal) << 32) | ((uint)key.Ordinal);
+    private static long Identity(int rowOrdinal, CellKey key) => PackedIntPair.Pack(high: rowOrdinal, low: key.Ordinal);
     // Rules the host does not serve are not evaluated: RuleNeeds.Admit is asked once per document load, and its
     // refusal rides every judged tick's refusal ledger so an author sees which rules this engine cannot run.
     private void Install(WorldDefinition definition) {
@@ -428,7 +429,7 @@ public sealed class BrowserSession {
     }
     private Dictionary<long, CellValue> Snapshot() {
         var layout = m_arena.Layout;
-        var snapshot = new Dictionary<long, CellValue>();
+        var snapshot = new Dictionary<long, CellValue>(comparer: PackedIntPairComparer.Instance);
 
         for (var ordinal = 0; (ordinal < layout.RowCount); ordinal++) {
             if (layout[ordinal].HostOwned) {

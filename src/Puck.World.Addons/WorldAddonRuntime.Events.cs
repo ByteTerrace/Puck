@@ -195,7 +195,7 @@ public sealed partial class WorldAddonRuntime {
                 HandleGeneration: 0,
                 Verdict: AddonVerdict.None,
                 Verb: ((byte)AddonAbi.ObservationVerbs.EventMachineMemoryChanged),
-                A: (((long)watch.Screen) << 32) | ((uint)watch.Address),
+                A: PackedIntPair.Pack(high: watch.Screen, low: watch.Address),
                 B: value
             );
             addon.EventCellsDelivered = ((addon.EventCellsDelivered == ulong.MaxValue)

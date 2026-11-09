@@ -1,15 +1,14 @@
-using Puck.Cli.Affected;
 using Xunit;
 
-namespace Puck.Cli.Gate.Tests;
+namespace Puck.Cli.Core.Tests;
 
 /// <summary>
-/// Laws for <see cref="AffectedRevisionExport"/>: an export holds exactly the named paths the revision recorded and
+/// Laws for <see cref="RevisionExport"/>: an export holds exactly the named paths the revision recorded and
 /// nothing else of the repository; a git run that outlasts the export's bound, or fails, refuses the export by name
 /// instead of waiting on git. The real-tree law over the canaries' worlds is quarantined with them in
 /// <c>experimental/tests/Puck.Cli.Gate.Tests</c>.
 /// </summary>
-public sealed class AffectedRevisionExportLawTests {
+public sealed class RevisionExportLawTests {
     private static string[] Files(string root) => [.. Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")
         .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: root).Replace(newChar: '/', oldChar: '\\'))
         .Order(comparer: StringComparer.Ordinal)];
@@ -36,7 +35,7 @@ public sealed class AffectedRevisionExportLawTests {
         var (checkout, revision) = Recorded();
 
         using (checkout) {
-            using var export = AffectedRevisionExport.Create(paths: ["documents", "single.json", "absent"], repository: checkout.Root, revision: revision);
+            using var export = RevisionExport.Create(paths: ["documents", "single.json", "absent"], repository: checkout.Root, revision: revision);
 
             Assert.Equal(actual: Files(root: export.Root), expected: ["documents/nested/layer.world.json", "documents/world.puck", "single.json"]);
             Assert.Equal(actual: File.ReadAllText(path: Path.Combine(path1: export.Root, path2: "single.json")), expected: "{}");
@@ -52,7 +51,7 @@ public sealed class AffectedRevisionExportLawTests {
         var (checkout, revision) = Recorded();
 
         using (checkout) {
-            using var export = AffectedRevisionExport.Create(paths: ["absent"], repository: checkout.Root, revision: revision);
+            using var export = RevisionExport.Create(paths: ["absent"], repository: checkout.Root, revision: revision);
 
             Assert.Empty(collection: Files(root: export.Root));
         }
@@ -62,7 +61,7 @@ public sealed class AffectedRevisionExportLawTests {
         var (checkout, revision) = Recorded();
 
         using (checkout) {
-            var refusal = Assert.Throws<AffectedRevisionExportRefusedException>(testCode: () => AffectedRevisionExport.Create(bound: TimeSpan.Zero, paths: ["documents"], repository: checkout.Root, revision: revision));
+            var refusal = Assert.Throws<RevisionExportRefusedException>(testCode: () => RevisionExport.Create(bound: TimeSpan.Zero, paths: ["documents"], repository: checkout.Root, revision: revision));
 
             Assert.StartsWith(actualString: refusal.Message, expectedStartString: $"the export of {revision} is refused: git ");
             Assert.EndsWith(actualString: refusal.Message, expectedEndString: " did not finish within 0 s.");
@@ -73,7 +72,7 @@ public sealed class AffectedRevisionExportLawTests {
         var (checkout, _) = Recorded();
 
         using (checkout) {
-            var refusal = Assert.Throws<AffectedRevisionExportRefusedException>(testCode: () => AffectedRevisionExport.Create(paths: ["documents"], repository: checkout.Root, revision: "no-such-revision"));
+            var refusal = Assert.Throws<RevisionExportRefusedException>(testCode: () => RevisionExport.Create(paths: ["documents"], repository: checkout.Root, revision: "no-such-revision"));
 
             Assert.StartsWith(actualString: refusal.Message, expectedStartString: "the export of no-such-revision is refused: git ls-tree exited ");
         }

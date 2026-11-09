@@ -289,8 +289,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             return 0;
         }
 
-        // The 8-byte LUID is laid out exactly as a Win32 LUID (LowPart then HighPart), matching DxgiInterop's
-        // packing, so reading it as a little-endian long yields a value directly comparable to a DXGI adapter LUID.
+        // The 8-byte LUID is laid out exactly as a Win32 LUID (LowPart then HighPart), matching
+        // GpuAdapterLuid.Pack, so reading it as a little-endian long yields a value directly comparable to a DXGI adapter LUID.
         return *((long*)idProperties.DeviceLuid);
     }
     /// <inheritdoc/>
