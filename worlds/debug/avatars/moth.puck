@@ -49,23 +49,13 @@ let thrusterGlow = 21 // #D8FDFF the back-pod thruster cores, lit by flight mode
 let thrusterCyan = 22 // #1F9BAE the back-pod thruster lenses, lit by flight mode (lane 2)
 let gauntletLeft = 23 // ivory left gauntlet, lavender on its inner half, vents on its outer face
 let gauntletRight = 24 // ivory right gauntlet, lavender on its inner half, vents on its outer face
-let bootCyan = 25 // #1F9BAE the heel lenses' idle pilot light
-let bootGlow = 26 // #D8FDFF the heel lenses' pale cores
+let bootCyan = 25 // the always-lit blue lamps: ankle and heel orbs and the pod nozzles' lenses
+let bootGlow = 26 // #D8FDFF a pale lamp core, unused
 let pistonSteel = 27 // satin steel piston cylinders
 let torsoSuit = 28 // segmented charcoal fabric between the chest and belt
-// Slots 6 (cyan), 7 (brown), 11 (pearl), 29 and 30 (lavender) are free.
+let podCream = 29 // ivory of the pods' band plates, with their badges and seams
+// Slots 6 (cyan), 7 (brown), 11 (pearl) and 30 (lavender) are free.
 
-// Wear is a faint floor on a pristine suit: its coverage stays under the primer's threshold except at the tightest
-// edges, where pale primer shows first, then the dark alloy.
-let plateWear = 0
-let lilacUndercoat = [
-  { threshold: 0.2, surface { color: "#C9B4CB", roughness: 0.6, metal: 0.05 } }
-  { threshold: 0.38, surface { color: "#51525C", roughness: 0.52, metal: 0.55 } }
-]
-let creamUndercoat = [
-  { threshold: 0.2, surface { color: "#C9B9A6", roughness: 0.65, metal: 0.05 } }
-  { threshold: 0.38, surface { color: "#5B5D63", roughness: 0.52, metal: 0.55 } }
-]
 
 // The heel light faces the greave's back face, which leans 10.6 degrees in toward the knee: its cylinders' -Y caps face
 // (0, 0.184, -0.983).
@@ -154,14 +144,16 @@ let braid1Rotation = [
   [0, 0, braidTwist, braidUntwist]
 ]
 
-// The pod nozzles' axis, the opening's normal: in toward the spine, down along the lip and a little back. Each cylinder's
-// -Y cap faces out along (-0.40 sx, -0.855, -0.33), so each rotation turns +Y onto (0.40 sx, 0.855, 0.33); the exhaust
-// volume takes the same frame and leaves along the same axis.
-let podNozzleRotationLeft = [0.171329, 0, -0.207672, 0.963077]
-let podNozzleRotationRight = [0.171329, 0, 0.207672, 0.963077]
+// The pod nozzles' axis, the opening's normal under the lip: down, back and a little in, so the plumes leave clear of her
+// seat and legs. Each cylinder's -Y cap faces out along (-0.15 sx, -0.852, -0.501), so each rotation turns +Y onto
+// (0.15 sx, 0.852, 0.501); the exhaust volume takes the same frame and leaves along the same axis.
+let podNozzleRotationLeft = [0.26044, 0, -0.078132, 0.962323]
+let podNozzleRotationRight = [0.26044, 0, 0.078132, 0.962323]
 // The shoulder stack's front outline, x outward and wound clockwise (sheet 01): a top sloping down and out from the
 // collar, a rounded outer side and a level bottom at the bottom of the chest.
 let shoulderOutline = [[-0.95, 0.8], [-0.4, 1], [0.6, 0.62], [0.95, 0.35], [1, -0.6], [0.85, -1], [-0.45, -1], [-0.9, -0.3], [-1, 0.45]]
+// Its side outline, x toward her back and wound clockwise: the top sloping down to a chamfered front edge.
+let shoulderSideOutline = [[-1, 0.35], [-0.55, 0.8], [0.6, 1], [1, 0.7], [1, -0.6], [0.75, -1], [-0.8, -1], [-1, -0.75]]
 
 // A pod's shell (sheets 07 and 12): its outline seen from behind, x outward and wound clockwise, narrow at the domed
 // cap, widest at the second band and running down the outer side to the long lip's tip, its lower edge rising in toward
@@ -217,7 +209,7 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
     exponent: 5
   }
 
-  for (layer, k) in [{ name: "podShell", material: violetPod, grow: 0 }, { name: "podBand1", material: shinCream, grow: 0.008, y: 1.475, h: 0.045 }, { name: "podBand2", material: shinCream, grow: 0.008, y: 1.28, h: 0.05 }] {
+  for (layer, k) in [{ name: "podShell", material: violetPod, grow: 0 }, { name: "podBand1", material: podCream, grow: 0.014, y: 1.475, h: 0.045 }, { name: "podBand2", material: podCream, grow: 0.014, y: 1.28, h: 0.05 }] {
     shape Prism $"{layer.name}-{side}" {
       id: baseId + 2 + 3 * k
       position [sx * 0.19, 1.3, -0.25]
@@ -263,7 +255,7 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
       position [sx * 0.19, band.y, -0.25]
       rotation [0, 0, -sx * 0.10453, 0.99452]
       scale [0.3, band.h, 0.2]
-      material: shinCream
+      material: podCream
       blend: "SmoothIntersection"
       smooth: 0.004
       group: groupId + 1 + b
@@ -289,9 +281,9 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
   // flight mode (lane 2); the exhaust volume leaves the mouth along the same axis.
   shape Cylinder $"nozzle-{side}" {
     id: baseId + 12
-    position [sx * 0.1363, 1.1304, -0.2667]
+    position [sx * 0.1653, 1.0935, -0.24]
     rotation: nozzleRotation
-    scale [0.055, 0.04, 0.055]
+    scale [0.058, 0.035, 0.058]
     material: charcoal
     parent: $"pod-{side}"
     rounding: 0.008
@@ -299,9 +291,9 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
 
   shape Cylinder $"nozzleGlow-{side}" {
     id: baseId + 13
-    position [sx * 0.1214, 1.0988, -0.2789]
+    position [sx * 0.1597, 1.062, -0.2585]
     rotation: nozzleRotation
-    scale [0.042, 0.01, 0.042]
+    scale [0.047, 0.01, 0.047]
     material: bootCyan
     parent: $"pod-{side}"
     rounding: 0.006
@@ -309,7 +301,7 @@ template flightPod(side, sx, baseId, groupId, violetPod, nozzleRotation, wingAmp
 
   shape Cylinder $"nozzleCore-{side}" {
     id: baseId + 14
-    position [sx * 0.1198, 1.0953, -0.2802]
+    position [sx * 0.1591, 1.0586, -0.2605]
     rotation: nozzleRotation
     scale [0.018, 0.008, 0.018]
     material: thrusterGlow
@@ -466,9 +458,10 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
   }
 
   // The shoulder stack (sheets 01 and 02): one solid convex lavender shell from collar height to the bottom of the
-  // chest, wrapping the top and outside of the upper arm, its front outline sloping down and out and its front and back
-  // domed by an ellipsoid. A lavender cap plate and an ivory band below it are the same shell a finger proud between
-  // planes that slope down and out, so the stack reads as plates on plates with their edges showing depth. A charcoal
+  // chest, wrapping the top and outside of the upper arm: its front outline slopes down and out, its side outline slopes
+  // down toward a chamfered front edge, and an ellipsoid domes it. A lavender cap plate and an ivory band below it are
+  // the same shell a finger proud between planes that slope down, out and forward, so the stack reads as plates on
+  // plates with their edges showing depth. It stands a little forward, clear of the flight pack behind it. A charcoal
   // pivot disc with a raised boss shows in front of the joint at the shell's inner edge. All ride the upper arm; the
   // shell's inner top stays outboard of the hood as the arm swings.
   shape Cylinder $"shoulderPivot-{side}" {
@@ -492,15 +485,15 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
   }
 
   for (layer, k) in [
-    { name: "shoulderSlab", ids [151, 158, 0], material: violetBand, grow: 0 }
-    { name: "shoulderCap", ids [210, 211, 212], material: violetBand, grow: 0.012, y: 1.6, h: 0.075 }
-    { name: "shoulderBand", ids [207, 208, 209], material: skin, grow: 0.012, y: 1.465, h: 0.042 }
+    { name: "shoulderSlab", ids [151, 158, 214], material: violetBand, grow: 0 }
+    { name: "shoulderCap", ids [210, 211, 215], material: violetBand, grow: 0.012, y: 1.6, h: 0.075 }
+    { name: "shoulderBand", ids [207, 208, 216], material: skin, grow: 0.012, y: 1.465, h: 0.042 }
   ] {
     shape Prism $"{layer.name}-{side}" {
       id: idBase + layer.ids[0]
-      position [sx * 0.37, 1.455, 0]
+      position [sx * 0.37, 1.455, 0.02]
       rotation: prismMirror(sx, [0, 0, 0, 1])
-      scale [0.14 + layer.grow, 0.2 + layer.grow, 0.17 + layer.grow]
+      scale [0.14 + layer.grow, 0.2 + layer.grow, 0.16 + layer.grow]
       material: layer.material
       group: groupBase + 150 + k
       parent: $"upperArm-{side}"
@@ -509,7 +502,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
 
     shape Superellipsoid $"{layer.name}Dome-{side}" {
       id: idBase + layer.ids[1]
-      position [sx * 0.35, 1.42, 0]
+      position [sx * 0.35, 1.42, 0.02]
       scale [0.25 + layer.grow, 0.33 + layer.grow, 0.2 + layer.grow]
       material: layer.material
       blend: "SmoothIntersection"
@@ -518,13 +511,28 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       parent: $"upperArm-{side}"
       exponent: 2
     }
+
+    // The side profile (sheets 01 and 02), extruded across the stack: its top slopes down toward the front over a
+    // chamfered front edge, so from the side the plates lean forward and down. It reads the same from either side.
+    shape Prism $"{layer.name}Profile-{side}" {
+      id: idBase + layer.ids[2]
+      position [sx * 0.37, 1.455, 0.02]
+      rotation [0, diagonal, 0, diagonal]
+      scale [0.16 + layer.grow, 0.2 + layer.grow, 0.3]
+      material: layer.material
+      blend: "SmoothIntersection"
+      smooth: 0.02
+      group: groupBase + 150 + k
+      parent: $"upperArm-{side}"
+      profile { kind: "Convex", vertices: shoulderSideOutline, cornerRadius: 0.12 }
+    }
   }
 
   for (band, b) in [{ name: "shoulderCap", id: 212, y: 1.6, h: 0.075 }, { name: "shoulderBand", id: 209, y: 1.465, h: 0.042 }] {
     shape Box $"{band.name}Span-{side}" {
       id: idBase + band.id
-      position [sx * 0.37, band.y, 0]
-      rotation [0, 0, -sx * 0.13053, 0.99144]
+      position [sx * 0.37, band.y, 0.02]
+      rotation [0.10363, -sx * 0.01364, -sx * 0.12981, 0.98601]
       scale [0.3, band.h, 0.3]
       material: skin
       blend: "SmoothIntersection"
@@ -685,6 +693,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
     }
   }
 
+  // In flight mode the fingers curl into a fist (sheet 10), each about its knuckle on the hand's lateral axis.
   shape Sweep $"finger-{side}-0" {
     id: idBase + 167
     position [sx * 0.3382, 0.7431, 0.1047]
@@ -698,6 +707,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       radiusStart: 0.01755
       radiusEnd: 0.01755
     }
+    swings [{ driver: "flight", axis [0.6606, -sx * 0.3495, -sx * 0.6645], amplitude: 1.25, pivot [sx * 0.3382, 0.7431, 0.1047], wave: "linear", phase: 0 }]
   }
 
   shape Sweep $"finger-{side}-1" {
@@ -713,6 +723,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       radiusStart: 0.01755
       radiusEnd: 0.01755
     }
+    swings [{ driver: "flight", axis [0.6606, -sx * 0.3495, -sx * 0.6645], amplitude: 1.3, pivot [sx * 0.3665, 0.7377, 0.0744], wave: "linear", phase: 0 }]
   }
 
   shape Sweep $"finger-{side}-2" {
@@ -728,6 +739,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       radiusStart: 0.01755
       radiusEnd: 0.01755
     }
+    swings [{ driver: "flight", axis [0.6606, -sx * 0.3495, -sx * 0.6645], amplitude: 1.3, pivot [sx * 0.3949, 0.7324, 0.044], wave: "linear", phase: 0 }]
   }
 
   shape Sweep $"finger-{side}-3" {
@@ -743,6 +755,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       radiusStart: 0.01755
       radiusEnd: 0.01755
     }
+    swings [{ driver: "flight", axis [0.6606, -sx * 0.3495, -sx * 0.6645], amplitude: 1.25, pivot [sx * 0.4232, 0.727, 0.0137], wave: "linear", phase: 0 }]
   }
 
   shape Sweep $"thumb-{side}" {
@@ -758,6 +771,7 @@ template mothArm(side, sx, stride, idBase, groupBase, gauntlet, violetBand) {
       radiusStart: 0.02565
       radiusEnd: 0.02565
     }
+    swings [{ driver: "flight", axis [0.6606, -sx * 0.3495, -sx * 0.6645], amplitude: 0.6, pivot [sx * 0.3312, 0.7959, 0.086], wave: "linear", phase: 0 }]
   }
 }
 
@@ -942,7 +956,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
   shape Prism $"shin-{side}" {
     id: idBase + 180
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.21, 0.3, 0.24]
+    scale [0.185, 0.3, 0.24]
     material: shinViolet
     group: groupBase + 18
     parent: $"thigh-{side}"
@@ -994,7 +1008,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
   shape Prism $"archBand-{side}" {
     id: idBase + 950
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.222, 0.312, 0.252]
+    scale [0.197, 0.312, 0.252]
     material: shinCream
     group: groupBase + 76
     parent: $"shin-{side}"
@@ -1045,7 +1059,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
   shape Prism $"sidePanel-{side}" {
     id: idBase + 954
     position [sx * 0.2, 0.4265, 0.0125]
-    scale [0.222, 0.312, 0.252]
+    scale [0.197, 0.312, 0.252]
     material: shinCream
     group: groupBase + 77
     parent: $"shin-{side}"
@@ -1106,11 +1120,12 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
   }
 
   // The ankle hub: the joint the foot turns about, a gunmetal drum on the greave's outer face at the heel with a charcoal
-  // bezel round a cyan lens that is always softly lit (sheet 01), so it reads as a light by day and at night.
+  // bezel round a glowing blue orb (sheet 01), faced out and 30 degrees forward so the lamp reads from the front and the
+  // side, by day and at night.
   shape Cylinder $"ankleHub-{side}" {
     id: idBase + 1000
-    position [sx * 0.392, 0.175, -0.07]
-    rotation [0, 0, sx * diagonal, diagonal]
+    position [sx * 0.384, 0.175, -0.07]
+    rotation [0.3536, 0, -sx * 0.6124, 0.7071]
     scale [0.072, 0.024, 0.072]
     material: gunmetal
     group: groupBase + 122
@@ -1120,31 +1135,30 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
 
   shape Cylinder $"ankleBezel-{side}" {
     id: idBase + 1001
-    position [sx * 0.408, 0.175, -0.07]
-    rotation [0, 0, sx * diagonal, diagonal]
+    position [sx * 0.3979, 0.175, -0.062]
+    rotation [0.3536, 0, -sx * 0.6124, 0.7071]
     scale [0.05, 0.01, 0.05]
     material: charcoal
     parent: $"shin-{side}"
     rounding: 0.004
   }
 
-  shape Cylinder $"ankleHubInset-{side}" {
+  shape Superellipsoid $"ankleHubInset-{side}" {
     id: idBase + 1303
-    position [sx * 0.415, 0.175, -0.07]
-    rotation [0, 0, sx * diagonal, diagonal]
-    scale [0.036, 0.011, 0.036]
+    position [sx * 0.3944, 0.175, -0.064]
+    scale [0.034, 0.034, 0.034]
     material: bootCyan
     parent: $"shin-{side}"
-    rounding: 0.006
+    exponent: 2
   }
 
   // The boot (sheet 02): one lavender piece from heel to toe with a raised toe cap on one charcoal sole under toe and
-  // heel; a flush round cyan light sits low on the greave's back above the heel.
+  // heel; a glowing blue orb in a charcoal bezel sits low on the greave's back above the heel.
   shape Prism $"boot-{side}" {
     id: idBase + 195
     position [sx * 0.2, 0.1875, 0.0775]
     rotation: prismMirror(sx, [0, -diagonal, 0, diagonal])
-    scale [0.235, 0.235, 0.2]
+    scale [0.235, 0.235, 0.17]
     material: violet
     group: groupBase + 21
     swings [
@@ -1208,7 +1222,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     id: idBase + 196
     position [sx * 0.2, 0.19, 0.085]
     rotation [diagonal, 0, 0, diagonal]
-    scale [0.165, 0.24, 0.25]
+    scale [0.145, 0.24, 0.25]
     material: violet
     blend: "SmoothIntersection"
     smooth: 0.012
@@ -1249,7 +1263,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     id: idBase + 199
     position [sx * 0.2, 0.125, 0.205]
     rotation: prismMirror(sx, [0, -diagonal, 0, diagonal])
-    scale [0.19, 0.12, 0.215]
+    scale [0.19, 0.12, 0.17]
     material: violet
     group: groupBase + 120
     parent: $"boot-{side}"
@@ -1272,7 +1286,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     id: idBase + 200
     position [sx * 0.2, 0.1, 0.205]
     rotation [diagonal, 0, 0, diagonal]
-    scale [0.18, 0.2, 0.2]
+    scale [0.15, 0.2, 0.2]
     material: violet
     blend: "SmoothIntersection"
     smooth: 0.012
@@ -1288,7 +1302,7 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     id: idBase + 201
     position [sx * 0.2, 0.03, 0.14]
     rotation [diagonal, 0, 0, diagonal]
-    scale [0.18, 0.27, 0.03]
+    scale [0.15, 0.27, 0.03]
     material: charcoal
     parent: $"boot-{side}"
     profile {
@@ -1308,24 +1322,13 @@ template mothLeg(side, sx, stride, idBase, groupBase) {
     rounding: 0.004
   }
 
-  shape Cylinder $"heelLight-{side}" {
+  shape Superellipsoid $"heelLight-{side}" {
     id: idBase + 205
-    position [sx * 0.2, 0.1906, -0.2105]
-    rotation: heelLensRotation
-    scale [0.036, 0.008, 0.036]
+    position [sx * 0.2, 0.1895, -0.205]
+    scale [0.034, 0.034, 0.034]
     material: bootCyan
     parent: $"shin-{side}"
-    rounding: 0.006
-  }
-
-  shape Cylinder $"heelCore-{side}" {
-    id: idBase + 980
-    position [sx * 0.2, 0.1912, -0.2125]
-    rotation: heelLensRotation
-    scale [0.014, 0.008, 0.014]
-    material: bootGlow
-    parent: $"shin-{side}"
-    rounding: 0.004
+    exponent: 2
   }
 }
 
@@ -2300,7 +2303,7 @@ prototypes {
       name: "moth"
       // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face, at the head's scale.
       frames [mothBlinkFrame(headAt, headScale)]
-      // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.
+      // The suit is pristine, as on the sheets: no wear, no deposit.
       palette [
         {
           color: ivoryPlate
@@ -2309,17 +2312,6 @@ prototypes {
           specular: 0.08
           emissive: 0
           coat: 0.28
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 71
-            scale: 75
-            floor: plateWear
-            under: creamUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: lavenderPlate
@@ -2328,17 +2320,6 @@ prototypes {
           specular: 0.12
           emissive: 0
           coat: 0.4
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 72
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           // The sole grooves.
           paints [
             {
@@ -2457,17 +2438,6 @@ prototypes {
           emissive: 0
           coat: 0
           metal: 0.2
-          weathering {
-            edge: 0.5
-            lines: 0
-            settle: 0.015
-            reach: 0.012
-            seed: 79
-            scale: 45
-            floor: plateWear
-            under [{ threshold: 0.22, surface { color: "#D0AF70", roughness: 0.6, metal: 0.5 } }]
-            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: "#89481D"
@@ -2503,17 +2473,6 @@ prototypes {
           specular: 0.12
           emissive: 0
           coat: 0.4
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 83
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: lavenderPlate
@@ -2522,17 +2481,6 @@ prototypes {
           specular: 0.12
           emissive: 0
           coat: 0.4
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 84
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: lavenderPlate
@@ -2541,17 +2489,8 @@ prototypes {
           specular: 0.12
           emissive: 0
           coat: 0.4
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 85
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
+          // The vertical seam splitting the pod's plates into inner and outer pieces (sheets 07 and 13).
+          paints [{ parent: "podShell-left", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: lavenderSeam }]
         }
         {
           color: lavenderPlate
@@ -2560,17 +2499,8 @@ prototypes {
           specular: 0.12
           emissive: 0
           coat: 0.4
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 86
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
+          // The vertical seam splitting the pod's plates into inner and outer pieces (sheets 07 and 13).
+          paints [{ parent: "podShell-right", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: lavenderSeam }]
         }
         // The chest slab's lavender centre, in the slab's frame, leaving the ivory border round it.
         {
@@ -2580,17 +2510,6 @@ prototypes {
           specular: 0.08
           emissive: 0
           coat: 0.3
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 87
-            scale: 75
-            floor: plateWear
-            under: creamUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           paints [
             {
               parent: "chestSlab"
@@ -2605,8 +2524,7 @@ prototypes {
             }
           ]
         }
-        // Ivory of the shin side panels, where each outer face carries its pair of vent slots, and of the pods' bands, where
-        // each lower band carries its grey inset on its back face, in the band's standing frame (local Y is its depth).
+        // Ivory of the shin side panels, where each outer face carries its pair of vent slots.
         {
           color: ivoryPlate
           toonSelect: mothStyles
@@ -2614,17 +2532,6 @@ prototypes {
           specular: 0.08
           emissive: 0
           coat: 0.28
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 88
-            scale: 75
-            floor: plateWear
-            under: creamUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           paints [
             {
               parent: "sidePanel-left"
@@ -2654,8 +2561,6 @@ prototypes {
               scale [0.08, 0.0075, 0.032]
               color: ventSlot
             }
-            { parent: "podBand2-left", type: "Box", position [0.02, -0.05, 0], scale [0.036, 0.016, 0.12], color: "#7E828E" }
-            { parent: "podBand2-right", type: "Box", position [0.02, -0.05, 0], scale [0.036, 0.016, 0.12], color: "#7E828E" }
           ]
         }
         {
@@ -2666,17 +2571,6 @@ prototypes {
           emissive: 0
           coat: 0.28
           // A panel line and two rivets on each greave's outer side; its ivory arch band and side panel are raised plates.
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 89
-            scale: 75
-            floor: plateWear
-            under: lilacUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           paints [
             {
               parent: "shin-left"
@@ -2706,17 +2600,6 @@ prototypes {
           metal: 0.6
           emissive: 0
           coat: 0.2
-          weathering {
-            edge: 0.5
-            lines: 0
-            settle: 0.015
-            reach: 0.012
-            seed: 90
-            scale: 45
-            floor: plateWear
-            under [{ threshold: 0.22, surface { color: "#858891", roughness: 0.6, metal: 0.5 } }]
-            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: "#8B9099"
@@ -2726,17 +2609,6 @@ prototypes {
           metal: 0.7
           emissive: 0
           coat: 0.2
-          weathering {
-            edge: 0.5
-            lines: 0
-            settle: 0.015
-            reach: 0.012
-            seed: 91
-            scale: 45
-            floor: plateWear
-            under [{ threshold: 0.22, surface { color: "#BDC1C5", roughness: 0.6, metal: 0.5 } }]
-            deposit { color: "#615B53", roughness: 0.85, metal: 0 }
-          }
         }
         {
           color: "#D8FDFF"
@@ -2765,17 +2637,6 @@ prototypes {
           specular: 0.08
           emissive: 0
           coat: 0.28
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 94
-            scale: 75
-            floor: plateWear
-            under: creamUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           paints [
             {
               parent: "bracer-left"
@@ -2807,17 +2668,6 @@ prototypes {
           specular: 0.08
           emissive: 0
           coat: 0.28
-          weathering {
-            edge: 0.55
-            lines: 0
-            settle: 0.025
-            reach: 0.014
-            seed: 95
-            scale: 75
-            floor: plateWear
-            under: creamUndercoat
-            deposit { color: "#807568", roughness: 0.85, metal: 0 }
-          }
           paints [
             {
               parent: "bracer-right"
@@ -2843,11 +2693,11 @@ prototypes {
           ]
         }
         {
-          color: "#1F9BAE"
+          color: "#1A80E6"
           toonSelect: mothStyles
           roughness: 0.25
           specular: 0.04
-          emissive: 700
+          emissive: 1400
           coat: 0
         }
         {
@@ -2903,11 +2753,22 @@ prototypes {
           ]
         }
         {
-          color: lavenderPlate
+          color: ivoryPlate
           toonSelect: mothStyles
-          roughness: 0.32
+          roughness: 0.36
           specular: 0.08
-          coat: 0.3
+          emissive: 0
+          coat: 0.28
+          // The pods' ivory band plates in each band's frame: the grey badge inside the lower band with an ivory margin,
+          // and the vertical seam splitting each band into inner and outer pieces (sheets 07 and 13).
+          paints [
+            { parent: "podBand2-left", type: "Box", position [0.03, 0.008, 0], scale [0.036, 0.015, 0.14], color: "#7E828E" }
+            { parent: "podBand1-left", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: "#B48C66" }
+            { parent: "podBand2-left", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: "#B48C66" }
+            { parent: "podBand2-right", type: "Box", position [0.03, 0.008, 0], scale [0.036, 0.015, 0.14], color: "#7E828E" }
+            { parent: "podBand1-right", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: "#B48C66" }
+            { parent: "podBand2-right", type: "Box", position [-0.012, 0, 0], scale [0.0035, 0.4, 0.2], color: "#B48C66" }
+          ]
         }
         {
           color: lavenderPlate
@@ -3090,13 +2951,12 @@ prototypes {
         rounding: 0.012
       }
 
-      // The lavender rib plates down each flank under the arms (sheet 01's front and side), riding the torso with the
-      // chest slab; they close the charcoal gap the sheet's suit never shows between the slab and the shoulder stack.
+      // The charcoal flanks down each side under the arms, beside the chest slab (sheets 01 and 03), riding the torso.
       shape Superellipsoid "flank-left" {
         id: 15
         position [0.165, 1.26, 0.005]
         scale [0.05, 0.125, 0.12]
-        material: violet
+        material: charcoal
         parent: "torso"
         exponent: 4
       }
@@ -3105,7 +2965,7 @@ prototypes {
         id: 16
         position [-0.165, 1.26, 0.005]
         scale [0.05, 0.125, 0.12]
-        material: violet
+        material: charcoal
         parent: "torso"
         exponent: 4
       }
@@ -3594,19 +3454,19 @@ prototypes {
           ]
         }
       ]
-      // Each pod's exhaust leaves its nozzle's mouth along the nozzle's axis and widens to two and a half times its mouth
-      // over a short 0.36 m (sheet 10); the box's +Y end is the mouth.
+      // Each pod's exhaust leaves its nozzle's mouth along the nozzle's axis, a short plume that widens a little and fades
+      // within 0.3 m, half a pod's height (sheet 10); the box's +Y end is the mouth.
       volumes [
         {
           kind: "flow"
           parent: "pod-left"
-          position [-0.0978, -0.3492, -0.166]
+          position [-0.0133, -0.3684, -0.1652]
           rotation: podNozzleRotationLeft
           halfExtent [0.15, 0.18, 0.15]
-          axis: 0.36
-          width: 0.0432
-          spread: 2.5
-          fade: 1.5
+          axis: 0.3
+          width: 0.05
+          spread: 1.4
+          fade: 1.8
           noiseScale: 0.08
           noiseDepth: 0.4
           speed: 1.5
@@ -3639,13 +3499,13 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-right"
-          position [0.0978, -0.3492, -0.166]
+          position [0.0133, -0.3684, -0.1652]
           rotation: podNozzleRotationRight
           halfExtent [0.15, 0.18, 0.15]
-          axis: 0.36
-          width: 0.0432
-          spread: 2.5
-          fade: 1.5
+          axis: 0.3
+          width: 0.05
+          spread: 1.4
+          fade: 1.8
           noiseScale: 0.08
           noiseDepth: 0.4
           speed: 1.5

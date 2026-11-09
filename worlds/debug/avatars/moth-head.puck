@@ -179,8 +179,7 @@ template mothEye(name, side, baseId, eyeGroup, s, at, parentName, skin, white, i
     position: map([side * 0.07656, 1.74842, 0.18945], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
     scale: map([0.048, 0.033, 0.065], v => v * s)
     material: white
-    blend: "SmoothIntersection"
-    smooth: 0.004 * s
+    blend: "Intersection"
     group: eyeGroup
     parent: parentName
     profile {
