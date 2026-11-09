@@ -1580,10 +1580,6 @@ by `world.view.pick`.
   concrete trough. Rebuild each to its panel, building the rendering features
   the panels need (flowing-sheet shading, foam and spray, depth colour,
   wet stone) where they are missing; check what exists first (rule 7).
-- [high] Cel shading is off: `world.toon` reads `off` in the debug world, whose
-  selected direction is the Wind Waker treatment. Decide the treatment's
-  authored defaults in the standard package and turn it on, then judge every
-  place under it.
 - [high] The valley's rim and walls (`valley-north-west` and its siblings) are
   one olive palette colour with low-frequency blotches and lumpy smoothed
   surfaces: none of Study B's warm layered strata, ledges or vegetation, and a
@@ -2762,9 +2758,7 @@ the fixed poses and the approaches already rejected.
     against the lockstep relight work below.
 
 - From step 1: stretching the far cascade to cover the valley costs too much,
-  so the valley waits for the terrain pass's step 7 static cascade; indoors a
-  cel style tints bounced light as its shadow band, so banded materials in the
-  hall read as shadow tone; `world.debug-view shadow` paints unqueried pixels
+  so the valley waits for the terrain pass's step 7 static cascade; `world.debug-view shadow` paints unqueried pixels
   white like lit ones; at the noon sun the meadow lies in the east wall's
   shadow. Step 1's checks and the frame bar are owed again on the moving day
   cycle, with a low-sun cel style for the dawn penumbra check.
@@ -3604,6 +3598,12 @@ Owner: debug-world tools lane (specialist) · medium · Next: the windowed check
 and the developer exhibits; the diagnostics (findings, pins, goto, annotate) are
 editor E6's.
 
+- [low] A field-path write of an enum, `world.row.set render toon.band "Combined"`
+  and then `"Visibility"`, applied without refusal but left every material under
+  the world's default style in its shade band, sunlit faces included, while a
+  whole-object write of the same style (`world.row.set render toon {...}`) banded
+  correctly. Cause unconfirmed: read how the field-path form converts an enum
+  string before it reaches `ToonStyleDocument.Band`.
 - [low] A pick on a screen's face names `screen=<index>` and no placement, and a
   derived face (a creation's own screen) does not name the placement it belongs
   to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
@@ -3964,12 +3964,6 @@ hang, then the pre-`main` language findings.
   functions (`worlds/standard/water.puck`, `waterViews`, `riverChannel`). Each
   is a clumsier form an author reached for (AGENTS.md, "Ergonomic is optimal");
   lift both, then simplify those templates.
-- [medium] `.puck` has no way to take an imported value and override one field
-  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
-  cel style as a default that boots off copies all eleven values
-  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
-  update over a `let`, or a merge builtin beside `concat`), then point the
-  debug world's default at `celStyle`.
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around

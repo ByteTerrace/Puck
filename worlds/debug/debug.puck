@@ -17,6 +17,7 @@ basis: "avatars/moth"
 documentId: "debug"
 
 import "../standard/skies"
+import "../standard/styles"
 import "shapes"
 import "studio"
 import "controls"
@@ -370,23 +371,9 @@ render {
   }
   farDistance: 6000
   temporal: true
-  // The standard's celStyle (../standard/styles.puck) as the world's default, booting off so `world.toon on` bands
-  // every material without a style of its own. Its values are copied because `.puck` cannot yet override one field of
-  // an imported value (the open items' Language packet); keep them equal to celStyle's.
-  toon {
-    enabled: false
-    threshold: 0.45
-    softness: 0.08
-    shadowTint [0.38, 0.48, 0.65]
-    outlineWidth: 1.5
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [0.08, 0.1, 0.16]
-    specularSize: 0.025
-    exposure: 0.5
-    shoulder: 0.65
-    band: Visibility
-  }
+  // The selected direction's cel treatment (docs/game/art/valley-and-gallery.md): the standard's celStyle
+  // (../standard/styles.puck) is the default every material without a style of its own shades with.
+  toon: celStyle
   atmosphere {
     clearDayAir()
   }

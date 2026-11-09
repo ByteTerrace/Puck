@@ -13,6 +13,7 @@
 //   reserved on the floor; nothing here stands there
 
 import "../standard/terrain"
+import "../standard/styles"
 import "valley-form"
 import "water-site"
 
@@ -111,6 +112,7 @@ prototypes {
             color: "#7D7366"
             roughness: 0.95
             specular: 0.02
+            toon: celTerrainStyle
           }
         ]
         terrainRelief(seed: sector.seed)
@@ -162,6 +164,7 @@ prototypes {
           color: "#7D7366"
           roughness: 0.95
           specular: 0.02
+          toon: celTerrainStyle
         }
         {
           color: "#9A958B"

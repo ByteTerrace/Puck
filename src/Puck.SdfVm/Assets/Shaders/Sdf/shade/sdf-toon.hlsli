@@ -15,8 +15,12 @@ struct SdfToonStyle {
     float3 ink;
 };
 
-// The style a material shades with: its own when it authors one, else the world's default.
-SdfToonStyle sdfToonStyle(SdfMaterialData material) {
+// The style a material shades with at a pixel: its own when it authors one, else the world's default. Curvature is the
+// surface's mean curvature (1/m) and footprint the pixel's width on it (m): across one pixel the normal turns by about
+// their product in radians, so a cosine moves by up to that much. The band's softness is widened to at least that, so
+// the terminator of a small or distant curved shape spans a pixel instead of stepping between neighbours and crawling
+// as the camera or the sun moves; a terminator wider than a pixel keeps the authored softness.
+SdfToonStyle sdfToonStyle(SdfMaterialData material, float curvature, float footprint) {
     SdfToonStyle style;
     bool own = (material.toonBands.x != 0.0);
 
@@ -25,6 +29,7 @@ SdfToonStyle sdfToonStyle(SdfMaterialData material) {
     style.outline = (own ? material.toonOutline : passGroup.toonOutline);
     style.ink = (own ? material.toonInk : passGroup.toonInk.rgb);
     style.bands.x = max(style.bands.x, 0.0);
+    style.bands.z = max(style.bands.z, min(abs(curvature) * footprint, 1.0));
     style.outline.x *= passGroup.toonInk.w;
     return style;
 }

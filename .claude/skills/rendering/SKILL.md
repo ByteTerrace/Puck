@@ -555,7 +555,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
   The band keeps visibility apart (`band(cosine) × visibility`) unless the style
   says `band: Combined`; rim lights, the environment reflection and ambient
-  occlusion stay in the cel response. `sdf-toon-outline.hlsli` reads
+  occlusion stay in the cel response. `sdfToonStyle` widens the authored
+  softness to the cosine's change across the pixel (mean curvature × footprint),
+  so a small or far curved shape's terminator spans a pixel instead of stepping
+  and crawling; a terminator that aliases is that widening's, not the style's.
+  The shadow tint multiplies sky ambient and indirect light, which is all of an
+  interior's light, so a tint far below unit luminance darkens rooms. `sdf-toon-outline.hlsli` reads
   depth/normal edges in views, before temporal resolve, at the pixel's own
   style's width. Keep screen pictures, portal pictures, sky and self-emission
   out of both the banding and ink. Nested worlds take the live enable override

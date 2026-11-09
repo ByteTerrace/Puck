@@ -181,7 +181,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.normal = normal;
             shadeSurface.rayDirection = p.rayDirection;
             shadeSurface.material = shadeMaterial;
-            shadeSurface.toon = sdfToonStyle(shadeMaterial);
+            SdfToonStyle style = sdfToonStyle(shadeMaterial, s.curvature, p.pixelFootprint * s.t);
+            bool toon = !sdfShadeBound(shadeBinding) && sdfToonEnabled(style);
+            shadeSurface.toon = style;
             if (sdfShadeBound(shadeBinding)) shadeSurface.toon = (SdfToonStyle)0;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
@@ -192,8 +194,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 ambientTerm = radiance;
-            SdfToonStyle style = sdfToonStyle(shadeMaterial);
-            bool toon = !sdfShadeBound(shadeBinding) && sdfToonEnabled(style);
             if (toon) { radiance *= style.shadow.rgb; }
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
