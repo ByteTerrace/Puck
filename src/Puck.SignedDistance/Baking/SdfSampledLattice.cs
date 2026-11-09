@@ -2481,16 +2481,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return sum;
     }
+    // The trilinear weight of a cell's corner (x | y << 1 | z << 2) at position (u, v, w) in the cell, each in [0, 1].
+    private static float CornerWeight(int corner, float u, float v, float w) =>
+        (((((corner & 1) == 1) ? u : (1f - u)) * ((((corner >> 1) & 1) == 1) ? v : (1f - v))) * ((((corner >> 2) & 1) == 1) ? w : (1f - w)));
     // A fine sample's value as its coarse cell's corners interpolate it.
     private float CoarseValue(int x, int y, int z) {
         var (cx, cy, cz, u, v, w) = Interpolant(x: x, y: y, z: z);
         var sum = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = corner & 1;
-            var dy = (corner >> 1) & 1;
-            var dz = (corner >> 2) & 1;
-            var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
+            var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
 
             sum += (weight * Values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
         }
@@ -2542,7 +2543,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         for (var corner = 0; (corner < 8); corner++) {
             var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
-            var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
 
             if (weight == 0f) { continue; }
             corners[count++] = new StrideCorner(
@@ -2629,10 +2630,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var sum = Vector3.Zero;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = corner & 1;
-            var dy = (corner >> 1) & 1;
-            var dz = (corner >> 2) & 1;
-            var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
+            var (dx, dy, dz) = ((corner & 1), ((corner >> 1) & 1), ((corner >> 2) & 1));
+            var weight = CornerWeight(corner: corner, u: u, v: v, w: w);
 
             sum += (m_gradients[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))] * weight);
         }
@@ -2769,7 +2768,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var dx = corner & 1;
                 var dy = (corner >> 1) & 1;
                 var dz = (corner >> 2) & 1;
-                var weight = ((((dx == 1) ? fx : (1f - fx)) * ((dy == 1) ? fy : (1f - fy))) * ((dz == 1) ? fz : (1f - fz)));
+                var weight = CornerWeight(corner: corner, u: fx, v: fy, w: fz);
 
                 if (weight != 0f) {
                     sum += (owner.FineGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz)) * weight);
