@@ -71,19 +71,23 @@ overhead: the strips' luminous bands lit through the irradiance volume as the
 soft area light, the downlights over them as a soft key with a highlight that
 shows roughness. The level aims at inspection lighting (EN 12464-1 asks 750 lux
 for inspection work), which also keeps a lit level above the darkest exposure
-the world adapts to (`EV100` 7 under the Moth basis's 2.5 stops of
-compensation, a room averaging under about 90 nits), so a lit room never
-renders darker than its light. The blinds start down, as a gallery keeps
+the hall adapts to by day (`render.exposure` in `hall.puck`: its floor of
+`EV100` 7 under 2 stops of compensation clamps a room averaging under about
+64 nits), so a lit room never renders darker than its light. Every lit room of
+the hall is held to that level: one lit more dimly reads as murk at noon,
+since the floor holds it under what its meter asks. The blinds start down, as a gallery keeps
 daylight off its exhibits: with them up, daylight through three window walls
 is several times the electric light and moves the exposure by up to three stops
 between neighbouring exhibits (`world.exposure` read `EV100` 9 to 12 along
 level 0's rows with the blinds up).
 
 Lighting is in real units: the sun gives 100,000 lux, an emissive strip
-(3,000 nits, white) runs along the ceiling over each viewing aisle and two over
+(4,000 nits, white) runs along the ceiling over each viewing aisle and three over
 each landing (`hallStrips`, part of the slab or roof above them), a 5,000-lumen
 6500 K downlight hangs every 12 m along each strip and, on level 3, in three more rows across the skylights' frames (`hallDownlights`), an
-800-lumen pendant lights the stairwell, and the lift car has a luminous
+800-lumen pendant and a luminous panel on the north wall over each half
+landing (`stair-light-<k>`, always lit, as a stair's egress light is) light the
+stairwell, and the lift car has a luminous
 ceiling (120 nits, nearly the whole ceiling) over a 6,000-lumen wide spot that
 rides the car's body. The volume cannot see the moving car's light, so the car
 takes the darkest exposure, `EV100` 7, and its light is sized to read there
@@ -98,9 +102,7 @@ traced indirect light, the shadow cascades under the roof and ambient
 occlusion.
 
 Each level's room lights switch on and off. `hallLights` holds each level's
-state (`Off` or `On`): level 0, the lobby where the gaming devices stand,
-starts `Off`, so its light is the device screens', and levels
-1 to 3 start `On`. A level that is off shows the dark variant of the slab or
+state (`Off` or `On`), and every level starts `On`. A level that is off shows the dark variant of the slab or
 roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
 pale, unlit diffuser in the strips' palette slot) through the placement's
 `respond` facet, and its fixtures (`hallLamps`: each level's downlights, and

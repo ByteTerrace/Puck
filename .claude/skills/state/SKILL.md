@@ -131,6 +131,10 @@ and the source-read timing choice; these are not guarantees the current implemen
   console and a host command reach the same `ArenaTransforms.TryApply` inside
   the caller's scope. A second shuffle or deal written in a host is a
   duplicate, not a feature.
+- **Draw seeds frame strings before folding characters.** `GeneratorEngine`
+  adds each rung's length as a `ulong`, then calls `Fnv1aHash.Add(ReadOnlySpan<char>)`.
+  The nullable-string overload uses a `uint` prefix; it is not a replacement
+  for the seed ladder's framing. The character fold itself belongs to Maths.
 - **Writes outside a scope cannot be rewound**, and a relayout cannot run
   while a scope is open. Open a scope before any change you may need to take
   back.
@@ -202,10 +206,7 @@ and the source-read timing choice; these are not guarantees the current implemen
   sharing only `GateProgramEvaluator`. Merging them is a design step for the
   physics and body lane ("Puck code over engine code": body facts are operands
   a rule gate could read).
-- **The draw-seed ladder folds strings its own way.** `GeneratorEngine`'s
-  private `FoldDelimited` folds a 64-bit length where `Fnv1aHash.Add` folds a
-  32-bit one; merging re-rolls every authored draw stream, so it belongs in a
-  change that looks at the debug world afterwards.
+  The remaining lowering work is in the [refactoring packet](../../../docs/plans/open-items.md#refactoring-campaign).
 - Rule-fault follow-ups are in [the rule-faults plan](../../../docs/plans/rule-faults.md),
   evaluation cost in [the rule-evaluation-cost plan](../../../docs/plans/rule-evaluation-cost.md).
 

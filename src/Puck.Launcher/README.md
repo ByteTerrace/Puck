@@ -129,11 +129,18 @@ observes the stub reject that payload and roll back to the proven version.
 Staging rebuilds the inactive version directory from the manifest's complete
 file set, so a retry cannot inherit files omitted by a replacement manifest.
 Cached objects are still reused and rehashed; a corrupt object is deleted so a
-later attempt can download it again. Direct stager callers hold the
-install lease and exclude the current version, as `UpdateService` does.
+later attempt can download it again. Each staged file is flushed to stable
+storage as it is written. Direct stager callers hold the publication lease and
+exclude the current version, as `UpdateService` does.
 
-`UpdateService` holds the install root's persistent `update.lock` lease across
-verification, staging and activation. Rollout exclusion and staging failure
+`UpdateService.ApplyAsync` holds the install root's persistent
+`publication.lock` across verification, staging and activation, which excludes
+other appliers and pruning, and takes `update.lock` (an `InstallTransaction`)
+only for short decisions: never across the network fetch or the download, so
+the stub, registration and health recording are not held back. Everything
+decided before staging is judged again under the final transaction. With
+`waitForOtherAppliers` it waits for another applier instead of reporting the
+install busy. Rollout exclusion and staging failure
 do not consume a sequence. Before activation it reserves the replay mark with
 the full signed-manifest SHA-256 pin, then writes `<cacheRoot>/install-intent.json`. A
 refused reservation creates no intent. A crash between reservation and intent
@@ -162,13 +169,13 @@ Each version's `versions/<version>/install-record.json` carries its install
 sequence, runtime, state generation, payload identity
 (`ReleasePayloadIdentity`) and file pins. Every change to either goes through
 `InstallTransaction`, which exists only while `update.lock` is held:
-`UpdateService` begins one for an apply and one around a check's verification,
+`UpdateService` begins short ones for an apply's decisions and one around a check's verification,
 and hands it to `IReleaseVerifier` and `IUpdateApplier`, which never begin
 their own. Verification merges an authentic manifest's revocations into the
 record before judging the manifest, so a refused or read-only check still
 records them; `ReleasePolicy.Refusal` then refuses a revoked version, a rejected
-payload or a state generation below the floor. The applier flushes the staged
-files, writes the install record durably and commits the record naming the
+payload or a state generation below the floor. The applier verifies the staged
+files, flushes their directory entries, writes the install record durably and commits the record naming the
 version current; nothing about the outgoing version changes. The selected
 executable records its health after startup (`HealthGateFile`, through
 `InstallTransaction.RecordHealthy`), only when its registration holds
@@ -237,8 +244,8 @@ earlier, and no link is followed. These are the invariants a review checks:
   launch with the reason. Whether a process runs from the install at all is the
   identity of its image's parent directory, never a path spelling. Under the
   same lease the release record must admit the version
-  (`InstallTransaction.AdmitProcess`): a version without a valid install
-  record, revoked, rejected or below the state generation floor refuses to
+  (`InstallTransaction.AdmitProcess`): a version without a committed install
+  record, neither current nor proven, revoked, rejected or below the state generation floor refuses to
   start, whoever started it, and a start raises the floor to its generation.
 - **Crash-safe.** A version leaves `versions/` whole by one move into `trash/`
   (by handle on Windows, `renameat2` relative to held descriptors on Linux),

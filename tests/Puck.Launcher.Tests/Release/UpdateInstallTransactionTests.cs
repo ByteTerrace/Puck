@@ -16,7 +16,7 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
         Assert.False(condition: (await Service(applier: new InterruptedApplier(boundary: "before-pointer"))
             .ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken)).Applied);
         var original = File.ReadAllBytes(path: Intent);
-        using (var lease = backwardsClock ? null : InstallTransaction.TryBegin(installRoot: Install)) {
+        using (var lease = backwardsClock ? null : InstallLeases.TryAcquire(fileName: InstallLeases.PublicationLockFileName, installRoot: Install)) {
             if (!backwardsClock) { Assert.NotNull(@object: lease); }
             var refused = await Service().ApplyAsync(now: backwardsClock ? Now.AddSeconds(seconds: -1) : Now,
                 cancellationToken: TestContext.Current.CancellationToken);
@@ -248,19 +248,30 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
 
         await blocked.Entered.Task.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         try {
-            Assert.Null(@object: InstallTransaction.TryBegin(installRoot: Install));
+            // R05: the download holds the publication lease, never the update lease, so the stub can select and launch
+            // meanwhile; a second applier is refused at once, or waits when asked to.
+            using (var stub = InstallTransaction.TryBegin(installRoot: Install)) {
+                Assert.NotNull(@object: stub);
+            }
             var second = await Service(stager: new RefusingStager()).ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.False(condition: second.Applied);
             Assert.Contains(expectedSubstring: "busy", actualString: second.Detail);
+            var waiting = Service().ApplyAsync(cancellationToken: TestContext.Current.CancellationToken, now: Now, waitForOtherAppliers: true);
+
+            Assert.False(condition: waiting.IsCompleted);
+            blocked.Release.TrySetResult();
+            Assert.False(condition: (await first).Applied);
+            var waited = await waiting;
+
+            Assert.True(condition: waited.Applied, userMessage: waited.Detail);
         } finally {
             blocked.Release.TrySetResult();
         }
-        Assert.False(condition: (await first).Applied);
         Assert.False(condition: File.Exists(path: Intent));
     }
     [Fact]
-    public async Task StubTransaction_BlocksUpdateUntilTheChildCanLaunch() {
+    public async Task StubTransaction_HoldsBackAnApplysDecisionsButNotForever() {
         Publish(manifest: Manifest());
         using (InstallTransaction.TryBegin(installRoot: Install)) {
             var blocked = await Service(stager: new RefusingStager()).ApplyAsync(now: Now, cancellationToken: TestContext.Current.CancellationToken);

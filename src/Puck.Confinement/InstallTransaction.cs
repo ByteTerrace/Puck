@@ -104,17 +104,20 @@ public sealed class InstallTransaction : IDisposable {
     // Registration already holds the lease on this root; the transaction borrows both.
     internal static InstallTransaction Under(ConfinedDirectory root) => new(lease: null, ownsRoot: false, root: root, rootPath: root.Path);
 
-    /// <summary>Reads a version directory's install record.</summary>
+    /// <summary>Reads a version directory's committed install record: one the release record's install order covers
+    /// (<see cref="InstallRecord.Sequence"/> at most <see cref="ReleasePolicy.LastSequence"/>). A record with a later
+    /// sequence was written by an apply whose commit never happened, and names no install.</summary>
     /// <param name="version">The version directory's name.</param>
     /// <returns>The record, or <see langword="null"/> when the name is not a plain directory name, the directory or its
-    /// record is absent, or the record does not validate.</returns>
+    /// record is absent, the record does not validate, or it was never committed.</returns>
     /// <exception cref="IOException">The directory or record is a link or cannot be read.</exception>
+    /// <exception cref="InvalidDataException">The release record does not validate.</exception>
     public InstallRecord? ReadRecord(string version) {
         if (!InstallLayout.IsPlainName(name: version)) { return null; }
         using var versions = Root.Child(name: InstallLayout.VersionsDirectoryName);
         using var directory = versions?.Child(name: version);
 
-        return ((directory is null) ? null : InstallRecord.TryRead(version: directory));
+        return (((directory is not null) && (InstallRecord.TryRead(version: directory) is { } record) && (record.Sequence <= Policy.LastSequence)) ? record : null);
     }
     /// <summary>Lists the proven installs, most recent first, each with why it may or may not be a rollback target under
     /// the current record: its directory must hold the very install that proved healthy (the same sequence and payload
@@ -128,7 +131,7 @@ public sealed class InstallTransaction : IDisposable {
         var current = Policy.Current;
 
         return RollbackCandidates().FirstOrDefault(predicate: candidate =>
-            (candidate.Disqualification is null) && !string.Equals(a: candidate.Proof.Version, b: current, comparisonType: StringComparison.Ordinal))?.Proof.Version;
+            (candidate.Disqualification is null) && !string.Equals(a: candidate.Proof.Version, b: current, comparisonType: InstallLayout.NameComparison))?.Proof.Version;
     }
     /// <summary>Reports whether an install record is the very install a proof of health names.</summary>
     /// <param name="version">The version directory's name.</param>
@@ -142,11 +145,12 @@ public sealed class InstallTransaction : IDisposable {
     /// eligibility is judged. A name that cannot be a version directory can name no install and is dropped before anything
     /// is written; revocations that can never again name a selectable or admissible version are retired.</summary>
     /// <param name="revoked">The manifest's revoked version names.</param>
-    /// <param name="precedence">The release version order admission uses (positive when the first follows the second).</param>
+    /// <param name="precedence">The release version order (positive when the first follows the second), or <see langword="null"/>
+    /// when either name has no defined order; such a name is never retired and never installs over another.</param>
     /// <returns>The refusal when the merged revocations would exceed <see cref="ReleasePolicy.MaximumRevokedVersions"/>, in
     /// which case nothing is written; otherwise <see langword="null"/>.</returns>
     /// <exception cref="IOException">The record cannot be written.</exception>
-    public string? MergeRevocations(IEnumerable<string>? revoked, Comparison<string> precedence) {
+    public string? MergeRevocations(IEnumerable<string>? revoked, Func<string, string, int?> precedence) {
         ArgumentNullException.ThrowIfNull(argument: precedence);
         var policy = Policy;
         var merged = policy.RevokedVersions.Concat(second: (revoked ?? []).Where(predicate: static version => InstallLayout.IsPlainName(name: version)))
@@ -170,13 +174,14 @@ public sealed class InstallTransaction : IDisposable {
     /// <param name="stateGeneration">The installed payload's state generation.</param>
     /// <param name="payloadPin">The installed payload's identity.</param>
     /// <param name="files">The payload files' content pins.</param>
-    /// <param name="precedence">The release version order admission uses (positive when the first follows the second).</param>
+    /// <param name="precedence">The release version order (positive when the first follows the second), or <see langword="null"/>
+    /// when either name has no defined order; such a name is never retired and never installs over another.</param>
     /// <param name="recovering">Whether this completes a durable install intent, which may already have made the version
     /// current.</param>
     /// <param name="record">The version's install record when it was installed or already current.</param>
     /// <returns>The refusal, or <see langword="null"/> when the version is current.</returns>
     /// <exception cref="IOException">The install record or the release record cannot be written.</exception>
-    public string? CommitApply(string version, string rid, int stateGeneration, string payloadPin, IReadOnlyList<string> files, Comparison<string> precedence,
+    public string? CommitApply(string version, string rid, int stateGeneration, string payloadPin, IReadOnlyList<string> files, Func<string, string, int?> precedence,
         bool recovering, out InstallRecord? record) {
         ArgumentNullException.ThrowIfNull(argument: files);
         ArgumentNullException.ThrowIfNull(argument: precedence);
@@ -184,7 +189,7 @@ public sealed class InstallTransaction : IDisposable {
 
         record = null;
         if (!InstallLayout.IsPlainName(name: version)) { return $"'{version}' is not a version directory name"; }
-        if (recovering && string.Equals(a: policy.Current, b: version, comparisonType: StringComparison.Ordinal)) {
+        if (recovering && string.Equals(a: policy.Current, b: version, comparisonType: InstallLayout.NameComparison)) {
             var installed = ReadRecord(version: version);
 
             if ((installed is null) || (installed.StateGeneration != stateGeneration) || !string.Equals(a: installed.PayloadPin, b: payloadPin, comparisonType: StringComparison.Ordinal)) {
@@ -195,7 +200,7 @@ public sealed class InstallTransaction : IDisposable {
         }
         if (policy.Refusal(payloadPins: [payloadPin], stateGeneration: stateGeneration, version: version) is { } refusal) { return refusal; }
         if (policy.Current is { } previous) {
-            if (precedence(version, previous) <= 0) { return $"version '{version}' does not exceed the current install '{previous}'"; }
+            if (precedence(version, previous) is not > 0) { return $"version '{version}' does not exceed the current install '{previous}'"; }
             if (string.Equals(a: version, b: previous, comparisonType: StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(a: version, b: RollbackTarget(), comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 return $"version '{version}' collides case-insensitively with an active install directory";
@@ -239,6 +244,7 @@ public sealed class InstallTransaction : IDisposable {
         }
         var record = ReadRecord(version: current);
         var next = policy;
+        var currentProven = ((record is not null) && IsProven(record: record, version: current));
         string? disqualified;
 
         if (record is null) {
@@ -246,7 +252,9 @@ public sealed class InstallTransaction : IDisposable {
         } else {
             var attempts = policy.AttemptsFor(payloadPin: record.PayloadPin);
 
-            if (attempts >= maxAttempts) {
+            // A proven install already started on this machine; its launches are not counted, so a run of closed or
+            // interrupted launches never rejects it.
+            if (!currentProven && (attempts >= maxAttempts)) {
                 next = Reject(payloadPin: record.PayloadPin, policy: next, version: current);
                 notes.Add(item: $"version {current} reached {attempts}/{maxAttempts} startup attempts; its payload {record.PayloadPin} is rejected");
             }
@@ -254,6 +262,7 @@ public sealed class InstallTransaction : IDisposable {
         }
         var chosen = current;
         var chosenRecord = record;
+        var chosenProven = currentProven;
 
         if (disqualified is not null) {
             var candidates = Candidates(policy: next);
@@ -268,13 +277,17 @@ public sealed class InstallTransaction : IDisposable {
             }
             chosen = target.Proof.Version;
             chosenRecord = target.Record!;
+            chosenProven = true;
             notes.Add(item: $"version {current} cannot launch ({disqualified}); rolling back to proven {chosen}");
         }
+        // Only an unproven install's launch is counted. The applier admits a new install only while the payload history
+        // has room for one more entry, and only that install is ever unproven and launched, so a launch adds at most the
+        // one entry the bound reserves for it, however many rollbacks follow.
         Commit(next: (RaiseFloor(policy: next, stateGeneration: chosenRecord!.StateGeneration) with {
             Current = chosen,
-            LaunchAttempts = Count(attempts: next.LaunchAttempts, payloadPin: chosenRecord.PayloadPin),
+            LaunchAttempts = (chosenProven ? next.LaunchAttempts : Count(attempts: next.LaunchAttempts, payloadPin: chosenRecord.PayloadPin)),
         }));
-        return new LaunchDecision(Notes: notes, Refusal: null, RolledBackFrom: (string.Equals(a: chosen, b: current, comparisonType: StringComparison.Ordinal) ? null : current),
+        return new LaunchDecision(Notes: notes, Refusal: null, RolledBackFrom: (string.Equals(a: chosen, b: current, comparisonType: InstallLayout.NameComparison) ? null : current),
             Version: chosen);
     }
     /// <summary>Records that the process registered from <paramref name="version"/> reached startup health: when the
@@ -287,30 +300,43 @@ public sealed class InstallTransaction : IDisposable {
     public bool RecordHealthy(string version) {
         var policy = Policy;
 
-        if (!string.Equals(a: policy.Current, b: version, comparisonType: StringComparison.Ordinal) || (ReadRecord(version: version) is not { } record)) { return false; }
+        if ((policy.Current is not { } current) || !string.Equals(a: current, b: version, comparisonType: InstallLayout.NameComparison) ||
+            (ReadRecord(version: current) is not { } record)) {
+            return false;
+        }
         var next = WithoutAttempts(payloadPin: record.PayloadPin, policy: policy);
 
-        if (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: version) is null) {
+        if (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: current) is null) {
             next = RaiseFloor(policy: next, stateGeneration: record.StateGeneration);
-            if (!next.ProvenInstalls.Any(predicate: proof => Matches(proof: proof, record: record, version: version))) {
-                next = (next with { ProvenInstalls = [.. next.ProvenInstalls, new ProvenInstall(PayloadPin: record.PayloadPin, Sequence: record.Sequence, Version: version)] });
+            if (!next.ProvenInstalls.Any(predicate: proof => Matches(proof: proof, record: record, version: current))) {
+                // At the bound the oldest proof gives way: losing one only loses a rollback target, never admits anything.
+                var kept = ((next.ProvenInstalls.Count < ReleasePolicy.MaximumProvenInstalls)
+                    ? next.ProvenInstalls
+                    : next.ProvenInstalls.OrderBy(keySelector: static proof => proof.Sequence).Skip(count: ((next.ProvenInstalls.Count - ReleasePolicy.MaximumProvenInstalls) + 1)).ToList());
+
+                next = (next with { ProvenInstalls = [.. kept, new ProvenInstall(PayloadPin: record.PayloadPin, Sequence: record.Sequence, Version: current)] });
             }
         }
         Commit(next: next);
         return true;
     }
-    /// <summary>Admits a process starting from <paramref name="version"/>: its install record must be valid and pass
-    /// <see cref="ReleasePolicy.Refusal"/>; the floor is then raised to its generation and committed if it rose, before the
-    /// process runs any application code.</summary>
+    /// <summary>Admits a process starting from <paramref name="version"/>: the version must be a committed install
+    /// (<see cref="ReadRecord"/>) that is the current one or a proven one, and pass <see cref="ReleasePolicy.Refusal"/>; the
+    /// floor is then raised to its generation and committed if it rose, before the process runs any application code. A
+    /// staged directory, one an interrupted apply left uncommitted, or one superseded before it ever proved healthy runs
+    /// nothing and raises no floor.</summary>
     /// <param name="version">The version directory the process runs from.</param>
     /// <returns>The refusal, or <see langword="null"/> when the process may run.</returns>
     /// <exception cref="InvalidDataException">The release record does not validate.</exception>
     /// <exception cref="IOException">A record cannot be read or the release record cannot be written.</exception>
     public string? AdmitProcess(string version) {
-        if (ReadRecord(version: version) is not { } record) { return $"versions/{version} holds no valid install record"; }
         var policy = Policy;
 
+        if (ReadRecord(version: version) is not { } record) { return $"versions/{version} holds no valid install record the release record committed"; }
         if (policy.Refusal(payloadPins: [record.PayloadPin], stateGeneration: record.StateGeneration, version: version) is { } refusal) { return refusal; }
+        if (!string.Equals(a: policy.Current, b: version, comparisonType: InstallLayout.NameComparison) && !IsProven(record: record, version: version)) {
+            return $"versions/{version} is neither the current install nor a proven one";
+        }
         Commit(next: RaiseFloor(policy: policy, stateGeneration: record.StateGeneration));
         return null;
     }
@@ -327,7 +353,7 @@ public sealed class InstallTransaction : IDisposable {
     }
 
     private static bool Matches(ProvenInstall proof, InstallRecord record, string version) =>
-        (string.Equals(a: proof.Version, b: version, comparisonType: StringComparison.Ordinal) && (proof.Sequence == record.Sequence) &&
+        (string.Equals(a: proof.Version, b: version, comparisonType: InstallLayout.NameComparison) && (proof.Sequence == record.Sequence) &&
         string.Equals(a: proof.PayloadPin, b: record.PayloadPin, comparisonType: StringComparison.Ordinal));
     private static ReleasePolicy RaiseFloor(ReleasePolicy policy, int stateGeneration) =>
         ((stateGeneration > policy.StateGenerationFloor) ? (policy with { StateGenerationFloor = stateGeneration }) : policy);
@@ -369,17 +395,18 @@ public sealed class InstallTransaction : IDisposable {
 
         return [.. (versions?.Entries() ?? []).Where(predicate: static entry => (entry.Kind == ConfinedEntryKind.Directory)).Select(selector: static entry => entry.Name)];
     }
-    // A revoked version can be retired once no directory bears its name and it is at or below every version that could
-    // become current: the current one and every installed one. Admission requires a version strictly above the current
-    // one, rollback selects only installed ones, and every later install is above some later current, so every future
-    // current is at or above today's minimum: the retired version can never again be admitted or selected.
-    private ReleasePolicy Retire(ReleasePolicy policy, Comparison<string> precedence) {
+    // A revoked version can be retired once no directory bears its name and it is strictly below every version that could
+    // become current: the current one and every committed install (a staged or uncommitted directory is no anchor).
+    // Admission requires a version strictly above the current one, rollback selects only committed installs, and every
+    // later install is above some later current, so every future current is at or above today's lowest anchor: the
+    // retired version can never again be admitted or selected. A name the order cannot place (precedence null), or one
+    // of equal precedence to an anchor, is kept; before the first commit nothing is retired.
+    private ReleasePolicy Retire(ReleasePolicy policy, Func<string, string, int?> precedence) {
+        if (policy.Current is not { } current) { return policy; }
         var installed = InstalledVersions();
-        var anchors = ((policy.Current is { } current) ? installed.Append(element: current) : installed).ToList();
-
-        if (anchors.Count == 0) { return policy; }
+        var anchors = installed.Where(predicate: name => (ReadRecord(version: name) is not null)).Append(element: current).ToList();
         var kept = policy.RevokedVersions.Where(predicate: version =>
-            installed.Contains(value: version, comparer: StringComparer.OrdinalIgnoreCase) || anchors.Any(predicate: anchor => (precedence(version, anchor) > 0))).ToList();
+            installed.Contains(value: version, comparer: StringComparer.OrdinalIgnoreCase) || anchors.Any(predicate: anchor => (precedence(version, anchor) is not < 0))).ToList();
 
         return ((kept.Count == policy.RevokedVersions.Count) ? policy : (policy with { RevokedVersions = kept }));
     }
