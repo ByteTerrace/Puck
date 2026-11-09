@@ -919,7 +919,16 @@ times, which a field-sampled witness and an outward-offset contour both rest
 on. So the chain waited for that bound to be fixed at its cause and the G1b audit
 was re-run unchanged on the corrected evaluator (the G1b row): the floor still
 fails, so the work goes to D1's option 1d or the member-aware collapse, and the
-levels that pass ship with G2, not alone. G4 is
+levels that pass ship with G2, not alone. The lead's ruling after that re-run:
+the evaluator's fix alone cut the collapse's own floor about twofold, field
+levels added little on top, and what still blocks them is thin shells flipping
+at coarse levels (the Moth's shins, pod bands and heel housings, which her
+rebuild is replacing) and fine cells spent where no view resolves them (D7's
+per-creation budget). Three experiments on one approach is the point to change
+the work: G2 is parked with its comparison re-baselined to the corrected
+collapse, and the build order proceeds with the steps that do not wait on it
+(G3, G5) and with D7's budget; option 1d or the member-aware collapse is taken
+up again after the Moth's rebuild lands and D7 is measured on her. G4 is
 V2b and lands where the visibility plan places it; G5 waits on nothing but the
 sight step it grows; G6 waits on G2 and G3, and its one-draw tier on V2c; G7
 on G6 and on V1's buckets for its comparison; G8 on G2; G9 on V1b and a
