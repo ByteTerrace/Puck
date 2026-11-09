@@ -1057,6 +1057,20 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   and error thresholds retain level zero's bounds and cell; a coarser mesh
   must not buy a cleaner report by enlarging its error budget. `--images`
   draws the selected level too. The default still audits level zero.
+- **`--cpu --field-levels` measures field-derived levels beside the collapse.**
+  `SdfMeshFieldLevels` drives `SdfMeshPathBake.ContourLevel` (the bake's own
+  lattice, refinement, crossings, contour, field check, crease split, material
+  cut and planar merge on a coarser lattice at an outward iso-value) and is the
+  one place the plan's error contract is computed, for its own levels and the
+  collapse's alike. The answers go through `ISdfMeshLevelField`, which the CLI
+  implements on `MeshCpuBake`'s sampler and the shared tap stencil
+  (`SdfMeshBakeTaps`), counting evaluations by contour and oracle and the
+  thread work inside them (`ThreadCycles`). A field whose level-zero brackets
+  break its step scale (`SdfMeshFieldLevels.Certified`) is answered at every
+  sample; a member's part takes its own box, and a slot whose shapes only carve
+  is no part (`SdfMeshAudit.MemberFields`). The offline bake answers the skin
+  round with each lattice's own slot, so no CPU-baked group is skinned and every
+  multi-slot group carries collapse levels a World's bake would not give it.
 - **What it cannot read.** The render reading interprets every warp, fold and
   relief the renderer draws, a non-uniform scale, a sweep of any strand count
   and a path's edge table, each a sync pair with its `mapCore` case
