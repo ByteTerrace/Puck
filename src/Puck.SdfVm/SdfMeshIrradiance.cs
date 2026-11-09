@@ -175,8 +175,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
     /// <summary>Traversal stack or step-limit assertions; valid scenes must leave this at zero.</summary>
     public static readonly WorkKind TraversalFaults = new(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
-    /// <summary>CPU sky projections captured for probe lighting.</summary>
-    public static readonly WorkKind EnvironmentProjections = new(name: "sdf.mesh-gi.environment.projections", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>CPU sky captures for probe lighting: each renders the sky map and averages it over the hit texels.</summary>
+    public static readonly WorkKind SkyCaptures = new(name: "sdf.mesh-gi.sky-captures", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
     public static readonly WorkKind Behind = new(name: "sdf.mesh-gi.behind", unit: "cycles", workClass: WorkClass.Pacing);
     /// <summary>Counts camera hit traces, including rejected samples inside opaque geometry.</summary>
@@ -189,7 +189,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
     public static readonly WorkKind GpuMeterNanoseconds = new(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, EnvironmentProjections, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, SkyCaptures, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -258,7 +258,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
     private const float ConvergedFloor = 1.0e-3f;
-    // Continuous asynchronous skies suppress capture-to-capture changes below this share of each channel's peak.
+    // Continuous asynchronous skies keep the preceding capture while every sky texel's channel is within this share of
+    // its own value in either capture, so no probe's sky light moves past it, however few rays reach the sky.
     private const float SkyTolerance = 1.0e-3f;
     // The least wall time between two behind lines.
     private static readonly TimeSpan BehindInterval = TimeSpan.FromSeconds(value: 10d);
@@ -1289,7 +1290,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // static point and spot lights, whole, so a fixture switched off relights the bounce it cast; the sky the bounce
     // reflects; the gains, the sources, the sweeps and what the scene's materials reflect and emit. Nonconverged
     // captures are rate-limited because a capture renders the sky. An authored grid snaps the capture inputs and
-    // radiance independently of history. Converged lighting compares sky captures exactly.
+    // radiance independently of history. A sky capture is kept or replaced by the sky texels the relight reads
+    // (Lighting.SkyMatches), exactly under a converged frame or a grid.
     private readonly SdfLights m_captureLights = new();
     private void RefreshLighting(SdfFrame frame, Layout layout) {
         var grid = frame.IndirectLightingGrid;
@@ -1332,7 +1334,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         var captured = Lighting.Capture(frame: frame, captureLights: captureLights, localVersion: m_localVersion, previous: m_lighting, version: (m_lightingVersion + 1), scratch: m_captureScratch);
-        if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(EnvironmentProjections); }
+        if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(SkyCaptures); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
         m_skyPeak = captured.SkyPeak;
 
@@ -2937,9 +2939,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Reach: reach
         );
     }
-    // The lighting the probes are relit under: its version and when it was captured, the directional lights, the static
-    // point and spot lights, the program's materials, the gains and sources, and the sky's irradiance projected on the CPU
-    // (SdfSkyEnvironment), which the bounced light reads.
     // Lighting.Capture's workspace: the frame thread's lists, sky map and sky layer table, which every capture refills.
     private sealed class CaptureScratch {
         public List<SdfLight> Lights { get; } = [];
@@ -2950,6 +2949,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public SdfSkyDetails Details { get; } = new();
     }
     private readonly CaptureScratch m_captureScratch = new();
+    // The lighting the probes are relit under: its version and when it was captured, the directional lights, the static
+    // point and spot lights, the program's materials, the gains and sources, and the radiance the sky sends along each
+    // hit texel's ray.
     private sealed class Lighting {
         public required int Version { get; init; }
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
@@ -2967,31 +2969,25 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public required SdfMaterial[] Materials { get; init; }
         public required TracedLight[] Points { get; init; }
         public bool Sky { get; init; }
-        public required Vector3[] SkyCoefficients { get; init; }
-        // The sky's radiance about each hit texel's ray, gain applied (SdfMeshProbeDepth.SkyRadiance), zero with the sky
-        // source off: what a probe's open ray carries.
+        // The sky's radiance about each hit texel's ray, gain applied (SdfMeshProbeDepth.SkyRadiance) and snapped on the
+        // authored grid, zero with the sky source off: what a probe's open ray carries, and the only sky a relight or a
+        // meter reads, so it is also the capture's identity (SkyMatches).
         public required Vector3[] SkyTexels { get; init; }
         public float SkyPeak { get; init; }
 
         public SdfMaterial MaterialAt(int index) =>
             (((index >= 0) && (index < Materials.Length)) ? Materials[index] : new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
-        // Whether another capture's sky lights the probes as this one's does: in each colour channel apart, every projected
-        // coefficient within SkyTolerance of that channel's own largest in either capture, so a dim channel's change
-        // counts however bright the others are, since a material that rejects the bright channels sees only it.
+        // Whether another capture's sky lights the probes as this one's does. Exact: every sky texel equal, so a kept
+        // capture relights exactly as the replacement would. Otherwise every texel's every channel within SkyTolerance of
+        // its own value in either capture: the relight sums texels with non-negative weights, so no probe's sky light moves
+        // by more than that share, even a probe that sees the sky through a few rays, and a dim channel counts however
+        // bright the others are.
         public bool SkyMatches(Lighting other, bool exact) {
             if (Sky != other.Sky) { return false; }
-            if (exact) { return SkyCoefficients.AsSpan().SequenceEqual(other.SkyCoefficients); }
-
-            var largest = Vector3.Zero;
-
-            for (var index = 0; (index < SkyCoefficients.Length); index++) {
-                largest = Vector3.Max(value1: largest, value2: Vector3.Max(value1: Vector3.Abs(value: SkyCoefficients[index]), value2: Vector3.Abs(value: other.SkyCoefficients[index])));
-            }
-
-            var bound = (largest * SkyTolerance);
-
-            for (var index = 0; (index < SkyCoefficients.Length); index++) {
-                var difference = Vector3.Abs(value: (SkyCoefficients[index] - other.SkyCoefficients[index]));
+            if (exact) { return SkyTexels.AsSpan().SequenceEqual(other.SkyTexels); }
+            for (var index = 0; (index < SkyTexels.Length); index++) {
+                var bound = (Vector3.Max(value1: Vector3.Abs(value: SkyTexels[index]), value2: Vector3.Abs(value: other.SkyTexels[index])) * SkyTolerance);
+                var difference = Vector3.Abs(value: (SkyTexels[index] - other.SkyTexels[index]));
 
                 if ((difference.X > bound.X) || (difference.Y > bound.Y) || (difference.Z > bound.Z)) { return false; }
             }
@@ -3019,7 +3015,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 }
             }
 
-            var coefficients = new Vector3[SdfSkyEnvironment.CoefficientCount];
             var skyTexels = new Vector3[SdfMeshProbeDepth.HitCount];
             var sources = frame.IndirectSources;
             var skyPeak = 0f;
@@ -3030,13 +3025,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 frame.Sky.Pack(captureLights, frame.FarDistance, scratch.Details, out var block, layers);
                 SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
-                SdfSkyEnvironment.Project(coefficients: coefficients, map: map);
                 SdfMeshProbeDepth.SkyRadiance(map: map, texels: skyTexels);
                 for (var texel = 0; (texel < skyTexels.Length); texel++) { skyTexels[texel] *= frame.IndirectGains.Sky; }
                 foreach (var texel in map) {
                     skyPeak = MathF.Max(x: skyPeak, y: SdfPhotometry.LuminanceOf(color: texel));
                 }
-                frame.IndirectLightingGrid.SnapRadiance(coefficients);
+                frame.IndirectLightingGrid.SnapRadiance(skyTexels);
                 skyPeak = frame.IndirectLightingGrid.SnapScalar(skyPeak);
             }
 
@@ -3055,7 +3049,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
                 Points = [.. points],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
-                SkyCoefficients = coefficients,
                 SkyTexels = skyTexels,
             };
         }
