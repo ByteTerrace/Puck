@@ -3612,7 +3612,11 @@ body or placement of the world stands has no geometry to bake and is refused.
   and the default are every one) and named views, `name=azimuth,elevation` in
   degrees about the author frame (azimuth 0 the front, +90 the subject's own
   left, elevation 90 from above), with `,x,y,z,halfWidth` a close window of
-  that half width in metres about an author-frame point. The three-quarter views
+  that half width in metres about an author-frame point. Commas separate
+  standard names in one `--views` value, so each named view goes in a
+  `--views` of its own. A close window's point is in the author frame at the
+  placement's scale, measured from the creation's origin (a perched bird's
+  feet), not in the creation's unit-scale numbers. The three-quarter views
   stand 18 degrees above the horizon. Each view frames the whole mesh, so
   its span is printed; a named close window fixes its own.
 - Lighting is one light fixed in the camera's frame, so every view is lit
