@@ -211,7 +211,8 @@ with `update.lock` at every site that touches both; one lock has no order.
 
 Every write of `release-policy.json`, of an install record, of the replay mark
 (`state/sequence-mark`) and of the install intent goes through one primitive,
-`AtomicFile.WriteAllBytesDurably`:
+`AtomicFile.WriteAllBytesDurably`, which ends in `ConfinedDirectory.Publish`
+(the replace step below is that one method, shared with the blob store):
 
 1. Write a sibling temporary (`<name>.<random>.tmp`) and flush it to stable
    storage (`FileStream.Flush(flushToDisk: true)`: `fsync` on Linux,

@@ -352,11 +352,7 @@ public static class LauncherServiceRegistration {
 
         services.TryAddSingleton(implementationFactory: _ => options);
         services.TryAddSingleton(implementationFactory: _ => releaseSource);
-        services.TryAddSingleton<IReleaseSequenceStore>(implementationFactory: _ => new FileReleaseSequenceStore(filePath: Path.Combine(
-            path1: options.CacheRoot,
-            path2: "state",
-            path3: "sequence-mark"
-        )));
+        services.TryAddSingleton<IReleaseSequenceStore>(implementationFactory: _ => new FileReleaseSequenceStore());
         services.TryAddSingleton<IReleaseVerifier>(implementationFactory: sp => {
             if (options.TrustAnchor.IsPlaceholder) {
                 return new PlaceholderReleaseVerifier();

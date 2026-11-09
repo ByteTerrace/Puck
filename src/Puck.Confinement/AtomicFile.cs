@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 
@@ -26,7 +24,7 @@ namespace Puck.Confinement;
 /// (a secret written owner-only). On Windows, the replacement is a new file that takes its directory's inherited
 /// access control.</para>
 /// </summary>
-public static partial class AtomicFile {
+public static class AtomicFile {
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
 
     [UnsupportedOSPlatform(platformName: "windows")]
@@ -180,30 +178,22 @@ public static partial class AtomicFile {
             }
         }
         /// <summary>Publishes the complete file durably, replacing an existing destination: the rename itself reaches
-        /// stable storage before this returns. On Windows it is <c>MoveFileExW</c> with <c>MOVEFILE_REPLACE_EXISTING</c>
-        /// and <c>MOVEFILE_WRITE_THROUGH</c>, which does not return until the move is on the disk; on Linux it is
-        /// <c>rename</c> followed by an <c>fsync</c> of the containing directory, which fsync(2) requires to persist the
-        /// entry. Unlike <see cref="Commit"/> it never falls back to <c>ReplaceFile</c>: a refused rename leaves the
-        /// destination as it was, deletes the temporary and throws, so no state exists in which the old file sits under a
-        /// backup name.</summary>
-        /// <exception cref="IOException">The rename or the directory flush failed; the destination is unchanged when the
-        /// rename failed.</exception>
+        /// stable storage before this returns. It opens the destination's directory as a <see cref="ConfinedDirectory"/>
+        /// and ends in <see cref="ConfinedDirectory.Publish"/>, the one durable replacement (its documentation names the
+        /// platform calls and the sources they rest on). Unlike <see cref="Commit"/> it never falls back to
+        /// <c>ReplaceFile</c>: a refused rename leaves the destination as it was, deletes the temporary and throws, so no
+        /// state exists in which the old file sits under a backup name. The destination must be on a local volume.</summary>
+        /// <exception cref="IOException">The rename or the directory flush failed, or the directory is on a network path;
+        /// the destination is unchanged when the rename failed.</exception>
+        /// <exception cref="DirectoryNotFoundException">The destination's directory vanished.</exception>
+        /// <exception cref="ObjectDisposedException">The write was already published or disposed.</exception>
         public void CommitDurably() {
             ObjectDisposedException.ThrowIf(condition: m_finished, instance: this);
             try {
-                if (OperatingSystem.IsWindows()) {
-                    if (!MoveFileEx(existingFileName: m_temporary, flags: (MoveFileReplaceExisting | MoveFileWriteThrough), newFileName: m_destination)) {
-                        var code = Marshal.GetLastPInvokeError();
+                using var directory = (ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: m_destination)!)
+                    ?? throw new DirectoryNotFoundException(message: $"The directory of '{m_destination}' vanished."));
 
-                        throw new IOException(message: $"Cannot replace '{m_destination}' durably.", innerException: new Win32Exception(error: code));
-                    }
-                } else {
-                    File.Move(destFileName: m_destination, overwrite: true, sourceFileName: m_temporary);
-                    using var directory = (ConfinedDirectory.OpenAnchor(create: false, path: Path.GetDirectoryName(path: m_destination)!)
-                        ?? throw new DirectoryNotFoundException(message: $"The directory of '{m_destination}' vanished."));
-
-                    directory.Flush();
-                }
+                directory.Publish(name: Path.GetFileName(path: m_destination), temporary: Path.GetFileName(path: m_temporary));
             } finally {
                 Dispose();
             }
@@ -337,10 +327,4 @@ public static partial class AtomicFile {
             unixCreateMode: unixCreateMode
         );
     }
-
-    private const uint MoveFileReplaceExisting = 0x1, MoveFileWriteThrough = 0x8;
-
-    [LibraryImport("kernel32.dll", EntryPoint = "MoveFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool MoveFileEx(string existingFileName, string newFileName, uint flags);
 }

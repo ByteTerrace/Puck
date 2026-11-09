@@ -100,8 +100,8 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
         // happens only at the very end, once every other check below has also passed.
         var manifestPin = ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(value: manifest, options: DocumentJsonOptions.Shared));
 
-        if (!m_sequenceStore.IsAcceptable(requirement: requirement) &&
-            !(reserveInstall && m_sequenceStore.IsReserved(manifestPin: manifestPin, requirement: requirement))) {
+        if (!m_sequenceStore.IsAcceptable(requirement: requirement, transaction: transaction) &&
+            !(reserveInstall && m_sequenceStore.IsReserved(manifestPin: manifestPin, requirement: requirement, transaction: transaction))) {
             return ReleaseVerifyOutcome.Refuse(reason: $"sequence {requirement.Sequence} at epoch {requirement.EpochStartUnixSeconds} does not exceed the stored high-water mark — refused as a replay");
         }
 
@@ -148,11 +148,8 @@ public sealed class AttestationReleaseVerifier(TrustList trustList, IReleaseSequ
 
         if (advanceSequence) {
             var written = reserveInstall
-                ? m_sequenceStore.TryReserve(manifestPin: manifestPin, requirement: requirement)
-                : m_sequenceStore.TryAdvance(requirement: requirement);
-            if (written == ReleaseDecision.TransientRefusal) {
-                return ReleaseVerifyOutcome.Retry(reason: "the release sequence store is busy");
-            }
+                ? m_sequenceStore.TryReserve(manifestPin: manifestPin, requirement: requirement, transaction: transaction)
+                : m_sequenceStore.TryAdvance(requirement: requirement, transaction: transaction);
             if (written == ReleaseDecision.TerminalRefusal) {
                 return ReleaseVerifyOutcome.Refuse(reason: "the sequence was already committed by another verification or the stored mark is invalid");
             }

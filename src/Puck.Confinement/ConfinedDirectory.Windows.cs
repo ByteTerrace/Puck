@@ -20,6 +20,7 @@ public sealed partial class ConfinedDirectory {
         public const uint DirectoryAccess = ListDirectory | Traverse | ReadAttributes | Synchronize;
 
         private const uint MaximumPath = 32768;
+        private const uint MoveFileReplaceExisting = 0x1, MoveFileWriteThrough = 0x8;
         private const uint FileOpen = 1, FileCreate = 2, FileOpenIf = 3;
         private const uint DirectoryFile = 0x1, NonDirectoryFile = 0x40, SynchronousIo = 0x20, OpenReparsePoint = 0x200000;
         private const uint AttributeDirectory = 0x10, AttributeReparsePoint = 0x400;
@@ -149,13 +150,23 @@ public sealed partial class ConfinedDirectory {
 
             return ((code == 18) ? entries : throw Error(message: "Cannot list confined directory"));
         }
-        // FileRenameInformation with RootDirectory: the held object moves under destination, whatever its path is now.
-        public static unsafe void Rename(SafeFileHandle handle, SafeFileHandle destination, string name, bool replace) {
+        // Replaces destination with source, both full paths, and returns only once the move is on the disk: MoveFileExW
+        // with MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH, the one Windows call whose documentation promises
+        // that ("The function does not return until the file is actually moved on the disk").
+        public static void MoveDurably(string source, string destination) {
+            if (!MoveFileEx(existingFileName: NativePath(path: source), flags: (MoveFileReplaceExisting | MoveFileWriteThrough), newFileName: NativePath(path: destination))) {
+                var code = Marshal.GetLastPInvokeError();
+
+                throw new IOException(message: $"Cannot replace '{destination}' durably.", innerException: new Win32Exception(error: code));
+            }
+        }
+        // FileRenameInformation with RootDirectory: the held object moves under destination, whatever its path is now. It
+        // never replaces an existing entry.
+        public static unsafe void Rename(SafeFileHandle handle, SafeFileHandle destination, string name) {
             var size = (24 + (name.Length * 2));
             var buffer = stackalloc byte[size];
 
             new Span<byte>(length: size, pointer: buffer).Clear();
-            *buffer = ((byte)(replace ? 1 : 0));
             *((nint*)(buffer + 8)) = destination.DangerousGetHandle();
             *((uint*)(buffer + 16)) = checked((uint)(name.Length * 2));
             name.AsSpan().CopyTo(destination: new Span<char>(pointer: (buffer + 20), length: name.Length));
@@ -223,6 +234,9 @@ public sealed partial class ConfinedDirectory {
                 : new IOException(message: message, innerException: new Win32Exception(error: code)));
         }
         private static IOException Error(string message) => new(message: message, innerException: new Win32Exception(error: Marshal.GetLastPInvokeError()));
+        [LibraryImport("kernel32.dll", EntryPoint = "MoveFileExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool MoveFileEx(string existingFileName, string newFileName, uint flags);
         [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
         private static partial SafeFileHandle CreateFile(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
         [LibraryImport("ntdll.dll")]

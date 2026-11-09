@@ -12,6 +12,9 @@ public static class InstallLayout {
     /// <summary>The install's release record's file name (<see cref="ReleasePolicy"/>), under
     /// <see cref="StateDirectoryName"/>.</summary>
     public const string ReleasePolicyFileName = "release-policy.json";
+    /// <summary>The install's release replay mark's file name, under <see cref="StateDirectoryName"/>. It is read and
+    /// written only under an <see cref="InstallTransaction"/>.</summary>
+    public const string SequenceMarkFileName = "sequence-mark";
     /// <summary>The install's durable state directory, directly under the install root.</summary>
     public const string StateDirectoryName = "state";
     /// <summary>Where a version waits for deletion after leaving <see cref="VersionsDirectoryName"/>.</summary>
