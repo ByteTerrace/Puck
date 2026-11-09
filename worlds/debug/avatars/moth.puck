@@ -2934,9 +2934,9 @@ prototypes {
       // The hip pivot: a large charcoal disc on the hip's axis, set on an ivory guard, both riding the thigh.
       shape Prism "hipGuard-left" {
         id: 175
-        position [0.222, 1.05, 0]
+        position [0.23, 1.05, 0]
         rotation [0, diagonal, 0, diagonal]
-        scale [0.13, 0.125, 0.016]
+        scale [0.13, 0.125, 0.024]
         material: skin
         parent: "thigh-left"
         profile {
@@ -2978,21 +2978,15 @@ prototypes {
 
       shape Prism "kneeGuard-left" {
         id: 179
-        position [0.19, 0.735, 0.118]
-        scale [0.095, 0.105, 0.04]
+        position [0.19, 0.735, 0.12]
+        scale [0.088, 0.102, 0.045]
         material: skin
         parent: "thigh-left"
         profile {
-          kind: "Convex"
-          vertices [
-            [-0.8, 0.8888889]
-            [0.7666667, 0.8888889]
-            [1, -0.1111111]
-            [0.4, -1]
-            [-0.7, -0.75]
-          ]
-          cornerRadius: 0.12
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.42
         }
+        rounding: 0.012
       }
 
       shape Superellipsoid "shin-left" {
@@ -3002,7 +2996,7 @@ prototypes {
         material: shinViolet
         group: 18
         parent: "thigh-left"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -3068,7 +3062,7 @@ prototypes {
         blend: "Subtraction"
         group: 18
         parent: "shin-left"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -3128,7 +3122,7 @@ prototypes {
         material: shinCream
         group: 76
         parent: "shin-left"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
@@ -3185,7 +3179,7 @@ prototypes {
         smooth: 0.008
         group: 76
         parent: "shin-left"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -3229,7 +3223,7 @@ prototypes {
         material: shinCream
         group: 80
         parent: "shin-left"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
@@ -3310,7 +3304,7 @@ prototypes {
         material: shinCream
         group: 77
         parent: "shin-left"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
@@ -4194,9 +4188,9 @@ prototypes {
 
       shape Prism "hipGuard-right" {
         id: 243
-        position [-0.222, 1.05, 0]
+        position [-0.23, 1.05, 0]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.13, 0.125, 0.016]
+        scale [0.13, 0.125, 0.024]
         material: skin
         parent: "thigh-right"
         profile {
@@ -4237,21 +4231,15 @@ prototypes {
 
       shape Prism "kneeGuard-right" {
         id: 247
-        position [-0.19, 0.735, 0.118]
-        scale [0.095, 0.105, 0.04]
+        position [-0.19, 0.735, 0.12]
+        scale [0.088, 0.102, 0.045]
         material: skin
         parent: "thigh-right"
         profile {
-          kind: "Convex"
-          vertices [
-            [0.7, -0.75]
-            [-0.4, -1]
-            [-1, -0.1111111]
-            [-0.7666667, 0.8888889]
-            [0.8, 0.8888889]
-          ]
-          cornerRadius: 0.12
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.42
         }
+        rounding: 0.012
       }
 
       shape Superellipsoid "shin-right" {
@@ -4261,7 +4249,7 @@ prototypes {
         material: shinViolet
         group: 32
         parent: "thigh-right"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -4326,7 +4314,7 @@ prototypes {
         blend: "Subtraction"
         group: 32
         parent: "shin-right"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -4386,7 +4374,7 @@ prototypes {
         material: shinCream
         group: 78
         parent: "shin-right"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
@@ -4443,7 +4431,7 @@ prototypes {
         smooth: 0.008
         group: 78
         parent: "shin-right"
-        exponent: 3
+        exponent: 4.5
         flare {
           amount: 1
           bulge: 0
@@ -4487,7 +4475,7 @@ prototypes {
         material: shinCream
         group: 81
         parent: "shin-right"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
@@ -4568,7 +4556,7 @@ prototypes {
         material: shinCream
         group: 79
         parent: "shin-right"
-        exponent: 3
+        exponent: 4.5
         dilate: 0.01
         flare {
           amount: 1
