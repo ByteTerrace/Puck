@@ -12,7 +12,7 @@ float3 meterNormal(uint axis) {
     normal[axis / 2] = (axis & 1) == 0 ? 1 : -1;
     return normal;
 }
-// KEEP IN SYNC with TryMeter: eight unobstructed fine probes, otherwise a sample at the camera itself. The answer is the
+// KEEP IN SYNC with SdfMeshIrradiance.TrySampleCamera: eight unobstructed fine probes, otherwise a sample at the camera itself. The answer is the
 // light the sample receives along each axis, RGB (SdfMeshProbeRelight.MeterOutputWords), then its sky visibility and
 // its flags.
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]

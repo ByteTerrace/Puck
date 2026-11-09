@@ -805,13 +805,13 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.True(condition: (SdfMeshProbeDepth.Visibility(surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.8f, z: -0.2f)) < 0.001f));
         Assert.Equal(1f, SdfMeshProbeDepth.Visibility(surfaces: moments, toward: new Vector3(x: 0.3f, y: 2.4f, z: -0.2f)));
         // The meter reads the lit room lit and the dark room dark.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (lit > 0f));
         Assert.True(condition: (dark < (0.01f * lit)));
 
         // The camera can approach the slab without reading the lit probes beyond it.
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var nearSlab, position: new Vector3(x: 0.5f, y: 3.99f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: (nearSlab < (0.01f * lit)));
 
         var (_, unlitWords) = Trace(frame: frame with { Lights = new SdfLights() }, volume: volume);
@@ -832,7 +832,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
             Lights = lights,
             IndirectBounces = 0,
             ConvergesLighting = true,
-            Exposure = new SdfExposure(Adaptation: 0f, Compensation: 0f, Ev100: 15f, Local: 0.5f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
+            Exposure = new SdfExposure(Adaptation: 0f, Compensation: 0f, Ev100: 15f, Local: 0.5f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto, Band: 0f, Low: 0f, High: 1f, Center: 0f),
             // An 18-cm gap contains the camera and light but no lattice centres (x = +/- 0.5), and is narrower than twice
             // the clearance, so no probe of the cells about it can move into it either.
             MeshDraws = [.. frame.MeshDraws,
@@ -843,47 +843,31 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var volume = Volume();
 
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
-        Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+        Assert.True(condition: volume.SampleLuminance(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
             luminance: out var lit, skyVisibility: out var sky, source: out var source));
-        Assert.Equal(actual: source, expected: SdfExposureMeterSource.CameraTrace);
+        Assert.Equal(actual: source, expected: SdfCameraSampleSource.CameraTrace);
         Assert.True(condition: (lit > 0f));
         Assert.InRange(actual: sky, high: 0.1f, low: 0f);
         var traces = volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces);
 
         for (var read = 0; (read < 100); read++) {
-            Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+            Assert.True(condition: volume.SampleLuminance(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
                 luminance: out var repeated, skyVisibility: out _, source: out _));
             Assert.Equal(actual: repeated, expected: lit);
         }
-        Assert.True(condition: volume.TryMeter(position: (frame.Views[0].Camera.Position + new Vector3(x: 0f, y: 0.05f, z: 0f)),
+        Assert.True(condition: volume.SampleLuminance(position: (frame.Views[0].Camera.Position + new Vector3(x: 0f, y: 0.05f, z: 0f)),
             forward: Vector3.UnitY, luminance: out _, skyVisibility: out _, source: out _));
         Assert.Equal(expected: traces, actual: volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces));
-        var exposures = new SdfViewExposures();
-
-        exposures.Stage(frame: frame, irradiance: Volume(), seconds: 1d);
-        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Ev100), actual: exposures.MultiplierOf(view: 0));
-        Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
-        exposures.Stage(frame: frame, irradiance: volume, seconds: 1d);
-        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
-        Assert.Contains(expectedSubstring: "source=camera-trace", actualString: exposures.Describe()[0]);
-        var held = exposures.MultiplierOf(view: 0);
-        var heldAir = exposures.AirLightOf(view: 0);
-
-        exposures.Stage(frame: frame, irradiance: Volume(), seconds: 1d);
-        Assert.Equal(expected: held, actual: exposures.MultiplierOf(view: 0));
-        Assert.Equal(expected: heldAir, actual: exposures.AirLightOf(view: 0));
-        Assert.Equal(expected: lit, actual: exposures.MeteredOf(view: 0));
-        Assert.Contains(expectedSubstring: "meter=none source=held", actualString: exposures.Describe()[0]);
         // Inside the opaque wall is unknown, not a reading of an unlit room.
-        Assert.False(condition: volume.TryMeter(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,
+        Assert.False(condition: volume.SampleLuminance(position: new Vector3(x: 0.3f, y: 2f, z: 0f), forward: Vector3.UnitX,
             luminance: out _, skyVisibility: out _, source: out source));
-        Assert.Equal(actual: source, expected: SdfExposureMeterSource.None);
+        Assert.Equal(actual: source, expected: SdfCameraSampleSource.None);
 
         frame = frame with { Lights = new SdfLights() };
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
-        Assert.True(condition: volume.TryMeter(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
+        Assert.True(condition: volume.SampleLuminance(position: frame.Views[0].Camera.Position, forward: Vector3.UnitX,
             luminance: out var unlit, skyVisibility: out _, source: out source));
-        Assert.Equal(actual: source, expected: SdfExposureMeterSource.CameraTrace);
+        Assert.Equal(actual: source, expected: SdfCameraSampleSource.CameraTrace);
         Assert.Equal(actual: unlit, expected: 0f);
         Assert.True(condition: (volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces) > traces));
     }
@@ -1034,42 +1018,85 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         } while (volume.Settling && (DateTime.UtcNow < deadline));
 
         Assert.NotNull(@object: volume.DiagnosticScene(frame: frame));
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var luminance, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out var source));
-        Assert.Equal(expected: SdfExposureMeterSource.Probes, actual: source);
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var luminance, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out var source));
+        Assert.Equal(expected: SdfCameraSampleSource.Probes, actual: source);
         Assert.True(condition: (luminance > 0f));
 
         var bare = Volume();
 
         _ = bare.Stage(bakePending: true, frame: (frame with { MeshDraws = [] }), tier: SdfIndirectTier.Medium, write: static _ => { });
         Assert.Null(@object: bare.DiagnosticScene(frame: (frame with { MeshDraws = [] })));
-        Assert.False(condition: bare.TryMeter(forward: Vector3.UnitX, luminance: out _, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out _));
+        Assert.False(condition: bare.SampleLuminance(forward: Vector3.UnitX, luminance: out _, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out _));
 
         var locked = Volume();
 
         _ = locked.Stage(bakePending: true, frame: (frame with { ConvergesLighting = true }), tier: SdfIndirectTier.Medium, write: static _ => { });
         Assert.Null(@object: locked.DiagnosticScene(frame: frame));
     }
-    /// <summary>THE LAW: a camera cut snaps to the first reading after it. A cut the meter cannot read yet stays owed,
-    /// so the frame that first reads takes its target at once rather than easing from the exposure before the cut.</summary>
+    /// <summary>THE LAW: the image meter holds within its band and snaps after a cut. A view's first image reading sets its
+    /// exposure at once; a reading within the band leaves it; a reading past the band moves it toward the new target; and
+    /// after a cut a reading the view rendered before the cut is ignored until one rendered after it lands, which the
+    /// exposure snaps to.</summary>
     [Fact]
-    public void ACutSnapsToTheFirstReadingAfterIt() {
+    public void TheImageMeterHoldsWithinItsBandAndSnapsAfterACut() {
         var frame = Frame() with {
-            IndirectBounces = 0,
-            ConvergesLighting = true,
-            Exposure = new SdfExposure(Adaptation: 0.75f, Compensation: 0f, Ev100: 15f, Local: 0f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
+            Exposure = new SdfExposure(Adaptation: 0.75f, Compensation: 0f, Ev100: 15f, Local: 0f, Maximum: 20f, Minimum: -6f, Mode: SdfExposureMode.Auto, Band: 0.5f, Low: 0f, High: 1f, Center: 0f),
         };
-        var volume = Volume();
-
-        _ = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
-        Assert.True(condition: volume.TryMeter(forward: frame.Views[0].Camera.Forward, luminance: out var lit, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out _));
-
         var exposures = new SdfViewExposures();
-        var cut = frame with { Views = [frame.Views[0] with { CutRevision = 1 }] };
+        var multiplier = SdfPhotometry.ExposureOf(ev100: 10f);
+        // A histogram of one bin, and the EV100 its reading aims for at that multiplier.
+        uint[] Bins(int bin) {
+            var bins = new uint[SdfExposure.MeterBins];
 
-        exposures.Stage(frame: frame, irradiance: Volume(), seconds: 0.01d);
-        exposures.Stage(frame: cut, irradiance: Volume(), seconds: 0.01d);
-        Assert.Contains(expectedSubstring: "meter=none", actualString: exposures.Describe()[0]);
-        exposures.Stage(frame: cut, irradiance: volume, seconds: 0.01d);
-        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
+            bins[bin] = 1000u;
+            return bins;
+        }
+        float TargetOf(int bin) => frame.Exposure.Target(luminance: (MathF.Pow(x: 2f, y: (SdfExposure.MeterLowestStop + ((bin + 0.5f) / SdfExposure.MeterBinsPerStop))) / multiplier));
+        float Ev100() => exposures.Ev100Of(view: 0);
+        void Step(SdfFrame staged) {
+            exposures.Stage(frame: staged, irradiance: Volume(), seconds: 0.1d);
+            _ = exposures.MultiplierOf(view: 0);
+        }
+
+        Step(staged: frame);
+        Assert.Contains(expectedSubstring: "meter=none source=initial", actualString: exposures.Describe()[0]);
+        exposures.Publish(bins: Bins(bin: 80), cut: 0, multiplier: multiplier, view: 0);
+        Step(staged: frame);
+        Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
+        // Three bins are three eighths of a stop: within the band, so the exposure holds.
+        exposures.Publish(bins: Bins(bin: 83), cut: 0, multiplier: multiplier, view: 0);
+        Step(staged: frame);
+        Assert.Equal(expected: TargetOf(bin: 80), actual: Ev100(), precision: 4);
+        Assert.Contains(expectedSubstring: "band=holding", actualString: exposures.Describe()[0]);
+        // Eight bins are a stop: past the band, so the exposure follows.
+        exposures.Publish(bins: Bins(bin: 88), cut: 0, multiplier: multiplier, view: 0);
+        Step(staged: frame);
+        Assert.InRange(actual: Ev100(), low: (TargetOf(bin: 80) + 0.01f), high: (TargetOf(bin: 88) - 0.01f));
+        Assert.Contains(expectedSubstring: "band=following", actualString: exposures.Describe()[0]);
+        var cutFrame = frame with { Views = [frame.Views[0] with { CutRevision = 1 }] };
+        var beforeCut = Ev100();
+
+        // A reading rendered before the cut holds the exposure; the first after it snaps.
+        exposures.Publish(bins: Bins(bin: 40), cut: 0, multiplier: multiplier, view: 0);
+        Step(staged: cutFrame);
+        Assert.Equal(expected: beforeCut, actual: Ev100());
+        Assert.Contains(expectedSubstring: "source=cut", actualString: exposures.Describe()[0]);
+        exposures.Publish(bins: Bins(bin: 40), cut: 1, multiplier: multiplier, view: 0);
+        Step(staged: cutFrame);
+        Assert.Equal(expected: TargetOf(bin: 40), actual: Ev100(), precision: 4);
+    }
+    /// <summary>THE LAW: the image meter averages between its percentiles. Pixels below the low percentile and above the
+    /// high one leave the reading, so a bright light fitting in view does not move it.</summary>
+    [Fact]
+    public void TheImageMeterAveragesBetweenItsPercentiles() {
+        var exposure = SdfExposure.Default with { Low = 0.1f, High = 0.9f };
+        var bins = new uint[SdfExposure.MeterBins];
+
+        bins[10] = 50u;
+        bins[60] = 900u;
+        bins[127] = 50u;
+        Assert.True(condition: exposure.Meter(bins: bins, luminance: out var luminance, multiplier: 1f));
+        Assert.Equal(expected: (SdfExposure.MeterLowestStop + (60.5f / SdfExposure.MeterBinsPerStop)), actual: MathF.Log2(x: luminance), precision: 4);
+        Assert.False(condition: exposure.Meter(bins: new uint[SdfExposure.MeterBins], luminance: out _, multiplier: 1f));
     }
 }

@@ -12,7 +12,8 @@
 
 // The local adaptation's gain on a lit surface (SdfExposure.Local): the surface's exposure moves that share of the way
 // from the view's toward the one its own illumination would meter, `incoming` (the luminance a white surface lit by the
-// light arriving here would show) against the view's meter reading taken as a scene of SDF_LOCAL_REFLECTANCE albedo,
+// light arriving here would show) against the luminance the view's image meter reads (meterLuminance,
+// SdfViewExposures.MeteredOf) taken as a scene of SDF_LOCAL_REFLECTANCE albedo,
 // within SDF_LOCAL_ADAPTATION_RANGE stops; one where adaptation is off or nothing arrives.
 float sdfLocalAdaptationGain(float incoming) {
     if ((passGroup.localAdaptation <= 0.0) || (passGroup.meterLuminance <= 0.0) || (incoming <= 0.0)) {
@@ -27,24 +28,28 @@ float sdfLocalAdaptationGain(float incoming) {
 // Whether the irradiance volume answers a surface: some published probe about it measured it (sdfMeshProbesAt). While
 // the volume is on, a surface it has not measured (every surface before a level first publishes; past every published
 // probe after a camera cut, until the moved windows land) is lit as the view's camera sample measured the surroundings,
-// one probe at the camera that the exposure meter reads there the moment a view arrives: its diffuse light is the
-// sample's six-axis light (meterLight, SdfViewExposures.LightOf: the radiance and sky-light cubes summed, the sky
-// integrated along each open ray as a probe's is) read about the normal as a probe's cube is, and its reflection the
-// environment over the share of the sky open about the camera (airLight) and the luminance the meter read
-// (meterLuminance) over the rest; its traced lights go unoccluded as with the volume off. It reads neither darkness nor
-// the unoccluded sky, and the image agrees with the exposure the meter set from the same light. Before the meter's
-// first reading no sample exists and the surface reads the open sky. Pixel passes only: a probe's relight never reads
-// this, so an unmeasured hit never feeds the volume a guess.
+// one probe at the camera that the volume reads there the moment a view arrives (SdfMeshIrradiance.TrySampleCamera): its
+// diffuse light is the sample's six-axis light (meterLight, SdfViewExposures.LightOf: the radiance and sky-light cubes
+// summed, the sky integrated along each open ray as a probe's is) read about the normal as a probe's cube is, and its
+// reflection the environment over the share of the sky open about the camera (airLight) and the sample's mean
+// luminance over the rest; its traced lights go unoccluded as with the volume off. It reads neither darkness nor the
+// unoccluded sky. Before the sample's first reading the surface reads the open sky. Pixel passes only: a probe's relight
+// never reads this, so an unmeasured hit never feeds the volume a guess.
 bool sdfMeshAnswers(SdfMeshProbes probes) {
     return (probes.share > 0.0);
 }
-// The camera sample's light from the surroundings it did not see open: the meter's luminance over the closed share,
-// grey, which its reflection reads.
+// The camera sample's light from the surroundings it did not see open: the mean luminance of its six axes over the
+// closed share, grey, which its reflection reads; zero before the sample's first reading.
 float3 sdfMeshCameraSurroundings() {
-    return (max(passGroup.meterLuminance, 0.0) * (1.0 - saturate(passGroup.airLight))).xxx;
+    float luminance = 0.0;
+
+    [unroll] for (uint axis = 0u; (axis < 6u); axis++) {
+        luminance += dot(passGroup.meterLight[axis].rgb, SDF_LUMINANCE);
+    }
+    return ((passGroup.meterLight[0].w > 0.0) ? ((luminance / 6.0) * (1.0 - saturate(passGroup.airLight))) : 0.0).xxx;
 }
 // The light the view's camera sample receives about a normal, its six faces read as a probe's cube; false before the
-// meter's first reading (meterLight's W zero).
+// sample's first reading (meterLight's W zero).
 bool sdfMeshCameraLight(float3 normal, out float3 light) {
     light = float3(0.0, 0.0, 0.0);
     if (passGroup.meterLight[0].w <= 0.0) {
@@ -59,7 +64,7 @@ bool sdfMeshCameraLight(float3 normal, out float3 light) {
     return true;
 }
 // The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the camera sample's light,
-// or before the meter has read the open sky under the volume's sky source.
+// or before the sample has read the open sky under the volume's sky source.
 float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
     if (sdfMeshAnswers(probes)) {
         return sdfMeshIndirect(probes, normal);

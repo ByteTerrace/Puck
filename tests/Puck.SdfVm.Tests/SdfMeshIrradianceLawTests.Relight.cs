@@ -156,9 +156,9 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var volume = Volume();
 
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out _, position: origin, skyVisibility: out _, source: out var source));
-        Assert.Equal(expected: SdfExposureMeterSource.CameraTrace, actual: source);
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out _, position: moved, skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out _, position: origin, skyVisibility: out _, source: out var source));
+        Assert.Equal(expected: SdfCameraSampleSource.CameraTrace, actual: source);
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out _, position: moved, skyVisibility: out _, source: out _));
 
         var traces = volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces);
         var dimmed = new SdfLights();
@@ -167,13 +167,13 @@ public sealed partial class SdfMeshIrradianceLawTests {
         dimmed.Count = 1;
         frame = frame with { Lights = dimmed };
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
-        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var relit, position: moved, skyVisibility: out _, source: out _));
+        Assert.True(condition: volume.SampleLuminance(forward: Vector3.UnitX, luminance: out var relit, position: moved, skyVisibility: out _, source: out _));
         Assert.Equal(expected: traces, actual: volume.Counters.Read(kind: SdfMeshIrradiance.CameraTraces));
 
         var fresh = Volume();
 
         _ = fresh.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: _ => { });
-        Assert.True(condition: fresh.TryMeter(forward: Vector3.UnitX, luminance: out var traced, position: origin, skyVisibility: out _, source: out _));
+        Assert.True(condition: fresh.SampleLuminance(forward: Vector3.UnitX, luminance: out var traced, position: origin, skyVisibility: out _, source: out _));
         Assert.Equal(expected: traced, actual: relit, tolerance: (1.0e-4f * traced));
     }
 
