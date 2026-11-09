@@ -310,7 +310,11 @@ Build `src/Puck.Cli` in Release in your worktree, copy
 the worktree root. Never run the globally installed `puck` on PATH: it is
 another build of another head. Refresh the copy after a change the CLI reaches
 and after every merge of the integration tip: a copy older than the merge
-rejects documents that use new schema members.
+rejects documents that use new schema members, and one that accepts them can
+still bake with old evaluator code: a Moth lane's previews showed a granular
+face and 270 open edges that the current head did not have, and three critic
+rounds judged them. A preview, audit or bake count in a hand-back names the
+commit its CLI copy was built from.
 A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
 `branding`) run without `--check` rewrites the files it owns; `--check` only
 reports drift. Restore a fresh worktree once
