@@ -30,22 +30,14 @@ public sealed class SdfFieldSliceLawTests {
     private static byte[] Answer(SdfMeshBakeBatch batch, Func<Vector3, float> instances, Func<Vector3, float> world) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
-        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         foreach (var lattice in batch.Lattices) {
             var field = ((lattice.Selector == int.MinValue) ? world : instances);
-            var spacing = (0.015625f * MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)));
+            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);
-                var gradient = Vector3.Zero;
-
-                if (lattice.Gradients) {
-                    foreach (var tap in taps) {
-                        gradient += (tap * field(arg: (position + (tap * spacing))));
-                    }
-                    gradient *= (0.25f / spacing);
-                }
+                var gradient = (lattice.Gradients ? SdfMeshBakeTaps.Gradient(field: field, point: position, spacing: spacing) : Vector3.Zero);
 
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
