@@ -1,7 +1,8 @@
 // The Moth out of her suit: the 1.68 m pilot of the concept pack's off-suit turnaround (sheet 04), a grounded, athletic
 // working woman in a charcoal undersuit with full sleeves, straight-cut work trousers, soft knee and elbow pads, a
-// contact harness, lavender shoulder patches and flat ankle boots, her hands bare. Her head is the suited Moth's own
-// (the moth-head library at the same 0.68 scale), so one head model serves both forms.
+// contact harness, lavender shoulder patches, work gloves and ankle boots. Her head is the suited Moth's own (the
+// moth-head library at the same 0.68 scale), so one head model serves both forms; the volume of her hair out of the
+// hood is her own.
 //
 // suit.puck wears her through the `moth-pilot` look when the body's suit register is 0. Every coordinate is in the author
 // frame (+Y up, +Z her front, +X her left), with her soles at Y = 0. A template's `side` is 1 for her left and -1 for
@@ -25,6 +26,16 @@ let pilotHeadScale = 0.68
 let pilotHeadAt = [0, 1.527, 0.095]
 
 let pilotSoftness = 2.2
+
+// Her hair's locks over the head library's scalp, each [name, id, root, control, end, root radius, end radius] in its
+// unscaled frame (mothHairLock).
+let pilotHairLocks = [
+  ["hairSwoop", 90, [-0.08, 1.945, 0.15], [0.12, 0.055, -0.01], [0.26, -0.05, -0.09], 0.038, 0.046]
+  ["hairFall-left", 92, [0.16, 1.86, 0.085], [0.04, -0.1, -0.01], [0.015, -0.24, -0.05], 0.045, 0.03]
+  ["hairFallBack-left", 93, [0.14, 1.84, -0.02], [0.06, -0.1, -0.02], [0.03, -0.23, -0.035], 0.05, 0.032]
+  ["hairSweep-right", 94, [-0.13, 1.9, 0.09], [-0.06, -0.1, -0.03], [-0.04, -0.2, -0.02], 0.04, 0.03]
+  ["hairGather", 95, [0.0, 1.8, -0.1], [-0.02, -0.11, -0.01], [-0.06, -0.2, 0.03], 0.075, 0.034]
+]
 // The plait's lobes down her braid's core, alternating either side of it, and the half-angle each leans by.
 let braidLobes = [
   [-0.112, 1.335, 0.0904]
@@ -43,9 +54,22 @@ let braidTwist = 0.247404
 let braidUntwist = 0.9689124
 let diagonal = 0.7071068
 
-// Her joints on her left side, each a swing pivot: hip (0.09, 0.86, 0), knee (0.1, 0.475, 0.012), ankle
-// (0.105, 0.085, -0.005), shoulder (0.172, 1.355, -0.015), elbow (0.212, 1.068, -0.032); her spine turns about
+// Her joints on her left side, each a swing pivot: hip (0.09, 0.86, 0), knee (0.106, 0.475, 0.012), ankle
+// (0.115, 0.085, -0.005), shoulder (0.172, 1.355, -0.015), elbow (0.212, 1.068, -0.032); her spine turns about
 // (0, 0.96, 0) and her neck about (0, 1.36, -0.005).
+
+// Her arms hang with the elbow bent 0.25 rad forward. `bent` turns a point authored on the straight forearm about the
+// elbow's axis by that bend, `bendTurn` is the same turn as a rotation, and the hold pose's first forearm swing,
+// `elbowRestBend`, turns it back.
+let elbowRestBend = 0.25
+let bendCos = 0.9689124
+let bendSin = 0.247404
+let bendTurn = [-0.1246747, 0, 0, 0.9921977]
+function bent(p) = [
+  p[0],
+  1.068 + (p[1] - 1.068) * bendCos + (p[2] + 0.032) * bendSin,
+  -0.032 - (p[1] - 1.068) * bendSin + (p[2] + 0.032) * bendCos
+]
 
 // The stride's radians per metre, π(1.5 + 0.6v)/v: 1.8 steps a second and 0.28 m steps at 0.5 m/s, 4.5 and 1.1 m at
 // 5 m/s, the suited Moth's rate scaled by her 1.03 m hip over this 0.85 m one.
@@ -80,12 +104,12 @@ let trousers = 1 // charcoal work trousers, with the knee pads' straps painted
 let skin = 2 // #B76B3C her skin
 let hair = 3 // #171210 hair, lids and brows
 let eyeWhite = 4 // #FFF8E9 the eyes' whites
-// Slot 5 (brown) is free.
+let glove = 5 // the charcoal work gloves, a strap round each cuff painted
 let iris = 6 // #89481D
 let pupil = 7 // #120D13
 // Slot 8 (pearl) is free.
 let pad = 9 // soft rubber knee and elbow pads
-let leather = 10 // flat ankle boots
+let leather = 10 // the ankle boots
 let sole = 11 // boot soles
 let belt = 12 // the belt
 let ochre = 13 // the belt buckle, harness plate and braid tie
@@ -111,21 +135,40 @@ let strapGrey = "#3A3C44"
 let patchLavender = "#8C6A94"
 let ochreTone = "#C98F35"
 
-// One arm: sleeve, shoulder patch, elbow pad, cuff and the bare hand with its four fingers and thumb. Its upper arm
-// swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers; `hold` brings both forward and in.
-template pilotArm(name, side, baseId, handGroup) {
+// One shoulder, sloping from her collar down to her arm in the torso's group; the lavender patch over it is paint.
+template pilotShoulder(name, side, id) {
+  shape Superellipsoid $"shoulder-{name}" {
+    id: id
+    position [side * 0.15, 1.33, -0.014]
+    rotation [0, 0, -0.1246747 * side, 0.9921977]
+    scale [0.075, 0.048, 0.078]
+    material: undersuit
+    blend: "SmoothUnion"
+    smooth: 0.04
+    group: 40
+    parent: "torso"
+    exponent: 2.3
+  }
+}
+
+// One arm: the sleeve's deltoid, biceps and forearm, the elbow pad, and the gloved hand with its flared cuff, four
+// fingers and a thumb. Its upper arm swings at the shoulder and its forearm at the elbow, on the suited Moth's drivers;
+// `hold` brings both forward and in. The forearm and glove are authored hanging straight and placed through `bent`, so
+// her arms hang relaxed; the hold pose's first forearm swing straightens them before it bends them.
+template pilotArm(name, side, baseId, handGroup, upperGroup, foreGroup) {
   shape Sweep $"upperArm-{name}" {
     id: baseId
     position [side * 0.172, 1.355, -0.015]
     material: sleeve
+    group: upperGroup
     parent: "torso"
     curve {
       a [0, 0, 0]
       b [side * 0.02, -0.14, -0.01]
       c [side * 0.04, -0.287, -0.017]
       radiusStart: 0.05
-      radiusEnd: 0.04
-      bulge: 0.005
+      radiusEnd: 0.043
+      bulge: 0.004
     }
     swings [
       {
@@ -171,35 +214,66 @@ template pilotArm(name, side, baseId, handGroup) {
       {
         driver: "hold"
         axis [0, 1, 0]
-        amplitude: -0.5 * side
+        amplitude: -0.53 * side
         pivot [side * 0.172, 1.355, -0.015]
         wave: "constant"
       }
     ]
   }
 
-  // The deltoid under the sleeve; the lavender patch over it is paint.
+  // The deltoid under the sleeve's cap, low and broad so the shoulder slopes into the arm; the lavender patch over it is
+  // paint.
   shape Superellipsoid $"deltoid-{name}" {
     id: baseId + 1
-    position [side * 0.182, 1.325, -0.016]
-    scale [0.05, 0.066, 0.056]
+    position [side * 0.19, 1.312, -0.014]
+    scale [0.054, 0.066, 0.062]
     material: sleeve
+    blend: "SmoothUnion"
+    smooth: 0.03
+    group: upperGroup
     parent: $"upperArm-{name}"
-    exponent: pilotSoftness
+    exponent: 2.8
+  }
+
+  // The biceps' swell on the front of the upper arm and the triceps' behind it.
+  shape Superellipsoid $"biceps-{name}" {
+    id: baseId + 12
+    position [side * 0.193, 1.2, 0.006]
+    scale [0.044, 0.075, 0.046]
+    material: sleeve
+    blend: "SmoothUnion"
+    smooth: 0.03
+    group: upperGroup
+    parent: $"upperArm-{name}"
+    exponent: 2.2
+  }
+
+  shape Superellipsoid $"triceps-{name}" {
+    id: baseId + 13
+    position [side * 0.196, 1.22, -0.036]
+    scale [0.042, 0.08, 0.04]
+    material: sleeve
+    blend: "SmoothUnion"
+    smooth: 0.03
+    group: upperGroup
+    parent: $"upperArm-{name}"
+    exponent: 2.2
   }
 
   shape Sweep $"forearm-{name}" {
     id: baseId + 2
     position [side * 0.212, 1.068, -0.032]
+    rotation: bendTurn
     material: sleeve
+    group: foreGroup
     parent: $"upperArm-{name}"
     curve {
       a [0, 0, 0]
       b [side * 0.005, -0.115, 0.008]
-      c [side * 0.01, -0.233, 0.022]
-      radiusStart: 0.041
-      radiusEnd: 0.03
-      bulge: 0.005
+      c [side * 0.022, -0.21, 0.02]
+      radiusStart: 0.046
+      radiusEnd: 0.034
+      bulge: 0.003
     }
     swings [
       {
@@ -233,9 +307,16 @@ template pilotArm(name, side, baseId, handGroup) {
         pivot [side * 0.212, 1.068, -0.032]
         wave: "linear"
       }
-      // Holding: the forearm turns a little palm-up, then the elbow bends, so the palms face each other in front of
-      // her chest with the thumbs up, 11 cm apart round the handheld's 75 mm. Swings compose in list order, then the
-      // parent's delta.
+      // Holding: the forearm straightens out of its rest bend, turns a little palm-up, then the elbow bends, so the
+      // palms face each other in front of her chest with the thumbs up, 11 cm apart round the handheld's 75 mm. Swings
+      // compose in list order, then the parent's delta.
+      {
+        driver: "hold"
+        axis [1, 0, 0]
+        amplitude: elbowRestBend
+        pivot [side * 0.212, 1.068, -0.032]
+        wave: "constant"
+      }
       {
         driver: "hold"
         axis [0, 1, 0]
@@ -253,47 +334,70 @@ template pilotArm(name, side, baseId, handGroup) {
     ]
   }
 
+  // The forearm's muscle under the sleeve, fullest just below the elbow, so the forearm tapers to the wrist.
+  shape Superellipsoid $"forearmMass-{name}" {
+    id: baseId + 14
+    position: bent([side * 0.222, 0.99, -0.024])
+    rotation: bendTurn
+    scale [0.046, 0.075, 0.044]
+    material: sleeve
+    blend: "SmoothUnion"
+    smooth: 0.03
+    group: foreGroup
+    parent: $"forearm-{name}"
+    exponent: 2.2
+  }
+
+  // The soft elbow pad on the back of the elbow, turned out a little, as sheet 04 draws it.
   shape Superellipsoid $"elbowPad-{name}" {
     id: baseId + 3
-    position [side * 0.218, 1.062, -0.066]
-    scale [0.04, 0.05, 0.022]
+    position: bent([side * 0.234, 1.05, -0.078])
+    rotation [-0.121234, -0.231579 * side, 0.029099 * side, 0.964813]
+    scale [0.042, 0.054, 0.017]
     material: pad
+    parent: $"forearm-{name}"
+    exponent: 3
+  }
+
+  // The glove's flared cuff over the sleeve's end, a strap round it painted.
+  shape Superellipsoid $"cuff-{name}" {
+    id: baseId + 4
+    position: bent([side * 0.234, 0.868, -0.008])
+    rotation: bendTurn
+    scale [0.04, 0.03, 0.042]
+    material: glove
+    group: handGroup
     parent: $"forearm-{name}"
     exponent: 2.6
   }
 
-  shape Superellipsoid $"cuff-{name}" {
-    id: baseId + 4
-    position [side * 0.222, 0.846, -0.01]
-    scale [0.033, 0.013, 0.033]
-    material: collarKnit
-    parent: $"forearm-{name}"
-    exponent: 2.4
-  }
-
-  // The bare hand hangs palm in, its fingers curling a little toward the palm.
+  // The gloved hand hangs palm in, its fingers apart and curling a little toward the palm.
   shape Sweep $"wrist-{name}" {
     id: baseId + 5
-    position [side * 0.222, 0.845, -0.01]
-    material: skin
+    position: bent([side * 0.234, 0.85, -0.008])
+    rotation: bendTurn
+    material: glove
+    blend: "SmoothUnion"
+    smooth: 0.01
     group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * 0.001, -0.02, 0.002]
-      c [side * 0.002, -0.04, 0.004]
-      radiusStart: 0.024
-      radiusEnd: 0.023
+      b [side * 0.001, -0.022, 0.002]
+      c [side * 0.002, -0.044, 0.004]
+      radiusStart: 0.028
+      radiusEnd: 0.026
     }
   }
 
   shape Superellipsoid $"palm-{name}" {
     id: baseId + 6
-    position [side * 0.224, 0.777, -0.006]
-    scale [0.017, 0.05, 0.041]
-    material: skin
+    position: bent([side * 0.236, 0.775, -0.005])
+    rotation: bendTurn
+    scale [0.021, 0.052, 0.045]
+    material: glove
     blend: "SmoothUnion"
-    smooth: 0.01
+    smooth: 0.012
     group: handGroup
     parent: $"forearm-{name}"
     exponent: 2.6
@@ -301,93 +405,110 @@ template pilotArm(name, side, baseId, handGroup) {
 
   shape Sweep $"thumb-{name}" {
     id: baseId + 7
-    position [side * 0.214, 0.79, 0.022]
-    material: skin
+    position: bent([side * 0.225, 0.792, 0.026])
+    rotation: bendTurn
+    material: glove
     blend: "SmoothUnion"
-    smooth: 0.006
+    smooth: 0.007
     group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * -0.014, -0.024, 0.016]
-      c [side * -0.02, -0.052, 0.012]
-      radiusStart: 0.0105
-      radiusEnd: 0.0085
+      b [side * -0.013, -0.026, 0.018]
+      c [side * -0.018, -0.055, 0.015]
+      radiusStart: 0.0125
+      radiusEnd: 0.0105
     }
   }
 
   shape Sweep $"finger-{name}-0" {
     id: baseId + 8
-    position [side * 0.222, 0.735, 0.024]
-    material: skin
+    position: bent([side * 0.235, 0.734, 0.027])
+    rotation: bendTurn
+    material: glove
+    blend: "SmoothUnion"
+    smooth: 0.005
+    group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * -0.002, -0.038, 0.002]
-      c [side * -0.014, -0.068, 0.004]
-      radiusStart: 0.0082
-      radiusEnd: 0.0068
+      b [side * -0.003, -0.038, 0.006]
+      c [side * -0.015, -0.068, 0.012]
+      radiusStart: 0.0105
+      radiusEnd: 0.009
     }
   }
 
   shape Sweep $"finger-{name}-1" {
     id: baseId + 9
-    position [side * 0.222, 0.735, 0.0035]
-    material: skin
+    position: bent([side * 0.235, 0.733, 0.0055])
+    rotation: bendTurn
+    material: glove
+    blend: "SmoothUnion"
+    smooth: 0.005
+    group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * -0.002, -0.042, 0]
-      c [side * -0.016, -0.076, 0]
-      radiusStart: 0.0084
-      radiusEnd: 0.007
+      b [side * -0.003, -0.042, 0.002]
+      c [side * -0.017, -0.076, 0.004]
+      radiusStart: 0.0106
+      radiusEnd: 0.0091
     }
   }
 
   shape Sweep $"finger-{name}-2" {
     id: baseId + 10
-    position [side * 0.222, 0.735, -0.0165]
-    material: skin
+    position: bent([side * 0.235, 0.733, -0.0155])
+    rotation: bendTurn
+    material: glove
+    blend: "SmoothUnion"
+    smooth: 0.005
+    group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * -0.002, -0.04, -0.001]
-      c [side * -0.015, -0.071, -0.003]
-      radiusStart: 0.008
-      radiusEnd: 0.0066
+      b [side * -0.003, -0.04, -0.002]
+      c [side * -0.016, -0.071, -0.005]
+      radiusStart: 0.0102
+      radiusEnd: 0.0088
     }
   }
 
   shape Sweep $"finger-{name}-3" {
     id: baseId + 11
-    position [side * 0.222, 0.737, -0.036]
-    material: skin
+    position: bent([side * 0.234, 0.736, -0.0355])
+    rotation: bendTurn
+    material: glove
+    blend: "SmoothUnion"
+    smooth: 0.005
+    group: handGroup
     parent: $"forearm-{name}"
     curve {
       a [0, 0, 0]
-      b [side * -0.002, -0.031, -0.002]
-      c [side * -0.012, -0.056, -0.006]
-      radiusStart: 0.007
-      radiusEnd: 0.0058
+      b [side * -0.003, -0.031, -0.004]
+      c [side * -0.013, -0.056, -0.01]
+      radiusStart: 0.0092
+      radiusEnd: 0.0078
     }
   }
 }
 
-// One leg: the trouser thigh and shin, the knee pad and the flat ankle boot. The thigh's stride swings sit between
-// the yaw swings that turn the stride plane to the travel direction, as the suited Moth's do; the boot is the foot
-// effector's tip, its origin on the sole's top so the standoff is its rest height.
-template pilotLeg(name, side, baseId) {
+// One leg: the straight-cut trouser thigh and shin, bloused over the boot, the knee pad and the work boot. The thigh's
+// stride swings sit between the yaw swings that turn the stride plane to the travel direction, as the suited Moth's
+// do; the boot is the foot effector's tip, its origin on the sole's top so the standoff is its rest height.
+template pilotLeg(name, side, baseId, shinGroup) {
   shape Sweep $"thigh-{name}" {
     id: baseId
-    position [side * 0.088, 0.92, 0]
+    position [side * 0.09, 0.93, -0.004]
     material: trousers
     parent: "pelvis"
     curve {
       a [0, 0, 0]
-      b [side * 0.008, -0.222, 0.018]
-      c [side * 0.012, -0.445, 0.012]
-      radiusStart: 0.088
-      radiusEnd: 0.06
+      b [side * 0.009, -0.228, 0.014]
+      c [side * 0.018, -0.455, 0.016]
+      radiusStart: 0.1
+      radiusEnd: 0.088
       bulge: 0.004
     }
     swings [
@@ -449,22 +570,23 @@ template pilotLeg(name, side, baseId) {
 
   shape Sweep $"shin-{name}" {
     id: baseId + 1
-    position [side * 0.1, 0.475, 0.012]
+    position [side * 0.106, 0.475, 0.012]
     material: trousers
+    group: shinGroup
     parent: $"thigh-{name}"
     curve {
       a [0, 0, 0]
-      b [side * 0.003, -0.13, -0.008]
-      c [side * 0.005, -0.265, -0.018]
-      radiusStart: 0.058
-      radiusEnd: 0.063
+      b [side * 0.004, -0.11, -0.006]
+      c [side * 0.008, -0.2, -0.012]
+      radiusStart: 0.088
+      radiusEnd: 0.084
     }
     swings [
       {
         driver: "gait"
         axis [1, 0, 0]
         amplitude: 1.25
-        pivot [side * 0.1, 0.475, 0.012]
+        pivot [side * 0.106, 0.475, 0.012]
         wave: "halfSine"
         phase: 2.0424 + 3.1415927 * (1 + side) / 2
       }
@@ -473,7 +595,7 @@ template pilotLeg(name, side, baseId) {
         driver: "air"
         axis [1, 0, 0]
         amplitude: 0.05
-        pivot [side * 0.1, 0.475, 0.012]
+        pivot [side * 0.106, 0.475, 0.012]
         wave: "linear"
         phase: 24
       }
@@ -481,41 +603,55 @@ template pilotLeg(name, side, baseId) {
         driver: "land"
         axis [1, 0, 0]
         amplitude: -0.2
-        pivot [side * 0.1, 0.475, 0.012]
+        pivot [side * 0.106, 0.475, 0.012]
         wave: "linear"
       }
     ]
   }
 
+  // The trouser leg gathered over the boot's shaft: a soft roll of cloth wider than the leg above it.
+  shape Superellipsoid $"blouse-{name}" {
+    id: baseId + 6
+    position [side * 0.113, 0.262, 0.0]
+    scale [0.088, 0.05, 0.094]
+    material: trousers
+    blend: "SmoothUnion"
+    smooth: 0.03
+    group: shinGroup
+    parent: $"shin-{name}"
+    exponent: 2.3
+  }
+
   shape Prism $"kneePad-{name}" {
     id: baseId + 2
-    position [side * 0.1, 0.468, 0.07]
-    scale [0.054, 0.07, 0.017]
+    position [side * 0.108, 0.47, 0.096]
+    rotation [-0.0499792, 0, 0, 0.9987503]
+    scale [0.064, 0.078, 0.02]
     material: pad
     parent: $"shin-{name}"
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.65
+      cornerRadius: 0.6
     }
-    rounding: 0.01
+    rounding: 0.012
   }
 
   shape Prism $"boot-{name}" {
     id: baseId + 3
-    position [side * 0.105, 0.025, 0.04]
+    position [side * 0.115, 0.025, 0.03]
     rotation [0, -diagonal, 0, diagonal]
-    scale [0.13, 0.13, 0.055]
+    scale [0.118, 0.15, 0.07]
     material: leather
     parent: $"shin-{name}"
     profile {
       kind: "Convex"
-      cornerRadius: 0.12
-      vertices [[-1, 0], [-1, 0.62], [-0.4, 0.78], [0.35, 0.55], [0.78, 0.41], [1, 0.24], [1, 0]]
+      cornerRadius: 0.14
+      vertices [[-1, 0], [-1, 0.6], [-0.4, 0.74], [0.3, 0.56], [0.75, 0.44], [1, 0.26], [1, 0]]
     }
     swings [
       {
         driver: "gait"
-        pivot [side * 0.105, 0.085, -0.005]
+        pivot [side * 0.115, 0.085, -0.005]
         axis [1, 0, 0]
         amplitude: 0.2
         phase: 3.1415927 * (1 - side) / 2
@@ -523,7 +659,7 @@ template pilotLeg(name, side, baseId) {
       }
       {
         driver: "gait"
-        pivot [side * 0.105, 0.085, -0.005]
+        pivot [side * 0.115, 0.085, -0.005]
         axis [1, 0, 0]
         amplitude: -0.25
         phase: 2.0424 + 3.1415927 * (1 + side) / 2
@@ -531,7 +667,7 @@ template pilotLeg(name, side, baseId) {
       }
       {
         driver: "air"
-        pivot [side * 0.105, 0.085, -0.005]
+        pivot [side * 0.115, 0.085, -0.005]
         axis [1, 0, 0]
         amplitude: 0.02
         phase: 12.5
@@ -539,7 +675,7 @@ template pilotLeg(name, side, baseId) {
       }
       {
         driver: "land"
-        pivot [side * 0.105, 0.085, -0.005]
+        pivot [side * 0.115, 0.085, -0.005]
         axis [1, 0, 0]
         amplitude: 0.1
         wave: "linear"
@@ -549,24 +685,35 @@ template pilotLeg(name, side, baseId) {
 
   shape Superellipsoid $"bootShaft-{name}" {
     id: baseId + 4
-    position [side * 0.105, 0.12, -0.008]
-    scale [0.058, 0.09, 0.066]
+    position [side * 0.115, 0.13, -0.01]
+    scale [0.064, 0.1, 0.072]
     material: leather
     parent: $"boot-{name}"
     exponent: 3
   }
 
+  // The boot's round toe box over the front of the foot.
+  shape Superellipsoid $"toeCap-{name}" {
+    id: baseId + 7
+    position [side * 0.115, 0.048, 0.092]
+    scale [0.072, 0.05, 0.093]
+    material: leather
+    parent: $"boot-{name}"
+    exponent: 2.5
+  }
+
   shape Prism $"sole-{name}" {
     id: baseId + 5
-    position [side * 0.105, 0.0125, 0.04]
+    position [side * 0.115, 0.012, 0.045]
     rotation [diagonal, 0, 0, diagonal]
-    scale [0.054, 0.135, 0.0125]
+    scale [0.074, 0.141, 0.016]
     material: sole
     parent: $"boot-{name}"
     profile {
       kind: "RoundedRectangle"
       cornerRadius: 0.7
     }
+    rounding: 0.005
   }
 }
 
@@ -661,16 +808,16 @@ prototypes {
             }
             {
               parent: "torso"
-              type: "Box"
-              position [0.19, 0.17, -0.008]
-              scale [0.075, 0.048, 0.08]
+              type: "Ellipsoid"
+              position [0.19, 0.225, 0]
+              scale [0.095, 0.135, 0.12]
               color: patchLavender
             }
             {
               parent: "torso"
-              type: "Box"
-              position [-0.19, 0.17, -0.008]
-              scale [0.075, 0.048, 0.08]
+              type: "Ellipsoid"
+              position [-0.19, 0.225, 0]
+              scale [0.095, 0.135, 0.12]
               color: patchLavender
             }
           ]
@@ -686,29 +833,29 @@ prototypes {
             {
               parent: "shin-left"
               type: "Box"
-              position [0, -0.08, -0.012]
-              scale [0.08, 0.009, 0.09]
+              position [0, -0.09, -0.012]
+              scale [0.11, 0.009, 0.12]
               color: padStrap
             }
             {
               parent: "shin-right"
               type: "Box"
-              position [0, -0.08, -0.012]
-              scale [0.08, 0.009, 0.09]
+              position [0, -0.09, -0.012]
+              scale [0.11, 0.009, 0.12]
               color: padStrap
             }
             {
               parent: "thigh-left"
               type: "Box"
-              position [0.012, -0.37, 0]
-              scale [0.08, 0.009, 0.09]
+              position [0.015, -0.37, 0.004]
+              scale [0.11, 0.009, 0.12]
               color: padStrap
             }
             {
               parent: "thigh-right"
               type: "Box"
-              position [-0.012, -0.37, 0]
-              scale [0.08, 0.009, 0.09]
+              position [-0.015, -0.37, 0.004]
+              scale [0.11, 0.009, 0.12]
               color: padStrap
             }
           ]
@@ -752,9 +899,14 @@ prototypes {
           paints: mothLidPaints(pilotHeadScale)
         }
         {
-          color: "#754137"
-          roughness: 0.6
-          specular: 0.04
+          color: "#131316"
+          roughness: 0.55
+          specular: 0.06
+          coat: 0.08
+          paints [
+            { parent: "cuff-left", type: "Box", position [0, -0.006, 0], scale [0.05, 0.009, 0.05], color: strapGrey }
+            { parent: "cuff-right", type: "Box", position [0, -0.006, 0], scale [0.05, 0.009, 0.05], color: strapGrey }
+          ]
         }
         {
           color: "#89481D"
@@ -843,16 +995,16 @@ prototypes {
           paints [
             {
               parent: "upperArm-left"
-              type: "Box"
-              position [0.018, 0.02, -0.001]
-              scale [0.075, 0.048, 0.08]
+              type: "Ellipsoid"
+              position [0.018, 0.075, 0.007]
+              scale [0.095, 0.135, 0.12]
               color: patchLavender
             }
             {
               parent: "upperArm-right"
-              type: "Box"
-              position [-0.018, 0.02, -0.001]
-              scale [0.075, 0.048, 0.08]
+              type: "Ellipsoid"
+              position [-0.018, 0.075, 0.007]
+              scale [0.095, 0.135, 0.12]
               color: patchLavender
             }
           ]
@@ -875,7 +1027,7 @@ prototypes {
       shape Superellipsoid "pelvis" {
         id: 120
         position [0, 0.93, -0.008]
-        scale [0.155, 0.105, 0.108]
+        scale [0.162, 0.108, 0.112]
         material: trousers
         group: 43
         exponent: 2.4
@@ -899,8 +1051,8 @@ prototypes {
       // swings out of its own below them.
       shape Superellipsoid "hip-left" {
         id: 135
-        position [0.088, 0.845, -0.006]
-        scale [0.088, 0.1, 0.097]
+        position [0.092, 0.85, -0.006]
+        scale [0.1, 0.105, 0.105]
         material: trousers
         blend: "SmoothUnion"
         smooth: 0.05
@@ -911,8 +1063,8 @@ prototypes {
 
       shape Superellipsoid "hip-right" {
         id: 136
-        position [-0.088, 0.845, -0.006]
-        scale [0.088, 0.1, 0.097]
+        position [-0.092, 0.85, -0.006]
+        scale [0.1, 0.105, 0.105]
         material: trousers
         blend: "SmoothUnion"
         smooth: 0.05
@@ -924,7 +1076,7 @@ prototypes {
       shape Superellipsoid "belt" {
         id: 121
         position [0, 1.0, -0.004]
-        scale [0.142, 0.022, 0.104]
+        scale [0.152, 0.022, 0.11]
         material: belt
         parent: "pelvis"
         exponent: 3
@@ -932,15 +1084,15 @@ prototypes {
 
       shape Box "beltBuckle" {
         id: 122
-        position [0, 1.0, 0.1]
-        scale [0.026, 0.018, 0.008]
+        position [0, 1.0, 0.106]
+        scale [0.026, 0.018, 0.007]
         material: ochre
         parent: "pelvis"
       }
 
       shape Box "beltTab-left" {
         id: 123
-        position [0.105, 1.0, 0.068]
+        position [0.112, 1.0, 0.073]
         rotation [0, 0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -949,7 +1101,7 @@ prototypes {
 
       shape Box "beltTab-right" {
         id: 124
-        position [-0.105, 1.0, 0.068]
+        position [-0.112, 1.0, 0.073]
         rotation [0, -0.4226, 0, 0.9063]
         scale [0.013, 0.016, 0.006]
         material: ochre
@@ -961,7 +1113,7 @@ prototypes {
       shape Superellipsoid "torso" {
         id: 125
         position [0, 1.205, -0.008]
-        scale [0.148, 0.165, 0.112]
+        scale [0.15, 0.165, 0.114]
         material: undersuit
         group: 40
         parent: "pelvis"
@@ -992,7 +1144,7 @@ prototypes {
       shape Superellipsoid "chest" {
         id: 127
         position [0, 1.218, 0.045]
-        scale [0.118, 0.062, 0.07]
+        scale [0.124, 0.066, 0.072]
         material: undersuit
         blend: "SmoothUnion"
         smooth: 0.035
@@ -1004,7 +1156,7 @@ prototypes {
       shape Superellipsoid "trapezius" {
         id: 128
         position [0, 1.335, -0.022]
-        scale [0.168, 0.058, 0.082]
+        scale [0.17, 0.056, 0.084]
         material: undersuit
         blend: "SmoothUnion"
         smooth: 0.045
@@ -1012,6 +1164,9 @@ prototypes {
         parent: "torso"
         exponent: 2.3
       }
+
+      pilotShoulder("left", 1, 137)
+      pilotShoulder("right", -1, 138)
 
       // The harness: two flat front straps from her shoulders to her belt, each in two runs that bridge her chest.
       shape Box "strapUpper-left" {
@@ -1063,8 +1218,8 @@ prototypes {
       // into a turn.
       shape Superellipsoid "collar" {
         id: 133
-        position [0, 1.37, -0.004]
-        scale [0.06, 0.04, 0.056]
+        position [0, 1.395, -0.01]
+        scale [0.062, 0.055, 0.056]
         material: collarKnit
         parent: "torso"
         exponent: 2.6
@@ -1078,6 +1233,26 @@ prototypes {
       }
 
       mothHead(pilotHeadScale, pilotHeadAt, "collar", skin, eyeWhite, iris, pupil, hair)
+
+      // Out of the hood her black hair has the volume sheet 04 draws: a mass over her crown and the back of her head
+      // down to the nape, a swoop lifting from a parting over her right eye across to her left, loose hair falling down
+      // her left side past the ear to the jaw, and her right side swept back to the braid's root. Each joins the head's
+      // scalp group, so the hair is one swept mass; coordinates are the head library's unscaled frame.
+      for lock in pilotHairLocks {
+        mothHairLock(lock[0], lock[1], lock[2], lock[3], lock[4], lock[5], lock[6], pilotHeadScale, pilotHeadAt, "collar", hair)
+      }
+
+      shape Superellipsoid "hairMass" {
+        id: 99
+        position: map([0, 1.82, -0.005], (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale)
+        scale: map([0.2, 0.17, 0.15], v => v * pilotHeadScale)
+        material: hair
+        blend: "SmoothUnion"
+        smooth: 0.02
+        group: 9
+        parent: "collar"
+        exponent: 2.2
+      }
 
       // The braid roots under the lock beside her right cheek as one smooth tapering root, which a core carries over her
       // right collarbone onto her chest; the plait's lobes alternate down the core to an ochre tie and a short tassel.
@@ -1154,10 +1329,10 @@ prototypes {
         exponent: pilotSoftness
       }
 
-      pilotArm("left", 1, 140, 41)
-      pilotArm("right", -1, 160, 42)
-      pilotLeg("left", 1, 180)
-      pilotLeg("right", -1, 200)
+      pilotArm("left", 1, 140, 41, 44, 46)
+      pilotArm("right", -1, 160, 42, 45, 47)
+      pilotLeg("left", 1, 180, 48)
+      pilotLeg("right", -1, 200, 49)
 
       // The handheld is the Humble Gaming Brick of the gallery, a faithful simplified copy: 75 x 133 x 23 mm of orange
       // glass with the battery bay 4.5 mm proud of its back, 27.5 mm in all. It rests hidden inside her chest, and the

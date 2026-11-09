@@ -1616,6 +1616,16 @@ by `world.view.pick`.
   readable shadow under a hovering Moth: both are treatment and lighting
   questions the toon lane's defaults and the night item decide, not her
   sculpt.
+- [high] The off-suit Moth ([moth-pilot.puck](../../worlds/debug/avatars/moth-pilot.puck))
+  is rebuilt to sheet 04 and judged on the CPU preview only: shaped deltoid,
+  biceps, triceps and forearm under the sleeves, elbows bent at rest, elbow
+  pads, gloves with cuffs, sloped shoulders under the patches, straight-cut
+  trousers gathered over round-toed boots, and her hair's volume out of the
+  hood. Not yet judged in a windowed World: the paints (patches, straps), the
+  hair against sheet 04 under the world lighting, the suit toggle, and the hold
+  pose, whose hands moved 12 mm out and whose upper arm turns 0.03 rad further
+  in to keep the handheld's grip. Her head's eyes and nose are the shared
+  `moth-head` library's, judged with the suited Moth.
 - [medium] The Moth's lights across the day: the pod nozzles' emissive
   (`thrusterGlow`, `thrusterCyan`) and the heel pilot lights (`bootCyan`,
   `bootGlow`) are fixed nits under an exposure that spans twelve stops, so a

@@ -4,20 +4,24 @@
 1.68 m pilot of the [concept pack](../../../docs/game/art/moth-concept-pack/README.md)'s
 off-suit turnaround (sheet 04), a grounded, athletic working woman, never
 sexualized. She wears a charcoal work undersuit with full sleeves and a high
-collar, straight-cut work trousers, soft knee and elbow pads, a contact harness
-with an ochre plate between her shoulder blades, small lavender shoulder
-patches, a belt with an ochre buckle and flat ankle boots. Her hands are bare,
-four fingers and a thumb each, so she can hold the 75 × 133 mm handheld of
-sheet 06 at true scale. The sheet draws gloves; the owner's direction is bare
-hands, and that wins.
+turtleneck collar, straight-cut work trousers gathered over her boots, soft
+knee and elbow pads, a contact harness with an ochre plate between her shoulder
+blades, lavender patches over her shoulders, a belt with an ochre buckle,
+charcoal work gloves with a strap round each cuff, four fingers and a thumb
+each, and round-toed ankle boots on dark soles, as sheet 04 draws them.
 
 Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
 `mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed
 so her eyes sit 1.527 m up, the suited eye line less sheet 05's 0.208 m
 footbed. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
-placed at her head the same way. A thick braid roots under the lock beside her
-right cheek as one smooth tapering root, then a plait of alternating lobes falls
-over her right collarbone to an ochre tie.
+placed at her head the same way. Out of the hood her black hair has sheet 04's
+volume, which is her own (`pilotHairLocks` and `hairMass`, joined to the head's
+scalp group through `mothHairLock`): a mass over her crown and down the back of
+her head, a swoop lifting from a parting over her right eye across to her left,
+loose hair falling down her left side to the jaw, and her right side swept back
+to the braid. A thick braid roots beside her right cheek as one smooth tapering
+root, then a plait of alternating lobes falls over her right collarbone to an
+ochre tie.
 
 ## Wear her
 
@@ -102,7 +106,10 @@ The look's first holding frame wins, so she does not blink while she holds it.
 She rides the suited Moth's drivers, followers and foot effectors
 ([moth.md](moth.md#geometry-and-motion)) at her own joints: hips at 0.86 m,
 knees at 0.475 m, ankles at 0.085 m, shoulders at 1.355 m and elbows at
-1.068 m. Her stride reads her own `pilot-stride` curve, π(1.5 + 0.6v)/v
+1.068 m. Her arms hang with the elbow bent 0.25 rad forward: the forearm and
+glove are authored straight and placed through `bent` and `bendTurn`, and the
+hold pose's first forearm swing (`elbowRestBend`) turns them back before the
+pose bends the elbow. Her stride reads her own `pilot-stride` curve, π(1.5 + 0.6v)/v
 radians per metre: 1.8 steps a second at 0.5 m/s rising to 4.5 at 5 m/s, the
 suited rate scaled by the suit's 1.03 m hip over her 0.85 m one. The gait
 weights (`moth-gait`, `moth-run`) and dynamics rows are the suited Moth's. The
@@ -115,15 +122,19 @@ hold pose was solved.
 
 ## Geometry
 
-The torso is one smoothly blended group (chest, waist, chest front and
-trapezius) riding the torso shape; two hip masses ride and blend into the
-pelvis so her hips flow into her trouser legs. Limbs are tapered sweeps. The
-front harness straps are thin boxes; the shoulder and back straps, the knee-pad
+The torso is one smoothly blended group (chest, waist, chest front, trapezius
+and the two sloping shoulders) riding the torso shape; two hip masses ride and
+blend into the pelvis so her hips flow into her trouser legs. Each moving part
+of a limb is its own blended group, so no blend crosses a joint: the upper arm
+(the sleeve's sweep, a low deltoid, biceps and triceps), the forearm (its sweep
+and the muscle below the elbow), the glove (cuff, wrist, palm, thumb and
+fingers) and the trouser shin with its gathered hem. The joints between them
+are plain unions, which the elbow and knee pads cover. The front harness straps
+are thin boxes; the shoulder and back straps, the knee-pad straps, the glove
 straps, the strap buckles, the shoulder patches and the handheld's picture are
-paint. A paint sits in its parent shape's own frame. The palette's
-charcoals are authored darker than the sheet reads, since the studio's light
-lifts them as it lifts the suit's lavender. She stamps 128 of her own 367
-shapes:
+paint. A paint sits in its parent shape's own frame. The palette's charcoals
+are authored darker than the sheet reads, since the studio's light lifts them
+as it lifts the suit's lavender. `creation stats` counts her shapes:
 
 ```powershell
 dotnet <cli>/Puck.Cli.dll creation stats --world worlds/debug/debug.puck --prototype moth-pilot
