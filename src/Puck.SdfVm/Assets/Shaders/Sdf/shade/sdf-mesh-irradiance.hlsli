@@ -1,16 +1,14 @@
-// The baked-mesh path's indirect light (views only): the irradiance volume SdfMeshIrradiance traces on the CPU against the
-// static meshes, read at a shaded point by the eight probes about it. It performs no field query. The probe record and the
-// normal bias are SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_IRRADIANCE_*); the
-// key, the toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's KeyOf, SlotOf and Incoming, the CPU
-// trace's read of the same volume.
+// The baked-mesh path's indirect light: the irradiance volume SdfMeshIrradiance traces against the static meshes, read at
+// a shaded point (by the views and glass passes) and at a probe's hit (by the relight's bounce and the exposure meter)
+// through the probes about it. It performs no field query. The probe record and the normal bias are
+// SdfMeshIrradianceProbe's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_IRRADIANCE_*); the key, the
+// toroidal slot and the probe weights are mirrored by SdfMeshIrradiance's KeyOf, SlotOf and Incoming, the CPU read of the
+// same volume.
 #ifndef SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
 
-bool sdfMeshIrradianceEnabled() {
-    return (passGroup.meshIrradianceVolume != 0u);
-}
 uint sdfMeshIrradianceKey(int3 cell) {
     uint3 low = (asuint(cell) & 1023u);
     return (low.x | (low.y << 10) | (low.z << 20));
@@ -77,18 +75,22 @@ float sdfMeshProbeRamp(float blocked, float start, float scale) {
     coverage = coverage * coverage * (3.0 - 2.0 * coverage);
     return 1.0 - coverage;
 }
-// The visibility the taps' blocked shares leave, at every level alike: the taps on solids close the receiver once they are
-// the majority, the taps on sheets (`sheets`, part of `blocked`) at almost any share. KEEP IN SYNC with
-// SdfMeshProbeCoverage.Visibility.
-float sdfMeshProbeCoverageVisibility(float blocked, float sheets) {
-    return sdfMeshProbeRamp(blocked, SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START, SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE)
+// The visibility the taps' blocked shares leave: at a coarser level the taps on solids close the receiver once they are
+// the majority, at the finest smoothly over their whole share, and the taps on sheets (`sheets`, part of `blocked`, marked
+// by the coarser levels alone) at almost any share. KEEP IN SYNC with SdfMeshProbeCoverage.Visibility.
+float sdfMeshProbeCoverageVisibility(float blocked, float sheets, bool finest) {
+    float start = (finest ? SDF_MESH_IRRADIANCE_DEPTH_FINEST_COVERAGE_START : SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START);
+    float scale = (finest ? SDF_MESH_IRRADIANCE_DEPTH_FINEST_COVERAGE_SCALE : SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+
+    return sdfMeshProbeRamp(blocked, start, scale)
         * sdfMeshProbeRamp(sheets, SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_START, SDF_MESH_IRRADIANCE_DEPTH_SHEET_COVERAGE_SCALE);
 }
 // First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
 // KEEP IN SYNC with SdfMeshProbeDepth.Visibility, its signed octahedral normal bytes and its sheet bit (the low bit of a
 // texel's curvature half, masked off before the curvature decodes).
-// `bounded` false lets a receiver past a measured miss's reach through, so only measured surfaces block it.
-float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
+// `bounded` false lets a receiver past a measured miss's reach through, so only measured surfaces block it; `finest`
+// names a probe of the finest level, which closes by that level's rule.
+float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, bool finest) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
@@ -146,7 +148,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
     if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
         float gap = dot(firstNormal, toward) - planeSum / planeWeight;
         float closed = saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
-        return sdfMeshProbeCoverageVisibility(planeWeight * closed, dot(weights, sheets) * closed);
+        return sdfMeshProbeCoverageVisibility(planeWeight * closed, dot(weights, sheets) * closed, finest);
     }
     float blocked = 0.0;
     float blockedSheets = 0.0;
@@ -188,7 +190,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
         blocked += share;
         blockedSheets += share * sheets[corner];
     }
-    return sdfMeshProbeCoverageVisibility(blocked, blockedSheets);
+    return sdfMeshProbeCoverageVisibility(blocked, blockedSheets, finest);
 }
 // A level's probe spacing along each axis, zero for a level not published, and its window: first cell and probes along
 // each axis.
@@ -350,7 +352,7 @@ float sdfMeshProbesGather(uint level, float3 spacing, int3 low, int3 dims, float
         float weight = (trilinear * lerp(max(fade, behind), 1.0, outside));
 
         if (weight > 0.0) {
-            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded);
+            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded, (level == 0u));
         }
         if (weight <= 0.0) {
             continue;
@@ -398,7 +400,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
-    if ((passGroup.meshIrradianceVolume == 0u) || any(!isfinite(position))) {
+    if (any(!isfinite(position))) {
         return probes;
     }
 

@@ -75,12 +75,20 @@ public static class SdfMeshIrradianceProbe {
     /// such as a downward rim at the ground whose front probes the ground hides, which would otherwise draw black. A coarser
     /// level's probe behind the plane keeps none: its depth test cannot resolve the receiver's own wall.</summary>
     public const float BehindShare = 0.05f;
-    /// <summary>The share of a receiver's angular taps blocked by solids at which their block starts closing: a minority
-    /// tap cannot extend a finite block over the footprint, so a tap half on a railing does not shadow the floor beyond it,
-    /// and a coarse probe's metres-wide tap on a hill's near bulge does not shadow the hill's far slope it sees.</summary>
+    /// <summary>The share of a coarser level's angular taps blocked by solids at which their block starts closing: a
+    /// minority tap cannot extend a finite block over the footprint, so a coarse probe's metres-wide tap on a hill's near
+    /// bulge does not shadow the hill's far slope it sees.</summary>
     public const float DepthCoverageStart = 0.5f;
-    /// <summary>Scales the solids' closing ramp to complete at three-quarter coverage.</summary>
+    /// <summary>Scales a coarser level's closing ramp on solids to complete at three-quarter coverage.</summary>
     public const float DepthCoverageScale = 4f;
+    /// <summary>The share of a finest-level probe's angular taps blocked by solids at which their block starts closing:
+    /// none, so the probe's visibility follows the blocked share over the taps' whole footprint, a texel wide. The
+    /// finest probes stand among a room's furnishings, often beside and below a plinth's top; a closing ramp narrower than
+    /// a texel turns each such probe's view past a furnishing's edges into a hard-edged wedge across the floor and the
+    /// faces beside it, wherever that probe's light differs from its neighbours'.</summary>
+    public const float DepthFinestCoverageStart = 0f;
+    /// <summary>Scales a finest-level probe's closing ramp on solids to complete when every tap blocks.</summary>
+    public const float DepthFinestCoverageScale = 1f;
     /// <summary>The share of a receiver's angular taps blocked by sheets at which their block starts closing: none, since
     /// a measured hit on a sheet before the receiver is a slab or a wall with another space beyond it.</summary>
     public const float DepthSheetCoverageStart = 0f;

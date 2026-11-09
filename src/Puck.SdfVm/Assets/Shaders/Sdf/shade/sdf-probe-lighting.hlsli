@@ -2,14 +2,12 @@
 #define SDF_PROBE_LIGHTING_HLSLI
 #include "sdf-probe-trace.hlsli"
 struct ProbePass {
-    uint meshIrradianceVolume;
     float4 meshIrradianceLevels[3];
     float4 meshIrradianceSpacings[3];
 };
 static ProbePass passGroup;
 #include "sdf-mesh-irradiance.hlsli"
 void sdfProbeLightingSetup() {
-    passGroup.meshIrradianceVolume = 1;
     [unroll] for (uint level = 0; level < 3; level++) {
         passGroup.meshIrradianceLevels[level] = sdfProbeLighting[3 + 2 * level];
         passGroup.meshIrradianceSpacings[level] = sdfProbeLighting[4 + 2 * level];

@@ -106,7 +106,7 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
                                         // shows apart from the direct light
             float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
 
-            viewColor = ((s.hit && sdfMeshIrradianceEnabled()) ? min((sdfMeshIndirectSeen(sdfMeshProbesAt(surfacePoint, s.normal), s.normal) * passGroup.exposure), SDF_LUMINANCE_CEILING) : float3(0.0, 0.0, 0.0));
+            viewColor = (s.hit ? min((sdfMeshIndirectSeen(sdfMeshProbesAt(surfacePoint, s.normal), s.normal) * passGroup.exposure), SDF_LUMINANCE_CEILING) : float3(0.0, 0.0, 0.0));
             break;
         }
         case SDF_DEBUG_VIEW_RATES:

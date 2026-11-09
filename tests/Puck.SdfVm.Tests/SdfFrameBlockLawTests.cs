@@ -68,7 +68,7 @@ public sealed class SdfFrameBlockLawTests {
         // (SdfFrameBlock.WriteShadeBins).
         SdfWorldPackage.ShadeBinWidths,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
-        SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
+        SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
         // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
         SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
     // A camera basis none of whose components is zero.

@@ -204,11 +204,13 @@ public static class SdfMeshProbeDepth {
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
     /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
+    /// <param name="finest">Whether the probe belongs to the volume's finest level, whose taps' blocked share closes by
+    /// the finest level's rule (<see cref="SdfMeshProbeCoverage.Visibility"/>).</param>
     /// <param name="bounded">Whether a receiver past a measured miss's reach is unsupported (zero); when false, only
     /// measured surfaces block, so a receiver past every probe's reach is extrapolated wherever no measured surface lies
     /// before it.</param>
     /// <returns>Visibility from zero to one, the taps' blocked shares closed by <see cref="SdfMeshProbeCoverage"/>.</returns>
-    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, bool bounded = true) {
+    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, bool finest, bool bounded = true) {
         var distance = toward.Length();
 
         if (!(distance > 0f)) { return 1f; }
@@ -277,7 +279,7 @@ public static class SdfMeshProbeDepth {
             var gap = (Vector3.Dot(vector1: firstNormal, vector2: toward) - (planeSum / planeWeight));
             var closed = Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade));
 
-            return SdfMeshProbeCoverage.Visibility(blocked: (planeWeight * closed), sheets: (sheetWeight * closed));
+            return SdfMeshProbeCoverage.Visibility(blocked: (planeWeight * closed), finest: finest, sheets: (sheetWeight * closed));
         }
         var blocked = 0f;
         var blockedSheets = 0f;
@@ -328,7 +330,7 @@ public static class SdfMeshProbeDepth {
             blocked += share;
             blockedSheets += (sheets[corner] ? share : 0f);
         }
-        return SdfMeshProbeCoverage.Visibility(blocked: blocked, sheets: blockedSheets);
+        return SdfMeshProbeCoverage.Visibility(blocked: blocked, finest: finest, sheets: blockedSheets);
     }
 
     /// <summary>Writes the sky's mean radiance over each hit texel's solid angle: what a ray of that texel that misses every

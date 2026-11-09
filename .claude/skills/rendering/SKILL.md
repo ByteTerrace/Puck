@@ -605,8 +605,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   coming from the next stage over another cage. Sixteen pre-scaled slots, named by
   each stage's cage word (`sdfMeshProbeCageWord`) rather than sixteen addresses;
   a corner answers where its weight is positive, and `sdfMeshProbeAt` is the one
-  door to its probe. One
-  closing rule at every level: taps on solids close as a majority, taps a coarse
+  door to its probe. Taps on solids close as a majority at a coarse level and
+  smoothly over their whole share at the finest (a narrower ramp there draws a
+  plinth's wedge across the floor from every low probe beside it), taps a coarse
   level's trace marked sheets (the curvature half's low bit) at almost any share.
   Only the finest level keeps the behind-plane floor. Nothing a camera sees reads
   an unmeasured surface as black. A view with no cascade (a session view, or

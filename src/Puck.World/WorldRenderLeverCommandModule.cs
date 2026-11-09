@@ -579,7 +579,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.indirect",
-            description: $"Selects the indirect-light tier the baked-mesh path's irradiance volume traces at: {WorldIndirectForms.Spelling}. No argument reads the selected tier.",
+            description: $"Selects the indirect-light tier: {WorldIndirectForms.Spelling}. Medium and high size the baked-mesh path's irradiance volume; off keeps the medium volume's occlusion of the traced lights and the reflected sky and applies none of its light. No argument reads the selected tier.",
             forms: WorldIndirectForms,
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.indirect: {settings.IndirectTier.ToString().ToLowerInvariant()}]");
@@ -892,8 +892,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
                 SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
                 SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
-                    QualityTier.Low => SdfIndirectTier.Off,
-                    QualityTier.Medium => SdfIndirectTier.Medium,
+                    QualityTier.Low or QualityTier.Medium => SdfIndirectTier.Medium,
                     _ => SdfIndirectTier.High,
                 }))));
                 SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,

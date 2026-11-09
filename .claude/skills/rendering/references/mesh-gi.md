@@ -353,10 +353,23 @@ after the main residency's done line; a nested residency's done line is insuffic
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
   No radial moments or squared-distance field remain. Misses supply no blocker.
-  Blocked taps close by one rule at every level (`SdfMeshProbeCoverage.Visibility`,
-  `sdfMeshProbeCoverageVisibility`): the taps on solids from half to
-  three-quarter support, so a minority hit cannot extend a finite block over the
-  footprint, times the taps on sheets from zero to an eighth. A coarse level's
+  Blocked taps close by one rule a level (`SdfMeshProbeCoverage.Visibility`,
+  `sdfMeshProbeCoverageVisibility`). At a coarser level the taps on solids close
+  from half to three-quarter support, so a metres-wide minority hit cannot extend
+  a finite block over the footprint, times the taps on sheets from zero to an
+  eighth. At the finest level the taps on solids close smoothly over their whole
+  share (`DepthFinestCoverageStart`, `DepthFinestCoverageScale`), so a probe's
+  weight changes across a texel as the receiver passes a furnishing's edge. The
+  finest probes stand among a room's furnishings (level 1's 2 m lattice puts a
+  plane 0.45 m over the floor, below the gallery's plinth tops); the majority
+  ramp, closing over a quarter texel, turned each such probe's view past a
+  plinth into a hard-edged wedge across the floor and the faces beside it,
+  wherever that probe's light differed from its neighbours' (the floor under a
+  strip reads 1.6 times the floor between strips, as a line source's cosine law
+  predicts). The residue is a soft wedge where a probe stands just behind a
+  furnishing's edge (`world.probe` names it with `reference-clear=0`): a point
+  probe there is truly blocked, and only a probe of finite extent (a penumbra
+  over its cell) would blend it out. A coarse level's
   trace (`SdfMeshIrradianceLevel.Sheets`) marks a hit a sheet in the low bit of
   its texel's curvature half (`SdfMeshProbeDepth.Surfaces`; every reader masks
   it off before decoding the curvature) when the scene holds another surface
@@ -489,10 +502,13 @@ after the main residency's done line; a nested residency's done line is insuffic
   only when the layout changes. On a resize or window move, retain the uploaded
   GPU table **and its old coordinates** until every new slot has a measured
   sample. Never publish unwritten cells as darkness or initialize them to
-  unoccluded sky. Until a level first publishes, no level has spacing, but the
-  volume flag is set whenever the tier is on (`SdfFrameBlock.WriteMeshIrradiance`'s
-  `measuring`), so views shade by the volume's model and never by the
-  indirect-off look (harmonic sky ambient and authored fill). A surface no
+  unoccluded sky. Until a level first publishes, no level has spacing, and views
+  still shade by the volume's model, never by an unoccluded sky ambient. The volume
+  measures at every tier: Off measures the Medium layout and applies none of its
+  light (`SdfFrameBlock`'s `indirectApply` intensity zero, which also brings in
+  the authored fill), while its probes keep occluding the traced lights, the
+  reflected sky and, with no cascade, the sun. Without the volume nothing occludes
+  any of those indoors. A surface no
   published probe answers (`sdfMeshAnswers` in `shade/sdf-light.hlsli`: every
   surface before the first publication, and surfaces past every published probe
   after a camera cut until the moved windows land) is lit by the exposure

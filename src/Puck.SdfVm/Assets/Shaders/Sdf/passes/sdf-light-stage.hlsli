@@ -167,10 +167,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // The irradiance volume is the indirect light, gathered once about the surface: its enabled sky source
             // replaces the unoccluded harmonic ambient (disabling that source retains the authored ambient look), its
             // probes occlude the traced point and spot lights and the reflected environment, and a surface no probe has
-            // measured yet reads the camera sample's light (sdfMeshAnswers). Direct lights and atmosphere remain
-            // independent.
-            bool meshIndirect = sdfMeshIrradianceEnabled();
-            bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
+            // measured yet reads the camera sample's light (sdfMeshAnswers). The probes occlude at every indirect tier;
+            // the off tier applies none of their light (indirectApply's intensity zero). Direct lights and atmosphere
+            // remain independent.
+            bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
             SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
 
             // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
@@ -187,7 +187,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.shadowMeasured = shadowMeasured;
             shadeSurface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
-            shadeSurface.probed = (meshIndirect && sdfMeshAnswers(probes));
+            shadeSurface.probed = sdfMeshAnswers(probes);
             shadeSurface.probes = probes;
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
@@ -218,19 +218,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 color = shadeMaterial.albedo * radiance;
             }
 
-            float3 indirect = float3(0.0, 0.0, 0.0);
-            float3 indirectTerm = 0.0;
-
-            if (meshIndirect) {
-                indirect = sdfMeshIndirectSeen(probes, normal);
-                if (toon) { indirect *= style.shadow.rgb; }
-                indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
-                    * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
-                color += indirectTerm * shadeMaterial.albedo * (toon ? 1.0 : (1.0 - shadeMaterial.metal));
-            }
-            // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface. It never
-            // adds a second approximation while the volume is on.
-            if (!meshIndirect) {
+            float3 indirect = sdfMeshIndirectSeen(probes, normal);
+            if (toon) { indirect *= style.shadow.rgb; }
+            float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
+                * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
+            color += indirectTerm * shadeMaterial.albedo * (toon ? 1.0 : (1.0 - shadeMaterial.metal));
+            // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface, where no
+            // indirect light is applied. It never adds a second approximation to the volume's light.
+            if (passGroup.indirectApply.w <= 0.0) {
                 float fill = toon ? 1.0 - sdfToonStep(style, dot(normal, keyDirection))
                     : 1.0 - max(dot(normal, keyDirection), 0.0);
                 float3 fillTint = toon ? style.shadow.rgb : 1.0;
@@ -240,9 +235,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
             // sky about the mirror direction, blurred toward its irradiance as the lobe widens with roughness, under the
             // lobe's directional albedo (sdfMaterialEnvironmentBrdf, which a rough dielectric keeps near its f0 at
-            // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; with the
-            // irradiance volume on, only as far as the volume sees the sky open that way, and the surroundings' light
-            // where not.
+            // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; only as far as
+            // the irradiance volume sees the sky open that way, and the surroundings' light where not.
             float3 environmentTerm = 0.0;
             float3 reflectionTerm = 0.0;
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
@@ -250,12 +244,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
-                float3 environment = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
-                environmentTerm = environment;
+                float3 environment = sdfMeshReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness));
 
-                if (meshIndirect) {
-                    environment = sdfMeshReflectionSeen(probes, reflectDirection, environment);
-                }
                 reflectionTerm = environment;
                 environmentTerm = ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);
                 color += environmentTerm;

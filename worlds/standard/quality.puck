@@ -1,8 +1,9 @@
 // The standard's graphics presets: `world.quality low|medium|high` applies one, each writing its shadow tier and slot
 // policy, its ambient-occlusion switch, its temporal-reconstruction switch, its dynamic-resolution switch (off in every
 // preset), its scalar render ceiling, its render-scale floor and its sky tier (`world.sky-quality`) into the live render
-// levers. The independently counted sky field stays Full at every tier; Half remains an authored option. Indirect light
-// is off at Low, Medium at Medium and High at High.
+// levers. The independently counted sky field stays Full at every tier; Half remains an authored option. The irradiance
+// volume is Medium at Low and Medium and High at High: its probes occlude the traced lights, the reflected sky and, in a
+// view with no cascade, the sun, so no tier goes without it.
 // A world boots on its own render levers and nothing here changes them until a tier is chosen. Until initial development
 // is done every machine runs `high`, the fullest render, and no machine drops to a lower tier to meet its frame-rate bar;
 // `low` and `medium` are what they are only until the tiers below the highest are worked out on the machines that need
@@ -27,7 +28,7 @@ render {
   }
   low {
     bloom: Off
-    indirect: Off
+    indirect: Medium
     sky: low
     skyFieldScale: 1
     shadows: Off

@@ -107,7 +107,7 @@ public static partial class SdfFrameBlock {
 
         block.Clear();
         Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height);
-        WriteMeshIrradiance(block: block, volume: residency.MeshIrradianceParameters, measuring: (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off));
+        WriteMeshIrradiance(block: block, volume: residency.MeshIrradianceParameters);
         WriteTemporal(block: block, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: temporalEnabled);
         WritePreviousView(block: block, view: temporal.PreviousView, valid: temporal.HasPreviousView);
         foreach (var copy in copies) {

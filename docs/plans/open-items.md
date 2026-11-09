@@ -1785,10 +1785,12 @@ by `world.view.pick`.
   an 18,000-nit sky moved the wall from mint to a cool sky tint), judged with
   `world.toon` both off and on, since the cel default tints the indirect light
   by its shadow band.
-- [low] `world.indirect off` leaves auto exposure metering the probes (view 0
-  read 15.272 nits before and after the toggle) while the frame turns white at
-  EV 4.5 in the devices room: the lever's fallback ambient lights an interior
-  as if it stood under the open sky, and the meter does not follow it.
+- [low] Under `world.indirect off` auto exposure still meters the volume's
+  light (the probes' cubes and the camera sample), which the off tier measures
+  but does not apply (`SdfFrameBlock.WriteIndirectControls`), so an indirectly
+  lit room reads darker than its meter expects. Decide whether the meter should
+  take the applied share of the indirect light (`indirectApply`) before
+  exposing.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
