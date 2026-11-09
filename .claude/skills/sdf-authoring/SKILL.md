@@ -346,8 +346,7 @@ What a first swallow taught, in the order it went wrong:
   box at their own factor, and only where the surface turns, so grouping a part
   to borrow a neighbour's detail is never needed (`puck mesh audit --prototype
   <id> --cpu` prints each group's cell and triangles). A section thinner than
-  the 2 mm floor declares its own half thickness rather than fragmenting into
-  shards. Each declaration costs triangles: a rounding of 5 mm or more refines
+  the 2 mm floor declares the floor. Each declaration costs triangles: a rounding of 5 mm or more refines
   its shape's turning cells to its radius, so round edges where they read.
 - **Animating a creation changes its bake.** Drivers make the creation
   animated and its shapes pooled: `group: 0` is ungrouped there, and each

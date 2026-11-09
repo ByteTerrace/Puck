@@ -387,10 +387,9 @@ laws exercise that boundary.
   span steps clean over the sheet. A shell declares a quarter of its
   thickness, a warped shape a thirty-second of its smallest half extent and
   cellular relief a thirty-second of its wavelength. The finest applies, at
-  placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`) unless
-  the shape's own section or half thickness is thinner, which then declares
-  itself: a part one cell holds whole contours as shards (the Moth's 1.2 mm
-  eyelid tubes did). A scoped creation keeps its tightest shape's spacing, or
+  placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`); a
+  part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
+  declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
   its noise relief's (`CreationNoiseDocument.DetailSpacing`) where that is
   finer; text declares `WorldPlacementStamper.TextDetail`. Refinement stops at
   eight cells a coarse axis, and a scoped creation's coarse lattice spans its

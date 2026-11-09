@@ -33,8 +33,7 @@ internal static class WorldShapeDetail {
     /// of its round sections' (<see cref="SdfSampledLattice.RoundCell"/>: a sphere's, an ellipsoid's middle radius, a
     /// cylinder's or cone's, a capsule's, a torus's tube, a strand's, an elliptic or rounded profile's tightest bend), its
     /// rounding's radius, a thin shape's half thickness, a shell's quarter thickness, cellular relief's cell and a warped
-    /// field's share of its extent; no finer than <see cref="FinestDetail"/>, or than half the shape's own section or half
-    /// thickness where that is thinner still.</summary>
+    /// field's share of its extent; no finer than <see cref="FinestDetail"/>.</summary>
     /// <param name="shape">The shape, in creation units.</param>
     /// <param name="scale">The placement's uniform scale from creation units to world units.</param>
     /// <returns>The spacing, in world units; zero for a shape that declares none.</returns>
@@ -68,12 +67,7 @@ internal static class WorldShapeDetail {
             Take(spacing: (HalfExtents(shape: shape, size: size).Smallest / WarpCells));
         }
 
-        // A section or sheet thinner than FinestDetail keeps a cell per half thickness, two across it, rather than one
-        // cell holding the whole part, which contours it as scattered shards: a part below the floor resolves.
-        var thinnest = MathF.Min(x: ((section > 0f) ? section : float.PositiveInfinity), y: ((plate > 0f) ? plate : float.PositiveInfinity));
-        var floor = MathF.Min(x: FinestDetail, y: (thinnest * scale));
-
-        return (float.IsFinite(f: detail) ? MathF.Max(x: (detail * scale), y: floor) : 0f);
+        return (float.IsFinite(f: detail) ? MathF.Max(x: (detail * scale), y: FinestDetail) : 0f);
     }
     // A round section's spacing in creation units at `scale` (SdfSampledLattice.RoundCell, in world units).
     private static float RoundCell(float radius, float scale) => (SdfSampledLattice.RoundCell(radius: (radius * scale)) / scale);
