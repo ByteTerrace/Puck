@@ -715,8 +715,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             SdfShapeType.Capsule => SdfCapsule(
             p: p,
             endpoint: Vector(instruction: instruction),
-            radius: instruction.Data0W,
-            inverseLengthSquared: instruction.Data1Y
+            radius: instruction.Data0W
         ),
             SdfShapeType.Cylinder => (SdfCylinder(
             p: p,
@@ -881,14 +880,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return ((outside + inside) - cornerRadius);
     }
-    private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) {
-        var h = FixedQ4816.Clamp(
-            value: (FixedVector3.Dot(
-                left: p,
-                right: endpoint
-            ) * inverseLengthSquared),
-            minimum: FixedQ4816.Zero,
-            maximum: FixedQ4816.One
+    // The kernel multiplies by the packed 1 / |endpoint|^2 (data1.y) in float; the carrier divides the exact dot products
+    // once instead (SegmentParameter), since a rounded dot of two centimetre vectors keeps a few bits.
+    private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
+        var h = FixedVector3.SegmentParameter(
+            point: p,
+            segment: endpoint
         );
 
         return ((p - (endpoint * h)).Length - radius);
@@ -929,10 +926,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // e == 2 is the ellipsoid, every ellipsoid the ISA carries: it takes the pow-free fast path (|q| - 1) * min(r), the
     // same scaled L2 gauge without four Pow evaluations, and the same m <= 0 center value -min(r) (|q| = 0 there).
     // KEEP the fast path IN SYNC with sdfSuperellipsoid's own e == 2 branch.
-    // The kernel's q = |p| · (1 / r) is carried here as q · min(r) = (|p| · min(r)) / r, in metres: the packed inverse
-    // radius has a Q16 raw of 65536 / r, so 1 / 514 carries seven bits and moves a 514 m surface by metres, and a q of
-    // 2^-16 resolution steps the distance by min(r) / 65536. Each scaled ratio rounds twice, at the product and the
-    // quotient, which SuperellipsoidScaledRatioBounds encloses.
+    // The kernel's q = |p| · (1 / r) is carried here as q · min(r) = (|p| · min(r)) / r, in metres, rounded once
+    // (SuperellipsoidScaledRatio): the packed inverse radius has a Q16 raw of 65536 / r, so 1 / 514 carries seven bits
+    // and moves a 514 m surface by metres, and a carrier-rounded product |p| · min(r) of two centimetres keeps a few
+    // bits, which the division by a centimetre radius turns into a millimetre of noise.
     private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedQ4816 exponent, ref PowerWork work) {
         var absP = FixedVector3.Abs(value: p);
         var minRadius = FixedQ4816.Min(
@@ -989,16 +986,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         )) - minRadius);
     }
 
-    // The product |p_i| · min(r) fits the carrier below 2^20 m on a radius under 2^26 m; past either the ratio divides
-    // first, at the coarser resolution, rather than wrap.
-    private const long SuperellipsoidScaledMagnitudeLimit = (1L << 36);
-    private const long SuperellipsoidScaledRadiusLimit = (1L << 42);
-
-    // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres.
+    // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres. min(r) <= r_i, so it never exceeds
+    // |p_i| and never wraps; it is non-decreasing in |p_i|, which SuperellipsoidScaledRatioBounds relies on.
     private static FixedQ4816 SuperellipsoidScaledRatio(FixedQ4816 magnitude, FixedQ4816 radius, FixedQ4816 minRadius) =>
-        (((magnitude.Value < SuperellipsoidScaledMagnitudeLimit) && (minRadius.Value < SuperellipsoidScaledRadiusLimit))
-            ? ((magnitude * minRadius) / radius)
-            : ((magnitude / radius) * minRadius));
+        FusedArithmetic.MultiplyDivide(divisor: radius, multiplicand: magnitude, multiplier: minRadius);
     // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli: the edge-list core (SdfPolygon2D) walked from each
     // vertex back to the one before it.
     private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) =>
@@ -1087,60 +1078,31 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // Sample 9 fixed candidates, then 5 rounds of halving-step compass probes either side of the running best —
     // deterministic, no trigonometry, converges toward the closest parameter on the centerline. See the KEEP-IN-SYNC
     // remark above for why this evaluator does not mirror the shader's closed-form cubic solve.
+    // Candidates are compared by their exact squared offsets (CompareLengthTo): a carrier-rounded squared distance is zero
+    // under four millimetres, so every candidate inside a thin tube tied with the first and the search kept the start,
+    // reading a point beside the tube's middle as the distance to its end.
     private static FixedQ4816 SdfSweepClosestT(FixedVector3 p, FixedVector3 a, FixedVector3 b, FixedVector3 c) {
         var bestT = FixedQ4816.Zero;
-        var bestDistanceSquared = (p - a).LengthSquared;
+        var bestOffset = (p - a);
 
-        for (var index = 0; (index < SweepSampleFractions.Length); index++) {
-            var t = SweepSampleFractions[index];
-            var distanceSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: t
-            )).LengthSquared;
+        void Consider(FixedQ4816 t) {
+            var offset = (p - SdfBezierPoint(a: a, b: b, c: c, t: t));
 
-            if (distanceSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceSquared;
+            if (offset.CompareLengthTo(other: bestOffset) < 0) {
+                bestOffset = offset;
                 bestT = t;
             }
+        }
+
+        for (var index = 0; (index < SweepSampleFractions.Length); index++) {
+            Consider(t: SweepSampleFractions[index]);
         }
 
         var step = SweepInitialStep;
 
         for (var round = 0; (round < 5); round++) {
-            var tPlus = FixedQ4816.Min(
-                x: FixedQ4816.One,
-                y: (bestT + step)
-            );
-            var distancePlusSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: tPlus
-            )).LengthSquared;
-
-            if (distancePlusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distancePlusSquared;
-                bestT = tPlus;
-            }
-
-            var tMinus = FixedQ4816.Max(
-                x: FixedQ4816.Zero,
-                y: (bestT - step)
-            );
-            var distanceMinusSquared = (p - SdfBezierPoint(
-                a: a,
-                b: b,
-                c: c,
-                t: tMinus
-            )).LengthSquared;
-
-            if (distanceMinusSquared < bestDistanceSquared) {
-                bestDistanceSquared = distanceMinusSquared;
-                bestT = tMinus;
-            }
-
+            Consider(t: FixedQ4816.Min(x: FixedQ4816.One, y: (bestT + step)));
+            Consider(t: FixedQ4816.Max(x: FixedQ4816.Zero, y: (bestT - step)));
             step = (step * Half);
         }
 
@@ -1515,24 +1477,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             )),
             Y: (FixedQ4816.Abs(value: p.Y) - halfHeight)
         );
-        // k2 is the slanted side; the projection divides by its squared length. SdfProgramBuilder.MinTrapezoidProfileSlant
-        // keeps every admitted profile clear of the rounding window where that length reads zero, so the zero arm is
-        // unreachable through the builder — it is here because an integer divide has no NaN to propagate, and a
-        // total function is the only shape this may take on a query path the authoritative server calls per tick.
-        var slantLengthSquared = FixedVector2.Dot(
-            left: k2,
-            right: k2
-        );
-        var projection = ((slantLengthSquared == FixedQ4816.Zero)
-            ? FixedQ4816.Zero
-            : FixedQ4816.Clamp(
-                value: (FixedVector2.Dot(
-                    left: (k1 - p),
-                    right: k2
-                ) / slantLengthSquared),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            )
+        // k2 is the slanted side; the projection divides by its squared length, both exact and rounded once.
+        var projection = FixedVector2.SegmentParameter(
+            point: (k1 - p),
+            segment: k2
         );
         var cb = ((p - k1) + (k2 * projection));
         var sign = (((cb.X < FixedQ4816.Zero) && (ca.Y < FixedQ4816.Zero))

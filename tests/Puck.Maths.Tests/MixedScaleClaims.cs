@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths.Tests;
 
 /// <summary>Claim bodies for the <c>mixed-scale</c> family — <see cref="FusedArithmetic"/>'s one-rounding products over
@@ -350,5 +352,42 @@ internal static class MixedScaleClaims {
             ? null
             : $"triple mixed-scale product at {operands}: subject={result} oracle={oracle.Exact}"
         );
+    }
+    /// <summary>The product quotient <c>x·y/z</c> against the exact rational rounded once, wrapped to the carrier.</summary>
+    /// <param name="left">Lanes 0 and 1 drive the factors.</param>
+    /// <param name="right">Lane 0 drives the divisor; a zero divisor reads as one.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? MultiplyDivideVsOracle(long[] left, long[] right) {
+        var divisor = ((right[0] == 0L) ? 1L : right[0]);
+        var subject = FusedArithmetic.MultiplyDivide(divisor: FixedQ4816.FromRawBits(value: divisor), multiplicand: FixedQ4816.FromRawBits(value: left[0]), multiplier: FixedQ4816.FromRawBits(value: left[1])).Value;
+        var oracle = Oracles.WrapToRaw(value: Oracles.RoundRationalTiesToEven(denominator: divisor, numerator: (((BigInteger)left[0]) * left[1])));
+
+        return ((subject == oracle) ? null : $"multiply-divide {left[0]}·{left[1]}/{divisor}: subject={subject} oracle={oracle}");
+    }
+    /// <summary>The clamped unit quotient of two exact sums, and the segment parameters built on it in two and three
+    /// dimensions, against the exact rational clamped to [0, 1] and rounded once.</summary>
+    /// <param name="left">Lanes 0 to 2 drive the point.</param>
+    /// <param name="right">Lanes 0 to 2 drive the segment.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? SegmentParameterVsOracle(long[] left, long[] right) {
+        // Raws folded below 2^62 keep each Int128 sum of two products inside its range, as the public face requires.
+        static long Fold(long raw) => (raw >> 2);
+        var (px, py, pz) = (Fold(raw: left[0]), Fold(raw: left[1]), Fold(raw: left[2]));
+        var (sx, sy, sz) = (Fold(raw: right[0]), Fold(raw: right[1]), Fold(raw: right[2]));
+        var along2 = ((((BigInteger)px) * sx) + (((BigInteger)py) * sy));
+        var square2 = ((((BigInteger)sx) * sx) + (((BigInteger)sy) * sy));
+        var along3 = (along2 + (((BigInteger)pz) * sz));
+        var square3 = (square2 + (((BigInteger)sz) * sz));
+        var quotient = FusedArithmetic.ClampedUnitQuotient(denominator: ((((Int128)sx) * sx) + (((Int128)sy) * sy)), numerator: ((((Int128)px) * sx) + (((Int128)py) * sy))).Value;
+        var planar = FixedVector2.SegmentParameter(point: new FixedVector2(X: FixedQ4816.FromRawBits(value: px), Y: FixedQ4816.FromRawBits(value: py)), segment: new FixedVector2(X: FixedQ4816.FromRawBits(value: sx), Y: FixedQ4816.FromRawBits(value: sy))).Value;
+        var spatial = FixedVector3.SegmentParameter(point: new FixedVector3(X: FixedQ4816.FromRawBits(value: px), Y: FixedQ4816.FromRawBits(value: py), Z: FixedQ4816.FromRawBits(value: pz)), segment: new FixedVector3(X: FixedQ4816.FromRawBits(value: sx), Y: FixedQ4816.FromRawBits(value: sy), Z: FixedQ4816.FromRawBits(value: sz))).Value;
+        var oracle2 = Oracles.ClampedUnitQuotient(denominator: square2, numerator: along2);
+        var oracle3 = Oracles.ClampedUnitQuotient(denominator: square3, numerator: along3);
+        var operands = $"p=({px}, {py}, {pz}) s=({sx}, {sy}, {sz})";
+
+        if (quotient != oracle2) { return $"clamped unit quotient at {operands}: subject={quotient} oracle={oracle2}"; }
+        if (planar != oracle2) { return $"planar segment parameter at {operands}: subject={planar} oracle={oracle2}"; }
+
+        return ((spatial == oracle3) ? null : $"spatial segment parameter at {operands}: subject={spatial} oracle={oracle3}");
     }
 }
