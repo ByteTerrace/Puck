@@ -15,21 +15,24 @@
 #define SDF_PROBE_STACK_DEPTH                     64u
 #define SDF_PROBE_MAX_WALK_STEPS                  65536u
 #define SDF_PROBE_GROUP_SIZE                      32u
-#define SDF_PROBE_RELIGHT_OUTPUT_WORDS            40u
-#define SDF_PROBE_RELIGHT_INPUT_WORDS             279u
-#define SDF_PROBE_RELIGHT_HEADER_ROWS             20u
+#define SDF_PROBE_RELIGHT_OUTPUT_WORDS            58u
+#define SDF_PROBE_RELIGHT_INPUT_WORDS             306u
+#define SDF_PROBE_RELIGHT_HEADER_ROWS             155u
 #define SDF_PROBE_RELIGHT_MATERIAL_ROWS           2u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS              4u
 #define SDF_PROBE_SELECT_INPUT_WORDS              12u
 #define SDF_PROBE_SELECT_HEADER_ROWS              8u
 #define SDF_PROBE_CACHE_WORDS                     290u
-#define SDF_PROBE_RELIGHT_RESULT_WORDS            275u
+#define SDF_PROBE_RELIGHT_RESULT_WORDS            302u
 #define SDF_PROBE_METER_OUTPUT_WORDS              8u
-#define SDF_PROBE_RECORD_INPUT_WORD               44u
+#define SDF_PROBE_RECORD_INPUT_WORD               62u
 #define SDF_PROBE_RELIGHT_PREVIOUS_WORD           4u
 #define SDF_PROBE_SELECT_GROUP_SIZE               64u
 #define SDF_PROBE_RELIGHT_SLICES                  5u
-#define SDF_PROBE_RELIGHT_PARTIAL_WORDS           44u
+#define SDF_PROBE_RELIGHT_PARTIAL_WORDS           62u
+#define SDF_PROBE_RELIGHT_PARTIAL_SKY_WORD        44u
+#define SDF_PROBE_RELIGHT_SKY_OUTPUT_WORD         40u
+#define SDF_PROBE_RELIGHT_SKY_ROW                 11u
 #define SDF_MESH_IRRADIANCE_CLEARANCE             0.1
 #define SDF_MESH_IRRADIANCE_INSIDE_SHARE          0.25
 #define SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE     2.0
@@ -161,11 +164,14 @@
 #define SDF_SIGHT_COUNT_BASE              5u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS                235u
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS                244u
 #define SDF_MESH_IRRADIANCE_LEVELS                     3u
+#define SDF_MESH_IRRADIANCE_SKY_WORD                   1u
+#define SDF_MESH_IRRADIANCE_RADIANCE_WORD              4u
+#define SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD             19u
 #define SDF_MESH_IRRADIANCE_LIGHTS_WORD                13u
 #define SDF_MESH_IRRADIANCE_LIGHT_WORDS                4u
-#define SDF_MESH_IRRADIANCE_DEPTH_WORD                 19u
+#define SDF_MESH_IRRADIANCE_DEPTH_WORD                 28u
 #define SDF_MESH_IRRADIANCE_DEPTH_SIZE                 12u
 #define SDF_MESH_IRRADIANCE_OFFSET_WORD                17u
 #define SDF_MESH_IRRADIANCE_WRITTEN                    0x40000000u

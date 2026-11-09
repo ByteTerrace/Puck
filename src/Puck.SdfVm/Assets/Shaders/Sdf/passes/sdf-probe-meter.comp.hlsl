@@ -13,9 +13,6 @@ float3 meterNormal(uint axis) {
     return normal;
 }
 float meterLuminance(float3 value) { return dot(value, SDF_LUMINANCE); }
-float meterSkyLuminance(uint axis, float sky) {
-    return sdfProbeLighting[1].w != 0 ? meterLuminance(sdfSkyPhysicalIrradiance(meterNormal(axis))) * (sky * sdfProbeLighting[2].w / 3.141592653589793) : 0;
-}
 // KEEP IN SYNC with TryMeter: eight unobstructed fine probes, otherwise a sample at the camera itself.
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
@@ -47,9 +44,9 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
                 float weight = weights.x * weights.y * weights.z;
                 meterWeight[lane] = weight;
                 [unroll] for (uint axis = 0; axis < 6; axis++) {
-                    float sky; float3 radiance;
-                    sdfMeshIrradianceProbe(address, meterNormal(axis), sky, radiance);
-                    meterAxis[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * (meterLuminance(radiance) + meterSkyLuminance(axis, sky));
+                    float sky; float3 radiance; float3 skyLight;
+                    sdfMeshIrradianceProbe(address, meterNormal(axis), sky, radiance, skyLight);
+                    meterAxis[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * meterLuminance(radiance + skyLight);
                     meterSky[axis * SDF_PROBE_GROUP_SIZE + lane] = weight * sky;
                 }
             }
@@ -73,7 +70,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             float distance = asfloat(hit.x);
             float sky = isfinite(distance) ? 0 : 1;
             meterBack[lane] += distance < 0 ? 1 : 0;
-            float3 radiance = 0;
+            float3 radiance = isfinite(distance) ? 0 : sdfProbeLighting[SDF_PROBE_RELIGHT_SKY_ROW + texel].xyz;
             if (isfinite(distance) && distance >= 0) {
                 float3 normal = sdfOctDecode(float2((int)(hit.y << 8) >> 24, (int)hit.y >> 24) / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
                 float3 local;
@@ -102,7 +99,6 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             float divisor = total > 0 ? total : sdfProbeLighting[9 + axis / 4][axis % 4];
             sky /= divisor;
             value /= divisor;
-            if (total <= 0) { value += meterSkyLuminance(axis, sky); }
             sdfProbeHitsRW[group.x * SDF_PROBE_METER_OUTPUT_WORDS + axis] = asuint(value);
             open += sky / 6;
         }
