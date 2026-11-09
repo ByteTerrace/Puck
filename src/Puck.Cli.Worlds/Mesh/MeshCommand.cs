@@ -390,7 +390,8 @@ public static class MeshCommand {
     }
     private static string Statistic(SdfMeshAuditStatistic statistic, float scale) =>
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {(statistic.P50 * scale):0.00} p99 {(statistic.P99 * scale):0.00} max {(statistic.Max * scale):0.00} over {statistic.Over}/{statistic.Count}");
-    private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(metres * 1000f):0.0}");
+    // A length in metres as millimetres, to a tenth by default.
+    internal static string Millimetres(float metres, string format = "0.0") => (metres * 1000f).ToString(format: format, provider: CultureInfo.InvariantCulture);
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
     private static string Direction(Vector3 direction) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({direction.X:0.00}, {direction.Y:0.00}, {direction.Z:0.00})");
 

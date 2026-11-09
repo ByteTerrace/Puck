@@ -222,7 +222,7 @@ internal static class MeshFieldLevels {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $" | material {error.Material.Count}/{error.Material.Triangles} {Mm(error.Material.Largest)} normal {error.Normal.Count}/{error.Normal.Triangles} {Mm(error.Normal.Largest)} (nearest-only {error.NormalNearest.Count}/{error.NormalNearest.Triangles} {Mm(error.NormalNearest.Largest)}) vanished {error.Vanished.Count} {Mm(error.Vanished.Largest)}");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $" | open {row.Audit?.OpenEdges} flips {row.Audit?.Flipped} folds {row.Audit?.Folds} missing {row.Audit?.MissingCrossings}/{row.Audit?.Crossings}\n");
     }
-    private static string Mm(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(metres * 1000f):0.###}");
+    private static string Mm(float metres) => MeshCommand.Millimetres(format: "0.###", metres: metres);
 
     /// <summary>One level of a group, field or collapse.</summary>
     /// <param name="Level">The level, one for the first coarser.</param>

@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Maths;
 using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
@@ -18,12 +19,6 @@ public sealed record SdfMeshFieldLevelOptions {
     /// lattice's median slope (<see cref="SdfMeshPathBake.ContourLevel"/>).</summary>
     public bool LocalAim { get; init; } = true;
 }
-
-/// <summary>A statistic over a level's witness distances, in metres.</summary>
-/// <param name="Count">The witnesses measured.</param>
-/// <param name="P99">The 99th percentile.</param>
-/// <param name="Max">The largest.</param>
-public readonly record struct SdfMeshLevelDistance(int Count, float P99, float Max);
 
 /// <summary>Runs of level-zero triangles a level misrepresents, connected over level zero's shared edges.</summary>
 /// <param name="Count">The runs.</param>
@@ -56,12 +51,12 @@ public readonly record struct SdfMeshLevelRuns(int Count, int Triangles, float L
 /// <param name="Vanished">The level-zero components no level triangle lies near.</param>
 /// <param name="Recorded">The error recorded: the largest component, raised to the finer level's.</param>
 public sealed record SdfMeshLevelError(
-    SdfMeshLevelDistance MeshToSurface,
+    SdfMeshAuditStatistic MeshToSurface,
     float LowerMax,
     int LowerOverUpper,
     int Refused,
     int Interior,
-    SdfMeshLevelDistance SurfaceToMesh,
+    SdfMeshAuditStatistic SurfaceToMesh,
     int Outside,
     float OutsideMax,
     SdfMeshLevelRuns Material,
@@ -372,7 +367,7 @@ public sealed class SdfMeshFieldLevels {
 
         var vanished = Runs(marked: Enumerable.Range(start: 0, count: m_reference.TriangleCount).Select(selector: triangle => !covered[m_component[triangle]]).ToArray());
         var kept = Enumerable.Range(start: 0, count: count).Where(predicate: witness => covered[m_component[m_owner[witness]]]).Select(selector: witness => distance[witness]).ToArray();
-        var fromSurface = Distance(values: kept);
+        var fromSurface = SdfMeshAudit.Statistic(over: budget, values: kept);
         var geometric = MathF.Max(x: toSurface.Max, y: fromSurface.Max);
         var allowed = MathF.Max(x: geometric, y: budget);
         var materialMarked = new bool[m_reference.TriangleCount];
@@ -443,7 +438,7 @@ public sealed class SdfMeshFieldLevels {
     // The level's witnesses (vertices, centroids, edge midpoints and a grid at the level's cell over larger triangles),
     // each bracketed onto its piece's field: the upper bounds, the largest certified lower bound, the witnesses whose lower
     // bound passes their upper one, those refused, and those left out as interior.
-    private (SdfMeshLevelDistance Upper, float Lower, int LowerOver, int Refused, int Interior) MeshToSurface(SdfMesh level, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, float cell, float budget) {
+    private (SdfMeshAuditStatistic Upper, float Lower, int LowerOver, int Refused, int Interior) MeshToSurface(SdfMesh level, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, float cell, float budget) {
         var positions = level.Positions.Span;
         var indices = level.Indices.Span;
         var byPiece = new Dictionary<int, List<(Vector3 Point, Vector3 Normal)>>();
@@ -529,7 +524,7 @@ public sealed class SdfMeshFieldLevels {
             }
         }
 
-        return (Distance(values: [.. upper]), lowerMax, lowerOver, refused, interior);
+        return (SdfMeshAudit.Statistic(over: budget, values: [.. upper]), lowerMax, lowerOver, refused, interior);
     }
 
     // Each point walked toward the field's surface along its gradient in steps of at most `step`, re-reading the gradient
@@ -814,20 +809,10 @@ public sealed class SdfMeshFieldLevels {
             }
         }
     }
-    private static SdfMeshLevelDistance Distance(float[] values) {
-        if (values.Length == 0) { return default; }
-        Array.Sort(array: values);
-
-        return new SdfMeshLevelDistance(Count: values.Length, Max: values[^1], P99: values[(int)((values.Length - 1) * 0.99)]);
-    }
     private static (int A, int B, int C) Corners(ReadOnlySpan<uint> indices, int triangle) =>
         ((int)indices[(3 * triangle)], (int)indices[((3 * triangle) + 1)], (int)indices[((3 * triangle) + 2)]);
     private static Vector3 Face(Vector3 a, Vector3 b, Vector3 c) => Unit(vector: Vector3.Cross(vector1: (b - a), vector2: (c - a)));
-    private static Vector3 Unit(Vector3 vector) {
-        var length = vector.Length();
-
-        return ((length > 0f) ? (vector / length) : Vector3.Zero);
-    }
+    private static Vector3 Unit(Vector3 vector) => VectorFunctions.NormalizeOr(fallback: Vector3.Zero, value: vector);
     // The barycentric weights of a point on a triangle (its closest point), each clamped to the triangle.
     private static Vector3 Barycentric(Vector3 a, Vector3 b, Vector3 c, Vector3 point) {
         var v0 = (b - a);

@@ -588,12 +588,5 @@ public static class WorldKeyResolver {
 
         return ((float)ImageSourceConversion.LinearToSrgb(value: (a + ((b - a) * t))));
     }
-    private static Vector3 Unit(Vector3 value) {
-        var length = value.Length();
-
-        return (((length > 0f) && float.IsFinite(f: length))
-            ? (value / length)
-            : Vector3.UnitY
-        );
-    }
+    private static Vector3 Unit(Vector3 value) => VectorFunctions.NormalizeOr(fallback: Vector3.UnitY, value: value);
 }

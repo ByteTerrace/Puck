@@ -638,7 +638,7 @@ public static class SdfMeshAudit {
 
         return lengths[(lengths.Length - 1) / 2];
     }
-    private static SdfMeshAuditStatistic Statistic(float[] values, float over) {
+    internal static SdfMeshAuditStatistic Statistic(float[] values, float over) {
         var finite = values.Where(predicate: static value => float.IsFinite(f: value)).ToArray();
 
         if (finite.Length == 0) { return default; }
