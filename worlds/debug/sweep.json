@@ -188,6 +188,26 @@
         "after": ["player.camera.view auto"]
       },
       {
+        "name": "route-primitives-row",
+        "group": "route-primitives",
+        "note": "Gallery level 0's primitives row walked in first person by its controller program (walkthrough-tests.puck, 'gallery level 0 primitives row'), one still at each rest beside the exhibit's plaque.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#gallery level 0 primitives row",
+        "captures": [
+          { "at": 41, "exhibit": "shape-sphere" },
+          { "at": 86, "exhibit": "shape-box" },
+          { "at": 131, "exhibit": "shape-torus" },
+          { "at": 175, "exhibit": "shape-cylinder" },
+          { "at": 220, "exhibit": "shape-capsule" },
+          { "at": 265, "exhibit": "shape-ellipsoid" },
+          { "at": 309, "exhibit": "shape-round-cone" },
+          { "at": 354, "exhibit": "shape-cone" },
+          { "at": 399, "exhibit": "shape-superellipsoid" },
+          { "at": 443, "exhibit": "shape-plane" }
+        ],
+        "after": ["player.camera.view auto"]
+      },
+      {
         "name": "inspect-moth-studio",
         "group": "inspection",
         "note": "The Moth on the avatar studio's platform through the studio-boots layout (front, side, low rear and front quarter), idle and then walking off the platform's edge at half deflection of the left stick: settled stills of each, and an eight-frame presented burst mid-stride for flicker, ghosting and trails a settled still hides.",

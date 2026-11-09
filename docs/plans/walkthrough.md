@@ -72,11 +72,11 @@ Gallery level 1's blend row: fourteen exhibits, 2.6 m apart along +X at
 z = 25. The program poses the body at `shape-blend-union`'s spawn point facing
 +Z, enters first person, recenters, looks down about 20 degrees with the right
 stick so each plinth's plaque stands in frame under its exhibit, then strafes
-with the left stick held at full deflection for 19, 19 and 18 ticks in turn and
-rests 26 ticks before each exhibit. On that floor a held deflection carries her
-0.142 m a tick after the first, so the pattern keeps every rest within 0.13 m of
-its exhibit's spawn point. The tour stop `route-blend-row` takes a still at
-each rest, and the arrival still at `shape-pipe-subtraction`.
+with the left stick held at full deflection for the ticks of `blendRowHolds`
+(19, 19 and 18 in turn: a `for` over the list with a `repeat` of each hold) and
+rests 26 ticks before each exhibit, which keeps every rest within 0.13 m of its
+exhibit's spawn point. The tour stop `route-blend-row` takes a still at each
+rest, and the arrival still at `shape-pipe-subtraction`.
 
 The inspection stop `inspect-moth-studio` stands the Moth on the avatar
 studio's platform under the `studio-boots` layout, idle, then walking off the
@@ -87,7 +87,7 @@ eight-frame presented burst mid-stride.
 
 | Defect | Caught by | How |
 |---|---|---|
-| Sawtooth and slivers on `shape-pipe-subtraction` and `shape-groove-subtraction` | Mechanical | The stop's mesh audit (`puck mesh audit --cpu --prototype …` over the row's prototypes): pipe subtraction 7 folds and 4 flipped triangles, groove subtraction 6 folds and 2 flipped, where a smooth union has none, so both stills are red with the counts. |
+| Sawtooth and slivers on `shape-pipe-subtraction` and `shape-groove-subtraction` | Mechanical | The stop's mesh audit (`puck mesh audit --cpu --prototype …` over the row's prototypes) finds folds and flipped triangles in both prototypes' surfaces, where the smooth blends have none, so both stills are red with the counts beside them. |
 | A plaque whose text overflows its plinth face | A reviewer | The still beside the plaque's authored text: the reviewer reads the rendered lines against the text and names a lost glyph or a line broken inside a word. No mechanical check exists yet (step 6 below). |
 | The floor's triangular light patches | A reviewer | Each still shows the floor in front of the plinth under the walker's view; nothing reads the floor's lighting mechanically (step 6). |
 | A walker off its route | Mechanical | `off course` per still and at the arrival. |
