@@ -282,14 +282,14 @@ public sealed class WorldCaptureScheduler {
     private void Stamp(FrameCaptureRequest request, ulong tick) {
         var stamp = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"tick={tick} hash={ToHex(hash: ComputeStateHash(server: m_server, tick: tick))} pose={ToHex(hash: WorldStateHashComposition.Hash(scope: WorldStateHashScope.Pose, server: m_server, tick: tick))}"
+            handler: $"tick={tick} hash={ComputeStateHash(server: m_server, tick: tick):x16} pose={WorldStateHashComposition.Hash(scope: WorldStateHashScope.Pose, server: m_server, tick: tick):x16}"
         );
 
         request.StateStamp = stamp;
         request.StateTick = tick;
         _ = request.Completion.ContinueWith(
             continuationAction: static (completed, state) => {
-                var (stamp, tick) = ((string Stamp, ulong Tick))state!;
+                var (stamp, tick) = (((string Stamp, ulong Tick))state!);
                 var result = completed.Result;
 
                 if (result.Succeeded) {
@@ -647,10 +647,6 @@ public sealed class WorldCaptureScheduler {
 
         return ((distance <= FixedQ4816.Zero), null);
     }
-    private static string ToHex(ulong hash) => hash.ToString(
-        format: "x16",
-        provider: CultureInfo.InvariantCulture
-    );
     private static bool TryFindCameraProgram(WorldDefinition definition, string name, out WorldCameraProgram program) {
         foreach (var camera in definition.Cameras) {
             if (
@@ -902,7 +898,7 @@ public sealed class WorldCaptureScheduler {
             RegionTick: result.Tick,
             Refusal: null,
             SourceVerdict: verdict,
-            StateHash: ToHex(hash: pending.StateHash),
+            StateHash: pending.StateHash.ToString(format: "x16", provider: CultureInfo.InvariantCulture),
             Station: pending.Station.Value,
             Tick: pending.Tick
         ));
@@ -997,7 +993,7 @@ public sealed class WorldCaptureScheduler {
             Frame: null,
             RegionTick: null,
             Refusal: refusal,
-            StateHash: ToHex(hash: stateHash),
+            StateHash: stateHash.ToString(format: "x16", provider: CultureInfo.InvariantCulture),
             Station: station.Value,
             Tick: tick
         ));

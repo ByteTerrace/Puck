@@ -50,32 +50,23 @@ evidence, citations and steps.
 
 A. Engine limits on authoring [high], in the plan's
    [section 1](modeling-authoring.md#1-the-engine-limits-authors-met) order:
-   - twist and bend are silently dropped on static placements
-     ([1.3](modeling-authoring.md#13-twist-and-bend-on-a-static-placement-limit-4));
-   - per-part bake detail: small round parts facet, thin parts shatter, and a
-     folded shape takes its repeat extent's cell. One detail rule is built on
-     `lane/part-detail`; the owner chose D7's demand budget as its cost bound,
-     so D7 is built with it (see [Bake detail](#bake-detail)). The gallery
-     shows it too: `shape-pipe-subtraction` and `shape-groove-subtraction`
-     (4 cm rim features) bake with sawtooth rims, slivers and torn edges;
-   - blends between moving parts tear: steps 1 to 3 are built on
-     `lane/moving-blends`, unlanded behind two high review findings (see
+   - per-part bake detail is landed: one detail rule, bounded by what each
+     view resolves ([the memo](bake-demand-tiers.md)); the gallery's pipe and
+     groove exhibits refine their 4 cm rim features, and what remains is the
+     Moth's shin blend group and the crease merge (see
      [Bake detail](#bake-detail));
-   - a `Convex` prism refuses any rounding
-     ([1.4](modeling-authoring.md#14-convex-rounding-limit-6));
-   - paint outlines cap at eight vertices behind a generic message, and
-     compile does not check paint emission
-     ([1.5](modeling-authoring.md#15-paint-outlines-limit-7)).
+   - blends between moving parts: steps 1 to 3 and their review fixes have
+     landed; step 4, paints and lanes across a blended seam, is next (see
+     [Bake detail](#bake-detail)).
 
-   The owner's gallery walkthrough added three engine defects that every
+   The owner's gallery walkthrough added two remaining engine defects that every
    indoor exhibit shows:
    - auto-exposure drifted while a player runs through an evenly lit room; the
      exposure now meters each view's own image with an authored dead band
      (`SdfExposure.Meter`, `SdfViewExposures`), awaiting the owner's walk;
    - indoor indirect light draws straight-edged triangular patches on floors and
      box faces, and concave carvings read flat; `world.indirect off` removes the
-     patches but floods the roofed hall near-white, which is a defect of its own;
-   - plaque text overflows its plinth and wraps mid-word.
+     patches but floods the roofed hall near-white, which is a defect of its own.
 A2. The scripted walkthrough
    ([decision](../decisions/engine-design.md#the-scripted-walkthrough)): first a
    slice over gallery level 1's blend row and one avatar-studio inspection stop,
@@ -97,7 +88,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | a fix pass on MB-1 and MB-2 |
 | `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
@@ -332,7 +322,7 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
     meter.
 23. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-24. [Bake detail](#bake-detail): measure the static round-section term.
+24. [Bake detail](#bake-detail): the flare's bound.
 25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
 26. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
@@ -350,10 +340,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Whether the cold-bake bar (one minute per backend) counts detail tiers baked
-  on demand as a camera approaches, now that bake detail is bounded by D7's
-  demand budget (the owner's choice of cost bound for `lane/part-detail`;
-  [virtual geometry](virtual-geometry.md#d7-the-detail-budget)).
 - The Moth's and the swallow's look, in a pair session with the owner (both
   stopped by the owner's ruling); within it, gloves or bare hands on the
   off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
@@ -1741,17 +1727,6 @@ by `world.view.pick`.
   [moving blends](moving-blends.md), which recommends a skinned seam (two members
   and the blend's weight a vertex, answered by the bake) and is reviewed before
   code.
-- [medium] One detail rule for static and pooled shapes. A static shape declares
-  `WorldPlacementStamper.ShapeDetail` (half thickness, rounded-profile corner,
-  shell, warp and relief terms); a pooled blend group's part declares only the
-  round-section and half-thickness terms (`WorldCreationInstances.PartDetail`),
-  and an ungrouped pooled shape only the round section (`BodyDetail`). The
-  static terms on the Moth's parts give 4.7 M triangles in place of 1.1 M,
-  because `SdfMeshPathBake.UnionFinal` refines every region by one factor, the
-  finest member's, so one member with a rounded corner refines every member's
-  box. A refinement factor per region (`SdfSampledLattice.Refine`, which takes
-  one factor) would let one rule serve both; the static path also lacks the round
-  section term, so its small spheres facet at 15 mm.
 - [medium] The Moth's pooled bake rose from 464,018 to 1,145,385 triangles
   (levels 393,043 and 238,235) when blend groups took the static union's lattice
   (`puck mesh audit --world worlds/debug/avatars/moth.puck --prototype moth --cpu`).
@@ -3242,55 +3217,41 @@ reproduce worker for what remains.
 ### Bake detail
 
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
-· Next: the owner's cost bound for `lane/part-detail`, then the moving blends
-fix pass on `lane/moving-blends`.
+· Next: the Moth's shin blend group, then moving blends step 4.
 
-- [high] `lane/part-detail` holds one detail rule (WorldShapeDetail.Of on the branch)
-  replacing the static, blend-group, ungrouped and coupled declarations, with
-  a refinement factor per region (SdfLatticeRegion.Factor), refinement only
-  where coarse samples show a turn (CurvedSplit), round sections for
-  cylinders and cones (SdfSampledLattice.RoundCell), and a folded shape
-  declaring its copies' smallest half extent. On the suited Moth it rounds the
-  lenses and seat plate and bakes the lids whole (817,280 to 1,698,672
-  triangles). On the whole debug world it multiplies triangles from 25,678,428
-  to 213,506,399, all of it foliage: meadow, lawn and forest grass blades that
-  refined nothing before now refine every blade. It cannot land without a cost
-  bound, and the bound is a look-against-budget call: (a) the visibility plan's
-  D7 demand budget supplies `SilhouetteError` and `FinestDetail` per tier (the
-  rule's chord term is already "the cell whose error stays under half a pixel
-  at the nearest camera"); (b) a floor relative to the creation's size; (c)
-  round sections only where a turn is visible at the creation's own scale. Its
-  curvature gate also refines sharp creases (toes, soles about 2x), since
-  sample values cannot tell a crease from a turn.
-- [high] `lane/moving-blends` holds
-  [moving blends](moving-blends.md) steps 1 to 3 (rest-pose bake and
-  envelope, propagated influences, dual-quaternion skinning on current,
-  previous and shadow positions; CPU pose error 1.11 mm under a 1.19 mm bound).
-  Its adversarial review found the C#/HLSL skin layout and the blend math right
-  and these to fix before landing: MB-1 (high, `SdfMeshSkin`) every vertex of a
-  moving part stores the root as its first member, so paints, insets and lanes
-  swim on every moving part and those vertices miss the rigid fast path; MB-2
-  (high, `SdfMeshPathBake`) skin `Build` and `Split` read the current program on
-  the bake pool, so a group kept across a restart reads another instance's
-  instructions and the mesh is no longer a function of its geometry; MB-3
-  (CreationMotion.Driven on the branch) shapes one frame moves together are flagged as
-  moving apart; MB-4 (`CreationMotionPlan`) a carve or clip one owner applies to
-  another is lost in both fallbacks, so the Moth's eye whites lose their clip;
-  MB-5 the envelope adds absolute frame shift instead of relative motion; MB-6
-  the third-owner CPU fallback contours with no sample cap; low: engraved runs
-  emitted per owner, the rotation bound under different pivots, the influence
-  stencil at millimetre radii, LINQ in the influence reading, a dead
-  `sdfMeshMemberLocal`, and docs that disagree with the code. A 60-frame
-  presented glance on both backends follows the fixes.
+- [high] The Moth's shin blend groups (`shin-*/shinCavity-*/archBand-*/
+  archBandHollow-*/archBandBack-*/sidePanel-*`) contour badly at their
+  declared detail: `puck mesh audit --world worlds/debug/debug.puck
+  --prototype moth --cpu` prints 276,690 triangles at a 2.1 mm cell with
+  1,437 folds, 1,383 flipped triangles, 5,469 turned faces and two
+  non-manifold edges on the left shin (audit score 10,144; the right shin
+  alike), a tenth of the Moth's 2,949,652 triangles in two groups. The
+  helmet (81,268 triangles, 301 folds, 135 flipped) and the nozzle lips are
+  the next worst. Read the shin's carve and blends against the lattice's
+  sheet and crease handling before touching the rule: the one detail rule
+  exposes the defect, it does not cause it.
+- [medium] The curvature gate refines sharp creases as turns (toes and soles
+  about 2x): the lattice's samples cannot tell a crease from a fillet narrower
+  than a cell, and a declared rounding must refine. The fix is after
+  measuring: a measured cell whose fine samples are two affine faces takes
+  its split as its contour stride, so its fine vertices merge per face
+  ([the memo's step 4](bake-demand-tiers.md#steps-and-checks), with its check).
+- [low] A tier between a group's narrowed final cell and its planned one is a
+  second key for one mesh (`SdfMeshBakeGroup.CoarsestTier` reads the planned
+  box): one extra bake and store entry for a group whose box narrows much,
+  reached only by a far view. Measure how many such entries a tour of the
+  places writes before tightening the clamp.
+- [high] [Moving blends](moving-blends.md) steps 4 and 5 remain: paints,
+  insets and lanes across a blended seam (a vertex wholly one owner's already
+  shades in that owner's frame), then retiring the settle rebake for the
+  dynamic groups that are not rest skins and the quiet-window cost measurement
+  of a skinned close-up and crowd on both backends.
+- [medium] A carve that moves against the surface it cuts keeps its rest cut in
+  both fallbacks (`CreationMotionPlan.Borrows`, the third-owner split): an
+  author who wants a moving carve gets no diagnostic saying so. PUCK122 could
+  name a cross-owner carve in a partitioned group the way it names a creased
+  blend.
 
-- Static placements' plain round shapes still bake at
-  15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
-  curvature term rebakes the world, so measure its cost first
-  (`puck mesh audit --cpu`). A dynamic group refines its whole bound toward its
-  finest member: `SdfMeshBakeGroup.PlanGroups` records per-member regions only
-  for static instances and merges every member's detail into one
-  `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
-  member declare its own detail.
 - [medium] A flare's field bound is loose: `SdfProgramBuilder.AxialProfile`
   builds in `1/maxS` and `SdfProgram.FlareOperatorNorm` bounds the shear term
   with the chain's whole reach times `maxS`, so a flared primitive's slope reads
@@ -3304,8 +3265,9 @@ fix pass on `lane/moving-blends`.
   bakes 4 open edges.
 - [low] A tapered tip thinner than about 1.5 bake cells does not bake (a
   swallow streamer ending at 0.3 to 0.7 mm radius stops 8 to 10 mm short at the
-  2 mm `WorldPlacementStamper.FinestDetail`), so a small creation cannot have a
-  needle point; a finer floor for small creations needs its cost measured.
+  2 mm `WorldShapeDetail.FinestDetail`, which a sweep's thicker radius sets), so a
+  small creation cannot have a needle point; a finer floor for small creations
+  needs its cost measured.
 
 ### Residency and streaming
 
@@ -4161,16 +4123,6 @@ still changes a fraction of a percent of pixels, not exactly zero.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
-- [medium] Paint and profile limits authors meet without a named refusal: a
-  convex paint outline holds at most 8 vertices (`SdfAppearance.PaintTableVectors`)
-  and over that the validator says only "Invalid inset, weathering, paint or
-  flow" (`CreationCanonicalizer.Wear`); `puck compile --validate` accepts a paint
-  profile that `puck creation stats` then refuses, so paint emission is not
-  checked at compile; a Convex paint profile with no `cornerRadius` is stored
-  with 0.15; and a `Convex` prism profile refuses any `rounding` ("no room to
-  round", `SdfSolidGeometry`), so a rounded convex prism has to be faked with
-  superellipsoids.
-
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   ("the CAS is an authoring-time import/export cache") has no implementation:
   no code puts or gets a creation document outside a projection
@@ -4826,8 +4778,8 @@ ordinary · Next: new content and art on the owner's call.
     is a hard overlap or gap, the sheets' flared lilac shin, cuff, hinged knee
     guard and recessed cyan heel light are missing, and the heel needs a housing
     designed around the downward nozzle the air jump's plume leaves (the bake
-    detail these parts get is the
-    [mesh-bake packet's](#bake-detail)).
+    detail these parts get is the one rule's, `WorldShapeDetail.Of`, in the
+    [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)).
 - The suit toggle's handheld: only body 0 holds the brick (`pilotHold` declares
   the one key `"0"`); she holds it only while captured standing still, so a
   mirrored engagement that walks or carrying it about wants a hold pose that

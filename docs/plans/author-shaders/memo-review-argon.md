@@ -39,7 +39,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Blocker
 - **Memo section:** `§3.3` ([`docs/plans/author-shaders.md:471-473`](../../../docs/plans/author-shaders.md)), `§3.4` ([`docs/plans/author-shaders.md:503-526`](../../../docs/plans/author-shaders.md)), `§4` Door 2 ([`docs/plans/author-shaders.md:679-681`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`.claude/skills/rendering/SKILL.md:796-801`](../../../.claude/skills/rendering/SKILL.md):
+  - [`.claude/skills/rendering/SKILL.md:839`](../../../.claude/skills/rendering/SKILL.md):
     ```markdown
     - **Index local arrays by constants only.** NVIDIA's Vulkan compiler keeps a dynamically indexed local array, a `static const` table included, in per-thread local memory. Unroll the loop to the array's length and guard the body (`if (i < count)`), or pick the element by comparison; DXC's SPIR-V unroller leaves a loop with a `break` rolled. RenderDoc's pipeline-executable statistics show the spill as "Local Memory Size" (the low 32 bits).
     ```
@@ -202,7 +202,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Medium
 - **Memo section:** `§3.1` ([`docs/plans/author-shaders.md:382-385`](../../../docs/plans/author-shaders.md)), `§3.8` ([`docs/plans/author-shaders.md:613-625`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2185-2187`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2185-L2187):
+  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2226-2228`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2226-L2228):
     ```csharp
     private (Vector3 Varying, Vector3 Local) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene) {
         var surface = lighting.MaterialAt(index: material);

@@ -568,6 +568,36 @@ public sealed class TextContractTests {
             placement.PlaneBounds.Right
         );
     }
+    [InlineData("the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp")]
+    [InlineData("min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface")]
+    [Theory]
+    public void LayoutKeepsWordsInsideTheAuthoredFace(string text) {
+        var atlas = new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
+            FontBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.Text/Assets/Fonts/source/Inter-Regular.ttf")),
+            FontIdentifier = "test://word-wrap",
+            Options = new FontAtlasGenerationOptions { AllowedCodePointRanges = ["U+0020-U+007E"] },
+        });
+        var layout = new TextLayout().Layout(atlas, text,
+            new TextLayoutOptions(MaxLineWidth: 1.12f, Alignment: TextAlignment.Center, LineHeightScale: 1.15f),
+            scale: 0.03f);
+
+        Assert.All(layout.Placements, placement => {
+            Assert.InRange(placement.PlaneBounds.Left, -0.56f, 0.56f);
+            Assert.InRange(placement.PlaneBounds.Right, -0.56f, 0.56f);
+            Assert.InRange((0.085f + placement.PlaneBounds.Bottom), 0f, 0.15f);
+            Assert.InRange((0.085f + placement.PlaneBounds.Top), 0f, 0.15f);
+        });
+        var index = 0;
+
+        foreach (var word in text.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')) {
+            var glyphs = layout.Placements.Skip(count: index).Take(count: word.Length).ToArray();
+
+            Assert.Equal(word, string.Concat(values: glyphs.Select(selector: glyph => char.ConvertFromUtf32(utf32: glyph.Unicode))));
+            Assert.Single(collection: glyphs.Select(selector: glyph => glyph.BaselineOrigin.Y).Distinct());
+            index += word.Length;
+        }
+        Assert.Equal(index, layout.Placements.Count);
+    }
     [Fact]
     public void LayoutCenterAlignmentCentersShorterLines() {
         var layout = new TextLayout().Layout(
@@ -955,7 +985,7 @@ public sealed class TextContractTests {
         public bool Exists(string path) =>
             assets.ContainsKey(key: path);
         public ReadOnlyMemory<byte> Read(string path, int maximumBytes = int.MaxValue) =>
-            assets[path].Length <= maximumBytes ? assets[path] : throw new InvalidDataException("Source exceeds limit.");
+            ((assets[path].Length <= maximumBytes) ? assets[path] : throw new InvalidDataException(message: "Source exceeds limit."));
     }
     private sealed class RecordingFontAtlasGenerator : IFontAtlasGenerator {
         private readonly List<int> m_faceIndices = [];

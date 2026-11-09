@@ -101,9 +101,9 @@ The remaining rendering-specific details follow.
 #### Bake quality
 
 The [collision-versus-mesh packet](open-items.md#collision-versus-drawn-mesh)
-owns sub-cell features and contact against the drawn surface;
-[bake detail](open-items.md#bake-detail) owns static round sections and
-per-member detail. The remaining bake investigations are:
+owns sub-cell features and contact against the drawn surface; every shape's bake detail is one rule
+(`WorldShapeDetail.Of`, [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)).
+The remaining bake investigations are:
 
 - Finish an in-flight group that a later plan drops and retain it in the library
   and store. Read back a boot's second, different `start` plan so churn cannot

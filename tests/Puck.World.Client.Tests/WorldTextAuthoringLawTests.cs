@@ -9,7 +9,7 @@ namespace Puck.World.Client.Tests;
 
 public sealed class WorldTextAuthoringLawTests {
     [Fact]
-    public void AnEngravedMovingCreationKeepsEveryOperandInsideOneIndirectInstance() {
+    public void AnEngravedMovingCreationCarvesEachRigidOwnerInItsOwnInstance() {
         var creation = TextCreationWithFrames();
         var canonical = CreationCanonicalizer.Canonicalize(document: creation.Document with {
             Shapes = [
@@ -32,11 +32,16 @@ public sealed class WorldTextAuthoringLawTests {
         pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
             slotBase: 0, textCatalog: fonts);
         var program = builder.Build();
-        var instance = Assert.Single(collection: program.Instances);
 
-        Assert.True(condition: instance.IsDynamic);
+        Assert.Equal(expected: 2, actual: program.Instances.Count);
+        foreach (var instance in program.Instances) {
+            Assert.True(condition: instance.IsDynamic);
+            var instructions = program.Instructions.Skip(count: instance.First).Take(count: (instance.End - instance.First)).ToArray();
+
+            Assert.All(instructions.Where(predicate: instruction => (instruction.Op == SdfOp.TransformDynamic)), instruction => Assert.Equal(instance.Slot, ((int)instruction.Data0.X)));
+            Assert.Contains(collection: instructions, filter: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph))));
+        }
         Assert.True(condition: program.InstancesComposable);
-        Assert.Equal(3, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.Contains(collection: program.Instructions, filter: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == ((uint)SdfBlendOp.Subtraction))));
     }
     // Embossed text carves nothing, so a moving creation's shapes keep their own instances and its text is an instance of

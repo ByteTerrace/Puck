@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
 
-using Puck.Maths;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -22,7 +21,7 @@ namespace Puck.Cli.Mesh;
 /// </summary>
 public static class MeshCpuBake {
     /// <summary>The narrowest spacing, in metres, of a gradient tap from its sample.</summary>
-    public const float MinimumSpacing = 0.0005f;
+    public const float MinimumSpacing = SdfMeshCpuField.MinimumSpacing;
 
     // The value a group not selected answers at every sample: far outside any surface.
     private const float Empty = 1_000f;
@@ -33,10 +32,12 @@ public static class MeshCpuBake {
     /// <param name="groups">The groups to bake.</param>
     /// <param name="evaluations">Receives the field evaluations each group's lattices took by its selector (a gradient
     /// sample counting five, as the bake's taps do), or <see langword="null"/> to count none.</param>
+    /// <param name="tier">The tier each group bakes at (<see cref="SdfMeshPathBake.PlannedTier"/>); <see langword="null"/>
+    /// bakes each at its finest, the geometry's own detail.</param>
     /// <returns>Each baked group's mesh by its selector; a group with no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="groups"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null) {
+    public static Dictionary<int, SdfMesh> Bake(RestScene scene, float farDistance, IEnumerable<SdfMeshBakeGroup> groups, Dictionary<int, long>? evaluations = null, Func<SdfMeshBakeGroup, int>? tier = null) {
         ArgumentNullException.ThrowIfNull(argument: scene);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
@@ -46,7 +47,8 @@ public static class MeshCpuBake {
                 .Select(selector: group => (Group: group, Field: SdfMeshAudit.Field(group: group, program: scene.Program)))
                 .Where(predicate: static entry => SdfMeshAudit.TryEvaluator(field: out _, program: entry.Field, refusal: out _))
                 .ToDictionary(keySelector: static entry => entry.Group.Selector, elementSelector: static entry => entry.Field),
-            frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance }
+            frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance },
+            tier: tier
         );
     }
     /// <summary>Bakes the selected groups of a program.</summary>
@@ -54,16 +56,19 @@ public static class MeshCpuBake {
     /// <param name="fields">Each selected group's selector and its field (<see cref="SdfMeshAudit.Field"/>).</param>
     /// <param name="evaluations">Receives the field evaluations each group's lattices took by its selector, or
     /// <see langword="null"/> to count none.</param>
+    /// <param name="tier">The tier each group bakes at; <see langword="null"/> bakes each at its finest.</param>
     /// <returns>Each selected group's mesh by its selector; a group whose bake found no surface is absent.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="fields"/> is
     /// <see langword="null"/>.</exception>
-    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null) {
+    public static Dictionary<int, SdfMesh> Bake(SdfFrame frame, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations = null, Func<SdfMeshBakeGroup, int>? tier = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: fields);
 
         using var library = new SdfMeshLibrary();
-        var bake = new SdfMeshPathBake { Library = library, Residency = "cpu", Selection = fields.Keys.ToHashSet() };
-        using var dresser = new SdfMeshDresser(bake);
+        // With no view the bake would plan every group at its coarsest tier; offline it bakes the tier asked, else the finest.
+        var bake = new SdfMeshPathBake { Library = library, PlannedTier = (tier ?? (static _ => 0)), Residency = "cpu", Selection = fields.Keys.ToHashSet() };
+        using var dresser = new SdfMeshDresser(bake: bake);
+
         try {
             while (true) {
                 // Read before the bake is asked what it owes, so a pool completion after this read ends the wait below.
@@ -77,7 +82,7 @@ public static class MeshCpuBake {
                 if (!bake.Pending) { break; }
                 // The contour runs on the pool; its completion is what changes what the next take asks for. The timeout
                 // only bounds a state no completion explains.
-                _ = SdfMeshPathBake.WaitForProgress(since: seen, timeout: TimeSpan.FromMilliseconds(250));
+                _ = SdfMeshPathBake.WaitForProgress(since: seen, timeout: TimeSpan.FromMilliseconds(milliseconds: 250));
             }
 
             var meshes = new Dictionary<int, SdfMesh>();
@@ -106,7 +111,7 @@ public static class MeshCpuBake {
     public static float Sample(SdfFieldEvaluator field, Vector3 point, out int material) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        return (field.TryDistance(distance: out var distance, material: out material, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))) ? (float)((double)distance) : Empty);
+        return SdfMeshCpuField.Sample(field: field, material: out material, point: point);
     }
     /// <summary>Pairs an evaluator with the value reader its gradient taps take (<see cref="SdfMeshBakeTaps.Gradient"/>),
     /// made once a thread.</summary>
@@ -116,7 +121,7 @@ public static class MeshCpuBake {
     public static (SdfFieldEvaluator Field, Func<Vector3, float> Read) Tapped(SdfFieldEvaluator field) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        return (field, point => Sample(field: field, material: out _, point: point));
+        return SdfMeshCpuField.Tapped(field: field);
     }
 
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points.
@@ -137,7 +142,7 @@ public static class MeshCpuBake {
             }
             if (evaluations is not null) { evaluations[lattice.Selector] = (evaluations.GetValueOrDefault(key: lattice.Selector) + lattice.Taps); }
 
-            var spacing = MathF.Max(MinimumSpacing, SdfMeshBakeTaps.Spacing(cell: lattice.Cell));
+            var spacing = MathF.Max(x: MinimumSpacing, y: SdfMeshBakeTaps.Spacing(cell: lattice.Cell));
             var slot = lattice.FrameSlot;
 
             _ = Parallel.For(

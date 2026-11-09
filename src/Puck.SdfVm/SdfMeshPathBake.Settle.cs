@@ -24,7 +24,7 @@ public sealed partial class SdfMeshPathBake {
         m_settleWatch.Clear();
         m_sampledReaders.Clear();
         for (var index = 0; (index < m_groups.Count); index++) {
-            if (m_groups[index].ReadsOtherSlots) { m_settleWatch.Add(item: index); }
+            if ((m_groups[index].Skin is not null) && !m_groups[index].Geometry.RestPoseSkin) { m_settleWatch.Add(item: index); }
             if (m_groups[index].Geometry.ReadsSampled) { m_sampledReaders.Add(item: index); }
         }
     }
@@ -32,7 +32,7 @@ public sealed partial class SdfMeshPathBake {
     private void WatchSettle(int index, Group group) {
         var at = m_settleWatch.BinarySearch(item: index);
 
-        if (group.ReadsOtherSlots) {
+        if ((group.Skin is not null) && !group.Geometry.RestPoseSkin) {
             if (at < 0) { m_settleWatch.Insert(index: ~at, item: index); }
         } else if (at >= 0) {
             m_settleWatch.RemoveAt(index: at);
@@ -43,34 +43,15 @@ public sealed partial class SdfMeshPathBake {
 
         var settles = Library.Settles;
         var inFlight = 0;
+
+        // The settle rebakes still to land (FinishReplacements retires each replaced group as its replacement lands).
+        foreach (var (group, _) in m_replacing) { inFlight += ((!group.Retiering && !group.Done) ? 1 : 0); }
+
         // Replace keeps the watch as it is for a group of the same slot, but a copy keeps the walk off it either way.
         var watched = m_settleWatchScratch;
 
         watched.Clear();
         watched.AddRange(collection: m_settleWatch);
-        foreach (var index in watched) {
-            var group = m_groups[index];
-
-            if (group.Replaces is not { } replaced) { continue; }
-            if (!group.Done) {
-                inFlight++;
-                continue;
-            }
-            if (group.Mesh is null) {
-                replaced.Blocked = true;
-                Replace(group: replaced, index: index);
-                m_productRevision++;
-                settles.Count(kind: SdfMeshSettle.Refused);
-                continue;
-            }
-            // The landed mesh replaces the skinned one: the replaced group retires here, its one place, and releases its
-            // mesh once its last work ends. A rebake that meshed no surface hands it back above instead.
-            m_retiredGroups.Add(item: replaced);
-            replaced.Retired = true;
-            group.Replaces = null;
-            settles.Count(kind: SdfMeshSettle.Done);
-            if (group.Stored) { settles.Count(kind: SdfMeshSettle.Reused); }
-        }
 
         var transforms = frame.DynamicTransforms;
 
@@ -148,27 +129,14 @@ public sealed partial class SdfMeshPathBake {
             slot: old.Slot,
             instance: old.FirstInstance,
             sampled: m_sampled,
+            tier: _ => old.Tier,
             transforms: frame.DynamicTransforms
         )!;
 
-        group.TakeDemandBox();
         Library.Settles.Count(kind: SdfMeshSettle.Queued);
         StartSettle(time: frame.Time);
-        group.Replaces = old;
-        Replace(group: group, index: index);
         m_productRevision++;
-        group.Identity = Identity.Value;
-        if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked)) {
-            group.Mesh = baked;
-            group.Done = true;
-            group.Stored = true;
-            return false;
-        }
-
-        group.Mesh = old.Mesh?.Acquire();
-        _ = Begin(group: group);
-
-        return true;
+        return StartReplacement(group: group, index: index, old: old);
     }
     // Whether the bake may start another settle rebake at `time`: fewer than SdfMeshSettle.MaxPerSecond started in the
     // second before it. A time before the oldest start (a new frame source's clock) forgets the starts.

@@ -11,11 +11,10 @@ namespace Puck.World.Authoring;
 public readonly record struct CreationMovingBlend(int Shape, int Other, int Group, SdfBlendOp Blend);
 /// <summary>
 /// What moves a creation's shapes, read off its document: whether it animates at all, and which shape's motion each
-/// shape inherits. An animated creation's shapes each ride a slot of their own in the stamp pool, and a pooled blend
-/// group bakes as one mesh whose vertices each ride one shape's slot, so a blend between shapes that move apart keeps
-/// the seam it baked with until the shapes settle (<c>Puck.SdfVm.SdfMeshSettle</c>).
+/// shape inherits. The pooled motion plan uses this reading to admit bounded rest-pose skins or partition a group
+/// into rigid owner fields. No presentation motion is applied to simulation state.
 /// </summary>
-public static class CreationMotion {
+public static partial class CreationMotion {
     /// <summary>Returns whether a creation animates: a driver or an inverse-kinematics effector moves it, or a timeline
     /// frame poses a shape away from its authored position or rotation (a state-bound value always differs from a
     /// literal). A creation whose frames carry no transforms, or only its shapes' authored poses, moves nothing.</summary>
@@ -56,7 +55,7 @@ public static class CreationMotion {
         }
     }
     /// <summary>Returns the shape whose own motion a shape inherits: the nearest of the shape and its parents that swings,
-    /// slides or lies on an effector's chain, or -1 when only the creation root moves it. Two shapes of one owner keep
+    /// slides, has timeline motion or lies on an effector's chain, or -1 when only the creation root moves it. Two shapes of one owner keep
     /// their places relative to each other under every driver and effector.</summary>
     /// <param name="document">The creation document.</param>
     /// <param name="parents">Each shape's parent (<see cref="ResolveParents"/>).</param>
@@ -71,7 +70,7 @@ public static class CreationMotion {
         while (index >= 0) {
             var shape = shapes[index];
 
-            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 })) { return index; }
+            if ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || FramesMove(document: document, index: index)) { return index; }
             foreach (var effector in (document.Effectors ?? [])) {
                 if ((shape.Name is { } name) && effector.Chain.Contains(value: name.Value)) { return index; }
             }
@@ -86,7 +85,7 @@ public static class CreationMotion {
     /// creation that does not animate joins by no such blend, and an ungrouped shape's blend is
     /// <see cref="UngroupedBlends"/>'s.</summary>
     /// <param name="document">The creation document.</param>
-    /// <returns>The blends, one per joining shape naming the first earlier member it moves apart from, in shape
+    /// <returns>The blends, each joining shape paired with every earlier member it moves apart from, in shape
     /// order; empty when there is none.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<CreationMovingBlend> MovingBlends(CreationDocument document) {
@@ -111,9 +110,8 @@ public static class CreationMotion {
 
             if ((group == 0) || (blend == SdfBlendOp.Union)) { continue; }
             for (var earlier = 0; (earlier < index); earlier++) {
-                if (((shapes[earlier].Group ?? 0) == group) && ((owners[earlier] != owners[index]) || !FramesAlike(document: document, first: earlier, second: index))) {
+                if (((shapes[earlier].Group ?? 0) == group) && OwnersMoveApart(document, parents, owners[earlier], owners[index])) {
                     found.Add(item: new CreationMovingBlend(Blend: blend, Group: group, Other: earlier, Shape: index));
-                    break;
                 }
             }
         }
@@ -166,7 +164,14 @@ public static class CreationMotion {
     public static string Describe(CreationDocument document, CreationMovingBlend blend) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        return $"joins shape '{NameOf(document: document, index: blend.Shape)}', which {MotionOf(document: document, index: blend.Shape)}, to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}', which {MotionOf(document: document, index: blend.Other)}, by {blend.Blend}: the group bakes one mesh at the pose its program arrives in, so the seam stretches as they move apart until their relative pose settles and the group bakes again there.";
+        var envelope = Envelope(blend: blend, document: document);
+        var outcome = (envelope.Admitted ? "bakes as a rest-pose skin" : ((envelope.Refusal is not null) ? "bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field" : $"bakes as a crease; widen smooth to at least {(2f * envelope.Displacement):G6} or reduce the motion to keep the blend"));
+
+        if (envelope.Admitted && MovingBlends(document: document).Any(predicate: other => ((other.Group == blend.Group) && !Envelope(blend: other, document: document).Admitted))) {
+            outcome = "bakes as a crease because another seam in this group is outside its envelope";
+        }
+
+        return $"joins shape '{NameOf(document: document, index: blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(radians: envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {(envelope.Smooth / 2f):G6}); {outcome}{((envelope.Refusal is { } reason) ? $" ({reason})" : string.Empty)}.";
     }
     /// <summary>Returns a shape's name, or <c>#index</c> for an unnamed one.</summary>
     /// <param name="document">The creation document.</param>
@@ -179,38 +184,62 @@ public static class CreationMotion {
         return (document.Shapes![index].Name?.Value ?? $"#{index}");
     }
 
-    // What moves a shape, as a diagnostic phrase: a timeline frame, its own motion, the shape it inherits motion from,
-    // or the creation root.
-    private static string MotionOf(CreationDocument document, int index) {
-        var shapes = document.Shapes!;
+    // Whether two motion owners (Owner; -1 for the creation root) move against each other. Motion their common ancestor
+    // carries moves both alike, so only the shapes on each side below it count: any swing, slide or effector there moves
+    // them apart, and otherwise every timeline frame must carry both sides by one rigid motion.
+    private static bool OwnersMoveApart(CreationDocument document, int[] parents, int first, int second) {
+        if (first == second) { return false; }
+        var (firstPath, secondPath) = Paths(parents: parents, first: first, second: second);
 
-        if (FramesMove(document: document, index: index)) { return "is posed by a timeline frame"; }
-
-        var parents = new int[shapes.Count];
-
-        ResolveParents(parents: parents, shapes: shapes);
-
-        var owner = Owner(document: document, index: index, parents: parents);
-
-        return ((owner < 0)
-            ? "rides the creation root"
-            : ((owner == index) ? "moves by its own swings, slides or effector" : $"moves with '{NameOf(document: document, index: owner)}'"));
-    }
-    // Whether every timeline frame moves two shapes by one rigid motion from their authored poses, so the frames keep
-    // their places relative to each other; a shape a frame does not pose holds its authored pose there.
-    private static bool FramesAlike(CreationDocument document, int first, int second) {
+        if (firstPath.Concat(second: secondPath).Any(predicate: index => Driven(document: document, index: index))) { return true; }
         const float Tolerance = 1.0e-4f;
 
         foreach (var frame in (document.Frames ?? [])) {
-            var (firstTurn, firstShift) = FrameMotion(document: document, frame: frame, index: first);
-            var (secondTurn, secondShift) = FrameMotion(document: document, frame: frame, index: second);
+            var (firstTurn, firstShift) = PathFrameMotion(document: document, frame: frame, path: firstPath);
+            var (secondTurn, secondShift) = PathFrameMotion(document: document, frame: frame, path: secondPath);
 
             if ((MathF.Abs(x: Quaternion.Dot(quaternion1: firstTurn, quaternion2: secondTurn)) < (1f - Tolerance)) || (Vector3.Distance(value1: firstShift, value2: secondShift) > Tolerance)) {
-                return false;
+                return true;
             }
         }
 
-        return true;
+        return false;
+    }
+    // Each shape's own chain up to, not including, the two shapes' nearest common ancestor (-1 for the creation root),
+    // nearest the shape first; a root-riding shape's chain is empty.
+    private static (List<int> First, List<int> Second) Paths(int[] parents, int first, int second) {
+        var above = new HashSet<int>();
+
+        for (var at = first; (at >= 0); at = parents[at]) { _ = above.Add(item: at); }
+        var common = second;
+
+        while ((common >= 0) && !above.Contains(item: common)) { common = parents[common]; }
+        var firstPath = new List<int>();
+        var secondPath = new List<int>();
+
+        for (var at = first; (at >= 0) && (at != common); at = parents[at]) { firstPath.Add(item: at); }
+        for (var at = second; (at >= 0) && (at != common); at = parents[at]) { secondPath.Add(item: at); }
+
+        return (firstPath, secondPath);
+    }
+    // Whether a shape's own swing, slide or effector chain moves it.
+    private static bool Driven(CreationDocument document, int index) {
+        var shape = document.Shapes![index];
+
+        return ((shape.Swings is { Count: > 0 }) || (shape.Slides is { Count: > 0 }) || (document.Effectors ?? []).Any(predicate: e => ((shape.Name is { } name) && e.Chain.Contains(value: name.Value))));
+    }
+    // The rigid motion a frame carries the end of a chain by, the chain's own frame motions composed from the shape nearest
+    // the chain's start outward: each parent's motion carries the child already moved.
+    private static (Quaternion Turn, Vector3 Shift) PathFrameMotion(CreationDocument document, FrameDocument frame, List<int> path) {
+        var (turn, shift) = (Quaternion.Identity, Vector3.Zero);
+
+        foreach (var index in path) {
+            var (outerTurn, outerShift) = FrameMotion(document: document, frame: frame, index: index);
+
+            (turn, shift) = (Quaternion.Normalize(value: (outerTurn * turn)), (Vector3.Transform(rotation: outerTurn, value: shift) + outerShift));
+        }
+
+        return (turn, shift);
     }
     // The rigid motion a frame carries a shape by from its authored pose: the turn, then the shift after it.
     private static (Quaternion Turn, Vector3 Shift) FrameMotion(CreationDocument document, FrameDocument frame, int index) {

@@ -2108,7 +2108,7 @@ export type CreationDocument = {
      */
     font?: string | null;
     /**
-     * The greedy glyph-level wrap width, in the creation's own units (null = only explicit line feeds break lines). Must be positive when present.
+     * The greedy word wrap width, in the creation's own units (null = only explicit line feeds break lines). Must be positive when present.
      */
     maxWidth?: number | null;
     /**

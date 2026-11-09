@@ -11,7 +11,7 @@ namespace Puck.SdfVm;
 // Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
 internal static unsafe class SdfMeshStoreCodec {
-    internal const ulong Magic = 0x3948534D4B435550ul; // PUCKMSH9
+    internal const ulong Magic = 0x4148534D4B435550ul; // PUCKMSHA
     internal const int HeaderBytes = 28;
 
     private const int ChecksumBytes = 16;
@@ -27,7 +27,7 @@ internal static unsafe class SdfMeshStoreCodec {
         }
         // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
         var width = ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces));
-        var canonical = SdfMeshMaterials.Canonical(pieces: pieces, materials: materials);
+        var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
         using var payload = new MemoryStream();
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
@@ -35,7 +35,7 @@ internal static unsafe class SdfMeshStoreCodec {
             foreach (var material in canonical) { writer.Write(value: material); }
             writer.Write(value: (mesh is { Chunks.Count: > 0 }));
             writer.Write(value: pieces.Count);
-            foreach (var piece in pieces) { WriteMesh(high: high, low: low, mesh: piece, width: width, writer: writer, from: materials, to: canonical); }
+            foreach (var piece in pieces) { WriteMesh(from: materials, high: high, low: low, mesh: piece, to: canonical, width: width, writer: writer); }
         }
         using var output = new MemoryStream();
 
@@ -78,7 +78,7 @@ internal static unsafe class SdfMeshStoreCodec {
             using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-decode");
             using var decoded = new OwnedBuffer<byte>(allocator: allocator, observer: owner);
 
-            decoded.Resize(length: length, clear: false, preserve: false);
+            decoded.Resize(clear: false, length: length, preserve: false);
             try {
                 using var compressed = new MemoryStream(bytes, HeaderBytes, (body.Length - HeaderBytes), writable: false);
                 using var decoder = new ZLibStream(mode: CompressionMode.Decompress, stream: compressed);
@@ -88,7 +88,7 @@ internal static unsafe class SdfMeshStoreCodec {
             } catch (Exception exception) when ((exception is IOException or InvalidDataException)) { return false; }
             // The pin and every plane borrow end before the decode storage is released, on success and refusal.
             using var pin = decoded.Pin();
-            using var input = new UnmanagedMemoryStream(pointer: (byte*)pin.Pointer, length: length);
+            using var input = new UnmanagedMemoryStream(pointer: ((byte*)pin.Pointer), length: length);
             using var reader = new BinaryReader(input: input);
             var palette = new int[Count(itemBytes: 4, reader: reader)];
 
@@ -156,6 +156,9 @@ internal static unsafe class SdfMeshStoreCodec {
         }
         writer.Write(value: mesh.VertexMembers.Length);
         writer.Write(buffer: mesh.VertexMembers.Span);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.Blend).ToArray(), 4);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.GradientXY).ToArray(), 4);
+        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.GradientZ).ToArray(), 4);
         writer.Write(value: mesh.Levels.Count);
         foreach (var level in mesh.Levels) {
             writer.Write(value: level.Error);
@@ -201,6 +204,14 @@ internal static unsafe class SdfMeshStoreCodec {
             members[index] = new SdfMeshMember(slot, position, new Quaternion(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()));
         }
         var vertexMembers = reader.ReadBytes(count: Count(itemBytes: 1, reader: reader));
+        var blends = ReadPlane(reader: reader);
+        var xy = ReadPlane(reader: reader);
+        var z = ReadPlane(reader: reader);
+
+        if ((blends.Length != xy.Length) || (blends.Length != z.Length)) { throw new InvalidDataException(message: "Invalid influence planes."); }
+        var influences = new SdfMeshInfluence[blends.Length];
+
+        for (var index = 0; (index < influences.Length); index++) { influences[index] = new(blend: blends[index], gradientXY: xy[index], gradientZ: z[index]); }
         var levels = new SdfMeshLevel[Count(itemBytes: 14, reader: reader)];
 
         for (var index = 0; (index < levels.Length); index++) {
@@ -208,7 +219,7 @@ internal static unsafe class SdfMeshStoreCodec {
 
             levels[index] = new SdfMeshLevel(ReadPlane(reader: reader), ReadPlane(reader: reader), error);
         }
-        return new SdfMesh(indices: indices, members: members, normals: normals, positions: positions, triangleMaterials: materials, vertexMembers: vertexMembers) { BakeCell = cell, Levels = levels };
+        return new SdfMesh(indices: indices, influences: influences, members: members, normals: normals, positions: positions, triangleMaterials: materials, vertexMembers: vertexMembers) { BakeCell = cell, Levels = levels };
     }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static Vector3[] ReadVectors(BinaryReader reader, int width, Vector3 low, Vector3 high) {
@@ -296,8 +307,8 @@ internal static unsafe class SdfMeshStoreCodec {
     private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials, int[] from, int[] to) {
         var width = 1;
 
-        foreach (var material in materials) { if (SdfMeshMaterials.Renumber(material, from, to) > byte.MaxValue) { width = 4; break; } }
-        WritePlane(width: width, words: materials, writer: writer, from: from, to: to);
+        foreach (var material in materials) { if (SdfMeshMaterials.Renumber(from: from, material: material, to: to) > byte.MaxValue) { width = 4; break; } }
+        WritePlane(from: from, to: to, width: width, words: materials, writer: writer);
     }
     private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width, int[]? from = null, int[]? to = null) {
         writer.Write(value: ((byte)width));

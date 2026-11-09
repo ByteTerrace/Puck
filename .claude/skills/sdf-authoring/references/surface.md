@@ -452,3 +452,8 @@ Procedural filtering references: [PBRT texture sampling and antialiasing](https:
 relates texture coordinates to pixel support; [NVIDIA's procedural-noise chapter](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-26-implementing-improved-perlin-noise)
 discusses GPU procedural evaluation. Puck reuses its own lattice noise and packed
 material path rather than importing another noise implementation.
+
+Paint outlines use the primitive profile admission: a Convex has 3–32 vertices.
+There is no separate eight-vertex paint cap: `SdfAppearance` packs variable side
+tables after its fixed nine-vector paint entries. Compile validation and stats
+both resolve paints through `CreationCanonicalizer.ValidatePaletteLayers`.
