@@ -85,7 +85,7 @@ The first step is offline and load-independent: a field-levels mode in the CPU
 bake that `puck mesh audit --cpu` drives, measured against the collapse on the
 Moth and one hall union ([G1](#the-build-order)). One decision stays the
 owner's and is stated, not decided: whether an on-demand finest tier counts
-toward the one-minute cold-bake bar ([owner call](#the-owner-call)).
+toward the one-minute cold-bake bar ([the bar under demand tiers](#the-cold-bake-bar-under-demand-tiers)).
 
 ## Where the pipeline stands
 
@@ -294,7 +294,7 @@ mechanism is uncontested across the three records. Where they disagreed:
    the slot-resolved draw is V2b's design ([D6](#d6-the-hosts-work-per-moved-body)).
 10. **The cold-bake bar.** Claude: demand tiers pay only what the spawn views
     resolve, and whether the bar counts on-demand finest tiers is the owner's.
-    Stated as [the owner call](#the-owner-call).
+    Settled in [the cold-bake bar under demand tiers](#the-cold-bake-bar-under-demand-tiers).
 
 ## The decisions
 
@@ -693,7 +693,7 @@ fact in the key, `SdfMeshPathBake.Retier` and the `world.residency` columns.
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 7a. Demand-bounded tiers: a group's tier is the coarsest power of two at which its finest cell stays under half a display pixel at the nearest demand seen (`SdfMeshDemand` holds each view's eye and pixels a metre at one metre **[opened]**); the tier joins the geometry key as a fact (`SdfMeshGeometryBuilder.AppendFact` **[opened]**), so each tier is its own cache entry, prewarmable in a player's build; the frame draws the finest tier baked so far, a counter reports detail owed, and the demand-first queue bakes the next tier; the D1 chain hangs under each tier | Virtual texturing applied to geometry; the bake pays what views resolve; no finest-cell ceiling for a mirror-close view (Claude **[record]**: the nose's cell is a sixth of a pixel at the chase camera and over three pixels at 0.3 m on 2160 lines, arithmetic) | A tier per group in the key; a residency counter; the bake queue reads demand it already has | Whether the owner's cold-bake bar counts on-demand tiers ([the owner call](#the-owner-call)); a view outrunning the bake sees a coarser tier for a moment, reported, never refused |
+| 7a. Demand-bounded tiers: a group's tier is the coarsest power of two at which its finest cell stays under half a display pixel at the nearest demand seen (`SdfMeshDemand` holds each view's eye and pixels a metre at one metre **[opened]**); the tier joins the geometry key as a fact (`SdfMeshGeometryBuilder.AppendFact` **[opened]**), so each tier is its own cache entry, prewarmable in a player's build; the frame draws the finest tier baked so far, a counter reports detail owed, and the demand-first queue bakes the next tier; the D1 chain hangs under each tier | Virtual texturing applied to geometry; the bake pays what views resolve; no finest-cell ceiling for a mirror-close view (Claude **[record]**: the nose's cell is a sixth of a pixel at the chase camera and over three pixels at 0.3 m on 2160 lines, arithmetic) | A tier per group in the key; a residency counter; the bake queue reads demand it already has | On-demand tiers sit outside the cold-bake bar ([the bar under demand tiers](#the-cold-bake-bar-under-demand-tiers)); a view outrunning the bake sees a coarser tier for a moment, reported, never refused |
 | 7b. A per-creation triangle or byte cap | Simple | A refusal by count | Contradicts "no scene ceiling is sized for a worst case ... Detail follows projected size (the one-pixel rule), never a body's index" **[opened]** (decisions) |
 | 7c. Spatial refinement: an octree of field-contoured nodes each at its depth's cell, nodes of one depth partitioning one lattice | Refines the nose without baking the back of the head | Seams between depths need D1's seam answers (skirts, or a parent above) | Later; the group tier needs no seam work and comes first |
 
@@ -1004,28 +1004,27 @@ runs agree on every group line compared, but the attribution is unverified
 (the review noted the same). The run's summary is in the lane's commit; the
 raw group output was not kept.
 
-## The owner call
+## The cold-bake bar under demand tiers
 
-**Does an on-demand finest tier count toward the one-minute cold-bake bar?**
-Under D7 the cold bake pays each group's coarsest tiers and the finest tier
-only where a spawn view resolves it; a view that later comes closer bakes the
-next tier on demand, counted as owed and never refused. The bar's words are
-"the debug world's meshes bake from an empty store in one minute at most per
-backend on the lead machine". Two readings:
+**Settled by derivation from recorded rulings, not asked:** the one-minute
+cold-bake bar counts what the boot's views demand. Under D7 the cold bake pays
+each group's coarsest tiers and the finest tier only where a spawn view
+resolves it; a view that later comes closer bakes the next tier on demand,
+reported as owed detail and never refused. The derivation:
 
-- *The bar counts what the spawn views resolve.* The cold bake is what a player
-  waits for at spawn; a tier a later view demands is streaming, as a store load
-  is. Under this reading D7 shortens the cold bake and G8's check reads the
-  spawn's bake alone.
-- *The bar counts every tier any view in the debug world can demand.* The bake
-  is "the debug world's meshes", all of them, at their finest. Under this
-  reading D7 changes nothing about the bar and the chain's and parents' costs
-  must fit beside today's finest cells.
+- The bar's words are "the debug world's meshes bake from an empty store in one
+  minute at most per backend on the lead machine". Under D7 there is no fixed
+  set of "the debug world's meshes": a tier exists because a view demands it,
+  and D7 sets no finest-cell ceiling for a mirror-close view, so "every tier any
+  view can demand" has no finite bake to time.
+- A derived product is a cache: a miss is derived again and counted, never
+  refused (AGENTS.md, the derived-product ruling). A finer tier baked as a
+  camera approaches is such a miss, as a store load is streaming.
+- The bar serves velocity: how long a fresh machine waits for the running
+  world. That wait is the spawn views' bake.
 
-This memo does not decide it. Until the owner does, G8 reports both numbers
-(the spawn's cold bake, and the cold bake of every tier a tour of the places
-demands) and nothing lands that depends on the first reading alone. What brings
-the call back: G2's cold-bake stage seconds.
+G8 still reports the cold bake of every tier a tour of the places demands, as a
+measurement of streaming cost beside the bar, never as the bar.
 
 ## Found while reading
 

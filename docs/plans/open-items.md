@@ -89,7 +89,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor | its windowed recipe |
-| `lane/moving-blends` | moving blends steps 1 to 3 | landing with the w1 moving-blends fix pass, which merged it |
 | `lane/part-detail` | one bake detail rule for every path | D7's demand budget, built beside it |
 | `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | a changed approach after three critic failures |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
@@ -342,10 +341,6 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Whether the cold-bake bar (one minute per backend) counts detail tiers baked
-  on demand as a camera approaches, now that bake detail is bounded by D7's
-  demand budget (the owner's choice of cost bound for `lane/part-detail`;
-  [virtual geometry](virtual-geometry.md#d7-the-detail-budget)).
 - The Moth's and the swallow's look, in a pair session with the owner (both
   stopped by the owner's ruling); within it, gloves or bare hands on the
   off-suit pilot (sheet 04 draws gloves; no ruling is recorded).
