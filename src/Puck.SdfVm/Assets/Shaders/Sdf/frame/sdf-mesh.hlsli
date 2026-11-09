@@ -373,5 +373,23 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
 
     return sdfMeshFaceCamera(normal, face, rayDirection);
 }
+// How far a triangle's vertex normals part: the longest chord between two of them, zero for a triangle with one normal
+// (a flat face, or a mesh without vertex normals) and up to two. A cosine against any direction changes across the
+// triangle by at most this, and between its vertices it is only interpolated, so a step drawn on it sharper than this
+// follows the triangle's edges.
+float sdfMeshNormalSpread(uint draw, uint triangleIndex) {
+    uint record = sdfMeshRecord(draw);
+    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_NORMALS_FLAG) == 0u) {
+        return 0.0;
+    }
+    uint first = (3u * triangleIndex);
+    float3 na = sdfMeshWorldNormal(record, first);
+    float3 nb = sdfMeshWorldNormal(record, first + 1u);
+    float3 nc = sdfMeshWorldNormal(record, first + 2u);
+    na *= rsqrt(max(dot(na, na), 1.0e-20));
+    nb *= rsqrt(max(dot(nb, nb), 1.0e-20));
+    nc *= rsqrt(max(dot(nc, nc), 1.0e-20));
+    return sqrt(max(max(dot(na - nb, na - nb), dot(nb - nc, nb - nc)), dot(nc - na, nc - na)));
+}
 
 #endif

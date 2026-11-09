@@ -2393,7 +2393,7 @@
         },
         "shadowTint": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+          "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
           "default": null
         },
         "outlineWidth": {
@@ -2450,7 +2450,7 @@
           "default": null
         },
         "band": {
-          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
           "enum": [
             "Visibility",
             "Combined"
@@ -10230,8 +10230,8 @@
         "Combined"
       ],
       "x-enumDescriptions": {
-        "Visibility": "The band shapes the light\u0027s cosine and the shadow visibility multiplies it after: band(cosine) \u00D7 visibility, so a filtered penumbra keeps its softness and colour.",
-        "Combined": "The band shapes the cosine and the visibility together: band(cosine \u00D7 visibility), the harder look in which a penumbra snaps to the band\u0027s edge."
+        "Visibility": "The visibility multiplies the band as the cascades\u0027 filter left it: step(cosine) \u00D7 visibility, so a cast shadow keeps its soft penumbra.",
+        "Combined": "The visibility is stepped too: step(cosine) \u00D7 step(visibility), so a cast shadow is a held shape. The visibility\u0027s step is never sharper than the style\u0027s softness, a pixel, or what the shadow cascade resolves at the receiver, so a coarse cascade texel keeps its penumbra rather than printing the texel grid."
       }
     },
     "ShapeNullable10": {
@@ -10266,7 +10266,7 @@
         },
         "shadowTint": {
           "default": null,
-          "description": "Shadow-band reflectance, three linear RGB values in [0, 1]."
+          "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1]."
         },
         "outlineWidth": {
           "type": [
@@ -10322,7 +10322,7 @@
         },
         "band": {
           "$ref": "#/$defs/ShapeNonNullable52",
-          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
           "default": "Visibility"
         }
       },

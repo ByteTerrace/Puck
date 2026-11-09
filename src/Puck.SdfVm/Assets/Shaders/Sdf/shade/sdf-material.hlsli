@@ -102,6 +102,11 @@ float sdfMaterialShadowDemand(int material) {
         float4 envelope = passGroup.shadeDemand;
         demand = envelope.z != 0.0 ? -1.0 : -sin(min(1.5707963267948966, asin(saturate(max(-demand, envelope.x))) + envelope.y));
     }
+    // A cel material is queried on every side: its band reads a neighbourhood normal (sdfToonGather), which can face the
+    // light where the pixel's own normal does not, and an unqueried slot decodes as fully visible, which would light a
+    // line of full key light along every edge and terminator.
+    float toonMode = asfloat(sdfWords[materialBase + 22u]).x;
+    if ((toonMode > 0.0) || ((toonMode == 0.0) && (passGroup.toonBands.x > 0.0))) demand = -1.0;
     return demand;
 }
 #endif

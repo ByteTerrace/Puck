@@ -4273,7 +4273,7 @@ export type ShapeNullable10 = {
    */
   softness?: number | null;
   /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   * The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].
    */
   shadowTint?: unknown;
   /**
@@ -4305,7 +4305,7 @@ export type ShapeNullable10 = {
    */
   shoulder?: number | null;
   /**
-   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.
    */
   band?: ShapeNonNullable52;
 };
@@ -5337,7 +5337,7 @@ export type ToonStyleDocument = {
    */
   softness?: number | null;
   /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   * The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].
    */
   shadowTint?: DocumentVector3;
   /**
@@ -5369,7 +5369,7 @@ export type ToonStyleDocument = {
    */
   shoulder?: number | null;
   /**
-   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.
    */
   band?: SdfToonBand;
 };

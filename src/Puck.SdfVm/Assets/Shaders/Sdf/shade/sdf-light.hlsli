@@ -159,12 +159,16 @@ float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) 
 }
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
-// reflected light by (1 unless it occludes).
+// reflected light by (1 unless it occludes). `metered` is the light the local adaptation meters (sdfLocalAdaptationGain):
+// the diffuse term, except under a cel style, whose band and shadow step it leaves out (the light under its cosine as
+// far as it reaches the surface's region), so the adaptation stays continuous across the terminator and a cast shadow's
+// edge and keeps the style's step between them.
 struct SdfLightResponse {
     float3 diffuse;
     float3 specular;
     float3 rim;
     float attenuation;
+    float3 metered;
 };
 
 // The lights a shading walk visits, in order: the lights table's the view shades, by the set bits of its light mask
@@ -319,16 +323,27 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
     response.specular = float3(0.0, 0.0, 0.0);
     response.rim = float3(0.0, 0.0, 0.0);
     response.attenuation = 1.0;
+    response.metered = float3(0.0, 0.0, 0.0);
 
     float3 normal = surface.normal;
+    bool toon = sdfToonEnabled(surface.toon);
 
     if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = inputs.visibility;
 
-        if (sdfToonEnabled(surface.toon)) {
-            response.diffuse = light.color * light.weight * sdfToonBand(surface.toon, lambert, occlusion);
-            response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, occlusion);
+        if (toon) {
+            // The band reads the style's neighbourhood normal; the highlight keeps the surface's own. The region is whether
+            // the surface stands in the open air (the style's `open`, from the sky the probes see above it), so a form or
+            // cast shadow outdoors keeps the tint and a room does not. The cascades cannot answer it: the inner face of a
+            // building's outer wall is that wall's own exit from the light, so it would read as reached. Without the
+            // volume the cascades' visibility stands in.
+            float cosine = sdfWrapDiffuse(dot(surface.toon.normal, light.position), surface.material.wrap);
+            float band = sdfToonBand(surface.toon, cosine, occlusion, sdfToonShadowWidth(surface.toon, light.index));
+            float region = (surface.probed ? surface.toon.open : saturate(occlusion));
+            response.diffuse = light.color * (light.weight * sdfToonShare(surface.toon, band, region));
+            response.metered = light.color * (light.weight * region * cosine);
+            response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, band);
         } else {
             response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
             response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, light.position, ((SDF_PI * light.weight) * occlusion)));
@@ -339,9 +354,13 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         if (reach > 0.0) {
             float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 
-            if (sdfToonEnabled(surface.toon)) {
-                response.diffuse = light.color * reach * sdfToonBand(surface.toon, pointLambert, surface.ambientOcclusion);
-                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, pointDirection, reach, surface.ambientOcclusion);
+            if (toon) {
+                // The reach already holds the light's traced visibility, so the shade side's tint goes wherever it does.
+                float cosine = sdfWrapDiffuse(dot(surface.toon.normal, pointDirection), surface.material.wrap);
+                float band = sdfToonStep(surface.toon, cosine);
+                response.diffuse = light.color * (reach * surface.ambientOcclusion * sdfToonShare(surface.toon, band, 1.0));
+                response.metered = light.color * (reach * surface.ambientOcclusion * cosine);
+                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, pointDirection, reach, band * surface.ambientOcclusion);
             } else {
                 response.diffuse = (light.color * ((reach * pointLambert) * surface.ambientOcclusion));
                 response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, ((SDF_PI * reach) * surface.ambientOcclusion)));
@@ -360,6 +379,9 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
         }
     } else if (light.kind == SdfLightScreen) {
         response.diffuse = light.color * (light.weight * max(dot(normal, inputs.direction), 0.0) * inputs.reach);
+    }
+    if (!toon || ((light.kind != SDF_LIGHT_DIRECTIONAL) && (light.kind != SDF_LIGHT_POINT))) {
+        response.metered = response.diffuse;
     }
 
     return response;

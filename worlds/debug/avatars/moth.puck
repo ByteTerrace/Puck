@@ -20,7 +20,8 @@ let lavenderSeam = "#5E3468"
 let ventSlot = "#2B2630"
 
 // Her look, swapped live by `moth.style` for playtesting: every palette slot shades plain or with the standard's cel
-// style by the mothStyle row, which changes only her materials' style rows and bakes nothing.
+// style by the mothStyle row, which changes only her materials' style rows and bakes nothing. She boots cel, the
+// selected direction's treatment, in the same style as the world around her.
 let mothStyles = {
   state: "state.mothStyle"
   cases [continuousStyle, celStyle]
@@ -6826,8 +6827,8 @@ state {
   ]
 
   world {
-    // Her look (mothStyles): Plain shades every slot continuously, Cel with the standard's celStyle.
-    slot mothStyle: MothStyle = 0
+    // Her look (mothStyles): Plain shades every slot continuously, Cel with the standard's celStyle, the world's own.
+    slot mothStyle: MothStyle = 1
 
     row {
       name: "dashPose"

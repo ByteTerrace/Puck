@@ -10909,7 +10909,7 @@
               "default": null
             },
             "shadowTint": {
-              "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+              "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
               "default": null,
               "title": "DocumentVector3",
               "anyOf": [
@@ -10997,7 +10997,7 @@
               "default": null
             },
             "band": {
-              "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+              "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
               "enum": [
                 "Visibility",
                 "Combined"
@@ -32814,7 +32814,7 @@
                           "default": null
                         },
                         "shadowTint": {
-                          "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+                          "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
                           "default": null,
                           "title": "DocumentVector3",
                           "anyOf": [
@@ -32902,7 +32902,7 @@
                           "default": null
                         },
                         "band": {
-                          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
                           "enum": [
                             "Visibility",
                             "Combined"
@@ -32961,7 +32961,7 @@
                                 "default": null
                               },
                               "shadowTint": {
-                                "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+                                "description": "The share of each direct light its shade side keeps, the painted shadow colour, three linear RGB values in [0, 1].",
                                 "default": null,
                                 "title": "DocumentVector3",
                                 "anyOf": [
@@ -33049,7 +33049,7 @@
                                 "default": null
                               },
                               "band": {
-                                "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                                "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined steps it into a held shape.",
                                 "enum": [
                                   "Visibility",
                                   "Combined"

@@ -31,8 +31,9 @@ let plungeHole = [-153, 134, -133, 154]
 let plungeCentre = [(plungeHole[0] + plungeHole[2]) / 2, (plungeHole[1] + plungeHole[3]) / 2]
 let reservoirHole = [-44, -24, -34, -12]
 
-// The valley floor's turf, which the floor (lawn.puck) and the ground the river is cut in (water-scenery.puck) both wear.
-let lawnTurf = "#6C8A33"
+// The valley floor's turf, which the floor (lawn.puck) and the ground the river is cut in (water-scenery.puck) both wear:
+// a real lawn's reflectance, so its bounce does not outweigh the sky and tint every shaded white green.
+let lawnTurf = "#4F6B2E"
 
 // The pool's rest depth over its floor (the chain's `poolBase`, water.puck): the river's water stands at the pool's, so
 // the river's bed, the datum of the river's lattice, is where that depth reaches from the pool's floor.
