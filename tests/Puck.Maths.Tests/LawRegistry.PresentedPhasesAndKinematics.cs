@@ -1752,6 +1752,18 @@ internal static partial class LawRegistry {
             claim: MixedScaleClaims.ScaledReciprocalInvalidInputsRefuse,
             id: "mixed-scale.scaled-reciprocal-invalid-inputs-refuse"
         ),
+        SweptCase(
+            claim: MixedScaleClaims.MultiplyDivideVsOracle,
+            domain: MixedScale,
+            id: "mixed-scale.multiply-divide-vs-oracle",
+            width: 2
+        ),
+        SweptCase(
+            claim: MixedScaleClaims.SegmentParameterVsOracle,
+            domain: MixedScale,
+            id: "mixed-scale.segment-parameter-vs-oracle",
+            width: 3
+        ),
         ClaimCase(
             claim: MixedScaleClaims.ExtremeScaleCountsAreCongruent,
             id: "mixed-scale.extreme-scale-counts-are-congruent"
