@@ -79,7 +79,7 @@ let swallowWingProfile = [
 // The bend's place: the upper flank at the base of the neck, with the blade's outer face a little proud of the body so it
 // reads along its whole length; its upper edge lies just over the back and meets it in a narrow blend, a rounded ledge
 // rather than a wide flat fillet.
-let swallowShoulder = [0.0099, 0.0335, 0.003]
+let swallowShoulder = [0.0104, 0.0335, 0.003]
 let swallowWingRoll = 10
 
 // The wing lies along the body's flank (the profile's X turned to point back), rolled so its upper edge leans in over
