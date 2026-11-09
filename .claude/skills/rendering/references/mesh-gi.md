@@ -219,7 +219,7 @@ after the main residency's done line; a nested residency's done line is insuffic
   measured, and the wall law reads visibility 1 through it. A receiver with no
   answering probe never reads black: the extended stages answer far gallery walls
   and outdoor shaded faces past a window, and a receiver no stage answers reads
-  the camera sample's open sky (`sdfMeshAnswers`, below).
+  the camera sample's light (`sdfMeshAnswers`, below).
   `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one published
   volume and requires the same sixteen slots, weights, share and measured flags
   on both backends; `SdfMeshIrradianceLawTests.FarField.cs` holds the four-storey
@@ -496,14 +496,17 @@ after the main residency's done line; a nested residency's done line is insuffic
   published probe answers (`sdfMeshAnswers` in `shade/sdf-light.hlsli`: every
   surface before the first publication, and surfaces past every published probe
   after a camera cut until the moved windows land) is lit by the exposure
-  meter's sample at the camera as one probe: the sky over the share it sees open
-  (`airLight`) and its metered luminance (`meterLuminance`, grey) over the rest,
-  for both its indirect light and its reflection, with its traced lights
-  unoccluded. The meter sets the exposure from that same sample, so a cold room
-  reads as the meter measured it, never white and blue-washed under the
-  unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
-  which reproduces the unpublished state on a warm boot. Before the meter's first reading `airLight` is one
-  and the luminance zero, so the first frames of a boot still read the open sky.
+  meter's sample at the camera as one probe. Its diffuse light is the sample's
+  six-axis RGB light (`meterLight`, `SdfViewExposures.LightOf`: the radiance and
+  sky-light cubes summed, its open rays carrying the sky's own radiance as a
+  probe's do) read about the normal by the probe cube's rule (`sdfMeshCubeFace`);
+  its reflection is the environment over the share it sees open (`airLight`)
+  and its metered luminance (`meterLuminance`, grey) over the rest; its traced
+  lights go unoccluded. No diffuse reader multiplies a share by the sky's SH. The
+  meter sets the exposure from that same light, so a cold room reads as the
+  meter measured it, never white and blue-washed under the unoccluded sky. `world.indirect high` (or back to medium) resets the layout,
+  which reproduces the unpublished state on a warm boot. Before the meter's first reading `meterLight` reads W zero,
+  `airLight` one and the luminance zero, so the first frames of a boot still read the open sky.
   Only pixel passes read it; a relight never does. `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.

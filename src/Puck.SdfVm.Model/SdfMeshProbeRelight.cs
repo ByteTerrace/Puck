@@ -38,8 +38,10 @@ public static class SdfMeshProbeRelight {
     public const int PartialSkyWord = 36 + (2 * SdfMeshIrradianceProbe.LightWords);
     /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
     public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
-    /// <summary>Six axis luminances, sky visibility and source/trace flags in one camera-meter answer.</summary>
-    public const int MeterOutputWords = 8;
+    /// <summary>One camera-meter answer: the light the sample receives along each of its six axes (+X, -X, +Y, -Y, +Z,
+    /// -Z), RGB in nits (the radiance and sky-light cubes summed, as a probe's indirect light), then its sky visibility,
+    /// then its source and trace flags.</summary>
+    public const int MeterOutputWords = 20;
     /// <summary>The first of the float4 rows holding the sky's radiance about each hit texel's ray, gain applied, zero when
     /// the sky source is off: one row a texel.</summary>
     public const int SkyRow = 11;

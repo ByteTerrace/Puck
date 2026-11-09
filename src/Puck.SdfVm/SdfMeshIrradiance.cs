@@ -958,15 +958,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <param name="fresh">Whether the reading must be the camera's own: at a camera cut, a camera sample is reused only
     /// from this very position, never from elsewhere in its cell, so the reading depends on where the camera stands and
     /// not on where it stood before.</param>
+    /// <param name="light">Receives, when not empty and the method returns <see langword="true"/>, the light the reading
+    /// receives along each of its six axes (+X, -X, +Y, -Y, +Z, -Z), RGB in nits: the radiance and sky-light cubes summed,
+    /// as one probe's indirect light, which the views pass reads for a surface no probe answers. At least six long when
+    /// not empty.</param>
     /// <returns><see langword="false"/> while no scene is available or the camera lies inside opaque geometry.</returns>
-    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility, out SdfExposureMeterSource source, bool fresh = false) {
+    public bool TryMeter(Vector3 position, Vector3 forward, out float luminance, out float skyVisibility, out SdfExposureMeterSource source, bool fresh = false, Span<Vector3> light = default) {
         luminance = 0f;
         skyVisibility = 1f;
         source = SdfExposureMeterSource.None;
         Counters.Count(kind: Meters);
 
         lock (m_gate) {
-            if (GpuTrace is not null) { return TryGpuMeter(position, forward, fresh, out luminance, out skyVisibility, out source); }
+            if (GpuTrace is not null) { return TryGpuMeter(position, forward, fresh, light, out luminance, out skyVisibility, out source); }
             if ((m_lighting is not { } lighting) || !m_windowValid) {
                 return false;
             }
@@ -976,7 +980,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var sample = ((position / spacing) - new Vector3(value: 0.5f));
             var floor = new Vector3(x: MathF.Floor(x: sample.X), y: MathF.Floor(x: sample.Y), z: MathF.Floor(x: sample.Z));
             var fraction = (sample - floor);
-            Span<float> axes = stackalloc float[6];
+            Span<Vector3> axes = stackalloc Vector3[6];
             var open = 0f;
             var total = 0f;
 
@@ -1005,7 +1009,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var skyLight = probe.SkyLight;
 
                 for (var axis = 0; (axis < 6); axis++) {
-                    axes[axis] += (SdfPhotometry.LuminanceOf(color: (radiance[axis] + skyLight[axis])) * weight);
+                    axes[axis] += ((radiance[axis] + skyLight[axis]) * weight);
                     open += ((sky[axis] * weight) / 6f);
                 }
                 total += weight;
@@ -1018,7 +1022,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 if (sampleAtCamera.Invalid) { return false; }
                 for (var axis = 0; (axis < 6); axis++) {
-                    axes[axis] = SdfPhotometry.LuminanceOf(color: (sampleAtCamera.Radiance[axis] + sampleAtCamera.SkyLight[axis]));
+                    axes[axis] = (sampleAtCamera.Radiance[axis] + sampleAtCamera.SkyLight[axis]);
                     open += (sampleAtCamera.Sky[axis] / 6f);
                 }
                 total = 1f;
@@ -1026,23 +1030,29 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             } else {
                 source = SdfExposureMeterSource.Probes;
             }
-
-            var sum = 0f;
-            var weights = 0f;
-
-            for (var axis = 0; (axis < 6); axis++) {
-                var ahead = MathF.Max(x: 0f, y: Vector3.Dot(vector1: Axes[axis], vector2: forward));
-                var facing = (MeterSurround + (ahead * ahead));
-
-                sum += ((axes[axis] / total) * facing);
-                weights += facing;
-            }
-
-            luminance = (sum / weights);
+            for (var axis = 0; (axis < 6); axis++) { axes[axis] /= total; }
+            luminance = MeteredLuminance(light: axes, forward: forward);
             skyVisibility = Math.Clamp(max: 1f, min: 0f, value: ((SdfMeshIrradianceProbe.OpenGroundShare * open) / total));
+            if (!light.IsEmpty) { axes.CopyTo(destination: light); }
 
             return true;
         }
+    }
+    // The meter's reading from the light a sample receives along its six axes: each axis's luminance weighted by the
+    // squared cosine of its angle to where the camera looks plus MeterSurround. The one reduction of the CPU and the GPU
+    // meter's answers.
+    private static float MeteredLuminance(ReadOnlySpan<Vector3> light, Vector3 forward) {
+        var sum = 0f;
+        var weights = 0f;
+
+        for (var axis = 0; (axis < 6); axis++) {
+            var ahead = MathF.Max(x: 0f, y: Vector3.Dot(vector1: Axes[axis], vector2: forward));
+            var facing = (MeterSurround + (ahead * ahead));
+
+            sum += (SdfPhotometry.LuminanceOf(color: light[axis]) * facing);
+            weights += facing;
+        }
+        return (sum / weights);
     }
 
     // A camera sample's hits are traced once per cell and geometry, at the camera's own position; its cubes are relit
