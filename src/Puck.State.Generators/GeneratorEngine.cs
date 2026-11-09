@@ -326,16 +326,6 @@ public static partial class GeneratorEngine {
 
         return set.UnitEntries[picked];
     }
-    // Each VARIABLE-LENGTH ladder rung folds its LENGTH before its content, so two different rung sequences can never
-    // present the same byte stream to the hash; the fixed-width rungs added directly are self-delimiting (see this
-    // type's remarks).
-    private static void FoldDelimited(ref Fnv1aHash hash, string text) {
-        hash.Add(value: ((ulong)text.Length));
-
-        foreach (var ch in text) {
-            hash.Add(value: ((uint)ch));
-        }
-    }
     // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
     // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, single and batch draws thread the same raw position.
@@ -699,10 +689,9 @@ public static partial class GeneratorEngine {
 
         hash.Add(value: EngineConstant);
         hash.Add(value: documentSeed);
-        FoldDelimited(
-            hash: ref hash,
-            text: instanceIdentity
-        );
+        // Each variable-width rung is framed by its 64-bit length; character folding is the shared Maths kernel.
+        hash.Add(value: ((ulong)instanceIdentity.Length));
+        hash.Add(values: instanceIdentity.AsSpan());
 
         return hash;
     }
@@ -711,10 +700,8 @@ public static partial class GeneratorEngine {
     internal static ulong ComputeSiteSeed(Fnv1aHash instance, string site) {
         ArgumentNullException.ThrowIfNull(argument: site);
 
-        FoldDelimited(
-            hash: ref instance,
-            text: site
-        );
+        instance.Add(value: ((ulong)site.Length));
+        instance.Add(values: site.AsSpan());
 
         return instance.Value;
     }
@@ -728,10 +715,8 @@ public static partial class GeneratorEngine {
 
         var hash = Fnv1aHash.Create();
 
-        FoldDelimited(
-            hash: ref hash,
-            text: site
-        );
+        hash.Add(value: ((ulong)site.Length));
+        hash.Add(values: site.AsSpan());
 
         return hash.Value & SiteStreamIdMask;
     }

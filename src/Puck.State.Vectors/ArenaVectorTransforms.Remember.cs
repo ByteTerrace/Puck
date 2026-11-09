@@ -55,27 +55,7 @@ public static partial class ArenaVectorTransforms {
         using var existingLease = arena.Scratch.Rent<NearestCandidate>(length: count);
 
         var existing = existingLease.Span;
-        var gathered = 0;
-
-        var cursor = 0;
-
-        while (arena.TryNextCell(
-            cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: into.RowOrdinal
-        )) {
-            if (
-                into.TryReadMemory(
-                components: out var stored,
-                key: key
-            )
-            ) {
-                existing[gathered++] = new NearestCandidate(
-                    Components: stored,
-                    Key: arena.Keys[key: key]
-                );
-            }
-        }
+        var gathered = GatherCandidates(from: in into, candidates: existing);
 
         if (!VectorTransforms.TryRemember(
             existingCells: existing[..gathered],

@@ -50,6 +50,17 @@ reaches: `puck test <source> --filter '<test-name-or-glob>' --reproduce --jobs 1
 Repeat `--filter` for alternatives; generated world names and authored test
 names both match, and the verb reports the skipped count. The same selection
 governs `--record` and `--compare`. The lead runs full suites once per batch.
+
+An interrupted run with completed preparation under `--keep` leaves runnable
+generated documents. For a self-contained scenario prepared from the head being
+verified, let the preparing process exit, then run `puck test
+<kept>/generated/<scenario>/<source>.world.json --reproduce --jobs 1`. This uses
+the same schedule and verdicts without retaining source preparation beside the
+worker; keep the whole scenario directory for its companion documents and
+assets. Use the authored source for tests with sibling-world expectations:
+`TestWorld.ForDocument` does not carry `WorldTestForeign` metadata, whereas
+`TestCommand.TryGenerateWorlds` does. Generated documents remain scratch output.
+
 Timing questions go to `puck measure request` with frozen before/after World
 artifacts with explicit `--before-input-tree` and `--after-input-tree` roots
 (or commits, which freeze their whole trees), the bench world, startup, frames or sweep command, numeric JSON-pointer

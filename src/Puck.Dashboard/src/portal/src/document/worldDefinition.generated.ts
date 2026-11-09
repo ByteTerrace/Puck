@@ -14181,7 +14181,7 @@ export type WorldUpdateDefaults = {
    */
   checkIntervalSeconds?: number | null;
   /**
-   * The number of most recently installed versions the launcher keeps beyond the current, last-good, pending and running ones. Null = the app's own default.
+   * The number of most recently installed versions the launcher keeps beyond the current, rollback target, pending and running ones. Null = the app's own default.
    */
   keepVersions?: number | null;
 };

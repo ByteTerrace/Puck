@@ -32,7 +32,8 @@ public static class ReleaseVersion {
 
         return 0;
     }
-    private static (IReadOnlyList<ulong> Core, string? PreRelease) Split(string version) {
+    // Ordered is whether every core segment is a decimal number; the others read as zero.
+    private static (IReadOnlyList<ulong> Core, string? PreRelease, bool Ordered) Split(string version) {
         var withoutBuildMetadata = version.Split(
             separator: '+',
             count: 2
@@ -50,17 +51,17 @@ public static class ReleaseVersion {
             ? null
             : trimmed[(dashIndex + 1)..]
         );
+        var ordered = true;
         var core = corePart
             .Split(separator: '.')
-            .Select(selector: segment => (ulong.TryParse(
-            result: out var value,
-            s: segment
-        )
-            ? value
-            : 0UL))
+            .Select(selector: segment => {
+                if (ulong.TryParse(result: out var value, s: segment)) { return value; }
+                ordered = false;
+                return 0UL;
+            })
             .ToArray();
 
-        return (core, preRelease);
+        return (core, preRelease, ordered);
     }
 
     /// <summary>Compares two version strings.</summary>
@@ -72,8 +73,8 @@ public static class ReleaseVersion {
         ArgumentNullException.ThrowIfNull(argument: left);
         ArgumentNullException.ThrowIfNull(argument: right);
 
-        var (leftCore, leftPreRelease) = Split(version: left);
-        var (rightCore, rightPreRelease) = Split(version: right);
+        var (leftCore, leftPreRelease, _) = Split(version: left);
+        var (rightCore, rightPreRelease, _) = Split(version: right);
         var coreComparison = CompareCore(
             left: leftCore,
             right: rightCore
@@ -103,6 +104,17 @@ public static class ReleaseVersion {
             strA: leftPreRelease,
             strB: rightPreRelease
         );
+    }
+    /// <summary>Compares two version strings when both have a defined order: every core segment a decimal number. A name
+    /// such as <c>canary</c>, whose segments <see cref="Compare"/> would read as zero, has none, so the install's release
+    /// record never retires a revocation of it or installs it over another version.</summary>
+    /// <param name="left">The first version.</param>
+    /// <param name="right">The second version.</param>
+    /// <returns>As <see cref="Compare"/>, or <see langword="null"/> when either core holds a segment that is not a number.</returns>
+    public static int? TryCompare(string left, string right) {
+        ArgumentNullException.ThrowIfNull(argument: left);
+        ArgumentNullException.ThrowIfNull(argument: right);
+        return ((Split(version: left).Ordered && Split(version: right).Ordered) ? Compare(left: left, right: right) : null);
     }
     /// <summary>Whether <paramref name="left"/> carries strictly greater precedence than <paramref name="right"/>.</summary>
     public static bool IsStrictlyGreaterThan(string left, string right) => (Compare(

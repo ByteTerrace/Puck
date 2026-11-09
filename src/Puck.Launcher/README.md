@@ -124,16 +124,23 @@ including `puck world prepare`'s documents and assets. Its baseline and candidat
 both pass through `UpdateService`; it never pre-seeds a version directory.
 The positive leg relaunches the activated version. The other leg activates a
 signed payload without its executable, observes the refused launch, and then
-observes the stub return to the last healthy version.
+observes the stub reject that payload and roll back to the proven version.
 
 Staging rebuilds the inactive version directory from the manifest's complete
 file set, so a retry cannot inherit files omitted by a replacement manifest.
 Cached objects are still reused and rehashed; a corrupt object is deleted so a
-later attempt can download it again. Direct stager callers hold the
-install lease and exclude the current version, as `UpdateService` does.
+later attempt can download it again. Each staged file is flushed to stable
+storage as it is written. Direct stager callers hold the publication lease and
+exclude the current version, as `UpdateService` does.
 
-`UpdateService` holds the install root's persistent `update.lock` lease across
-verification, staging and activation. Rollout exclusion and staging failure
+`UpdateService.ApplyAsync` holds the install root's persistent
+`publication.lock` across verification, staging and activation, which excludes
+other appliers and pruning, and takes `update.lock` (an `InstallTransaction`)
+only for short decisions: never across the network fetch or the download, so
+the stub, registration and health recording are not held back. Everything
+decided before staging is judged again under the final transaction. With
+`waitForOtherAppliers` it waits for another applier instead of reporting the
+install busy. Rollout exclusion and staging failure
 do not consume a sequence. Before activation it reserves the replay mark with
 the full signed-manifest SHA-256 pin, then writes `<cacheRoot>/install-intent.json`. A
 refused reservation creates no intent. A crash between reservation and intent
@@ -149,37 +156,53 @@ verification instant: removing trust refuses recovery; signature expiry alone
 does not cancel already-authorized local work. Newly published revocations do
 not replace that intent. A malformed intent or changed trust/replay state fails
 closed and may require operator inspection before further updates. Protect the
-install root from untrusted local writers. Flushed atomic file replacement and
-process-interruption recovery do not establish power-loss durability across
-filesystems.
+install root from untrusted local writers.
 
-`last-good` advances from `current` only while `state/health.json` is absent.
-Activation writes pending health before changing current, so successive updates
-cannot bless a version that has never started.
-The selected executable clears that marker after startup, under `update.lock`,
-only when its registration (below) holds `versions/<current>`. An old or
-concurrently replaced process leaves it intact. The stub refuses missing or
-corrupt state generations rather than guessing rollback compatibility.
+### The release record
+
+One record, `state/release-policy.json` (`ReleasePolicy` in
+[`Puck.Confinement`](../Puck.Confinement/README.md#the-release-record)), holds
+everything launch, rollback, admission and retention depend on: the current
+version, the startup attempts counted per payload, the proofs of health, the
+rejected payloads, the accepted revocations and the state generation floor.
+Each version's `versions/<version>/install-record.json` carries its install
+sequence, runtime, state generation, payload identity
+(`ReleasePayloadIdentity`) and file pins. Every change to either goes through
+`InstallTransaction`, which exists only while `update.lock` is held:
+`UpdateService` begins short ones for an apply's decisions and one around a check's verification,
+and hands it to `IReleaseVerifier` and `IUpdateApplier`, which never begin
+their own. Verification merges an authentic manifest's revocations into the
+record before judging the manifest, so a refused or read-only check still
+records them; `ReleasePolicy.Refusal` then refuses a revoked version, a rejected
+payload or a state generation below the floor. The applier verifies the staged
+files, flushes their directory entries, writes the install record durably and commits the record naming the
+version current; nothing about the outgoing version changes. The selected
+executable records its health after startup (`HealthGateFile`, through
+`InstallTransaction.RecordHealthy`), only when its registration holds
+`versions/<current>`: that proves its exact install and clears its payload's
+attempts in one commit. The design and its failure schedules are in
+[the updater policy plan](../../docs/plans/updater-policy.md).
 
 ### Pruning past versions
 
-After clearing, `InstallPruner` deletes past versions. It keeps `current`,
-`last-good`, the version a pending `install-intent.json` names, every version a
-live process holds, every version whose install order cannot be read, and the
-`UpdateOptions.KeepVersions` most recently installed others. It then deletes the
-content-addressed objects nothing kept references (a pending intent and a local
-release source's channel manifests count as references). Install order is the
-`sequence` the applier writes into `versions/<version>/install-record.json`,
-never version precedence; a payload file or directory of that name (or
-`state-generation`) is refused by manifest validation. A version without a
-valid record (one with a positive sequence and a non-empty inventory of
-well-formed pins) is kept and keeps the content pins of the regular files it
-holds.
+After recording health, `InstallPruner` deletes past versions. It keeps the
+record's current version, its rollback target, the version a pending
+`install-intent.json` names unless the record refuses it, every version a live
+process holds, every version whose install order cannot be read, and the
+`UpdateOptions.KeepVersions` others ranked proven first and then most recently
+installed; a version the record refuses (revoked, rejected or below the floor)
+takes none of those places. It then deletes the content-addressed objects
+nothing kept references (a pending intent and a local release source's channel
+manifests count as references). Install order is the `sequence` the applier
+writes into `versions/<version>/install-record.json`, never version precedence;
+a payload file or directory of that name is refused by manifest validation. A
+version without a valid record (all its fields present, a positive sequence and
+a non-empty inventory of well-formed pins) is kept and keeps the content pins of
+the regular files it holds.
 
 A pass first reads and validates everything it depends on and deletes nothing
-while it does. Both pointers must be the plain name of an existing version
-(`current` must exist). Only a missing pointer file is absent: one that exists
-but is empty, blank, not a version name or unreadable skips the pass. The pending intent's manifest must validate. Every
+while it does. The release record must validate and name a current version
+that is an existing version directory. The pending intent's manifest must validate. Every
 version's record is either valid or treated as absent and replaced by hashing
 its files. Every store's layout and channel manifests must be free of links and
 must validate. Any failure there skips the whole pass with its reason. `Prune`
@@ -219,7 +242,11 @@ earlier, and no link is followed. These are the invariants a review checks:
   mapped file's inode and current path on Linux; on Windows the mapped file's
   open-time name, whose directory the runtime's open file pins), or fails its
   launch with the reason. Whether a process runs from the install at all is the
-  identity of its image's parent directory, never a path spelling.
+  identity of its image's parent directory, never a path spelling. Under the
+  same lease the release record must admit the version
+  (`InstallTransaction.AdmitProcess`): a version without a committed install
+  record, neither current nor proven, revoked, rejected or below the state generation floor refuses to
+  start, whoever started it, and a start raises the floor to its generation.
 - **Crash-safe.** A version leaves `versions/` whole by one move into `trash/`
   (by handle on Windows, `renameat2` relative to held descriptors on Linux),
   then is deleted there through the same handle. An interrupted pass leaves

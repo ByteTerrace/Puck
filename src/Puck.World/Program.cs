@@ -645,22 +645,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         updateCacheRoot = (updateConfig.CacheRoot ?? updateCacheRoot);
         updateChannel = (updateConfig.Channel ?? updateChannel);
     }
-    // The stub reads its own selected version from `<cacheRoot>/current` (FileUpdateApplier's own contract: cacheRoot
-    // IS the stub's install root). Reporting that same value back as InstalledVersion is what makes version-monotonicity
-    // verification mean something beyond "this build's fixed assembly version" once staging is real; a cacheRoot with no
-    // stub-managed install (no `current` file yet) falls back to the compiled assembly version.
-    var updateCurrentPointerPath = Path.Combine(
-        path1: updateCacheRoot,
-        path2: "current"
-    );
-    var updateInstalledVersion = (File.Exists(path: updateCurrentPointerPath)
-        ? File.ReadAllText(path: updateCurrentPointerPath).Trim()
-        : string.Empty
-    );
-
-    if (updateInstalledVersion.Length == 0) {
-        updateInstalledVersion = (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0");
-    }
+    // The version this process runs as is the version directory its registration holds: health is recorded for exactly
+    // that install, and version monotonicity is judged from it. A process outside any install reports the compiled
+    // assembly version; updates re-check the release record's current version under the install's transaction.
+    var updateInstalledVersion = (Puck.Confinement.InstallRegistration.Process?.Version
+        ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0");
     services.AddSelfUpdate(
         options: new Puck.Launcher.Release.UpdateOptions(
             App: "puck.world",

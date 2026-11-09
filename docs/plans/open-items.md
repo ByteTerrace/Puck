@@ -50,8 +50,8 @@ milestone. The owner requested its baseline and implementation plan, which
 
 0. [Duplication audit](#refactoring-campaign) [high, the owner's priority]: the
    seven-lane audit's drifted copies and boundary duplicates are fixed first
-   (done for tooling, physics and world contact, and rendering; the state and
-   rules audit is still open), then its live copies as a batch, and
+   (done for tooling, physics and world contact, rendering, and state and
+   rules), then its live copies as a batch, and
    small helpers ride along. Each audit lane's remaining findings are filed in
    the refactoring packet as its fix lane lands. Duplicates are fixed when found
    (AGENTS.md); this item is the backlog the audit surfaced.
@@ -660,20 +660,10 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
-  (`TryGetValue` and `GetValueRefOrAddDefault` in
-  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
-  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
-  edge bit and schedule in one entry of one table. The state hash sorts the
-  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
-  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
-  from the unhashed schedule cache. The host's interaction path still resolves
-  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
-  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
-  `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
-  success (`GeneratorEngine.cs:567-569`, `:1407`) and the caller slices to the
+  `GeneratorEngine.TryFireBatch` passes `values.Length` to `GeneratorEngine.TryRunBatch`,
+  which writes every index in that range before success, and the caller slices to the
   lattice's cell count (`:54-57`), but the determinism of the paint rests on
   that loop. Keep the buffer with the lattice that owns the row, sized once, so
   whatever it holds is that row's own earlier paint.
@@ -1366,7 +1356,8 @@ retirement.
   `../../standard/camera` and `../standard/standard`. Carry the packages a
   package imports, as the published World's `compile --tree worlds` now does.
 - [low] The launcher's version pruning (the owner's ruling: keep `current`,
-  `last-good` and the newest N, delete the rest) is rebuilt by handle:
+  `last-good`, which the release record's rollback target now is, and the newest N,
+  delete the rest) is rebuilt by handle:
   `Puck.Confinement`'s `ConfinedDirectory` and `InstallRegistration`, and
   `InstallPruner`, with the invariants in the
   [launcher README](../../src/Puck.Launcher/README.md#pruning-past-versions) and
@@ -2533,6 +2524,34 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      engine header (and key its incremental check on the header) first; the group
      accumulators differ per kernel, so only the two-line scale helper is shared.
 
+State and rules audit remainder (paths under `src/`):
+
+- [low · owner: state] The rule VM's latch keeps a binding in two dictionaries:
+  `RuleLatch.RuleState.Held` (`Puck.State.Rules/Evaluation/RuleLatch.cs:72`)
+  and `RuleLatch.RuleState.Scheduling` (`:76`), both walked by
+  `RuleLatch.EndSweep` (`:495`) after each swept rule. Shared home: one binding
+  entry in `RuleLatch.RuleState`, holding the edge bit and schedule together.
+  Keep the hashed, checkpointed bit apart from the unhashed schedule cache:
+  `RuleLatch.AppendStateHash` sorts binding identities and folds their edge bits;
+  schedule caches stay out.
+  This needs the journal-participant and lifecycle writers moved together,
+  with latch and undo checks plus the rule-faults reproduce run. The host's
+  interaction path also resolves its `RuleState` by name per tick
+  (`IRuleOwner.TryEvaluateOwn` carries no state); the evaluator's own family
+  walk reads them from `RuleLatch.States`.
+- [medium · owner: body programs] `WorldBody.GateOpen`
+  (`Puck.World.Server/WorldBody.ActionState.cs:551`) interprets a postfix
+  `CompiledPredicate[]` beside `RuleEvaluation.Decide`
+  (`Puck.State.Rules/Evaluation/RuleEvaluation.cs:64`). Both share
+  `GateProgramEvaluator`'s Boolean stack operations, but body predicates still
+  have a separate dispatch over recency clocks, counters, timers and held
+  input. Shared home: operands and gate programs in `Puck.State.Rules`, with
+  body facts served by the World host. Move the predicates and their validation
+  together; retain the body's recency and timer continuation when doing so.
+  This is a body-program lowering change, beyond the local duplication fix
+  pass. Check it through the debug world's authored body-action scenarios and
+  their reproduce runs.
+
 Rendering duplicates the dup-render audit found (paths under `src/`):
 
 - [medium · owner: author shaders] The generated light phase recomputes what
@@ -3461,6 +3480,12 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
+- [low] Fourteen `WorldAuthorityBlobStoreTests` cases throw in setup: their
+  stores take a plain directory target whose per-blob budget (64 MiB) is below
+  the checkpoint bound `WorldAuthorityBlobStore`'s constructor guard requires.
+  Every production caller sizes its target with
+  `WorldAuthorityBlobStore.DirectoryTarget`; the fixture should too, or be
+  deleted with its suite.
 - [low] Four `SessionObservationLawTests.ReadDoors` cases fail on
   `WorldStateReadView.Of` (`SessionObservationLawTests.ReadDoors.cs`), seen by
   the disc-4-fix lane; likely older than it, unconfirmed.
@@ -4123,31 +4148,16 @@ brief's priorities ([security review](../development/security-review.md)).
   credential selection, with a bound-seat positive control and an unbound-link
   refusal case.
 
-- [medium, confirmed] Rejected payload selection (verified finding 2.1;
-  [the updater policy memo](updater-policy.md)).
-  `StubInstall.RevertToLastGood` cancels the failed version's intent but records
-  no durable rejection; `StubHealth.IncrementAndFlush` replaces its single health
-  slot on the fallback launch. `AttestationReleaseVerifier.Verify` admits fresh
-  higher-sequence authorization for the same failed payload, and
-  `InstallPruner.Prune` ranks inactive installs without rejection status. This
-  requires new valid signed authorization, not replay of a consumed sequence.
-  Next: persist the installed payload's complete identity and rejection before
-  rollback, consult it at install selection and retention, and prove that rollout
-  metadata progression cannot retry identical rejected content while changed
-  payloads remain eligible. Keep this state separate from transient launch attempts.
-- [medium, confirmed] Revoked rollback candidate (verified finding 2.2;
-  [the updater policy memo](updater-policy.md)).
-  `AttestationReleaseVerifier.Verify` rejects a manifest that revokes itself but
-  does not persist its other revocations. `FileUpdateApplier.Apply` can retain a
-  revoked current as last-good; `StubDecisionTable.Decide` checks generations and
-  attempts, and `StubInstall.RevertToLastGood` publishes that candidate without
-  revocation selection. Next: share persisted accepted revocations across every
-  launch and rollback selection; select an allowed, state-compatible proven
-  candidate or refuse rollback. Prove the signed-release → failed-startup →
-  revoked-last-good schedule, including interruption during policy publication.
-  `ReleaseManifest.MinimumSupported` remains update eligibility, not an invented
-  persistent rollback floor. Implement alongside rejected-payload selection so
-  updater, stub and pruner use one durable policy mechanism.
+- [low, unverified] The release record's power-loss guarantee
+  ([the updater policy plan](updater-policy.md#durable-publication-u04-u05))
+  rests on `AtomicFile.WriteAllBytesDurably` (a post-rename directory `fsync` on
+  Linux, `MOVEFILE_WRITE_THROUGH` on Windows) and on flushing staged payload
+  files before the commit that selects them; that a newly created payload
+  file's directory entry is durable on NTFS once a later write-through move
+  commits is an inference from NTFS metadata journalling. Next: a power-cut
+  rig (or a block-device fault injector such as dm-log-writes on Linux)
+  replaying an apply and a stub rollback, cut at each write, showing the record
+  never selects a version whose files or install record are missing.
 
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes (`state-correctness`, `disclosure-2`) did not reach, and

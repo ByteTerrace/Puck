@@ -210,15 +210,19 @@ health writer (`HealthGateFile`, not `Program`). Its hosted service first
 registers the process (`InstallRegistration`: waits for `update.lock` without a
 deadline, confirms by identity that `versions/<name>` is the directory its entry
 assembly was loaded from, and holds it until exit, or fails the start with the
-reason). It then holds the same persistent `update.lock` as the stub and
-updater, checks that current names the registered version, deletes the health
-marker and runs one `InstallPruner` pass. Pruning and its invariants are in the
+reason; registration also requires the release record to admit its version).
+It then begins an `InstallTransaction` (the same persistent `update.lock` as
+the stub and updater), records health when the record's current version is the
+registered one (`RecordHealthy`), and runs one `InstallPruner` pass. Pruning and its invariants are in the
 [launcher README](../../../../src/Puck.Launcher/README.md#pruning-past-versions);
 every removal goes through `Puck.Confinement`'s handle-held directories, never a
 path, and the stub holds its child's version the same way. `InstallPruneLawTests`
-pins each review finding against it. The applier promotes current to
-last-good only with no marker, then writes pending health before swapping current;
-two applies before a launch must never promote an unstarted version. Missing/corrupt state generations refuse rollback.
+pins each review finding against it. One release record,
+`state/release-policy.json` (`ReleasePolicy`), holds current, per-payload launch
+attempts, identity-bound proofs, rejections, revocations and the state generation
+floor; only `InstallTransaction` writes it, one durable commit per transition, and
+an unproven version is never a rollback target. A current version without a valid
+install record refuses launch ([the plan](../../../../docs/plans/updater-policy.md)).
 Replay reservation precedes the durable recovery intent; interruption between
 them needs a fresh signed release. `UpdateRecoveryHardeningTests` and
 `UpdateInstallTransactionTests` cover these boundaries, including killed processes.
