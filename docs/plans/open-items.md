@@ -36,22 +36,9 @@ what it surfaces is fixed at the cause.
 
 Owed at the integration tip, for whoever leads next:
 
-- a quiet frame-p99 window for the frame bar, the machine to itself, now that
-  the frame-cpu-2 lane's allocation cuts have landed (its readings were not
-  quiet: spawn 50 of 1200 frames over 16.7 ms, flight B 63 of 878);
-- Codex reviews of the trust-boundary and GPU-lifetime changes that landed
-  without one: the deal displacement (`WorldPlacementFrameCompilation.LocalFrame`,
-  `WorldPlacementDeal.Reconcile`, `WorldStateDisclosure.Shown`) and the
-  vk-glass-loss lane's whole-target clear (`SdfWorldPassRecorder.RecordMesh`)
-  and device-address report (`VulkanDeviceAddressBindings`);
-- a look at glass and water under a roof on both backends, since glass now
-  gathers the irradiance probes (`SdfFrameBlock.WriteInto`);
-- the duplicate found at the cold-bake lane's landing, dispatched rather than
-  left here: the reciprocal divisor and packed-pair comparer (refactoring
-  campaign), and the branch-scoped duplicate check (agent tooling);
-- the swallow (`worlds/debug/birds.puck`, not imported): rebuilt to the visual
-  bar from references, then its idle rig once the animated bake holds
-  ([the visual bar](#the-visual-bar)). Work whose correctness rests
+- a Vulkan look at glass under a roof, the pair of the Direct3D 12 look the
+  visual bar packet records (glass gathers the irradiance probes,
+  `SdfFrameBlock.WriteInto`), in the next batch window. Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -84,9 +71,10 @@ milestone. The owner requested its baseline and implementation plan, which
    4.4 to 2.2 ms at spawn, 3.4 to 1.8 at the teal roof, 2.0 to 1.4 at flight B
    and 2.0 to 1.1 at the studio on Direct3D 12, and the root view to 10 to 12 ms
    of GPU at every one of those stops, under the bar with headroom; the frame
-   p50 sits at the display rate there, and what remains over 16.7 ms at p99 is
-   the CPU side, read under a loaded machine, so a quiet-window `bench frames`
-   pair is owed before the p99 is called. The frame thread's CPU side now
+   p50 sits at the display rate there. Measured quiet, the studio and the
+   meadow meet the bar at p99 and the teal roof and flight B do not; the teal
+   roof drops more than 1% of its frames to a doubled display period (lane
+   frame-teal). The frame thread's CPU side now
    reads apart: `host.frames` splits produce into `produce-work` and
    `produce-fence` (time blocked on submission fences) and prints the frame
    thread's allocated bytes per iteration. A headless debug World's tick
@@ -1601,6 +1589,25 @@ by `world.view.pick`.
 - [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
   meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
   every colour out, the lawn to pale yellow-green and deep teal to sky blue.
+- [high] The hall's interiors read near black at noon. The exposure floor
+  (`worlds/debug/hall.puck`, `exposure.minimum`, EV 7 from dawn to dusk) holds
+  view 0 at EV 7 in the devices room, where the probes meter 9 to 15 nits and
+  the metered exposure with the authored compensation is about EV 4.5: about
+  two and a half stops under, so the walls, floor and devices read as murk.
+  The floor exists so the moonlit valley reads at night; a daytime floor that
+  clamps every dim interior is the wrong lever. Decide the interiors' look
+  (lamps, fill, or an exposure that meters them) against the gallery's
+  references, then judge every room.
+- [medium] The Humble Gaming Brick's atomic-orange glass shell
+  (`worlds/debug/devices.puck`, `device-humble-gaming-brick`) reads as an
+  opaque deep red even at a pinned exposure that shows the room (EV 4.5): the
+  board, chips and cells behind it do not show through. On Direct3D 12 the
+  probe gather leaks no sky light into it under the roof (it reads as dim as
+  its surroundings, neither glowing nor black).
+- [low] `world.indirect off` leaves auto exposure metering the probes (view 0
+  read 15.272 nits before and after the toggle) while the frame turns white at
+  EV 4.5 in the devices room: the lever's fallback ambient lights an interior
+  as if it stood under the open sky, and the meter does not follow it.
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen; `view.override camera look ...` took over. Find
   why a named world camera row does not replace the view.
