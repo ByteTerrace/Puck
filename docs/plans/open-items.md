@@ -3446,6 +3446,12 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
+- [low] Fourteen `WorldAuthorityBlobStoreTests` cases throw in setup: their
+  stores take a plain directory target whose per-blob budget (64 MiB) is below
+  the checkpoint bound `WorldAuthorityBlobStore`'s constructor guard requires.
+  Every production caller sizes its target with
+  `WorldAuthorityBlobStore.DirectoryTarget`; the fixture should too, or be
+  deleted with its suite.
 - [low] Four `SessionObservationLawTests.ReadDoors` cases fail on
   `WorldStateReadView.Of` (`SessionObservationLawTests.ReadDoors.cs`), seen by
   the disc-4-fix lane; likely older than it, unconfirmed.
