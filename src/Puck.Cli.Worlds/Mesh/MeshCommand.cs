@@ -246,7 +246,7 @@ public static class MeshCommand {
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  history: {bakes.Count} stored bake(s) of this field\n");
         foreach (var (written, name, report) in bakes.OrderBy(keySelector: static bake => bake.Written).ThenBy(keySelector: static bake => bake.Name, comparer: StringComparer.Ordinal)) {
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"    {written:yyyy-MM-dd HH:mm}Z {name[..8]}: {report.Triangles} triangles, score {report.Score:0.0}, face p99 {report.NormalError.P99:0.0} over {report.NormalError.Over}, shading p99 {report.ShadingError.P99:0.0} over {report.ShadingError.Over}, loose {report.SlopeDeficit.Over}, {report.Folds} folds, {report.Flipped} flipped, off p99 {Millimetres(metres: report.CentroidError.P99)} mm, {report.MissingCrossings} uncovered\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"    {written:yyyy-MM-dd HH:mm}Z {name[..8]}: {report.Triangles} triangles, score {report.Score:0.0}, face p99 {report.NormalError.P99:0.0} over {report.NormalError.Over}, shading p99 {report.ShadingError.P99:0.0} over {report.ShadingError.Over}, rough p99 {report.RoughError.P99:0.0} over {report.RoughError.Over}, loose {report.SlopeDeficit.Over}, {report.Folds} folds, {report.Flipped} flipped, off p99 {Millimetres(metres: report.CentroidError.P99)} mm, {report.MissingCrossings} uncovered\n");
         }
     }
     // Whether a mesh's vertices lie on a field: a sample of them spread over its vertex list, nearly all within reach.
@@ -274,7 +274,7 @@ public static class MeshCommand {
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {report.Triangles} triangles, {report.Vertices} vertices, cell {Millimetres(metres: report.Cell)} mm, score {report.Score:0.0}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  off surface (mm): vertex {Statistic(statistic: report.VertexError, scale: 1000f)} | centroid {Statistic(statistic: report.CentroidError, scale: 1000f)} | midpoint {Statistic(statistic: report.MidpointError, scale: 1000f)}\n");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)}\n");
+        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered\n");
         for (var rank = 0; (rank < Math.Min(val1: top, val2: report.Clusters.Count)); rank++) {
@@ -393,7 +393,7 @@ public static class MeshCommand {
         if (outcome.Owner is { } owner) {
             builder.Append(provider: CultureInfo.InvariantCulture, handler: $" (author {Point(point: owner.ToAuthor(world: world))})");
         }
-        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg at {Point(point: outcome.ToWorld(arg: cluster.Worst))}");
+        builder.Append(provider: CultureInfo.InvariantCulture, handler: $" extent {Millimetres(metres: cluster.Extent.X)}x{Millimetres(metres: cluster.Extent.Y)}x{Millimetres(metres: cluster.Extent.Z)} mm, {cluster.Samples} samples ({cluster.Off} off, {cluster.Turned} turned, {cluster.Shaded} shaded, {cluster.Rough} rough, {cluster.Folded} folded, {cluster.Missing} uncovered), worst {Millimetres(metres: cluster.WorstError)} mm / {cluster.WorstNormal:0} deg at {Point(point: outcome.ToWorld(arg: cluster.Worst))}");
         if (cluster.WorstFacing != Vector3.Zero) {
             builder.Append(provider: CultureInfo.InvariantCulture, handler: $" facing {Direction(direction: cluster.WorstFacing)} against gradient {Direction(direction: cluster.WorstGradient)}");
         }

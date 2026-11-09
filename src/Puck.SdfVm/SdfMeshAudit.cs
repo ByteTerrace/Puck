@@ -17,6 +17,13 @@ public sealed record SdfMeshAuditOptions {
     /// <summary>Gets the angle, in degrees, between a triangle's normal and the field's gradient past which the triangle
     /// is flagged.</summary>
     public float NormalDegrees { get; init; } = 30f;
+    /// <summary>Gets the angle, in degrees, between a smooth vertex's shading normal and the field's gradient at the
+    /// vertex past which the vertex is flagged rough.</summary>
+    public float RoughDegrees { get; init; } = 10f;
+    /// <summary>Gets the probe step, in the mesh's cells, of the field gradient a smooth vertex's shading normal is
+    /// measured against: wide enough that relief under the cell averages out, narrow enough that the surface's own
+    /// curvature does not.</summary>
+    public float RoughCells { get; init; } = 0.25f;
     /// <summary>Gets the samples along the longest axis of the lattice the field's zero set is found on.</summary>
     public int MissingSamples { get; init; } = 48;
     /// <summary>Gets the most clusters a report keeps, worst first.</summary>
@@ -63,6 +70,9 @@ public readonly record struct SdfMeshAuditShapeCount(string Name, int Count);
 /// <param name="WorstNormal">The largest normal error among them, in degrees.</param>
 /// <param name="Shapes">The shapes whose own surfaces lie nearest its center, nearest first.</param>
 public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float Score, int Samples, int Off, int Turned, int Shaded, int Folded, int Missing, float WorstError, float WorstNormal, IReadOnlyList<SdfMeshAuditShape> Shapes) {
+    /// <summary>Gets the smooth vertices whose shading normals stray from the gradient across a fraction of a cell among
+    /// them (<see cref="SdfMeshAuditReport.RoughError"/>).</summary>
+    public int Rough { get; init; }
     /// <summary>Gets the position of its most severe sample, in the group's frame.</summary>
     public Vector3 Worst { get; init; }
     /// <summary>Gets the unit direction the mesh faces at its most severe sample (the wound face normal of a turned
@@ -87,6 +97,9 @@ public sealed record SdfMeshAuditCluster(Vector3 Center, Vector3 Extent, float S
 /// degrees.</param>
 /// <param name="ShadingError">The largest angle between a triangle's corners' shading normals and the field's gradient at
 /// its centroid, in degrees: what the normals debug view draws.</param>
+/// <param name="RoughError">The angle between each smooth vertex's shading normal and the field's gradient at the vertex
+/// across <see cref="SdfMeshAuditOptions.RoughCells"/> of a cell, in degrees: relief under the mesh's cell that the
+/// surface the field describes at that scale does not have, which shading shows as mottling.</param>
 /// <param name="SlopeDeficit">How far the length of the field's gradient at each triangle's centroid falls short of a
 /// distance's one: past one less <see cref="SdfMeshAuditOptions.LooseSlope"/>, the field there is a loose bound.</param>
 /// <param name="LooseShapes">The shapes that make the field loose over its triangles, with how many triangles each,
@@ -109,6 +122,7 @@ public sealed record SdfMeshAuditReport(
     SdfMeshAuditStatistic MidpointError,
     SdfMeshAuditStatistic NormalError,
     SdfMeshAuditStatistic ShadingError,
+    SdfMeshAuditStatistic RoughError,
     SdfMeshAuditStatistic SlopeDeficit,
     IReadOnlyList<SdfMeshAuditShapeCount> LooseShapes,
     int Folds,
@@ -232,6 +246,8 @@ public static class SdfMeshAudit {
     private const float DegenerateRatio = 0.002f;
     // The samples of a cluster its shapes are named at.
     private const int ProbeCount = 16;
+    // Two copies of a welded vertex carry one normal when their normals' dot product reaches this, within a degree.
+    private const float CopyAgreement = 0.99985f;
 
     /// <summary>Returns the field a bake group samples, as one program: its instructions in order, each transform into a
     /// dynamic slot replaced by the translation and rotation the group's geometry posed that slot at
@@ -456,8 +472,7 @@ public static class SdfMeshAudit {
                 var straying = Vector3.Zero;
 
                 for (var corner = 0; (corner < 3); corner++) {
-                    var normal = normals[(int)indices[(3 * triangle) + corner]];
-                    var unit = ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero);
+                    var unit = Unit(normal: normals[(int)indices[(3 * triangle) + corner]]);
                     var angle = Angle(first: unit, second: gradients[triangle]);
 
                     if (angle > worst) {
@@ -479,6 +494,8 @@ public static class SdfMeshAudit {
                 flagged.Add(item: new Sample(Kind: SampleKind.Turned, Position: ((a + b + c) / 3f), Severity: (degrees / 90f), Value: degrees) { Facing = (winding * faceNormals[triangle]), Gradient = gradients[triangle] });
             }
         }
+
+        var roughErrors = Rough(cell: cell, field: field, flagged: flagged, normals: normals, options: options, positions: positions, welded: welded);
 
         // Edges: midpoints off the surface, folds, open and non-manifold edges.
         var midpointErrors = new float[edges.Count];
@@ -523,6 +540,7 @@ public static class SdfMeshAudit {
             NormalError: Statistic(over: options.NormalDegrees, values: normalErrors),
             ShadingError: Statistic(over: options.NormalDegrees, values: shadingErrors),
             OpenEdges: open,
+            RoughError: Statistic(over: options.RoughDegrees, values: roughErrors),
             Score: flagged.Sum(selector: static sample => sample.Severity),
             Slivers: slivers,
             Triangles: triangles,
@@ -604,6 +622,53 @@ public static class SdfMeshAudit {
 
         return (float.IsFinite(f: slope.X) && float.IsFinite(f: slope.Y) && float.IsFinite(f: slope.Z)) ? slope : Vector3.Zero;
     }
+    // Each smooth vertex's shading normal against the field's gradient at the vertex across RoughCells of a cell, in
+    // degrees, one entry per welded position (NaN for a copy, a crease or a mesh with no normals), flagging those past
+    // RoughDegrees. A smooth vertex is one whose copies all carry one normal: at a crease each copy carries its own face's
+    // side, which no single gradient at the shared position answers, and the shading check (Shaded) judges those. The
+    // shading check compares a corner against the gradient at its triangle's centroid, which the surface's curvature over
+    // half a cell turns as far as relief does; measured at the vertex, a smooth bake's normal is the field's gradient, so
+    // what is left is relief under the cell, such as a field whose rounding the bake's gradient taps read.
+    private static float[] Rough(SdfFieldEvaluator field, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals, int[] welded, float cell, SdfMeshAuditOptions options, List<Sample> flagged) {
+        var errors = new float[(normals.IsEmpty ? 0 : positions.Length)];
+
+        if (normals.IsEmpty) { return errors; }
+        Array.Fill(array: errors, value: float.NaN);
+
+        var creased = new bool[positions.Length];
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            var root = welded[vertex];
+
+            if ((root != vertex) && !(Vector3.Dot(vector1: Unit(normal: normals[vertex]), vector2: Unit(normal: normals[root])) >= CopyAgreement)) {
+                creased[root] = true;
+            }
+        }
+
+        var step = MathF.Max(options.GradientStep, (options.RoughCells * cell));
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            var normal = Unit(normal: normals[vertex]);
+
+            if ((welded[vertex] != vertex) || creased[vertex] || (normal == Vector3.Zero)) { continue; }
+
+            var slope = Slope(field: field, point: positions[vertex], step: step);
+            var length = slope.Length();
+
+            if (!(length > 0f)) { continue; }
+
+            var gradient = (slope / length);
+            var degrees = Angle(first: normal, second: gradient);
+
+            errors[vertex] = degrees;
+            if (degrees > options.RoughDegrees) {
+                flagged.Add(item: new Sample(Kind: SampleKind.Rough, Position: positions[vertex], Severity: (degrees / 90f), Value: degrees) { Facing = normal, Gradient = gradient });
+            }
+        }
+
+        return errors;
+    }
+    private static Vector3 Unit(Vector3 normal) => ((normal.LengthSquared() > 0f) ? Vector3.Normalize(value: normal) : Vector3.Zero);
     /// <summary>Reads a field's unit gradient at a point in its frame.</summary>
     /// <param name="field">The field.</param>
     /// <param name="point">The point, in metres.</param>
@@ -822,8 +887,9 @@ public static class SdfMeshAudit {
                     Shaded: samples.Count(predicate: static sample => (sample.Kind == SampleKind.Shaded)),
                     Turned: samples.Count(predicate: static sample => (sample.Kind == SampleKind.Turned)),
                     WorstError: samples.Where(predicate: static sample => (sample.Kind is SampleKind.Off or SampleKind.Missing)).Select(selector: static sample => sample.Value).DefaultIfEmpty(defaultValue: 0f).Max(),
-                    WorstNormal: samples.Where(predicate: static sample => (sample.Kind is SampleKind.Turned or SampleKind.Shaded)).Select(selector: static sample => sample.Value).DefaultIfEmpty(defaultValue: 0f).Max()
+                    WorstNormal: samples.Where(predicate: static sample => (sample.Kind is SampleKind.Turned or SampleKind.Shaded or SampleKind.Rough)).Select(selector: static sample => sample.Value).DefaultIfEmpty(defaultValue: 0f).Max()
                 ) {
+                    Rough = samples.Count(predicate: static sample => (sample.Kind == SampleKind.Rough)),
                     Axis = Spread(center: center, samples: samples),
                     Probes = [.. Enumerable.Range(start: 0, count: Math.Min(samples.Length, ProbeCount)).Select(selector: probe => samples[(probe * samples.Length) / Math.Min(samples.Length, ProbeCount)].Position)],
                     Worst = samples.MaxBy(keySelector: static sample => sample.Severity).Position,
@@ -917,6 +983,7 @@ public static class SdfMeshAudit {
         Off,
         Turned,
         Shaded,
+        Rough,
         Folded,
         Missing,
     }
