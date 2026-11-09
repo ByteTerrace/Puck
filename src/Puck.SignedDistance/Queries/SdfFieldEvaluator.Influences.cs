@@ -7,12 +7,21 @@ public sealed partial class SdfFieldEvaluator {
     private FixedQ4816[] m_influenceLow = [];
     private FixedQ4816[] m_influenceHigh = [];
 
-    /// <summary>Reads the gradient of the second owner's share after the selected pair is renormalized.
-    /// Central differences use a fixed 1/1024-unit stencil, independent of backend, tessellation and vertex normal.</summary>
-    public bool ReadInfluenceGradient(FixedPosition position, IReadOnlyList<int> shapeOwners, int ownerCount, int first, int second, out FixedVector3 gradient) {
+    /// <summary>Reads the gradient of the second owner's share after the selected pair is renormalized, by central
+    /// differences a fixed step either way along each axis: a function of the field and the point alone, independent of
+    /// backend, tessellation and vertex normal.</summary>
+    /// <param name="position">The exact rest point.</param>
+    /// <param name="shapeOwners">One zero-based owner index per shape instruction, in stream order.</param>
+    /// <param name="ownerCount">The owners.</param>
+    /// <param name="first">The first owner of the pair.</param>
+    /// <param name="second">The owner whose share is differentiated.</param>
+    /// <param name="step">The stencil's half width, in field units; positive and narrower than the blend zone it
+    /// differentiates.</param>
+    /// <param name="gradient">Receives the gradient, in reciprocal field units.</param>
+    /// <returns>False when a tap leaves the field or the pair holds no share there.</returns>
+    public bool ReadInfluenceGradient(FixedPosition position, IReadOnlyList<int> shapeOwners, int ownerCount, int first, int second, FixedQ4816 step, out FixedVector3 gradient) {
         gradient = FixedVector3.Zero;
         if (m_influenceLow.Length != ownerCount) { m_influenceLow = new FixedQ4816[ownerCount]; m_influenceHigh = new FixedQ4816[ownerCount]; }
-        var step = FixedQ4816.FromRawBits(value: 64);
         Span<FixedQ4816> derivatives = stackalloc FixedQ4816[3];
 
         for (var axis = 0; (axis < 3); axis++) {
@@ -71,7 +80,10 @@ public sealed partial class SdfFieldEvaluator {
         public void Leaf(in CompiledInstruction instruction, FixedQ4816 current, FixedQ4816 candidate, int owner) {
             if ((owner < 0) || (owner >= count)) { Valid = false; return; }
             var vector = m_vectors[m_depth];
-            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, !vector.Where(predicate: (value, at) => ((value != FixedQ4816.Zero) && (at != owner))).Any());
+            var alone = true;
+
+            for (var at = 0; (alone && (at < count)); at++) { alone = ((at == owner) || (vector[at] == FixedQ4816.Zero)); }
+            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, alone);
 
             for (var at = 0; (at < count); at++) {
                 vector[at] = FixedQ4816.Lerp(vector[at], ((at == owner) ? FixedQ4816.One : FixedQ4816.Zero), share);
@@ -81,7 +93,7 @@ public sealed partial class SdfFieldEvaluator {
             if (instruction.ScopeScale > 0L) { candidate = ScaleScope(candidate: candidate, scale: instruction.ScopeScale); }
             var child = m_vectors[m_depth--];
             var parent = m_vectors[m_depth];
-            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, (parent.SequenceEqual(other: child) || parent.All(predicate: v => (v == FixedQ4816.Zero))));
+            var share = Share(instruction.Blend, instruction.Data1X, current, candidate, (parent.AsSpan().SequenceEqual(other: child) || !parent.AsSpan().ContainsAnyExcept(value: FixedQ4816.Zero)));
 
             for (var at = 0; (at < count); at++) { parent[at] = FixedQ4816.Lerp(parent[at], child[at], share); }
         }

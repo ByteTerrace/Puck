@@ -34,28 +34,18 @@ float3 sdfMeshPreviousRow(uint record, uint row) {
 
     return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
 }
-// Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, then
-// under the draw's previous matrix, or, for a vertex
-// riding a member, under that member's slot's previous transform; then under the draw's carry, as its current position
-// is (sdfMeshWorldPosition).
+// Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, skinned
+// under its members' previous transforms (sdfMeshSkinPose), then under the draw's previous matrix and its carry, as its
+// current position is (sdfMeshWorldVertex).
 float3 sdfMeshPreviousPosition(uint record, uint k) {
     float3 unused = float3(0.0, 1.0, 0.0);
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), true, unused);
     if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_SKIN_FLAG) != 0u) {
-        uint vertex = sdfMeshIndexAt(record, k);
-        uint first = sdfMeshMemberEntry(record, vertex);
-        uint second = sdfMeshSecondEntry(record, vertex);
-        uint root = asuint(asint(sdfMeshRegion[record + SDF_MESH_FRAME_SLOT_WORD]));
-        float3 rp = sdfPreviousDynamicTransforms[3u * root].xyz;
-        float4 rq = sdfPreviousDynamicTransforms[3u * root + 1u];
-        uint s0 = first == 0u ? root : sdfMeshMemberSlot(record, first);
-        uint s1 = second == 0u ? root : sdfMeshMemberSlot(record, second);
-        float4 q0, q1;
-        float3 t0, t1;
-        float scale = length(sdfMeshPreviousRow(record, 0u));
-        sdfMeshMemberDelta(first, rp, rq, scale, sdfPreviousDynamicTransforms[3u * s0].xyz, sdfPreviousDynamicTransforms[3u * s0 + 1u], q0, t0);
-        sdfMeshMemberDelta(second, rp, rq, scale, sdfPreviousDynamicTransforms[3u * s1].xyz, sdfPreviousDynamicTransforms[3u * s1 + 1u], q1, t1);
-        object = sdfMeshBlendPose(record, vertex, object, unused, q0, t0, q1, t1);
+        SdfMeshSkinSlots slots = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, k));
+        object = sdfMeshSkinPose(slots, object, unused, length(sdfMeshPreviousRow(record, 0u)),
+            sdfPreviousDynamicTransforms[3u * slots.root].xyz, sdfPreviousDynamicTransforms[3u * slots.root + 1u],
+            sdfPreviousDynamicTransforms[3u * slots.s0].xyz, sdfPreviousDynamicTransforms[3u * slots.s0 + 1u],
+            sdfPreviousDynamicTransforms[3u * slots.s1].xyz, sdfPreviousDynamicTransforms[3u * slots.s1 + 1u]);
     }
 
     return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +

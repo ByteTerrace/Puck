@@ -211,7 +211,7 @@ internal static unsafe class SdfMeshStoreCodec {
         if ((blends.Length != xy.Length) || (blends.Length != z.Length)) { throw new InvalidDataException(message: "Invalid influence planes."); }
         var influences = new SdfMeshInfluence[blends.Length];
 
-        for (var index = 0; (index < influences.Length); index++) { influences[index] = new(Blend: blends[index], GradientXY: xy[index], GradientZ: z[index]); }
+        for (var index = 0; (index < influences.Length); index++) { influences[index] = new(blend: blends[index], gradientXY: xy[index], gradientZ: z[index]); }
         var levels = new SdfMeshLevel[Count(itemBytes: 14, reader: reader)];
 
         for (var index = 0; (index < levels.Length); index++) {

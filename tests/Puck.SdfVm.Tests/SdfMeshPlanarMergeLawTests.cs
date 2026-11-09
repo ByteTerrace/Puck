@@ -17,7 +17,7 @@ public sealed class SdfMeshPlanarMergeLawTests {
         var plane = Plane(material: static (_, _) => 0, member: static (_, _) => SdfMesh.NoMember);
 
         foreach (var share in new ushort[] { 0, 32768 }) {
-            var tuple = SdfMeshInfluence.Pack(second: 0, share: share, gradient: Vector3.UnitX);
+            var tuple = SdfMeshSkinTuple.Of(first: SdfMesh.NoMember, gradient: Vector3.UnitX, second: 0, share: share).Influence;
             var mesh = new SdfMesh(positions: plane.Positions, indices: plane.Indices, normals: plane.Normals, triangleMaterials: plane.TriangleMaterials,
                 members: plane.Members, vertexMembers: plane.VertexMembers, influences: Enumerable.Repeat(tuple, plane.Positions.Length).ToArray());
             var merged = SdfMeshPlanarMerge.Merge(mesh: mesh);

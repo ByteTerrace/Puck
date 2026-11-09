@@ -58,6 +58,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <summary>Gets the settle rebakes' counts (<see cref="SdfMeshSettle"/>) every bake holding the library counts
     /// into, so one source reads a presentation's residencies together.</summary>
     public WorkCounterSet Settles { get; } = SdfMeshSettle.Counters();
+    /// <summary>Gets the skinned meshes' counts (<see cref="SdfMeshSkin"/>) every bake holding the library counts into:
+    /// each skinned mesh a group starts drawing, and its vertices by vertex-stage path.</summary>
+    public WorkCounterSet Skins { get; } = SdfMeshSkin.Counters();
 
     /// <summary>Gets how many geometries the library holds.</summary>
     public int Count {

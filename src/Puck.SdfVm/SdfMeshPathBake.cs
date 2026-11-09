@@ -2034,14 +2034,13 @@ public sealed partial class SdfMeshPathBake {
         group.Creases = null;
         group.Cut = null;
         // The CPU influence reading propagates owners through composition once per exact position. Copies at a
-        // crease or material cut carry the same motion, independently of their normals.
-        var skinned = ((mesh is not null) && group.Dynamic && group.Geometry.Poses.Keys.Any(predicate: slot => (slot != group.Slot)));
-
-        if (skinned) {
-            mesh = SdfMeshSkin.Build(group: group, mesh: mesh!, program: m_program!, refusal: out var refusal);
+        // crease or material cut carry the same motion, independently of their normals. It reads the group's own
+        // instructions (SdfMeshSkinSource), so the skin stays a function of the geometry the mesh is stored under.
+        if ((mesh is not null) && (group.Skin is { } skin)) {
+            mesh = SdfMeshSkin.Build(mesh: mesh, refusal: out var refusal, skin: skin);
             if (mesh is null) {
                 SdfMeshBakeReport.SkinSplit(group.Selector, group.Sealed, refusal);
-                mesh = SdfMeshSkin.Split(group: group, program: m_program!);
+                mesh = SdfMeshSkin.Split(skin: skin);
             }
         }
         lock (m_gate) { m_accounts.CutEdges += edges; }
@@ -2282,15 +2281,16 @@ public sealed partial class SdfMeshPathBake {
 
                 m_mesh = (Retired ? null : value);
                 if (Retired) { value?.Release(); }
-                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) { owner.m_productRevision++; }
+                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) {
+                    owner.m_productRevision++;
+                    if (m_mesh is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: m_mesh); }
+                }
                 old?.Release();
             }
         }
 
-        private bool? m_readsOtherSlots;
-
         // Whether the group's geometry reads a slot besides its own: a skinned group, whose members drift (Settle).
-        public bool ReadsOtherSlots => (m_readsOtherSlots ??= (Dynamic && Geometry.Poses.Keys.Any(predicate: slot => (slot != Slot))));
+        public bool ReadsOtherSlots => (Skin is not null);
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
@@ -2363,6 +2363,7 @@ public sealed partial class SdfMeshPathBake {
                     m_pointMaterials?.Dispose();
                     Contour = null; Cut = null; Creases = null; Projection = null;
                     Next = null; Deferred = null;
+                    Skin?.Release();
                     Memory.Dispose();
                 }
                 if (Retired && !m_released) {

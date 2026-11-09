@@ -1064,8 +1064,10 @@ public static partial class CreationStampEmitter {
     /// <param name="textLayouts">Per-run layouts already computed by <see cref="LayoutTextRuns"/> for this same
     /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) — indexed like
     /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
-    /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
-    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
+    /// <see langword="null"/> lays every run out fresh.</param>
+    /// <param name="includes">Whether the run at an index of <see cref="CreationDocument.TextRuns"/> is emitted;
+    /// <see langword="null"/> emits every run.</param>
+    public static void EmitTextDynamic(SdfProgramBuilder builder, CreationDocument document, int dynamicSlot, float scale, Func<string?, FontAtlas> fontFor, Func<TextRunDocument, int> materialFor, IReadOnlyList<TextLayoutResult>? textLayouts = null, Func<int, bool>? includes = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontFor);
@@ -1074,6 +1076,7 @@ public static partial class CreationStampEmitter {
         var runs = (document.TextRuns ?? []);
 
         for (var index = 0; (index < runs.Count); index++) {
+            if ((includes is not null) && !includes(arg: index)) { continue; }
             var run = runs[index];
 
             var (position, rotation) = RunFrame(

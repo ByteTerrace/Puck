@@ -39,11 +39,14 @@ public sealed partial record SdfMesh {
     /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, the mesh has more than
     /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or member pose is not finite,
     /// an attribute is neither empty nor one per vertex (one per triangle for <paramref name="triangleMaterials"/>), the
-    /// mesh has more than <see cref="MaxMembers"/> members, or a vertex names no member.</exception>
-    /// <param name="influences">One second-owner tuple per skinned vertex, or empty for rigid members.</param>
+    /// mesh has more than <see cref="MaxMembers"/> members, a vertex names no member, or an influence is not
+    /// canonical.</exception>
+    /// <param name="influences">One second-owner tuple per skinned vertex, each canonical
+    /// (<see cref="SdfMeshInfluence.Canonical"/>), or empty for rigid members.</param>
     public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default, ReadOnlyMemory<SdfMeshInfluence> influences = default) {
         if (!influences.IsEmpty && ((influences.Length != positions.Length) || (vertexMembers.Length != positions.Length))) { throw new ArgumentException(message: "Influences require one complete member tuple per vertex.", paramName: nameof(influences)); }
         foreach (var influence in influences.Span) {
+            if (!influence.Canonical) { throw new ArgumentException(message: "A vertex whose share leaves one owner rides that owner first, with the rigid influence (SdfMeshSkinTuple.Of).", paramName: nameof(influences)); }
             if ((influence.Second != NoMember) && (influence.Second >= members.Length)) { throw new ArgumentException(message: "An influence names no member.", paramName: nameof(influences)); }
             if (!float.IsFinite(f: influence.Gradient.LengthSquared())) { throw new ArgumentException(message: "An influence gradient must be finite.", paramName: nameof(influences)); }
         }
@@ -895,7 +898,7 @@ public static class SdfMeshRegion {
         var perVertex = skin[(1 + (members.Length * SdfMeshRecord.MemberWords))..];
 
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            var influence = (mesh.Influences.IsEmpty ? new SdfMeshInfluence(Blend: SdfMesh.NoMember, GradientXY: 0, GradientZ: 0) : mesh.Influences.Span[vertex]);
+            var influence = (mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[vertex]);
 
             perVertex[(SdfMeshRecord.SkinVertexWords * vertex)] = vertexMembers[vertex];
             perVertex[((SdfMeshRecord.SkinVertexWords * vertex) + 1)] = influence.Blend;

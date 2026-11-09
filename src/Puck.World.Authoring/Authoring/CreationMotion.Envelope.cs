@@ -27,18 +27,8 @@ public static partial class CreationMotion {
         var parents = new int[shapes.Count];
 
         ResolveParents(parents: parents, shapes: shapes);
-        var first = new HashSet<int>();
-
-        for (var at = blend.Shape; (at >= 0); at = parents[at]) { first.Add(item: at); }
-        var common = -1;
-
-        for (var at = blend.Other; (at >= 0); at = parents[at]) {
-            if (first.Contains(item: at)) { common = at; break; }
-        }
-        var chain = new List<int>();
-
-        for (var at = blend.Shape; (at != common); at = parents[at]) { chain.Add(item: at); }
-        for (var at = blend.Other; (at != common); at = parents[at]) { chain.Add(item: at); }
+        var (firstPath, secondPath) = Paths(parents: parents, first: blend.Shape, second: blend.Other);
+        var chain = firstPath.Concat(second: secondPath).ToArray();
 
         // State-bound authored geometry has no document-only rest or seam box.
         foreach (var index in chain.Append(element: blend.Shape).Append(element: blend.Other)) {
@@ -56,42 +46,50 @@ public static partial class CreationMotion {
         // Disjoint inflated boxes have no seam to skin. Their shapes may share a group without joining here.
         if (Vector3.Min(value1: (high - low), value2: Vector3.Zero) != Vector3.Zero) { return new(Displacement: 0f, Refusal: null, Rotation: 0f, Smooth: k); }
         var theta = 0f;
-        var slides = 0f;
-        var radius = 0f;
-        var frameShift = 0f;
+        var displacement = 0f;
 
         foreach (var index in chain) {
             var shape = shapes[index];
 
             if ((document.Effectors ?? []).Any(predicate: e => ((shape.Name is { } name) && e.Chain.Contains(value: name.Value)))) { return Refuse(why: "effector motion is unbounded"); }
-            foreach (var swing in (shape.Swings ?? [])) {
-                if ((swing.Amplitude.Reference is not null) || (swing.Pivot.Reference is not null) || (swing.Axis.Reference is not null) || !BoundedWave(wave: swing.Wave)) { return Refuse(why: "swing is unbounded"); }
-                theta += MathF.Abs(x: swing.Amplitude.Value);
-                var reach = Vector3.Max(value1: Vector3.Abs(value: (low - swing.Pivot.Value)), value2: Vector3.Abs(value: (high - swing.Pivot.Value))).Length();
-
-                radius = MathF.Max(x: radius, y: reach);
-            }
-            foreach (var slide in (shape.Slides ?? [])) {
-                if ((slide.Amplitude.Reference is not null) || (slide.Axis.Reference is not null) || !BoundedWave(wave: slide.Wave)) { return Refuse(why: "slide is unbounded"); }
-                slides += MathF.Abs(x: slide.Amplitude.Value);
-            }
-            var frameAngle = 0f;
-            var shift = 0f;
-
-            foreach (var frame in (document.Frames ?? [])) {
-                if ((frame.Transforms ?? []).Any(predicate: t => ((t.Id == shape.Id) && ((t.Position.Reference is not null) || (t.Rotation.Reference is not null))))) { return Refuse(why: "timeline pose is state bound"); }
-                var (turn, translation) = FrameMotion(document: document, frame: frame, index: index);
-                frameAngle = MathF.Max(x: frameAngle, y: (2f * MathF.Acos(x: Math.Clamp(MathF.Abs(x: turn.W), 0f, 1f))));
-                shift = MathF.Max(x: shift, y: translation.Length());
-                radius = MathF.Max(x: radius, y: Vector3.Max(value1: Vector3.Abs(value: low), value2: Vector3.Abs(value: high)).Length());
-            }
-            theta += frameAngle;
-            frameShift += shift;
+            if ((shape.Swings ?? []).Any(predicate: swing => ((swing.Amplitude.Reference is not null) || (swing.Pivot.Reference is not null) || (swing.Axis.Reference is not null) || !BoundedWave(wave: swing.Wave)))) { return Refuse(why: "swing is unbounded"); }
+            if ((shape.Slides ?? []).Any(predicate: slide => ((slide.Amplitude.Reference is not null) || (slide.Axis.Reference is not null) || !BoundedWave(wave: slide.Wave)))) { return Refuse(why: "slide is unbounded"); }
+            if ((document.Frames ?? []).Any(predicate: frame => (frame.Transforms ?? []).Any(predicate: t => ((t.Id == shape.Id) && ((t.Position.Reference is not null) || (t.Rotation.Reference is not null)))))) { return Refuse(why: "timeline pose is state bound"); }
         }
-        var displacement = ((slides + frameShift) + ((2f * radius) * MathF.Sin(x: (MathF.Min(x: theta, y: MathF.PI) / 2f))));
+        // Frames: each frame carries the two sides by their chains' composed motions; the seam box's points separate by at
+        // most the largest corner's separation, since the separation is affine in the point.
+        foreach (var frame in (document.Frames ?? [])) {
+            var (firstTurn, firstShift) = PathFrameMotion(document: document, frame: frame, path: firstPath);
+            var (secondTurn, secondShift) = PathFrameMotion(document: document, frame: frame, path: secondPath);
+            var relative = Quaternion.Normalize(value: (firstTurn * Quaternion.Conjugate(value: secondTurn)));
+            var separation = 0f;
+
+            for (var corner = 0; (corner < 8); corner++) {
+                var p = new Vector3(x: (((corner & 1) == 0) ? low.X : high.X), y: (((corner & 2) == 0) ? low.Y : high.Y), z: (((corner & 4) == 0) ? low.Z : high.Z));
+
+                separation = MathF.Max(x: separation, y: Vector3.Distance(value1: (Vector3.Transform(rotation: firstTurn, value: p) + firstShift), value2: (Vector3.Transform(rotation: secondTurn, value: p) + secondShift)));
+            }
+            theta = MathF.Max(x: theta, y: (2f * MathF.Acos(x: Math.Clamp(MathF.Abs(x: relative.W), 0f, 1f))));
+            displacement = MathF.Max(x: displacement, y: separation);
+        }
+        // Slides move the seam by their amplitudes. Each swing turns the seam box, already moved by every motion counted
+        // before it, about its own pivot, so its reach grows by that displacement: a sound bound for pivots that differ.
+        foreach (var shape in chain.Select(selector: index => shapes[index])) {
+            displacement += (shape.Slides ?? []).Sum(selector: slide => MathF.Abs(x: slide.Amplitude.Value));
+        }
+        foreach (var shape in chain.Select(selector: index => shapes[index])) {
+            foreach (var swing in (shape.Swings ?? [])) {
+                var angle = MathF.Min(x: MathF.Abs(x: swing.Amplitude.Value), y: MathF.PI);
+                var reach = (Vector3.Max(value1: Vector3.Abs(value: (low - swing.Pivot.Value)), value2: Vector3.Abs(value: (high - swing.Pivot.Value))).Length() + displacement);
+
+                theta += angle;
+                displacement += ((2f * reach) * MathF.Sin(x: (angle / 2f)));
+            }
+        }
 
         return new(Displacement: displacement, Refusal: null, Rotation: theta, Smooth: k);
     }
+
 
     // Curve waveforms require the containing world's curve, absent from a creation-only proof. Driver weights,
     // including weightBy, are clamped to [0,1] by WorldGaitDrivers before ComposeDelta consumes them.

@@ -146,11 +146,12 @@ public sealed partial class WorldCreationInstances {
     // Groups with independent motion or followers retain the conservative creation-root bound. The group's instance
     // declares a part a shown member (PartOf); the probe's, with no document, none.
     private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, float materialScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden, CreationMotionPlan? motion, Vector3 boundOffset) {
-        var groupNeedsScope = GroupNeedsScope(
+        // A partition that borrows another owner's carve (CreationMotionPlan.Borrows) scopes it like any other carve.
+        var groupNeedsScope = (GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
             shapes: shapes
-        );
+        ) || ((motion is not null) && Enumerable.Range(start: fromIndex, count: (shapes.Count - fromIndex)).Any(predicate: member => motion.Borrows(renderGroup: groupId, shape: member, slot: out _))));
 
         if (ownInstance) {
             // Each shown member declares its own part, so the group bakes on a union's final lattice as a static copy's run
@@ -189,8 +190,12 @@ public sealed partial class WorldCreationInstances {
 
         for (var member = fromIndex; ((member < shapes.Count)); member++) {
             var shape = shapes[member];
+            var memberSlot = ((motion is null) ? 0 : motion.ShapeSlots[member]);
 
-            if (((shape.Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) {
+            if (
+                (((shape.Group ?? 0) != groupId) && ((motion is null) || !motion.Borrows(renderGroup: groupId, shape: member, slot: out memberSlot))) ||
+                ((hidden is not null) && hidden[member])
+            ) {
                 continue;
             }
 
@@ -228,7 +233,7 @@ public sealed partial class WorldCreationInstances {
                 : (shape.Scale * placementScale)),
                 shapePosition: shape.Position,
                 shapeRotation: shape.Rotation,
-                slot: (rootSlot + motion!.ShapeSlots[member]),
+                slot: (rootSlot + memberSlot),
                 motion: motion,
                 smooth: ((shape.Smooth ?? 0f) * placementScale),
                 twist: (shape.Twist ?? 0f),

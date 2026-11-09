@@ -21,9 +21,9 @@ public sealed class MovingBlendLawTests {
         var group = Assert.Single(collection: SdfMeshBakeGroup.Plan<SdfMeshBakeGroup>(program: program, transforms: Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity, Vector4.Zero), 3).ToArray(), farDistance: 1f, create: static (selector, dynamic) => new(dynamic: dynamic, selector: selector)));
         var mesh = new SdfMesh(positions: new Vector3[] { new(x: 0f, y: 0.03f, z: 0f), new(x: 0f, y: 0.03f, z: 0.001f), new(x: 0f, y: 0.031f, z: 0f) }, indices: new uint[] { 0, 1, 2 });
 
-        Assert.Null(@object: SdfMeshSkin.Build(group: group, mesh: mesh, program: program, refusal: out var refusal));
+        Assert.Null(@object: SdfMeshSkin.Build(mesh: mesh, refusal: out var refusal, skin: group.Skin!));
         Assert.Equal(actual: refusal, expected: "third owner share exceeds 1/64");
-        var split = SdfMeshSkin.Split(group: group, program: program);
+        var split = SdfMeshSkin.Split(skin: group.Skin!);
 
         Assert.NotNull(@object: split);
         Assert.Empty(collection: split.Influences.ToArray());
@@ -71,7 +71,7 @@ public sealed class MovingBlendLawTests {
         var group = Group(program, new(Vector3.Zero, Quaternion.Identity, Vector4.Zero));
         Vector3[] positions = [new(x: 0f, y: 0.03f, z: 0f), new(x: 0f, y: 0.03f, z: 0.001f), new(x: 0f, y: 0.031f, z: 0f), new(x: 0f, y: 0.03f, z: 0f)];
         var mesh = new SdfMesh(positions, new uint[] { 0, 1, 2, 3, 2, 1 }, Enumerable.Repeat(Vector3.UnitY, 4).ToArray());
-        var skin = SdfMeshSkin.Build(group: group, mesh: mesh, program: program, refusal: out var refusal);
+        var skin = SdfMeshSkin.Build(mesh: mesh, refusal: out var refusal, skin: group.Skin!);
 
         Assert.Null(@object: refusal);
         Assert.NotNull(@object: skin);
@@ -93,7 +93,7 @@ public sealed class MovingBlendLawTests {
     }
     [Fact]
     public void TranslationBendsTheNormalAndQuaternionSignsDoNotChangeThePose() {
-        var influence = SdfMeshInfluence.Pack(0, 32768, Vector3.UnitX);
+        var influence = SdfMeshSkinTuple.Of(first: SdfMesh.NoMember, gradient: Vector3.UnitX, second: 0, share: 32768).Influence;
         var mesh = new SdfMesh(new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, new uint[] { 0, 1, 2 }, Enumerable.Repeat(Vector3.UnitY, 3).ToArray(), members: new SdfMeshMember[] { new(1, Vector3.Zero, Quaternion.Identity) }, vertexMembers: new byte[] { 255, 255, 255 }, influences: Enumerable.Repeat(count: 3, element: influence).ToArray());
         var positive = SdfMeshSkin.Pose(mesh: mesh, poses: new Dictionary<int, DynamicTransform> { [1] = new((Vector3.UnitY * 0.1f), Quaternion.Identity, Vector4.Zero) });
         var negative = SdfMeshSkin.Pose(mesh: mesh, poses: new Dictionary<int, DynamicTransform> { [1] = new((Vector3.UnitY * 0.1f), Quaternion.Negate(value: Quaternion.Identity), Vector4.Zero) });
