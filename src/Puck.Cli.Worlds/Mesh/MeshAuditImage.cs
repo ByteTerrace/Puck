@@ -43,63 +43,29 @@ internal static class MeshAuditImage {
 
     // One row: the mesh seen from forward, its shading normals on the left and its face normals on the right.
     private static void Draw(SdfMesh mesh, Vector3 center, Vector3 forward, float halfWidth, byte[] rgba, int row) {
-        var helper = ((MathF.Abs(x: forward.Y) < 0.9f) ? Vector3.UnitY : Vector3.UnitX);
-        var right = Vector3.Normalize(value: Vector3.Cross(vector1: helper, vector2: forward));
-        var up = Vector3.Cross(vector1: forward, vector2: right);
-        var depth = new float[Side * Side];
+        var view = MeshView.Looking(center: center, halfWidth: halfWidth, toward: forward);
         var positions = mesh.Positions.Span;
         var normals = mesh.Normals.Span;
         var indices = mesh.Indices.Span;
+        var seen = MeshRaster.Draw(height: Side, mesh: mesh, nearLimit: halfWidth, positions: positions, view: view, width: Side);
 
-        Array.Fill(array: depth, value: float.NegativeInfinity);
+        for (var y = 0; (y < Side); y++) {
+            for (var x = 0; (x < Side); x++) {
+                var at = ((y * Side) + x);
+                var triangle = seen.Triangle[at];
 
-        (float X, float Y, float Z) Project(Vector3 point) {
-            var offset = (point - center);
+                if (triangle == MeshVisibility.None) { continue; }
 
-            return ((((Vector3.Dot(vector1: offset, vector2: right) / halfWidth) * 0.5f) + 0.5f) * Side, ((0.5f - ((Vector3.Dot(vector1: offset, vector2: up) / halfWidth) * 0.5f)) * Side), Vector3.Dot(vector1: offset, vector2: forward));
-        }
+                var i0 = (int)indices[3 * triangle];
+                var i1 = (int)indices[(3 * triangle) + 1];
+                var i2 = (int)indices[(3 * triangle) + 2];
+                var (w0, w1) = (seen.First[at], seen.Second[at]);
+                var face = Vector3.Cross(vector1: (positions[i1] - positions[i0]), vector2: (positions[i2] - positions[i0]));
+                var flat = ((face.LengthSquared() > 0f) ? Vector3.Normalize(value: face) : Vector3.Zero);
+                var shading = (normals.IsEmpty ? flat : (((normals[i0] * w0) + (normals[i1] * w1)) + (normals[i2] * ((1f - w0) - w1))));
 
-        for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
-            var i0 = (int)indices[3 * triangle];
-            var i1 = (int)indices[(3 * triangle) + 1];
-            var i2 = (int)indices[(3 * triangle) + 2];
-            var a = Project(point: positions[i0]);
-            var b = Project(point: positions[i1]);
-            var c = Project(point: positions[i2]);
-
-            if ((a.Z > halfWidth) || (b.Z > halfWidth) || (c.Z > halfWidth)) { continue; }
-
-            var area = (((b.X - a.X) * (c.Y - a.Y)) - ((c.X - a.X) * (b.Y - a.Y)));
-
-            if (MathF.Abs(x: area) < 1e-9f) { continue; }
-
-            var face = Vector3.Cross(vector1: (positions[i1] - positions[i0]), vector2: (positions[i2] - positions[i0]));
-            var flat = ((face.LengthSquared() > 0f) ? Vector3.Normalize(value: face) : Vector3.Zero);
-            var minX = Math.Max(0, (int)MathF.Floor(MathF.Min(a.X, MathF.Min(b.X, c.X))));
-            var maxX = Math.Min((Side - 1), (int)MathF.Ceiling(MathF.Max(a.X, MathF.Max(b.X, c.X))));
-            var minY = Math.Max(0, (int)MathF.Floor(MathF.Min(a.Y, MathF.Min(b.Y, c.Y))));
-            var maxY = Math.Min((Side - 1), (int)MathF.Ceiling(MathF.Max(a.Y, MathF.Max(b.Y, c.Y))));
-
-            for (var y = minY; (y <= maxY); y++) {
-                for (var x = minX; (x <= maxX); x++) {
-                    var (px, py) = ((x + 0.5f), (y + 0.5f));
-                    var w0 = ((((b.X - px) * (c.Y - py)) - ((c.X - px) * (b.Y - py))) / area);
-                    var w1 = ((((c.X - px) * (a.Y - py)) - ((a.X - px) * (c.Y - py))) / area);
-                    var w2 = ((1f - w0) - w1);
-
-                    if ((w0 < 0f) || (w1 < 0f) || (w2 < 0f)) { continue; }
-
-                    var z = (((w0 * a.Z) + (w1 * b.Z)) + (w2 * c.Z));
-                    var at = ((y * Side) + x);
-
-                    if (z <= depth[at]) { continue; }
-                    depth[at] = z;
-
-                    var shading = (normals.IsEmpty ? flat : (((normals[i0] * w0) + (normals[i1] * w1)) + (normals[i2] * w2)));
-
-                    Paint(normal: ((shading.LengthSquared() > 0f) ? Vector3.Normalize(value: shading) : Vector3.Zero), rgba: rgba, x: x, y: ((row * Side) + y));
-                    Paint(normal: flat, rgba: rgba, x: (x + Side), y: ((row * Side) + y));
-                }
+                Paint(normal: ((shading.LengthSquared() > 0f) ? Vector3.Normalize(value: shading) : Vector3.Zero), rgba: rgba, x: x, y: ((row * Side) + y));
+                Paint(normal: flat, rgba: rgba, x: (x + Side), y: ((row * Side) + y));
             }
         }
     }

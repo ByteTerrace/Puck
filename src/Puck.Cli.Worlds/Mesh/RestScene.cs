@@ -145,6 +145,16 @@ public sealed class RestScene {
 
         return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms, copies: captured!.MeshInstances);
     }
+    /// <summary>Plans the scene's bake groups as a World's first frame plans them.</summary>
+    /// <param name="farDistance">The far distance the world renders to (<see cref="WorldRenderFarDistance.Resolve"/>).</param>
+    /// <returns>The groups, in plan order.</returns>
+    public List<SdfMeshBakeGroup> Plan(float farDistance) =>
+        SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: Program, transforms: Transforms);
+    /// <summary>Returns the placement a group's first instance was emitted for, or <see langword="null"/> for a shared
+    /// template, a body's group or anonymous world geometry.</summary>
+    /// <param name="group">The bake group.</param>
+    /// <returns>The placement's id, or <see langword="null"/>.</returns>
+    public string? Placement(SdfMeshBakeGroup group) => Pick(group.FirstInstance)?.Placement;
     /// <summary>Returns the body whose pool carries a dynamic group's slot, or <see langword="null"/> for a static
     /// group.</summary>
     /// <param name="group">The group.</param>

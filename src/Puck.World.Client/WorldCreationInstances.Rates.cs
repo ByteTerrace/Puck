@@ -353,18 +353,19 @@ public sealed partial class WorldCreationInstances {
     private static bool HeldRootStill(in DynamicTransform root, Vector3 rootPosition, Quaternion rootRotation) =>
         (root.Position.Equals(other: rootPosition) && root.Orientation.Equals(other: rootRotation));
     // Carries a held registration's slots with its root (FollowHeldRoot's pose): every other slot it packed rides the
-    // root's motion since the last frame rigidly.
-    private static void CarryPose(Span<DynamicTransform> transforms, Registration live, int rootSlot, int packedSlots, Vector3 rootPosition, Quaternion rootRotation) {
+    // root's motion since the last frame rigidly. Returns whether it changed a slot.
+    private static bool CarryPose(Span<DynamicTransform> transforms, Registration live, int rootSlot, int packedSlots, Vector3 rootPosition, Quaternion rootRotation) {
         var root = transforms[rootSlot];
         var turn = Quaternion.Normalize(value: (rootRotation * Quaternion.Conjugate(value: root.Orientation)));
+        var moved = false;
 
         for (var slot = (rootSlot + 1); (slot < (rootSlot + packedSlots)); slot++) {
             var held = transforms[slot];
 
-            transforms[slot] = (held with {
+            moved |= SdfMovedTransforms.Write(slot: slot, table: transforms, value: (held with {
                 Orientation = Quaternion.Normalize(value: (turn * held.Orientation)),
                 Position = (rootPosition + Vector3.Transform(rotation: turn, value: (held.Position - root.Position))),
-            });
+            }));
         }
 
         for (var shape = 0; (shape < live.ShapeTransforms.Length); shape++) {
@@ -372,9 +373,9 @@ public sealed partial class WorldCreationInstances {
 
             live.ShapeTransforms[shape] = held with { Orientation = Quaternion.Normalize((turn * held.Orientation)), Position = (rootPosition + Vector3.Transform((held.Position - root.Position), turn)) };
         }
-        transforms[rootSlot] = (root with {
+        return (SdfMovedTransforms.Write(slot: rootSlot, table: transforms, value: (root with {
             Orientation = rootRotation,
             Position = rootPosition,
-        });
+        })) | moved);
     }
 }
