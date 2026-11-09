@@ -1562,6 +1562,26 @@ by `world.view.pick`.
   no context.
 - [medium] The binding-bar overlay sits over the Moth's legs at the centre
   bottom of the screen in third person.
+- [high] The animated creation path cannot hold a sculpt's quality. A
+  creation with drivers bakes pooled and coarser than its static stamp: the
+  swallow drafted in a session baked cleanly static, then on gaining a
+  head glance and tail bob its eyes and back faceted and 4 mm tail streamers
+  broke into fragments. A blend across parts that move apart tears in motion
+  (PUCK122): the head's glance tore the throat into spikes. Find why the
+  pooled bake is coarser at the same projected size and give animated
+  creations the static bake's detail; make a moving part's blend hold (a
+  rebake per settled pose is not enough for continuous idle motion).
+- [high] Adding drivers silently changes a creation's look: animated shapes
+  bake pooled, where `group: 0` is ungrouped, so every `SmoothUnion` becomes a
+  hard union with no diagnostic. Warn (as PUCK122 does for moving blends) when
+  an animated creation carries a non-union blend on an ungrouped shape, or
+  make ungrouped shapes of one creation keep their authored blends.
+- [medium] Daylight at spawn is overexposed: at `day` 0.6, auto exposure
+  meters about 1,900 nits there (`world.exposure`, view 0) and the frame washes
+  every colour out, the lawn to pale yellow-green and deep teal to sky blue.
+- [low] `view.override camera swallow-portrait` echoed success but left the
+  seat's camera on screen; `view.override camera look ...` took over. Find
+  why a named world camera row does not replace the view.
 
 ### Water
 
@@ -1786,6 +1806,11 @@ Owner: hot-reload follow-up (boot and build) · ordinary · Next: what a shading
 edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
+
+- [high] `world.reload` is refused on the debug world: "Rebuild payload is
+  21740167 bytes; cap is 16777216" (`world.transport.codec-refused`), so the
+  documented edit-then-reload loop does not work on the proving ground. A
+  reload should send what changed, not the whole rebuilt document.
 
 A live edit installs what it changed (`WorldDocument.InstallKindOf`, the server
 README's [What an install rebuilds](../../src/Puck.World.Server/README.md#what-an-install-rebuilds)):

@@ -323,6 +323,42 @@ moved points across segment and instance boundaries; `ClosesAtScopeEdge` checks
 reads within the segment. `SdfCullAdversarialLawTests` compares cull certificates
 with the cull-off walk.
 
+## Making it read
+
+A creation is held to [the visual bar](../../../docs/game/art/README.md#the-visual-bar).
+What a first swallow taught, in the order it went wrong:
+
+- **References before shapes.** Name the references and the traits to hit
+  (silhouette, proportion, the two or three marks that say what it is) in the
+  place's guide first. Guessing numbers from memory took ten passes to reach a
+  bird that still failed.
+- **Sculpt with the shaping vocabulary, not primitive soup.** A body is one
+  shaped mass (`Superellipsoid` with `flare` and `shear` for a teardrop), not
+  stacked ellipsoids; an eye is a palette `inset` under a cornea
+  ([surface](references/surface.md#inset)), never a dark sphere, which reads
+  as a chrome or faceted bead; markings are `paints`, not proud ellipsoids,
+  which read as stickers or an open mouth from the front.
+- **Detail at least two bake cells wide.** A 3 mm leg vanishes from a static
+  bake (5 mm refined cell) and a 4 mm streamer fragments on the animated path,
+  which bakes coarser still. Make a thin part a flat blade, wider in one axis,
+  or leave it out.
+- **Animating a creation changes its bake.** Drivers make the creation
+  animated and its shapes pooled: `group: 0` is ungrouped there, so every
+  `SmoothUnion` silently becomes a hard union and the head reads as a ball on
+  the body. Give every blended shape a group of 1 or more.
+- **A blend across parts that move apart tears.** PUCK122 names it: a glancing
+  head blended into the body in one group tore the throat into spikes
+  mid-motion. Give each moving part its own group (a crease, no tear) or one
+  motion owner, and check the extreme poses frame by frame.
+- **Judge every side.** A side view read right while the front showed a
+  screaming face. Capture front, side, three-quarter, back and close, plus a
+  presented burst for motion, and send them to the `look-critic` agent; show
+  the owner only what passes.
+- **Push a live edit as a row when `world.reload` is refused.** The debug
+  world's rebuild exceeds the transport cap (open items), so compile the
+  `.puck` and send the creation's document with
+  `world.row.set creations <id> document <json>`; a rebake shows in about 20 s.
+
 ## Verifying
 
 Source first, then structure, then pixels:

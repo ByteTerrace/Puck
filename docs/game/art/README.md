@@ -70,13 +70,20 @@ to point out the obvious. Each place's guide (`worlds/debug/<place>.md` or its
 section of `worlds/debug/debug.md`) names its reference panels and its look
 intent in a sentence or two.
 
-**How it is judged.** A look change is captured at its place's reference
-views, in the scene-read order (position, place guide, `world.view.pick`
-across the frame, the authored intent, then the pixels), and judged against
-the reference by a reader that did not build it, under the headings above and
-the [concept art review](#concept-art-review)'s attachment, physical coherence,
-perspective and compositing checks. It lands when it passes; a failure is a
-defect fixed at its cause, including the rendering feature the place needs.
+**How it is judged.** References come before the build: the place's panels,
+or for a new creation a few named references and the traits to hit, written
+into its guide. A look change is captured in the scene-read order (position,
+place guide, `world.view.pick` across the frame, the authored intent, then the
+pixels) from every side that matters: front, side, three-quarter, back and
+close, plus a presented burst through the extreme poses of anything that
+moves. The `look-critic` agent (`.claude/agents/look-critic.md`) judges those
+captures against the references and never sees the builder's account, under
+the headings above and the [concept art review](#concept-art-review)'s
+attachment, physical coherence, perspective and compositing checks. Any seam,
+tear, facet, fragment or unexplained shape fails; there is no pass with
+caveats. The work lands, and reaches the owner, only after a pass; a failure
+is a defect fixed at its cause, including the rendering feature or engine
+path the work needs.
 The lead puts current captures beside their references before the owner on a
 regular cadence ([orchestration](../../../.claude/skills/orchestration/SKILL.md#land-in-batches)).
 
