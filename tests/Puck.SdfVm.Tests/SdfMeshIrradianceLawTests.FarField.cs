@@ -47,7 +47,12 @@ public sealed partial class SdfMeshIrradianceLawTests {
     /// one in a hundred clear corners.</summary>
     [Fact]
     public void ACoarseProbeAnswersNoReceiverAcrossASlabOrAWall() {
-        var frame = StoreyedHall();
+        // The camera looks back out of the hall, so the finest window, which centres ahead of it, leaves the storeys it
+        // reads to the coarser levels.
+        var view = StoreyedHall().Views[0];
+        var frame = StoreyedHall() with {
+            Views = [view with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: view.Camera.Position, target: (view.Camera.Position - Vector3.UnitX), viewportHeight: 4u, viewportWidth: 4u) }],
+        };
         var volume = Volume();
         var (parameters, _) = Trace(frame: frame, volume: volume);
         using var scene = volume.DiagnosticScene(frame: frame);

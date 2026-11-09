@@ -225,8 +225,16 @@ after the main residency's done line; a nested residency's done line is insuffic
   on both backends; `SdfMeshIrradianceLawTests.FarField.cs` holds the four-storey
   hall's segment-test counts.
 - Each level's window centres on the box of the cameras of every view the
-  residency renders when it fits in the window's middle, and on the first view's
-  camera alone when it does not (`WindowLow`).
+  residency renders when the box fits in the window's middle, and on the first
+  view's alone when it does not (`WindowLow`). For the finest level the first
+  view's camera is taken a quarter of the window's horizontal extent ahead of
+  it along its horizontal forward (`WindowAnchor`); the coarser levels' windows
+  already reach past the finest one's ahead. Centred on the camera, the Medium window ended 32 m ahead, and a
+  view down level 1's hall from its west end read the far ceiling and floor from
+  the storey level, whose 4 m probes 1.75 m under the ceiling see it past the
+  hanging strips at grazing angles: jagged dark streaks beside each strip, and a
+  floor 2 to 3 times too bright under the lamps. Turning the camera moves the
+  anchor; the window recentres only once the anchor leaves its middle.
 - A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
   and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
   Read the wait's bake description twice: its meshes, pending groups,

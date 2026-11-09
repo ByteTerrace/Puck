@@ -852,21 +852,41 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_published = new SdfMeshIrradianceParameters(Enabled: enabled, Far: PublishedOf(layout: layout, level: 2), Finest: PublishedOf(layout: layout, level: 0),
             Middle: PublishedOf(layout: layout, level: 1));
     }
+    // Where a level's window centres for the first view. The finest level's anchor is its camera moved ahead along its
+    // horizontal forward by a quarter of the window's horizontal extent, so the finest probes cover what the view looks
+    // across rather than as much behind it, and the camera stays a quarter of the window inside its back face; a view
+    // looking straight up or down keeps its camera. A coarser level centres on the camera: its window already reaches
+    // past the finest one's on every side.
+    private Vector3 WindowAnchor(SdfFrame frame, Layout layout, int level) {
+        var camera = frame.Views[0].Camera;
+
+        if ((level != 0) || frame.Views[0].Elsewhere) { return m_camera; }
+
+        var ahead = new Vector3(x: camera.Forward.X, y: 0f, z: camera.Forward.Z);
+        var length = ahead.Length();
+
+        if (!(length > 1e-3f) || !float.IsFinite(f: length)) { return m_camera; }
+
+        var extent = (layout.SpacingOf(level: level) * new Vector3(x: layout.DimsOf(level: level).X, y: 0f, z: layout.DimsOf(level: level).Z));
+
+        return (m_camera + ((ahead / length) * (0.25f * MathF.Min(x: extent.X, y: extent.Z))));
+    }
     // A level's published window; one not yet published carries its probe counts at zero spacing, so the views pass skips
     // it yet places the coarser levels' slots after its own.
     private SdfMeshIrradianceWindow PublishedOf(Layout layout, int level) => (m_levels[level].Published.Present
         ? m_levels[level].Published
         : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
-    // renders when that box fits in the window's middle, and on the first view's camera alone when it does not, so each
-    // level follows every view as far as its reach allows and a coarser level covers views a finer one cannot. It
-    // recentres only once a camera it centres on leaves its middle, an eighth of the window short of each face, so a
-    // camera that moves back and forth across a cell (a body falling through a floor painting and out of the ceiling's)
-    // keeps one window rather than moving it, refilling it and tracing its new probes every frame.
+    // renders, the first view's taken at its anchor ahead of it (WindowAnchor), when that box fits in the window's
+    // middle, and on the first view's anchor alone when it does not, so each level follows every view as far as its
+    // reach allows and a coarser level covers views a finer one cannot. It recentres only once a point it centres on
+    // leaves its middle, an eighth of the window short of each face, so a camera that moves back and forth across a cell
+    // (a body falling through a floor painting and out of the ceiling's) or turns a little keeps one window rather than
+    // moving it, refilling it and tracing its new probes every frame.
     private (int X, int Y, int Z) WindowLow(SdfFrame frame, int level, Layout layout, (int X, int Y, int Z) current, bool resizing) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
-        var first = CellOf(position: m_camera, spacing: spacing);
+        var first = CellOf(position: WindowAnchor(frame: frame, layout: layout, level: level), spacing: spacing);
         var low = first;
         var high = first;
 

@@ -2671,6 +2671,22 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [high] Emissive faces light the world only where a probe's 144 fixed rays
+  happen to meet them. The gallery hall is lit mostly by its 0.4 m ceiling
+  strips (`hallStrips`, 4000 nits, "lit through the irradiance volume"), which
+  subtend about 6 degrees from a probe 3.7 m below against texels of 15 to 17,
+  so neighbouring probes catch a strip or miss it by where they stand: in a CPU
+  harness of level 1 (a slab, a ceiling, four strips, Medium), the probes at
+  (29, 5, 19) and (29, 5, 21) read 96 and 194 nits, and the floor's indirect
+  light shows rows of dark and bright blotches. Point lights in the strips'
+  places light the same floor smoothly. A surface beside a strip is not lit by
+  it either, except through those sampled probes. The fix is an emitter's light
+  integrated over its solid angle: static emissive faces as area sources in the
+  relight's local part (a polygon form factor per probe axis under a visibility
+  test, a texel that meets an emitter then taking only its reflection) and, for
+  their near field, in the views pass. Design lane with review; it owns the
+  interiors' floor blotches and the stair treads' stains if `world.probe` there
+  names an emitter. Owner: lighting batch.
 - [medium] Probe scene capacity retains its high-water allocation:
   `GpuArena.Allocate` (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:147`)
   never lowers `Words`, and `RecordSceneUpload`
@@ -2882,8 +2898,8 @@ the fixed poses and the approaches already rejected.
     `(8, 2, 8)` m over 32×48×32 alternative keeps the 8 m band outdoors at 60 %
     more probes; the overlook's mid-field showed no change under the default
     table, so it was not taken.
-  - Left open by the memo: a sparse finest level and a forward window offset
-    (options 9 and 10) once the trace is on the GPU, an authored `indirect`
+  - Left open by the memo: a sparse finest level (option 9) now that the
+    trace is on the GPU, an authored `indirect`
     region (option 5) if a world asks for one, higher angular resolution for
     coarse surface maps (option 7) if an atrium taller than its probe planes
     still seams, and the per-probe visibility lattice (option 8) as the coarse

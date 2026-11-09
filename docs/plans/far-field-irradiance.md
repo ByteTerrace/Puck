@@ -245,10 +245,13 @@ own.
    frees most of the window. **Left open** as the storage redesign the
    illumination plan's GPU trace step can carry.
 10. **The window ahead of the camera** (Assassin's Creed Shadows' forward
-    offset). At Medium a 64 m window centred 24 m ahead covers the whole hall;
-    at High it covers 25 m of the far third. Turning the camera then moves
-    the window by its offset and retraces what it uncovers. **Left open**, as a
-    measured trade once the trace is budgeted on the GPU.
+    offset). At Medium a 64 m window centred 16 m ahead covers level 1's hall
+    from its west end; at High a 48 m window 12 m ahead covers most of it.
+    Turning the camera then moves the window by its offset and retraces what it
+    uncovers. **Taken** (`SdfMeshIrradiance.WindowAnchor`): with the trace on
+    the GPU, the storey level answering a hall's far ceiling past a
+    camera-centred window drew dark streaks beside every hanging strip. The cost
+    of the retrace on a turn is owed a quiet-window measurement.
 
 ---
 

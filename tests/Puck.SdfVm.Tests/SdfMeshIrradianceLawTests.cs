@@ -891,8 +891,9 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.True(condition: (words.Length == ((parameters.Window(level: 0).Count + parameters.Middle.Count + parameters.Far.Count) * SdfMeshIrradianceProbe.ProbeWords)));
     }
     /// <summary>THE LAW: a finer level's probes answer a receiver past their window as far as their surface maps reach,
-    /// before a coarser level does. At the High tier the finest window about a camera at the origin ends half a metre
-    /// short of a room's end wall, whose metres-wide coarse taps cannot resolve it. The wall reads the finest level's
+    /// before a coarser level does. At the High tier the finest window about a camera looking at the origin from a quarter
+    /// of the window behind it ends half a metre short of a room's end wall, whose metres-wide coarse taps cannot resolve
+    /// it. The wall reads the finest level's
     /// boundary probes, measured, with weight; a floor far past the finest probes' reach still reads the coarser level.
     /// The inner wall of a sealed room past that reach reads light rather than black.</summary>
     [Fact]
@@ -901,6 +902,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         var volume = Volume();
         var room = Frame() with {
             ConvergesLighting = true,
+            Views = [Frame().Views[0] with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: -12f, y: 2f, z: 0f), target: new Vector3(x: -11f, y: 2f, z: 0f), viewportHeight: 4u, viewportWidth: 4u) }],
             MeshDraws = [
                 Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: (EndWall + 0.3f), y: 0f, z: 10f))),
                 Draw(mesh: Box(low: new Vector3(x: -10f, y: 4f, z: -10f), high: new Vector3(x: (EndWall + 0.3f), y: 4.3f, z: 10f))),
