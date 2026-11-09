@@ -58,6 +58,14 @@ collided runs, while the same expensive work ran eight times).
   views-resolve lane's GPU legs and handed back with its verification undone).
   Run them one after another, or give the second only its code and return its
   GPU legs as verification requests for the lead's window.
+- **Count the windowed lanes before launching one.** Look lanes iterate live
+  in a windowed World, which holds 12 to 20 GB, so the machine's commit limit,
+  not the GPU lease, decides how many can work: on the lead machine one
+  windowed World fits beside the building lanes, two only on a quiet machine.
+  Before briefing a lane that needs a windowed World, count those already in
+  flight; a third waits, or starts with document work and a windowed slot the
+  lead schedules by name. A lead that ran six windowed lanes at once left one
+  refused after a 30-minute admission wait while its fixes sat ready.
 - **Fix the scheduler before working around it.** An admission, lease or
   harness defect that stalls a lane is a top fix, filed and briefed the day it
   is found, never a wait every lane absorbs.
@@ -376,7 +384,11 @@ A look change lands only when it meets
 captures from every side. The builder holds itself to that and keeps
 iterating while it can see a defect; the lead checks a lane's captures before
 merging and sends a milestone or a doubtful case to the `look-critic` agent
-when fresh eyes pay for themselves, not every pass. The lead never shows the
+when fresh eyes pay for themselves, not every pass. A change is judged on what
+it owns: a failure the critic attributes to a filed world-wide item (the night
+lighting, a backend colour defect, the world's cel treatment, another
+creation's defect) holds that item, not the change, once the lead has checked
+the attribution and the item is filed or has a lane. The lead never shows the
 owner a result it knows fails, and never frames one as progress with caveats.
 A lead that iterated a creation in front of the owner and reported it as
 reading right while it knew the throat tore and the eyes faceted is the case. The lead also keeps the bar in front
@@ -384,7 +396,11 @@ of the owner: at the close of every session that touched a place, and at least
 once per milestone across the debug world's places, it publishes current
 captures beside their reference panels with the critic's verdicts, and queues
 a look lane for the worst place. Look work is scheduled as fundamentals are,
-never left until the owner walks past it.
+never left until the owner walks past it. Every batch window also takes a few
+captures focused on something chosen at random (a creation, a room, a surface
+up close), because the owner's observation is that any such capture shows
+flaws at once; each flaw seen is filed in the visual bar packet or sent to a
+running look lane, the same as a sweep finding.
 
 The main checkout tracks the integration branch (the owner's ruling). Claude
 Code loads `.claude/agents/`, hooks and unscoped skills from the project root,

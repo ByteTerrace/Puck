@@ -14,6 +14,38 @@ stub can use it without the rest of the engine.
 share delete access with concurrent publication. It is the shared writer for
 the launcher stub and updater, without an engine dependency. Unlike
 `ConfinedDirectory`, it operates on trusted paths rather than held directories.
+`AtomicFile.WriteAllBytesDurably` makes the rename itself durable by ending in
+`ConfinedDirectory.Publish`, the one durable replacement (the blob store in
+`Puck.Storage` publishes through the same call): on Windows
+[`MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+with `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`, whose documentation
+says it "does not return until the file is actually moved on the disk", after the
+temporary is checked through the held handle (not a link, not hard-linked); on
+Linux [`renameat`](https://man7.org/linux/man-pages/man2/rename.2.html) relative
+to the held descriptor followed by an `fsync` of the directory, which
+[fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html) requires to persist
+the entry. It never falls back to `ReplaceFile`, so a failure leaves the old file
+whole under its own name. The Windows move takes paths, so `Publish` is the one
+operation that names its entries by the held directory's path, which stays valid
+because a held directory cannot be renamed or deleted. Neither platform's
+guarantee has been verified against a power cut on hardware.
+
+## The release record
+
+`ReleasePolicy` is an install root's release record,
+`state/release-policy.json`: the current version, startup attempts per payload
+identity, proofs of health by exact install (version, sequence and payload
+identity), rejected payloads, accepted revocations and the state generation
+floor. `InstallRecord` is a version's `versions/<version>/install-record.json`. Both live here
+because the stub, every installed entry point's registration and the launcher
+must share them. `InstallTransaction` holds `update.lock` and is the only writer
+of either: `SelectLaunch` for the stub, `CommitApply` and `MergeRevocations`
+for the updater, `RecordHealthy` for startup health, `AdmitProcess` for
+registration, and `Compact` for the pruner, each one durable commit.
+`ReleasePolicy.Refusal` is the one admission predicate. A record that does not
+validate throws `InvalidDataException`, and every caller fails closed. The
+launcher's [release record section](../Puck.Launcher/README.md#the-release-record)
+describes how the updater uses it.
 
 ## Usage
 
@@ -44,11 +76,11 @@ registration here, because every entry point an installed payload carries, the
 stub and the launcher must share it and this is the one BCL-only project all of
 them reach. `TryRegisterProcess` is the first statement of each such entry point:
 a process whose own directory sits directly under a `versions/` directory
-belongs to the install root above it, whether or not that root has written
-`current` yet. It waits for `update.lock`, confirms by identity that
-`versions/<name>` is the directory its image (the entry assembly's file, or the
-executable of a single-file app) was loaded from, and holds it for the life of
-the process; one that cannot refuses to start. The launcher's pruner never removes a held version (see the
+belongs to the install root above it. It waits for `update.lock`, confirms by
+identity that `versions/<name>` is the directory its image (the entry
+assembly's file, or the executable of a single-file app) was loaded from, has
+the release record admit that version (`InstallTransaction.AdmitProcess`), and
+holds it for the life of the process; one that cannot refuses to start. The launcher's pruner never removes a held version (see the
 [launcher README](../Puck.Launcher/README.md#pruning-past-versions)).
 
 ## Platforms

@@ -9,8 +9,8 @@ internal static class LocalAdapterInstall {
     public static async Task<string> ActivateAsync(string build, string install, CancellationToken token) {
         // Publication writes release content into the install root; the pruner holds the same lease while it deletes.
         using (await InstallLeases.AcquireAsync(cancellationToken: token, fileName: InstallLeases.PublicationLockFileName, installRoot: install).ConfigureAwait(continueOnCapturedContext: false)) {
-            var pointer = Path.Combine(path1: install, path2: "current");
-            var current = (File.Exists(path: pointer) ? File.ReadAllText(path: pointer).Trim() : "0.0.0");
+            // A display read: UpdateService re-checks the version under the install's transaction before it acts.
+            var current = (ReleasePolicy.ReadUnlocked(installRoot: install).Current ?? "0.0.0");
             var ready = Path.Combine(path1: build, path2: "puck-build-ready");
 
             if (!File.Exists(path: ready) && (current != "0.0.0")) { return current; }

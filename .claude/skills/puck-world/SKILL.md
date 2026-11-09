@@ -266,13 +266,16 @@ Azure release or application-copy staging is involved. The main checkout's
 included: a lane proving an adapter change publishes into an install root in
 its own worktree (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`)
 and runs that front, never the main checkout's: activating an unfinished
-adapter there breaks every session's tool results until `current` points back at
-`last-good`. The stub counts each launch of a pending
-version and rolls back after three unproven ones, and a client's protocol probe
-plus its connect launch the front twice, so the front and its worker both clear
-the health marker as they start. A build the stub rolled back has spent its
-replay sequence: `--prepare-install` then keeps the installed version and says
-`kept …`, and rebuilding `src/Puck.Cli` publishes a newer one.
+adapter there breaks every session's tool results until the stub rolls back to a
+proven version. The stub counts each launch of a payload and, after three
+unproven ones, rejects it and rolls back; a client's protocol probe plus its
+connect launch the front twice, so the front and its worker both record health
+as they start. A build the stub rejected stays rejected and has spent its replay
+sequence: `--prepare-install` then keeps the installed version and says
+`kept …`, and rebuilding `src/Puck.Cli` publishes a newer one. An install root
+from before the release record (`state/release-policy.json`) starts empty: the
+next activation installs over it, and its old version directories, which carry
+no valid install record, are kept until the root is deleted.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches

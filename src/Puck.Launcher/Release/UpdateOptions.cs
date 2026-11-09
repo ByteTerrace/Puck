@@ -16,7 +16,7 @@ namespace Puck.Launcher.Release;
 /// <see cref="FileUpdateApplier"/> also checks that pointer before activating another version.</param>
 /// <param name="CheckInterval">How often an automatic check runs. <see langword="null"/> or non-positive disables automatic checking; <c>update.check</c> still works manually.</param>
 /// <param name="KeepVersions">The number of most recently installed versions <see cref="InstallPruner"/> keeps beyond
-/// <c>current</c>, <c>last-good</c>, a pending install's version and every version a live process holds.</param>
+/// the current version, the rollback target, a pending install's version and every version a live process holds.</param>
 /// <param name="InstallId">The 16-byte, hex-encoded rollout-bucketing identity. When <see langword="null"/>, one is minted via <see cref="System.Security.Cryptography.RandomNumberGenerator"/> and persisted at <c>&lt;cacheRoot&gt;/install-id</c> on first use.</param>
 /// <param name="ReplayAcceptanceHorizon">The verifier-wide finite replay horizon <c>H</c> — bounds how stale a
 /// manifest the verifier considers signature-valid, and defines the sequence-mark epoch length. <see langword="null"/>

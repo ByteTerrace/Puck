@@ -51,7 +51,10 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <summary>Gets the resolved operational configuration this service checks against.</summary>
     public UpdateOptions Options => m_options;
 
-    private async Task<UpdateCheckResult> FetchAndVerifyAsync(CancellationToken cancellationToken, DateTimeOffset now) {
+    // Fetches without the install lease (a network wait must not hold back the stub), then verifies under a transaction:
+    // the caller's when it holds one, otherwise one begun here for verification alone, so a check's revocation merge is
+    // serialized with every other writer of the release record.
+    private async Task<UpdateCheckResult> FetchAndVerifyAsync(CancellationToken cancellationToken, DateTimeOffset now, InstallTransaction? transaction) {
         var fetch = await m_source.TryGetLatestManifestAsync(
             channel: m_options.Channel,
             cancellationToken: cancellationToken
@@ -101,12 +104,19 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             );
         }
 
-        var verified = m_verifier.Verify(
-            advanceSequence: false,
-            installedVersion: m_options.InstalledVersion,
-            manifest: manifest,
-            now: now
-        );
+        ReleaseVerifyOutcome verified;
+
+        if (transaction is not null) {
+            verified = m_verifier.Verify(advanceSequence: false, installedVersion: m_options.InstalledVersion, manifest: manifest, now: now, transaction: transaction);
+        } else {
+            try {
+                using var check = InstallTransaction.Begin(cancellationToken: cancellationToken, installRoot: Path.GetFullPath(path: m_options.CacheRoot), timeout: CheckLeaseWait);
+
+                verified = m_verifier.Verify(advanceSequence: false, installedVersion: m_options.InstalledVersion, manifest: manifest, now: now, transaction: check);
+            } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or InvalidDataException or PlatformNotSupportedException)) {
+                return new UpdateCheckResult(Detail: $"install is busy or unavailable: {error.Message}", Manifest: null, Outcome: UpdateCheckOutcome.Refused);
+            }
+        }
 
         if (!verified.Accepted) {
             return new UpdateCheckResult(
@@ -138,27 +148,28 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         );
     }
 
-    /// <summary>Under an exclusive install-root lease, resumes a pending local install or checks the tracked
-    /// channel. Rollout and staging precede replay reservation, then a durable exact-manifest intent; the pointer
-    /// changes only after reservation. Process interruption resumes that intent, even after signature expiry,
-    /// using the current trust policy at its original authorization instant. Terminal refusal retires an intent without lowering replay marks. No network response can replace a resumable
-    /// pending intent. The filesystem must protect the install root from untrusted local writers.</summary>
+    /// <summary>Under one <see cref="InstallTransaction"/> on the install root, resumes a pending local install or checks
+    /// the tracked channel. Rollout and staging precede replay reservation, then a durable exact-manifest intent; the
+    /// release record selects the version only after reservation. Process interruption resumes that intent, even after
+    /// signature expiry, using the current trust policy at its original authorization instant. Terminal refusal retires an
+    /// intent without lowering replay marks. No network response can replace a resumable pending intent. The filesystem
+    /// must protect the install root from untrusted local writers.</summary>
     /// <param name="now">The check instant, captured once by the caller.</param>
     /// <param name="cancellationToken">Cancels the fetch/stage.</param>
+    /// <returns>Whether a version was applied, and why not.</returns>
     public async Task<UpdateApplyOutcome> ApplyAsync(DateTimeOffset now, CancellationToken cancellationToken) {
         try {
-            var root = Path.GetFullPath(path: m_options.CacheRoot);
-            using var lease = (InstallLeases.TryAcquire(fileName: InstallLeases.UpdateLockFileName, installRoot: root)
-                ?? throw new IOException(message: $"another process holds {InstallLeases.UpdateLockFileName}"));
+            using var transaction = (InstallTransaction.TryBegin(installRoot: Path.GetFullPath(path: m_options.CacheRoot))
+                ?? throw new IOException(message: $"another process holds {InstallLayout.UpdateLockFileName}"));
 
-            return await ApplyUnderLeaseAsync(cancellationToken: cancellationToken, now: now, root: root).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or PlatformNotSupportedException)) {
+            return await ApplyUnderLeaseAsync(cancellationToken: cancellationToken, now: now, transaction: transaction).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or PlatformNotSupportedException)) {
             return new UpdateApplyOutcome(Applied: false, Detail: $"install is busy or unavailable; any pending intent is retained: {error.Message}");
         }
     }
 
-    private async Task<UpdateApplyOutcome> ApplyUnderLeaseAsync(string root, DateTimeOffset now, CancellationToken cancellationToken) {
-        var intentPath = Path.Combine(path1: root, path2: "install-intent.json");
+    private async Task<UpdateApplyOutcome> ApplyUnderLeaseAsync(InstallTransaction transaction, DateTimeOffset now, CancellationToken cancellationToken) {
+        var intentPath = Path.Combine(path1: transaction.RootPath, path2: InstallLayout.InstallIntentFileName);
         var recovering = File.Exists(path: intentPath);
         var rid = CurrentRid();
         InstallIntent intent;
@@ -185,13 +196,15 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             }
             // A changed current trust policy still refuses the intent. Time alone does not revoke local work
             // already authorized while its signature was valid; no fresh network verification uses this instant.
-            var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+            // The release record's admission runs here too: an intent whose version was revoked or whose payload was
+            // rejected since it was written is refused terminally and retired.
+            var resumed = m_verifier.ReserveInstall(manifest: intent.Manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion, transaction: transaction);
 
             if (!resumed.Accepted) {
                 return Refusal(detail: $"pending install refused: {resumed.RefusalReason}", decision: resumed.Decision);
             }
         } else {
-            var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
+            var check = await FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now, transaction: transaction).ConfigureAwait(continueOnCapturedContext: false);
 
             if (check.Outcome != UpdateCheckOutcome.Available) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"re-verification reported {check.Outcome}: {check.Detail}");
@@ -200,10 +213,8 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         }
 
         var manifest = intent.Manifest;
-        var currentPath = Path.Combine(path1: root, path2: "current");
-        var current = (File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null);
-        var lastGoodPath = Path.Combine(path1: root, path2: "last-good");
-        var lastGood = (File.Exists(path: lastGoodPath) ? File.ReadAllText(path: lastGoodPath).Trim() : null);
+        var current = transaction.Policy.Current;
+        var rollbackTarget = transaction.RollbackTarget();
         var alreadyCurrent = (recovering && (current == manifest.Version));
 
         if (!alreadyCurrent && !string.IsNullOrEmpty(value: current)) {
@@ -216,12 +227,12 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
             }
         }
         if ((!alreadyCurrent && !string.IsNullOrEmpty(value: current) && string.Equals(a: manifest.Version, b: current, comparisonType: StringComparison.OrdinalIgnoreCase)) ||
-            (!string.IsNullOrEmpty(value: lastGood) && string.Equals(a: manifest.Version, b: lastGood, comparisonType: StringComparison.OrdinalIgnoreCase))) {
+            (!string.IsNullOrEmpty(value: rollbackTarget) && string.Equals(a: manifest.Version, b: rollbackTarget, comparisonType: StringComparison.OrdinalIgnoreCase))) {
             return Refusal(detail: $"version '{manifest.Version}' collides case-insensitively with an active install directory");
         }
 
-        // Never restage the running directory, including when an interrupted apply already swapped current.
-        // The applier rehashes it below without modifying its files or last-good pointer.
+        // Never restage the running directory, including when an interrupted apply already made it current.
+        // The applier rehashes it below without modifying its files.
         if (!alreadyCurrent) {
             var staged = await m_stager.StageAsync(cancellationToken: cancellationToken, manifest: manifest, rid: rid).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -231,15 +242,15 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
         }
 
         if (!recovering) {
-            var reserved = m_verifier.ReserveInstall(manifest: manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion);
+            var reserved = m_verifier.ReserveInstall(manifest: manifest, verifiedAt: intent.VerifiedAt, installedVersion: intent.InstalledVersion, transaction: transaction);
 
             if (!reserved.Accepted) {
                 return new UpdateApplyOutcome(Applied: false, Detail: $"install reservation refused: {reserved.RefusalReason}");
             }
-            AtomicFile.WriteAllText(path: intentPath, contents: JsonSerializer.Serialize(value: intent, options: DocumentJsonOptions.Shared));
+            AtomicFile.WriteAllBytesDurably(bytes: JsonSerializer.SerializeToUtf8Bytes(value: intent, options: DocumentJsonOptions.Shared), path: intentPath);
         }
 
-        var applied = m_applier.Apply(cacheRoot: root, manifest: manifest, recoverInterruptedApply: recovering, rid: rid);
+        var applied = m_applier.Apply(manifest: manifest, recoverInterruptedApply: recovering, rid: rid, transaction: transaction);
 
         if (!applied.Applied) {
             return Refusal(detail: (applied.RefusalReason ?? "apply refused"));
@@ -257,14 +268,18 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <summary>Fetches and verifies the current channel manifest, and evaluates the rollout bucket. Performs no
     /// download or staging, and never commits the manifest's sequence to the durable replay high-water mark — a
     /// read-only inspection that can be repeated without permanently consuming the one sequence number an
-    /// <see cref="ApplyAsync"/> still needs to commit.</summary>
+    /// <see cref="ApplyAsync"/> still needs to commit.
+    /// <para>Verification runs under an <see cref="InstallTransaction"/> begun for it alone (waiting up to
+    /// <see cref="CheckLeaseWait"/>), so the revocations an authentic manifest carries are merged into the release record
+    /// without racing the stub, an apply or another check; a busy install reports <see cref="UpdateCheckOutcome.Refused"/>
+    /// and writes nothing.</para></summary>
     /// <param name="now">The check instant, captured once by the caller.</param>
     /// <param name="cancellationToken">Cancels the fetch.</param>
+    /// <returns>What the check found.</returns>
     public Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
-        FetchAndVerifyAsync(
-            cancellationToken: cancellationToken,
-            now: now
-        );
+        FetchAndVerifyAsync(cancellationToken: cancellationToken, now: now, transaction: null);
+    /// <summary>Gets how long a check waits for the install root's update lease before reporting the install busy.</summary>
+    public static TimeSpan CheckLeaseWait { get; } = TimeSpan.FromSeconds(seconds: 10);
     /// <summary>Resolves the current process's .NET runtime identifier — the payload key <see cref="IUpdateStager"/> stages.</summary>
     public static string CurrentRid() => RuntimeInformation.RuntimeIdentifier;
 }

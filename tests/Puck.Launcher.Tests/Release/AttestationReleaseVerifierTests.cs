@@ -26,15 +26,15 @@ public sealed class AttestationReleaseVerifierTests {
         private readonly InMemoryReleaseSequenceStore m_inner = new();
         private readonly Barrier m_previews = new(participantCount: 2);
 
-        public bool IsAcceptable(ReplayCommitRequirement requirement) {
-            var accepted = m_inner.IsAcceptable(requirement: requirement);
+        public bool IsAcceptable(ReplayCommitRequirement requirement, Puck.Confinement.InstallTransaction transaction) {
+            var accepted = m_inner.IsAcceptable(requirement: requirement, transaction: transaction);
             m_previews.SignalAndWait(cancellationToken: TestContext.Current.CancellationToken);
             return accepted;
         }
 
-        public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement) => m_inner.TryAdvance(requirement: requirement);
-        public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.TryReserve(requirement: requirement, manifestPin: manifestPin);
-        public bool IsReserved(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin) => m_inner.IsReserved(requirement: requirement, manifestPin: manifestPin);
+        public ReleaseDecision TryAdvance(ReplayCommitRequirement requirement, Puck.Confinement.InstallTransaction transaction) => m_inner.TryAdvance(requirement: requirement, transaction: transaction);
+        public ReleaseDecision TryReserve(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin, Puck.Confinement.InstallTransaction transaction) => m_inner.TryReserve(requirement: requirement, manifestPin: manifestPin, transaction: transaction);
+        public bool IsReserved(ReplayCommitRequirement requirement, Puck.Assets.ContentPin manifestPin, Puck.Confinement.InstallTransaction transaction) => m_inner.IsReserved(requirement: requirement, manifestPin: manifestPin, transaction: transaction);
         public void Dispose() => m_previews.Dispose();
     }
 

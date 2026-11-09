@@ -29,7 +29,7 @@
       "default": null
     },
     "keepVersions": {
-      "description": "The number of most recently installed versions the launcher keeps beyond the current, last-good, pending and running ones. Null = the app\u0027s own default.",
+      "description": "The number of most recently installed versions the launcher keeps beyond the current, rollback target, pending and running ones. Null = the app\u0027s own default.",
       "type": [
         "integer",
         "null"
