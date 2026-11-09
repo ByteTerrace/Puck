@@ -909,7 +909,17 @@ as noted.
 | G8. Demand-bounded tiers | The tier fact in the geometry key, the finest tier baked on demand with lookahead, cancellation and the one in-flight budget, `world.residency` reporting tiers owed with each group's owed error and interval, `world.budget` per creation | Spawn in the studio and walk to the Moth's face at boom 1.5 m, retreat, and cut back; open a portal onto a second demanding view: owed error and interval per group over the walk, peak resident and in-flight bytes, and the lead's produce-work window; the cold bake from an empty store on both backends | Owed error never worse than one tier below demand for longer than the landing budget's frames on any of the four runs; peak bytes under the library's budget; cold-bake seconds against today's with the owner's answer on what counts; no view ever refused, only owed |
 | G9. Clusters inside a draw (D4's experiment) | Flat clusters of the chosen level on V1's buckets, behind a lever | The terrain sector and the hall shell from inside, on the 2060 or at the Deck's resolution: candidates, survivors, pyramid tests, rejected triangles, reference writes; moving, cut, portal-clipped and bent geometry captured | Kept only if it removes measured geometry-bound work without a missed surface, a swapped pick or a stale bound |
 
-G1 and G3 share no files and run beside V2a and V1a; G2 waits on the ruling on G1b; G4 is
+G1 and G3 share no files and run beside V2a and V1a. G2 waits on the lead's
+ruling on G1b: two experiments have not broken the floor by an order of
+magnitude, and the parts that block it (carved and thin parts refused by
+enclosure and by witnesses with no crossing within twice the budget, and
+level-zero bake defects such as the nose's) are the same parts where the Moth's
+fields were measured exceeding the evaluator's Lipschitz bound by up to 26
+times, which a field-sampled witness and an outward-offset contour both rest
+on. So the chain waits for that bound to be fixed at its cause, the G1b audit
+is re-run unchanged on the corrected evaluator, and only a floor that still
+fails sends the work to D1's option 1d or the member-aware collapse; the levels
+that pass today ship with G2, not alone. G4 is
 V2b and lands where the visibility plan places it; G5 waits on nothing but the
 sight step it grows; G6 waits on G2 and G3, and its one-draw tier on V2c; G7
 on G6 and on V1's buckets for its comparison; G8 on G2; G9 on V1b and a
