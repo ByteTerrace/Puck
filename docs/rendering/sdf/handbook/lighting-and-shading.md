@@ -550,8 +550,9 @@ material with it; every other material inherits the world's default style,
 mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
 `shape-cel-hard` exhibits on level 3). The standard package authors styles as
 data in `worlds/standard/styles.puck` (`celStyle`, `celInkStyle`,
-`celHardStyle`, `continuousStyle`): a row names one with `toon: celInkStyle`
-and a world with `render { toon: celStyle }`, as the debug world does, and a
+`celTerrainStyle`, `celHardStyle`, `continuousStyle`): a row names one with
+`toon: celInkStyle` (the debug world's Moth) or `toon: celTerrainStyle` (its
+valley walls) and a world with `render { toon: celStyle }`, as the debug world does, and a
 variant is `celStyle with { softness: 0.2 }`. The engine holds no look of its own: a style that
 bands authors every value below, and validation names each one it leaves out;
 a style that says `enabled: false` needs none.
