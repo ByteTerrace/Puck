@@ -499,6 +499,18 @@ public static partial class WorldSubmissionCodec {
             ? ReadRebuildDefinition(reader: ref reader)
             : null
         );
+        WorldReloadDelta? delta = null;
+        if (reader.ReadBoolean()) {
+            var version = new WorldDocumentVersion(reader.ReadGuid(), reader.ReadInt64());
+            var baseHash = reader.ReadNullableString(field: "Rebuild.Delta.BaseHash");
+            var targetHash = reader.ReadNullableString(field: "Rebuild.Delta.TargetHash");
+            var patch = reader.ReadBlock(field: "Rebuild.Delta.Patch", maxBytes: WorldFrameCodec.MaxPayloadBytes(WorldSubmissionKind.Rebuild)).ToArray();
+            var directory = reader.ReadNullableString(field: "Rebuild.Delta.DocumentDirectory");
+            if (baseHash is null || targetHash is null) {
+                throw new LeafCodecException(Fail(WorldCodecRefusal.PayloadMalformed, "a reload delta requires base and target fingerprints"));
+            }
+            delta = new(version, baseHash, targetHash, patch, directory);
+        }
 
         if (reader.Failed) {
             return null;
@@ -506,6 +518,7 @@ public static partial class WorldSubmissionCodec {
 
         var request = new WorldRebuildRequest(
             ContentHash: contentHash,
+            Delta: delta,
             Definition: definition,
             Force: force,
             Kind: kind,
@@ -514,7 +527,7 @@ public static partial class WorldSubmissionCodec {
 
         if (!ValidRebuildShape(request: request)) {
             throw new LeafCodecException(failure: Fail(
-                detail: $"rebuild request kind '{kind}' does not carry the shape its kind requires (a document, an origin, and a content hash iff Kind is Load or Reload, none of the three for Reset)",
+                detail: $"rebuild request kind '{kind}' does not carry the shape its kind requires (Load: document/origin/hash; Reload: version-pinned delta/origin/hash; Reset: none)",
                 refusal: WorldCodecRefusal.PayloadMalformed
             ));
         }
@@ -934,8 +947,9 @@ public static partial class WorldSubmissionCodec {
         $"leaf kind '{value.GetType().Name}' has no discriminant"
     ));
     private static bool ValidRebuildShape(WorldRebuildRequest request) => request.Kind switch {
-        WorldRebuildKind.Reset => ((request.Definition is null) && (request.Origin is null) && (request.ContentHash is null)),
-        WorldRebuildKind.Load or WorldRebuildKind.Reload => ((request.Definition is not null) && (request.Origin is not null) && (request.ContentHash is not null)),
+        WorldRebuildKind.Reset => ((request.Definition is null) && (request.Delta is null) && (request.Origin is null) && (request.ContentHash is null)),
+        WorldRebuildKind.Load => ((request.Definition is not null) && (request.Delta is null) && (request.Origin is not null) && (request.ContentHash is not null)),
+        WorldRebuildKind.Reload => ((request.Definition is null) && (request.Delta is { BaseVersion.IsDelivered: true, BaseHash.Length: > 0, TargetHash.Length: > 0, Patch.Length: > 0 }) && (request.Origin is not null) && (request.ContentHash is not null)),
         _ => false,
     };
     private static void WriteCapability(WireWriter writer, WorldCapability capability) {
@@ -1231,9 +1245,9 @@ public static partial class WorldSubmissionCodec {
                 $"{grantee.Describe()} has no live wire value — its row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
             ));
         }
-    }    // The rebuild leaf's own tagged union: one discriminant byte for WorldRebuildKind, the force flag, an optional
-    // origin (none, a file, or a store), an optional content-hash pin, then — Load/Reload only — the embedded document through the document's
-    // own canonical serializer (never a re-derived re-parse). Reset carries neither an origin, a document, nor a
+    }    // The rebuild leaf's own tagged union: kind, force, origin, source hash, then a Load document or Reload delta.
+    // The delta uses the document composer's keyed vocabulary, with authority version and base/result fingerprints.
+    // Reset carries neither an origin, a document, a delta, nor a
     // content-hash pin here: the base is server state, never client-supplied, and its CAS hash is computed at apply
     // time (WorldServer.ApplyRebuild), not known at submission — see ValidRebuildShape, checked on BOTH write and
     // read so a malformed request can never round-trip silently into a different shape than it claims.
@@ -1247,7 +1261,7 @@ public static partial class WorldSubmissionCodec {
         if (!ValidRebuildShape(request: request)) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.PayloadMalformed,
-                $"rebuild request kind '{request.Kind}' does not carry the shape its kind requires (a document, an origin, and a content hash iff Kind is Load or Reload, none of the three for Reset)"
+                $"rebuild request kind '{request.Kind}' does not carry the shape its kind requires (Load: document/origin/hash; Reload: version-pinned delta/origin/hash; Reset: none)"
             ));
         }
         WriteRebuildKind(
@@ -1289,6 +1303,14 @@ public static partial class WorldSubmissionCodec {
                 w.WriteNullableString(value: definition.DocumentDirectory);
             }
         );
+        writer.WriteOptionalClass(request.Delta, static (w, delta) => {
+            w.WriteGuid(delta.BaseVersion.Activation);
+            w.WriteInt64(delta.BaseVersion.Sequence);
+            w.WriteNullableString(delta.BaseHash);
+            w.WriteNullableString(delta.TargetHash);
+            w.WriteBlock(delta.Patch);
+            w.WriteNullableString(delta.DocumentDirectory);
+        });
     }
     private static void WriteRebuildKind(WireWriter writer, WorldRebuildKind kind) {
         if (!WorldWireTags.TryToWire(
@@ -1912,9 +1934,8 @@ public static partial class WorldSubmissionCodec {
             value: query
         );
     /// <summary>Encodes the rebuild leaf: one discriminant byte for <see cref="WorldRebuildKind"/>, the force flag, an
-    /// optional origin (none, a file, or a store), an optional content-hash pin, and — for <see cref="WorldRebuildKind.Load"/>/
-    /// <see cref="WorldRebuildKind.Reload"/> only — the embedded document through the document's own canonical
-    /// serializer. A binary leaf, like the addon-lifecycle leaf, not a JSON union: the shape is small and fixed. The
+    /// optional origin (none, a file, or a store), an optional content-hash pin, and either a Load document or a
+    /// version-pinned Reload delta. A binary leaf, like the addon-lifecycle leaf, not a JSON union. The
     /// content-hash pin is this envelope's own copy of the CAS value the replay tape later checks a re-read against
     /// (<c>WorldReplaySnapshot</c>'s own leaf, never this one, records it on the TAPE) — carried here so it survives
     /// the loopback's encode-then-decode round trip intact before <c>WorldServer.ApplyRebuild</c> ever sees it.</summary>

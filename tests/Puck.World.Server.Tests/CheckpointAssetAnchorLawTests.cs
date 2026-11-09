@@ -265,7 +265,8 @@ public sealed class CheckpointAssetAnchorLawTests {
             failure: out var encodeFailure,
             request: new WorldRebuildRequest(
                 ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: definition)),
-                Definition: definition,
+                Definition: null,
+                Delta: WorldReloadDelta.Create(definition, new WorldDocumentVersion(Guid.NewGuid(), 0), definition),
                 Force: false,
                 Kind: WorldRebuildKind.Reload,
                 Origin: origin

@@ -17,13 +17,13 @@ public enum WorldRebuildKind {
 }
 /// <summary>One <c>world.reset</c>/<c>world.load</c>/<c>world.reload</c> request — the payload
 /// <see cref="WorldSubmissionPayload.Rebuild"/> carries through the ordered submission domain. The console-side
-/// Immediate handler resolves everything I/O-shaped (reading and validating a file) before this ever reaches the
+/// handler resolves everything I/O-shaped (reading and validating a file) before this ever reaches the
 /// domain, so this record carries only the result of that resolution (or, for <see cref="WorldRebuildKind.Reset"/>,
 /// nothing at all: the base is server state, never client-supplied).</summary>
 /// <param name="Kind">Which of the three document sources this request rebuilds from.</param>
-/// <param name="Definition">The document to install — required for <see cref="WorldRebuildKind.Load"/>/
-/// <see cref="WorldRebuildKind.Reload"/>, always <see langword="null"/> for <see cref="WorldRebuildKind.Reset"/>
-/// (the server supplies its own base).</param>
+/// <param name="Definition">The document to install, carried on the wire for Load. Reload carries Delta instead;
+/// the authority reconstructs Definition before queuing it. In-process reloads may supply a document directly.
+/// Reset carries no document (the server supplies its own base).</param>
 /// <param name="Origin">Where the document came from — a file, or a hosted world's store — for the completion echo
 /// and (on a <see cref="WorldRebuildKind.Load"/>/<see cref="WorldRebuildKind.Reload"/> of a file) the new save/reload
 /// target; required for those two kinds, always <see langword="null"/> for <see cref="WorldRebuildKind.Reset"/>.</param>
@@ -38,4 +38,6 @@ public enum WorldRebuildKind {
 /// at apply time — see <c>WorldServer.ApplyRebuild</c>). This is the replay tape's CAS pin: a re-drive refuses by
 /// name when a re-read of the same file (or a re-hash of the re-driven run's own base) disagrees with what was
 /// recorded, rather than silently reproducing a base or file that has moved since the recording was made.</param>
-public sealed record WorldRebuildRequest(WorldRebuildKind Kind, WorldDefinition? Definition, WorldRebuildOrigin? Origin, bool Force, string? ContentHash = null);
+/// <param name="Delta">A reload's version-pinned document delta. The wire carries this instead of Definition;
+/// the server alone fills Definition after reconstructing and validating it.</param>
+public sealed record WorldRebuildRequest(WorldRebuildKind Kind, WorldDefinition? Definition, WorldRebuildOrigin? Origin, bool Force, string? ContentHash = null, WorldReloadDelta? Delta = null);
