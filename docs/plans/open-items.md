@@ -2324,12 +2324,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     three times: `Puck.SignedDistance/SdfProgramBuilder.Text.cs:225`,
     `Puck.World.Client/WorldFramePresenter.cs:951`,
     `Puck.World.Client/WorldScreenStamper.cs:23`.
-  - [low] The bake's tetrahedral gradient taps, written out in
-    `Puck.Cli.Worlds/Mesh/MeshCpuBake.cs:30` and four `SdfVm` test helpers
-    (`tests/Puck.SdfVm.Tests/SdfFieldSliceLawTests.cs:33`,
-    `SdfMeshPathBakeLawTests.Settle.cs:204`, `SdfMeshPathBakeLawTests.cs:579`,
-    `:617`); the sample position beside them is already one
-    `SampleAt` (`SdfMeshPathBake.cs:44`). Check the HLSL tap set against the same constant.
+  - [low] The bake's tetrahedral gradient taps have one C# home,
+    `SdfMeshBakeTaps`, which the offline bake, the field levels and the `SdfVm`
+    laws' kernel stand-ins share; the HLSL tap set (`SdfBakeTaps` in
+    `passes/sdf-mesh-bake.comp.hlsl`) is still a hand pair with it, which a
+    generated declaration would close.
   - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
     (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
     `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
