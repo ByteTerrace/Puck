@@ -408,7 +408,10 @@ back judging her as meeting her sheets, and the critic failed her on every headi
 side by side with the sheet it should match, gets geometry right on `puck mesh preview` (seconds, no GPU) first,
 and the lead sends the preview sheet to the critic before the lane takes a windowed slot, which then serves
 lamps, palette, motion and lighting only. A creation whose parts live in separate documents (a suit and its
-pilot) is split into lanes by document. Every batch window also takes a few
+pilot) is split into lanes by document. A creation with no reference sheet gets one first, as a durable doc
+with its proportions, per-view silhouette targets and cited sources, before any rebuild: six swallow lanes each
+cleared some critic items and surfaced others, because each lane and the critic judged against their own idea
+of a swallow. The Moth's preview rounds, judged against her concept pack, converged in four. Every batch window also takes a few
 captures focused on something chosen at random (a creation, a room, a surface
 up close), because the owner's observation is that any such capture shows
 flaws at once; each flaw seen is filed in the visual bar packet or sent to a
