@@ -265,7 +265,8 @@ public sealed partial class ConfinedDirectory : IDisposable {
         }
     }
     /// <summary>Atomically replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both directly in
-    /// this directory, and makes the replacement durable.</summary>
+    /// this directory, by handle: on Windows a rename of the temporary's handle followed by <c>FlushFileBuffers</c> on it,
+    /// on Linux <c>renameat</c> followed by <see cref="Flush"/>.</summary>
     /// <param name="temporary">The replacing file's name.</param>
     /// <param name="name">The replaced file's name.</param>
     /// <exception cref="IOException">Either name is a link, or the replacement fails.</exception>
@@ -279,7 +280,40 @@ public sealed partial class ConfinedDirectory : IDisposable {
             Windows.Rename(destination: Handle, handle: source, name: name, replace: true);
             if (!FlushFileBuffers(handle: source)) { throw new IOException(message: "Cannot flush the published file."); }
         } else {
-            Linux.ReplaceFile(destinationName: name, parent: Handle, sourceName: temporary);
+            Linux.RenameReplace(parent: Handle, sourceName: temporary, destinationName: name);
+            Linux.Flush(directory: Handle);
+        }
+    }
+    /// <summary>Makes this directory's entries durable: on Linux an <c>fsync</c> of the directory, which persists a rename
+    /// into it or a file created in it (fsync(2) requires this beside the file's own flush). On Windows it does nothing:
+    /// a file's own <c>FlushFileBuffers</c> and a write-through move (<see cref="AtomicFile.WriteAllBytesDurably"/>) are
+    /// the documented durability operations there, and a directory opened for listing cannot be flushed.</summary>
+    /// <exception cref="IOException">The directory cannot be flushed.</exception>
+    public void Flush() {
+        if (!OperatingSystem.IsWindows()) { Linux.Flush(directory: Handle); }
+    }
+    /// <summary>Makes every directory below this one, and this one, durable (<see cref="Flush"/>), through handles and
+    /// without recursion; a link is never followed.</summary>
+    /// <exception cref="IOException">A directory cannot be opened or flushed.</exception>
+    public void FlushTree() {
+        if (OperatingSystem.IsWindows()) { return; }
+        var pending = new Stack<ConfinedDirectory>();
+
+        try {
+            Flush();
+            foreach (var entry in Entries()) {
+                if ((entry.Kind == ConfinedEntryKind.Directory) && (Child(name: entry.Name) is { } child)) { pending.Push(item: child); }
+            }
+            while (pending.TryPop(result: out var directory)) {
+                using (directory) {
+                    directory.Flush();
+                    foreach (var entry in directory.Entries()) {
+                        if ((entry.Kind == ConfinedEntryKind.Directory) && (directory.Child(name: entry.Name) is { } child)) { pending.Push(item: child); }
+                    }
+                }
+            }
+        } finally {
+            foreach (var directory in pending) { directory.Dispose(); }
         }
     }
     /// <summary>Removes the file or directory tree <paramref name="name"/> directly in this directory, through handles:

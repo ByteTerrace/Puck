@@ -120,13 +120,14 @@ exercise the public wire paths. Invalidation itself remains observable; the
 `UpdateService.ApplyUnderLeaseAsync` retires terminally refused intents without
 rewinding replay marks, while staging and I/O failures retain resumable work.
 `UpdateInstallTransactionTests` covers subsequent signed releases and a bridge
-release after rollback. `HealthGateFile.MarkPending` preserves the still-selected
-version's attempts until the stub reads committed `current`; `StubHealth.Write`
-and `StubInstall.WritePointerAtomic` use the shared flushed `AtomicFile` writer.
-`SelfUpdateHealthGateHostedService` awaits startup and retries transient clearing
-failures until selection is decided or the host stops. `UpdateRecoveryHardeningTests`
-exercises interrupted publication and install-lease contention. File flushing
-does not establish directory durability or power-loss ordering on every filesystem.
+release after rollback. Launch attempts, proofs of health and the current version
+live in one release record that only `InstallTransaction` writes, with the durable
+`AtomicFile.WriteAllBytesDurably` replacement
+([the updater policy plan](../plans/updater-policy.md)).
+`SelfUpdateHealthGateHostedService` awaits startup and retries transient health
+recording until selection is decided or the host stops. `UpdateRecoveryHardeningTests`
+exercises install-lease contention and an invalid record. Power-loss ordering has
+not been reproduced on hardware.
 
 Findings 2.1 and 2.2 remain open in the [security packet](../plans/open-items.md#security-review):
 fresh signed authorization can retry a rejected payload, and rollback does not
@@ -159,9 +160,9 @@ someone else's private key are different threat models.
 | Addon intake and guest resources lacked combined limits | Whole source files reached native parsing/compilation before a size check. A guest could declare additional hidden memories within each memory's individual ceiling. This requires an authorized addon mount; no ordinary remote-player upload route was found. | Bounded source reads and declaration checks precede native compilation. The store limits instance, memory and table counts and growth; [guest cases](../../tests/Puck.World.Server.Tests/AddonGuestLawTests.cs) include hidden resources, boundary controls and cache-eviction lifetime. Native compiler workspace and aggregate host budgets remain separate questions. |
 | Release signing subject could name another app | A signing key admitted for another subject under the trusted root could sign canonical bytes naming the target app. A CDN without that key cannot forge this claim. | The replay requirement's subject must equal the manifest app before sequence reservation. `AttestationReleaseVerifierTests.Verify_Refuses_ClaimSubjectMismatchingManifestApp` failed with the check withheld and passed with it. |
 | Release directory names admitted ambiguous metadata | Channels admitted traversal/separators and leading whitespace; version names admitted leading spaces that pointer readers trim. Exploitation of signed metadata requires an authorized signer. | Channels are single portable components and path segments reject leading spaces. `ReleaseManifestTests` has four rejected-channel cases and a leading-space version case, each failing without the fix. |
-| Signed payload could occupy install metadata | A signer could declare `state-generation` as a payload file; activation would overwrite those already-hashed bytes with install metadata. | The filename is reserved case-insensitively. `Validate_RefusesReservedStateGenerationPayloadFile` failed without the exclusion and passed with it. |
+| Signed payload could occupy install metadata | A signer could declare an install metadata file as a payload file; activation would overwrite those already-hashed bytes with install metadata. | The install record's name is reserved case-insensitively; `ReleaseManifestTests.Validate_RefusesReservedPayloadFiles` covers it. |
 | Rollback left a stale minimum-supported check | An interrupted valid signed update could resume after rollback below its minimum supported version because recovery checked the former installed version. | Recovery checks the current pointer before staging. `Recovery_RefusesWhenRollbackDropsCurrentBelowPendingIntentsMinimumSupported` reached staging without the fix and refuses with it. |
-| Case-alias release could reuse an active directory | Case-sensitive prerelease ordering could choose a case alias of current or last-good on a case-insensitive filesystem. Requires a signed alias release and an existing active directory. | The service refuses before staging and the applier independently refuses activation. `Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall` and both `Apply_RefusesCaseAliasOfAnActiveDirectory` cases failed without the checks and pass with them. |
+| Case-alias release could reuse an active directory | Case-sensitive prerelease ordering could choose a case alias of the current version or the rollback target on a case-insensitive filesystem. Requires a signed alias release and an existing active directory. | The service refuses before staging and the applier independently refuses activation. `Apply_RefusesCaseInsensitiveVersionCollisionWithActiveInstall` and both `Apply_RefusesCaseAliasOfAnActiveDirectory` cases failed without the checks and pass with them. |
 | Rule-local evaluation escaped transform control checks | A hidden local can affect whether evaluation reaches a transform, including through expression failure. Requires an authored rule, or a later runtime visibility restriction. | The compiler includes all compiled local reads in transform controls. Both `HiddenRuleLocalsCannotControlAPublicTransform` cases failed without the fix and pass with it. This remains conservative audience enforcement, not precise taint analysis. |
 | Push-ray disclosure used field indices as row ordinals | An authored pool transform checked unrelated arena rows and omitted its pool domain. | The check resolves domain and backing-field rows through the pool catalog. `PushRayDisclosureChecksThePoolsOwnBackingRows` failed with an incorrect refusal without the fix and passes with it; this witness proves the mapping defect, not an end-to-end disclosure exploit. |
 | Parenthesized vector subject named the operand instead of its row | An authored transform reported `(secretVec[a])` as its read subject, obscuring the actual row from consumers. | Balanced enclosing parentheses are stripped before subject extraction. `ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject` failed without stripping and passes with it; the witness does not establish a complete remote authorization bypass. |

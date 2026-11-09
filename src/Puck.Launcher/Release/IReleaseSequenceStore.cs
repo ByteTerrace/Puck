@@ -195,10 +195,8 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
                     .Append(value: mark.ManifestPin?.ToString()).Append(value: '\n');
             }
 
-            AtomicFile.WriteAllText(
-                contents: text.ToString(),
-                path: m_filePath
-            );
+            // Durable before acceptance: a mark a power loss could roll back would reopen the sequences it consumed.
+            AtomicFile.WriteAllBytesDurably(bytes: Encoding.UTF8.GetBytes(s: text.ToString()), path: m_filePath);
             return ReleaseDecision.Accepted;
         }
     }
