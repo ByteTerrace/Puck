@@ -1061,6 +1061,19 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   crossings and open edges; a cutter that is only a lower bound (a stretched
   ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to
   the shape whose own field is loosest there.
+- **`rough` sees mottling the centroid checks cannot.** The shading check
+  compares each corner against the gradient at its triangle's centroid, which
+  the surface's own curvature over half a cell turns by up to the 30-degree
+  threshold, so sub-cell relief of 5 to 15 degrees scored clean. `rough`
+  measures each smooth vertex (copies with one normal; crease copies stay with
+  the shading check) against the gradient at the vertex across a quarter cell,
+  where a correct bake's normal is the gradient, and flags past 10 degrees. A
+  CPU field that rounds a product of two lengths before dividing (a superellipsoid
+  ratio `(|p| · min(r)) / r` rounded at the product craters every ellipsoid and
+  sphere at centimetre sizes in `MeshCpuBake` and `mesh preview`) reads p50 near
+  10 degrees; a sound one reads under 1. A loose bound multiplies the CPU twin's
+  rounding by its slope deficit: a flare raises `rough` p99 to about 6 degrees
+  on every primitive in a CPU bake, which the kernel's float field does not.
 - **Audit changed collapse levels explicitly.** `--level 1` and `--level 2`
   select the triangles those forced render levels draw, clamped per chunk to
   its last level. Only referenced vertices count. The field coverage lattice
