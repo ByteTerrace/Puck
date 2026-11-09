@@ -259,31 +259,13 @@ public sealed class FieldLattice {
 
         for (var z = 0; (z < m_depth); z++) {
             for (var x = 0; (x < m_width); x++) {
-                // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream.
-                var amplitude = FixedQ4816.One;
-                var total = FixedQ4816.Zero;
-                var weight = FixedQ4816.Zero;
-                var cells = fill.Frequency;
-
-                for (var octave = 0; (octave < fill.Octaves); octave++) {
-                    total += (amplitude * Pcg3dLatticeNoise.ValueNoise01(
-                        cellX: x,
-                        cellZ: z,
-                        noiseCells: System.Math.Max(
-                            val1: 1,
-                            val2: cells
-                        ),
-                        seed: unchecked((seed + (((uint)octave) * 0x9E3779B9u)))
-                    ));
-                    weight += amplitude;
-                    amplitude = FixedQ4816.FromRawBits(value: (amplitude.Value >> 1));
-                    cells = System.Math.Max(
-                        val1: 1,
-                        val2: (cells >> 1)
-                    );
-                }
-
-                var n = (total / weight);
+                var n = Pcg3dLatticeNoise.Fbm01(
+                    cellX: x,
+                    cellZ: z,
+                    frequency: fill.Frequency,
+                    octaves: fill.Octaves,
+                    seed: seed
+                );
 
                 if (n < fill.Threshold) {
                     continue;

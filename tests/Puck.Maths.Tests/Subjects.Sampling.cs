@@ -1352,6 +1352,80 @@ internal static partial class Subjects {
     }
     // Pcg3d against Oracles.Pcg3dReference — the identical Jarzynski & Olano mix, formed independently in
     // BigInteger with the carrier reduction taken explicitly, where the subject relies on unchecked uint wrap.
+    /// <summary>Pcg3dLatticeNoise.Fbm01 against its octaves' closed-form weighted mean over a few fills: noise-cell
+    /// edges below one, one, odd and wide, one to eight octaves, edge and drawn cell indices and seeds.</summary>
+    public static string? Pcg3dLatticeFractalNoiseVersusOctaveSum() {
+        var generator = Pcg32XshRr.Create(
+            state: 0xFB0001UL,
+            stream: 13UL
+        );
+        ReadOnlySpan<int> frequencies = [-3, 0, 1, 2, 5, 16, 33, 1000];
+        ReadOnlySpan<int> octaveCounts = [1, 2, 3, 4, 8];
+
+        foreach (var frequency in frequencies) {
+            foreach (var octaves in octaveCounts) {
+                for (var draw = 0; (draw < 24); ++draw) {
+                    var cellX = ((draw < 8) ? (draw - 4) : unchecked((int)generator.NextUInt32()));
+                    var cellZ = ((draw < 8) ? (3 - draw) : unchecked((int)generator.NextUInt32()));
+                    var seed = ((draw == 0) ? uint.MaxValue : generator.NextUInt32());
+                    var subject = Pcg3dLatticeNoise.Fbm01(
+                        cellX: cellX,
+                        cellZ: cellZ,
+                        frequency: frequency,
+                        octaves: octaves,
+                        seed: seed
+                    );
+                    var reference = Oracles.FractalValueNoise01Raw(
+                        frequency: frequency,
+                        octaves: octaves,
+                        seed: seed,
+                        octaveRaw: (cells, octaveSeed) => Pcg3dLatticeNoise.ValueNoise01(
+                            cellX: cellX,
+                            cellZ: cellZ,
+                            noiseCells: cells,
+                            seed: octaveSeed
+                        ).Value
+                    );
+
+                    if (subject.Value != ((long)reference)) { return $"Fbm01({cellX}, {cellZ}, {frequency}, {octaves}, {seed}) is raw {subject.Value}, not its octaves' weighted mean {reference}"; }
+
+                    if ((subject.Value < 0L) || (subject.Value >= FixedQ4816.One.Value)) { return $"Fbm01({cellX}, {cellZ}, {frequency}, {octaves}, {seed}) left [0, 1) at raw {subject.Value}"; }
+                }
+            }
+        }
+
+        // One octave is ValueNoise01 itself at the clamped edge: the mean of a single term divides its own weight.
+        var single = Pcg3dLatticeNoise.Fbm01(
+            cellX: 7,
+            cellZ: -9,
+            frequency: 4,
+            octaves: 1,
+            seed: 0xC0FFEEU
+        );
+
+        if (single != Pcg3dLatticeNoise.ValueNoise01(
+            cellX: 7,
+            cellZ: -9,
+            noiseCells: 4,
+            seed: 0xC0FFEEU
+        )) { return "one octave of Fbm01 is not ValueNoise01 at the first octave's edge and seed"; }
+
+        foreach (var octaves in ((ReadOnlySpan<int>)[0, -1])) {
+            if (!ThrowsExactly<ArgumentOutOfRangeException>(
+                action: () => Pcg3dLatticeNoise.Fbm01(
+                    cellX: 0,
+                    cellZ: 0,
+                    frequency: 4,
+                    octaves: octaves,
+                    seed: 0U
+                ),
+                paramName: "octaves"
+            )) { return $"Fbm01 admitted {octaves} octaves"; }
+        }
+
+        return null;
+    }
+
     private static string? Pcg3dAgreesWithReference(uint x, uint y, uint z) {
         var reference = Oracles.Pcg3dReference(
             x: x,
