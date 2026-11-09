@@ -15,9 +15,10 @@ lugged sole with a heel step, as sheet 04 draws them. Gloves, pads, boots and
 hair are darker than the suit, and the straps lighter.
 
 Her head is the suited Moth's own: the [`moth-head`](moth-head.puck) library's
-`mothHead` template at the same 0.68 scale (about 0.26 m crown to chin), placed
-so her eyes sit 1.527 m up, the suited eye line less sheet 05's 0.208 m
-footbed. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
+`mothHead` template at 0.64 scale (`pilotHeadScale`), placed so her eyes sit
+1.552 m up (`pilotHeadAt`): high enough over her sloped shoulders for sheet
+04's column of turtleneck under her chin, and small enough that she stands
+about six heads tall. Its mouth and lid paints and its blink frame (`mothBlinkPose`) are
 placed at her head the same way. Out of the hood her black hair has sheet 04's
 volume, which is her own: a few tapered locks (`pilotHairLocks`, joined to the
 head's scalp group through `mothHairLock`) over a smaller inner mass
@@ -134,10 +135,13 @@ hold pose was solved.
 The torso is one smoothly blended group (chest, waist, chest front, trapezius
 and the two rounded shoulder caps, which carry the deltoid) riding the torso
 shape; the sleeve's top sits inside the cap, so the shoulder reads as one form.
-The thighs' rounded tops overlap across her middle, so the two trouser legs
-make her hips and seat themselves and meet in a seam down the front and back;
-the pelvis, which carries the body's motion, sits hidden inside them. The belt
-is one flat band, an ellipse in plan, round her hips.
+The trousers' top rides the pelvis as one blended group: the pelvis, the tops of
+both legs (`hipLeg`) down to the crotch a little over a third of the way from
+the belt to the knee, and a modest seat. Each swinging thigh leaves its top in
+a plain union, because a blend between parts that move apart tears in a walk
+(PUCK122); a moving blend ([moving blends](../../../docs/plans/moving-blends.md))
+will join them there, and at the elbow and knee. The belt is one flat band, an
+ellipse in plan, round her hips.
 Each moving part of a limb is its own blended group, so no blend crosses a
 joint: the upper arm (the sleeve's sweep, biceps and triceps), the forearm (its
 sweep and the muscle below the elbow), the glove (cuff, wrist, palm, padded
