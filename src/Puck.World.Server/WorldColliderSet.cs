@@ -60,6 +60,7 @@ public sealed partial class WorldColliderSet : IContactField {
     private readonly FixedStaticCollider[] m_colliders;
     // m_colliders with each one's world bounds, compiled once: what every solve runs over.
     private readonly FixedStaticColliderSet m_staticSet;
+
     // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
     // rebuilds it, which are the only writers between solves.
     private readonly FixedStaticColliderSet m_attachedSet = new();
@@ -93,7 +94,6 @@ public sealed partial class WorldColliderSet : IContactField {
     // actually moved without keeping a second snapshot array. AttachedRevision only advances when the fold changes —
     // never on every call — so a world with no moving attached row (the common case) never wakes a sleeping body.
     private ulong m_attachedHash;
-
     // The box every attached row that moved since the last TakeAttachedChange swept through: its colliders before and
     // after each move. A sleeping body outside it cannot meet any collider that moved, so a moving carrier wakes only
     // what it nears.
@@ -125,10 +125,12 @@ public sealed partial class WorldColliderSet : IContactField {
     /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
     /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
     public ulong AttachedRevision { get; private set; }
+
     /// <summary>Gets how far past a body's collider surface a collider of this set still acts on the body, in metres:
     /// the tuning's <see cref="FixedWorldCollision.ContactReach"/>, the reach of a carrier's support
     /// (<see cref="TryRideDisplacement"/>).</summary>
     internal FixedQ4816 ContactReach { get; }
+
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
     /// <summary>Gets the number of solid circular cylinders in the set.</summary>
@@ -294,6 +296,9 @@ public sealed partial class WorldColliderSet : IContactField {
     // The one collider a solid row compiles for a creation's primitive copy, static and attached rows alike: a plane a
     // half-space, a uniformly scaled sphere a sphere, anything else its finite collider; each grown by the margin.
     private static FixedStaticCollider CopyCollider(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
+        if (ShapePointOps.DeformsContact(shape: copy.Shape) && (copy.Shape.Type != SdfSolidPrimitive.Plane)) {
+            return FixedStaticCollider.Box(center: copy.Center, halfExtents: (copy.LocalHalfExtents + new FixedVector3(X: margin, Y: margin, Z: margin)), rotation: copy.Rotation);
+        }
         if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
             var normal = copy.PlaneNormal;
 
@@ -316,7 +321,6 @@ public sealed partial class WorldColliderSet : IContactField {
             $"{copy.Shape.Type}/{copy.Shape.Blend}", placement.Solid!.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
             ConservativeInset = ((collider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
         };
-
     private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (copy.Shape.Type == SdfSolidPrimitive.Box) {
             var stampScale = copy.StampScale;
@@ -485,10 +489,11 @@ public sealed partial class WorldColliderSet : IContactField {
             );
 
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+
             if (
                 (previous is null) ||
                 !previous.m_placements.TryGetValue(key: placement, value: out var compiled) ||
-                !ReferenceEquals(compiled.Stamp, stamp) ||
+                !ReferenceEquals(objA: compiled.Stamp, objB: stamp) ||
                 !ReferenceEquals(objA: compiled.Creation, objB: creation) ||
                 (compiled.Frame != resolvedFrame) ||
                 (compiled.WorldSeed != worldSeed) ||
@@ -699,46 +704,47 @@ public sealed partial class WorldColliderSet : IContactField {
         var fields = 0;
         var composed = CollidesAsField(document: creation.EngineDocument);
         var rotation = stamp.FixedRotation;
-        stamp.ForEachFixed(instance => {
-                var transform = new FixedCreationStampTransform(
-                    Origin: instance.Origin,
-                    Rotation: rotation,
-                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
-                    ReflectionNormal: instance.ReflectionNormal
-                );
 
-                if (composed) {
-                    if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform) is not { } relief) {
-                        return;
-                    }
+        stamp.ForEachFixed(visitor: instance => {
+            var transform = new FixedCreationStampTransform(
+                Origin: instance.Origin,
+                Rotation: rotation,
+                Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                ReflectionNormal: instance.ReflectionNormal
+            );
 
-                    colliders.Add(item: relief);
-                    diagnostics.Add(item: new WorldDiagnosticCollider(relief, placement.Id.ToString(), creation.Id.ToString(), "relief",
-                        "Field/relief", solid.Margin));
-                    fields++;
+            if (composed) {
+                if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform) is not { } relief) {
                     return;
                 }
 
-                CreationStampEmitter.VisitFixedPrimitiveCopies(
-                document: creation.EngineDocument,
-                transform: transform,
-                visitor: copy => {
-                    var placementCollider = CopyCollider(copy: copy, margin: margin);
-
-                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                        planes++;
-                    } else if (IsSphereCopy(copy: copy)) {
-                        spheres++;
-                    } else if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
-                        cylinders++;
-                    } else {
-                        boxes++;
-                    }
-                    colliders.Add(item: placementCollider);
-                    diagnostics.Add(item: DiagnosticOf(collider: placementCollider, copy: copy, creation: creation, placement: placement));
-                }
-            );
+                colliders.Add(item: relief);
+                diagnostics.Add(item: new WorldDiagnosticCollider(relief, placement.Id.ToString(), creation.Id.ToString(), "relief",
+                    "Field/relief", solid.Margin));
+                fields++;
+                return;
             }
+
+            CreationStampEmitter.VisitFixedPrimitiveCopies(
+            document: creation.EngineDocument,
+            transform: transform,
+            visitor: copy => {
+                var placementCollider = CopyCollider(copy: copy, margin: margin);
+
+                if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+                    planes++;
+                } else if (IsSphereCopy(copy: copy)) {
+                    spheres++;
+                } else if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
+                    cylinders++;
+                } else {
+                    boxes++;
+                }
+                colliders.Add(item: placementCollider);
+                diagnostics.Add(item: DiagnosticOf(collider: placementCollider, copy: copy, creation: creation, placement: placement));
+            }
+        );
+        }
         );
 
         // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
@@ -825,7 +831,6 @@ public sealed partial class WorldColliderSet : IContactField {
     // A row moved when it resolves at one refresh and not the other, or at another origin or rotation at both.
     private bool AttachedRowMoved(int row) => ((m_attachedResolved[row] != m_previousAttachedResolved[row]) ||
         (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]))));
-
     private void FoldAttachedMoves(List<FixedStaticCollider> colliders, List<int> rows) {
         for (var index = 0; (index < colliders.Count); index++) {
             if (AttachedRowMoved(row: rows[index])) { m_attachedMoves.Fold(collider: colliders[index]); }
@@ -847,6 +852,7 @@ public sealed partial class WorldColliderSet : IContactField {
         m_attachedColliderRows.Add(item: m_refreshRow);
         FoldCollider(collider: in attached, hash: ref m_refreshHash);
     }
+
     /// <summary>Returns every attached solid row its carrier resolved at the latest refresh, at the pose that refresh
     /// sampled (the one every solve this tick runs against), with the colliders compiled there and their authored
     /// sources: what a diagnostic compares with the authored solid at the same pose. A row whose carrier is inactive
@@ -870,6 +876,7 @@ public sealed partial class WorldColliderSet : IContactField {
 
         return rows;
     }
+
     private void RefreshAttachedRows(WorldPopulation population) {
         m_refreshHash = Fnv1aHash.Create();
 
@@ -931,8 +938,8 @@ public sealed partial class WorldColliderSet : IContactField {
                 continue;
             }
             foreach (ref readonly var volume in volumes) {
-                if (!collider.TryGetPush(orientation: in orientation, position: position, push: out var push, uncertain: out _,
-                    skin: skin, volume: in volume) ||
+                if (!collider.TryGetPush(orientation: in orientation, position: position, push: out var push, skin: skin,
+                    uncertain: out _, volume: in volume) ||
                     (FixedVector3.Dot(left: push.Normal, right: up) < m_solver.GroundedThreshold) ||
                     (found && (push.Penetration <= bestDepth))) {
                     continue;

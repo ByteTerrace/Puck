@@ -568,22 +568,30 @@ public sealed class TextContractTests {
             placement.PlaneBounds.Right
         );
     }
-    [InlineData("the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp")]
-    [InlineData("min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface")]
+    [InlineData("the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp", TextAlignment.Center)]
+    [InlineData("min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface", TextAlignment.Center)]
+    [InlineData("the sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp", TextAlignment.Left)]
+    [InlineData("min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface", TextAlignment.Left)]
+    [InlineData("unusuallylongwordwithoutanyseparatorsatall", TextAlignment.Left)]
+    [InlineData("unusuallylongwordwithoutanyseparatorsatall", TextAlignment.Center)]
     [Theory]
-    public void LayoutKeepsWordsInsideTheAuthoredFace(string text) {
+    public void LayoutKeepsWordsInsideTheAuthoredFace(string text, TextAlignment alignment) {
         var atlas = new ManagedFontAtlasGenerator().Generate(request: new FontAtlasGenerationRequest {
             FontBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.Text/Assets/Fonts/source/Inter-Regular.ttf")),
             FontIdentifier = "test://word-wrap",
             Options = new FontAtlasGenerationOptions { AllowedCodePointRanges = ["U+0020-U+007E"] },
         });
         var layout = new TextLayout().Layout(atlas, text,
-            new TextLayoutOptions(MaxLineWidth: 1.12f, Alignment: TextAlignment.Center, LineHeightScale: 1.15f),
+            new TextLayoutOptions(MaxLineWidth: 1.12f, Alignment: alignment, LineHeightScale: 1.15f),
             scale: 0.03f);
 
         Assert.All(layout.Placements, placement => {
-            Assert.InRange(placement.PlaneBounds.Left, -0.56f, 0.56f);
-            Assert.InRange(placement.PlaneBounds.Right, -0.56f, 0.56f);
+            var left = ((alignment == TextAlignment.Left) ? 0f : -0.56f);
+            // Left alignment anchors the pen, retaining a glyph's negative left bearing.
+            var overhang = ((alignment == TextAlignment.Left) ? MathF.Min(x: 0f, y: (placement.Glyph.PlaneBounds!.Value.Left * 0.03f)) : 0f);
+
+            Assert.InRange(placement.PlaneBounds.Left, (left + overhang), (left + 1.12f));
+            Assert.InRange(placement.PlaneBounds.Right, left, (left + 1.12f));
             Assert.InRange((0.085f + placement.PlaneBounds.Bottom), 0f, 0.15f);
             Assert.InRange((0.085f + placement.PlaneBounds.Top), 0f, 0.15f);
         });
@@ -597,6 +605,38 @@ public sealed class TextContractTests {
             index += word.Length;
         }
         Assert.Equal(index, layout.Placements.Count);
+    }
+    [Fact]
+    public void LayoutSharesWrapMeasureAndPreservesHardLineSpacing() {
+        var atlas = CreateAtlas(
+            glyphs: [
+                new FontAtlasGlyph('A', 1f, new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f), new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
+                new FontAtlasGlyph('B', 1f, new FontAtlasBounds(Bottom: 0f, Left: 0.25f, Right: 1.25f, Top: 1f), new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)),
+                new FontAtlasGlyph(' ', 0.5f, null, null),
+                new FontAtlasGlyph(0x2007, 0.5f, null, null),
+            ],
+            imageData: new FontAtlasImageData(height: 1, rgbaPixels: [1, 2, 3, 4], width: 1), width: 1);
+        var layout = new TextLayout();
+        var hard = layout.Layout(atlas, "  A\n  A", maxLineWidth: 10f);
+
+        Assert.All(hard.Placements, glyph => Assert.Equal(1f, glyph.BaselineOrigin.X));
+        var soft = layout.Layout(atlas, "AA  A", maxLineWidth: 2.5f);
+
+        Assert.Equal(new Vector2(x: 0f, y: -1f), soft.Placements[^1].BaselineOrigin);
+        var nonbreaking = layout.Layout(atlas, "A A\u2007A", maxLineWidth: 2.6f);
+
+        Assert.Equal(-1f, nonbreaking.Placements[1].BaselineOrigin.Y);
+        Assert.Equal(-1f, nonbreaking.Placements[2].BaselineOrigin.Y);
+        var oversized = layout.Layout(atlas, "AAAAAA", maxLineWidth: 2.6f);
+
+        Assert.Equal(3, oversized.Placements.Select(selector: glyph => glyph.BaselineOrigin.Y).Distinct().Count());
+        Assert.All(oversized.Placements, glyph => Assert.InRange(glyph.PlaneBounds.Right, 0f, 2.6f));
+        var bearingWord = layout.Layout(atlas, "B B", maxLineWidth: 2.6f);
+
+        Assert.Equal(-1f, bearingWord.Placements[1].BaselineOrigin.Y);
+        var bearingGlyphs = layout.Layout(atlas, "BB", maxLineWidth: 2.1f);
+
+        Assert.Equal(-1f, bearingGlyphs.Placements[1].BaselineOrigin.Y);
     }
     [Fact]
     public void LayoutCenterAlignmentCentersShorterLines() {

@@ -473,8 +473,8 @@ public sealed partial class SdfFieldEvaluator {
         _ => (result - Point(value: instruction.Data0X)),
     };
     // The render reading's warps over a box (WarpPoint's inclusion rules). AxialProfile divides the two other axes by an s
-    // of at least FlareMinScale, so each lies between zero and its range over FlareMinScale. RotatePlane turns (u, v) about
-    // the plane's origin, so both lie within the largest radius the box's (u, v) rectangle reaches.
+    // of at least FlareMinScale, so each lies between zero and its range over FlareMinScale. RotatePlane uses directed
+    // interval trigonometry: the enclosure shrinks with the query box, so a contact solve can certify its surface.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static IntervalVector3 WarpBounds(in CompiledInstruction instruction, IntervalVector3 local, ref FixedInterval distanceScale) {
         if (instruction.Op == SdfOp.AxialProfile) {
@@ -491,13 +491,18 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var (u, v) = PlaneAxes(plane: instruction.Shape);
-        var radius = FixedInterval.Magnitude(x: Component(axis: u, box: local), y: Component(axis: v, box: local)).Upper;
-        var turned = new FixedInterval(lower: -radius, upper: radius);
+        var angle = (Point(value: instruction.Data0X) * (Component(local, ((int)instruction.Blend)) - Point(value: instruction.Data0Y)));
+        var sin = FixedInterval.Sin(angle: angle);
+        var cos = FixedInterval.Cos(angle: angle);
+        var pu = Component(axis: u, box: local);
+        var pv = Component(axis: v, box: local);
+        var turnedU = ((cos * pu) + (sin * pv));
+        var turnedV = ((cos * pv) - (sin * pu));
 
         return new IntervalVector3(
-            X: (((u == 0) || (v == 0)) ? turned : local.X),
-            Y: (((u == 1) || (v == 1)) ? turned : local.Y),
-            Z: (((u == 2) || (v == 2)) ? turned : local.Z)
+            X: ((u == 0) ? turnedU : ((v == 0) ? turnedV : local.X)),
+            Y: ((u == 1) ? turnedU : ((v == 1) ? turnedV : local.Y)),
+            Z: ((u == 2) ? turnedU : ((v == 2) ? turnedV : local.Z))
         );
     }
     private static FixedInterval Component(IntervalVector3 box, int axis) => axis switch {

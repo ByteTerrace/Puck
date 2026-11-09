@@ -2230,6 +2230,12 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · volume emission] `WorldPlacementStamper.AppendStaticVolumes` and
+  `WorldCreationInstances.AppendVolumes` repeat enabled-volume admission,
+  capacity refusal, parent lookup and isolation filtering. Share that walk
+  and keep each caller's static or motion-slot frame resolution at its boundary.
+  The deformation fix pass's duplicate scan found the existing pair; the next
+  volume/client pass owns its unification.
 - [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
   slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
   `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
@@ -5403,8 +5409,9 @@ read one. The plans that keep open items:
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.
 - [Modeling authoring](modeling-authoring.md#5-implementation-slices): the
-  engine limits authors met with their owners and steps (a static placement's
-  dropped `twist`, Convex rounding, the paint outline cap, a fold's detail),
+  remaining engine limits authors met (bake detail, folds and non-uniform scale);
+  static twist/bend including contact and scoped clamps, Convex rounding,
+  paint outlines and word layout are delivered there. The plan also owns
   the `mirror` block, rotation builtins and `relativeTo` placement as slices
   S1 to S3, the preview compare and named anchors after them.
 - [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the unbuilt

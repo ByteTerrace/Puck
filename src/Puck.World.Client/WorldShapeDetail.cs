@@ -82,7 +82,7 @@ internal static class WorldShapeDetail {
         if (shape.Cells is { } cells) { Take(spacing: (1f / (32f * cells.Frequency))); }
         // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document reads it
         // as authored.
-        if ((shape.Flare is not null) || (shape.Shear is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f) || (shape.Bumps is { Count: > 0 }) || (shape.Warp is not null) || (shape.Displace is not null)) {
+        if (ShapePointOps.NeedsScope(shape)) {
             Take(spacing: (HalfExtents(shape: shape, size: size).Smallest / WarpCells));
         }
 
@@ -127,16 +127,10 @@ internal static class WorldShapeDetail {
     // A rounded-rectangle or convex prism profile's corner radius, in creation units, its rounding included for a convex
     // one as the builder clamps it; zero for another profile.
     private static float ProfileCorner(ShapeDocument shape, Vector3 size) {
-        if (shape.Profile is not { CornerRadius: > 0f, Kind: SdfPrismProfileKind.Convex or SdfPrismProfileKind.RoundedRectangle } profile) { return 0f; }
+        if (shape.Profile is not { Kind: SdfPrismProfileKind.Convex or SdfPrismProfileKind.RoundedRectangle } profile) { return 0f; }
         if (profile.Kind == SdfPrismProfileKind.RoundedRectangle) { return (profile.CornerRadius * MathF.Min(x: size.X, y: size.Y)); }
 
-        var vertices = new Vector2[profile.Vertices!.Count];
-
-        for (var index = 0; (index < vertices.Length); index++) {
-            vertices[index] = (profile.Vertices[index] * new Vector2(x: size.X, y: size.Y));
-        }
-
-        var inradius = SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices);
+        var inradius = SdfSolidGeometry.ScaledConvexProfile(profile, size).Inradius;
 
         return SdfProgramBuilder.ClampRounding(
             rounding: ((profile.CornerRadius * inradius) + (shape.Rounding ?? 0f)),

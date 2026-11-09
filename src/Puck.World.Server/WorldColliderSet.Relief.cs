@@ -22,19 +22,20 @@ public sealed partial class WorldColliderSet {
     /// <summary>Returns whether a creation carries relief: a noise facet of nonzero amplitude.</summary>
     /// <param name="document">The creation.</param>
     /// <returns><see langword="true"/> when the creation has a noise facet of nonzero amplitude.</returns>
-    internal static bool Relieves(CreationDocument document) => CreationStampEmitter.HasRelief(document);
+    internal static bool Relieves(CreationDocument document) => CreationStampEmitter.HasRelief(document: document);
     /// <summary>Returns whether a creation's solid collides as its composed field rather than as its primitives: it
-    /// carries relief, or a shape contact keeps joins the others by any blend but a hard union, whose surface the
+    /// carries relief or point deformation, or a shape contact keeps joins the others by any blend but a hard union, whose surface the
     /// independent primitives do not draw.</summary>
     /// <param name="document">The creation.</param>
-    /// <returns><see langword="true"/> when the creation is relieved or a contact shape blends other than by union.</returns>
+    /// <returns><see langword="true"/> when the creation is relieved, deformed, or a contact shape blends other than by union.</returns>
     internal static bool CollidesAsField(CreationDocument document) {
         if (Relieves(document: document)) {
             return true;
         }
 
         foreach (var shape in (document.Shapes ?? [])) {
-            if (CreationStampEmitter.EmitsContact(shape: shape) && ((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union)) {
+            if (CreationStampEmitter.EmitsContact(shape: shape) &&
+                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ShapePointOps.DeformsContact(shape: shape))) {
                 return true;
             }
         }
@@ -116,10 +117,19 @@ public sealed partial class WorldColliderSet {
         }
 
         var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(scale: copy.Shape.Scale, type: copy.Shape.Type));
-        var half = (FixedVector3.Abs(value: copy.LocalHalfExtents) + (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero)));
+        var dilationReach = (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero));
+
+        if (ShapePointOps.DeformsContact(shape: copy.Shape)) {
+            // The visitor carries the rotation-invariant enclosing cube. Dilation in any local direction
+            // can turn onto any world axis under the deformation, so grow by its diagonal on every axis.
+            var radius = dilationReach.Length;
+
+            dilationReach = new FixedVector3(X: radius, Y: radius, Z: radius);
+        }
+        var half = (FixedVector3.Abs(value: copy.LocalHalfExtents) + dilationReach);
         var reach = FixedFieldReach.Oriented(center: copy.Center, halfExtent: half, rotation: copy.Rotation);
 
-        if (copy.Shape.Type is not (SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid)) {
+        if (ShapePointOps.DeformsContact(shape: copy.Shape) || (copy.Shape.Type is not (SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid))) {
             return reach;
         }
 
@@ -144,7 +154,7 @@ public sealed partial class WorldColliderSet {
     // field dilates by its gauge, not by distance) only bound theirs. A negative margin erodes, which no collider here
     // mirrors.
     private static FixedStaticCollider? ExactCollider(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
-        if (margin < FixedQ4816.Zero) {
+        if ((margin < FixedQ4816.Zero) || ShapePointOps.DeformsContact(shape: copy.Shape)) {
             return null;
         }
 
@@ -220,6 +230,7 @@ public sealed partial class WorldColliderSet {
         var growth = ((relieved ? FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
             partitioned: !relieved, transform: transform, unbounded: out var unbounded);
+
         var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);
         var local = (transform with { Origin = (transform.Origin - center) });
         var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, partition: partition, transform: local);

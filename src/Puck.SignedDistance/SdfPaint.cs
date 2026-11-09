@@ -19,6 +19,15 @@ namespace Puck.SignedDistance;
 /// <param name="Bound">The box the shape lies in, in its local frame and the paint frame's units; unbounded for a plane.
 /// The views pass evaluates the shape only where the hit lies within the box widened by the stroke and the pixel.</param>
 public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Data1, IReadOnlyList<float> Table, Vector3 Scale, SdfSolidBounds Bound) {
+    /// <summary>Whether the side table contains exactly the payload named by the packed primitive.</summary>
+    public bool HasValidTable => ((Table is not null) && (Type switch {
+        SdfShapeType.ConvexPolygon =>
+            ((((BitConverter.SingleToUInt32Bits(value: Data0.X) & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1u) is var count) &&
+            (count >= SdfPrismProfile.MinConvexVertices) && (count <= SdfPrismProfile.MaxConvexVertices) &&
+            (Table.Count == (count * 2))),
+        SdfShapeType.Sweep => (Table.Count == (SdfProgram.SweepCurveVectorsPerEntry * 4)),
+        _ => (Table.Count == 0),
+    }));
     /// <summary>The primitive's point-frame rotation, after the residual scale and before its distance evaluation.</summary>
     public Quaternion Rotation { get; init; } = Quaternion.Identity;
 
@@ -128,7 +137,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         (paint is { Shape: { } shape }) &&
         Admits(type: shape.Type) &&
         Enum.IsDefined(value: shape.Type) &&
-        (shape.Table is not null) &&
+        shape.HasValidTable &&
         VectorFunctions.IsFinite(vector: shape.Scale) &&
         float.IsFinite(f: shape.Rotation.LengthSquared()) && (shape.Rotation.LengthSquared() >= 1e-12f) &&
         (shape.Scale.X > 0f) && (shape.Scale.Y > 0f) && (shape.Scale.Z > 0f) &&

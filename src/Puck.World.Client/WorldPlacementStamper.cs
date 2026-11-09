@@ -35,7 +35,7 @@ public static class WorldPlacementStamper {
             // Emission also reads the composed parent frame and seeded pattern. The child row can stay identical
             // while either changes, including moving a previously admitted instance outside the evaluator's frame.
             if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation) ||
-                (verdict.Frame != frame) || (verdict.Seed != seed) || !ReferenceEquals(verdict.Stamp, stamp)) {
+                (verdict.Frame != frame) || (verdict.Seed != seed) || !ReferenceEquals(objA: verdict.Stamp, objB: stamp)) {
                 string? refusal = null;
 
                 try {
@@ -44,7 +44,7 @@ public static class WorldPlacementStamper {
                     EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
 
                     var program = builder.Build();
-                    var queryFrame = (double)new SdfFieldEvaluator(program: program).Frame;
+                    var queryFrame = ((double)new SdfFieldEvaluator(program: program).Frame);
 
                     // The composed field answers only inside the least of its parts' frames, so a placement its own
                     // field cannot answer at would refuse every query in the world.
@@ -61,9 +61,9 @@ public static class WorldPlacementStamper {
                 verdict = new QueryVerdict(
                     Creation: creation,
                     Frame: frame,
-                    Stamp: stamp,
+                    Refusal: refusal,
                     Seed: seed,
-                    Refusal: refusal
+                    Stamp: stamp
                 );
                 QueryVerdicts.AddOrUpdate(key: placement, value: verdict);
             }
@@ -111,8 +111,8 @@ public static class WorldPlacementStamper {
             colors: colors,
             document: document,
             hidden: hidden,
-            motion: motion,
             ids: ids,
+            motion: motion,
             pool: pool,
             tint: tint
         );
@@ -159,7 +159,7 @@ public static class WorldPlacementStamper {
                 albedo: albedo,
                 colors: colors,
                 scale: (pool?.Scale ?? 1f),
-                paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion)
+                paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, motion: motion, pool: pool)
             ));
         }
     }
@@ -198,9 +198,9 @@ public static class WorldPlacementStamper {
             var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: (frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)));
             var shape = shapes[shapeIndex];
 
-            resolved.Add(authored with {
+            resolved.Add(item: authored with {
                 Origin = ((shape.Position.Value * frames.Scale) + Vector3.Transform(authored.Origin, shape.Rotation.Value)),
-                Rotation = Quaternion.Normalize((shape.Rotation.Value * authored.Rotation)),
+                Rotation = Quaternion.Normalize(value: (shape.Rotation.Value * authored.Rotation)),
             });
         }
 
@@ -210,23 +210,22 @@ public static class WorldPlacementStamper {
     // Material layers authored in the old winning shape frame are composed into its motion owner's frame.
     internal static int MaterialForShape(SdfProgramBuilder builder, int material, ShapeDocument shape, float scale, bool rigid = false) {
         if (material >= SdfProgramBuilder.ScreenMaterialId) { return material; }
-        var source = builder.MaterialAt(material);
+        var source = builder.MaterialAt(index: material);
 
         if ((source.Inset is null) && (source.Paints is not { Count: > 0 })) { return material; }
         var rotation = shape.Rotation.Value;
         var origin = (shape.Position.Value * scale);
         var inset = ((source.Inset is { } layer) ? layer with {
             Origin = (origin + Vector3.Transform(layer.Origin, rotation)),
-            Rotation = Quaternion.Normalize((rotation * layer.Rotation)),
+            Rotation = Quaternion.Normalize(value: (rotation * layer.Rotation)),
         } : null);
-        var paints = source.Paints?.Select(paint => ((paint.Slot == SdfPaint.WinningFrame) ? paint with {
+        var paints = source.Paints?.Select(selector: paint => ((paint.Slot == SdfPaint.WinningFrame) ? paint with {
             Origin = (origin + Vector3.Transform(paint.Origin, rotation)),
-            Rotation = Quaternion.Normalize((rotation * paint.Rotation)),
+            Rotation = Quaternion.Normalize(value: (rotation * paint.Rotation)),
         } : (rigid ? paint with { Slot = SdfPaint.WinningFrame } : paint))).ToArray();
 
-        return builder.AddMaterial(source with { Inset = inset, Paints = paints });
+        return builder.AddMaterial(material: source with { Inset = inset, Paints = paints });
     }
-
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
@@ -245,7 +244,7 @@ public static class WorldPlacementStamper {
                 continue;
             }
             if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                throw new InvalidOperationException($"Creation '{creation.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
+                throw new InvalidOperationException(message: $"Creation '{creation.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var frameOrigin = origin;
@@ -281,6 +280,7 @@ public static class WorldPlacementStamper {
             ));
         }
     }
+
     // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws. Its
     // identity is its scope, its placement and its order among the placement's draws, which a rebuild that keeps the
     // placement keeps, so an edited placement's draw reads its edit as motion.
@@ -356,6 +356,7 @@ public static class WorldPlacementStamper {
         },
         key: mesh
     );
+
     // A closed mesh drawn under a mirror: the same triangles with each one's winding reversed, which the mirror reverses
     // back, so its faces stay outward where it is drawn.
     private static SdfMesh Mirrored(SdfMesh mesh) => MirroredMeshes.GetValue(key: mesh, createValueCallback: static closed => {
@@ -367,6 +368,7 @@ public static class WorldPlacementStamper {
 
         return new SdfMesh(indices: indices, positions: closed.Positions);
     });
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SdfMesh> MirroredMeshes = new();
 
     // The triangles wound outward when they close a volume: every edge, its vertices matched by position, is shared by
@@ -415,7 +417,6 @@ public static class WorldPlacementStamper {
 
         return outward;
     }
-
     // The triangles in their authored winding, then each again with its last two vertices swapped.
     private static uint[] TwoSided(IReadOnlyList<uint> indices) {
         var doubled = new uint[(indices.Count * 2)];
@@ -453,6 +454,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
+
     internal static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden, CompiledPlacementFrame? frameOverride = null) {
         // An isolation that hides every shape leaves the placement nothing to draw.
         if ((hidden is not null) && (Array.IndexOf(array: hidden, value: false) < 0)) {
@@ -463,7 +465,7 @@ public static class WorldPlacementStamper {
             return;
         }
 
-        var stamp = WorldPlacementStamp.Resolve(definition, placement, frameOverride, worldSeed);
+        var stamp = WorldPlacementStamp.Resolve(definition: definition, frameOverride: frameOverride, placement: placement, worldSeed: worldSeed);
         // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
         // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
         var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
@@ -532,8 +534,9 @@ public static class WorldPlacementStamper {
             volumes: volumes
         );
 
-        stamp.ForEach(ref visitor);
+        stamp.ForEach(visitor: ref visitor);
     }
+
     // The masks a creation with glass shapes emits through: the opaque emission's hidden shapes (the isolation's and
     // every glass shape) and the glass emission's (everything but the isolation's visible glass shapes). Both null for a
     // creation with no visible glass shape, which emits as it stands.
@@ -570,10 +573,8 @@ public static class WorldPlacementStamper {
 
         return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
     }
-
     // A warped field stays separate from its neighbours under the existing static bake partition.
-    internal static bool BakesAlone(ShapeDocument shape) => ((shape.Flare is not null) || (shape.Shear is not null) ||
-        (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
+    internal static bool BakesAlone(ShapeDocument shape) => ShapePointOps.NeedsScope(shape: shape);
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
@@ -712,7 +713,7 @@ public static class WorldPlacementStamper {
                     // alone, and so does the shape after it: its scope divides its field by its warp's bound, so beside an
                     // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
                     // closes into slabs across the neighbour.
-                    var warped = BakesAlone(shape);
+                    var warped = BakesAlone(shape: shape);
                     var box = CreationStampEmitter.ShapeStampBox(document: creation, shapeIndex: shapeIndex, transform: stampTransform);
                     var margin = new Vector3(value: PlacementBoundMargin);
 
@@ -920,7 +921,7 @@ public static class WorldPlacementStamper {
                 builder.AppendEmission(emission: held.Program);
                 foreach (var volume in held.Volumes) {
                     if (volumes is not null) {
-                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
+                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
                         volumes.Add(item: volume);
                     }
                 }
@@ -954,7 +955,7 @@ public static class WorldPlacementStamper {
                 );
                 foreach (var volume in (emittedVolumes ?? [])) {
                     if (volumes is not null) {
-                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
+                        if (volumes.Count >= SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"A world frame holds at most {SdfProgramBuilder.MaxVolumes} bounded volumes."); }
                         volumes.Add(item: volume);
                     }
                 }

@@ -271,7 +271,7 @@ public static partial class CreationStampEmitter {
             // inside the creation's.
             var ownScope = (
                 (!inScope &&
-                (wantsDilate || wantsOnion || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null))) ||
+                (wantsDilate || wantsOnion || (panel is not null) || ShapePointOps.NeedsScope(shape: shape))) ||
                 ShapeScope.IsPopOnly(blend: blend)
             );
 
@@ -739,7 +739,7 @@ public static partial class CreationStampEmitter {
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
     /// <remarks>This is the collision-field sibling of <see cref="Emit"/>: the same stamp prefix and mirror alignment,
-    /// with every domain fold expanded to its rigid copies and the render-only facets (panels, trims, warps, per-shape
+    /// with every domain fold expanded to its rigid copies, twist and bend through the shared point chain, and the render-only facets (panels, trims, other warps, per-shape
     /// relief, text, detail shapes, sweeps) left out. The creation's noise relief is the caller's to emit inside its
     /// scope, through the fixed-point <c>EmitNoise</c>. A mirrored shape's orientation is composed from its two reflection
     /// planes as a fixed quaternion; it never visits <see cref="Matrix4x4"/>,
@@ -795,6 +795,8 @@ public static partial class CreationStampEmitter {
                     ? posed.MirrorX()
                     : posed
                 );
+
+                chain = ShapePointOps.Apply(chain, twist: (shape.Twist ?? 0f), bend: (shape.Bend ?? 0f));
 
                 if (
                     (contactMargin is not { } margin) ||
@@ -1458,7 +1460,7 @@ public static partial class CreationStampEmitter {
 
         var shape = document.Shapes![shapeIndex];
 
-        if ((shape.Domain is { Count: > 0 }) || (shape.Type == SdfSolidPrimitive.Sweep) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Warp is not null) || (shape.Displace is not null) || (shape.Cells is not null) || (shape.Elongate is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f)) {
+        if ((shape.Domain is { Count: > 0 }) || (shape.Type == SdfSolidPrimitive.Sweep) || ShapePointOps.NeedsScope(shape: shape) || (shape.Elongate is not null)) {
             return null;
         }
 
@@ -1533,6 +1535,14 @@ public static partial class CreationStampEmitter {
             // The shape's own box at its scale (SdfSolidGeometry.LocalBox, symmetric across local X, so a mirrored copy
             // keeps it), in its scaled local units: a revolve's radial offset and a baked capsule's segment included.
             var bounds = SdfSolidGeometry.LocalBox(lift: (shape.Lift ?? SdfLift.Extrude), scale: shape.Scale, type: shape.Type);
+
+            if (!bounds.IsUnbounded && ShapePointOps.DeformsContact(shape: shape)) {
+                // Twist and bend preserve distance from the shape origin, including for an off-centre primitive.
+                // Its straight box does not enclose the rotated surface; a sphere's enclosing cube does.
+                var radius = MathF.BitIncrement(x: (Vector3.Abs(value: bounds.Center) + bounds.HalfExtents).Length());
+
+                bounds = new SdfSolidBounds(Center: Vector3.Zero, HalfExtents: new Vector3(value: radius));
+            }
             var boundsCenter = FixedVector3.FromVector3(value: bounds.Center);
             var boundsHalfExtents = FixedVector3.FromVector3(value: bounds.HalfExtents);
             var shapeScale = EffectiveScale(value: shape.Scale);

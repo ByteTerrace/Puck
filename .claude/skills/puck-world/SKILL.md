@@ -843,7 +843,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   name errors within it as known approximations, red beyond it, and never
   apply that bound to outward error. Other finite primitives use
   oriented bounds. A creation with relief (`noise`) collides as its drawn
-  surface: one field collider per copy over the creation's own fixed-point
+  surface, as does a solid carrying twist or bend: one field collider per copy over the creation's own fixed-point
   program, the valley's walls included
   ([sdf-authoring](../sdf-authoring/references/shapes.md#contact-admission)).
   The Moth's capsule has a 0.35 m radius and is 2.06 m tall;

@@ -125,7 +125,7 @@ The material cut has landed on the integration tip in two commits ("the
 material cut shares each quartered edge's middle, so a crease leaves no
 T-junction" and "the material cut finds a quartered edge's whole holders by
 position"), so limit 5 is closed pending the look lanes' captures. Neither
-limit needs a step from this memo; the lead lands the moving-blends branch.
+limit needs a step from this memo.
 
 ### 1.3 Twist and bend on a static placement (limit 4)
 
@@ -134,7 +134,11 @@ Delivered by w1-limits. Static and pooled emission share
 bumps, warp, elongation. The stamp prefix already puts points in creation
 units; pooled callers provide their length conversion, with inverse-length
 rates converted reciprocally. The previous static chain omitted both rotations.
-The existing fixed contact emitter still omits these render deformations.
+The fixed contact emitter shares the twist/bend chain too. Such a solid selects
+the composed field collider, with a rotation-invariant reach and no exact
+straight-primitive partition shortcut. `ShapePointOps` derives scope admission
+from the same operation mask emission reads; static and pooled emission, bake
+partitioning, bounds and detail share that decision.
 
 Check: a static Box blade with `twist: 1`, `bend: 0.3` reports
 `lowered=RotatePlane·RotatePlane·Box` through `creation shape`.
@@ -150,6 +154,8 @@ inradius and, on an extrude, its half-depth. `ConvexProfile` already added
 separate rounding to corner rounding, and `SdfProgramBuilder.ConvexPolygon`
 already inset the polygon and lift before emitting the fillet; those existing
 mechanisms are reused. A radius past the ceiling refuses with its value.
+Scaled vertices and their inradius come from `SdfSolidGeometry.ScaledConvexProfile`
+for emission, admission and detail; a rounding-only Convex prism requests fillet detail.
 
 Check: a Convex blade at scale [0.2, 0.6, 0.04], `cornerRadius: 0.1`,
 `rounding: 0.002` passes compile validation, reports `distance=exact`,
@@ -166,6 +172,8 @@ shade programs. `VectorsOf` and `Pack` use the same side-table size function;
 `SdfPaintShape.Data0At` relocates each reference into that table region. The
 shader reads the generated stride and its existing absolute table references.
 There is no extra paint-specific vertex cap.
+`SdfPaintShape.HasValidTable` ties the table's float count to the packed vertex
+count at paint admission, including directly constructed descriptors.
 
 `CreationCanonicalizer.ValidatePaletteLayers` already resolves paints through
 `ToPaint`, the same primitive emission stats uses. Its `ResolvePaint` now
@@ -180,7 +188,9 @@ rounding is authored explicitly. Compile validation and stats admit 8, 9 and
 using the atlas's glyph bounds, advances, tracking and kerning. Enriched text
 and plain strings share that path. Only a word wider than the entire available
 line falls back to glyph breaks. Nonbreaking spaces stay within their word;
-wrapped lines omit leading breakable spaces. Unwrapped text keeps its original
+soft-wrapped lines omit leading breakable spaces; hard newlines retain indentation.
+U+2007, like U+00A0 and U+202F, does not break a word. Word and fallback glyph
+wraps use one alignment-aware width measure. Unwrapped text keeps its original
 scalar layout. Creation `maxWidth` uses this shared layout in both static and
 pooled text emission, rather than a gallery-specific text implementation.
 

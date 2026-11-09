@@ -163,7 +163,7 @@ to }`) compose at the pop of a scope the shape opens for itself
 
 Two rules decide whether facets are available at all:
 
-1. **Per-shape scope.** `dilate`, `onion`, `panel`, `flare`, `shear`, `bumps`,
+1. **Per-shape scope.** `dilate`, `onion`, `panel`, `twist`, `bend`, `flare`, `shear`, `bumps`,
    `warp`, `displace`, `erode`, and `cells` each make the shape request its
    own field scope, as does a stairs or morph blend. A
    non-uniformly scaled sphere or ellipsoid does not: it bakes into the
@@ -175,6 +175,8 @@ Two rules decide whether facets are available at all:
    only an unscoped chain taxes the program-wide step scale. So a warp does not
    by itself soften a whole model: read the shared and global clamps
    `creation stats` prints before naming the cause of a soft image.
+   `ShapePointOps` derives the warp predicate from the point chain's emission
+   mask; static and pooled scopes, bake partitioning, bounds and detail share it.
 2. **The creation-wide scope.** If a creation has a `noise` facet, an engraved
    text run, **or any shape blend outside `Union` and `SmoothUnion`**, the whole
    static creation emits inside one scope, and `panel`, `trims`, and `cells`
