@@ -1853,6 +1853,15 @@ Next: the harness's residency wait below, then rerun its two refused pairs.
 
 Evidence here is timing, so it waits for a window with no other lane building or
 running a World ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
+
+- [high] A ten-minute window cannot answer one frame question: a `bench frames`
+  sample over four sweep stops with three samples each takes about three and a
+  half minutes (boot, bake, settle per stop), so the default five ABAB pairs of
+  one request need about 35 minutes and a window answers one and a half pairs.
+  The frame-teal and frame-cpu requests have stayed pending through two windows
+  for this. Fix at the cause: a sample that boots once and measures both sides'
+  stops warm, or requests sized to what a window can answer, never a timing
+  claim from one pair.
 The queue is the `measure` folder of the main checkout's ignored scratch, so it is
 machine-local. The same-build `bench world` and `bench startup` controls are
 answered and sit well inside their 10 % criteria; a `bench world` or
