@@ -42,11 +42,8 @@ public static class SdfMeshSkin {
         ArgumentNullException.ThrowIfNull(argument: counters);
         ArgumentNullException.ThrowIfNull(argument: mesh);
         if (mesh.VertexMembers.IsEmpty) { return; }
-        var (root, member, blended) = (0L, 0L, 0L);
+        var (root, member, blended) = Paths(mesh: mesh);
 
-        for (var vertex = 0; (vertex < mesh.VertexMembers.Length); vertex++) {
-            if (!mesh.Influences.IsEmpty && mesh.Influences.Span[vertex].Blended) { blended++; } else if (mesh.VertexMembers.Span[vertex] == SdfMesh.NoMember) { root++; } else { member++; }
-        }
         counters.Count(kind: Meshes);
         counters.Add(amount: root, kind: RootVertices);
         counters.Add(amount: member, kind: MemberVertices);
@@ -103,24 +100,35 @@ public static class SdfMeshSkin {
         }
         return new(positions, mesh.Indices, normals, mesh.TriangleMaterials, mesh.Members, mesh.VertexMembers, mesh.Influences) { BakeCell = mesh.BakeCell };
     }
-    /// <summary>Counts blended vertices and positions whose copies carry different tuples.</summary>
+    /// <summary>Counts a skin's vertices by vertex-stage path and the positions whose copies carry different
+    /// tuples.</summary>
     /// <param name="mesh">The skin.</param>
-    /// <returns>The blended vertices and the positions whose copies disagree.</returns>
-    public static (int Blended, int SplitPlaces) Audit(SdfMesh mesh) {
+    /// <returns>The vertices riding the draw's slot alone, riding one member alone and blending two, and the positions
+    /// whose copies disagree; all zero for a mesh with no members.</returns>
+    public static (int Root, int Member, int Blended, int SplitPlaces) Audit(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
-        if (mesh.VertexMembers.IsEmpty) { return (0, 0); }
-        var places = new Dictionary<Vector3, (byte, SdfMeshInfluence)>();
+        if (mesh.VertexMembers.IsEmpty) { return (0, 0, 0, 0); }
+        var places = new Dictionary<Vector3, SdfMeshSkinTuple>();
         var split = new HashSet<Vector3>();
-        var blended = 0;
 
         for (var at = 0; (at < mesh.Positions.Length); at++) {
-            var tuple = (mesh.VertexMembers.Span[at], (mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[at]));
+            var tuple = new SdfMeshSkinTuple(First: mesh.VertexMembers.Span[at], Influence: (mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[at]));
             var position = mesh.Positions.Span[at];
 
             if (!places.TryAdd(key: position, value: tuple) && (places[position] != tuple)) { split.Add(item: position); }
-            if (tuple.Item2.Blended) { blended++; }
         }
-        return (blended, split.Count);
+        var (root, member, blended) = Paths(mesh: mesh);
+
+        return (root, member, blended, split.Count);
+    }
+    // A skin's vertices by vertex-stage path: riding the draw's slot alone, riding one member alone, blending two.
+    private static (int Root, int Member, int Blended) Paths(SdfMesh mesh) {
+        var (root, member, blended) = (0, 0, 0);
+
+        for (var vertex = 0; (vertex < mesh.VertexMembers.Length); vertex++) {
+            if (!mesh.Influences.IsEmpty && mesh.Influences.Span[vertex].Blended) { blended++; } else if (mesh.VertexMembers.Span[vertex] == SdfMesh.NoMember) { root++; } else { member++; }
+        }
+        return (root, member, blended);
     }
     /// <summary>Bakes a nonrepresentable seam as rigid owner surfaces through the existing contour pipeline: each slot's
     /// own part (<see cref="SdfMeshSkinSource.MemberFields"/>) over the box its parts declare, at the group's detail or

@@ -77,7 +77,7 @@ public sealed class MovingBlendLawTests {
         Assert.NotNull(@object: skin);
         Assert.Equal(skin.VertexMembers.Span[0], skin.VertexMembers.Span[3]);
         Assert.Equal(skin.Influences.Span[0], skin.Influences.Span[3]);
-        Assert.Equal((4, 0), SdfMeshSkin.Audit(mesh: skin));
+        Assert.Equal((0, 0, 4, 0), SdfMeshSkin.Audit(mesh: skin));
         var merged = SdfMeshPlanarMerge.Merge(mesh: skin);
 
         Assert.Equal(skin.Positions.ToArray(), merged.Positions.ToArray());

@@ -308,7 +308,7 @@ public static class MeshCommand {
         if (outcome.Mesh is { } skin) {
             var influences = SdfMeshSkin.Audit(mesh: skin);
 
-            output.Append(CultureInfo.InvariantCulture, $"  skin: {influences.Blended} blend-zone vertices, {influences.SplitPlaces} places with split tuples\n");
+            output.Append(CultureInfo.InvariantCulture, $"  skin: {influences.Root} root vertices, {influences.Member} rigid member vertices, {influences.Blended} blend-zone vertices, {influences.SplitPlaces} places with split tuples\n");
         }
         for (var rank = 0; (rank < Math.Min(val1: top, val2: report.Clusters.Count)); rank++) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cluster {(rank + 1)}: {Describe(cluster: report.Clusters[rank], outcome: outcome)}\n");
