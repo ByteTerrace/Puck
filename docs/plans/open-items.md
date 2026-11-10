@@ -1215,6 +1215,21 @@ custodian reaches a remote home only through a remote authority its host
 already opened. The debug world's faerie declares no role yet, so it does not
 travel.
 
+- [medium · research input] Flecs, the one major ECS the rule-evaluation round
+  did not read ([memo](rule-evaluation-cost.md)), adds two ideas to weigh at
+  MMO scale when a round next touches state or federation. Relationships are
+  first-class data: "a relationship adds a pair of two things to an entity",
+  and transitive ones answer queries such as `(IsA, Fruit)` matching every
+  subtype. Runtime inheritance with override: "an entity with an IsA
+  relationship to another entity is equivalent to the other entity" and reads
+  its components until it sets its own
+  ([Flecs relationships](https://www.flecs.dev/flecs/Relationships.html)).
+  Puck models containment, custody and membership as keyed rows and placement
+  parent chains, and resolves overrides at compile time; the question is
+  whether a general relationship primitive and runtime prototype sharing pay
+  for an MMO's inventories, guilds and millions of near-identical instances.
+  Flecs' own warning: heavy relationship use fragments its tables, which it
+  mitigates with `DontFragment` relationships.
 Neighbour contact replay packet (independent of companion custody):
 
 - [high] Tape fixed neighbour inputs at their local admission tick.
