@@ -89,11 +89,14 @@ A1. **Owed first after the restart: one batched windowed window** on the
    Then the frame bar at the standard stops: bake detail raised the resident
    world from 25.7 M to 83.6 M triangles at the spawn, and D7's levers (the
    pixel share, which views demand) are the answer if the bar suffers.
-A3. Adversarial reviews owed on landed invariant work, findings-only, each by
-   another family than its author: the demand tiers' cache identity and
-   publication (`bake-demand-tiers.md`); the exposure readback's slot lifetime
-   (`RenderGraphSlotResults` to `SdfViewExposures.Publish`); the indirect
-   lane's pass-block layout change (one uint removed). Also queued: three cold
+A3. Adversarial reviews owed on landed work in the review-only classes of
+   [hazards](../development/hazards.md#silent-invariants), findings-only, each
+   by another family than its author: the demand tiers' cache identity and
+   publication (`bake-demand-tiers.md`; an invariant kept by convention), and
+   the exposure readback's slot lifetime (`RenderGraphSlotResults` to
+   `SdfViewExposures.Publish`; GPU fences and resource lifetimes). The indirect
+   lane's pass-block layout change needs none: the generated shader interface
+   and `ShaderInterfaceLayout.Mismatch` cover that class. Also queued: three cold
    bakes per backend from an empty `--cache-dir` with `paused` and `lockstep`,
    to show whether a late retier changes which tiers are stored.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
