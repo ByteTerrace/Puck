@@ -2059,20 +2059,21 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
 
-- [medium] A `.puck` edit costs a whole source file and a whole document:
-  `WorldCompileCache` reuses a file's compile only when every file fact matches,
-  and `world.reload` diffs, validates and installs whole documents. Zig's
-  incremental compiler is the worked design for proportional cost (mlugg,
+- [medium] A `.puck` compile of the debug world takes about 15 s (`puck compile
+  worlds/debug/debug.puck`, with or without `--validate`, against 0.17 s of CLI
+  startup; indicative, on a lightly loaded machine), and every document edit
+  pays it before a reload: half the 30-second edit-to-running budget, in the
+  authoring loop. It is not what makes boot or bake slow (the first irradiance
+  trace alone took 373 s in the walkthrough tour's boot). First profile the
+  15 s for hot spots and fix them. Only if the cost proves spread across the
+  pipeline, take Zig's incremental compiler as the design (mlugg,
   [Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/);
-  the author's own outline on
+  the author's outline on
   [Ziggit](https://ziggit.dev/t/how-zig-incremental-compilation-is-implemented-internally/3543/2)):
-  small analysis units, dependencies recorded as each unit is analysed (a
-  source range's hash, a declaration's value, a name's presence), and early
-  cutoff, where a re-analysed unit whose value is unchanged marks its dependents
-  current. First measure where a one-line `.puck` edit's time goes from save to
-  running (their 37 ms update spent about 30 ms in a traversal the change did not
-  need); then design per-declaration lowering, validation and install against
-  that measurement. The bake's input-keyed meshes already cut off the same way.
+  per-declaration units, dependencies recorded during analysis, and early
+  cutoff when a re-analysed value is unchanged. Their own 37 ms update spent
+  about 30 ms in a traversal the change did not need, which is why the profile
+  comes first.
 - [medium] Reload deltas cannot express key order: the sender proves its delta
   with `JsonNode.DeepEquals`, which ignores object key order, and the diff and
   merge (`WorldDocumentBasis`) keep old order and append new keys. Fields that
