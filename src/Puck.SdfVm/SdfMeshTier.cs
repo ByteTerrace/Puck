@@ -25,6 +25,31 @@ public static class SdfMeshTier {
     /// so a cut that demands a thousand finer tiers does not stage them all beside their resident meshes.</summary>
     public const int MaxInFlight = 64;
 
+    /// <summary>The most half rungs a residency's bake coarsens every group's demand by to hold its meshes inside the
+    /// mesh region's budget (<see cref="Biased"/>): eight rungs, a cell 256 times the demanded one.</summary>
+    public const int MaxBias = 16;
+    /// <summary>The frames a residency's meshes must stay under half the mesh region's budget before its bake takes one
+    /// half rung of bias back; the wait doubles each time the budget presses again soon after.</summary>
+    public const int BiasQuietFrames = 600;
+    /// <summary>The eighths of the mesh region's limit a residency's bake budgets its meshes to; the rest is the room a
+    /// replacement lands in beside the mesh it replaces.</summary>
+    public const int BudgetEighths = 7;
+
+    /// <summary>Returns the pixel a bias reads a demand at: <paramref name="pixel"/> times the square root of two to
+    /// the <paramref name="halfRungs"/>, so two half rungs demand one tier coarser.</summary>
+    /// <param name="pixel">The metres one display pixel covers at the group's box.</param>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <returns>The biased pixel.</returns>
+    public static float Biased(float pixel, int halfRungs) => (pixel * MathF.Pow(x: 2f, y: (0.5f * halfRungs)));
+    /// <summary>Returns the bytes a mesh is expected to take at another tier of its geometry: a rung doubles the cell,
+    /// and a surface's triangles go with the inverse square of it.</summary>
+    /// <param name="bytes">The bytes at <paramref name="from"/>.</param>
+    /// <param name="from">The tier the bytes were measured at.</param>
+    /// <param name="to">The tier asked about.</param>
+    /// <returns>The expected bytes.</returns>
+    public static long BytesAt(long bytes, int from, int to) => ((to >= from)
+        ? (bytes >> Math.Min(val1: 62, val2: (2 * (to - from))))
+        : ((bytes > (long.MaxValue >> Math.Min(val1: 62, val2: (2 * (from - to))))) ? long.MaxValue : (bytes << Math.Min(val1: 62, val2: (2 * (from - to))))));
     /// <summary>Returns a tier's cell, in metres.</summary>
     /// <param name="tier">The tier, from zero to <see cref="Last"/>.</param>
     /// <returns>The cell.</returns>

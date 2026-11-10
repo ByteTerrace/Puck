@@ -39,6 +39,32 @@ public sealed class GpuRangeAllocator {
         MaxRanges = maxRanges;
         Size = size;
     }
+    /// <summary>Initializes a new instance of the <see cref="GpuRangeAllocator"/> class over another's span, with every
+    /// range of it live and free as it stands there and room for more live ranges.</summary>
+    /// <param name="source">The allocator whose ranges the new one holds; it is left as it was.</param>
+    /// <param name="maxRanges">The most ranges live at once; at least the source's.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxRanges"/> is under the source's.</exception>
+    public GpuRangeAllocator(GpuRangeAllocator source, int maxRanges) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: source.MaxRanges,
+            value: maxRanges
+        );
+
+        m_freeLengths = new uint[(maxRanges + 1)];
+        m_freeStarts = new uint[(maxRanges + 1)];
+        m_liveLengths = new uint[maxRanges];
+        m_liveStarts = new uint[maxRanges];
+        m_freeCount = source.m_freeCount;
+        m_liveCount = source.m_liveCount;
+        source.m_freeLengths.AsSpan(length: m_freeCount, start: 0).CopyTo(destination: m_freeLengths);
+        source.m_freeStarts.AsSpan(length: m_freeCount, start: 0).CopyTo(destination: m_freeStarts);
+        source.m_liveLengths.AsSpan(length: m_liveCount, start: 0).CopyTo(destination: m_liveLengths);
+        source.m_liveStarts.AsSpan(length: m_liveCount, start: 0).CopyTo(destination: m_liveStarts);
+        MaxRanges = maxRanges;
+        Size = source.Size;
+    }
 
     /// <summary>Gets the free count across every free range.</summary>
     public uint FreeCount {
@@ -70,6 +96,9 @@ public sealed class GpuRangeAllocator {
             return largest;
         }
     }
+    /// <summary>Gets the end of the highest live range, the least span that holds every live range; zero with
+    /// none.</summary>
+    public uint LiveEnd => ((m_liveCount == 0) ? 0u : (m_liveStarts[(m_liveCount - 1)] + m_liveLengths[(m_liveCount - 1)]));
     /// <summary>Gets the ranges live now.</summary>
     public int LiveRanges => m_liveCount;
     /// <summary>Gets the most ranges live at once.</summary>
@@ -84,8 +113,7 @@ public sealed class GpuRangeAllocator {
     /// <exception cref="GpuRangeExhaustedException">No free range holds <paramref name="count"/>, or
     /// <see cref="MaxRanges"/> ranges are already live.</exception>
     public uint Allocate(uint count) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: count);
-
+        if (TryAllocate(count: count, start: out var allocated)) { return allocated; }
         if (m_liveCount == MaxRanges) {
             throw new GpuRangeExhaustedException(
                 largestFree: LargestFree,
@@ -95,12 +123,34 @@ public sealed class GpuRangeAllocator {
             );
         }
 
+        var largest = LargestFree;
+
+        throw new GpuRangeExhaustedException(
+            largestFree: largest,
+            message: $"A range of {count} is refused: the largest free range holds {largest} of this span's {Size}, and the span never grows.",
+            request: count,
+            size: Size
+        );
+    }
+    /// <summary>Allocates a range of <paramref name="count"/> from the lowest free range that holds it, where one does
+    /// and fewer than <see cref="MaxRanges"/> ranges are live.</summary>
+    /// <param name="count">The range's length; at least one.</param>
+    /// <param name="start">The range's start; zero when refused.</param>
+    /// <returns><see langword="false"/> when no free range holds <paramref name="count"/> or
+    /// <see cref="MaxRanges"/> ranges are already live.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is zero.</exception>
+    public bool TryAllocate(uint count, out uint start) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: count);
+
+        start = 0u;
+        if (m_liveCount == MaxRanges) { return false; }
+
         for (var index = 0; (index < m_freeCount); index++) {
             if (m_freeLengths[index] < count) {
                 continue;
             }
 
-            var start = m_freeStarts[index];
+            start = m_freeStarts[index];
 
             if (m_freeLengths[index] == count) {
                 RemoveAt(
@@ -127,17 +177,10 @@ public sealed class GpuRangeAllocator {
                 starts: m_liveStarts
             );
 
-            return start;
+            return true;
         }
 
-        var largest = LargestFree;
-
-        throw new GpuRangeExhaustedException(
-            largestFree: largest,
-            message: $"A range of {count} is refused: the largest free range holds {largest} of this span's {Size}, and the span never grows.",
-            request: count,
-            size: Size
-        );
+        return false;
     }
     /// <summary>Frees the live range that starts at <paramref name="start"/>, merging it with any free neighbour.</summary>
     /// <param name="start">The start <see cref="Allocate"/> returned.</param>

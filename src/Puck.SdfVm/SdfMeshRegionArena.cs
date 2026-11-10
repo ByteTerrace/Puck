@@ -8,35 +8,52 @@ namespace Puck.SdfVm;
 /// was given when a draw list first named it. A mesh keeps that place for as long as the arena keeps it, so a list that
 /// adds a mesh owes only the draw records and the new mesh's words, and a list that drops one leaves the mesh where it
 /// lies: a list that names it again, as when a body that left the world returns, owes nothing for it.
+/// <para>The arena never passes its limit, and it gives a forgotten mesh's words to the next mesh they hold
+/// (<see cref="GpuRangeAllocator"/>, the lowest free run first), so a list whose meshes are replaced one at a time, as a
+/// group changing its detail, moves no other mesh. The meshes no list names any more are forgotten together once their
+/// words pass the retained slack, or sooner when a named mesh finds no free run (<see cref="Forgotten"/>). A named mesh
+/// that still finds none is refused (<see cref="Refused"/>), never placed past the limit: its draws wait until a later
+/// plan finds it room.</para>
 /// <para>A list holding more draws than the reserve doubles it, and only the meshes lying in the words the reserve takes
-/// move: each one the list names is placed again at the arena's end (<see cref="Moved"/>), and the rest are forgotten.
-/// A body straddling a door draws twice, so a list can outgrow the reserve wherever a body stands; growing it once
-/// moves a mesh or two, never every mesh the region holds.</para>
-/// <para>A plan relocates every mesh a list names, packing the arena from the start in the list's order and forgetting
-/// every mesh the list does not name, only on the first plan, or when the arena's words outside the named meshes exceed
-/// both the named meshes' words and <see cref="RetainedSlackWords"/>, or keeping those words would append past
-/// <see cref="SdfWorldTables.MostMeshRegionBytes"/>.
-/// The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>), of which the
-/// <see cref="Moved"/> ones held words a draw read until this plan.</para>
+/// move: each one the list names is placed again (<see cref="Moved"/>), and the rest are forgotten. A body straddling a
+/// door draws twice, so a list can outgrow the reserve wherever a body stands; growing it once moves a mesh or two,
+/// never every mesh the region holds.</para>
+/// <para>A plan relocates every mesh a list names, packing the arena from the reserve's end in the list's order and
+/// forgetting every other mesh, only on the first plan, or when a named mesh finds no free run although the named meshes
+/// packed would fit the limit, or when the free words under the last placed mesh pass both <see cref="PackedShare"/>
+/// times the named meshes' words and the retained slack. The plan states what it owes: <see cref="Relocated"/>, or the
+/// meshes it placed (<see cref="Placed"/>), of which the <see cref="Moved"/> ones held words a draw read until this
+/// plan.</para>
 /// </summary>
 public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>The fewest draw records the region reserves.</summary>
     public const int MinimumDrawCapacity = 256;
-    /// <summary>The words outside the named meshes (meshes no list names any more) the arena keeps, however few words the
-    /// named meshes hold, before a plan packs it again: 32 MB, so a body crossing between worlds finds its meshes where
-    /// it left them rather than writing them again.</summary>
+    /// <summary>The fewest meshes the arena has room to place at once; the room doubles when a plan needs more.</summary>
+    public const int MinimumMeshCapacity = 4096;
+    /// <summary>The multiple of the named meshes' words the free words under the last placed mesh may reach before a
+    /// plan packs the arena, where they also pass the retained slack.</summary>
+    public const int PackedShare = 3;
+    /// <summary>The words outside the named meshes (meshes no list names any more) the arena keeps before a plan forgets
+    /// them: 32 MB, so a body crossing between worlds finds its meshes where it left them rather than writing them
+    /// again.</summary>
     public const int RetainedSlackWords = (1 << 23);
 
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly HashSet<SdfMesh> m_named = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMesh> m_placed = [];
     private readonly HashSet<SdfMesh> m_moved = new(comparer: ReferenceEqualityComparer.Instance);
-    private readonly List<SdfMesh> m_reserved = [];
+    private readonly List<SdfMesh> m_forgotten = [];
+    private readonly HashSet<SdfMesh> m_refused = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly List<SdfMesh> m_scratch = [];
 
     private readonly int m_retainedSlackWords;
 
+    // The region's words up to the limit: the reserve is the range at zero, and each placed mesh a range of its own.
+    private GpuRangeAllocator m_ranges;
+
     private int m_drawCapacity;
-    private int m_end;
+    // Whether a trim forgot a mesh since the latest full plan, so a list naming a refused mesh is planned again.
+    private bool m_trimmed;
 
     // The meshes the latest full plan's list named, in its order.
     private SdfMesh?[] m_latestMeshes = [];
@@ -44,32 +61,50 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private int m_latestMeshCount;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshRegionArena"/> class.</summary>
-    /// <param name="retainedSlackWords">The words outside the named meshes the arena keeps before a plan packs it again,
-    /// however few words the named meshes hold; <see cref="RetainedSlackWords"/> for a residency's tables.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="retainedSlackWords"/> is negative.</exception>
-    public SdfMeshRegionArena(int retainedSlackWords = RetainedSlackWords) {
+    /// <param name="retainedSlackWords">The words outside the named meshes the arena keeps before a plan forgets them;
+    /// <see cref="RetainedSlackWords"/> for a residency's tables.</param>
+    /// <param name="limitBytes">The most bytes the arena places, the reserve included, rounded down to whole words; at
+    /// least <see cref="MinimumDrawCapacity"/> draw records and at most <see cref="SdfWorldTables.MostMeshRegionBytes"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="retainedSlackWords"/> is negative, or
+    /// <paramref name="limitBytes"/> is outside its bounds.</exception>
+    public SdfMeshRegionArena(int retainedSlackWords = RetainedSlackWords, ulong limitBytes = SdfWorldTables.MostMeshRegionBytes) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: retainedSlackWords);
+        ArgumentOutOfRangeException.ThrowIfLessThan(other: ((ulong)(MinimumDrawCapacity * SdfMeshRegion.DrawBytes)), value: limitBytes);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(other: SdfWorldTables.MostMeshRegionBytes, value: limitBytes);
 
+        m_ranges = new GpuRangeAllocator(maxRanges: (MinimumMeshCapacity + 1), size: ((uint)(limitBytes / sizeof(uint))));
         m_retainedSlackWords = retainedSlackWords;
     }
 
-    /// <summary>Gets each placed mesh's words, keyed by reference: every mesh the latest list names, and the meshes
-    /// earlier lists named that the arena still keeps.</summary>
+    /// <summary>Gets each placed mesh's words, keyed by reference: every mesh the latest list names that is not
+    /// <see cref="Refused"/>, and the meshes earlier lists named that the arena still keeps.</summary>
     public Dictionary<SdfMesh, SdfMeshRegionMesh> Placements => m_placements;
     /// <summary>Gets the meshes the latest list names, the same set object for the arena's lifetime; placements the
     /// arena keeps beyond them are retained for a list that names them again.</summary>
     public IReadOnlySet<SdfMesh> Named => m_named;
+    /// <summary>Gets the words of the meshes the latest list names, each counted once, placed or refused.</summary>
+    public long NamedWords { get; private set; }
     /// <summary>Gets the draw records the region reserves ahead of the arena.</summary>
     public int DrawCapacity => m_drawCapacity;
+    /// <summary>Gets the most words the arena places, the reserve included.</summary>
+    public long LimitWords => m_ranges.Size;
     /// <summary>Gets the region's words: the reserved draw records and the arena up to its last placed mesh.</summary>
-    public int Words => m_end;
+    public int Words => checked((int)m_ranges.LiveEnd);
     /// <summary>Gets the meshes the latest plan placed, whose words it owes; every placed mesh when it
     /// <see cref="Relocated"/>.</summary>
     public IReadOnlyList<SdfMesh> Placed => m_placed;
-    /// <summary>Gets the meshes among <see cref="Placed"/> that the latest plan moved out of the words a grown reserve
-    /// took: the region drew them from their old words until this plan, so it writes them before the draws read them
-    /// again rather than letting them land over later frames.</summary>
+    /// <summary>Gets the meshes the latest plan moved out of the words a grown reserve took: the region drew them from
+    /// their old words until this plan, so it writes each one placed again before the draws read it rather than letting
+    /// it land over later frames. One no free run held is <see cref="Refused"/> instead of placed.</summary>
     public IReadOnlySet<SdfMesh> Moved => m_moved;
+    /// <summary>Gets the meshes the latest plan forgot without relocating: placed until this plan, named by no list, and
+    /// their words free for the next mesh they hold. Empty when the plan <see cref="Relocated"/>, which forgets every
+    /// mesh its list does not name.</summary>
+    public IReadOnlyList<SdfMesh> Forgotten => m_forgotten;
+    /// <summary>Gets the meshes the latest list names that no free run under the limit holds, the same set object for
+    /// the arena's lifetime: they have no placement, and a plan of a later list places each one it then has room
+    /// for.</summary>
+    public IReadOnlySet<SdfMesh> Refused => m_refused;
     /// <summary>Gets whether the latest plan moved every mesh, so the region owes every word.</summary>
     public bool Relocated { get; private set; }
     /// <summary>Gets how many plans relocated every mesh, the first plan included.</summary>
@@ -80,12 +115,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// placement and the reserve stand as they were and only the draws' own values can have moved.</summary>
     public bool Unchanged { get; private set; }
 
-    /// <summary>Places the meshes a list of draws names: a mesh already placed keeps its words, and a new one is added at
-    /// the arena's end, unless the plan relocates every mesh.</summary>
+    /// <summary>Places the meshes a list of draws names: a mesh already placed keeps its words, and a new one takes the
+    /// lowest free run that holds it, unless the plan relocates every mesh.</summary>
     /// <param name="draws">The draws.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The list holds more than <see cref="SdfMeshRegion.MaxDraws"/> draws.</exception>
-    /// <exception cref="OverflowException">The region holds more words than an <see cref="int"/> counts.</exception>
+    /// <exception cref="InvalidOperationException">The list's draw records alone pass the arena's limit.</exception>
     public void Plan(IReadOnlyList<SdfMeshDraw> draws) {
         ArgumentNullException.ThrowIfNull(draws);
 
@@ -93,10 +128,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
             throw new ArgumentException(message: $"A mesh region holds at most {SdfMeshRegion.MaxDraws} draws; the list holds {draws.Count}.", paramName: nameof(draws));
         }
 
-        // A list naming the meshes the latest plan's list named, in its order, finds every mesh placed and the reserve
-        // large enough, and the words outside the named meshes are those that plan left, so it neither places, moves nor
-        // relocates: the plan of a frame whose draws only moved.
-        if (NamesLatestMeshes(draws: draws)) {
+        m_forgotten.Clear();
+
+        // A list naming the meshes the latest plan's list named, in its order, finds every mesh where that plan left it
+        // and the reserve large enough, so it neither places, moves nor relocates: the plan of a frame whose draws only
+        // moved. A refused mesh is tried again only once a trim has freed words.
+        if (NamesLatestMeshes(draws: draws) && !(m_trimmed && (m_refused.Count > 0))) {
             m_placed.Clear();
             m_moved.Clear();
             Relocated = false;
@@ -106,10 +143,11 @@ public sealed class SdfMeshRegionArena : IDisposable {
         }
 
         Unchanged = false;
-
+        m_trimmed = false;
         m_named.Clear();
         m_placed.Clear();
         m_moved.Clear();
+        m_refused.Clear();
 
         var namedWords = 0L;
 
@@ -119,62 +157,61 @@ public sealed class SdfMeshRegionArena : IDisposable {
             }
         }
 
-        // A first plan has no reserve to grow, and relocates.
-        var grown = ((m_drawCapacity > 0) && (draws.Count > m_drawCapacity));
+        NamedWords = namedWords;
 
-        if (grown) {
+        var first = (m_drawCapacity == 0);
+
+        if (draws.Count > m_drawCapacity) {
             GrowReserve(drawCount: draws.Count);
         }
 
-        var placedNamedWords = 0L;
+        var unnamedWords = 0L;
+        var placedWords = 0L;
 
-        foreach (var mesh in m_named) {
-            if (m_placements.ContainsKey(key: mesh)) {
-                placedNamedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+        foreach (var mesh in m_placements.Keys) {
+            var words = SdfMeshRegion.WordsOf(mesh: mesh);
+
+            placedWords += words;
+            if (!m_named.Contains(item: mesh)) { unnamedWords += words; }
+        }
+        if (unnamedWords > m_retainedSlackWords) {
+            placedWords -= ForgetUnnamed();
+        }
+        foreach (var draw in draws) {
+            var mesh = draw.Mesh;
+
+            if (m_placements.ContainsKey(key: mesh) || m_refused.Contains(item: mesh)) { continue; }
+            if (TryPlace(mesh: mesh)) {
+                placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+                continue;
+            }
+
+            // The meshes no list names give their words up before a named one is refused.
+            placedWords -= ForgetUnnamed();
+            if (TryPlace(mesh: mesh)) {
+                placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+            } else {
+                _ = m_refused.Add(item: mesh);
             }
         }
 
-        // The arena's words that no named mesh holds: meshes no list names any more.
-        var unnamed = ((m_end - (((long)m_drawCapacity) * SdfMeshRecord.DrawWords)) - placedNamedWords);
-        var appendedWords = (m_end + (namedWords - placedNamedWords));
-        var relocate = (
-            ((m_drawCapacity == 0) && (draws.Count > 0)) ||
-            ((unnamed > namedWords) && (unnamed > m_retainedSlackWords)) ||
-            ((unnamed > 0) && (((ulong)appendedWords) > (SdfWorldTables.MostMeshRegionBytes / sizeof(uint))))
-        );
+        var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
+        var free = ((m_ranges.LiveEnd - reserveWords) - placedWords);
+        // A first list with no draw reserves nothing, and the next list is the first again.
+        var relocate = (first && (m_drawCapacity > 0));
 
         if (relocate) {
-            Relocations++;
-            RelocationReason = ((m_drawCapacity == 0)
-                ? "first plan"
-                : (((ulong)appendedWords) > (SdfWorldTables.MostMeshRegionBytes / sizeof(uint)))
-                ? $"appending {(namedWords - placedNamedWords) * sizeof(uint)}B would pass the region's limit"
-                : $"{unnamed * sizeof(uint)}B no draw names exceeds the {namedWords * sizeof(uint)}B named");
-            if (!grown) {
-                m_drawCapacity = GrownCapacity(drawCount: draws.Count);
-            }
-
-            m_end = checked((m_drawCapacity * SdfMeshRecord.DrawWords));
-            foreach (var mesh in m_placements.Keys) { mesh.Release(cached: true); }
-            m_placements.Clear();
-            m_moved.Clear();
+            RelocationReason = "first plan";
+        } else if ((m_refused.Count > 0) && ((reserveWords + namedWords) <= LimitWords)) {
+            RelocationReason = $"no free run holds a named mesh, and the {namedWords * sizeof(uint)}B named fit packed";
+            relocate = true;
+            Pack(draws: draws);
+        } else if ((free > (PackedShare * namedWords)) && (free > m_retainedSlackWords)) {
+            RelocationReason = $"{free * sizeof(uint)}B free under the last mesh exceed {PackedShare} times the {namedWords * sizeof(uint)}B named";
+            relocate = true;
+            Pack(draws: draws);
         }
-
-        foreach (var draw in draws) {
-            if (m_placements.ContainsKey(key: draw.Mesh)) { continue; }
-
-            var mesh = draw.Mesh;
-            var words = SdfMeshRegion.WordsOf(mesh: mesh);
-            var vertexWord = m_end;
-            var materialWord = checked((vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords)));
-            var indexWord = checked((materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
-            var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked((indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh))));
-
-            m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
-            mesh.Acquire(cached: true);
-            m_end = checked((m_end + words));
-            m_placed.Add(item: mesh);
-        }
+        if (relocate) { Relocations++; }
 
         Relocated = relocate;
         if (m_latestMeshes.Length < draws.Count) {
@@ -200,33 +237,105 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         return true;
     }
+    // Places a mesh at the lowest free run that holds it, doubling the room for placed meshes when it is spent; false
+    // when no free run under the limit holds it.
+    private bool TryPlace(SdfMesh mesh) {
+        // A range is at least one word, so a mesh without words still has a place of its own.
+        var words = ((uint)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
+
+        if (!m_ranges.TryAllocate(count: words, start: out var start)) {
+            if (m_ranges.LiveRanges < m_ranges.MaxRanges) { return false; }
+
+            m_ranges = new GpuRangeAllocator(maxRanges: checked((2 * m_ranges.MaxRanges)), source: m_ranges);
+            if (!m_ranges.TryAllocate(count: words, start: out start)) { return false; }
+        }
+
+        var vertexWord = ((int)start);
+        var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
+        var indexWord = (materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
+        var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : (indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
+
+        m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
+        mesh.Acquire(cached: true);
+        m_placed.Add(item: mesh);
+
+        return true;
+    }
+    // Frees a placed mesh's words and lets its placement claim go; its words.
+    private long Forget(SdfMesh mesh) {
+        _ = m_placements.Remove(key: mesh, value: out var placement);
+        mesh.Release(cached: true);
+
+        return m_ranges.Free(start: ((uint)placement.VertexWord));
+    }
+    // Forgets every placed mesh the latest list does not name; their words.
+    private long ForgetUnnamed() {
+        var words = 0L;
+
+        m_scratch.Clear();
+        foreach (var mesh in m_placements.Keys) {
+            if (!m_named.Contains(item: mesh)) { m_scratch.Add(item: mesh); }
+        }
+        foreach (var mesh in m_scratch) {
+            words += Forget(mesh: mesh);
+            m_forgotten.Add(item: mesh);
+        }
+        m_scratch.Clear();
+
+        return words;
+    }
+    // Relocates every mesh the list names: forgets every placed mesh and places the named ones again from the reserve's
+    // end in the list's order, refusing those the limit still cannot hold.
+    private void Pack(IReadOnlyList<SdfMeshDraw> draws) {
+        m_scratch.Clear();
+        m_scratch.AddRange(collection: m_placements.Keys);
+        foreach (var mesh in m_scratch) { _ = Forget(mesh: mesh); }
+        m_scratch.Clear();
+        m_forgotten.Clear();
+        m_moved.Clear();
+        m_placed.Clear();
+        m_refused.Clear();
+        foreach (var draw in draws) {
+            var mesh = draw.Mesh;
+
+            if (m_placements.ContainsKey(key: mesh) || m_refused.Contains(item: mesh)) { continue; }
+            if (!TryPlace(mesh: mesh)) { _ = m_refused.Add(item: mesh); }
+        }
+    }
     // The reserve a list of drawCount draws takes: the current one while it holds the list, otherwise doubled, at least the
     // list and MinimumDrawCapacity, at most SdfMeshRegion.MaxDraws.
     private int GrownCapacity(int drawCount) => (int)GpuCapacity.Grown(current: m_drawCapacity, required: drawCount,
         ceiling: SdfMeshRegion.MaxDraws, divisor: 1, minimum: MinimumDrawCapacity);
     // Grows the reserve for a list of drawCount draws: every mesh whose words begin inside the grown reserve leaves its
-    // placement, a named one to be placed again at the arena's end (Moved), and the arena ends no earlier than the reserve.
+    // placement, a named one to be placed again (Moved) and any other forgotten, and the reserve takes the words from zero.
     private void GrowReserve(int drawCount) {
+        var held = (m_drawCapacity > 0);
+
         m_drawCapacity = GrownCapacity(drawCount: drawCount);
 
-        var reserveEnd = checked((m_drawCapacity * SdfMeshRecord.DrawWords));
+        var reserveEnd = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
 
-        m_reserved.Clear();
-        foreach (var (mesh, placement) in m_placements) {
-            if (placement.VertexWord < reserveEnd) {
-                m_reserved.Add(item: mesh);
-            }
+        if (reserveEnd > LimitWords) {
+            throw new InvalidOperationException(message: $"A list of {drawCount} draws reserves {reserveEnd * sizeof(uint)} bytes of draw records, past the {LimitWords * sizeof(uint)} the mesh region is limited to.");
         }
-        foreach (var mesh in m_reserved) {
-            _ = m_placements.Remove(key: mesh);
-            mesh.Release(cached: true);
 
+        m_scratch.Clear();
+        foreach (var (mesh, placement) in m_placements) {
+            if (placement.VertexWord < reserveEnd) { m_scratch.Add(item: mesh); }
+        }
+        foreach (var mesh in m_scratch) {
+            _ = Forget(mesh: mesh);
             if (m_named.Contains(item: mesh)) {
                 _ = m_moved.Add(item: mesh);
+            } else {
+                m_forgotten.Add(item: mesh);
             }
         }
-        m_reserved.Clear();
-        m_end = Math.Max(val1: m_end, val2: reserveEnd);
+        m_scratch.Clear();
+        if (held) { _ = m_ranges.Free(start: 0u); }
+
+        // Every range that began under the reserve's end is free, so the lowest run that holds the reserve begins at zero.
+        _ = m_ranges.Allocate(count: ((uint)reserveEnd));
     }
 
     /// <summary>Releases the arena's CPU source claims after all uploads and staged draw readers finish.</summary>
@@ -234,11 +343,13 @@ public sealed class SdfMeshRegionArena : IDisposable {
         foreach (var mesh in m_placements.Keys) { mesh.Release(cached: true); }
         m_placements.Clear();
     }
-    /// <summary>Releases CPU source claims no current draw names, keeping every current mesh address standing.</summary>
+    /// <summary>Forgets the placed meshes no current draw names, freeing their words and CPU source claims and keeping
+    /// every current mesh address standing.</summary>
     public void TrimUnused() {
-        m_reserved.Clear();
-        foreach (var mesh in m_placements.Keys) { if (!m_named.Contains(item: mesh)) { m_reserved.Add(item: mesh); } }
-        foreach (var mesh in m_reserved) { m_placements.Remove(key: mesh); mesh.Release(cached: true); }
-        m_reserved.Clear();
+        var before = m_forgotten.Count;
+
+        _ = ForgetUnnamed();
+        m_trimmed |= (m_forgotten.Count > before);
+        m_forgotten.RemoveRange(count: (m_forgotten.Count - before), index: before);
     }
 }

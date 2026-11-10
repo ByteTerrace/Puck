@@ -15,9 +15,9 @@ namespace Puck.SdfVm;
 // current placement has been copied by a completed submission: CompleteLanding, on the fence the service observed, or
 // the frame upload that writes a moved mesh together with the records naming it. The landing filter in
 // StageMeshRegionCore is the one place a draw is held out while its mesh is owed. A plan that relocates the arena, moves
-// a mesh, or trims a placement drops that mesh's progress, so a job in flight for its old words completes into a
-// progress no longer kept (LandingProgress identity) and lands nothing; its words were queued before any later job's,
-// which rewrites them.
+// a mesh, or forgets a placement drops that mesh's progress, so a job taken for its old words records none of them, and
+// one already in flight completes into a progress no longer kept (LandingProgress identity) and lands nothing; its
+// words were queued before any later job's, which rewrites them for the mesh the arena gave them to.
 public sealed partial class SdfWorldTables {
     /// <summary>The stages that read the tables' regions, the mesh region included: what a region copy hands its buffer
     /// to.</summary>
@@ -130,9 +130,12 @@ public sealed partial class SdfWorldTables {
     }
 
     // Owes each slice's words at its mesh's current placement and records their copy into the job's slot of the region.
+    // A slice whose progress a plan dropped since the take owes nothing: its mesh was moved or forgotten, and the words
+    // it was taken for may be another mesh's.
     private void RecordLanding(LandingJob job, in SdfGpuWorkRecording recording) {
         foreach (var slice in job.Slices) {
-            var placement = m_meshArena.Placements[slice.Mesh];
+            if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
+                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement)) { continue; }
 
             m_meshRegion.OweSourced(
                 length: (((long)slice.Count) * sizeof(uint)),

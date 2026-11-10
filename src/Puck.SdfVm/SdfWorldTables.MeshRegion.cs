@@ -13,9 +13,13 @@ namespace Puck.SdfVm;
 // boot, a relocation or a body crossing into a world with all its meshes at once fills in over several frames from the
 // cameras outward rather than staging every word in one upload. The region is created with the tables, one draw record
 // long so every set that binds it binds a buffer, and grows to the need plus an eighth without waiting for the device, the
-// next upload carrying the words it held on the GPU; a frame without draws keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
+// next upload carrying the words it held on the GPU; a frame without draws keeps it. It never grows past its limit
+// (MeshRegionLimitBytes), a share of the device's memory: a mesh the arena finds no room for under it is refused, its
+// draws wait out of the staged records like an owed mesh's, and the bake coarsens what the views can spare until the
+// list fits (SdfMeshPathBake.ObserveResidency). A view's mesh pass reads the draws' triangles from it, and primary a
+// mesh hit's material.
 public sealed partial class SdfWorldTables {
-    private readonly SdfMeshRegionArena m_meshArena = new();
+    private readonly SdfMeshRegionArena m_meshArena;
     private long m_meshPlacementVersion;
 
     // Called only during a background admission on the frame thread. An owed geometry is never bound.
@@ -50,6 +54,8 @@ public sealed partial class SdfWorldTables {
             m_meshArena.TrimUnused();
             m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
             ForgetAllLanding();
+            // The words a trim freed may hold a mesh the arena refused, so the next staging plans its list again.
+            if (m_meshArena.Refused.Count > 0) { m_meshSource = null; }
             // The source order walks the placements, so a trim that forgot one rebuilds it.
             m_meshOrderStale = true;
         } finally {
@@ -72,14 +78,15 @@ public sealed partial class SdfWorldTables {
     /// the frame it staged renders without it. Read on the frame thread.</summary>
     public bool DrawsAwaitMeshes => (m_meshSource is not null) && !m_stagedWhole;
 
-    /// <summary>Gets whether the current staged mesh geometry owes no mesh words and its required upload has
-    /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
+    /// <summary>Gets whether the current staged mesh geometry owes no mesh words, the region refuses none of its meshes,
+    /// and its required upload has completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame
+    /// thread; never waits.</summary>
     public bool MeshesResident => (MeshResidencyPending() is null);
 
     /// <summary>Names what keeps <see cref="MeshesResident"/> false: the owed words and meshes of the staged list, how many
-    /// of those wait on a store restore, whether background work may bind the latest upload, and the required upload
-    /// against the submitted and completed ones and its fence; <see langword="null"/> once resident. Read on the frame
-    /// thread; never waits.</summary>
+    /// of those wait on a store restore, whether background work may bind the latest upload, the meshes the region
+    /// refuses under its limit, and the required upload against the submitted and completed ones and its fence;
+    /// <see langword="null"/> once resident. Read on the frame thread; never waits.</summary>
     /// <returns>The reason, or <see langword="null"/>.</returns>
     public string? MeshResidencyPending() {
         if (m_disposed) { return "the tables are disposed"; }
@@ -89,7 +96,11 @@ public sealed partial class SdfWorldTables {
             var restoring = 0;
             foreach (var mesh in m_activeOwed) { if (!mesh.Resident) { restoring++; } }
             return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
-                $"owes {(owed * sizeof(uint))}B of {m_activeOwed.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved}");
+                $"owes {(owed * sizeof(uint))}B of {m_activeOwed.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved} refused={m_meshArena.Refused.Count}");
+        }
+        if (m_meshArena.Refused.Count > 0) {
+            return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
+                $"the mesh region refuses {m_meshArena.Refused.Count} meshes: the staged list names {MeshRegionNamedBytes}B, and the region is limited to {MeshRegionLimitBytes}B");
         }
         if ((required == 0UL) || ((required <= m_uploads) &&
             ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled))) { return null; }
@@ -175,18 +186,53 @@ public sealed partial class SdfWorldTables {
     /// places, which <see cref="MeshRegionBytes"/> holds with room to grow. Safe to read from any thread.</summary>
     public ulong MeshRegionUsedBytes => Volatile.Read(location: ref m_meshRegionUsedBytes);
 
+    /// <summary>The divisor of a device's device-local memory its mesh region is limited to: a quarter of it, so the
+    /// region, the copy of it a growth holds until the next upload completes, and everything else the device holds fit
+    /// together.</summary>
+    public const ulong MeshRegionDeviceLocalShare = 4UL;
+
+    /// <summary>Returns the most bytes a device's mesh region places: <see cref="MeshRegionDeviceLocalShare"/> of its
+    /// device-local memory (<see cref="GpuMemoryProfile.DeviceLocalShare"/>), a whole number of words, at least
+    /// <see cref="MeshRegionGranuleBytes"/> and at most <see cref="MostMeshRegionBytes"/>, which is also the limit on a
+    /// device whose profile reports no device-local memory.</summary>
+    /// <param name="profile">The device's memory profile.</param>
+    /// <returns>The limit in bytes.</returns>
+    public static ulong MeshRegionLimitOf(GpuMemoryProfile profile) => (Math.Clamp(
+        max: MostMeshRegionBytes,
+        min: MeshRegionGranuleBytes,
+        value: profile.DeviceLocalShare(divisor: MeshRegionDeviceLocalShare, unreportedBytes: MostMeshRegionBytes)
+    ) & ~((ulong)(sizeof(uint) - 1)));
+
+    /// <summary>Gets the most bytes the mesh region places (<see cref="MeshRegionLimitOf"/>): a mesh the latest list
+    /// names that finds no room under it is refused, and its draws wait until a later list fits.</summary>
+    public ulong MeshRegionLimitBytes => (((ulong)m_meshArena.LimitWords) * sizeof(uint));
+    /// <summary>Gets the bytes the latest planned draw list asks of the mesh region: its reserved draw records and every
+    /// mesh it names, each once, placed or refused. Past <see cref="MeshRegionLimitBytes"/> the list cannot be resident
+    /// whole. Safe to read from any thread.</summary>
+    public ulong MeshRegionNamedBytes => Volatile.Read(location: ref m_meshRegionNamedBytes);
+    /// <summary>Gets how many meshes the latest planned draw list names that the mesh region refuses under its limit.
+    /// Read on the frame thread.</summary>
+    public int MeshRegionRefused => m_meshArena.Refused.Count;
+
+    private ulong m_meshRegionNamedBytes;
+    // The meshes plans refused and forgot, over the tables' life.
+    private long m_meshRefusals;
+    private long m_meshForgotten;
+
     /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: the need plus an
-    /// eighth, rounded up to <see cref="MeshRegionGranuleBytes"/> and capped at <see cref="MostMeshRegionBytes"/>. The size
-    /// is never below the need and is a whole number of words.</summary>
-    /// <param name="needBytes">The bytes the planned draws and meshes use; at most <see cref="MostMeshRegionBytes"/>.</param>
+    /// eighth, rounded up to <see cref="MeshRegionGranuleBytes"/> and capped at <paramref name="mostBytes"/>. The size is
+    /// never below the need and is a whole number of words.</summary>
+    /// <param name="needBytes">The bytes the planned draws and meshes use; at most <paramref name="mostBytes"/>.</param>
+    /// <param name="mostBytes">The most bytes the region may hold, a whole number of words; at most
+    /// <see cref="MostMeshRegionBytes"/>.</param>
     /// <returns>The region's new size in bytes.</returns>
-    /// <exception cref="InvalidOperationException"><paramref name="needBytes"/> is past <see cref="MostMeshRegionBytes"/>.</exception>
-    public static ulong MeshRegionGrownBytes(ulong needBytes) {
-        if (needBytes > MostMeshRegionBytes) {
-            throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {MostMeshRegionBytes} one region holds.");
+    /// <exception cref="InvalidOperationException"><paramref name="needBytes"/> is past <paramref name="mostBytes"/>.</exception>
+    public static ulong MeshRegionGrownBytes(ulong needBytes, ulong mostBytes = MostMeshRegionBytes) {
+        if (needBytes > mostBytes) {
+            throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {mostBytes} the region may hold.");
         }
 
-        return (ulong)GpuCapacity.Headroom(required: ((long)needBytes), ceiling: ((long)MostMeshRegionBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes));
+        return (ulong)GpuCapacity.Headroom(required: ((long)needBytes), ceiling: ((long)mostBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes));
     }
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
@@ -308,6 +354,18 @@ public sealed partial class SdfWorldTables {
                 location: ref m_meshRegionUsedBytes,
                 value: (((ulong)m_meshArena.Words) * sizeof(uint))
             );
+            Volatile.Write(
+                location: ref m_meshRegionNamedBytes,
+                value: ((((ulong)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes) + (((ulong)m_meshArena.NamedWords) * sizeof(uint)))
+            );
+            // A forgotten mesh's words are free for the next mesh they hold, so it owes none and its landing starts
+            // again should a list place it later.
+            foreach (var mesh in m_meshArena.Forgotten) {
+                ForgetLanding(mesh: mesh);
+                _ = m_meshesOwed.Remove(mesh: mesh);
+            }
+            m_meshForgotten += m_meshArena.Forgotten.Count;
+            if (!m_meshArena.Unchanged) { m_meshRefusals += m_meshArena.Refused.Count; }
 
             if (m_meshArena.Words > 0) {
                 if (m_meshArena.Relocated) {
@@ -327,13 +385,18 @@ public sealed partial class SdfWorldTables {
                     foreach (var mesh in m_meshArena.Moved) {
                         m_meshMoved++;
                         ForgetLanding(mesh: mesh);
+                        // A moved mesh no free run held is refused: it owes nothing until a plan places it.
+                        if (!m_meshArena.Placements.TryGetValue(key: mesh, value: out var placement)) {
+                            _ = m_meshesOwed.Remove(mesh: mesh);
+                            continue;
+                        }
                         // A moved mesh whose normals and levels are still coming back from the store stays owed and
                         // lands through the background work, its draws held out until it does.
                         if (!mesh.Resident) { continue; }
                         mesh.Need();
                         m_meshesWithUpload.Add(item: mesh);
                         _ = m_meshesOwed.Remove(mesh: mesh);
-                        WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
+                        WriteMeshWords(mesh: mesh, placement: placement);
                     }
                 }
                 m_meshSectionWritten = true;
@@ -354,16 +417,16 @@ public sealed partial class SdfWorldTables {
         OrderLanding(draws: draws);
         CountOwed(draws);
 
-        // A draw whose mesh's words are still owed waits for them: the staged list holds the draws whose meshes are
-        // written, and the next frames write the rest.
+        // A draw whose mesh's words are still owed, or whose mesh the region refuses, waits for them: the staged list
+        // holds the draws whose meshes are written, and a landing or a later plan stages the rest.
         var staged = draws;
 
-        if ((m_meshesOwed.Count > 0) && draws.Any(predicate: draw => m_meshesOwed.Contains(mesh: draw.Mesh))) {
+        if ((m_meshesOwed.Count > 0) || (m_meshArena.Refused.Count > 0)) {
             m_meshLanded.Clear();
             foreach (var draw in draws) {
-                if (!m_meshesOwed.Contains(mesh: draw.Mesh)) { m_meshLanded.Add(item: draw); }
+                if (!m_meshesOwed.Contains(mesh: draw.Mesh) && !m_meshArena.Refused.Contains(item: draw.Mesh)) { m_meshLanded.Add(item: draw); }
             }
-            staged = m_meshLanded;
+            if (m_meshLanded.Count != draws.Count) { staged = m_meshLanded; }
         }
 
         // While existing mesh addresses stand, a same-sized list owes only its changed draws, including draws
@@ -415,8 +478,10 @@ public sealed partial class SdfWorldTables {
         Array.Clear(array: m_stagedDraws, index: staged.Count, length: (m_stagedCount - Math.Min(val1: m_stagedCount, val2: staged.Count)));
         m_stagedCount = staged.Count;
         m_meshRevision++;
-        m_meshStaged = ReferenceEquals(objA: staged, objB: draws);
-        m_stagedWhole = m_meshStaged;
+        // The records stand until a mesh lands (CompleteLanding), a trim frees words for a refused one
+        // (ServiceMemoryTrim) or a list is planned, each of which stages again; a frame between them stages nothing.
+        m_meshStaged = true;
+        m_stagedWhole = ReferenceEquals(objA: staged, objB: draws);
     }
     // Stages changed draws at their indices while existing mesh addresses stand: each changed record, box and motion
     // row, and the region's words for each run of them.
@@ -544,16 +609,18 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Returns whether the mesh region still owes a mesh's words: the latest staged draw list placed it and its
-    /// draws wait out of the staged records until a frame writes them. Read on the frame's thread.</summary>
+    /// draws wait out of the staged records until a frame writes them, or the list names it and the region refuses it
+    /// under its limit. Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
-    public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh));
+    public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Refused.Contains(item: mesh) || (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh)));
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
     /// one at which a staging last stopped owing, the arena's relocations and the latest one's reason, the meshes grown
-    /// draw reserves moved, and the background landing jobs, their bytes and the most one job may carry. Safe to read
-    /// from any thread, the counts being a frame's.</summary>
+    /// draw reserves moved, the region's limit, the bytes the latest list names, the meshes it refuses now and those
+    /// plans refused and forgot in all, and the background landing jobs, their bytes and the most one job may carry.
+    /// Safe to read from any thread, the counts being a frame's.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeLanding() {
         var since = Volatile.Read(location: ref m_owedSince);
@@ -561,7 +628,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} {DescribeLandingJobs()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
     }
 
     // The mesh whose words the mesh scratch holds, which a landing slicing it over several jobs reads again.
@@ -679,7 +746,7 @@ public sealed partial class SdfWorldTables {
     // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. The shrunk
     // region owes its draw records; a relocation owes every mesh, which lands through the background work.
     private void FitMeshRegion(ulong bytes) {
-        var fitted = MeshRegionGrownBytes(needBytes: bytes);
+        var fitted = MeshRegionGrownBytes(needBytes: bytes, mostBytes: MeshRegionLimitBytes);
 
         if (((ulong)m_meshRegion.ByteCount) <= (fitted + (fitted / 2UL))) {
             return;
@@ -701,7 +768,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var grown = MeshRegionGrownBytes(needBytes: bytes);
+        var grown = MeshRegionGrownBytes(needBytes: bytes, mostBytes: MeshRegionLimitBytes);
 
         RequireMeshUpload();
         Retire(replaced: m_meshRegion.Grow(byteCount: ((long)grown)));

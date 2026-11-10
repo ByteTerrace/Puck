@@ -201,8 +201,9 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
     /// <param name="shadowGlassRaster">The cascade glass extinction pipeline.</param>
     public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
-        m_meshesOwed = new OwedMeshes(named: m_meshArena.Named);
         ArgumentNullException.ThrowIfNull(device);
+        m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionLimitOf(profile: device.MemoryProfile));
+        m_meshesOwed = new OwedMeshes(named: m_meshArena.Named);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
         ArgumentNullException.ThrowIfNull(meshRaster);

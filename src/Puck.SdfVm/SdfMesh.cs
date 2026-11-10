@@ -551,6 +551,20 @@ public static class SdfMeshRegion {
 
         return checked(((((mesh.Positions.Length * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
     }
+    /// <summary>The bytes a baked mesh takes of a region whose arena places it (<see cref="SdfMeshRegionArena"/>): its
+    /// own words, or each of its chunks' where it is chunked, since the chunks are what draws name.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns>Its bytes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static long PlacedBytesOf(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(mesh);
+
+        var words = ((mesh.Chunks.Count == 0) ? ((long)WordsOf(mesh: mesh)) : 0L);
+
+        foreach (var chunk in mesh.Chunks) { words += WordsOf(mesh: chunk); }
+
+        return (words * sizeof(uint));
+    }
     /// <summary>The index section's words: all levelled triangles' indices, then one three-word row per level, including
     /// zero, holding its first triangle, vertex count and error.</summary>
     /// <param name="mesh">The mesh.</param>

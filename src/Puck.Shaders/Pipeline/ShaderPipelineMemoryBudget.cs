@@ -19,14 +19,7 @@ public static class ShaderPipelineMemoryBudget {
     /// <param name="profile">The device's memory profile.</param>
     /// <returns>The device-local bytes divided by <see cref="DeviceLocalShare"/>; <see cref="UnreportedBytes"/> when
     /// that share is zero.</returns>
-    public static ulong For(GpuMemoryProfile profile) {
-        var share = (profile.DeviceLocalBytes / DeviceLocalShare);
-
-        return ((share == 0UL)
-            ? UnreportedBytes
-            : share
-        );
-    }
+    public static ulong For(GpuMemoryProfile profile) => profile.DeviceLocalShare(divisor: DeviceLocalShare, unreportedBytes: UnreportedBytes);
 }
 /// <summary>
 /// What installing a graph costs a shader pipeline instance, counted from the plan before anything is allocated. Bytes
