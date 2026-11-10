@@ -555,8 +555,10 @@ landed geometry).
   guaranteed phase of the host loop, and give every cross-subsystem wait a
   deadline and a named reason; make thread ownership of the state arena, the
   frame thread and each GPU queue a checked type rather than a comment; prefer
-  publish-once handoff over shared state under locks, with `puck scan`'s
-  `LockAnalyzer` as a ratchet on new hot-path locks; and research a systematic
+  publish-once handoff over shared state under locks, with the scheduler
+  analyzer and `puck scan`'s `LockAnalyzer` switched on per project as each
+  project migrates (no recorded allowlist: the owner retired ratchets and
+  ledgers); and research a systematic
   schedule explorer for .NET (Microsoft Coyote) beside the existing
   `--workers` harness, since these defects rarely show in one run.
 - [medium] The rule phase's remaining volatile and visit costs, as
