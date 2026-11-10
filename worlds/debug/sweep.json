@@ -226,7 +226,7 @@
           { "at": 20, "name": "idle" },
           { "at": 55, "name": "idle-late" },
           { "at": 80, "name": "walk" },
-          { "at": 90, "name": "walk-burst", "presented": 8 },
+          { "at": 82, "name": "walk-burst", "presented": 8 },
           { "at": 100, "name": "walk-edge" }
         ]
       },

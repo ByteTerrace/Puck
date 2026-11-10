@@ -641,7 +641,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ));
     }
     /// <summary>Stages the frame: prepares it (<see cref="Prepare"/>), then submits its upload and pumps the tables'
-    /// background GPU work against it (<see cref="PumpGpuWork"/>), once a frame, whoever asks first. The render graph's
+    /// background GPU work against it (<see cref="PumpGpuWork"/>), or drives it while the frame is held for its lighting
+    /// (<see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
     /// preparation asks for every scheduled render that reads the residency, before the frame's batch opens and before any
     /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
     /// This is the one place the frame's upload is submitted.</summary>
@@ -657,7 +658,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_submitted = true;
             tables.HoldsFrame = HoldsFrame;
             tables.SubmitUpload();
-            tables.GpuWork.Pump(tables: tables);
+            // A frame held for its lighting presents nothing, so the work it waits on runs at the GPU's pace.
+            if (LightingPending) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
         }
 
         return true;

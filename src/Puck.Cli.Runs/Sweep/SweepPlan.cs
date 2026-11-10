@@ -172,6 +172,22 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
 
                     return false;
                 }
+                if (capture.Presented == 0) {
+                    continue;
+                }
+
+                // A burst armed at a tick reads the frames of the ticks after it, one a tick under the tour's lockstep,
+                // after at most one temporal period of presentations its discarded history takes to converge; a capture
+                // armed while it still reads is refused.
+                var free = (capture.At + capture.Presented + ((int)Puck.Shaders.SdfWorldPackage.TemporalPeriod));
+
+                var early = (stop.Captures ?? []).FirstOrDefault(predicate: other => ((other.At > capture.At) && (other.At <= free)));
+
+                if ((early is not null) || ((stop.Route is null) && ((stop.Settle ?? plan.Tour.Settle) <= free))) {
+                    error = $"the tour stop '{stop.Name}' arms {((early is null) ? "its own capture" : $"'{early.Still}'")} while the presented burst '{capture.Still}' may still read frames: a burst of {capture.Presented} armed at {capture.At} reads until tick {free}";
+
+                    return false;
+                }
             }
         }
 
@@ -307,7 +323,10 @@ public sealed record SweepStep(int At, string Run);
 /// <param name="Tolerance">The planar metres the body may stand from the exhibit's spawn point before the still is off
 /// course.</param>
 /// <param name="Presented">Zero for a settled still; otherwise the frames a presented burst reads as the display
-/// showed them (<c>world.screenshot &lt;path&gt; presented &lt;frames&gt;</c>), jitter and temporal history included.</param>
+/// showed them (<c>world.screenshot &lt;path&gt; presented &lt;frames&gt;</c>), jitter and temporal history included. The
+/// stop's next capture is armed more than this many ticks plus one
+/// <see cref="Puck.Shaders.SdfWorldPackage.TemporalPeriod"/> later, the ticks the burst may still read frames
+/// for.</param>
 public sealed record SweepCapture(int At, string? Exhibit = null, string? Name = null, double Tolerance = 0.5, int Presented = 0) {
     /// <summary>Gets the still's file name: its own, or the exhibit's.</summary>
     [JsonIgnore]

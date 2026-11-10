@@ -37,6 +37,14 @@ tier is `floor(log2((p / 2) / BaseCell))`. A shared template's geometry is
 measured where its copies stand, as its priority is (`MeasureDemand`). With no
 demand point `p` is infinite and the demanded tier is the coarsest.
 
+Each view demands at its own image. `SdfMeshDemand.Observe` takes a view's
+pixels from the height of the image it renders
+(`SdfViewSnapshot.DemandHeight`, which a screen's binder sets to the screen's
+resolution) or else from its region's share of the output, so a filmed screen
+of few lines demands coarser tiers than the window beside it, and a taller
+window demands finer ones. No display height is built in: 1080 is only the
+default of `puck mesh audit`'s `--view-height`, the one view `--eye` models.
+
 The group's tier is the demanded tier clamped to the rungs that change its
 mesh, both derived from the plan's inputs alone:
 
@@ -194,6 +202,46 @@ yet, the longest owed interval 288 frames, and `tiers-owed` read zero again
 once the bakes settled at 88,521,957 resident triangles. The pipe and groove
 beads and the Moth's helmet ring, collar and lids read round in the settled
 captures at 0.9 to 2.4 m.
+
+## The lighting follows the tier
+
+The probe lighting traces the meshes the frame draws
+(`SdfMeshIrradianceScene` keys a geometry by its mesh's own triangles), so a
+retier that lands is a geometry change to the volume. The scene rebuilds the
+group's hierarchy, the probes the changed box can reach trace again, and
+every probe of the window relights its local cube from nothing, because a
+kept hit's shadow rays toward the point lights may cross the change
+(`SdfMeshIrradiance`'s `reuseLocal`). A World that converges its lighting
+before a still (`world.lockstep on`) therefore owes one whole drain for every
+wave of retiers a walk starts, and the walkthrough tour pays it at every
+exhibit: its drains after a retier wave ran about two and a half times as
+long as a relight alone, and a walk between exhibits starts several waves.
+The frame is unaffected in ordinary play, where the volume converges behind
+the picture.
+
+The surface a retier moves stays under half a pixel of the view that asked
+for it; light that reaches a probe two metres away does not change by an
+amount the picture shows. Three answers, not yet chosen between:
+
+- **A lighting tier.** The scene traces each group at a rung fixed by the
+  plan alone (its coarsest, where nothing refines), so a view-driven retier
+  never changes what the light sees. Cost: a group near a view holds two
+  meshes, and thin detail the coarsest rung drops no longer shadows. The
+  final lattice exists at every rung, so walls stay closed.
+- **Reach-bounded invalidation.** A probe keeps its local cube unless a
+  changed box lies within the reach of one of its hits' light paths (a
+  conservative box test bounded by each light's range). The retier's traces
+  remain; the whole-window relight goes.
+- **Converge at the capture.** A lockstep World converges every tick's frame
+  (`PresentPacingControl.ConvergesLighting`), so a walk owes a drain at each
+  tick whose frame saw a retier land, the window move or the day step the
+  lighting grid. Holding only the frames a capture reads owes one drain a
+  still and changes no light; the exposure, which adapts over the frames
+  between, then has to snap at the capture as it does after a cut. It does
+  nothing for play.
+
+Whichever lands is measured by the tour: drains per still and their seconds
+on the `[sdf.mesh-gi] done` lines.
 
 ## Invariants and their doors
 

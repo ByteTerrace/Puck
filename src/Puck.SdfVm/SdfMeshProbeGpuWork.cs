@@ -138,6 +138,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             if (m_stopping || m_disposed) { job.Scene.Dispose(); throw new OperationCanceledException(); }
             m_pending.Enqueue(job);
         }
+        m_tables.GpuWork.Wake();
         return job.Answer.Task;
     }
 
@@ -212,7 +213,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             // Serialized queries make replacing the hierarchy safe: the prior token has been released before
             // the coordinator can enqueue another. No slot descriptor or region is changed while it is read.
             if (!ReferenceEquals(m_scene, pending.Scene) || m_placementVersion != version) {
-                m_sceneUpload = new SceneUpload(pending.Scene, placements, version, m_sceneArena);
+                m_sceneUpload = new SceneUpload(pending.Scene, placements, version, m_sceneArena, m_tables.GpuWork.Wake);
                 return false;
             }
             pending.Meshes = meshes;

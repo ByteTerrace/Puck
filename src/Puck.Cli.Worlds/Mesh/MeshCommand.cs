@@ -251,7 +251,7 @@ public static class MeshCommand {
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
     private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses) {
-        var label = $"{scene.Label(group: group, owner: owner)} geometry={group.Sealed.Hash:x32}{((poses.Count > 0) ? " posed" : string.Empty)}";
+        var label = MeshAuditLines.Label(geometry: group.Sealed.Hash, posed: (poses.Count > 0), prototype: scene.Prototype(group: group), scene: scene.Label(group: group, owner: owner));
         var toWorld = scene.ToWorld(group: group);
 
         if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program, poses: poses), refusal: out var why)) {
@@ -319,11 +319,11 @@ public static class MeshCommand {
             return;
         }
 
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {report.Triangles} triangles, {report.Vertices} vertices, cell {Millimetres(metres: report.Cell)} mm, score {report.Score:0.0}{((outcome.Mesh is { } mesh) ? $", box centre {Point(point: outcome.ToWorld(arg: ((mesh.PositionLow + mesh.PositionHigh) * 0.5f)))}" : string.Empty)}\n");
+        output.Append(value: MeshAuditLines.Heading(boxCentre: ((outcome.Mesh is { } mesh) ? Point(point: outcome.ToWorld(arg: ((mesh.PositionLow + mesh.PositionHigh) * 0.5f))) : null), cell: Millimetres(metres: report.Cell), label: outcome.Label, ordinal: ordinal, report: report)).Append(value: '\n');
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  off surface (mm): vertex {Statistic(statistic: report.VertexError, scale: 1000f)} | centroid {Statistic(statistic: report.CentroidError, scale: 1000f)} | midpoint {Statistic(statistic: report.MidpointError, scale: 1000f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds, {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered\n");
+        output.Append(value: MeshAuditLines.TopologyLine(report: report)).Append(value: '\n');
         if (outcome.Mesh is { } skin) {
             var influences = SdfMeshSkin.Audit(mesh: skin);
 

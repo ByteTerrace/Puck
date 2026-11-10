@@ -79,7 +79,8 @@ internal sealed partial class SdfMeshProbeGpuWork {
         internal SdfMeshIrradianceScene.GpuExport? Export;
         internal long Bytes;
 
-        internal SceneUpload(SdfMeshIrradianceScene scene, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, long placementVersion, SdfMeshIrradianceScene.GpuArena arena) {
+        // `offered` tells the service a chunk, or the root, is ready to take (SdfGpuWork.Wake).
+        internal SceneUpload(SdfMeshIrradianceScene scene, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, long placementVersion, SdfMeshIrradianceScene.GpuArena arena, Action offered) {
             Scene = scene.Acquire();
             PlacementVersion = placementVersion;
             Placements = scene.CaptureGpuPlacements(placements);
@@ -94,11 +95,13 @@ internal sealed partial class SdfMeshProbeGpuWork {
                             Export.Read(word + offset, chunk.Words.AsSpan(0, take));
                             await Chunks.Writer.WriteAsync(chunk, m_cancel.Token).ConfigureAwait(false);
                         } catch { chunk.Dispose(); throw; }
+                        offered();
                         offset += take;
                     }
                 }
                 m_root = new SceneChunk(0, [Export.Root], 1);
                 Chunks.Writer.Complete();
+                offered();
             }, m_cancel.Token);
         }
 

@@ -103,9 +103,20 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         lock (m_gate) {
             if (!m_entries.TryGetValue(key: instance, value: out var entry) || entry.Residency is not { } residency) { return null; }
             if (residency.Frame is { TickLocked: true } && (residency.MeshPathBake.Pending || residency.DrawsAwaitMeshes)) { return $"residency '{residency.Name}' is completing its meshes"; }
-            return residency.LightingPending ? $"residency '{residency.Name}' is converging its probe lighting and exposure" : null;
+            return LightingWaitOf(residency: residency);
         }
     }
+    /// <inheritdoc/>
+    /// <remarks>A view of a residency that holds its frame for its lighting (<see cref="SdfWorldResidency.LightingPending"/>):
+    /// the probes and the exposure converge through the residency's background GPU work, which its staging drives
+    /// (<see cref="SdfWorldResidency.Stage"/>), so a recording of the held frame would only take the GPU from it.</remarks>
+    public string? WithheldOf(string instance) {
+        lock (m_gate) {
+            return ((m_entries.TryGetValue(key: instance, value: out var entry) && entry.Residency is { } residency) ? LightingWaitOf(residency: residency) : null);
+        }
+    }
+    private static string? LightingWaitOf(SdfWorldResidency residency) =>
+        (residency.LightingPending ? $"residency '{residency.Name}' is converging its probe lighting and exposure" : null);
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
     /// its tables' build or its views kernel, refused by name, which only a change to what they are built from

@@ -154,7 +154,7 @@ public sealed partial class RenderGraphRuntime {
                 reason: $"the instance '{name}' cannot render: {failure}",
                 refused: true
             );
-        } else if ((PackageReasonOf(index: index, refusal: true) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
+        } else if ((PackageReasonOf(index: index, kind: PackageReason.Refusal) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
             MarkStale(
                 index: index,
                 reason: $"the instance '{name}' cannot render: {refusal}",
@@ -188,8 +188,11 @@ public sealed partial class RenderGraphRuntime {
             );
         }
     }
-    // The first refusal or pending-content reason a package of the instance's graph states for it.
-    private string? PackageReasonOf(int index, bool refusal) {
+    // What a package is asked of an instance: its refusal, why its rendered image is incomplete, or why it records nothing.
+    private enum PackageReason { Refusal, Waiting, Withheld }
+
+    // The first reason of one kind a package of the instance's graph states for it.
+    private string? PackageReasonOf(int index, PackageReason kind) {
         if (m_graphs[index] is not { } graph) {
             return null;
         }
@@ -204,7 +207,11 @@ public sealed partial class RenderGraphRuntime {
                     factory: out var factory,
                     package: step.Package
                 ) &&
-                ((refusal ? factory.RefusalOf(instance: name) : factory.WaitingOf(instance: name)) is { } reason)
+                ((kind switch {
+                    PackageReason.Refusal => factory.RefusalOf(instance: name),
+                    PackageReason.Waiting => factory.WaitingOf(instance: name),
+                    _ => factory.WithheldOf(instance: name),
+                }) is { } reason)
             ) {
                 return reason;
             }
@@ -230,7 +237,7 @@ public sealed partial class RenderGraphRuntime {
     // the output it bound is older than the frame the schedule has it read.
     private void MarkRendered(int index, RenderGraphSchedule schedule) {
         if (!MarkReadStale(index: index, schedule: schedule)) {
-            if (PackageReasonOf(index: index, refusal: false) is { } waiting) {
+            if (PackageReasonOf(index: index, kind: PackageReason.Waiting) is { } waiting) {
                 MarkStale(index: index, reason: waiting);
             } else {
                 MarkCurrent(index: index);

@@ -1426,6 +1426,28 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                     continue;
                 }
+                // A render its package withholds records nothing: its image waits on work the frame's preparation ran,
+                // which another recording would only queue GPU work ahead of. Its completed image stands published, a
+                // capture already reading it is polled, and the render is withdrawn so the next frame asks again.
+                if (
+                    (LatestOf(index: index).Frame >= 0) &&
+                    (PackageReasonOf(index: index, kind: PackageReason.Withheld) is { } withheld)
+                ) {
+                    if (index == m_captureInstance) {
+                        node.PollCapture();
+                    }
+                    m_unproduced++;
+                    MarkStale(
+                        index: index,
+                        reason: withheld
+                    );
+                    schedule.Next.Withdraw(
+                        index: index,
+                        previous: prior
+                    );
+
+                    continue;
+                }
                 if (!Bind(
                     index: index,
                     schedule: schedule

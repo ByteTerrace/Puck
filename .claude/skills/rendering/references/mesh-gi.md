@@ -135,9 +135,20 @@ jobs in flight, and a job whose walks stopped at their bound prints
 `SdfWorldResidency.LightingPending` latches convergence after preparation for
 the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
 to render-graph completion. A worker finishing later cannot certify an image
-whose exposure was held. Readiness waits for the next prepared frame, while
-the service keeps pumping. A settled PNG must have a capture completion line
-after the main residency's done line; a nested residency's done line is insufficient.
+whose exposure was held. Readiness waits for the next prepared frame. A held
+frame shows nothing new, so its staging drives the service
+(`SdfGpuWork.Drive`): the thread waits on the host for each job, outside the
+budgets that protect a queued frame, and `SdfWorldPasses.WithheldOf` has the
+render graph record no pass of the view again until the hold ends
+(`IRenderGraphPackageFactory.WithheldOf`), so the drain has the GPU. A view
+with no completed image still renders once. A residency no scheduled render
+reads is not staged, so its drain waits until one does. `world.residency`'s
+`gpu-work` line splits the drives' wall time into fence waits, waits for a
+client and steps; fence time far above the jobs' measured GPU time means
+something else holds the queue. A done line's `seconds` counts from the moment
+the volume first owed work (`SdfMeshIrradiance.Owe`), not from the hold. A
+settled PNG must have a capture completion line after the main residency's
+done line; a nested residency's done line is insufficient.
 
 | Part | Owner |
 |---|---|

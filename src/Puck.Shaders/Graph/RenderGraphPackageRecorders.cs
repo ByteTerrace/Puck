@@ -291,6 +291,15 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance whose recording just submitted.</param>
     /// <returns>The pending work, or null.</returns>
     string? WaitingOf(string instance) => null;
+    /// <summary>Returns why recording an instance's passes this frame would complete nothing, or null when they record:
+    /// its image waits on work the package runs outside them (in <see cref="PrepareRender"/>), which another recording
+    /// would only queue GPU work ahead of. The runtime asks once the frame's renders are prepared, of an instance that has
+    /// a completed image; it records no pass of an instance a package withholds, leaves that image published, reports
+    /// the instance waiting for the reason and asks again on the next frame. A wait that recording advances is
+    /// <see cref="WaitingOf"/>'s instead.</summary>
+    /// <param name="instance">The instance whose render was prepared.</param>
+    /// <returns>The work the image waits on, or null.</returns>
+    string? WithheldOf(string instance) => null;
     /// <summary>Names the retained package state the instance consumes that contains unfilled external pixels, or
     /// returns <see langword="null"/> when none does. This joins the current graph inputs' taint; replacing those inputs
     /// cannot relabel an older retained result. The name reaches a waiting capture's reason, so it says which state holds

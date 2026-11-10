@@ -214,8 +214,9 @@ public sealed class WorldCaptureScheduler {
     }
 
     /// <summary>Gets whether a capture armed at the last published tick, scheduled or armed outside the schedule
-    /// (<see cref="ArmUnscheduled"/>), still waits for the frame that shows it. The fixed-step host composes a frame
-    /// before its next step while this holds.</summary>
+    /// (<see cref="ArmUnscheduled"/>), still waits for the frame that shows it, or a presented capture that has taken
+    /// its last frame still waits for its files. The fixed-step host composes a frame before its next step while this
+    /// holds.</summary>
     public bool AwaitsFrame => (ScheduledAwaitsFrame || UnscheduledAwaitsFrame);
 
     private bool ScheduledAwaitsFrame => (
@@ -223,11 +224,15 @@ public sealed class WorldCaptureScheduler {
         (m_lastPublishedTick == pending.Tick) &&
         !pending.Request.Completion.IsCompleted
     );
+    // A settled capture waits for the frame of the tick it was armed after. A presented one waits for nothing while it
+    // takes frames; once it has taken its last (Claimed) it waits only for its encodes, so the tick after its last
+    // frame finds the render chain free whatever the encodes cost.
     private bool UnscheduledAwaitsFrame => (
         (m_unscheduled is { } unscheduled) &&
-        (unscheduled.Request.Mode == FrameCaptureMode.Settled) &&
-        (m_lastPublishedTick == unscheduled.Tick) &&
-        !unscheduled.Request.Completion.IsCompleted
+        !unscheduled.Request.Completion.IsCompleted &&
+        ((unscheduled.Request.Mode == FrameCaptureMode.Settled)
+            ? (m_lastPublishedTick == unscheduled.Tick)
+            : unscheduled.Request.Claimed)
     );
 
     /// <summary>Gets every capture outcome recorded so far, in the order each was decided.</summary>
@@ -236,8 +241,9 @@ public sealed class WorldCaptureScheduler {
     /// <summary>Arms a capture requested outside the schedule (<c>world.screenshot</c>) on the render chain's target, for
     /// the frame of the last published tick. The host holds for a settled one as for a scheduled capture
     /// (<see cref="AwaitsFrame"/>, <see cref="HoldsClock"/>, from the same budgets); a presented one
-    /// (<see cref="FrameCaptureMode.Presented"/>) holds nothing, so the frames it reads are the ones the running world
-    /// presents. <see cref="Drain"/> refuses either by name when the run ends before its frames are served. It writes no
+    /// (<see cref="FrameCaptureMode.Presented"/>) holds nothing while it takes frames, so the frames it reads are the
+    /// ones the running world presents, and holds the same way only from its last frame until its files are written, so
+    /// a capture armed at any later tick is never refused for encodes still running. <see cref="Drain"/> refuses either by name when the run ends before its frames are served. It writes no
     /// manifest entry: its outcome is its request's own, a refusal an <see cref="OperationCanceledException"/> naming
     /// why no frame served it.</summary>
     /// <param name="request">The unserved request.</param>
