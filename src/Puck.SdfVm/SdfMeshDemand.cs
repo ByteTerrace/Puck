@@ -82,11 +82,24 @@ public sealed class SdfMeshDemand {
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
-    public float PixelAt(Vector3 center, Vector3 half) {
+    public float PixelAt(Vector3 center, Vector3 half) => PixelAt(center: center, half: half, point: out _);
+    /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest
+    /// (<see cref="PixelAt(Vector3, Vector3)"/>), and which point that is.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <param name="point">The demand point that sees the box finest, below <see cref="Count"/>; -1 with none.</param>
+    /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
+    public float PixelAt(Vector3 center, Vector3 half, out int point) {
         var finest = float.PositiveInfinity;
 
+        point = -1;
         for (var index = 0; (index < Count); index++) {
-            finest = MathF.Min(x: finest, y: (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]));
+            var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]);
+
+            if (pixel < finest) {
+                finest = pixel;
+                point = index;
+            }
         }
 
         return finest;
@@ -161,6 +174,10 @@ public sealed class SdfMeshDemand {
     /// <param name="index">The point, below <see cref="Count"/>.</param>
     /// <returns>The eye's position.</returns>
     public Vector3 Point(int index) => m_points[index];
+    /// <summary>Returns the pixels a metre covers one metre in front of a demand point.</summary>
+    /// <param name="index">The point, below <see cref="Count"/>.</param>
+    /// <returns>The pixels a metre.</returns>
+    public float PixelsPerMetre(int index) => m_focal[index];
     /// <summary>Returns the world-axis box about a draw's host box (<see cref="SdfMeshBox.TryOf"/>).</summary>
     /// <param name="draw">The draw.</param>
     /// <param name="center">The box's center; the origin for a draw no host box bounds.</param>

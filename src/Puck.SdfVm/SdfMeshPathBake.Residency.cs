@@ -381,6 +381,54 @@ public sealed partial class SdfMeshPathBake {
             m_allResident = all;
         }
     }
+    /// <summary>Describes where the resident triangles' detail is asked from: one line a demand point that sees some
+    /// group finest (its eye, its pixels a metre at one metre, the groups and triangles whose tier it sets and the
+    /// finest tier among them), then the groups holding the most triangles, each with its tier, the rungs that change
+    /// its mesh, the pixel it is seen at and the point that sees it so.</summary>
+    /// <param name="largest">How many of the largest groups to name.</param>
+    /// <returns>The description, one part a line.</returns>
+    public IReadOnlyList<string> DescribeDemand(int largest = 12) {
+        lock (m_gate) {
+            var count = Demand.Count;
+            var groups = new int[(count + 1)];
+            var triangles = new long[(count + 1)];
+            var finest = new int[(count + 1)];
+            var top = new List<(long Triangles, string Line)>();
+
+            Array.Fill(array: finest, value: SdfMeshTier.Last);
+            foreach (var group in m_groups) {
+                if (group.Retired || (group.Mesh is not { } mesh)) { continue; }
+
+                var point = -1;
+                var pixel = (group.HasDemandBox ? MeasurePixel(group: group, point: out point) : float.PositiveInfinity);
+                var slot = ((point < 0) ? count : point);
+                var tier = (group.Replaces ?? group).Tier;
+
+                groups[slot]++;
+                triangles[slot] += mesh.TriangleCount;
+                finest[slot] = Math.Min(val1: finest[slot], val2: tier);
+                top.Add(item: (mesh.TriangleCount, string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-group={group.Selector}{(group.Dynamic ? "/dynamic" : ((group.Instances > 1) ? $"/union{group.Instances}" : "/static"))} triangles={mesh.TriangleCount} tier={tier}@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm rungs={group.FinestTier}..{group.CoarsestTier} pixel={(1000f * pixel):0.###}mm point={point} box={(group.High - group.Low).X:0.##}x{(group.High - group.Low).Y:0.##}x{(group.High - group.Low).Z:0.##}")));
+            }
+
+            var lines = new List<string>();
+
+            for (var index = 0; (index <= count); index++) {
+                if (groups[index] == 0) { continue; }
+                if (index == count) {
+                    lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-point=none groups={groups[index]} triangles={triangles[index]}"));
+                    continue;
+                }
+
+                var eye = Demand.Point(index: index);
+
+                lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-point={index} eye={eye.X:0.##},{eye.Y:0.##},{eye.Z:0.##} pixels-a-metre={Demand.PixelsPerMetre(index: index):0.#} groups={groups[index]} triangles={triangles[index]} finest-tier={finest[index]}"));
+            }
+            top.Sort(comparison: static (left, right) => right.Triangles.CompareTo(value: left.Triangles));
+            for (var index = 0; ((index < top.Count) && (index < largest)); index++) { lines.Add(item: top[index].Line); }
+
+            return lines;
+        }
+    }
     /// <summary>Describes the latest bake's residency: its groups, when they landed (finished) and became resident (their
     /// words in the mesh region) counted from its start, those near the first demand point (the primary seat's eye)
     /// apart, with when half and nine tenths of those had landed and which landed last, its store loads, the time its

@@ -41,22 +41,29 @@ public sealed partial class SdfMeshPathBake {
         (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: tiers(arg: group)) != group.Tier);
     // The metres one display pixel covers at a group's demand box, in the group's own units, from the demand point that
     // sees it finest: a shared geometry where its copies stand, as its priority is measured (MeasureDemand).
-    private float MeasurePixel(Group group) {
+    private float MeasurePixel(Group group) => MeasurePixel(group: group, point: out _);
+    // MeasurePixel, and the demand point that sees the group finest; -1 with none.
+    private float MeasurePixel(Group group, out int point) {
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
             var units = ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
 
-            return (Demand.PixelAt(center: center, half: half) / units);
+            return (Demand.PixelAt(center: center, half: half, point: out point) / units);
         }
 
         var finest = float.PositiveInfinity;
 
+        point = -1;
         foreach (var index in copies) {
             var matrix = m_demandCopies[index].Matrix;
             var (center, half) = TransformDemandBox(group: group, matrix: matrix);
             var units = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var pixel = (Demand.PixelAt(center: center, half: half, point: out var seen) / units);
 
-            finest = MathF.Min(x: finest, y: (Demand.PixelAt(center: center, half: half) / units));
+            if (pixel < finest) {
+                finest = pixel;
+                point = seen;
+            }
         }
 
         return finest;
