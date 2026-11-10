@@ -306,7 +306,7 @@ surface independent of where its program places it: its instructions, a convex
 ```
 
 The persistent store adds the bake's code identity **[opened]**
-(`docs/rendering/sdf/handbook/frame-rendering.md:1384-1387`):
+(`docs/rendering/sdf/handbook/frame-rendering.md:1396-1399`):
 
 ```text
 geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'

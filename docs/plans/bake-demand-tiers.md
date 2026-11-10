@@ -1,6 +1,6 @@
 # Bake detail bounded by demand: D7's build
 
-The one detail rule (`WorldShapeDetail.Of`, from `lane/part-detail`) gives
+The one detail rule (`WorldShapeDetail.Of`) gives
 every shape the spacing its own geometry asks: a round section at
 `SdfSampledLattice.RoundCell`, a plate at its half thickness, a shell at a
 quarter of its thickness, floored at `WorldShapeDetail.FinestDetail` (2 mm).
@@ -151,7 +151,7 @@ once a measured cell's fine samples are in, a cell whose fine field is two
 affine faces (every fine second difference zero except along one fine line)
 is a crease the coarse contour already places exactly, and its contour
 stride is set to the cell's split so its fine vertices merge per face
-(`ISdfRefinedContourLattice.Stride`, the merge `lane/part-detail` built for
+(`ISdfRefinedContourLattice.Stride`, the merge built for
 coarser strides). The taps are spent; the triangles are not. This is step 4
 below, with its check; until it lands the over-refinement is bounded by the
 tier like every other refinement.
