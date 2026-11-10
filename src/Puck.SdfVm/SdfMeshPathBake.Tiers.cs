@@ -19,6 +19,12 @@ public sealed partial class SdfMeshPathBake {
     private int m_retiers;
     private int m_retiersReused;
     private readonly List<(float Pixel, int Index, int Tier)> m_retierCandidates = [];
+    // The measure of every group's demand, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands): the group
+    // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
+    // measured, which a frame's share is taken of.
+    private int m_measureAt;
+    private long m_measureSweep;
+    private long m_measureBoxes;
     // The residency's mesh region as the frame's thread last read it (ObserveResidency): its limit, zero before the
     // first reading, the bytes the frame's draws name, and the meshes it refuses.
     private long m_regionLimitBytes;
@@ -74,15 +80,17 @@ public sealed partial class SdfMeshPathBake {
         (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: tiers(arg: group)) != group.Tier);
     // The metres one display pixel covers at a group's demand box, in the group's own units, from the demand point that
     // sees it finest: a shared geometry where its copies stand, as its priority is measured (MeasureDemand).
-    private float MeasurePixel(Group group) => MeasurePixel(group: group, point: out _);
+    private float MeasurePixel(Group group, out int point) => MeasurePixel(boxes: out _, group: group, point: out point);
     // The metres one display pixel covers at a group's planned box while a plan is choosing its tier, in the group's own
     // units: a shared geometry's where the frame's copies of it stand, and any other group's at its planned box. On the
     // frame's thread, with the copy index at the planned program's frame (PrepareFrame indexes before it plans).
     private float PlannedPixel(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) => ((CopiesOf(group: group) is { } copies)
         ? CopiesPixel(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)), point: out _)
         : Demand.PixelAt(group: group, transforms: transforms));
-    // MeasurePixel, and the demand point that sees the group finest; -1 with none.
-    private float MeasurePixel(Group group, out int point) {
+    // MeasurePixel, the demand point that sees the group finest, -1 with none, and the boxes the measure read: one,
+    // or a shared geometry's copies.
+    private float MeasurePixel(Group group, out int point, out int boxes) {
+        boxes = 1;
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
             var units = ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
@@ -90,7 +98,38 @@ public sealed partial class SdfMeshPathBake {
             return (Demand.PixelAt(center: center, half: half, point: out point) / units);
         }
 
+        boxes = Math.Max(val1: 1, val2: copies.Count);
         return CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out point);
+    }
+    // Measures a frame's share of the groups' demand (Group.DemandPixel), from the group the last frame's share
+    // ended at: the boxes one whole sweep reads, spread over SdfMeshTier.MeasureFrames frames, so the measure costs a
+    // frame that share of the resident world whatever its size, and every group is measured again within that many
+    // frames. Retier reads the tiers from the measured pixels each frame, so a change of the bias shows at once, and
+    // measures a group it has no pixel of where it meets it. Under the gate, on the frame's thread.
+    private void MeasureDemands() {
+        var count = m_groups.Count;
+
+        if (count == 0) { return; }
+
+        var share = Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: ((m_measureBoxes + (SdfMeshTier.MeasureFrames - 1)) / SdfMeshTier.MeasureFrames));
+        var at = ((m_measureAt < count) ? m_measureAt : 0);
+        var spent = 0L;
+
+        for (var visited = 0; ((visited < count) && (spent < share)); visited++) {
+            var group = m_groups[at];
+
+            if (!group.Retired && group.HasDemandBox) {
+                group.DemandPixel = MeasurePixel(boxes: out var boxes, group: group, point: out _);
+                spent += boxes;
+                m_measureSweep += boxes;
+            }
+            if (++at == count) {
+                at = 0;
+                m_measureBoxes = m_measureSweep;
+                m_measureSweep = 0L;
+            }
+        }
+        m_measureAt = at;
     }
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy.
@@ -153,8 +192,9 @@ public sealed partial class SdfMeshPathBake {
             if (group.Stored) { settles.Count(kind: SdfMeshSettle.Reused); }
         }
     }
-    // Measures every group's demanded tier against the one it draws, counts the debt, and plans again at the demanded
-    // tier each landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
+    // Reads every group's demanded tier, from the pixel its demand was last measured at (MeasureDemands, a share of
+    // the groups each frame), against the one it draws, counts the debt, and plans again at the demanded tier each
+    // landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
     // SdfMeshTier.MaxInFlight at once: the replacement bakes (or lands from the library) while the coarser mesh draws.
     // Detail is budgeted by demand inside the mesh region's budget (RegionBudgetBytes). A finer tier starts only while
     // the bytes the frame's draws name, with those the finer replacements in flight are expected to add, leave it room.
@@ -206,12 +246,14 @@ public sealed partial class SdfMeshPathBake {
 
         candidates.Clear();
         spare.Clear();
+        MeasureDemands();
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
             if (group.Retired || !group.HasDemandBox) { continue; }
+            if (float.IsNaN(f: group.DemandPixel)) { group.DemandPixel = MeasurePixel(group: group, point: out _); }
 
-            var pixel = MeasurePixel(group: group);
+            var pixel = group.DemandPixel;
             var demanded = SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));
 
             if (demanded != group.DemandedTier) {
@@ -349,6 +391,7 @@ public sealed partial class SdfMeshPathBake {
         group.RetierDeltaBytes = delta;
         group.OwedFrames = old.OwedFrames;
         group.DemandedTier = old.DemandedTier;
+        group.DemandPixel = old.DemandPixel;
         return StartReplacement(group: group, index: index, old: old);
     }
     // Starts a replacement planned for a landed group in that group's place: the library's mesh of its geometry lands at

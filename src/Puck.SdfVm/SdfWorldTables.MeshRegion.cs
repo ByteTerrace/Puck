@@ -173,8 +173,8 @@ public sealed partial class SdfWorldTables {
     /// before a frame draws a mesh.</summary>
     public int MeshRegionWords => m_meshArena.Words;
 
-    /// <summary>The most bytes one mesh region holds, a whole number of words (<see cref="GpuRegion.MaxByteCount"/>): the
-    /// baked meshes a frame draws must fit it, and a frame that needs more throws.</summary>
+    /// <summary>The most bytes one mesh region can hold on any device, a whole number of words
+    /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of a device's own limit (<see cref="MeshRegionLimitOf"/>).</summary>
     public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
     /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
     public const ulong MeshRegionGranuleBytes = (16UL << 20);

@@ -21,6 +21,13 @@ public static class SdfMeshTier {
     /// <summary>The frames a finer tier must stay demanded before a group is planned again at it, so a view standing at a
     /// rung's boundary does not bake the group at both.</summary>
     public const int HoldFrames = 8;
+    /// <summary>The frames a residency's bake spreads one measure of every group's demand over: each frame measures
+    /// that share of the boxes its groups stand at, so the measure's cost a frame is that share of the resident
+    /// world's, and a group's demanded tier is at most this many frames behind its demand points. A group is
+    /// measured once in every hold (<see cref="HoldFrames"/>).</summary>
+    public const int MeasureFrames = 8;
+    /// <summary>The fewest boxes a frame measures, so a small world is measured whole each frame.</summary>
+    public const int MeasureBoxes = 256;
     /// <summary>The most groups one residency replans for a finer tier at once; the rest wait, the most demanded first,
     /// so a cut that demands a thousand finer tiers does not stage them all beside their resident meshes.</summary>
     public const int MaxInFlight = 64;

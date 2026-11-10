@@ -45,6 +45,20 @@ of few lines demands coarser tiers than the window beside it, and a taller
 window demands finer ones. No display height is built in: 1080 is only the
 default of `puck mesh audit`'s `--view-height`, the one view `--eye` models.
 
+A window fitted to its glass (a portal's view) is the exception that proves
+the rule. Its image is the viewer's own view carried through the glass: the
+fit keeps the viewer's rays unchanged in angle, so whatever size the image
+is rendered at, the destination is seen at the viewer's display density.
+Such a view demands in the display pixels the glass spans from the viewer's
+eye (`WorldWindowFrustumFit.ShownHeight`), and only inside its frustum
+(`SdfViewSnapshot.DemandWithinView`): the frustum is the aperture however
+the viewer turns, so nothing beside the glass can enter the image without
+the viewer walking. Measured at its own image's height and in every
+direction, each window demanded its whole destination at the detail of a
+viewer standing at the window's eye, and the gallery's windows set the tier
+of most of the world. A root camera still demands in every direction: it
+can turn to anything about its eye within a frame.
+
 The group's tier is the demanded tier clamped to the rungs that change its
 mesh, both derived from the plan's inputs alone:
 
@@ -99,12 +113,10 @@ from the previous program (`Keeps`: same sealed geometry) keeps its tier; one
 whose tier moved is a new geometry and takes the old mesh to draw while it
 bakes, which is the same replacement without a second mechanism.
 
-A **coarser** tier demanded (the view retreats) changes nothing this round:
-the finer tier is at least as correct, and dropping it is eviction, which is
-the library's byte budget (`SdfMeshLibrary.ByteBudget`, age-ordered) and
-D9's. When the library loses a group's mesh the bake restarts it, and that
-restart plans at the current demand, so an evicted finer tier comes back as
-the coarser one the view now asks for.
+A **coarser** tier demanded (the view retreats) changes nothing while the
+mesh region has room: the finer tier is at least as correct, and a viewer
+who comes back finds it. What bounds the resident world is the region's
+budget, below.
 
 The cold bake is the boot's views' bake: the plan a residency makes for its
 first frame takes that frame's demand points (the residency observes them
@@ -112,6 +124,73 @@ before it dresses the frame), so a fresh store bakes each group at the tier
 the spawn views resolve, and a finer tier a later view asks for is owed and
 counted, never part of the bar
 ([the cold-bake bar under demand tiers](virtual-geometry.md#the-cold-bake-bar-under-demand-tiers)).
+
+## The region's budget
+
+Finer replacements alone are a ratchet: every place a viewer has been keeps
+its finest tier, and the resident world grows toward the whole world at its
+finest (190.9 M triangles for the debug world) until the mesh region cannot
+hold it. The meadow stop reached that end: its draws named more than one
+region addresses, and the frame threw.
+
+The region now has a limit and the bake a budget inside it, so that detail
+is bounded by demand at both ends:
+
+- **The limit** (`SdfWorldTables.MeshRegionLimitOf`) is a share of the
+  device's device-local memory (`MeshRegionDeviceLocalShare`, a quarter),
+  never past what one region addresses. A quarter leaves room for the copy
+  a growth holds until its upload completes, beside everything else the
+  device holds. The arena places under it and refuses a mesh that finds no
+  room (`SdfMeshRegionArena.Refused`); a refused mesh's draws wait, and
+  nothing throws.
+- **The budget** is `SdfMeshTier.BudgetEighths` of the limit; the rest is
+  where a replacement lands beside the mesh it replaces. `Retier` reads the
+  bytes the frame's draws name (`ObserveResidency`) and holds them under it:
+  a finer tier starts only while it fits; while the budget presses, a group
+  drawing a finer tier than its demand asks (spare) is planned again at the
+  demanded one, the largest saving first; when it presses with nothing
+  spare, the demand itself is past the budget and every demand is coarsened
+  half a rung (`SdfMeshTier.Biased`), which is D7's admitted degradation
+  applied evenly and reported (`detail-bias`), never a hole. The bias is
+  taken back when the finer demand would fit again.
+- **The first plan** is budgeted from its own measure, before any mesh
+  exists, so a cold bake does not bake tiers the region would then refuse.
+
+One region, limited, is the answer for now, rather than several regions.
+Several regions raise what can be resident past one region's addressing,
+but the limit that bites on the bar devices is the device's memory (a
+12 GB device's quarter is 3.1 GB, under the 4 GiB addressing; a 6 GB
+device's is 1.5 GB), and a second region would only move the failure from
+the frame's throw to the device's refusal, which is how the Vulkan World
+died (`GpuRegion.Grow` asked for a second buffer the device did not have).
+A world too large for one region at half a pixel is served by the budget
+coarsening it; several regions become worth their second code path only
+when a device with more than 16 GiB device-local is a bar device.
+
+What the budget does not yet do, each a named gap:
+
+- **An occluded or far group demands as if seen.** A root camera's demand
+  is distance alone, blind to occlusion and to the frustum. At the meadow
+  stop one viewpoint's demand at half a pixel is past the budget on a
+  12 GB device, so the stop settles half a rung coarse (`detail-bias=1`).
+  The frame already knows what it draws: the mesh occlusion pass classifies
+  every draw each frame (`SdfMeshOcclusion`). A group no view has drawn for
+  some seconds is spare at any tier above its coarsest, which would let the
+  budget free hidden detail before it coarsens visible detail. It needs the
+  classification read back per group; the retier's hold already absorbs a
+  frame-late answer.
+- **The lighting holds the tier it traces.** See below: under the budget
+  tiers move both ways, so the lighting's cost per retier wave is paid more
+  often.
+- **Each residency budgets alone.** Every residency reads the same limit
+  and budgets its own region to it; the nested worlds are small today (tens
+  of megabytes), and one account across a device's residencies is the
+  memory account's when it is not.
+- **The material cut's lists** grow outside the memory account
+  (`SdfMeshMaterialCut.Build`), so a bake's peak is unbounded by any budget
+  here; reserving them through `MemoryAccount.Owner.TryReserve` and failing
+  the group by name (`SdfMeshBakeReport.Failed`) is
+  [open](open-items.md#bake-detail).
 
 ## The debt's contract
 
@@ -221,7 +300,11 @@ the picture.
 
 The surface a retier moves stays under half a pixel of the view that asked
 for it; light that reaches a probe two metres away does not change by an
-amount the picture shows. Three answers, not yet chosen between:
+amount the picture shows. Under the region's budget tiers move both ways (a
+circuit of five stops coarsened 4,277 groups and started 7,723 replans), so
+the first answer below is the one to build: it is the only one under which
+neither a finer nor a coarser tier changes what the light sees. It is not
+built; the three answers:
 
 - **A lighting tier.** The scene traces each group at a rung fixed by the
   plan alone (its coarsest, where nothing refines), so a view-driven retier
@@ -252,6 +335,9 @@ on the `[sdf.mesh-gi] done` lines.
 | A group's effective spacing is never finer than its tier's cell | One floor, `SdfMeshTier.Cell(group.Tier)`, applied where the factors are formed (`OwnFinal`, `UnionFinal`, `FactorOf`) | A new refinement path that forms a factor elsewhere; the three sites are the only ones today |
 | A group's tier never passes its finest or coarsest rung | `Seal` clamps through `SdfMeshTier.Clamp` from the group's members and planned box | None |
 | A live bake's tiers follow its demand | `SdfMeshPathBake` is the one residency planner and passes `TierOf` to every plan it makes | Convention at that one site; an offline planner that passes no tier gets the finest, by design |
+| The mesh region never places past its limit | `SdfMeshRegionArena` places every mesh through one `GpuRangeAllocator` sized to the limit; a mesh with no run is `Refused` | A device that refuses a growth under the limit: `GpuRegion.Grow` still throws |
+| The bytes a frame's draws name stay under the bake's budget | `SdfMeshPathBake.Retier` is the one place a replacement starts, and it reads `ObserveResidency`'s bytes before each | The first plan before the residency reports its limit (it budgets from the plan's own measure once it does); a list of draws the bake does not own (authored meshes) |
+| A fitted group's box holds its whole surface | `SdfProgramBuilder.EndInstance` is the one door that sets `SdfInstanceRange.Fitted`, from the boxes `Text` emitted; `SdfMeshGeometry` hashes it | An emitter that sets it by hand over a box with a margin; none does |
 
 ## Steps and checks
 
@@ -292,8 +378,20 @@ on the `[sdf.mesh-gi] done` lines.
   reused for the restart's tier test and for `Retier`; its static-group
   shortcut (a static group that reads no slot is never stale) goes, since a
   tier can stale one.
-- `SdfMeshLibrary.Lose` and the byte budget: eviction, which a retreat relies
-  on rather than a second account.
+- `SdfMeshLibrary.Lose` and the byte budget: eviction of CPU meshes by age.
+  It bounds the library, not the region a frame's draws name, so the
+  region's budget is the bake's own (`SdfMeshPathBake.Retier`), read from
+  the residency's account rather than a second one.
+- `GpuRangeAllocator` (`Puck.Abstractions`): the free-run allocator the
+  arena places through, reused rather than a second free list in the arena.
+- `GpuMemoryProfile.DeviceLocalShare`: the device's reported memory, the one
+  source of the region's limit; no backend query of live usage exists, and
+  the limit does not need one.
+- `SdfMeshOcclusion`: the per-draw visibility the frame already computes;
+  named as the source for occluded demand, not read by the bake yet.
+- `MemoryAccount.Owner.TryReserve`: the account the material cut's lists
+  should reserve through; not wired here.
+- Several mesh regions: weighed and not built (the region's budget, above).
 - A per-creation triangle cap (7b): rejected by D7 and the no-ceiling
   decision ([rendering decisions](../decisions/rendering.md)).
 - A size-relative floor (option b of the packet): rejected; it reads the

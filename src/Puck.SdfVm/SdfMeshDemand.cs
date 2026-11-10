@@ -113,11 +113,11 @@ public sealed class SdfMeshDemand {
 
         point = -1;
         for (var index = 0; (index < Count); index++) {
-            if (!Demands(index: index, center: center, half: half)) { continue; }
-
             var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]);
 
-            if (pixel < finest) {
+            // The distance is the cheap test and the view the costly one: only a point that would be the finest is
+            // asked whether its view holds the box.
+            if ((pixel < finest) && Demands(index: index, center: center, half: half)) {
                 finest = pixel;
                 point = index;
             }
@@ -163,12 +163,12 @@ public sealed class SdfMeshDemand {
         var best = 0f;
 
         for (var index = 0; (index < Count); index++) {
-            if (!Demands(index: index, center: center, half: half)) { continue; }
-
             var density = (m_focal[index] / MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])));
             var size = (diagonal * density);
+            var priority = ((size >= 1f) ? (1f + density) : size);
 
-            best = MathF.Max(x: best, y: ((size >= 1f) ? (1f + density) : size));
+            // As PixelAt: the view is asked only of a point that would rank the box highest.
+            if ((priority > best) && Demands(index: index, center: center, half: half)) { best = priority; }
         }
 
         return best;

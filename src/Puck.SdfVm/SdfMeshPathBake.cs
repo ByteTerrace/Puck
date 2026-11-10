@@ -2457,6 +2457,9 @@ public sealed partial class SdfMeshPathBake {
         // tier than it draws, whether it is the finer tier's replacement of the group it replaces, and whether a finer
         // tier's bake meshed nothing at the demanded tier, so none is tried until the demand asks another.
         public int DemandedTier { get; set; }
+        // The metres one display pixel covers at its demand box, as the bake last measured it (MeasureDemands); not a
+        // number before the first measure.
+        public float DemandPixel { get; set; } = float.NaN;
         public int OwedFrames { get; set; }
         // The frames in a row the demand has asked a coarser tier than it draws, and, for a tier's replacement, the
         // bytes of mesh region it is expected to add (a finer tier) or give back (a coarser one, negative).

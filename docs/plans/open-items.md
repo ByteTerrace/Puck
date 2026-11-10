@@ -3378,26 +3378,6 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
   between samples. The tour stays red until the contour holds a crease at any
   lattice alignment; its thresholds (`folds > 0` amber, `flipped > 0` red) are
   right and are not to be loosened.
-- [high] The per-axis narrowing (`SdfMeshPathBake.Refine`) is unproven over the
-  whole world. It restores the first letters the old reach (half the finest
-  spacing on every axis) cut off the gallery plaques' note lines, and a
-  whole-world `puck mesh audit` of the Direct3D 12 store against the previous
-  narrowing's reads mixed over the 6,105 groups both hold: triangles 190.9 M
-  to 197.2 M, folds 184,128 to 221,969, flipped 125,139 to 208,532, slivers
-  3.57 M to 4.96 M, open edges 129 to 2,265 (2,246 in one group), uncovered
-  cells 407 to 1,087, worst vertex off the surface 177 mm to 304 mm. One group
-  carries most of it: `studio-grid` (sub-cell floor lines) went from 86 folds
-  and 505 flipped to 36,216 and 73,806, and its CPU bake is as bad, so the
-  cause is the box the narrowing hands the contour, not the GPU path.
-  `cardTable` gained 660 uncovered cells; `hall-floor-2` and `-3`,
-  `alchemyShelf`, `range-window-121`, the lift door and car and `shape-onion`
-  score far lower than before. Fifty-seven groups the previous store held
-  (`boardroom-sign`, `shape-path-*`, `shape-sweep-braid`, `shape-panel-*`,
-  `shape-trims`, `shape-paint-world`) had no stored mesh to audit after a bake
-  from the gallery spawn alone; whether demand tiers or the narrowing explains
-  that is unchecked. Next: bake `studio-grid` and `cardTable` alone under both
-  narrowings (`puck mesh audit --cpu --prototype <id>`), find what the per-axis
-  box does to a lattice of sub-cell lines, and keep the plaque letters.
 - [high] The material cut's lists are outside the memory account.
   `SdfMeshMaterialCut.Build` grows managed position and index lists with no
   reservation (`MemoryAccount.Owner.TryReserve` never sees them), so a cut
@@ -3410,10 +3390,20 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 - [medium] Glyphs have no CPU reference and drop fine strokes.
   `SdfFieldEvaluator` has no interpreter for the `Glyph` shape, so
   `puck mesh audit --cpu` refuses a plaque ("cannot interpret instruction 3's
-  shape Glyph") and no audit covers text. The gallery plaques' note lines lose
-  thin strokes at their baked cell (the UNION plaque's note reads "m n of the
-  two fields: a hard c ease" from a metre away). Add the interpreter, then
-  audit a plaque and decide the detail a glyph's stroke width declares.
+  shape Glyph") and no audit covers text. The gallery plaques' note lines
+  keep every word now that text bakes over its glyphs' box
+  (`SdfInstanceRange.Fitted`), and still lose thin strokes at their baked
+  cell (the UNION plaque's note reads "min of the two fie ds" from a metre
+  away). The arithmetic: a note line 0.03 m tall and 4 mm deep declares
+  `WorldPlacementStamper.TextDetail`, the lesser of its depth and a tenth of
+  its em, 3 mm, which is about a whole stroke where `WorldShapeDetail`
+  declares half a shape's thickness; a 1.2 m line's final lattice has an
+  18.75 mm cell, and the refinement stops at
+  `SdfMeshPathBake.MaxDetailRefinement` cells of it, 2.3 mm, so a 2.4 mm
+  stroke gets one cell. Declare half the stroke, and let a fitted line's
+  refinement follow its declared detail instead of its longest axis (a
+  line's lattice is long and thin, so the cap costs it most). Add the
+  interpreter, then audit a plaque.
 - [medium] A rim thinner than a group's final cell is lost: `range-window`'s
   2 cm rim does not bake at its 26.2 mm final cell. The same question as the
   crease merge below: a declared feature narrower than the cell must refine or
@@ -3569,13 +3559,6 @@ Grounded causes and leads, largest first:
   grow that the device refuses has no answer but the host's death. The answer
   is a region budget from the device's reported memory, and a refused grow
   that degrades demand instead of throwing. Owner: rendering/bake.
-- The mesh region keeps meshes no draw names until their words outweigh the
-  named ones (`SdfMeshRegionArena.Plan`'s relocation rule, past
-  `RetainedSlackWords`), so a running debug world whose bodies change form and
-  whose placements re-pose grows `region-used` far past its named meshes within
-  minutes (the readings are in the commit that made mesh storage restorable).
-  Bound the retained slack by bytes, not by the named meshes' size.
-  Owner: rendering/bake.
 - The device-local memory no residency line names needs an owner line. The
   render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
   past the 1 MiB an MCP answer carries, so name it with a reading that fits

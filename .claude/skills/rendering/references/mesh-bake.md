@@ -279,7 +279,10 @@ laws exercise that boundary.
 - **Work goes near-first** ([residency](../../../../docs/decisions/residency.md)).
   `SdfMeshDemand` holds the eye of every view of the residency's latest frame
   (an `Elsewhere` or hidden view demands nothing; a filmed camera measures in
-  its own image's pixels, `SdfViewSnapshot.DemandHeight`). A group whose
+  its own image's pixels, `SdfViewSnapshot.DemandHeight`; a window fitted to
+  its glass measures in the display pixels the glass spans from the viewer's
+  eye, `WorldWindowFrustumFit.ShownHeight`, and demands nothing of a box
+  outside its frustum, `SdfViewSnapshot.DemandWithinView`). A group whose
   planned box (`Group.TakeDemandBox`, kept before `Begin` cubes it) projects
   past a pixel ranks by the pixels a metre covers at the box, nearest first
   whatever its size; one under a pixel ranks after. Ranking by projected size
@@ -431,12 +434,30 @@ laws exercise that boundary.
   as a replacement (`SdfMeshPathBake.Retier`, the settle rebake's `Replaces`
   path, at most `MaxInFlight` at once, the finest demand first): the coarser
   mesh draws until the finer lands (`FinishReplacements`, one step for settles
-  and tiers). A coarser tier demanded leaves the finer mesh until the library
-  evicts it; the restart that follows plans at the current demand.
-  `world.residency` reports `tiers-owed`, `owed-error` (the worst owing
-  group's resident cell in display pixels), `owed-frames`, the worst of each
-  since the bake started, `retiers` and the resident triangles by tier
-  ([the memo](../../../../docs/plans/bake-demand-tiers.md)).
+  and tiers). The demand is measured a share of the groups each frame
+  (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
+  `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
+  with the resident world; `Retier` reads the tiers from the measured
+  pixels every frame. With room in the mesh region a coarser tier demanded leaves the
+  finer mesh where it is. The region's budget
+  (`SdfMeshTier.BudgetEighths` of `SdfWorldTables.MeshRegionLimitBytes`, read
+  each frame by `SdfMeshPathBake.ObserveResidency`) decides the rest in
+  `Retier`: a finer tier starts only while the bytes the draws name leave it
+  room; while the budget presses, the groups drawing a finer tier than their
+  demand asks are planned again at the demanded one, the largest saving
+  first; and when it presses with nothing spare every demand is coarsened
+  half a rung (`SdfMeshTier.Biased`), taken back once the finer demand would
+  fit again. The first plan is budgeted the same way from the plan's own
+  measure. `world.residency` reports `tiers-owed`, `owed-error` (the worst
+  owing group's resident cell in display pixels), `owed-frames`, the worst of
+  each since the bake started, `retiers`, the resident triangles by tier, the
+  budget's account (`region-budget`, `region-named`, `tiers-spare`,
+  `tiers-held-back`, `coarsened`, `detail-bias`, `bias-raised`,
+  `bias-lowered`) and, per demand point, the groups and triangles that point
+  sets the tier of ([the memo](../../../../docs/plans/bake-demand-tiers.md)).
+  A stop that settles with `detail-bias` above zero is drawing coarser than
+  half a pixel there: the demand is past the budget, which is the reading to
+  act on, never a raised limit.
 - **A region refines only where its surface turns, and each region at its own
   factor.** `SdfSampledLattice.Refine` takes a factor per region
   (`SdfLatticeRegion.Factor`): `UnionFinal` asks each member's own
@@ -462,6 +483,21 @@ laws exercise that boundary.
   union is the same case: the hall's walls bake at 15 cm, so the cassettes at
   their window heads, set 2 cm and 5 cm back from the wall's faces, are a row
   per level and face of their own (`hall-cassettes-*`), each baking at 5 cm.
+- **Text bakes over its glyphs' box, without the coarse search.** An instance
+  holding text alone is fitted (`SdfInstanceRange.Fitted`): the builder
+  unions each glyph cell's box as `SdfProgramBuilder.Text` emits it and
+  `EndInstance` declares the union as the instance's box (a static instance)
+  or its one part (a dynamic one on the glyphs' slot). A group whose every
+  instance is fitted takes the union of those boxes
+  (`SdfMeshBakeGroup.Fit`) and goes straight to its final lattice
+  (`SdfMeshPathBake.StartFinal`). The search samples a bound at a spacing the
+  bound sets, and a line of strokes thinner than that spacing reads far from
+  the surface wherever a column falls between two strokes, so the narrowed
+  box cut the first words off the gallery plaques' notes. An emitter that
+  knows its surface's box exactly declares it the same way; a box with a
+  margin about the surface is not fitted. A stroke about one fine cell wide
+  still tears: the refinement stops at `MaxDetailRefinement` cells of the
+  final lattice's cell, which the box's longest axis sets.
 - **The coarse narrowing keeps the rows a thin plate lies between.** The
   narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
   finest spacing of the surface, beside a sign change, or in a pair of rows a
@@ -703,15 +739,29 @@ laws exercise that boundary.
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
-- **One region holds every resident mesh, up to
-  `SdfWorldTables.MostMeshRegionBytes` (`GpuRegion.MaxByteCount`, just under
-  4 GiB).** It grows to its need plus an eighth, rounded up to a 16 MiB granule
-  and capped at that ceiling (`SdfWorldTables.MeshRegionGrownBytes`, a pure
-  function), so it reads fuller than a doubling would; `world.budget` prints the
-  bytes the staged draws use (`MeshRegionUsedBytes`) beside the bytes held and
-  that ceiling. A frame that needs
-  more than the ceiling throws `InvalidOperationException` naming the need and
-  the ceiling. The ceiling is the whole uints below 4 GiB less the staging
+- **One region holds every resident mesh, up to a share of the device's
+  memory.** Its limit (`SdfWorldTables.MeshRegionLimitOf`) is one part in
+  `MeshRegionDeviceLocalShare` of the device-local memory the profile
+  reports, never past `SdfWorldTables.MostMeshRegionBytes`
+  (`GpuRegion.MaxByteCount`, just under 4 GiB), so the region, the copy a
+  growth holds until its upload completes and everything else the device
+  holds fit together. It grows to its need plus an eighth, rounded up to a
+  16 MiB granule and capped at the limit
+  (`SdfWorldTables.MeshRegionGrownBytes`, a pure function), so it reads
+  fuller than a doubling would; `world.budget` prints the bytes the staged
+  draws use (`MeshRegionUsedBytes`) beside the bytes held and the limit.
+  The arena places each mesh in the lowest free run under the limit
+  (`SdfMeshRegionArena`, over `GpuRangeAllocator`) and gives a forgotten
+  mesh's words to the next mesh they hold, so a group changing tier moves no
+  other mesh. A mesh that finds no run is refused
+  (`SdfMeshRegionArena.Refused`, `refused` and `refusals` on
+  `world.residency`'s landing line): its draws wait out of the staged
+  records, which shows as a hole, and nothing throws. The bake keeps the
+  named bytes under its budget so that a refusal is the exception (the tier
+  bullet above); a run with `refusals` above zero has a demand the budget's
+  law did not hold. A growth the device itself refuses under the limit
+  (`GpuRegion.Grow`) still stops the host. The ceiling is the whole uints
+  below 4 GiB less the staging
   buffer's header and run table, because a staged region's staging buffer binds
   as one storage view and Vulkan states a view's range in a uint32. `GpuRegion`
   counts bytes in a `long` and words in an `int`: a mesh's byte offset is
