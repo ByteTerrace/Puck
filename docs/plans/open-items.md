@@ -59,36 +59,34 @@ A. Engine limits on authoring [high], in the plan's
      landed; step 4, paints and lanes across a blended seam, is next (see
      [Bake detail](#bake-detail)).
 
-   The owner's gallery walkthrough's three engine defects have landed fixes,
-   each awaiting the windowed check below: auto-exposure meters each view's own
-   image with an authored dead band (`SdfExposure.Meter`, `SdfViewExposures`);
-   indoor indirect light closes the finest probe level's visibility smoothly
-   (`SdfMeshIrradianceProbe.DepthFinestCoverageStart`), and `world.indirect off`
-   keeps the volume's occlusion and applies none of its light; plaque text wraps
-   at word boundaries within its face.
-A1. **Owed first after the restart: one batched windowed window** on the
-   integration head, Direct3D 12 then Vulkan, in this order, each lane's recipe
-   in its merge commit's hand-back (scratch copies under the main checkout's
-   `.claude/scratch/`):
-   - the walkthrough slice's tour (`w1-bench-plan.py` writes the route-only
-     plan): first person on every still, pipe and groove red, no off-course;
-     also whether first person drops in a windowed World;
-   - exposure: the slow, arrival and fast walks along gallery level 0 and the
-     hall-to-lawn change, with no Vulkan validation lines; the owner's eye on
-     its calibration (compensation 2 settles the hall at about EV 8.3 to 9.9);
-   - indirect: the before and after pairs at the three spots its hand-back
-     names (base build `2ef814b84c`), and the `off` flood gone;
-   - bake detail: the Vulkan captures of the pipe and groove exhibits and the
-     Moth's head, `world.residency` within a few percent of Direct3D 12
-     (83,584,416 triangles at the stage spawn);
-   - moving-blend exhibits: full-cycle presented bursts of `motion-nod`,
-     `motion-three` and `motion-seam-paint` on both backends, and
-     `motion-smooth-blend` and `motion-carve` on Vulkan;
-   - the limits fixes: the device stands, the hex clips and a body on a twisted
-     static solid.
-   Then the frame bar at the standard stops: bake detail raised the resident
-   world from 25.7 M to 83.6 M triangles at the spawn, and D7's levers (the
-   pixel share, which views demand) are the answer if the bar suffers.
+   The owner's gallery walkthrough's three engine defects have landed fixes and
+   had their windowed checks on both backends: auto-exposure meters each view's
+   own image with an authored dead band (`SdfExposure.Meter`,
+   `SdfViewExposures`); indoor indirect light closes the finest probe level's
+   visibility smoothly (`SdfMeshIrradianceProbe.DepthFinestCoverageStart`), and
+   `world.indirect off` keeps the volume's occlusion and applies none of its
+   light; plaque text wraps at word boundaries within its face.
+A1. **What the windowed checks left open.** The walkthrough slice's tour runs to
+   its end on Direct3D 12 and on Vulkan, first person on every still, no stop
+   off course and no Vulkan validation line; the readings are in the commit
+   that closed the checks. What remains, in this order:
+   - the tour's verdict is red on both backends from its per-exhibit mesh
+     audits: fourteen blend exhibits and four primitives, not only the pipe
+     and groove subtractions ([Bake detail](#bake-detail));
+   - a windowed World dies when its meshes outgrow the mesh region (the
+     meadow, both backends) and when Vulkan refuses the region's growth
+     ([residency](#residency-and-streaming)); the frame bar follows from it
+     (item D);
+   - the owner's eye on the exposure calibration: gallery level 0 holds near
+     EV 9 to 10 and the lawn near EV 14.3 at compensation 2, and Direct3D 12's
+     first stop walked in from outdoors settles late
+     ([Lighting and GI](#lighting-and-gi));
+   - the moving-blend bursts ran a whole cycle only for `motion-nod`; the
+     others showed every presented pair changed over 16 to 20 frames, short of
+     a cycle;
+   - a body on a twisted static solid was not repeated in a windowed World;
+   - the Humble Brick's face at close range shows line artifacts and a ragged
+     d-pad on both backends ([Bake detail](#bake-detail)).
 A3. Adversarial reviews owed on landed invariant work, findings-only, each by
    another family than its author: the demand tiers' cache identity and
    publication (`bake-demand-tiers.md`); the exposure readback's slot lifetime
@@ -102,8 +100,10 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar's hitches (item 1 below): flight B and the teal roof at p99 on
-   both backends, and Vulkan's meadow.
+D. The frame bar (item 1 below): the meadow's meshes outgrow the mesh region and
+   the World dies on both backends
+   ([residency](#residency-and-streaming)), first; then flight B and the teal
+   roof at p99 on both backends.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 
@@ -130,11 +130,14 @@ E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    pool against the caldera pack), then the per-milestone review across every
    place.
 1. The frame bar [high]: measured on the head with `bench frames` (five fresh
-   processes per backend), every stop holds 60 FPS on average; at p99 the
-   studio sits at about 17.2 ms on both backends, the meadow meets it on
-   Direct3D 12 (17.16 ms) but not on Vulkan (20.55 ms), and flight B (21.5 and
-   20.9 ms) and the teal roof (22.2 and 21.6 ms, worst frame 54.5 ms on
-   Direct3D 12) do not. The far cascade's cadence is settled: a
+   processes per backend, Direct3D 12 then Vulkan), the studio and flight B
+   hold 60 FPS on average and the teal roof misses it (17.29 and 17.27 ms); at
+   p99 the studio sits at about 17.2 ms on both backends, and flight B (22.1
+   and 21.8 ms) and the teal roof (34.6 and 30.7 ms, worst frame 62.7 and
+   52.1 ms) do not. The teal roof's p99 read about 22 ms on both backends
+   before the demand tiers raised the resident world. The meadow cannot be
+   read: its meshes outgrow the mesh region and the World dies
+   ([residency](#residency-and-streaming)). The far cascade's cadence is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -2866,6 +2869,30 @@ and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [high] A view-driven retier relights the whole window: a retier that lands is
+  a geometry change to the volume, and every probe's local cube starts again
+  (`SdfMeshIrradiance`'s `reuseLocal`), so a World that converges its lighting
+  owes a whole drain per retier wave and per step of the day's lighting grid.
+  The walkthrough tour pays it at every exhibit (its two backends' tours take
+  16 and 19 minutes for 32 stills). Choose between the three answers in
+  [the lighting follows the tier](bake-demand-tiers.md#the-lighting-follows-the-tier);
+  the tour's drains per still and their seconds on the `[sdf.mesh-gi] done`
+  lines measure whichever lands.
+- [medium] A held frame's hold stops at the instance. A view withheld for its
+  lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
+  instance that reads it is only marked stale (`RenderGraphRuntime`'s
+  `MarkReadStale`) and still records its own passes each frame, and a residency
+  no scheduled render reads is not driven (`SdfGpuWork.Drive` runs from a
+  view's staging), so its drain waits for a view to read it. Propagate the
+  hold to the consumers the schedule shows, and drive every residency that
+  owes lighting.
+- [low · one reading] Auto-exposure's first indoor stop after the lawn settles
+  late on Direct3D 12: walked onto gallery level 0 from outdoors, the first
+  stop read four stops above its target after 90 ticks and reached it after
+  90 more, where Vulkan on the same walk was inside its band. Every later
+  stop, the arrival and fast walks and the hall-to-lawn change held their band
+  on both backends (`world.exposure`). Repeat it before treating it as a
+  defect of the meter (`SdfExposure.Meter`) rather than of one walk.
 - [medium] A concave carving does not read as a hollow (`shape-blend-subtraction`'s
   bowl): its upward faces read the probes' bright +Y face, 2 m probes cannot
   resolve a 0.6 m cavity, and screen-space AO at 0.75 m darkens it only mildly.
@@ -3265,13 +3292,75 @@ reproduce worker for what remains.
 Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 · Next: the Moth's shin blend group, then moving blends step 4.
 
-- [high] The walkthrough slice's CPU audit turns six more blend exhibits red
-  with flipped triangles beside their folds: `shape-blend-xor` 88 (110 folds),
-  `shape-blend-subtraction` 83 (48 folds), `shape-groove-union` 22 (73 folds),
-  `shape-blend-intersection` 4, `shape-chamfer-intersection` 2,
-  `shape-chamfer-subtraction` 1 (`puck mesh audit --cpu --prototype <id>`).
-  The smooth blends, union, pipe union and the primitives have none. Same class
-  as the shin groups: contouring across a hard blend's crease.
+- [high] The walkthrough slice's tour is red on its mesh audits alone, on both
+  backends: the CPU audit each exhibit reads (`SweepMeshAudit`,
+  `puck mesh audit --cpu --prototype <id>`) finds flipped triangles on all
+  fourteen blend exhibits and on four primitives. Flipped (folds):
+  `shape-blend-subtraction` 30 (98), `shape-blend-xor` 28 (102),
+  `shape-groove-union` 17 (160, and 6 uncovered cells),
+  `shape-smooth-intersection` 13 (33), `shape-chamfer-intersection` 11 (28),
+  `shape-pipe-union` 9 (20), `shape-cylinder` 9 (20), `shape-pipe-subtraction`
+  8 (18), `shape-smooth-subtraction` 8 (13), `shape-blend-union` 7 (21),
+  `shape-round-cone` 4 (12), `shape-cone` 4 (9), `shape-blend-intersection` 3
+  (7), `shape-chamfer-subtraction` 3 (7), `shape-smooth-union` 2 (6),
+  `shape-chamfer-union` 1 (3), `shape-groove-subtraction` 1 (8) and
+  `shape-plane` 1 (0). Which exhibits fold follows where the narrowed box puts
+  the lattice, not the shape alone: under the narrowing before
+  `SdfMeshPathBake.Refine` measured per axis, `shape-blend-union`,
+  `shape-cylinder` and `shape-plane` were clean and `shape-superellipsoid` was
+  red. Same class as the shin groups: contouring across a crease that falls
+  between samples. The tour stays red until the contour holds a crease at any
+  lattice alignment; its thresholds (`folds > 0` amber, `flipped > 0` red) are
+  right and are not to be loosened.
+- [high] The per-axis narrowing (`SdfMeshPathBake.Refine`) is unproven over the
+  whole world. It restores the first letters the old reach (half the finest
+  spacing on every axis) cut off the gallery plaques' note lines, and a
+  whole-world `puck mesh audit` of the Direct3D 12 store against the previous
+  narrowing's reads mixed over the 6,105 groups both hold: triangles 190.9 M
+  to 197.2 M, folds 184,128 to 221,969, flipped 125,139 to 208,532, slivers
+  3.57 M to 4.96 M, open edges 129 to 2,265 (2,246 in one group), uncovered
+  cells 407 to 1,087, worst vertex off the surface 177 mm to 304 mm. One group
+  carries most of it: `studio-grid` (sub-cell floor lines) went from 86 folds
+  and 505 flipped to 36,216 and 73,806, and its CPU bake is as bad, so the
+  cause is the box the narrowing hands the contour, not the GPU path.
+  `cardTable` gained 660 uncovered cells; `hall-floor-2` and `-3`,
+  `alchemyShelf`, `range-window-121`, the lift door and car and `shape-onion`
+  score far lower than before. Fifty-seven groups the previous store held
+  (`boardroom-sign`, `shape-path-*`, `shape-sweep-braid`, `shape-panel-*`,
+  `shape-trims`, `shape-paint-world`) had no stored mesh to audit after a bake
+  from the gallery spawn alone; whether demand tiers or the narrowing explains
+  that is unchecked. Next: bake `studio-grid` and `cardTable` alone under both
+  narrowings (`puck mesh audit --cpu --prototype <id>`), find what the per-axis
+  box does to a lattice of sub-cell lines, and keep the plaque letters.
+- [high] The material cut's lists are outside the memory account.
+  `SdfMeshMaterialCut.Build` grows managed position and index lists with no
+  reservation (`MemoryAccount.Owner.TryReserve` never sees them), so a cut
+  that does not end takes the process: two contour sites one rounding step
+  apart once split for ever and the World reached 50 GiB private on a 31 GiB
+  machine before `OutOfMemoryException`. The T-junction pass now quarters an
+  edge only when its midpoint differs from both ends; the lists still need a
+  bound the account enforces, and a cut that exceeds it should fail its group
+  by name (`SdfMeshBakeReport.Failed`) instead of the process.
+- [medium] Glyphs have no CPU reference and drop fine strokes.
+  `SdfFieldEvaluator` has no interpreter for the `Glyph` shape, so
+  `puck mesh audit --cpu` refuses a plaque ("cannot interpret instruction 3's
+  shape Glyph") and no audit covers text. The gallery plaques' note lines lose
+  thin strokes at their baked cell (the UNION plaque's note reads "m n of the
+  two fields: a hard c ease" from a metre away). Add the interpreter, then
+  audit a plaque and decide the detail a glyph's stroke width declares.
+- [medium] A rim thinner than a group's final cell is lost: `range-window`'s
+  2 cm rim does not bake at its 26.2 mm final cell. The same question as the
+  crease merge below: a declared feature narrower than the cell must refine or
+  be reported.
+- [medium · unconfirmed whether new] The Humble Brick's face at close range
+  shows thin red line artifacts across the screen bezel and a ragged d-pad
+  outline, alike on both backends, so it is the bake or the material cut and
+  not a backend. Audit the device's groups (`puck mesh audit --cpu --prototype
+  <id>`) and compare a bake under the previous narrowing before naming the
+  cause.
+- [low] No console command names a bake's pending groups or maps a slot to its
+  creation, so a bake that does not settle is found by reading stderr
+  (`[sdf.mesh-bake] ... failed`) and matching geometry hashes by hand.
 - [high] The Moth's shin blend groups (`shin-*/shinCavity-*/archBand-*/
   archBandHollow-*/archBandBack-*/sidePanel-*`) contour badly at their
   declared detail: `puck mesh audit --world worlds/debug/debug.puck
@@ -3389,6 +3478,31 @@ Grounded causes and leads, largest first:
   when it needs only the normals and level-index planes; a codec read of
   those planes alone would cut a rebuilt region's restore work. Owner:
   rendering/bake.
+- [high] The meadow's baked meshes outgrow the one mesh region, and the World
+  dies. A fresh windowed World sent to the sweep plan's `meadow` stop (`bench
+  frames --stop meadow`) needs about 5.6 GiB of mesh region where one region
+  holds `SdfWorldTables.MostMeshRegionBytes`; `SdfWorldTables.MeshRegionGrownBytes`
+  throws from `SdfWorldResidency.PrepareOnce` inside the frame, nothing catches
+  it, and the host stops. Two defects: the frame has no answer but a throw when
+  the named meshes outweigh the region (an eye that cannot be served degrades
+  its tier, D7's admitted degradation, or the region becomes several), and the
+  demand tiers ask the meadow for more detail than any budget holds. Until it
+  lands, `bench frames` cannot read the meadow. Owner: rendering/bake.
+- [high] Growing the mesh region kills a windowed Vulkan World on a discrete
+  adapter: `vkAllocateMemory` answers out of device memory in
+  `VulkanMemoryArena.Allocate`, reached from `GpuRegion.Grow` through
+  `SdfWorldTables.EnsureMeshRegionCapacity` inside the frame, and nothing
+  catches it. A grow holds the old buffer and the new one until the copy lands,
+  and the gallery alone holds nearly the whole of
+  `SdfWorldTables.MostMeshRegionBytes` after a few views (`world.residency`'s
+  `region-held`), so the device is asked for close to twice the region beside
+  everything else it holds. It struck a World that had walked gallery level 0,
+  the lawn and the moving-blend exhibits at a raised clock; a second World on
+  the same recipe survived by relocating instead. One cause with the item
+  above: the region has no budget smaller than its addressing limit, and a
+  grow that the device refuses has no answer but the host's death. The answer
+  is a region budget from the device's reported memory, and a refused grow
+  that degrades demand instead of throwing. Owner: rendering/bake.
 - The mesh region keeps meshes no draw names until their words outweigh the
   named ones (`SdfMeshRegionArena.Plan`'s relocation rule, past
   `RetainedSlackWords`), so a running debug world whose bodies change form and
@@ -3984,10 +4098,25 @@ Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
 
-- [medium] A loaded machine starves a windowed sweep: probe-lighting
-  convergence held frames for minutes (`[render-graph] not rendered for 3417
-  attempts`), a prelude line missed its 120 s answer and the attachment
-  dropped. The walkthrough tour runs on a quiet GPU until convergence yields.
+- [medium] A windowed sweep's convergence is unproven under load. A frame held
+  for its lighting is withheld, not recorded again, and its staging drives the
+  background GPU work (`SdfWorldPasses.WithheldOf`, `SdfGpuWork.Drive`), and
+  the walkthrough slice's tour runs to its end on a quiet GPU on both
+  backends. The loaded case that once starved it (frames held for minutes, a
+  prelude line missing its 120 s answer, the attachment dropping) has not been
+  retried; run the tour beside a build or a test run before relying on it
+  there.
+- [medium] The walkthrough tour's route stills clip their exhibits' tops: the
+  first-person eye stands close enough that a tall exhibit leaves the frame
+  while its plaque stays in it
+  ([`walkthrough-tests.puck`](../../worlds/debug/walkthrough-tests.puck)'s
+  route stops). Stand the stops back, or pitch the eye, until the exhibit and
+  its plaque both fit.
+- [low] One capture is pending at a time (`RenderGraphRuntime.PendingCapturePath`):
+  a presented burst holds the clock until its files are written
+  (`WorldCaptureScheduler`), and the sweep plan refuses a still armed inside a
+  burst's read window, so a stop orders its captures by hand. A queue of
+  captures would remove the rule.
 - [low] Editing `worlds/` while a World build waits for the build lease
   discards that build ("the checkout's sources changed while waiting to
   build"); a lane sequences its world edits around its own queued builds.
