@@ -7,6 +7,8 @@ public sealed partial class SdfProgramBuilder {
     private bool m_openInstanceBoundInSlotFrame;
     private bool m_openInstanceRestPoseSkin;
     private SdfInstancePart[] m_openInstanceParts = [];
+    // The slot m_openInstanceGlyphs holds once the open instance's runs have ridden more than one frame.
+    private const int GlyphFramesMixed = -2;
 
     /// <summary>Reads a registered material while composing local material frames.</summary>
     public SdfMaterial MaterialAt(int index) => m_materials[index];
@@ -287,6 +289,22 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
+        // An instance of text alone is fitted to the box its glyphs span: a static one's box, or a dynamic one's part
+        // on the slot the glyphs ride. An emitter that declared a box or parts of its own keeps them.
+        var box = m_openInstanceBox;
+        var parts = m_openInstanceParts;
+        var fitted = false;
+
+        if ((m_openInstanceGlyphs is { } glyphs) && (glyphs.Instructions == (m_instructions.Count - m_openInstanceFirst))) {
+            if (!m_openInstanceIsDynamic && (glyphs.Slot == -1) && (box is null)) {
+                box = (glyphs.Low, glyphs.High);
+                fitted = true;
+            } else if (m_openInstanceIsDynamic && (glyphs.Slot >= 0) && (parts.Length == 0)) {
+                parts = [new SdfInstancePart(Slot: glyphs.Slot, Low: glyphs.Low, High: glyphs.High, Detail: m_openInstanceDetail)];
+                fitted = true;
+            }
+        }
+
         m_instances.Add(item: new SdfInstanceRange(
             First: m_openInstanceFirst,
             End: m_instructions.Count,
@@ -297,7 +315,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox, HeightField = m_openInstanceHeightField, Parts = m_openInstanceParts, RestPoseSkin = m_openInstanceRestPoseSkin });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, HeightField = m_openInstanceHeightField, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
         ResetOpenInstance();
 
@@ -336,6 +354,7 @@ public sealed partial class SdfProgramBuilder {
     private void ResetOpenInstance() {
         m_openInstanceFirst = -1;
         m_openInstanceBox = null;
+        m_openInstanceGlyphs = null;
         m_openInstanceHeightField = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;

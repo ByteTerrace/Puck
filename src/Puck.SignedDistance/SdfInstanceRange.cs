@@ -50,6 +50,12 @@ public readonly record struct SdfInstanceRange(
     /// thin member refines its own surface rather than its neighbours' across a cube its length wide.
     /// <see langword="null"/> where the sphere alone bounds the instance.</summary>
     public (Vector3 Low, Vector3 High)? Box { get; init; }
+    /// <summary>Gets whether the instance's box (<see cref="Box"/>, or a dynamic instance's <see cref="Parts"/>) is
+    /// fitted to its surface: the box holds the whole surface and little else, so the mesh bake contours over it as
+    /// it stands instead of searching the bound for the surface. A search samples at a spacing its bound sets, and
+    /// steps over a surface made of features thinner than that spacing, such as a line of glyphs' strokes. The
+    /// builder declares it for an instance of text alone (<see cref="SdfProgramBuilder.Text"/>).</summary>
+    public bool Fitted { get; init; }
     /// <summary>Gets the shapes a dynamic instance holds, each the box it occupies in its own slot's frame and the detail it
     /// declares (<see cref="SdfInstancePart"/>): the members its group's union lattice refines one by one, as a static union
     /// refines each instance's box. Empty where the instance's bound alone describes it.</summary>

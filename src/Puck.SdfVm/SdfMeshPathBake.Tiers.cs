@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -25,14 +26,15 @@ public sealed partial class SdfMeshPathBake {
     private int m_regionRefused;
     // The groups drawing a finer tier than their demand asks and the finer tiers the budget held back, as of the
     // latest frame; the coarser tiers landed; the half rungs every demand is coarsened by (SdfMeshTier.Biased), the
-    // steps up and down, the frames since the budget last pressed, the quiet frames a step down waits, and the frames
-    // since the latest step down.
+    // steps up and down, the frames the budget has pressed with nothing spare, the frames a step down has had room,
+    // the frames a step down waits, and the frames since the latest step down.
     private int m_tiersSpare;
     private int m_tiersHeldBack;
     private int m_coarsened;
     private int m_bias;
     private int m_biasRaised;
     private int m_biasLowered;
+    private int m_biasPressed;
     private int m_biasQuiet;
     private int m_biasWait = SdfMeshTier.BiasQuietFrames;
     private int m_biasSinceLowered = int.MaxValue;
@@ -155,36 +157,52 @@ public sealed partial class SdfMeshPathBake {
     // tier each landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
     // SdfMeshTier.MaxInFlight at once: the replacement bakes (or lands from the library) while the coarser mesh draws.
     // Detail is budgeted by demand inside the mesh region's budget (RegionBudgetBytes). A finer tier starts only while
-    // the bytes the frame's draws name, with those the replacements in flight are expected to add, leave it room. When
-    // they do not, the groups drawing a finer tier than their demand asks (spare) are planned again at the demanded
-    // one, the largest saving first, until the expected bytes leave an eighth of the budget free; with no spare group
-    // left, every demand is coarsened half a rung (m_bias), which makes the groups farthest past their rung spare, and
-    // the bias is taken back half a rung at a time once the draws have named under half the budget for the quiet
-    // wait. With room to spare a coarser tier demanded changes nothing: the finer mesh stays, so a viewer who comes
-    // back finds it. Under the gate, on the frame's thread.
+    // the bytes the frame's draws name, with those the finer replacements in flight are expected to add, leave it room.
+    // What a replacement adds is known once it lands, so the expectation is the surface's scaling
+    // (SdfMeshTier.BytesAt) held to one part in SdfMeshTier.ReplacementShare of the budget, and the pressure below is
+    // read from the bytes the draws name, never from an expectation. The budget presses while the draws name more than
+    // it holds, or a finer tier waits and they name within one replacement of it: the groups drawing a finer tier than
+    // their demand asks (spare) are then planned again at the demanded one, the largest saving first, until the draws
+    // are expected two replacements under the budget. When it has pressed for SdfMeshTier.HoldFrames frames with no
+    // spare group left, landing or waiting its hold, the demand itself is past the budget and every demand is coarsened
+    // half a rung (m_bias), which makes the groups farthest past their rung spare. The bias is taken back half a rung
+    // once the bytes the draws would name with every demand half a rung finer and every spare group coarsened have
+    // stayed under that same mark, with nothing owed or in flight, for the quiet wait. With room to spare a coarser tier
+    // demanded changes nothing: the finer mesh stays, so a viewer who comes back finds it. Under the gate, on the
+    // frame's thread.
     private void Retier(SdfFrame frame) {
+        var budget = RegionBudgetBytes;
+        var replacement = (budget / SdfMeshTier.ReplacementShare);
+        var target = (budget - (2L * replacement));
+        var named = m_regionNamedBytes;
+        var bias = m_bias;
         var inFlight = 0;
         var coarsening = 0;
-        // The bytes the draws will name once every replacement in flight has landed, and those before any coarser
-        // one has, which is what a finer tier must fit beside.
-        var expected = m_regionNamedBytes;
-        var most = m_regionNamedBytes;
+        // The bytes the draws name once every finer replacement in flight has landed, which another must fit beside,
+        // and the bytes the coarser ones in flight free.
+        var filled = named;
+        var freed = 0L;
 
         foreach (var (group, _) in m_replacing) {
             if (!group.Retiering) { continue; }
             inFlight++;
-            expected += group.RetierDeltaBytes;
-            if (group.RetierDeltaBytes > 0L) { most += group.RetierDeltaBytes; } else { coarsening++; }
+            if (group.RetierDeltaBytes > 0L) {
+                filled = filled.AddSaturating(right: group.RetierDeltaBytes);
+            } else {
+                coarsening++;
+                freed -= group.RetierDeltaBytes;
+            }
         }
 
         var candidates = m_retierCandidates;
         var spare = m_spareCandidates;
-        var budget = RegionBudgetBytes;
         var owed = 0;
         var error = 0f;
         var frames = 0;
         var spares = 0;
         var sparesWaiting = 0;
+        // The bytes the draws would name with every demand half a rung finer and every spare group coarsened.
+        var finer = 0L;
 
         candidates.Clear();
         spare.Clear();
@@ -201,8 +219,16 @@ public sealed partial class SdfMeshPathBake {
                 group.RetierRefused = false;
             }
             // The tier a frame draws is the replaced group's while a replacement is still to land.
-            var resident = (group.Replaces ?? group).Tier;
+            var shown = (group.Replaces ?? group);
+            var resident = shown.Tier;
 
+            if ((bias > 0) && (shown.Mesh is { } mesh)) {
+                finer = finer.AddSaturating(right: SdfMeshTier.BytesAt(
+                    bytes: SdfMeshRegion.PlacedBytesOf(mesh: mesh),
+                    from: resident,
+                    to: SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: (bias - 1), pixel: pixel)))
+                ));
+            }
             if (demanded >= resident) {
                 group.OwedFrames = 0;
                 if ((demanded == resident) || (group.Mesh is not { } drawn)) {
@@ -240,66 +266,59 @@ public sealed partial class SdfMeshPathBake {
 
         var replaced = false;
         var heldBack = 0;
-        var heldBackBytes = 0L;
 
         foreach (var (_, index, tier) in candidates) {
             var old = m_groups[index];
             var bytes = SdfMeshRegion.PlacedBytesOf(mesh: old.Mesh!);
-            var delta = (SdfMeshTier.BytesAt(bytes: bytes, from: old.Tier, to: tier) - bytes);
+            var delta = Math.Min(val1: replacement, val2: (SdfMeshTier.BytesAt(bytes: bytes, from: old.Tier, to: tier) - bytes));
 
             // A finer tier the budget has no room for waits, the finest demand first in line for what is freed.
-            if ((heldBack > 0) || (delta > (budget - most))) {
+            if ((heldBack > 0) || (delta > (budget - filled))) {
                 heldBack++;
-                heldBackBytes = ((delta > (long.MaxValue - heldBackBytes)) ? long.MaxValue : (heldBackBytes + delta));
                 continue;
             }
             if (inFlight >= SdfMeshTier.MaxInFlight) { break; }
-            if (Retier(delta: delta, frame: frame, index: index, old: old, tier: tier)) {
-                inFlight++;
-                expected += delta;
-                most += delta;
-            }
+            if (Retier(delta: delta, frame: frame, index: index, old: old, tier: tier)) { inFlight++; }
+            // One the library held has landed, and the next frame's draws name it.
+            filled = filled.AddSaturating(right: delta);
             replaced = true;
         }
         m_tiersHeldBack = heldBack;
-
-        // The budget presses while the bytes expected, with those the held finer tiers would add, pass it.
-        var wanted = ((heldBackBytes > (long.MaxValue - expected)) ? long.MaxValue : (expected + heldBackBytes));
-        var pressed = (wanted > budget);
-
-        if (pressed) {
-            var target = (budget - (budget / 8L));
+        if ((named > budget) || ((heldBack > 0) && (named > (budget - replacement)))) {
+            var expected = (named - freed);
 
             m_biasQuiet = 0;
             spare.Sort(comparison: static (left, right) => ((right.Saving.CompareTo(value: left.Saving) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index)));
             foreach (var (saving, index, tier) in spare) {
-                if ((inFlight >= SdfMeshTier.MaxInFlight) || (wanted <= target)) { break; }
-                if (Retier(delta: -saving, frame: frame, index: index, old: m_groups[index], tier: tier)) {
-                    inFlight++;
-                    coarsening++;
-                }
-                // A coarser tier the library held lands at once, and its saving shows in the next frame's draws.
-                wanted -= saving;
+                if ((inFlight >= SdfMeshTier.MaxInFlight) || (expected <= target)) { break; }
+                if (Retier(delta: -saving, frame: frame, index: index, old: m_groups[index], tier: tier)) { inFlight++; }
+                // One the library held has landed, and its saving shows in the next frame's draws.
+                coarsening++;
+                expected -= saving;
                 replaced = true;
             }
-            // Nothing spare is left, waiting its hold or landing: the demand itself is past the budget, so every
-            // demand coarsens half a rung.
-            if ((wanted > target) && (spare.Count == 0) && (sparesWaiting == 0) && (coarsening == 0) && (m_bias < SdfMeshTier.MaxBias)) {
-                Volatile.Write(location: ref m_bias, value: (m_bias + 1));
+            if ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) {
+                m_biasPressed = 0;
+            } else if ((++m_biasPressed >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
+                Volatile.Write(location: ref m_bias, value: (bias + 1));
                 m_biasRaised++;
+                m_biasPressed = 0;
                 // A step up soon after a step down is a bounce: the next step down waits twice as long.
                 if (m_biasSinceLowered < m_biasWait) { m_biasWait = ((int)Math.Min(val1: (2L * m_biasWait), val2: (1L << 20))); }
                 m_biasSinceLowered = int.MaxValue;
             }
-        } else if ((m_bias > 0) && (wanted < (budget / 2L)) && (owed == 0)) {
-            if (++m_biasQuiet >= m_biasWait) {
-                Volatile.Write(location: ref m_bias, value: (m_bias - 1));
-                m_biasLowered++;
-                m_biasQuiet = 0;
-                m_biasSinceLowered = 0;
-            }
         } else {
-            m_biasQuiet = 0;
+            m_biasPressed = 0;
+            if ((bias > 0) && (owed == 0) && (inFlight == 0) && (finer <= target)) {
+                if (++m_biasQuiet >= m_biasWait) {
+                    Volatile.Write(location: ref m_bias, value: (bias - 1));
+                    m_biasLowered++;
+                    m_biasQuiet = 0;
+                    m_biasSinceLowered = 0;
+                }
+            } else {
+                m_biasQuiet = 0;
+            }
         }
         if (m_biasSinceLowered < int.MaxValue) { m_biasSinceLowered++; }
         if (replaced) { m_productRevision++; }

@@ -28,12 +28,17 @@ public static class SdfMeshTier {
     /// <summary>The most half rungs a residency's bake coarsens every group's demand by to hold its meshes inside the
     /// mesh region's budget (<see cref="Biased"/>): eight rungs, a cell 256 times the demanded one.</summary>
     public const int MaxBias = 16;
-    /// <summary>The frames a residency's meshes must stay under half the mesh region's budget before its bake takes one
-    /// half rung of bias back; the wait doubles each time the budget presses again soon after.</summary>
+    /// <summary>The frames the meshes a residency's demand would name half a rung finer must have fit its mesh region's
+    /// budget before its bake takes one half rung of bias back; the wait doubles each time the budget presses again
+    /// soon after.</summary>
     public const int BiasQuietFrames = 600;
     /// <summary>The eighths of the mesh region's limit a residency's bake budgets its meshes to; the rest is the room a
     /// replacement lands in beside the mesh it replaces.</summary>
     public const int BudgetEighths = 7;
+    /// <summary>The part of the mesh region's budget, one in this many, a finer replacement is expected to add at
+    /// most before it lands: what a surface's scaling says of a tier never baked is a guess, and the budget counts
+    /// as full within one such part of its end.</summary>
+    public const int ReplacementShare = 16;
 
     /// <summary>Returns the pixel a bias reads a demand at: <paramref name="pixel"/> times the square root of two to
     /// the <paramref name="halfRungs"/>, so two half rungs demand one tier coarser.</summary>

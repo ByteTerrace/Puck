@@ -143,6 +143,11 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public Vector3 PlannedHigh { get; private set; }
     /// <summary>Gets whether a member's bound passed the reach, so the group's box, and its geometry, hold the reach.</summary>
     public bool Clamped { get; internal set; }
+    /// <summary>Gets whether the group's box is fitted to its surface: every instance it holds declares so
+    /// (<see cref="SdfInstanceRange.Fitted"/>), and <see cref="Low"/> and <see cref="High"/> were planned as the box
+    /// its members' boxes span rather than its bounds' cube. The bake contours such a group over that box as it
+    /// stands, with no lattice searching it for the surface.</summary>
+    public bool Fitted { get; private set; }
 
     /// <summary>Gets the tier the group bakes at (<see cref="SdfMeshTier"/>): the one its planner asked for, held between
     /// <see cref="FinestTier"/> and <see cref="CoarsestTier"/>, whose cell floors every spacing its refinement aims for.
@@ -265,6 +270,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         replanned.Glass = group.Glass;
         replanned.Displacement = group.Displacement;
         replanned.Clamped = group.Clamped;
+        replanned.Fitted = group.Fitted;
         replanned.Detail = group.Detail;
         replanned.DetailLow = group.DetailLow;
         replanned.DetailHigh = group.DetailHigh;
@@ -410,10 +416,30 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         foreach (var group in groups) {
             if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
+            group.Fit(program: program);
             group.Seal(program: program, tier: tier);
         }
 
         return groups;
+    }
+    // Gives a group whose every instance is fitted to its surface (SdfInstanceRange.Fitted) the box its members' boxes
+    // span, in place of its bounds' cube. A group clamped to the reach, or with no member, keeps the cube.
+    private void Fit(SdfProgram program) {
+        if (Clamped || (Members.Count == 0)) { return; }
+        foreach (var instance in m_instances) {
+            if (!program.Instances[instance].Fitted) { return; }
+        }
+
+        var low = new Vector3(value: float.PositiveInfinity);
+        var high = new Vector3(value: float.NegativeInfinity);
+
+        foreach (var member in Members) {
+            low = Vector3.Min(value1: low, value2: member.Low);
+            high = Vector3.Max(value1: high, value2: member.High);
+        }
+        Low = low;
+        High = high;
+        Fitted = true;
     }
     // A dynamic instance's members of its group's union lattice, in the group's frame: each part it declares, its box
     // carried from its own slot's frame through the pose the geometry hashed for that slot (so the members are a function

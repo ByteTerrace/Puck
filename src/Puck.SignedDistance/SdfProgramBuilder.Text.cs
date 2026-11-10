@@ -248,6 +248,13 @@ public sealed partial class SdfProgramBuilder {
         ));
         var atlasWidth = ((float)atlas.Width);
         var atlasHeight = ((float)atlas.Height);
+        // The box the run's glyph cells span in the frame the chains ride, which an instance of text alone is fitted to
+        // (SdfInstanceRange.Fitted): each cell's rectangle on the text plane, extruded by the relief and a smooth
+        // blend's radius.
+        var firstInstruction = m_instructions.Count;
+        var spanLow = new Vector3(value: float.PositiveInfinity);
+        var spanHigh = new Vector3(value: float.NegativeInfinity);
+        var relief = (MathF.Max(x: extrudeHalfDepth, y: 0f) + MathF.Max(x: smooth, y: 0f));
 
         foreach (var placement in laidOut.Placements) {
             var atlasBounds = placement.AtlasBounds;
@@ -261,6 +268,10 @@ public sealed partial class SdfProgramBuilder {
                 y: (0.5f * (planeBounds.Bottom + planeBounds.Top))
             );
             var worldCentre = ((origin + (unitRight * centre2D.X)) + (unitUp * centre2D.Y));
+            var reach = (((Vector3.Abs(value: unitRight) * MathF.Abs(x: halfWidth)) + (Vector3.Abs(value: unitUp) * MathF.Abs(x: halfHeight))) + (Vector3.Abs(value: forward) * relief));
+
+            spanLow = Vector3.Min(value1: spanLow, value2: (worldCentre - reach));
+            spanHigh = Vector3.Max(value1: spanHigh, value2: (worldCentre + reach));
             // Local (-hw,-hh) is the cell's bottom-left → atlas (uMin, vBottom = the LARGER texel row, top-down); local
             // (+hw,+hh) is top-right → (uMax, vTop). The lerp in the shader maps local→uv along this diagonal.
             var uvBottomLeft = new Vector2(
@@ -293,6 +304,15 @@ public sealed partial class SdfProgramBuilder {
                 uvBottomLeft: uvBottomLeft,
                 uvTopRight: uvTopRight
             );
+        }
+
+        if ((m_openInstanceFirst >= 0) && (spanLow.X <= spanHigh.X)) {
+            var frame = (dynamicSlot ?? -1);
+            var emitted = (m_instructions.Count - firstInstruction);
+
+            m_openInstanceGlyphs = ((m_openInstanceGlyphs is { } glyphs)
+                ? (Vector3.Min(value1: glyphs.Low, value2: spanLow), Vector3.Max(value1: glyphs.High, value2: spanHigh), ((glyphs.Slot == frame) ? frame : GlyphFramesMixed), (glyphs.Instructions + emitted))
+                : (spanLow, spanHigh, frame, emitted));
         }
 
         return this;

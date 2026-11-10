@@ -1358,19 +1358,30 @@ public sealed partial class SdfMeshPathBake {
         (old.Form == group.Form) &&
         (old.MaterialOrder.Length == group.MaterialOrder.Length)
     );
-    // Starts a group the library holds no mesh of at the coarse lattice over its box, under the bake's identity. Geometry
+    // Starts a group the library holds no mesh of at the coarse lattice over its box, under the bake's identity. A group
+    // whose box is fitted to its surface (SdfMeshBakeGroup.Fitted) starts at its final lattice instead: the box is
+    // widened by one cell of the lattice a search would end on, as a searched box is, so the surface lies off the final
+    // lattice's edge, and no coarse lattice, which would step over features thinner than its cells, narrows it. Geometry
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
     private bool Begin(Group group) {
         group.Allocator = Library.Allocator;
         group.TakeDemandBox();
-        // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
-        var center = ((group.Low + group.High) * 0.5f);
-        var half = (MathF.Max(x: (group.High.X - group.Low.X), y: MathF.Max(x: (group.High.Y - group.Low.Y), y: (group.High.Z - group.Low.Z))) * 0.5f);
+        if (group.Fitted) {
+            var cell = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: RefineMinimum).Cell;
 
-        group.Low = (center - new Vector3(value: half));
-        group.High = (center + new Vector3(value: half));
-        group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
+            group.Low -= cell;
+            group.High += cell;
+            StartFinal(group: group);
+        } else {
+            // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
+            var center = ((group.Low + group.High) * 0.5f);
+            var half = (MathF.Max(x: (group.High.X - group.Low.X), y: MathF.Max(x: (group.High.Y - group.Low.Y), y: (group.High.Z - group.Low.Z))) * 0.5f);
+
+            group.Low = (center - new Vector3(value: half));
+            group.High = (center + new Vector3(value: half));
+            group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
+        }
         group.Identity = Identity.Value;
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity)) { return false; }
         group.Deferred = group.Next;
@@ -1397,32 +1408,26 @@ public sealed partial class SdfMeshPathBake {
     }
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
     private static bool SheetBetween(in SdfMeshBakeRequest lattice, ReadOnlySpan<float> values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
-    // Narrows a group's box to the cells the surface can cross. A sample beside a sign change joins every axis with the
-    // edge the surface crosses and a cell either side of it. A sample near the surface joins one axis at a time, with a
-    // cell either side of itself. A cell's corner nearest a surface point lies within half a cell of it along each axis
-    // and within half the cell's diagonal of it in all, and a field that never overstates distance reads no more than
-    // that there; so along the lattice's coarsest axis every sample within half the diagonal joins, and no surface a
-    // cell holds is left out along it, with half a cell to spare: a line of thin strokes the sample columns step over
-    // keeps its ends. Along a finer axis that reach is scaled by the axis's spacing over the coarsest: at the full reach
-    // the samples rows away from a plate would join, and the box would stay so fat the final lattice steps over the
-    // plate. Every reach is under its axis's spacing, so past a solid's face only the first sample joins, and its cell
-    // ends where the sign change's does: the reach widens no box a sign change already bounds. The box also takes in
-    // every pair of samples, neither within the finest reach, that a sheet thinner than the spacing passes between
+    // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign and every sample
+    // whose value is within half the lattice's finest spacing of the surface, widened by one cell along each axis, and
+    // every pair of samples neither of which is within that reach that a sheet thinner than the spacing passes between
     // (SdfSampledLattice.SheetsBetween: a plate lying between two sample rows of a lattice narrowed to a flat box, whose
-    // long axes are sampled coarsely), with one cell about each sample: the sheet lies between the pair along the line
-    // and within the line's reach of the sample across it, and the cell beyond the pair keeps the sheet off the next
-    // lattice's edge, whose outermost pair no line can test. A pair with a sample within that reach is left to the
-    // sample, so the pair test moves the box only where the distance test loses the sheet. An axis no sample joins
-    // keeps the lattice's extent; a group no sample joins along any axis has no surface. Once the box stops shrinking,
-    // the group's next lattice is the final one.
+    // long axes are sampled coarsely; kept within half the cell's diagonal instead, the box stays so fat the final
+    // lattice steps over the plate). A pair with a sample within reach is left to that sample, so the pair test moves
+    // the box only where the distance test loses the sheet. A group with no such cell has no surface. Once the box
+    // stops shrinking, the group's next lattice is the final one.
     private void Refine(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values) {
         var (sx, sy, sz) = request.Dims;
-        var cell = request.Cell;
-        var reach = (cell * ((0.5f * cell.Length()) / MathF.Max(x: cell.X, y: MathF.Max(x: cell.Y, y: cell.Z))));
-        var near = MathF.Min(x: reach.X, y: MathF.Min(x: reach.Y, y: reach.Z));
+        var near = (0.5f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
         var low = new Vector3(value: float.PositiveInfinity);
         var high = new Vector3(value: float.NegativeInfinity);
-        var between = SdfSampledLattice.SheetsBetween(cell: cell, dims: request.Dims, near: near, values: values);
+        var between = SdfSampledLattice.SheetsBetween(cell: request.Cell, dims: request.Dims, near: near, values: values);
+        // A sample of a pair a sheet passes between joins the box with one cell about it: the sheet lies between the
+        // pair along the line and within the line's reach of the sample across it, and the cell beyond the pair keeps
+        // the sheet off the next lattice's edge, whose outermost pair no line can test. A sample near the surface or
+        // beside a sign change can hold the surface anywhere within its cell, so its cell joins and the box widens by one.
+        var sheetLow = new Vector3(value: float.PositiveInfinity);
+        var sheetHigh = new Vector3(value: float.NegativeInfinity);
 
         int Index(int x, int y, int z) => (x + (sx * (y + (sy * z))));
 
@@ -1430,44 +1435,36 @@ public sealed partial class SdfMeshPathBake {
             for (var y = 0; (y < sy); y++) {
                 for (var x = 0; (x < sx); x++) {
                     var value = values[Index(x: x, y: y, z: z)];
-                    var point = (request.Origin + (new Vector3(x: x, y: y, z: z) * cell));
-                    var magnitude = MathF.Abs(x: value);
-                    var inside = (value < 0f);
+                    var point = (request.Origin + (new Vector3(x: x, y: y, z: z) * request.Cell));
 
                     if (between[Index(x: x, y: y, z: z)] != 0) {
-                        low = Vector3.Min(value1: low, value2: (point - cell));
-                        high = Vector3.Max(value1: high, value2: (point + cell));
+                        sheetLow = Vector3.Min(value1: sheetLow, value2: (point - request.Cell));
+                        sheetHigh = Vector3.Max(value1: sheetHigh, value2: (point + request.Cell));
                     }
-                    if ((((x + 1) < sx) && ((values[Index(x: (x + 1), y: y, z: z)] < 0f) != inside)) ||
-                        (((y + 1) < sy) && ((values[Index(x: x, y: (y + 1), z: z)] < 0f) != inside)) ||
-                        (((z + 1) < sz) && ((values[Index(x: x, y: y, z: (z + 1))] < 0f) != inside))) {
-                        low = Vector3.Min(value1: low, value2: (point - cell));
-                        high = Vector3.Max(value1: high, value2: (point + (2f * cell)));
+
+                    var candidate = (MathF.Abs(x: value) <= near);
+
+                    if (!candidate) {
+                        var inside = (value < 0f);
+
+                        candidate = ((((x + 1) < sx) && ((values[Index(x: (x + 1), y: y, z: z)] < 0f) != inside)) ||
+                            (((y + 1) < sy) && ((values[Index(x: x, y: (y + 1), z: z)] < 0f) != inside)) ||
+                            (((z + 1) < sz) && ((values[Index(x: x, y: y, z: (z + 1))] < 0f) != inside)));
                     }
-                    if (magnitude <= reach.X) {
-                        low.X = MathF.Min(x: low.X, y: (point.X - cell.X));
-                        high.X = MathF.Max(x: high.X, y: (point.X + cell.X));
-                    }
-                    if (magnitude <= reach.Y) {
-                        low.Y = MathF.Min(x: low.Y, y: (point.Y - cell.Y));
-                        high.Y = MathF.Max(x: high.Y, y: (point.Y + cell.Y));
-                    }
-                    if (magnitude <= reach.Z) {
-                        low.Z = MathF.Min(x: low.Z, y: (point.Z - cell.Z));
-                        high.Z = MathF.Max(x: high.Z, y: (point.Z + cell.Z));
-                    }
+                    if (!candidate) { continue; }
+                    low = Vector3.Min(value1: low, value2: point);
+                    high = Vector3.Max(value1: high, value2: (point + request.Cell));
                 }
             }
         }
 
-        var latticeHigh = (request.Origin + (new Vector3(x: (sx - 1), y: (sy - 1), z: (sz - 1)) * cell));
-        var empty = !((low.X <= high.X) || (low.Y <= high.Y) || (low.Z <= high.Z));
-
-        for (var axis = 0; (axis < 3); axis++) {
-            if (low[axis] <= high[axis]) { continue; }
-            low[axis] = request.Origin[axis];
-            high[axis] = latticeHigh[axis];
+        if (low.X <= high.X) {
+            low -= request.Cell;
+            high += request.Cell;
         }
+        low = Vector3.Min(value1: low, value2: sheetLow);
+        high = Vector3.Max(value1: high, value2: sheetHigh);
+        var empty = !(low.X <= high.X);
 
         // An empty result is a fact about the geometry, stored whether or not the group is still planned.
         if (empty) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
@@ -1494,14 +1491,17 @@ public sealed partial class SdfMeshPathBake {
             var converged = ((after.X >= (Converged * before.X)) && (after.Y >= (Converged * before.Y)) && (after.Z >= (Converged * before.Z)));
 
             if (converged || (group.Refinements >= MaxRefinements)) {
-                group.Final = ((group.Members.Count > 1)
-                    ? UnionFinal(group: group)
-                    : OwnFinal(group: group));
-                group.Next = SlabOf(group: group);
+                StartFinal(group: group);
                 return;
             }
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: RefineMinimum);
         }
+    }
+    // Gives a group its final lattice over its box as it stands, a union's for several members, and makes that lattice's
+    // first slab its next request. The lattice holds its description alone until that slab is answered (FinalLattice).
+    private static void StartFinal(Group group) {
+        group.Final = ((group.Members.Count > 1) ? UnionFinal(group: group) : OwnFinal(group: group));
+        group.Next = SlabOf(group: group);
     }
     // The final lattice of a group of one member (SdfMeshBakeGroup.Members): FinalSamples along its longest axis, no finer
     // than MinimumCell. An instance that declares its own detail (SdfInstanceRange.Detail), static or riding a slot, refines

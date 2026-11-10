@@ -269,6 +269,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.BoxLow, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in low)));
             Hash(fact: Fact.BoxHigh, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in high)));
         }
+        // So does a box fitted to the surface, which the bake contours over without searching it.
+        if (range.Fitted) { Hash(fact: Fact.Fitted, source: [1]); }
         // So do the parts a dynamic instance declares, each by its slot's offset from the instance's own so one creation's
         // shapes key alike on every body that wears it.
         foreach (var part in range.Parts) {
@@ -475,6 +477,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         Instruction,
         Part,
         Tier,
+        Fitted,
     }
     // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
     [StructLayout(LayoutKind.Sequential)]
