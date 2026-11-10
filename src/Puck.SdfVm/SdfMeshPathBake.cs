@@ -439,6 +439,10 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(frame);
         using (EnterFrameGate()) {
             m_preparedFrames++;
+            // The copies are indexed before anything plans: a plan measures a shared geometry where they stand (Tiers).
+            m_demandTransforms = frame.DynamicTransforms;
+            m_demandCopies = frame.MeshInstances;
+            if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps).
@@ -449,9 +453,6 @@ public sealed partial class SdfMeshPathBake {
                 Resample(frame: frame);
             }
             if (m_successors > 0) { Promote(frame: frame); }
-            m_demandTransforms = frame.DynamicTransforms;
-            m_demandCopies = frame.MeshInstances;
-            if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
         }
         // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
         Prioritize();
@@ -975,7 +976,7 @@ public sealed partial class SdfMeshPathBake {
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
-            tier: Tiers(transforms: transforms),
+            tier: Tiers(copies: false, transforms: transforms),
             transforms: transforms
         );
 

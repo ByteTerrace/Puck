@@ -22,13 +22,19 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
     /// a dynamic group's box carried into world space by its slot's transform among <paramref name="transforms"/> and
-    /// its pixel read in the slot's units. The plan holds it to the rungs that change the group's mesh. A plan made on a
-    /// build's thread can read a frame's demand points mid-update; a tier so misjudged is corrected once the group lands
-    /// (<see cref="Retier(SdfFrame)"/>).</summary>
+    /// its pixel read in the slot's units, and a shared geometry's box measured where its copies stand
+    /// (<see cref="PlannedPixel"/>), as the frames after measure it (<see cref="Retier(SdfFrame)"/>). The plan holds
+    /// the tier to the rungs that change the group's mesh.</summary>
     /// <param name="transforms">The dynamic transforms the plan is made at.</param>
+    /// <param name="copies">Whether the copy index is the planned program's and this thread may read it: the frame's
+    /// thread under the gate, once the frame's copies are indexed. A plan made on a build's thread passes
+    /// <see langword="false"/> and measures every group by its planned box, and the restart that adopts it plans again
+    /// each group whose tier the frame's demand moves; such a plan can also read a frame's demand points mid-update.</param>
     /// <returns>The function a plan asks each group's tier of.</returns>
-    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms) =>
-        (PlannedTier ?? (group => SdfMeshTier.Of(pixel: Demand.PixelAt(group: group, transforms: transforms))));
+    private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true) =>
+        (PlannedTier ?? (copies
+            ? (group => SdfMeshTier.Of(pixel: PlannedPixel(group: group, transforms: transforms)))
+            : (group => SdfMeshTier.Of(pixel: Demand.PixelAt(group: group, transforms: transforms)))));
 
     /// <summary>Gets the tier every plan of this bake asks for each group in place of the one its demand points ask
     /// (<see cref="SdfMeshTier"/>), held to the rungs that change the group's mesh; <see langword="null"/>, a residency's
@@ -42,6 +48,12 @@ public sealed partial class SdfMeshPathBake {
     // The metres one display pixel covers at a group's demand box, in the group's own units, from the demand point that
     // sees it finest: a shared geometry where its copies stand, as its priority is measured (MeasureDemand).
     private float MeasurePixel(Group group) => MeasurePixel(group: group, point: out _);
+    // The metres one display pixel covers at a group's planned box while a plan is choosing its tier, in the group's own
+    // units: a shared geometry's where the frame's copies of it stand, and any other group's at its planned box. On the
+    // frame's thread, with the copy index at the planned program's frame (PrepareFrame indexes before it plans).
+    private float PlannedPixel(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) => ((CopiesOf(group: group) is { } copies)
+        ? CopiesPixel(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)), point: out _)
+        : Demand.PixelAt(group: group, transforms: transforms));
     // MeasurePixel, and the demand point that sees the group finest; -1 with none.
     private float MeasurePixel(Group group, out int point) {
         if (CopiesOf(group: group) is not { } copies) {
@@ -51,14 +63,19 @@ public sealed partial class SdfMeshPathBake {
             return (Demand.PixelAt(center: center, half: half, point: out point) / units);
         }
 
+        return CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out point);
+    }
+    // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
+    // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy.
+    private float CopiesPixel(IReadOnlyList<int> copies, Vector3 center, Vector3 half, out int point) {
         var finest = float.PositiveInfinity;
 
         point = -1;
         foreach (var index in copies) {
             var matrix = m_demandCopies[index].Matrix;
-            var (center, half) = TransformDemandBox(group: group, matrix: matrix);
+            var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
             var units = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
-            var pixel = (Demand.PixelAt(center: center, half: half, point: out var seen) / units);
+            var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / units);
 
             if (pixel < finest) {
                 finest = pixel;
