@@ -254,6 +254,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const int MaxSweeps = 32;
     // The geometry changes the volume remembers; a probe traced before the oldest traces again.
     private const int MaxChanges = 16;
+    // The boxes one geometry change names at most; a change of more draws names the one box that holds them all. A
+    // selection tests a probe's every ray against every box newer than its trace, one box after another on one GPU
+    // thread (sdf-probe-select), so the remembered boxes bound how long a selection job runs however few probes it
+    // holds: thousands of them (a change of detail across the world) made one probe's selection outlast several frames.
+    private const int MaxChangeBoxes = 64;
     // The lighting versions whose capture times the volume remembers.
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
@@ -794,7 +799,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return (start <= end);
     }
     // The world boxes of the static draws one draw list holds and the other does not, counted as multisets of their
-    // mesh, transform and material; null when one of them has no box.
+    // mesh, transform and material; null when one of them has no box. More than MaxChangeBoxes of them are answered as
+    // the one box that holds them all, which names every probe the boxes named and more.
     private static Box[]? ChangedBoxes(SdfMeshDraw[] before, SdfMeshDraw[] after) {
         var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
 
@@ -827,6 +833,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             counts[key]--;
             if (!TryBox(box: out var box, draw: in draw)) { return null; }
             changed.Add(item: box);
+        }
+        if (changed.Count > MaxChangeBoxes) {
+            var all = changed[0];
+
+            foreach (var box in changed) { all = new Box(High: Vector3.Max(value1: all.High, value2: box.High), Low: Vector3.Min(value1: all.Low, value2: box.Low)); }
+            return [all];
         }
         return [.. changed];
     }

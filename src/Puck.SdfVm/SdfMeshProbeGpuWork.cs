@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -18,8 +19,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly Lock m_gate = new();
     private readonly Queue<Job> m_pending = new();
     // The measured GPU cost of each kind's unit (UnitsOf), indexed by JobKind: what TryTake charges a job and what sizes
-    // trace and relight jobs to background work's share of a frame. Complete measures them on the recording thread; the
-    // coordinator reads them as it cuts jobs.
+    // trace, relight and selection jobs to background work's share of a frame. Complete measures them on the recording
+    // thread; the coordinator reads them as it cuts jobs.
     private readonly SdfGpuWorkRate[] m_rates = [
         new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
         new(priorSecondsPerUnit: 1e-8),
@@ -29,6 +30,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     ];
     // The coordinator's answer scratch for one trace job of a trace cut into several (Trace).
     private uint[]? m_traceJobAnswer;
+    // The coordinator's answer scratch for one selection job of a selection cut into several (Select), and the
+    // selection's changed boxes counted by geometry: each geometry the boxes name, ascending, with the boxes of it and
+    // of every later one.
+    private uint[]? m_selectJobAnswer;
+    private readonly List<(uint Geometry, int Boxes)> m_selectNewer = [];
     private bool m_disposed;
     private bool m_stopping;
     private GpuRegion? m_sceneRegion;
@@ -128,8 +134,61 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         private SdfGpuWorkReadback? m_readback = readback;
         public void Dispose() => Interlocked.Exchange(ref m_readback, null)?.Release();
     }
-    internal uint[] Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, uint[]? reuse = null) =>
-        Submit(new Job(scene.Acquire(), centers) { Input = metadata, Lighting = changes, Selection = true, HitCapacity = hitCapacity, Reuse = reuse });
+    // A selection answers each probe from its own row alone (sdf-probe-select), so it is cut like a trace: consecutive
+    // jobs of at most the probes whose tests (SelectTestsOf) fit background work's share of a frame at the measured
+    // rate, each answered before the next is submitted. A selection over a settled scene is one job of a test a
+    // probe; one after the scene changed becomes several, never one job a frame waits on. The rate is read again for
+    // every job, so a job measured costlier than its estimate shortens the ones after it, and the tests left are
+    // shared evenly among the jobs left, since a short last job would measure its fixed cost as a high rate. One
+    // coordinator calls this at a time.
+    internal uint[] Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, uint[]? reuse = null) {
+        var boxes = (int)changes[1].Y;
+        m_selectNewer.Clear();
+        for (var box = 0; (box < boxes); box++) {
+            var geometry = BitConverter.SingleToUInt32Bits(value: changes[SdfMeshProbeRelight.SelectionHeaderRows + (2 * box)].W);
+            if ((m_selectNewer.Count == 0) || (m_selectNewer[^1].Geometry != geometry)) { m_selectNewer.Add(item: (geometry, (boxes - box))); }
+        }
+        var left = 0L;
+        for (var probe = 0; (probe < centers.Length); probe++) {
+            left += SelectTestsOf(row: metadata.Span.Slice(start: (probe * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
+        }
+        uint[]? answer = null;
+        for (var start = 0; ;) {
+            var most = m_rates[(int)JobKind.Select].UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
+            var share = left.CeilingDivide(divisor: Math.Max(val1: 1L, val2: left.CeilingDivide(divisor: most)));
+            var rows = metadata.Span;
+            var count = 0;
+            var tests = 0L;
+            while ((start + count) < centers.Length) {
+                var probe = SelectTestsOf(row: rows.Slice(start: ((start + count) * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
+                if ((count != 0) && ((tests + probe) > share)) { break; }
+                tests += probe;
+                count++;
+            }
+            left -= tests;
+            if (count == centers.Length) {
+                return Submit(new Job(scene.Acquire(), centers) { Input = metadata, Lighting = changes, Selection = true, HitCapacity = hitCapacity, Reuse = reuse, Tests = tests });
+            }
+            answer ??= ((reuse is { } array) && (array.Length > centers.Length)) ? array : new uint[centers.Length + 1];
+            var part = Submit(new Job(scene.Acquire(), centers.Slice(start: start, length: count)) {
+                Input = metadata.Slice(start: (start * SdfMeshProbeRelight.SelectionInputWords), length: (count * SdfMeshProbeRelight.SelectionInputWords)),
+                Lighting = changes, Selection = true, HitCapacity = hitCapacity, Reuse = m_selectJobAnswer, Tests = tests,
+            });
+            m_selectJobAnswer = part;
+            part.AsSpan(start: 0, length: count).CopyTo(answer.AsSpan(start: start));
+            start += count;
+            if (start >= centers.Length) { return answer; }
+        }
+    }
+    // The tests one probe of a selection costs at most (sdf-probe-select): its own row, and for a probe traced against
+    // an earlier geometry, each of its rays against each changed box of a later one. A probe the kernel finds absent
+    // from the hit cache costs its row alone, so this never counts fewer than the kernel runs.
+    private long SelectTestsOf(ReadOnlySpan<uint> row, Vector4[] changes) {
+        if (((row[0] & 1u) == 0) || (row[1] == BitConverter.SingleToUInt32Bits(value: changes[0].Y))) { return 1L; }
+        var newer = 0;
+        for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[1])); index--) { newer = m_selectNewer[index].Boxes; }
+        return (1L + ((long)newer * SdfMeshProbeDepth.HitCount));
+    }
     internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
         SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
     private uint[] Submit(Job job) => SubmitAsync(job).GetAwaiter().GetResult();
@@ -484,17 +543,19 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private static JobKind KindOf(Job query) => (query.CommitSource is not null) ? JobKind.Commit : query.Meter ? JobKind.Meter :
         query.Selection ? JobKind.Select : (query.Lighting is not null) ? JobKind.Relight : JobKind.Trace;
     // The units a job's rate is measured in: a relight's predicted rays (none for a job of invalid probes alone, which
-    // measures nothing), a commit's destinations, and every other kind's origins.
+    // measures nothing), a commit's destinations, a selection's tests (SelectTestsOf), and every other kind's origins.
     private static long UnitsOf(Job query) => KindOf(query) switch {
         JobKind.Commit => query.Destinations.Length,
         JobKind.Relight => query.Rays,
+        JobKind.Select => query.Tests,
         _ => query.Origins.Length,
     };
     public string Describe(object job) {
         if (job is SceneChunk chunk) { return FormattableString.Invariant($"scene-chunk word={chunk.Word} words={chunk.Count}"); }
         var query = (Job)job;
         var kind = KindOf(query).ToString().ToLowerInvariant();
-        var lights = ((query.Lighting is { Length: > 0 } rows) ? FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}") : string.Empty);
+        var lights = (query.Lighting is not { Length: > 0 } rows) ? string.Empty :
+            query.Selection ? FormattableString.Invariant($" boxes={rows[1].Y} tests={query.Tests}") : FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}");
         return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}{((kind == "relight") ? DescribeRelight(query) : string.Empty)}");
     }
     // What decides a relight's cost: the probes it shades and, for each, the shadowing point lights in range of its
@@ -596,6 +657,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public uint[]? CacheSlots;
         public uint[]? Reuse;
         public long Rays;
+        public long Tests;
         public uint HitCapacity;
         public int Geometry;
         public int Window;
