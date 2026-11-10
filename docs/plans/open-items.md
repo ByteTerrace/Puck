@@ -87,11 +87,14 @@ A1. **What the windowed checks left open.** The walkthrough slice's tour runs to
    - a body on a twisted static solid was not repeated in a windowed World;
    - the Humble Brick's face at close range shows line artifacts and a ragged
      d-pad on both backends ([Bake detail](#bake-detail)).
-A3. Adversarial reviews owed on landed invariant work, findings-only, each by
-   another family than its author: the demand tiers' cache identity and
-   publication (`bake-demand-tiers.md`); the exposure readback's slot lifetime
-   (`RenderGraphSlotResults` to `SdfViewExposures.Publish`); the indirect
-   lane's pass-block layout change (one uint removed). Also queued: three cold
+A3. Adversarial reviews owed on landed work in the review-only classes of
+   [hazards](../development/hazards.md#silent-invariants), findings-only, each
+   by another family than its author: the demand tiers' cache identity and
+   publication (`bake-demand-tiers.md`; an invariant kept by convention), and
+   the exposure readback's slot lifetime (`RenderGraphSlotResults` to
+   `SdfViewExposures.Publish`; GPU fences and resource lifetimes). The indirect
+   lane's pass-block layout change needs none: the generated shader interface
+   and `ShaderInterfaceLayout.Mismatch` cover that class. Also queued: three cold
    bakes per backend from an empty `--cache-dir` with `paused` and `lockstep`,
    to show whether a late retier changes which tiers are stored.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
@@ -106,6 +109,21 @@ D. The frame bar (item 1 below): the meadow's meshes outgrow the mesh region and
    roof at p99 on both backends.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
+F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
+   because it adds a full-screen cost and the bar must
+   be known first, and it starts with a research round, since it decides how a
+   post pass works: the separable complex-kernel circular bokeh (Garcia,
+   Frostbite, [GDC 2018](https://media.gdcvault.com/gdc2018/presentations/Garcia_Kleber_CircularDepthOf.pdf))
+   against gather with tile dilation, with near and far layers handled
+   correctly (the simplified complex-kernel form blurs with one radius per
+   pixel and lets sharp foreground bleed), and a Puck-native option weighed:
+   defocus traced from the field's exact depth where a view renders the field.
+   It is a mechanism, not a look: focus distance and aperture are camera-program
+   operations, off by default, opted into by the standard package or an author.
+   Proving cases in the debug world: the avatar studio's photo area (a focus
+   pull on the subject), Wonderland (shallow focus as the scale cue at a
+   quarter size), and portals and screens (focus marking the frame or the
+   world beyond). The walkthrough's studio inspection stop reads it.
 
 **Unlanded branches on origin**, each kept on purpose:
 
@@ -528,6 +546,24 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
+- [high] Concurrency is hand-rolled across the engine: `lock`, `Task.Run`, `new
+  Thread`, `ThreadPool` and `Parallel.For` appear 1,028 times in 323 files under
+  `src`, densest in the bake and irradiance code (`SdfMeshIrradiance.cs`,
+  `SdfMeshPathBake.cs` and its residency). The walkthrough tour's stall was one
+  case: presentation waiting on lighting convergence starved the console, against
+  the host loop's contract that control work progresses on held iterations. The
+  structural fixes, in order: finish moving every pool and handoff onto
+  `Puck.Hosting.Jobs` and refuse `Task.Run`, `new Thread` and `ThreadPool`
+  outside it with an analyzer; give the control plane (console, MCP, input) a
+  guaranteed phase of the host loop, and give every cross-subsystem wait a
+  deadline and a named reason; make thread ownership of the state arena, the
+  frame thread and each GPU queue a checked type rather than a comment; prefer
+  publish-once handoff over shared state under locks, with the scheduler
+  analyzer and `puck scan`'s `LockAnalyzer` switched on per project as each
+  project migrates (no recorded allowlist: the owner retired ratchets and
+  ledgers); and research a systematic
+  schedule explorer for .NET (Microsoft Coyote) beside the existing
+  `--workers` harness, since these defects rarely show in one run.
 - [medium] The rule phase's remaining volatile and visit costs, as
   `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
   version (the chess sweeps), a placement-pose move marks its readers in full
@@ -1203,6 +1239,21 @@ custodian reaches a remote home only through a remote authority its host
 already opened. The debug world's faerie declares no role yet, so it does not
 travel.
 
+- [medium · research input] Flecs, the one major ECS the rule-evaluation round
+  did not read ([memo](rule-evaluation-cost.md)), adds two ideas to weigh at
+  MMO scale when a round next touches state or federation. Relationships are
+  first-class data: "a relationship adds a pair of two things to an entity",
+  and transitive ones answer queries such as `(IsA, Fruit)` matching every
+  subtype. Runtime inheritance with override: "an entity with an IsA
+  relationship to another entity is equivalent to the other entity" and reads
+  its components until it sets its own
+  ([Flecs relationships](https://www.flecs.dev/flecs/Relationships.html)).
+  Puck models containment, custody and membership as keyed rows and placement
+  parent chains, and resolves overrides at compile time; the question is
+  whether a general relationship primitive and runtime prototype sharing pay
+  for an MMO's inventories, guilds and millions of near-identical instances.
+  Flecs' own warning: heavy relationship use fragments its tables, which it
+  mitigates with `DontFragment` relationships.
 Neighbour contact replay packet (independent of companion custody):
 
 - [high] Tape fixed neighbour inputs at their local admission tick.
@@ -2047,6 +2098,21 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop timed on a quiet machine and the cold and warm builds
 measured.
 
+- [medium] A `.puck` compile of the debug world takes about 15 s (`puck compile
+  worlds/debug/debug.puck`, with or without `--validate`, against 0.17 s of CLI
+  startup; indicative, on a lightly loaded machine), and every document edit
+  pays it before a reload: half the 30-second edit-to-running budget, in the
+  authoring loop. It is not what makes boot or bake slow (the first irradiance
+  trace alone took 373 s in the walkthrough tour's boot). First profile the
+  15 s for hot spots and fix them. Only if the cost proves spread across the
+  pipeline, take Zig's incremental compiler as the design (mlugg,
+  [Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/);
+  the author's outline on
+  [Ziggit](https://ziggit.dev/t/how-zig-incremental-compilation-is-implemented-internally/3543/2)):
+  per-declaration units, dependencies recorded during analysis, and early
+  cutoff when a re-analysed value is unchanged. Their own 37 ms update spent
+  about 30 ms in a traversal the change did not need, which is why the profile
+  comes first.
 - [medium] Reload deltas cannot express key order: the sender proves its delta
   with `JsonNode.DeepEquals`, which ignores object key order, and the diff and
   merge (`WorldDocumentBasis`) keep old order and append new keys. Fields that

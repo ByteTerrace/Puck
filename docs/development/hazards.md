@@ -54,6 +54,7 @@ preferred outcome.
 | GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |
 | A GPU read indexed by GPU data (a raster hit's draw and triangle, a record a pass left from an earlier frame) past its buffer: Direct3D 12's bounded views read zero, Vulkan reads freed or unmapped memory and loses the device, intermittently | A Vulkan run that loses the device names the passes in flight (`VK_NV_device_diagnostic_checkpoints`); GPU-assisted validation sees it only on a run where the read happens | Yes |
 | Process environment reads and any-address listeners | `ENV001`, `NET001` | No |
+| A wait across threads or subsystems: one subsystem holding another's thread on its progress (a frame held for lighting starving the console), a wait with no deadline or reason | Review, until the job system's one scheduler and the control plane's guaranteed phase cover it | Yes |
 | Trust boundaries: grants, federation, admission, credentials, a cap on what a sender claims | Review | Yes |
 | Deleting, moving or rewriting files and persisted data outside the intended root or shape | Review | Yes |
 | [An invariant kept by convention](#an-invariant-kept-by-convention), [unbounded retention](#unbounded-retention), [one local fault poisoning a global query](#one-local-fault-poisoning-a-global-query) | Review | Yes |
