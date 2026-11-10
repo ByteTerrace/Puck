@@ -2082,7 +2082,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
-        m_viewports.PublishFirstView(camera: m_views[0].Camera);
+        m_viewports.PublishFirstView(camera: m_views[0].Camera, height: (m_views[0].Region.Height * height));
 
         // The camera views film this frame as views of it after its own, so they render from the world's residency.
         m_frameViews.Clear();

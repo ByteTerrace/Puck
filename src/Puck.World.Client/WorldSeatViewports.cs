@@ -43,6 +43,7 @@ public sealed class WorldSeatViewports {
     private readonly WorldSeatView[] m_seats = new WorldSeatView[PlayerRoster.MaxSlots];
 
     private CameraSnapshot m_firstView;
+    private float m_firstViewHeight;
     private bool m_hasFirstView;
 
     /// <summary>Gets the live OS client-area height, px — 0 until the first frame publishes it.</summary>
@@ -66,6 +67,27 @@ public sealed class WorldSeatViewports {
                 : null);
         }
     }
+    /// <summary>Gets the display pixels a metre covers one metre in front of the <see cref="Viewer"/>: half the pixels
+    /// its view is high over the tangent of half its field of view. A window's view is that view carried through its
+    /// glass, so it resolves what the viewer does (<see cref="WorldWindowFrustumFit.ShownHeight"/>). Zero when the frame
+    /// published no viewer.</summary>
+    public float ViewerPixelsPerMetre {
+        get {
+            foreach (ref readonly var seat in m_seats.AsSpan()) {
+                if (seat.Present) {
+                    return PixelsPerMetre(camera: seat.Camera, height: (seat.Region.Height * seat.Height));
+                }
+            }
+
+            return (m_hasFirstView
+                ? PixelsPerMetre(camera: in m_firstView, height: m_firstViewHeight)
+                : 0f);
+        }
+    }
+
+    private static float PixelsPerMetre(in CameraSnapshot camera, float height) => ((camera.TanHalfFieldOfView > 0f)
+        ? ((height * 0.5f) / camera.TanHalfFieldOfView)
+        : 0f);
 
     /// <summary>Clears every seat's view and the first view — the start of a dress; a seat that resolves no view this
     /// frame stays absent. The client extent is NOT cleared: it is a window fact, not a per-seat one, and the freshest
@@ -77,8 +99,10 @@ public sealed class WorldSeatViewports {
     /// <summary>Publishes the camera the frame's first view renders with, the <see cref="Viewer"/> while no seat
     /// resolves a view.</summary>
     /// <param name="camera">The render camera's snapshot, exactly as the view drew with it.</param>
-    public void PublishFirstView(in CameraSnapshot camera) {
+    /// <param name="height">The height of the view's region of the frame, px.</param>
+    public void PublishFirstView(in CameraSnapshot camera, float height) {
         m_firstView = camera;
+        m_firstViewHeight = height;
         m_hasFirstView = true;
     }
     /// <summary>Publishes one seat's resolved view for this frame.</summary>

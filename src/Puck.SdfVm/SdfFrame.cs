@@ -30,11 +30,18 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
-    /// <summary>The pixels high the view's own image is when it renders into one apart from the residency's output (a
-    /// camera filmed for a screen, a session's window), which the mesh demand measures projected sizes in
-    /// (<see cref="SdfMeshDemand"/>); zero, the default, for a view whose region places it in the residency's
-    /// output.</summary>
-    public uint DemandHeight { get; init; }
+    /// <summary>The pixels high the mesh demand measures the view's projected sizes in (<see cref="SdfMeshDemand"/>)
+    /// when the view renders into an image apart from the residency's output: a camera filmed for a screen its own
+    /// image's height, and a window fitted to its glass the display pixels the glass spans from the viewer's eye, since
+    /// its image is the viewer's own view carried through the glass. Zero, the default, for a view whose region places
+    /// it in the residency's output.</summary>
+    public float DemandHeight { get; init; }
+
+    /// <summary>Whether the view demands meshes only inside its frustum (<see cref="SdfMeshDemand"/>): a window fitted
+    /// to its glass, whose frustum is the aperture from the viewer's eye however the viewer turns, so nothing beside or
+    /// before the glass can enter its image without the viewer walking. <see langword="false"/>, the default, for a view
+    /// that can turn to anything about its eye within a frame, which demands by distance alone.</summary>
+    public bool DemandWithinView { get; init; }
 
     /// <summary>The render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/> into
     /// <see cref="RenderCeiling"/>. Scratch is allocated at that fraction of the view's output extent; its published

@@ -138,6 +138,17 @@ public static class WorldWindowFrustumFit {
 
         return viewports.Viewer?.Position;
     }
+    /// <summary>Returns the display pixels a window's glass spans from the eye its camera was fitted to: the fitted
+    /// frustum's height at one metre times the viewer's pixels a metre there. A fit carries the viewer's rays through
+    /// the glass unchanged in angle, so the window's image shows the destination at the viewer's own resolution
+    /// whatever size the image is rendered at, and its mesh demand measures projected sizes in this height
+    /// (<see cref="Puck.SdfVm.SdfViewSnapshot.DemandHeight"/>).</summary>
+    /// <param name="fitted">The window's fitted camera.</param>
+    /// <param name="viewerPixelsPerMetre">The display pixels a metre covers one metre in front of the viewer
+    /// (<see cref="WorldSeatViewports.ViewerPixelsPerMetre"/>).</param>
+    /// <returns>The height in display pixels; zero when the viewer's resolution is unknown.</returns>
+    public static float ShownHeight(in CameraSnapshot fitted, float viewerPixelsPerMetre) =>
+        MathF.Max(x: 0f, y: ((2f * fitted.TanHalfFieldOfView) * viewerPixelsPerMetre));
     /// <summary>Returns the fit a window session renders through (<see cref="WorldSessionSceneEmitter.SetWindowFit"/>):
     /// asked as each frame is dressed, it reads the documents and the screen row at that moment and fits against the
     /// viewer's eye in that frame (<see cref="TryFitFromView"/>), so a placement mutation or a camera move reaches the

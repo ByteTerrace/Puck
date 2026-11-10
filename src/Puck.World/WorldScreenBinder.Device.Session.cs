@@ -34,6 +34,7 @@ public sealed partial class WorldScreenBinder {
         );
         emitter.FitSkyViews = (views, sky, width, height) => FitSessionSky(feed: feed, height: height, sky: sky, views: views, width: width);
         emitter.SetWindowFit(fit: feed.WindowFit);
+        emitter.ViewerPixelsPerMetre = () => (m_viewports?.ViewerPixelsPerMetre ?? 0f);
 
         // The destination instance's own render envelope is not configured for a session screen by default — an
         // unconfigured envelope admits any document mutation regardless of capacity. Configuring it here closes
@@ -111,19 +112,37 @@ public sealed partial class WorldScreenBinder {
     }
     // The view a session renders its destination with this frame, as a view of a residency it shares: its camera (a
     // window's fit, or its projection's camera) at a window's or a session screen's quality, under the session's
-    // resolution policy.
-    private SdfViewSnapshot SharedViewOf(SessionFeed feed) => ResolveResolution(
-        height: ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
-        name: feed.RegistrationName,
-        view: new SdfViewSnapshot(
-            Camera: CameraOf(feed: feed),
-            Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-        ) {
-            Quality = WorldSessionSceneEmitter.ReducedQuality,
-            // A window shows the luminance beyond its glass, which the view looking through it exposes.
-            Unexposed = (feed.Projection == WorldScreenProjection.Window),
-        },
-        width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
+    // resolution policy. A fitted window's mesh demand measures in the display pixels its glass spans (WindowDemandOf)
+    // and holds to its frustum, the aperture from the viewer's eye.
+    private SdfViewSnapshot SharedViewOf(SessionFeed feed) {
+        var camera = CameraOf(feed: feed, fitted: out var fitted);
+        var view = ResolveResolution(
+            height: ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
+            name: feed.RegistrationName,
+            view: new SdfViewSnapshot(
+                Camera: camera,
+                Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
+            ) {
+                Quality = WorldSessionSceneEmitter.ReducedQuality,
+                // A window shows the luminance beyond its glass, which the view looking through it exposes.
+                Unexposed = (feed.Projection == WorldScreenProjection.Window),
+            },
+            width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
+        );
+
+        if (!fitted) { return view; }
+
+        return ((WindowDemandOf(fitted: in camera) is > 0f and var shown)
+            ? (view with { DemandHeight = shown, DemandWithinView = true })
+            : (view with { DemandWithinView = true }));
+    }
+    // The display pixels a fitted window's glass spans from the presentation's viewer, which its mesh demand measures
+    // projected sizes in; zero before a dress has published a viewer, when the view measures in its own image. A window
+    // one level down fits to the camera of the window above it, whose rays are the viewer's own, so every level
+    // measures by the one viewer.
+    private float WindowDemandOf(in CameraSnapshot fitted) => WorldWindowFrustumFit.ShownHeight(
+        fitted: in fitted,
+        viewerPixelsPerMetre: (m_viewports?.ViewerPixelsPerMetre ?? 0f)
     );
     // Frames every session joined to a routed scene for the frame its residency is about to capture, after the world's
     // own capture has resolved this frame's seat cameras.

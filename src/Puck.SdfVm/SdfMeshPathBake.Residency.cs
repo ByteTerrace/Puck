@@ -421,7 +421,7 @@ public sealed partial class SdfMeshPathBake {
 
                 var eye = Demand.Point(index: index);
 
-                lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-point={index} eye={eye.X:0.##},{eye.Y:0.##},{eye.Z:0.##} pixels-a-metre={Demand.PixelsPerMetre(index: index):0.#} groups={groups[index]} triangles={triangles[index]} finest-tier={finest[index]}"));
+                lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-point={index} eye={eye.X:0.##},{eye.Y:0.##},{eye.Z:0.##} pixels-a-metre={Demand.PixelsPerMetre(index: index):0.#} within-view={(Demand.WithinView(index: index) ? 1 : 0)} groups={groups[index]} triangles={triangles[index]} finest-tier={finest[index]}"));
             }
             top.Sort(comparison: static (left, right) => right.Triangles.CompareTo(value: left.Triangles));
             for (var index = 0; ((index < top.Count) && (index < largest)); index++) { lines.Add(item: top[index].Line); }

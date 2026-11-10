@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -22,16 +23,26 @@ public sealed class SdfMeshDemand {
     /// as though this far off, alike with every other such box.</summary>
     public const float NearDistance = 0.25f;
 
+    /// <summary>The fraction a view's frustum sides are widened by where the view demands only inside it
+    /// (<see cref="SdfViewSnapshot.DemandWithinView"/>): half as wide again, so the viewer's next steps find the meshes
+    /// beside the aperture's edge at the tier their view asks.</summary>
+    public const float WithinViewMargin = 0.5f;
+
     private Vector3[] m_points = new Vector3[4];
     private float[] m_focal = new float[4];
+    // Each point's camera, read only where the point demands inside its view (m_within).
+    private CameraSnapshot[] m_cameras = new CameraSnapshot[4];
+    private bool[] m_within = new bool[4];
 
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
 
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
-    /// it, from its own image's height (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of the output's
-    /// height, and its field of view. The points keep the views' order, so the first is the primary seat's while that seat
-    /// is presented here.</summary>
+    /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
+    /// the output's height, and its field of view. A view that demands only inside its frustum
+    /// (<see cref="SdfViewSnapshot.DemandWithinView"/>) demands nothing of a box wholly outside it, widened by
+    /// <see cref="WithinViewMargin"/> and begun at its near plane. The points keep the views' order, so the first is the
+    /// primary seat's while that seat is presented here.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="height">The output's height in display pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -44,6 +55,8 @@ public sealed class SdfMeshDemand {
         if (m_points.Length < views.Count) {
             m_points = new Vector3[views.Count];
             m_focal = new float[views.Count];
+            m_cameras = new CameraSnapshot[views.Count];
+            m_within = new bool[views.Count];
         }
         for (var index = 0; (index < views.Count); index++) {
             var view = views[index];
@@ -52,7 +65,9 @@ public sealed class SdfMeshDemand {
 
             if (view.Elsewhere || !(view.Region.Height > 0f) || !(tan > 0f) || !float.IsFinite(f: camera.Position.X)) { continue; }
             m_points[count] = camera.Position;
-            m_focal[count] = ((MathF.Max(x: 1f, y: ((view.DemandHeight > 0) ? view.DemandHeight : (view.Region.Height * height))) * 0.5f) / tan);
+            m_focal[count] = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
+            m_within[count] = view.DemandWithinView;
+            if (view.DemandWithinView) { m_cameras[count] = (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }); }
             count++;
         }
         Count = count;
@@ -69,8 +84,11 @@ public sealed class SdfMeshDemand {
         if (Count == m_points.Length) {
             Array.Resize(array: ref m_points, newSize: (2 * m_points.Length));
             Array.Resize(array: ref m_focal, newSize: (2 * m_focal.Length));
+            Array.Resize(array: ref m_cameras, newSize: (2 * m_cameras.Length));
+            Array.Resize(array: ref m_within, newSize: (2 * m_within.Length));
         }
         m_points[Count] = eye;
+        m_within[Count] = false;
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
     }
@@ -78,7 +96,8 @@ public sealed class SdfMeshDemand {
     public void Clear() => Count = 0;
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
-    /// a tier's cell is measured against (<see cref="SdfMeshTier.Of"/>).</summary>
+    /// a tier's cell is measured against (<see cref="SdfMeshTier.Of"/>). A point that demands only inside its view
+    /// counts for no box outside it.</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
@@ -94,6 +113,8 @@ public sealed class SdfMeshDemand {
 
         point = -1;
         for (var index = 0; (index < Count); index++) {
+            if (!Demands(index: index, center: center, half: half)) { continue; }
+
             var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]);
 
             if (pixel < finest) {
@@ -133,7 +154,7 @@ public sealed class SdfMeshDemand {
     /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a
     /// metre over the distance from its eye to the box, no nearer than <see cref="NearDistance"/>: the nearer, and the
     /// finer the view, the sooner, whatever the box's size. A box under a pixel ranks below every demanded one, by the
-    /// share of a pixel it covers. Zero with no demand point.</summary>
+    /// share of a pixel it covers. Zero with no demand point, or with none whose view may hold the box.</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <returns>The priority: past one for a demanded box, below one for another.</returns>
@@ -142,6 +163,8 @@ public sealed class SdfMeshDemand {
         var best = 0f;
 
         for (var index = 0; (index < Count); index++) {
+            if (!Demands(index: index, center: center, half: half)) { continue; }
+
             var density = (m_focal[index] / MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])));
             var size = (diagonal * density);
 
@@ -178,6 +201,10 @@ public sealed class SdfMeshDemand {
     /// <param name="index">The point, below <see cref="Count"/>.</param>
     /// <returns>The pixels a metre.</returns>
     public float PixelsPerMetre(int index) => m_focal[index];
+    /// <summary>Returns whether a demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>).</summary>
+    /// <param name="index">The point, below <see cref="Count"/>.</param>
+    /// <returns><see langword="true"/> for a point bounded to its view's frustum.</returns>
+    public bool WithinView(int index) => m_within[index];
     /// <summary>Returns the world-axis box about a draw's host box (<see cref="SdfMeshBox.TryOf"/>).</summary>
     /// <param name="draw">The draw.</param>
     /// <param name="center">The box's center; the origin for a draw no host box bounds.</param>
@@ -191,6 +218,15 @@ public sealed class SdfMeshDemand {
         return boxed;
     }
 
+    // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
+    // box its widened frustum may hold for one that demands inside its view.
+    private bool Demands(int index, Vector3 center, Vector3 half) => (!m_within[index] || m_cameras[index].MaySee(
+        center: center,
+        halfX: new Vector3(x: half.X, y: 0f, z: 0f),
+        halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
+        halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
+        margin: WithinViewMargin
+    ));
     // The distance from a point to a box, zero inside it.
     private static float DistanceTo(Vector3 center, Vector3 half, Vector3 point) =>
         Vector3.Max(value1: (Vector3.Abs(value: (point - center)) - half), value2: Vector3.Zero).Length();

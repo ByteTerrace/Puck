@@ -143,7 +143,7 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
             Add(hash: ref hash, value: camera.TanHalfFieldOfView); Add(hash: ref hash, value: camera.AspectRatio); Add(hash: ref hash, value: camera.Near); Add(hash: ref hash, value: camera.FrustumOffset.X); Add(hash: ref hash, value: camera.FrustumOffset.Y);
             Add(hash: ref hash, value: view.Region.X); Add(hash: ref hash, value: view.Region.Y); Add(hash: ref hash, value: view.Region.Width); Add(hash: ref hash, value: view.Region.Height);
             Add(hash: ref hash, value: view.RenderScale); Add(hash: ref hash, value: view.ResolvedRenderScale); Add(hash: ref hash, value: view.UpscaleSharpness); Add(hash: ref hash, value: view.ScreenFidelity);
-            hash.Add(value: view.DemandHeight); hash.Add(value: view.CutRevision); hash.Add(value: ((byte)(view.Elsewhere ? 1 : 0))); hash.Add(value: ((byte)(view.Unexposed ? 1 : 0)));
+            Add(hash: ref hash, value: view.DemandHeight); hash.Add(value: view.CutRevision); hash.Add(value: ((byte)(view.Elsewhere ? 1 : 0))); hash.Add(value: ((byte)(view.Unexposed ? 1 : 0))); hash.Add(value: ((byte)(view.DemandWithinView ? 1 : 0)));
             Add(hash: ref hash, value: view.Quality.SkyFieldScale); hash.Add(value: ((uint)view.Quality.ShadowResolution));
             hash.Add(value: ((byte)(view.Quality.GeometryOnly ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableAmbientOcclusion ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableSoftShadows ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.Temporal ? 1 : 0)));
             hash.Add(value: ((uint)view.StampFade.FirstSlot)); hash.Add(value: ((uint)view.StampFade.SlotCount)); Add(hash: ref hash, value: view.StampFade.Opacity);

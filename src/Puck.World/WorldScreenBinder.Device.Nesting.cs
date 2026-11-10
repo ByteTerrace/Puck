@@ -157,13 +157,19 @@ public sealed partial class WorldScreenBinder {
 
     // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
     // has no answer and for a camera projection.
-    private CameraSnapshot CameraOf(SessionFeed feed) {
+    private CameraSnapshot CameraOf(SessionFeed feed) => CameraOf(feed: feed, fitted: out _);
+    // CameraOf, and whether the camera is a window's fit.
+    private CameraSnapshot CameraOf(SessionFeed feed, out bool fitted) {
         if (
             (feed.Projection == WorldScreenProjection.Window) &&
-            (feed.WindowFit?.Invoke() is { } fitted)
+            (feed.WindowFit?.Invoke() is { } fit)
         ) {
-            return fitted;
+            fitted = true;
+
+            return fit;
         }
+
+        fitted = false;
 
         return WorldSessionSceneEmitter.ResolveCamera(
             cameraName: feed.EffectiveCamera,

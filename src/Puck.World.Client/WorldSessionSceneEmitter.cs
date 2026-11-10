@@ -220,6 +220,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
     /// records. <see langword="null"/>, the default, films none.</summary>
     public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <summary>Gets or sets what reads the display pixels a metre covers one metre in front of the presentation's
+    /// viewer (<see cref="WorldSeatViewports.ViewerPixelsPerMetre"/>), which a fitted window's mesh demand measures by
+    /// (<see cref="WorldWindowFrustumFit.ShownHeight"/>). <see langword="null"/>, the default, or a reading of zero
+    /// measures the view in its own image.</summary>
+    public Func<float>? ViewerPixelsPerMetre { get; set; }
     /// <summary>The host's live render levers that reach this world (its cel-shading override and exposure pin), or
     /// <see langword="null"/> to follow this world's document alone.</summary>
     public WorldRenderSettings? Session { get; init; }
@@ -483,7 +488,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
-        var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
+        var fitted = m_windowFit?.Invoke();
+        var camera = (fitted ?? ResolveCamera(
             cameraName: m_effectiveCameraName,
             domains: m_domains,
             height: height,
@@ -498,6 +504,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
+            DemandHeight = ((fitted is null)
+                ? 0f
+                : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
+            DemandWithinView = (fitted is not null),
             Quality = ReducedQuality,
             // A window shows the luminance beyond its glass, which the view looking through it exposes.
             Unexposed = (m_windowFit is not null),
