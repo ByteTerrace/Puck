@@ -106,6 +106,21 @@ D. The frame bar's hitches (item 1 below): flight B and the teal roof at p99 on
    both backends, and Vulkan's meadow.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
+F. Depth of field (the owner's go-ahead): Puck has none. It comes after A1's
+   frame-bar reading and D, because it adds a full-screen cost and the bar must
+   be known first, and it starts with a research round, since it decides how a
+   post pass works: the separable complex-kernel circular bokeh (Garcia,
+   Frostbite, [GDC 2018](https://media.gdcvault.com/gdc2018/presentations/Garcia_Kleber_CircularDepthOf.pdf))
+   against gather with tile dilation, with near and far layers handled
+   correctly (the simplified complex-kernel form blurs with one radius per
+   pixel and lets sharp foreground bleed), and a Puck-native option weighed:
+   defocus traced from the field's exact depth where a view renders the field.
+   It is a mechanism, not a look: focus distance and aperture are camera-program
+   operations, off by default, opted into by the standard package or an author.
+   Proving cases in the debug world: the avatar studio's photo area (a focus
+   pull on the subject), Wonderland (shallow focus as the scale cue at a
+   quarter size), and portals and screens (focus marking the frame or the
+   world beyond). The walkthrough's studio inspection stop reads it.
 
 **Unlanded branches on origin**, each kept on purpose:
 
