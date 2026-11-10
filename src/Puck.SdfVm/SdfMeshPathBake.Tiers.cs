@@ -25,6 +25,9 @@ public sealed partial class SdfMeshPathBake {
     private int m_measureAt;
     private long m_measureSweep;
     private long m_measureBoxes;
+    // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
+    // frame's thread (DetailSettled).
+    private int m_detailQuiet;
     // The residency's mesh region as the frame's thread last read it (ObserveResidency): its limit, zero before the
     // first reading, the bytes the frame's draws name, and the meshes it refuses.
     private long m_regionLimitBytes;
@@ -45,6 +48,16 @@ public sealed partial class SdfMeshPathBake {
     private int m_biasWait = SdfMeshTier.BiasQuietFrames;
     private int m_biasSinceLowered = int.MaxValue;
     private readonly List<(long Saving, int Index, int Tier)> m_spareCandidates = [];
+
+    /// <summary>Gets whether the bake's meshes stand at the detail its demand asks and its mesh region's budget
+    /// allows: for <see cref="SdfMeshTier.SettleFrames"/> prepared frames in a row no group was planned again at
+    /// another tier, none was landing, none that owes a finer tier was waiting its hold
+    /// (<see cref="SdfMeshTier.HoldFrames"/>), and the budget pressed on nothing it can still coarsen. A finer tier
+    /// the budget holds back at the most bias, and the slow step that takes a half rung of bias back
+    /// (<see cref="SdfMeshTier.BiasQuietFrames"/>), are where the detail rests, not a move still owed.
+    /// <see cref="Pending"/> does not cover this: a bake with every group landed still owes the tiers its demand
+    /// moved to. Read from any thread.</summary>
+    public bool DetailSettled => (Volatile.Read(location: ref m_detailQuiet) >= SdfMeshTier.SettleFrames);
 
     // The bytes of mesh region the bake budgets its meshes to; no budget before the region's limit is read.
     private long RegionBudgetBytes => ((m_regionLimitBytes == 0L) ? long.MaxValue : ((m_regionLimitBytes / 8L) * SdfMeshTier.BudgetEighths));
@@ -241,6 +254,10 @@ public sealed partial class SdfMeshPathBake {
         var frames = 0;
         var spares = 0;
         var sparesWaiting = 0;
+        // The groups that owe a finer tier and wait their hold, and whether the budget presses on something it can
+        // still coarsen: with a replacement started or in flight, what keeps the detail from settled.
+        var owedWaiting = 0;
+        var pressing = false;
         // The bytes the draws would name with every demand half a rung finer and every spare group coarsened.
         var finer = 0L;
 
@@ -295,7 +312,11 @@ public sealed partial class SdfMeshPathBake {
             owed++;
             error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
             frames = Math.Max(val1: frames, val2: group.OwedFrames);
-            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused || (group.OwedFrames < SdfMeshTier.HoldFrames)) { continue; }
+            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused) { continue; }
+            if (group.OwedFrames < SdfMeshTier.HoldFrames) {
+                owedWaiting++;
+                continue;
+            }
             candidates.Add(item: (pixel, index, demanded));
         }
         m_tiersOwed = owed;
@@ -339,6 +360,7 @@ public sealed partial class SdfMeshPathBake {
                 expected -= saving;
                 replaced = true;
             }
+            pressing = ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0) || (bias < SdfMeshTier.MaxBias));
             if ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) {
                 m_biasPressed = 0;
             } else if ((++m_biasPressed >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
@@ -364,6 +386,10 @@ public sealed partial class SdfMeshPathBake {
         }
         if (m_biasSinceLowered < int.MaxValue) { m_biasSinceLowered++; }
         if (replaced) { m_productRevision++; }
+        Volatile.Write(
+            location: ref m_detailQuiet,
+            value: ((replaced || (inFlight > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + 1), val2: SdfMeshTier.SettleFrames))
+        );
     }
     // Plans a group again at another tier, as Plan would plan it at this frame, and starts it in the group's place: the
     // library's mesh of that geometry lands at once, and otherwise the group bakes (or loads from the store) while the

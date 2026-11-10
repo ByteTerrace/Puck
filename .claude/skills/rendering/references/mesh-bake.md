@@ -438,7 +438,13 @@ laws exercise that boundary.
   (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
   `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
   with the resident world; `Retier` reads the tiers from the measured
-  pixels every frame. With room in the mesh region a coarser tier demanded leaves the
+  pixels every frame. A bake whose groups have all landed can still owe
+  the tiers its demand moved to, which `SdfMeshPathBake.Pending` does not
+  say: `SdfMeshPathBake.DetailSettled` does, once `Retier` has replaced
+  nothing, had nothing landing or waiting its hold, and pressed on nothing
+  it can still coarsen for `SdfMeshTier.SettleFrames` frames, and
+  `world.wait bakes` waits on both for the world's own residency, that
+  many frames after it armed. With room in the mesh region a coarser tier demanded leaves the
   finer mesh where it is. The region's budget
   (`SdfMeshTier.BudgetEighths` of `SdfWorldTables.MeshRegionLimitBytes`, read
   each frame by `SdfMeshPathBake.ObserveResidency`) decides the rest in

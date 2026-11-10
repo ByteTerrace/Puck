@@ -28,6 +28,11 @@ public static class SdfMeshTier {
     public const int MeasureFrames = 8;
     /// <summary>The fewest boxes a frame measures, so a small world is measured whole each frame.</summary>
     public const int MeasureBoxes = 256;
+    /// <summary>The frames a residency's bake must have left its detail alone, nothing replaced, landing, waiting its
+    /// hold or pressed by the budget, before its detail is settled (<see cref="SdfMeshPathBake.DetailSettled"/>): two
+    /// whole measures (<see cref="MeasureFrames"/>), the one under way when the demand last moved and one whole
+    /// measure after it, so every group has been read against the demand as it stands.</summary>
+    public const int SettleFrames = (2 * MeasureFrames);
     /// <summary>The most groups one residency replans for a finer tier at once; the rest wait, the most demanded first,
     /// so a cut that demands a thousand finer tiers does not stage them all beside their resident meshes.</summary>
     public const int MaxInFlight = 64;

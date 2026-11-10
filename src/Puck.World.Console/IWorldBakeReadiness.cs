@@ -3,7 +3,8 @@ namespace Puck.World;
 /// <summary>
 /// Whether the presentation's mesh-path bakes are settled: every residency it renders (the world's own, each session
 /// view's, each routed scene's and each infinity layer's) has baked every group of the program it last drew, so no
-/// lattice is owed and no contour still runs. It is the fact the console waits on (<c>world.wait bakes</c>), so a
+/// lattice is owed and no contour still runs, and the world's own meshes stand at the detail its demand points ask
+/// and its mesh region's budget allows. It is the fact the console waits on (<c>world.wait bakes</c>), so a
 /// script that reads the baked frame waits on the bake rather than on a tick count. A host that composes no renderer
 /// registers none. Members are read on the host pump.
 /// </summary>
@@ -12,9 +13,11 @@ public interface IWorldBakeReadiness {
     long Frames { get; }
 
     /// <summary>Returns whether the bakes are settled for the content as it stood at <paramref name="mark"/>: the world's
-    /// presentation has captured a frame since, holds the program that frame's content called for (no rebuild in flight)
-    /// and has baked it, so a document change delivered before the mark (a <c>world.reload</c>, a row edit) is in the
-    /// bake rather than still queued. Allocates nothing, so a hold polls it every drain.</summary>
+    /// presentation has captured since the frames its bake measures every group's demand over, holds the program the
+    /// latest one's content called for (no rebuild in flight), has baked it, and has left its meshes' detail alone for
+    /// as long, so a change delivered before the mark (a <c>world.reload</c>, a row edit, a camera moved to a stop) is
+    /// in the bake rather than still queued or still to be measured. Allocates nothing, so a hold polls it every
+    /// drain.</summary>
     /// <param name="mark">The value of <see cref="Frames"/> when the wait armed.</param>
     /// <returns><see langword="true"/> when the bakes are settled for that content.</returns>
     bool IsSettledSince(long mark);
