@@ -543,6 +543,22 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
+- [high] Concurrency is hand-rolled across the engine: `lock`, `Task.Run`, `new
+  Thread`, `ThreadPool` and `Parallel.For` appear 1,028 times in 323 files under
+  `src`, densest in the bake and irradiance code (`SdfMeshIrradiance.cs`,
+  `SdfMeshPathBake.cs` and its residency). The walkthrough tour's stall was one
+  case: presentation waiting on lighting convergence starved the console, against
+  the host loop's contract that control work progresses on held iterations. The
+  structural fixes, in order: finish moving every pool and handoff onto
+  `Puck.Hosting.Jobs` and refuse `Task.Run`, `new Thread` and `ThreadPool`
+  outside it with an analyzer; give the control plane (console, MCP, input) a
+  guaranteed phase of the host loop, and give every cross-subsystem wait a
+  deadline and a named reason; make thread ownership of the state arena, the
+  frame thread and each GPU queue a checked type rather than a comment; prefer
+  publish-once handoff over shared state under locks, with `puck scan`'s
+  `LockAnalyzer` as a ratchet on new hot-path locks; and research a systematic
+  schedule explorer for .NET (Microsoft Coyote) beside the existing
+  `--workers` harness, since these defects rarely show in one run.
 - [medium] The rule phase's remaining volatile and visit costs, as
   `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
   version (the chess sweeps), a placement-pose move marks its readers in full
