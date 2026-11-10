@@ -185,7 +185,16 @@ public sealed partial class SdfMeshPathBake {
     // Finishes a group whose stage threw: it keeps drawing the mesh it drew before, if any, and a later program plans it
     // again rather than keeping the failure (Keeps).
     private void Fail(Group group, Exception exception) {
-        SdfMeshBakeReport.Failed(exception: exception, residency: Residency, selector: group.Selector);
+        SdfMeshBakeReport.Failed(
+            exception: exception,
+            geometry: group.Sealed,
+            high: group.High,
+            lattice: ((group.Final is { } final) ? (final.Lattice, FactorOf(final: final)) : null),
+            low: group.Low,
+            refinements: group.Refinements,
+            residency: Residency,
+            selector: group.Selector
+        );
         lock (m_gate) {
             group.Contouring = false;
             group.InFlight = false;

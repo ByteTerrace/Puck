@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
@@ -220,11 +221,20 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
     public static void StoreRefused(int selector, string refusal) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {selector} store refused: {refusal}");
-    /// <summary>Writes the line for a group whose stage threw.</summary>
+    /// <summary>Writes the lines for a group whose stage threw: the group's geometry, the box and lattice it had reached,
+    /// and the exception with its stack, so the failure can be found again and baked alone.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
+    /// <param name="geometry">The group's geometry.</param>
+    /// <param name="low">The low corner of the group's box.</param>
+    /// <param name="high">The high corner of the group's box.</param>
+    /// <param name="refinements">The narrowing passes the group had taken.</param>
+    /// <param name="lattice">The group's final lattice and its refinement factor, once it has one.</param>
     /// <param name="exception">What was thrown.</param>
-    public static void Failed(string residency, int selector, Exception exception) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] residency={residency} group={selector} failed: {exception.GetType().Name}: {exception.Message}");
+    public static void Failed(string residency, int selector, SdfMeshGeometry geometry, Vector3 low, Vector3 high, int refinements, (SdfMeshBakeRequest Request, int Factor)? lattice, Exception exception) => Console.Error.WriteLine(value: string.Create(
+        provider: CultureInfo.InvariantCulture,
+        handler: $"[sdf.mesh-bake] residency={residency} group={selector} geometry={geometry.Hash:x32} failed: {exception.GetType().Name}: {exception.Message} box=({low.X:R}, {low.Y:R}, {low.Z:R})..({high.X:R}, {high.Y:R}, {high.Z:R}) refinements={refinements} {((lattice is { } final) ? $"dims={final.Request.Dims} cell=({final.Request.Cell.X:R}, {final.Request.Cell.Y:R}, {final.Request.Cell.Z:R}) factor={final.Factor}" : "no final lattice")}\n{exception}"
+    ));
     /// <summary>Writes the line for a pool work item that threw past its own settling.</summary>
     /// <param name="exception">What was thrown.</param>
     public static void WorkFailed(Exception exception) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");

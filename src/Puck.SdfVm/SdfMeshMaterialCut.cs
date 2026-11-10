@@ -241,7 +241,9 @@ internal sealed class SdfMeshMaterialCut {
         // split: the triangle across such an edge takes the middle too (the pass after the quads), so the quartering
         // leaves no T-junction, which the audit and the preview would count as an open edge. The position is the midpoint
         // of the sites in site order, so a copy made for a crease's other side lands at the same bits and welds to it; the
-        // normal is the pair's own, so the copy shades its own face.
+        // normal is the pair's own, so the copy shades its own face. Two sites a rounding step apart have no point
+        // between them: their middle is one of them, the edge has nothing to split at, and it is not a quartered edge
+        // (the split of a triangle across it would hold that edge again, without end).
         var middles = new Dictionary<(uint Low, uint High), uint>();
         var quartered = new HashSet<(int Low, int High)>();
 
@@ -250,10 +252,12 @@ internal sealed class SdfMeshMaterialCut {
 
             if (!middles.TryGetValue(key: key, value: out var vertex)) {
                 var sites = Key(a: m_siteAt[positions[(int)a]], b: m_siteAt[positions[(int)b]]);
+                var (low, high) = (Position(vertex: sites.Low), Position(vertex: sites.High));
+                var point = Vector3.Lerp(value1: low, value2: high, amount: 0.5f);
 
-                vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: Vector3.Lerp(value1: Position(vertex: sites.Low), value2: Position(vertex: sites.High), amount: 0.5f));
+                vertex = Add(normal: (normals[(int)a] + normals[(int)b]), point: point);
                 middles.Add(key: key, value: vertex);
-                if (sites.Low != sites.High) { quartered.Add(item: sites); }
+                if ((point != low) && (point != high)) { quartered.Add(item: sites); }
             }
 
             return vertex;

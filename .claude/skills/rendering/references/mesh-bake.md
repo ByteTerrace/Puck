@@ -463,8 +463,18 @@ laws exercise that boundary.
   their window heads, set 2 cm and 5 cm back from the wall's faces, are a row
   per level and face of their own (`hall-cassettes-*`), each baking at 5 cm.
 - **The coarse narrowing keeps the rows a thin plate lies between.** The
-  narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
-  finest spacing of the surface, beside a sign change, or in a pair of rows a
+  narrowing (`SdfMeshPathBake.Refine`) measures the box one axis at a time.
+  Along the lattice's coarsest axis it keeps every sample within half the
+  cell's diagonal of the surface: the corner nearest a surface point is never
+  farther, so nothing a cell holds is cut off along that axis, and a line of
+  glyphs whose strokes the sample columns step over keeps the letters at its
+  ends. Along a finer axis the reach scales by that axis's spacing over
+  the coarsest, which is about half the spacing in a flat box and keeps the
+  box thin. A sample within an axis's reach joins that axis alone, with one
+  cell either side of itself; every reach is under its axis's spacing, so it
+  widens no box a sign change already bounds. A sample beside a sign change
+  joins every axis with the crossed edge and a cell either side of it. The box
+  also keeps a pair of rows a
   sheet thinner than the spacing passes between
   (`SdfSampledLattice.SheetsBetween`), and a final lattice all of one sign
   refines when that test finds a sheet rather than finishing empty. The pair
@@ -487,8 +497,8 @@ laws exercise that boundary.
   of a 1.8 m coarse cube in the box while its neighbour a row lands near is
   kept by the distance test (`SdfMeshPathBakeLawTests`, the plates law: four
   standalone 48 m strips); keeping samples within half a cell's diagonal
-  instead fattens the converged box until the final lattice steps over the
-  plates and the group bakes nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
+  along every axis instead fattens the converged box until the final lattice
+  steps over the plates and the group bakes nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.
