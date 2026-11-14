@@ -269,18 +269,18 @@ those triangles with audit scores near 10,000 (folds, flips and turned faces
 at a 2.1 mm cell): a contouring defect the finer cell exposes, filed under
 [bake detail](open-items.md#bake-detail).
 
-The debug world windowed on Direct3D 12, from the stage spawn after
-`world.wait bakes`: `world.residency` reads `groups=7519`, `level0=83,584,416`
-triangles (1,337,350,656 bytes), by tier 32.7 M at 2 mm, 37.6 M at 4 mm,
-8.2 M at 8 mm, 4.5 M at 16 mm and 0.5 M at 32 mm, against 25,678,428 before
-the rule and 213,506,399 under the rule unbounded; 53 demand points (every
-rendered view, the gallery's filmed cameras and screens among them) set
-those tiers. Walking to the pipe exhibit started 142 retiers; the worst owed
-error over the walk was 52.4 pixels for a group that had no mesh of its own
-yet, the longest owed interval 288 frames, and `tiers-owed` read zero again
-once the bakes settled at 88,521,957 resident triangles. The pipe and groove
-beads and the Moth's helmet ring, collar and lids read round in the settled
-captures at 0.9 to 2.4 m.
+The debug world windowed, cold from the stage spawn under the region's
+budget, alike on both backends: `world.residency` reads `groups=7528` and
+41.4 M level-0 triangles (0.66 GB of indices), 1.40 GB named of a 2.75 GB
+budget on a 12 GB device, against 25,678,428 before the rule, 83.6 M while
+every window demanded in every direction at its own image's height, and
+213,506,399 under the rule unbounded. 53 demand points (every rendered
+view, the gallery's filmed cameras and screens among them) set those
+tiers, and the root camera asks 31.9 M of the triangles. The meadow stop
+settles at 80 to 85 M triangles with 2.5 to 2.6 GB named, half a rung to a
+rung coarse (`detail-bias` 1 to 2); the teal roof at 78 to 82 M with no
+bias. The pipe and groove beads and the Moth's helmet ring, collar and
+lids read round in the settled captures at 0.9 to 2.4 m.
 
 ## The lighting follows the tier
 
@@ -295,8 +295,16 @@ before a still (`world.lockstep on`) therefore owes one whole drain for every
 wave of retiers a walk starts, and the walkthrough tour pays it at every
 exhibit: its drains after a retier wave ran about two and a half times as
 long as a relight alone, and a walk between exhibits starts several waves.
-The frame is unaffected in ordinary play, where the volume converges behind
-the picture.
+In ordinary play the volume converges behind the picture, and the frame
+pays only for what the change makes the background work submit. A swap of
+detail changes the mesh of every draw of the group, so a wave of retiers
+names two boxes a swapped draw (`SdfMeshIrradiance.ChangedBoxes`); the
+selection after it tested every stale probe's rays against every one of
+them in one job, which the frame waited on for several frames. The
+selection is now cut to a frame's share by its tests
+(`SdfMeshProbeGpuWork.Select`) and a change names at most
+`MaxChangeBoxes` boxes, their union past that, which bounds the job and
+retraces every probe inside the union.
 
 The surface a retier moves stays under half a pixel of the view that asked
 for it; light that reaches a probe two metres away does not change by an
@@ -331,7 +339,7 @@ on the `[sdf.mesh-gi] done` lines.
 | Invariant | Enforced by | Stops at |
 |---|---|---|
 | Every mesh is one tier of one geometry, and its key names that tier | `SdfMeshBakeGroup.Seal` appends the tier; no sealed geometry lacks it; `Tier` has no public setter | A caller constructing an `SdfMeshGeometry` by hand (none does; the record is public) |
-| The frame draws a complete tier | The one publication door (`Land` -> `group.Mesh` under the gate); a replacement draws the old whole mesh until the new one lands | Nothing: no path assembles across tiers |
+| The frame draws a complete tier | The one publication door (`Land` -> `group.Mesh` under the gate); a replacement draws the old whole mesh until the new one is baked | The mesh region: the new mesh's draws wait out of the frame until its words land there ([open](open-items.md#residency-and-streaming)); no path assembles across tiers |
 | A group's effective spacing is never finer than its tier's cell | One floor, `SdfMeshTier.Cell(group.Tier)`, applied where the factors are formed (`OwnFinal`, `UnionFinal`, `FactorOf`) | A new refinement path that forms a factor elsewhere; the three sites are the only ones today |
 | A group's tier never passes its finest or coarsest rung | `Seal` clamps through `SdfMeshTier.Clamp` from the group's members and planned box | None |
 | A live bake's tiers follow its demand | `SdfMeshPathBake` is the one residency planner and passes `TierOf` to every plan it makes | Convention at that one site; an offline planner that passes no tier gets the finest, by design |

@@ -71,12 +71,11 @@ A1. **What the windowed checks left open.** The walkthrough slice's tour runs to
    off course and no Vulkan validation line; the readings are in the commit
    that closed the checks. What remains, in this order:
    - the tour's verdict is red on both backends from its per-exhibit mesh
-     audits: fourteen blend exhibits and four primitives, not only the pipe
+     audits: thirteen blend exhibits and three primitives, not only the pipe
      and groove subtractions ([Bake detail](#bake-detail));
-   - a windowed World dies when its meshes outgrow the mesh region (the
-     meadow, both backends) and when Vulkan refuses the region's growth
-     ([residency](#residency-and-streaming)); the frame bar follows from it
-     (item D);
+   - a group whose detail swaps waits out of the frame while its new mesh
+     lands, and a device that refuses the mesh region's growth still ends
+     the World ([residency](#residency-and-streaming));
    - the owner's eye on the exposure calibration: gallery level 0 holds near
      EV 9 to 10 and the lawn near EV 14.3 at compensation 2, and Direct3D 12's
      first stop walked in from outdoors settles late
@@ -103,10 +102,9 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar (item 1 below): the meadow's meshes outgrow the mesh region and
-   the World dies on both backends
-   ([residency](#residency-and-streaming)), first; then flight B and the teal
-   roof at p99 on both backends.
+D. The frame bar (item 1 below): the teal roof's p99 and worst frame on both
+   backends, by what a swap of a group's detail costs the frame's thread
+   ([residency](#residency-and-streaming)).
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
@@ -148,14 +146,15 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
    pool against the caldera pack), then the per-milestone review across every
    place.
 1. The frame bar [high]: measured on the head with `bench frames` (five fresh
-   processes per backend, Direct3D 12 then Vulkan), the studio and flight B
-   hold 60 FPS on average and the teal roof misses it (17.29 and 17.27 ms); at
-   p99 the studio sits at about 17.2 ms on both backends, and flight B (22.1
-   and 21.8 ms) and the teal roof (34.6 and 30.7 ms, worst frame 62.7 and
-   52.1 ms) do not. The teal roof's p99 read about 22 ms on both backends
-   before the demand tiers raised the resident world. The meadow cannot be
-   read: its meshes outgrow the mesh region and the World dies
-   ([residency](#residency-and-streaming)). The far cascade's cadence is settled: a
+   processes per backend, Direct3D 12 then Vulkan), the studio, the meadow and
+   flight B hold 60 FPS on average and the teal roof misses it by 0.2 ms
+   (16.86 and 16.82 ms); at p99 the studio sits at about 17.2 ms on both
+   backends, the meadow at 17.4 and 18.6 ms, flight B at 18.7 and 20.4 ms,
+   and the teal roof at 23.5 and 22.5 ms with a worst frame of 54.8 and
+   46.2 ms. The teal roof's p99 read about 22 ms on both backends before the
+   demand tiers, and its Direct3D 12 worst frame was the same then; with 120
+   frames a sample its p99 is the second-worst frame, and it spreads 18.6 to
+   28.5 ms across five samples. The far cascade's cadence is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -187,6 +186,12 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      (`most-job`); a queued measurement holds the timing question. A probe scene
      upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
      share against its `SdfGpuWork.UploadSecondsOf` estimate.
+   - A swap of a group's detail stages every draw twice on the frame's
+     thread, and under the mesh region's budget tiers move both ways, so an
+     arrival pays it for every wave of swaps
+     ([residency](#residency-and-streaming)). Sampled thread time at the teal
+     roof put each staging near a frame's length at the debug world's draw
+     count.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
      lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
      during play still submits jobs of several frames' length. Cutting them with
@@ -3360,21 +3365,21 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 
 - [high] The walkthrough slice's tour is red on its mesh audits alone, on both
   backends: the CPU audit each exhibit reads (`SweepMeshAudit`,
-  `puck mesh audit --cpu --prototype <id>`) finds flipped triangles on all
-  fourteen blend exhibits and on four primitives. Flipped (folds):
-  `shape-blend-subtraction` 30 (98), `shape-blend-xor` 28 (102),
-  `shape-groove-union` 17 (160, and 6 uncovered cells),
-  `shape-smooth-intersection` 13 (33), `shape-chamfer-intersection` 11 (28),
-  `shape-pipe-union` 9 (20), `shape-cylinder` 9 (20), `shape-pipe-subtraction`
-  8 (18), `shape-smooth-subtraction` 8 (13), `shape-blend-union` 7 (21),
-  `shape-round-cone` 4 (12), `shape-cone` 4 (9), `shape-blend-intersection` 3
-  (7), `shape-chamfer-subtraction` 3 (7), `shape-smooth-union` 2 (6),
-  `shape-chamfer-union` 1 (3), `shape-groove-subtraction` 1 (8) and
-  `shape-plane` 1 (0). Which exhibits fold follows where the narrowed box puts
-  the lattice, not the shape alone: under the narrowing before
-  `SdfMeshPathBake.Refine` measured per axis, `shape-blend-union`,
-  `shape-cylinder` and `shape-plane` were clean and `shape-superellipsoid` was
-  red. Same class as the shin groups: contouring across a crease that falls
+  `puck mesh audit --cpu --prototype <id>`) finds flipped triangles on twelve
+  of the fourteen blend exhibits and on three primitives, and folds alone on
+  `shape-blend-xor` (95). Flipped (folds): `shape-groove-union` 76 (199, and
+  6 uncovered cells), `shape-blend-subtraction` 24 (91),
+  `shape-pipe-subtraction` 9 (20), `shape-smooth-subtraction` 8 (13),
+  `shape-smooth-intersection` 7 (21), `shape-chamfer-subtraction` 7 (16),
+  `shape-blend-intersection` 7 (12), `shape-smooth-union` 6 (18),
+  `shape-groove-subtraction` 6 (12), `shape-chamfer-union` 5 (15),
+  `shape-chamfer-intersection` 5 (12), `shape-cone` 4 (9), `shape-pipe-union`
+  3 (3), `shape-round-cone` 2 (6) and `shape-superellipsoid` 1 (3). Which
+  exhibits fold follows where the narrowed box puts the lattice, not the
+  shape alone: a narrowing that measured each axis apart turned
+  `shape-blend-union`, `shape-cylinder` and `shape-plane` red and
+  `shape-superellipsoid` clean, and was worse over the whole world, so it
+  went. Same class as the shin groups: contouring across a crease that falls
   between samples. The tour stays red until the contour holds a crease at any
   lattice alignment; its thresholds (`folds > 0` amber, `flipped > 0` red) are
   right and are not to be loosened.
@@ -3411,9 +3416,9 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 - [medium · unconfirmed whether new] The Humble Brick's face at close range
   shows thin red line artifacts across the screen bezel and a ragged d-pad
   outline, alike on both backends, so it is the bake or the material cut and
-  not a backend. Audit the device's groups (`puck mesh audit --cpu --prototype
-  <id>`) and compare a bake under the previous narrowing before naming the
-  cause.
+  not a backend. It was seen under the per-axis narrowing that has since
+  gone: look again first, then audit the device's groups (`puck mesh audit
+  --cpu --prototype <id>`).
 - [low] No console command names a bake's pending groups or maps a slot to its
   creation, so a bake that does not settle is found by reading stderr
   (`[sdf.mesh-bake] ... failed`) and matching geometry hashes by hand.
@@ -3534,31 +3539,54 @@ Grounded causes and leads, largest first:
   when it needs only the normals and level-index planes; a codec read of
   those planes alone would cut a rebuilt region's restore work. Owner:
   rendering/bake.
-- [high] The meadow's baked meshes outgrow the one mesh region, and the World
-  dies. A fresh windowed World sent to the sweep plan's `meadow` stop (`bench
-  frames --stop meadow`) needs about 5.6 GiB of mesh region where one region
-  holds `SdfWorldTables.MostMeshRegionBytes`; `SdfWorldTables.MeshRegionGrownBytes`
-  throws from `SdfWorldResidency.PrepareOnce` inside the frame, nothing catches
-  it, and the host stops. Two defects: the frame has no answer but a throw when
-  the named meshes outweigh the region (an eye that cannot be served degrades
-  its tier, D7's admitted degradation, or the region becomes several), and the
-  demand tiers ask the meadow for more detail than any budget holds. Until it
-  lands, `bench frames` cannot read the meadow. Owner: rendering/bake.
-- [high] Growing the mesh region kills a windowed Vulkan World on a discrete
-  adapter: `vkAllocateMemory` answers out of device memory in
-  `VulkanMemoryArena.Allocate`, reached from `GpuRegion.Grow` through
-  `SdfWorldTables.EnsureMeshRegionCapacity` inside the frame, and nothing
-  catches it. A grow holds the old buffer and the new one until the copy lands,
-  and the gallery alone holds nearly the whole of
-  `SdfWorldTables.MostMeshRegionBytes` after a few views (`world.residency`'s
-  `region-held`), so the device is asked for close to twice the region beside
-  everything else it holds. It struck a World that had walked gallery level 0,
-  the lawn and the moving-blend exhibits at a raised clock; a second World on
-  the same recipe survived by relocating instead. One cause with the item
-  above: the region has no budget smaller than its addressing limit, and a
-  grow that the device refuses has no answer but the host's death. The answer
-  is a region budget from the device's reported memory, and a refused grow
-  that degrades demand instead of throwing. Owner: rendering/bake.
+- [high · the missing frames unconfirmed in a capture] A group whose detail
+  swaps waits out of the frame while its new mesh lands, and the swap stages
+  every draw twice. A replacement draws the old mesh while the new one bakes
+  (`SdfMeshPathBake.StartReplacement`), but `FinishReplacements` hands the
+  group's draws to the new mesh the frame it is baked, before the region
+  holds its words; the landing filter in
+  `SdfWorldTables.StageMeshRegionCore` then keeps those draws out of the
+  staged records until the background uploads land it
+  (`SdfWorldTables.DrawsAwaitMeshes`; `world.residency`'s region line counts
+  `owed-frames`, which went on rising through an arrival at the meadow long
+  after the cold bake). The same step costs the frame: the dresser rebuilds
+  its whole draw list when any group's mesh changes
+  (`SdfMeshDresser.BuildDrawTopology`), the tables plan the arena over it and
+  stage the filtered list whole, and the landing stages it whole again. The
+  [demand tiers'](bake-demand-tiers.md#invariants-and-their-doors) "the frame
+  draws a complete tier" holds from the bake's side only. One answer for
+  both: the frame names the meshes it is about to draw beside those it draws,
+  the arena places and lands them, and a replacement takes the draws only
+  once the tables say its words stand in the region. The swap then owes
+  nothing, so it stages its changed draws alone
+  (`SdfWorldTables.TryStageDrawChanges` refuses a changed mesh today), and a
+  mesh the region refuses leaves the old one drawing. Check: `owed-frames`
+  holds still across a wave of swaps after the cold bake, a burst capture
+  across a swap shows the group in every frame, and `bench frames` reads the
+  teal roof's p99. Owner: rendering/bake.
+- [medium] A device that refuses the mesh region's growth still ends the
+  World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`
+  inside the frame. The region's limit (`SdfWorldTables.MeshRegionLimitOf`, a
+  share of the device's reported memory) and the bake's budget inside it keep
+  every debug-world stop from reaching the refusal on either backend; a
+  device whose memory other programs hold can still give it. A refused growth
+  should lower the limit to what the region holds and let the budget coarsen
+  ([the region's budget](bake-demand-tiers.md#the-regions-budget)). Owner:
+  rendering/bake.
+- [medium] What the region's budget leaves
+  ([the demand tiers' memo](bake-demand-tiers.md#the-regions-budget)): a root
+  camera demands in every direction and through walls, so the meadow settles
+  coarser than half a pixel where an occlusion-aware demand would not; the
+  bias is taken back only after `SdfMeshTier.BiasQuietFrames` quiet frames,
+  so a place left under pressure stays coarse for that long after the
+  pressure ends; a warm start's first plan lands before the residency reports
+  its limit; and `world.wait bakes` returns before the lighting's trace scene
+  has rebuilt over the swapped meshes.
+- [low] The capture feed's thread spends about a core scaling frames no
+  device asked for in a World started with `--devices none`
+  (`Win32GraphicsCaptureFeed.PumpFrame` into
+  `Win32GraphicsCaptureDevice.ScaleMapped`, in sampled thread time). Find
+  what subscribes it and let an unread feed idle. Owner: media.
 - The device-local memory no residency line names needs an owner line. The
   render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) run
   past the 1 MiB an MCP answer carries, so name it with a reading that fits

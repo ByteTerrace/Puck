@@ -344,7 +344,16 @@ done line; a nested residency's done line is insufficient.
   (`Affected`, with a millimetre margin so a hit on the draw's own face counts);
   every other probe keeps its hits and is relit. A layout or reach change, a
   draw with no box, or a probe older than the last `MaxChanges` changes
-  retraces.
+  retraces. A change of more than `MaxChangeBoxes` draws names their one
+  union box: the selection kernel walks a probe's rays over every newer box
+  on one GPU thread, so the box count bounds a selection job's length
+  whatever its probe count, and a swap of detail across the world changes
+  two boxes a swapped draw.
+- A selection is cut like a trace (`SdfMeshProbeGpuWork.Select`): jobs of
+  the probes whose box tests (`SelectTestsOf`) fit
+  `SdfGpuWork.FrameShareSeconds` at the measured rate, each answered before
+  the next is submitted. `most-job` prints a selection's `boxes` and
+  `tests`.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals
   agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
