@@ -73,9 +73,8 @@ A1. **What the windowed checks left open.** The walkthrough slice's tour runs to
    - the tour's verdict is red on both backends from its per-exhibit mesh
      audits: thirteen blend exhibits and three primitives, not only the pipe
      and groove subtractions ([Bake detail](#bake-detail));
-   - a group whose detail swaps waits out of the frame while its new mesh
-     lands, and a device that refuses the mesh region's growth still ends
-     the World ([residency](#residency-and-streaming));
+   - a device that refuses the mesh region's growth still ends the World
+     ([residency](#residency-and-streaming));
    - the owner's eye on the exposure calibration: gallery level 0 holds near
      EV 9 to 10 and the lawn near EV 14.3 at compensation 2, and Direct3D 12's
      first stop walked in from outdoors settles late
@@ -102,9 +101,8 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar (item 1 below): the teal roof's p99 and worst frame on both
-   backends, by what a swap of a group's detail costs the frame's thread
-   ([residency](#residency-and-streaming)).
+D. The frame bar (item 1 below): the frames after a change of geometry, when
+   the views that stood render again together.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
@@ -146,15 +144,18 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
    pool against the caldera pack), then the per-milestone review across every
    place.
 1. The frame bar [high]: measured on the head with `bench frames` (five fresh
-   processes per backend, Direct3D 12 then Vulkan), the studio, the meadow and
-   flight B hold 60 FPS on average and the teal roof misses it by 0.2 ms
-   (16.86 and 16.82 ms); at p99 the studio sits at about 17.2 ms on both
-   backends, the meadow at 17.4 and 18.6 ms, flight B at 18.7 and 20.4 ms,
-   and the teal roof at 23.5 and 22.5 ms with a worst frame of 54.8 and
-   46.2 ms. The teal roof's p99 read about 22 ms on both backends before the
-   demand tiers, and its Direct3D 12 worst frame was the same then; with 120
-   frames a sample its p99 is the second-worst frame, and it spreads 18.6 to
-   28.5 ms across five samples. The far cascade's cadence is settled: a
+   processes per backend, Direct3D 12 then Vulkan), every stop holds 60 FPS on
+   average but the Direct3D 12 studio (16.94 ms); at p99 flight B reads 16.7
+   and 18.4 ms, the teal roof 16.7 and 19.3 ms, the meadow 18.8 and 18.5 ms
+   and the studio 22.5 and 18.5 ms, with worst frames of 17.4 and 18.5, 20.1
+   and 28.6, 29.6 and 19.6, and 49.6 and 18.9 ms. A window holds about 240
+   frames, so its p99 lies between its third and fourth worst, and a stop's
+   reading moves by whether a change of geometry falls in its window (the
+   second bullet below): the Direct3D 12 studio read p99 16.7 ms in two
+   samples of five and 22 to 58 ms in the three one fell in, and the meadow
+   16.7 to 31.5 ms. Vulkan's p99 sat near 18.3 ms at every stop of that run,
+   in windows where no frame's work passed 16.7 ms. The far cascade's cadence
+   is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -186,12 +187,27 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      (`most-job`); a queued measurement holds the timing question. A probe scene
      upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
      share against its `SdfGpuWork.UploadSecondsOf` estimate.
-   - A swap of a group's detail stages every draw twice on the frame's
-     thread, and under the mesh region's budget tiers move both ways, so an
-     arrival pays it for every wave of swaps
-     ([residency](#residency-and-streaming)). Sampled thread time at the teal
-     roof put each staging near a frame's length at the debug world's draw
-     count.
+   - The frame that takes a change of geometry, and the one after it. In the
+     debug world a sampled field moves a few times in the half minute after
+     boot, each time resampling one or two groups (`cause=resample` on the
+     bake's start line), whatever stop the body stands at; `bench frames`
+     measures settled stops, so the stop a resample falls in reads it as its
+     worst frames, and the reading moves between stops with the timing of the
+     run. `host.frames` with a worst count names the frames: one of 40 to
+     60 ms whose `produce` is mostly a wait on the previous upload's fence
+     (`SdfWorldTables.SubmitUpload`, 25 to 33 ms), beside one whose pass
+     recording takes 8 to 10 ms where a settled frame's takes under 2
+     (`ShaderPipelineRenderNode.RecordFrame`, sampled thread time). The
+     staging of the changed draws is no longer in it (the hand-over stages
+     its own rows, [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)).
+     Unconfirmed cause: every view's signature folds the mesh and sampled
+     revisions (`SdfWorldTables.Cadence.cs`), and a view stands only while
+     its signature does and the lighting is settled
+     (`SdfWorldResidency.IsUnchanged`), so the views of a settled world all
+     render in the frame a revision moves, and again while the irradiance
+     volume settles over the change. Next step: count the views recorded a
+     frame (`world.counters`) across one resample, then spread the due views
+     over frames by what each can see of the change.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
      lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
      during play still submits jobs of several frames' length. Cutting them with
@@ -3539,31 +3555,24 @@ Grounded causes and leads, largest first:
   when it needs only the normals and level-index planes; a codec read of
   those planes alone would cut a rebuilt region's restore work. Owner:
   rendering/bake.
-- [high · the missing frames unconfirmed in a capture] A group whose detail
-  swaps waits out of the frame while its new mesh lands, and the swap stages
-  every draw twice. A replacement draws the old mesh while the new one bakes
-  (`SdfMeshPathBake.StartReplacement`), but `FinishReplacements` hands the
-  group's draws to the new mesh the frame it is baked, before the region
-  holds its words; the landing filter in
-  `SdfWorldTables.StageMeshRegionCore` then keeps those draws out of the
-  staged records until the background uploads land it
-  (`SdfWorldTables.DrawsAwaitMeshes`; `world.residency`'s region line counts
-  `owed-frames`, which went on rising through an arrival at the meadow long
-  after the cold bake). The same step costs the frame: the dresser rebuilds
-  its whole draw list when any group's mesh changes
-  (`SdfMeshDresser.BuildDrawTopology`), the tables plan the arena over it and
-  stage the filtered list whole, and the landing stages it whole again. The
-  [demand tiers'](bake-demand-tiers.md#invariants-and-their-doors) "the frame
-  draws a complete tier" holds from the bake's side only. One answer for
-  both: the frame names the meshes it is about to draw beside those it draws,
-  the arena places and lands them, and a replacement takes the draws only
-  once the tables say its words stand in the region. The swap then owes
-  nothing, so it stages its changed draws alone
-  (`SdfWorldTables.TryStageDrawChanges` refuses a changed mesh today), and a
-  mesh the region refuses leaves the old one drawing. Check: `owed-frames`
-  holds still across a wave of swaps after the cold bake, a burst capture
-  across a swap shows the group in every frame, and `bench frames` reads the
-  teal roof's p99. Owner: rendering/bake.
+- [medium] A replacement that changes a group's piece or copy count still
+  rebuilds the dresser's whole draw list and stages every record once. A
+  mesh that replaces a drawn one lands ahead of the draws and takes them
+  only once its words stand, and a hand-over whose counts stand stages its
+  own rows
+  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)). A
+  chunked mesh whose chunks differ between tiers, or a shared geometry
+  whose copies change, shifts every later row, so
+  `SdfMeshDresser.BuildDrawTopology` runs, its journal names every row, and
+  `SdfWorldTables.StageMeshRegionCore` plans the arena and stages the list
+  whole. Rows that keep their place across such a change (a free row a
+  group's surplus pieces give up and its next pieces take, with a rebuild
+  only when free rows pass a share of the list) would make that hand-over
+  its own rows' work as well. No capture has yet shown a hand-over frame by
+  frame: a burst capture across one, with the group in every frame, is the
+  check the landing-ahead invariant still owes.
+  `SdfMeshHistory.DressTopologyBuilds` counts the rebuilds. Owner:
+  rendering/bake.
 - [medium] A device that refuses the mesh region's growth still ends the
   World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`
   inside the frame. The region's limit (`SdfWorldTables.MeshRegionLimitOf`, a

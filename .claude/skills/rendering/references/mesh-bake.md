@@ -759,9 +759,27 @@ laws exercise that boundary.
   a named mesh, they land after the meshes a draw waits on, and the group
   takes the draws only once the tables say every piece stands
   (`SdfWorldTables.MeshStands`). So a swap holds no draw out of a frame, and
-  a mesh landing ahead stages no draw again: only the hand-over does.
+  a mesh landing ahead stages no draw again: only the hand-over does. The
+  standing products take the draws together, once none is still landing or
+  one has waited `SdfMeshTier.HandFrames`, so a wave of replacements moves
+  the draws every view renders from once. The hand-over stages its own
+  rows: the dresser replaces a group's bindings in their run when its
+  piece and copy counts stand, so its journal names those rows alone;
+  `SdfWorldTables.TryStageDrawChanges` takes a row whose new mesh stands,
+  the arena moves the row's name (`SdfMeshRegionArena.Rename`, the old mesh
+  becoming retained slack) and the claims move with it
+  (`SdfMeshClaims.Move`). A replacement that changes a group's piece or
+  copy count rebuilds the dresser's topology and stages every record once
+  ([open](../../../../docs/plans/open-items.md#residency-and-streaming)).
   `SdfMeshPathBake.Pending` stays true while a product waits, so
-  `world.wait bakes` and a lockstep frame wait for it. The guarantee stops
+  `world.wait bakes` and a lockstep frame wait for it;
+  `SdfMeshPathBake.DrawsPending` leaves the waiting products out, and a
+  view's standing render is judged by it
+  (`SdfWorldResidency.IsUnchanged`), since nothing a view draws moves until
+  the hand-over. The owed meshes named ahead land from a list of their own,
+  listed again whenever the set changes (`SdfWorldTables.MeshLanding.cs`):
+  the roster's landing order is rebuilt only when a draw list is planned,
+  which a hand-over no longer does. The guarantee stops
   at a group's first mesh, which has nothing to keep drawing, at a bake no
   tables observe (an offline bake draws each product at once), and at a
   piece the region has no room for beside the mesh it replaces
@@ -769,9 +787,7 @@ laws exercise that boundary.
   and the piece lands in the words the old mesh gives up, out of the frame
   until it does. `world.residency` counts the products that took their
   draws (`handed`, with `handed-refused` for the last case) and those
-  waiting (`ahead`). The hand-over still rebuilds the dresser's draw list
-  and stages it whole once
-  ([open](../../../../docs/plans/open-items.md#residency-and-streaming)).
+  waiting (`ahead`).
 - **One region holds every resident mesh, up to a share of the device's
   memory.** Its limit (`SdfWorldTables.MeshRegionLimitOf`) is one part in
   `MeshRegionDeviceLocalShare` of the device-local memory the profile

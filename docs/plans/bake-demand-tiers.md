@@ -277,7 +277,7 @@ every window demanded in every direction at its own image's height, and
 213,506,399 under the rule unbounded. 53 demand points (every rendered
 view, the gallery's filmed cameras and screens among them) set those
 tiers, and the root camera asks 31.9 M of the triangles. The meadow stop
-settles at 80 to 85 M triangles with 2.5 to 2.6 GB named, half a rung to a
+settles at 77 to 85 M triangles with 2.4 to 2.6 GB named, half a rung to a
 rung coarse (`detail-bias` 1 to 2); the teal roof at 78 to 82 M with no
 bias. The pipe and groove beads and the Moth's helmet ring, collar and
 lids read round in the settled captures at 0.9 to 2.4 m.
