@@ -203,7 +203,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionLimitOf(profile: device.MemoryProfile));
-        m_meshesOwed = new OwedMeshes(named: m_meshArena.Named);
+        m_meshesOwed = new OwedMeshes(arena: m_meshArena);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
         ArgumentNullException.ThrowIfNull(meshRaster);

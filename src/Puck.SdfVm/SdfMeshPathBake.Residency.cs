@@ -341,8 +341,10 @@ public sealed partial class SdfMeshPathBake {
     }
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
-    /// each whose mesh's words the region holds, which <see cref="DescribeResidency"/> times from the bake's start, and
-    /// reads the region's limit and what the frame's draws ask of it, which the next frame's tiers are budgeted by.</summary>
+    /// each whose mesh's words the region holds, which <see cref="DescribeResidency"/> times from the bake's start,
+    /// reads the region's limit and what the frame's draws ask of it, which the next frame's tiers are budgeted by,
+    /// names the tables the products that wait ahead of the draws (<see cref="SdfWorldTables.NameMeshesAhead"/>), and
+    /// hands the draws to each whose words stand in the region (<see cref="SdfWorldTables.MeshStands"/>).</summary>
     /// <param name="tables">The residency's tables, whose mesh region owes a mesh's words or not
     /// (<see cref="SdfWorldTables.OwesMesh"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="tables"/> is <see langword="null"/>.</exception>
@@ -354,6 +356,7 @@ public sealed partial class SdfMeshPathBake {
             m_regionLimitBytes = ((long)tables.MeshRegionLimitBytes);
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
+            ServeAhead(tables: tables);
             if (m_allResident) { return; }
 
             var now = Stopwatch.GetTimestamp();
@@ -371,11 +374,7 @@ public sealed partial class SdfMeshPathBake {
                 if (group.Mesh is { } mesh) {
                     var held = (m_dressedRevision == m_productRevision);
 
-                    if (mesh.Chunks.Count == 0) {
-                        held &= !tables.OwesMesh(mesh: mesh);
-                    } else {
-                        foreach (var chunk in mesh.Chunks) { held &= !tables.OwesMesh(mesh: chunk); }
-                    }
+                    for (var piece = 0; (piece < mesh.PieceCount); piece++) { held &= !tables.OwesMesh(mesh: mesh.Piece(index: piece)); }
                     if (!held) {
                         all = false;
                         continue;
@@ -384,6 +383,54 @@ public sealed partial class SdfMeshPathBake {
                 group.ResidentAt = now;
             }
             m_allResident = all;
+        }
+    }
+    // Names the tables the products that wait ahead of the draws, then hands the draws to each whose every piece
+    // stands in the mesh region: the one place a product that replaces a drawn mesh takes the draws (Group.ShowOwn).
+    // A product handed its draws stays named ahead until the next frame's draws name it, so the region keeps its
+    // words between the two. A piece the region had no room for beside the mesh it replaces (RefusesAhead) cannot
+    // land until that mesh gives its words up, so its product takes the draws once its other pieces stand and the
+    // piece waits out of the frame as a first mesh does. Under the gate, on the frame's thread.
+    private void ServeAhead(SdfWorldTables tables) {
+        if ((m_ahead.Count == 0) && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
+        for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
+            var group = m_ahead[at];
+
+            // A group retired, or whose product was replaced by none, waits on nothing.
+            if (group.Retired || !group.Ahead || (group.Mesh is null)) {
+                m_ahead.RemoveAt(index: at);
+                m_aheadRevision++;
+            }
+        }
+        if ((m_aheadNamed != m_aheadRevision) || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
+            m_aheadMeshes.Clear();
+            foreach (var group in m_ahead) {
+                var mesh = group.Mesh!;
+
+                for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
+            }
+            tables.NameMeshesAhead(meshes: m_aheadMeshes);
+            m_aheadNamed = m_aheadRevision;
+            m_aheadTables = tables;
+        }
+        for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
+            var group = m_ahead[at];
+            var mesh = group.Mesh!;
+            var stands = true;
+            var refused = false;
+
+            for (var piece = 0; (stands && (piece < mesh.PieceCount)); piece++) {
+                var part = mesh.Piece(index: piece);
+
+                if (tables.MeshStands(mesh: part)) { continue; }
+                if (tables.RefusesAhead(mesh: part)) { refused = true; } else { stands = false; }
+            }
+            if (!stands) { continue; }
+            group.ShowOwn();
+            m_ahead.RemoveAt(index: at);
+            m_aheadRevision++;
+            m_handed++;
+            if (refused) { m_handedRefused++; }
         }
     }
     /// <summary>Describes where the resident triangles' detail is asked from: one line a demand point that sees some
@@ -515,7 +562,7 @@ public sealed partial class SdfMeshPathBake {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : ((lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static"))}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} sampled-readers={m_sampledReaders.Count} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
             // The detail budget's debt (SdfMeshTier): the groups drawing a coarser tier than their demand asks, the worst
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers

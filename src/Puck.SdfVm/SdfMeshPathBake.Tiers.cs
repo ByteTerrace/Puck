@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshPathBake {
     // The replacements in flight, each with the index it was placed at: a settle rebake (Rebake) or a finer tier (Retier).
-    // The replaced group draws until the replacement lands (FinishReplacements).
+    // The replaced group draws until the replacement lands and its words stand in the mesh region (FinishReplacements).
     private readonly List<(Group Group, int Index)> m_replacing = [];
     // The groups whose demanded tier is finer than the one they draw, as of the latest frame, the worst owed error among
     // them in display pixels and the longest owed interval in frames; the worst of each since the bake started; and the
@@ -164,8 +164,9 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
-    // Retires each replaced group whose replacement has landed, and hands back one whose replacement meshed nothing: the
-    // one step every replacement ends in, a settle rebake's (Rebake) and a finer tier's (Retier) alike. Under the gate.
+    // Retires each replaced group whose replacement has landed and taken the draws (Group.Ahead), and hands back one
+    // whose replacement meshed nothing: the one step every replacement ends in, a settle rebake's (Rebake) and a finer
+    // tier's (Retier) alike. Under the gate.
     private void FinishReplacements() {
         var settles = Library.Settles;
 
@@ -176,7 +177,7 @@ public sealed partial class SdfMeshPathBake {
                 m_replacing.RemoveAt(index: at);
                 continue;
             }
-            if (!group.Done) { continue; }
+            if (!group.Done || group.Ahead) { continue; }
             m_replacing.RemoveAt(index: at);
             if (group.Mesh is null) {
                 // The replaced group keeps drawing: a settle rebake is not tried again at this pose, a finer tier not until
@@ -296,7 +297,7 @@ public sealed partial class SdfMeshPathBake {
                 }
                 spares++;
                 group.SpareFrames++;
-                if (!group.Done || (group.Replaces is not null) || group.RetierRefused) { continue; }
+                if (!group.Done || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { continue; }
                 if (group.SpareFrames < SdfMeshTier.HoldFrames) {
                     sparesWaiting++;
                     continue;
@@ -312,7 +313,7 @@ public sealed partial class SdfMeshPathBake {
             owed++;
             error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
             frames = Math.Max(val1: frames, val2: group.OwedFrames);
-            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused) { continue; }
+            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { continue; }
             if (group.OwedFrames < SdfMeshTier.HoldFrames) {
                 owedWaiting++;
                 continue;
@@ -420,15 +421,17 @@ public sealed partial class SdfMeshPathBake {
         group.DemandPixel = old.DemandPixel;
         return StartReplacement(group: group, index: index, old: old);
     }
-    // Starts a replacement planned for a landed group in that group's place: the library's mesh of its geometry lands at
-    // once, and otherwise it bakes (or loads from the store) while the mesh it replaces keeps drawing; true when the
-    // replacement is still to land. FinishReplacements retires the replaced group once it does. Under the gate.
+    // Starts a replacement planned for a landed group in that group's place: the library's mesh of its geometry is its
+    // product at once, and otherwise it bakes (or loads from the store); the mesh it replaces keeps drawing until the
+    // product stands in the mesh region. True when the replacement is still to bake or load. FinishReplacements
+    // retires the replaced group once the product has the draws. Under the gate.
     private bool StartReplacement(Group group, Group old, int index) {
         group.TakeDemandBox();
         group.Replaces = old;
         Replace(group: group, index: index);
         m_replacing.Add(item: (group, index));
         group.Identity = Identity.Value;
+        ShowReplaced(group: group, old: old);
         if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked)) {
             group.Mesh = baked;
             group.Done = true;
@@ -436,7 +439,6 @@ public sealed partial class SdfMeshPathBake {
             return false;
         }
 
-        group.Mesh = old.Mesh?.Acquire();
         _ = Begin(group: group);
 
         return true;

@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 // (SdfGpuWork), in jobs of what that service's upload budget allows (at most SdfGpuWork.MostUploadJobBytes) under its byte,
 // host-time and GPU-share rates,
 // never through a frame's upload. The meshes the latest staged list names and the region still owes are taken in the
-// order the views see them largest (MeshDemand), so the scene fills in from the cameras outward; a large mesh lands in
+// order the views see them largest (MeshDemand), so the scene fills in from the cameras outward, and after them the
+// meshes named ahead of the draws (NameMeshesAhead), which no draw waits on; a large mesh lands in
 // several jobs. Each job owes its words to the region (GpuRegion.OweSourced), which stages them from the meshes' own
 // arrays into the job's slot of the region (MeshLandingSlot) and records the copy into the job's command buffer.
 //
@@ -49,8 +50,8 @@ public sealed partial class SdfWorldTables {
     private const int LandingSlices = (GpuRegion.MaxCopyRuns / 2);
 
     // Orders the owed meshes the draw list names for landing: those the demand points see largest first, a draw no host
-    // box bounds (a skinned body) before any, then the list's order. A placed mesh no draw names stays owed until a list
-    // names it again.
+    // box bounds (a skinned body) before any, then the list's order, and after them the owed meshes named ahead
+    // (OrderLandingAhead). Any other placed mesh no draw names stays owed until a list names it again.
     private void OrderLanding(IReadOnlyList<SdfMeshDraw> draws) {
         m_landingOrder.Clear();
         m_landingOrdered.Clear();
@@ -73,6 +74,14 @@ public sealed partial class SdfWorldTables {
             var mesh = draws[index].Mesh;
 
             if (m_landingOrdered.Add(item: mesh)) { m_landingOrder.Add(item: mesh); }
+        }
+        OrderLandingAhead();
+    }
+    // Appends the owed meshes named ahead to the landing order: a draw with a hole in the frame lands before a mesh
+    // whose draws still read the one it replaces.
+    private void OrderLandingAhead() {
+        foreach (var mesh in m_meshArena.Ahead) {
+            if (m_meshesOwed.Contains(mesh: mesh) && m_landingOrdered.Add(item: mesh)) { m_landingOrder.Add(item: mesh); }
         }
     }
 
@@ -156,7 +165,8 @@ public sealed partial class SdfWorldTables {
     }
 
     // Lands each slice whose progress is still the mesh's: a mesh all of whose words have completed leaves the owed set,
-    // and the next staging names its draws.
+    // and the next staging names its draws. A mesh the staged list does not name (one named ahead) held no draw out,
+    // so its landing stages nothing again.
     private void CompleteLanding(LandingJob job) {
         foreach (var slice in job.Slices) {
             if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress)) {
@@ -166,14 +176,12 @@ public sealed partial class SdfWorldTables {
             progress.Landed += slice.Count;
             if (progress.Landed < progress.Words) { continue; }
             _ = m_landing.Remove(key: slice.Mesh);
-            if (m_meshesOwed.Remove(mesh: slice.Mesh)) {
+            // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
+            // until it renders again) reads resident once they have; any render stages the landed draws first.
+            if (m_meshesOwed.Remove(mesh: slice.Mesh) && m_activeOwed.Remove(item: slice.Mesh)) {
                 m_meshStaged = false;
                 m_meshLandedSinceStaging = true;
-                // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
-                // until it renders again) reads resident once they have; any render stages the landed draws first.
-                if (m_activeOwed.Remove(item: slice.Mesh)) {
-                    Volatile.Write(location: ref m_owedWords, value: (m_owedWords - progress.Words));
-                }
+                Volatile.Write(location: ref m_owedWords, value: (m_owedWords - progress.Words));
             }
         }
     }
@@ -190,11 +198,12 @@ public sealed partial class SdfWorldTables {
     private string DescribeLandingJobs() => string.Create(provider: CultureInfo.InvariantCulture,
         handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-job-most={SdfGpuWork.MostUploadJobBytes}B");
 
-    // The placed meshes whose words the region owes. An owed mesh the latest list names holds a need on its storage
+    // The placed meshes whose words the region owes. An owed mesh the arena names (a draw of the latest list, or ahead
+    // of the draws: SdfMeshRegionArena.Names) holds a need on its storage
     // (SdfMesh.Need), so its normals and coarser levels stay in memory, or come back from the store off the frame thread,
     // until its words land; an owed mesh the list stopped naming lets its need go, and takes it again when a list names it
     // (Sync). Landing takes only named meshes, and any other read of a mesh's words goes through a hold (MeshWordsOf).
-    private sealed class OwedMeshes(IReadOnlySet<SdfMesh> named) {
+    private sealed class OwedMeshes(SdfMeshRegionArena arena) {
         private HashSet<SdfMesh> m_set = new(comparer: ReferenceEqualityComparer.Instance);
         private HashSet<SdfMesh> m_spare = new(comparer: ReferenceEqualityComparer.Instance);
         // The owed meshes holding a need: those the latest list names.
@@ -205,7 +214,7 @@ public sealed partial class SdfWorldTables {
         public int Count => m_set.Count;
         public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
         public void Add(SdfMesh mesh) {
-            if (m_set.Add(item: mesh) && named.Contains(item: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
+            if (m_set.Add(item: mesh) && arena.Names(mesh: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
         }
         public bool Remove(SdfMesh mesh) {
             if (!m_set.Remove(item: mesh)) { return false; }
@@ -227,10 +236,10 @@ public sealed partial class SdfWorldTables {
         public void Sync() {
             m_changes.Clear();
             foreach (var mesh in m_set) {
-                if (named.Contains(item: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
+                if (arena.Names(mesh: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
             }
             foreach (var mesh in m_needed) {
-                if (!m_set.Contains(item: mesh) || !named.Contains(item: mesh)) { m_changes.Add(item: mesh); }
+                if (!m_set.Contains(item: mesh) || !arena.Names(mesh: mesh)) { m_changes.Add(item: mesh); }
             }
             foreach (var mesh in m_changes) {
                 _ = m_needed.Remove(item: mesh);

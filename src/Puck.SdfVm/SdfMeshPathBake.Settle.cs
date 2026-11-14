@@ -58,7 +58,7 @@ public sealed partial class SdfMeshPathBake {
         foreach (var index in watched) {
             var group = m_groups[index];
 
-            if (!group.Done || (group.Mesh is null) || !group.Dynamic || (group.Replaces is not null)) { continue; }
+            if (!group.Done || (group.Mesh is null) || !group.Dynamic || (group.Replaces is not null) || group.Ahead) { continue; }
             if (!Drifted(group: group, moved: out var moved, time: frame.Time, transforms: transforms)) { continue; }
             if (moved || ((frame.Time - group.StillSince) < SdfMeshSettle.SettleSeconds)) {
                 settles.Count(kind: SdfMeshSettle.Moving);

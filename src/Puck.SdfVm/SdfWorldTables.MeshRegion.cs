@@ -16,8 +16,10 @@ namespace Puck.SdfVm;
 // next upload carrying the words it held on the GPU; a frame without draws keeps it. It never grows past its limit
 // (MeshRegionLimitBytes), a share of the device's memory: a mesh the arena finds no room for under it is refused, its
 // draws wait out of the staged records like an owed mesh's, and the bake coarsens what the views can spare until the
-// list fits (SdfMeshPathBake.ObserveResidency). A view's mesh pass reads the draws' triangles from it, and primary a
-// mesh hit's material.
+// list fits (SdfMeshPathBake.ObserveResidency). A mesh that replaces one a draw reads is named ahead of the draws
+// (NameMeshesAhead) and lands beside the one it replaces, which the draws read until the new mesh stands
+// (MeshStands), so the swap holds no draw out of a frame. A view's mesh pass reads the draws' triangles from it, and
+// primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena;
     private long m_meshPlacementVersion;
@@ -614,6 +616,48 @@ public sealed partial class SdfWorldTables {
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Refused.Contains(item: mesh) || (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh)));
+
+    /// <summary>Names the meshes the draws are about to name, in place of those named ahead before
+    /// (<see cref="SdfMeshRegionArena.PlanAhead"/>): each is placed beside the meshes the draws read and lands through
+    /// the background work after the meshes a draw waits on, and the region keeps it until a draw list names it or it
+    /// leaves the set. No draw record changes, so the staged frame stands. On the frame's thread, after the frame's
+    /// draws are staged and before its upload.</summary>
+    /// <param name="meshes">The meshes, a chunk of a chunked mesh being a mesh of its own.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="meshes"/> is <see langword="null"/>.</exception>
+    public void NameMeshesAhead(IReadOnlyList<SdfMesh> meshes) {
+        ArgumentNullException.ThrowIfNull(argument: meshes);
+        if (m_disposed) { return; }
+        m_meshArena.PlanAhead(meshes: meshes);
+        if ((m_meshArena.Placed.Count > 0) || (m_meshArena.Forgotten.Count > 0)) {
+            m_meshPlacementVersion++;
+            m_meshOrderStale = true;
+            foreach (var mesh in m_meshArena.Forgotten) {
+                ForgetLanding(mesh: mesh);
+                _ = m_meshesOwed.Remove(mesh: mesh);
+            }
+            m_meshForgotten += m_meshArena.Forgotten.Count;
+            Volatile.Write(location: ref m_meshRegionUsedBytes, value: (((ulong)m_meshArena.Words) * sizeof(uint)));
+            if (m_meshArena.Words > 0) {
+                EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+                ShadowMeshRecords();
+            }
+            m_meshesOwed.UnionWith(meshes: m_meshArena.Placed);
+        }
+        // A mesh that left the set unnamed lets its need go, and one named again takes it back and its place in line.
+        m_meshesOwed.Sync();
+        OrderLandingAhead();
+    }
+    /// <summary>Returns whether a mesh's words stand in the mesh region where a draw naming it would read them: the
+    /// arena holds it and the region owes none of its words. Read on the frame's thread.</summary>
+    /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
+    /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
+    public bool MeshStands(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && !m_meshesOwed.Contains(mesh: mesh));
+    /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read
+    /// (<see cref="SdfMeshRegionArena.AheadRefused"/>): it can land only in the words the mesh it replaces gives up.
+    /// Read on the frame's thread.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns><see langword="true"/> when the mesh is named ahead and refused.</returns>
+    public bool RefusesAhead(SdfMesh mesh) => m_meshArena.AheadRefused.Contains(item: mesh);
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
@@ -628,7 +672,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} ahead={m_meshArena.Ahead.Count} ahead-refused={m_meshArena.AheadRefused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
     }
 
     // The mesh whose words the mesh scratch holds, which a landing slicing it over several jobs reads again.

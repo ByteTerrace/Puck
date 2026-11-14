@@ -433,8 +433,9 @@ laws exercise that boundary.
   `SdfMeshTier.HoldFrames` frames is planned again at the finer tier and placed
   as a replacement (`SdfMeshPathBake.Retier`, the settle rebake's `Replaces`
   path, at most `MaxInFlight` at once, the finest demand first): the coarser
-  mesh draws until the finer lands (`FinishReplacements`, one step for settles
-  and tiers). The demand is measured a share of the groups each frame
+  mesh draws until the finer is baked and its words stand in the mesh region
+  (`FinishReplacements`, one step for settles and tiers; the swap bullet
+  below). The demand is measured a share of the groups each frame
   (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
   `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
   with the resident world; `Retier` reads the tiers from the measured
@@ -745,6 +746,32 @@ laws exercise that boundary.
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
   ([sync pairs](sync-pairs.md#engine-buffers-groups-and-bindings)).
+- **A mesh that replaces a drawn one lands before a draw names it.** A
+  group's product and the mesh the frame draws for it are two things
+  (`SdfMeshPathBake`'s group: its `Mesh` and its `Shown`). Every product
+  arrives through the one setter, whatever made it: a finer or coarser
+  tier, a settle rebake, a resample, a new program's plan, a renumbered
+  mesh. Where a residency's tables land the bake's meshes, a product that
+  replaces a drawn mesh waits ahead of the draws: the bake names its pieces
+  to the tables (`SdfMeshPathBake.ObserveResidency` into
+  `SdfWorldTables.NameMeshesAhead`), the arena places them beside the
+  meshes the draws read (`SdfMeshRegionArena.PlanAhead`) and keeps them like
+  a named mesh, they land after the meshes a draw waits on, and the group
+  takes the draws only once the tables say every piece stands
+  (`SdfWorldTables.MeshStands`). So a swap holds no draw out of a frame, and
+  a mesh landing ahead stages no draw again: only the hand-over does.
+  `SdfMeshPathBake.Pending` stays true while a product waits, so
+  `world.wait bakes` and a lockstep frame wait for it. The guarantee stops
+  at a group's first mesh, which has nothing to keep drawing, at a bake no
+  tables observe (an offline bake draws each product at once), and at a
+  piece the region has no room for beside the mesh it replaces
+  (`SdfMeshRegionArena.AheadRefused`): that product takes the draws anyway,
+  and the piece lands in the words the old mesh gives up, out of the frame
+  until it does. `world.residency` counts the products that took their
+  draws (`handed`, with `handed-refused` for the last case) and those
+  waiting (`ahead`). The hand-over still rebuilds the dresser's draw list
+  and stages it whole once
+  ([open](../../../../docs/plans/open-items.md#residency-and-streaming)).
 - **One region holds every resident mesh, up to a share of the device's
   memory.** Its limit (`SdfWorldTables.MeshRegionLimitOf`) is one part in
   `MeshRegionDeviceLocalShare` of the device-local memory the profile

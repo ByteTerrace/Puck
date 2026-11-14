@@ -1350,7 +1350,11 @@ bytes a second as a fast one, the meshes the views see largest
 first (`SdfMeshDemand`). A draw whose mesh is still owed waits out of the staged
 records until its last job has completed, so a boot, a relocation or a body whose
 meshes all arrive at once fills in from the cameras outward over several frames
-rather than staging every word in one upload. A list with more draws than the
+rather than staging every word in one upload. A mesh that replaces one a draw
+already reads never makes its draw wait: the bake names it to the tables ahead
+of the draws (`SdfWorldTables.NameMeshesAhead`), it lands beside the mesh it
+replaces, and the draw names it only once its words stand
+(`SdfWorldTables.MeshStands`). A list with more draws than the
 reserve doubles it and moves only the meshes whose words the grown reserve takes,
 writing them in that frame's upload with the records that name them
 (`SdfMeshRegionArena.Moved`); a body that straddles a door draws twice, so a list

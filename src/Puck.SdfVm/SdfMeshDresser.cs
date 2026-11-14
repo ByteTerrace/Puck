@@ -310,14 +310,14 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             m_dressedGroups.Add((group, mesh));
             if (access.CopiesOf(group) is { } copies) {
                 foreach (var copy in copies) {
-                    for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                        Bind(((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]), group, copy, chunked: false);
+                    for (var piece = 0; piece < mesh.PieceCount; piece++) {
+                        Bind(mesh.Piece(piece), group, copy, chunked: false);
                     }
                 }
                 continue;
             }
-            for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
+            for (var piece = 0; piece < mesh.PieceCount; piece++) {
+                var part = mesh.Piece(piece);
                 Bind(part, group, -1, chunked: (mesh.Chunks.Count > 0));
                 if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
             }

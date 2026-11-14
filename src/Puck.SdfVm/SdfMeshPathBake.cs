@@ -365,12 +365,13 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, a field slice
     /// (<see cref="Probe"/>) still samples, a newer plan of a resampled group waits to start, or a landed mesh has not
-    /// reached the dressed frame yet.</summary>
+    /// reached the dressed frame yet: one the dresser has not listed, or one still landing in the mesh region ahead
+    /// of the draws that will name it (<see cref="ObserveResidency"/>).</summary>
     public bool Pending {
         get {
             lock (m_gate) {
                 if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
-                if ((m_slice is not null) || (m_successors > 0)) { return true; }
+                if ((m_slice is not null) || (m_successors > 0) || (m_ahead.Count > 0)) { return true; }
                 // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
                 while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
                 return (m_doneThrough < m_groups.Count);
@@ -384,6 +385,9 @@ public sealed partial class SdfMeshPathBake {
         get {
             lock (m_gate) {
                 if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
+                foreach (var group in m_ahead) {
+                    if ((!group.Dynamic || m_fixedAssetSlots.Contains(item: group.Slot)) && !group.Glass && !group.Retired && group.Ahead) { return true; }
+                }
                 foreach (var group in m_groups) {
                     if ((!group.Dynamic || m_fixedAssetSlots.Contains(item: group.Slot)) && !group.Glass && !group.Done) { return true; }
                 }
@@ -429,6 +433,25 @@ public sealed partial class SdfMeshPathBake {
     private long m_productRevision;
 
     private long m_dressedRevision = -1;
+
+    // The groups whose product lands in the mesh region ahead of the draws (Group.Ahead); the count of changes to
+    // that list, the count the tables were last named its meshes at, and those tables; and the products that took
+    // their draws, those the region had no room for beside the mesh they replace among them. Under the gate.
+    private readonly List<Group> m_ahead = [];
+    private readonly List<SdfMesh> m_aheadMeshes = [];
+    private long m_aheadRevision;
+    private long m_aheadNamed = -1L;
+    private SdfWorldTables? m_aheadTables;
+    private long m_handed;
+    private long m_handedRefused;
+
+    // Whether a residency's tables land this bake's meshes: they have read it their region's limit (ObserveResidency).
+    // A bake no tables observe (an offline bake) draws every product at once, since nothing would hand it its draws.
+    private bool LandsAhead => (m_regionLimitBytes != 0L);
+    private void AwaitAhead(Group group) {
+        m_ahead.Add(item: group);
+        m_aheadRevision++;
+    }
 
     // The library's lost revision this bake last restarted at.
     private long m_lostRevision;
@@ -482,7 +505,7 @@ public sealed partial class SdfMeshPathBake {
         internal long CopyLayoutRevision { get; }
         internal IReadOnlyList<SdfMeshBakeGroup> Groups => m_owner.m_groups;
 
-        internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Mesh;
+        internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Shown;
         internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
         internal void Acknowledge() => m_owner.m_dressedRevision = Revision;
 
@@ -1265,6 +1288,7 @@ public sealed partial class SdfMeshPathBake {
         // the world and came back) or by another residency (a body that crossed from another world), takes that mesh: a
         // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
         if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var baked)) {
+            ShowReplaced(group: group, old: old);
             group.Mesh = baked;
             group.Done = true;
             return true;
@@ -1280,6 +1304,7 @@ public sealed partial class SdfMeshPathBake {
         // and watches its members against the pose the mesh was baked at, so it bakes again only once it settles away
         // from it (Settle).
         if (group.Dynamic && Library.TryTakeForm(form: group.Form, identity: identity, materials: group.MaterialOrder, mesh: out var shaped)) {
+            ShowReplaced(group: group, old: old);
             group.Mesh = shaped;
             group.Done = true;
             group.Stored = true;
@@ -1287,9 +1312,7 @@ public sealed partial class SdfMeshPathBake {
             return true;
         }
 
-        if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
-            group.Mesh = old.Mesh.Acquire();
-        }
+        ShowReplaced(group: group, old: old);
         if (leaders.TryGetValue(key: group.Sealed, value: out var leader)) {
             group.Leader = leader;
             started.Shared++;
@@ -1298,6 +1321,12 @@ public sealed partial class SdfMeshPathBake {
         leaders.Add(key: group.Sealed, value: group);
         started.Begun(group: group, loading: Begin(group: group));
         return true;
+    }
+    // Has a group newly put in a landed group's place draw what that group draws until its own mesh takes the draws
+    // (Group.Mesh): a static mesh lies in world space and a dynamic one in its slot's frame, so only a group of the
+    // same kind can.
+    private static void ShowReplaced(Group group, Group? old) {
+        if ((old?.Shown is { } shown) && (old.Dynamic == group.Dynamic)) { group.Mesh = shown.Acquire(); }
     }
     // Begins each group, of the listed indices or every one, still waiting on a leader the bake has retired: it bakes its
     // geometry itself.
@@ -2152,8 +2181,9 @@ public sealed partial class SdfMeshPathBake {
             Finish();
         }
     }
-    // Makes a group's new mesh the one it draws. A group rebaking after an edit keeps drawing its previous mesh until this
-    // one lands, so the count of drawn meshes alone does not move: the product revision changes so the dresser lists the new one.
+    // Makes a group's new mesh its product. A group rebaking after an edit keeps drawing its previous mesh until this
+    // one lands, and then until its words stand in the mesh region (Group.Mesh): the product revision changes when the
+    // drawn mesh does, so the dresser lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
         group.Mesh = mesh;
         group.ResidentAt = 0;
@@ -2323,20 +2353,62 @@ public sealed partial class SdfMeshPathBake {
         // the mesh a listed group draws moves that bake's product revision here, the one door, so the dresser can trust
         // the revision: a group no list holds yet draws nothing.
         public SdfMeshPathBake? Owner { get; set; }
+        // The group's product, and the mesh the frame draws for it (Shown). Invariant: a draw names a mesh that
+        // replaces a drawn one only once its words stand in the mesh region. This setter is the one door a product
+        // arrives by: where a residency's tables land the bake's meshes (LandsAhead), a product that replaces a drawn
+        // mesh waits ahead of the draws, the group still drawing what it drew, and ObserveResidency hands it the draws
+        // (ShowOwn) once the tables say it stands. A group's first mesh, and any product of a bake no tables observe,
+        // is drawn at once. The setter takes the claim handed in and lets go of the product's it replaces.
         public SdfMesh? Mesh {
             get => m_mesh;
             set {
                 var old = m_mesh;
+                var next = (Retired ? null : value);
+                var owner = Owner;
 
-                m_mesh = (Retired ? null : value);
                 if (Retired) { value?.Release(); }
-                if (!ReferenceEquals(objA: old, objB: m_mesh) && (Owner is { } owner)) {
+                if (ReferenceEquals(objA: old, objB: next)) {
+                    // The same product again: the claim handed in is one too many.
+                    if (!Retired) { old?.Release(); }
+                    return;
+                }
+                if ((next is not null) && ((m_shown ?? old) is not null) && (owner is { LandsAhead: true })) {
+                    // A product that never took the draws is let go; the mesh the frame draws stays.
+                    if (m_shown is null) {
+                        m_shown = old;
+                        owner.AwaitAhead(group: this);
+                    } else {
+                        old?.Release();
+                    }
+                    m_mesh = next;
+                    SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next);
+                    return;
+                }
+                m_mesh = next;
+                if (m_shown is { } shown) {
+                    m_shown = null;
+                    shown.Release();
+                }
+                if (owner is not null) {
                     owner.m_productRevision++;
-                    if (m_mesh is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: m_mesh); }
+                    if (next is not null) { SdfMeshSkin.Count(counters: owner.Library.Skins, mesh: next); }
                 }
                 old?.Release();
             }
         }
+        // The mesh the frame draws for the group: the one its product replaces while that lands ahead, else its product.
+        public SdfMesh? Shown => (m_shown ?? m_mesh);
+        // Whether the group's product waits for its words to stand in the mesh region before it takes the draws.
+        public bool Ahead => (m_shown is not null);
+        // Hands the draws to the product, letting go of the mesh it replaces. Under the owner's gate.
+        public void ShowOwn() {
+            if (m_shown is not { } shown) { return; }
+            m_shown = null;
+            shown.Release();
+            if (Owner is { } owner) { owner.m_productRevision++; }
+        }
+
+        private SdfMesh? m_shown;
 
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
@@ -2416,6 +2488,7 @@ public sealed partial class SdfMeshPathBake {
                 if (Retired && !m_released) {
                     m_released = true;
                     m_mesh?.Release(); m_mesh = null;
+                    m_shown?.Release(); m_shown = null;
                     Replaces?.RetireReplaced();
                 }
             }

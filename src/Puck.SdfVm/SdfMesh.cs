@@ -18,6 +18,12 @@ public sealed partial record SdfMesh {
     /// enter the mesh region, the irradiance scene and the store. An offline mesh's own triangles concatenate their merged
     /// surfaces for whole-group queries; a published one keeps no joined indices (<see cref="Indices"/>).</summary>
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
+    /// <summary>Gets how many independently drawn meshes the mesh is: its <see cref="Chunks"/>, or one, itself.</summary>
+    public int PieceCount => Math.Max(val1: 1, val2: Chunks.Count);
+    /// <summary>Returns one independently drawn mesh of the mesh: a chunk, or the mesh itself when it has none.</summary>
+    /// <param name="index">The piece, below <see cref="PieceCount"/>.</param>
+    /// <returns>The piece.</returns>
+    public SdfMesh Piece(int index) => ((Chunks.Count == 0) ? this : Chunks[index]);
     /// <summary>Gets whether the triangles are outward-wound pieces of closed surfaces, so a face turned from a light is
     /// where that light leaves a solid: true for every baked mesh, and for an authored mesh whose triangles close a volume
     /// (<c>WorldPlacementStamper.MeshOf</c>); false for an authored sheet or soup, which is drawn in both windings and
