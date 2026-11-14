@@ -40,6 +40,29 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
+**Wave 2, after the lead's session restart, in this order (agreed with the
+owner):** read-only and headless work runs beside the GPU-bound lanes, and no
+more than one lane besides the lead's batched window holds the GPU at once.
+
+1. The adversarial reviews in A3, findings-only, by Codex Sol.
+2. The control plane's guaranteed phase of the host loop, and a deadline and a
+   named reason on every cross-subsystem wait
+   ([engine job system](#engine-job-system)), headless.
+3. The design for moving the hand-rolled concurrency sites onto the job system,
+   project by project, with the analyzers switched on per migrated project;
+   Fable designs, Codex reviews, before any build.
+4. The frame bar's remaining owed frames (D): the views that render together
+   after a change of geometry, and the upload fence the frame waits on; with
+   the residency lane's two verification requests (a burst across one
+   hand-over, the views recorded per frame across one boot-time resample).
+5. The engine limits A1 names: the per-exhibit contouring reds on the blend
+   exhibits and primitives, the Moth's shin groups, and a refused growth that
+   still ends the World.
+6. The walkthrough's next step ([plan](walkthrough.md)): coverage derived from
+   the document.
+
+The owner's own items, whenever the owner is ready: the exposure calibration
+(A1) and the modeling authoring plan's review (C).
 **First, in this order (the owner's direction after the modeling session):**
 the limits and flaws that got in the way of authoring lead, because every agent
 modeling pass failed on them. They are three kinds, and each has its own fix:
@@ -92,7 +115,11 @@ A3. Adversarial reviews owed on landed work in the review-only classes of
    the exposure readback's slot lifetime (`RenderGraphSlotResults` to
    `SdfViewExposures.Publish`; GPU fences and resource lifetimes). The indirect
    lane's pass-block layout change needs none: the generated shader interface
-   and `ShaderInterfaceLayout.Mismatch` cover that class. Also queued: three cold
+   and `ShaderInterfaceLayout.Mismatch` cover that class.
+   The tour lane's withhold (a frame held for lighting is withheld and the
+   lighting drains on the frame's thread, `SdfWorldPasses.WithheldOf`,
+   `SdfGpuWork.Drive`) is in the new class of a wait across threads or
+   subsystems, so it is reviewed too. Also queued: three cold
    bakes per backend from an empty `--cache-dir` with `paused` and `lockstep`,
    to show whether a late retier changes which tiers are stored.
 B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
