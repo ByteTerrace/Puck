@@ -231,6 +231,9 @@ public sealed partial class SdfMeshPathBake {
         var named = m_regionNamedBytes;
         var bias = m_bias;
         var inFlight = 0;
+        // The replacements baked and landing ahead of the draws: they add no bake work, so they do not count
+        // against the most in flight, and a wave the library holds starts whole and takes the draws together.
+        var landing = 0;
         var coarsening = 0;
         // The bytes the draws name once every finer replacement in flight has landed, which another must fit beside,
         // and the bytes the coarser ones in flight free.
@@ -239,7 +242,7 @@ public sealed partial class SdfMeshPathBake {
 
         foreach (var (group, _) in m_replacing) {
             if (!group.Retiering) { continue; }
-            inFlight++;
+            if (group.Done) { landing++; } else { inFlight++; }
             if (group.RetierDeltaBytes > 0L) {
                 filled = filled.AddSaturating(right: group.RetierDeltaBytes);
             } else {
@@ -374,7 +377,7 @@ public sealed partial class SdfMeshPathBake {
             }
         } else {
             m_biasPressed = 0;
-            if ((bias > 0) && (owed == 0) && (inFlight == 0) && (finer <= target)) {
+            if ((bias > 0) && (owed == 0) && (inFlight == 0) && (landing == 0) && (finer <= target)) {
                 if (++m_biasQuiet >= m_biasWait) {
                     Volatile.Write(location: ref m_bias, value: (bias - 1));
                     m_biasLowered++;
@@ -389,7 +392,7 @@ public sealed partial class SdfMeshPathBake {
         if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,
-            value: ((replaced || (inFlight > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + 1), val2: SdfMeshTier.SettleFrames))
+            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + 1), val2: SdfMeshTier.SettleFrames))
         );
     }
     // Plans a group again at another tier, as Plan would plan it at this frame, and starts it in the group's place: the

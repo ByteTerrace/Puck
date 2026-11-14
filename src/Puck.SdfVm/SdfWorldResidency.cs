@@ -629,7 +629,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool IsUnchanged(in FrameContext context, int view) {
         if (
             !Prepare(context: in context) ||
-            MeshPathBake.Pending || MeshIrradiance.Settling ||
+            MeshPathBake.DrawsPending || MeshIrradiance.Settling ||
             (m_frame is not { } frame) ||
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||

@@ -369,14 +369,24 @@ public sealed partial class SdfMeshPathBake {
     /// of the draws that will name it (<see cref="ObserveResidency"/>).</summary>
     public bool Pending {
         get {
-            lock (m_gate) {
-                if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
-                if ((m_slice is not null) || (m_successors > 0) || (m_ahead.Count > 0)) { return true; }
-                // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
-                while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
-                return (m_doneThrough < m_groups.Count);
-            }
+            lock (m_gate) { return ((m_ahead.Count > 0) || Owes()); }
         }
+    }
+    /// <summary>Gets whether the frame's draws still follow the bake: <see cref="Pending"/> less the products landing
+    /// in the mesh region ahead of the draws, which move no draw until they take them. A view whose latest render
+    /// stands need not render again while only those wait.</summary>
+    public bool DrawsPending {
+        get {
+            lock (m_gate) { return Owes(); }
+        }
+    }
+    // Whether the bake still owes the dressed frame a mesh, a slice or a successor. Under the gate.
+    private bool Owes() {
+        if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
+        if ((m_slice is not null) || (m_successors > 0)) { return true; }
+        // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
+        while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
+        return (m_doneThrough < m_groups.Count);
     }
     /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
     /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
@@ -439,6 +449,8 @@ public sealed partial class SdfMeshPathBake {
     // their draws, those the region had no room for beside the mesh they replace among them. Under the gate.
     private readonly List<Group> m_ahead = [];
     private readonly List<SdfMesh> m_aheadMeshes = [];
+    // Where each waiting product stands this frame, by its place in m_ahead (ServeAhead).
+    private readonly List<AheadState> m_aheadStates = [];
     private long m_aheadRevision;
     private long m_aheadNamed = -1L;
     private SdfWorldTables? m_aheadTables;
@@ -448,6 +460,8 @@ public sealed partial class SdfMeshPathBake {
     // Whether a residency's tables land this bake's meshes: they have read it their region's limit (ObserveResidency).
     // A bake no tables observe (an offline bake) draws every product at once, since nothing would hand it its draws.
     private bool LandsAhead => (m_regionLimitBytes != 0L);
+    private enum AheadState : byte { Landing, Stands, StandsRefused }
+
     private void AwaitAhead(Group group) {
         m_ahead.Add(item: group);
         m_aheadRevision++;
@@ -2376,6 +2390,7 @@ public sealed partial class SdfMeshPathBake {
                     // A product that never took the draws is let go; the mesh the frame draws stays.
                     if (m_shown is null) {
                         m_shown = old;
+                        AheadFrames = 0;
                         owner.AwaitAhead(group: this);
                     } else {
                         old?.Release();
@@ -2400,6 +2415,8 @@ public sealed partial class SdfMeshPathBake {
         public SdfMesh? Shown => (m_shown ?? m_mesh);
         // Whether the group's product waits for its words to stand in the mesh region before it takes the draws.
         public bool Ahead => (m_shown is not null);
+        // The frames the product has waited ahead of the draws (SdfMeshPathBake.ServeAhead).
+        public int AheadFrames { get; set; }
         // Hands the draws to the product, letting go of the mesh it replaces. Under the owner's gate.
         public void ShowOwn() {
             if (m_shown is not { } shown) { return; }

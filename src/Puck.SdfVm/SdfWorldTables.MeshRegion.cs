@@ -322,18 +322,44 @@ public sealed partial class SdfWorldTables {
 
         CopyRuns(from: m_reseatedDraws, to: m_owedDraws);
         var checkedMeshes = 0;
+        var renamed = 0;
         for (var run = 0; run < m_owedDraws.Count; run++) {
             var end = Math.Min(draws.Count, checked(m_owedDraws.Start(run) + m_owedDraws.Length(run)));
             for (var index = m_owedDraws.Start(run); index < end; index++) {
+                var mesh = draws[index].Mesh;
+
                 checkedMeshes++;
-                if (!ReferenceEquals(draws[index].Mesh, m_stagedDraws[index].Mesh)) {
+                if (ReferenceEquals(mesh, m_stagedDraws[index].Mesh)) { continue; }
+                // A row takes another mesh here only when that mesh's words already stand in the region (one that
+                // landed ahead of the draws): any other change of a row's mesh is planned and lands.
+                if (!MeshStands(mesh: mesh)) {
                     SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingMeshChecks, checkedMeshes);
                     return false;
                 }
+                renamed++;
             }
         }
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingMeshChecks, checkedMeshes);
-        // Every mesh is still held at its existing arena address. Pose/metadata changes need neither a new placement
+        // The arena and the staged list's claims follow each row that names another standing mesh, as a plan of the
+        // list would leave them, so the rows alone are staged: no plan, no walk of the claims, no landing.
+        for (var run = 0; (renamed > 0) && (run < m_owedDraws.Count); run++) {
+            var end = Math.Min(draws.Count, checked(m_owedDraws.Start(run) + m_owedDraws.Length(run)));
+            for (var index = m_owedDraws.Start(run); index < end; index++) {
+                var mesh = draws[index].Mesh;
+                var staged = m_stagedDraws[index].Mesh;
+
+                if (ReferenceEquals(mesh, staged)) { continue; }
+                m_meshArena.Rename(index: index, mesh: mesh);
+                m_meshClaims?.Move(from: staged, to: mesh);
+            }
+        }
+        if (renamed > 0) {
+            Volatile.Write(
+                location: ref m_meshRegionNamedBytes,
+                value: ((((ulong)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes) + (((ulong)m_meshArena.NamedWords) * sizeof(uint)))
+            );
+        }
+        // Every mesh is held at its arena address. Pose, metadata and such a renamed row need neither a new placement
         // plan nor a walk of all mesh claims. Coarsened journal runs may include unchanged records; compare them once.
         if ((draws.Count > 0) && (StageChangedDraws(draws, m_owedDraws) > 0)) { m_meshRevision++; }
         m_meshSourceRevision = frame.MeshDrawsRevision;

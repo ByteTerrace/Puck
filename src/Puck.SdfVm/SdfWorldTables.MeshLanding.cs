@@ -31,6 +31,10 @@ public sealed partial class SdfWorldTables {
     private readonly List<SdfMesh> m_landingOrder = [];
     private readonly HashSet<SdfMesh> m_landingOrdered = new(comparer: ReferenceEqualityComparer.Instance);
     private int m_landingCursor;
+    // The owed meshes named ahead of the draws that the order above does not hold, and the first that may still
+    // have words to take: listed again whenever the set named ahead changes, whether or not a draw list is staged.
+    private readonly List<SdfMesh> m_landingAhead = [];
+    private int m_landingAheadCursor;
     // Whether a mesh has landed since the draws were last staged: a frame that stands is staged again then
     // (StageLandedMeshes).
     private bool m_meshLandedSinceStaging;
@@ -56,6 +60,8 @@ public sealed partial class SdfWorldTables {
         m_landingOrder.Clear();
         m_landingOrdered.Clear();
         m_landingCursor = 0;
+        m_landingAhead.Clear();
+        m_landingAheadCursor = 0;
         if (m_meshesOwed.Count == 0) { return; }
 
         var demand = ((MeshDemand is { Count: > 0 } points) ? points : null);
@@ -77,11 +83,13 @@ public sealed partial class SdfWorldTables {
         }
         OrderLandingAhead();
     }
-    // Appends the owed meshes named ahead to the landing order: a draw with a hole in the frame lands before a mesh
+    // Lists the owed meshes named ahead after the landing order: a draw with a hole in the frame lands before a mesh
     // whose draws still read the one it replaces.
     private void OrderLandingAhead() {
+        m_landingAhead.Clear();
+        m_landingAheadCursor = 0;
         foreach (var mesh in m_meshArena.Ahead) {
-            if (m_meshesOwed.Contains(mesh: mesh) && m_landingOrdered.Add(item: mesh)) { m_landingOrder.Add(item: mesh); }
+            if (m_meshesOwed.Contains(mesh: mesh) && !m_landingOrdered.Contains(item: mesh)) { m_landingAhead.Add(item: mesh); }
         }
     }
 
@@ -90,10 +98,12 @@ public sealed partial class SdfWorldTables {
     private void ForgetLanding(SdfMesh mesh) {
         _ = m_landing.Remove(key: mesh);
         m_landingCursor = 0;
+        m_landingAheadCursor = 0;
     }
     private void ForgetAllLanding() {
         m_landing.Clear();
         m_landingCursor = 0;
+        m_landingAheadCursor = 0;
     }
 
     // Takes the next owed words in landing order, up to one chunk, from as many meshes as fit and at most LandingSlices of
@@ -106,17 +116,24 @@ public sealed partial class SdfWorldTables {
         var budget = (uploadBytes / sizeof(uint));
         var taken = 0;
 
+        TakeLanding(budget: budget, cursor: ref m_landingCursor, job: ref job, order: m_landingOrder, taken: ref taken);
+        TakeLanding(budget: budget, cursor: ref m_landingAheadCursor, job: ref job, order: m_landingAhead, taken: ref taken);
+        if (job is not null) { job.Words = taken; }
+        return (job is not null);
+    }
+    // Takes owed words from one order, from its cursor, into a job that may hold slices already.
+    private void TakeLanding(List<SdfMesh> order, ref int cursor, int budget, ref int taken, ref LandingJob? job) {
         // A mesh whose storage is still coming back from the store (SdfMesh.Resident) is passed over, and the cursor stays
         // at the first such mesh so a later take finds it restored.
         var waiting = -1;
 
-        while ((m_landingCursor < m_landingOrder.Count) && (taken < budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
-            var mesh = m_landingOrder[m_landingCursor];
+        while ((cursor < order.Count) && (taken < budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
+            var mesh = order[cursor];
 
-            if (!m_meshesOwed.Contains(mesh: mesh)) { m_landingCursor++; continue; }
+            if (!m_meshesOwed.Contains(mesh: mesh)) { cursor++; continue; }
             if (!mesh.Resident) {
-                if (waiting < 0) { waiting = m_landingCursor; }
-                m_landingCursor++;
+                if (waiting < 0) { waiting = cursor; }
+                cursor++;
                 continue;
             }
             if (!m_landing.TryGetValue(key: mesh, value: out var progress)) {
@@ -131,11 +148,9 @@ public sealed partial class SdfWorldTables {
                 progress.Taken += take;
                 taken += take;
             }
-            if (progress.Taken == progress.Words) { m_landingCursor++; }
+            if (progress.Taken == progress.Words) { cursor++; }
         }
-        if (waiting >= 0) { m_landingCursor = Math.Min(val1: m_landingCursor, val2: waiting); }
-        if (job is not null) { job.Words = taken; }
-        return (job is not null);
+        if (waiting >= 0) { cursor = Math.Min(val1: cursor, val2: waiting); }
     }
 
     // Owes each slice's words at its mesh's current placement and records their copy into the job's slot of the region.

@@ -36,6 +36,11 @@ public static class SdfMeshTier {
     /// <summary>The most groups one residency replans for a finer tier at once; the rest wait, the most demanded first,
     /// so a cut that demands a thousand finer tiers does not stage them all beside their resident meshes.</summary>
     public const int MaxInFlight = 64;
+    /// <summary>The most frames a product whose words stand in the mesh region waits for the products still landing
+    /// beside it before it takes the draws (<see cref="SdfMeshPathBake.ObserveResidency"/>): a wave of replacements
+    /// takes the draws in one frame, so every view renders the wave once, and a stream of them that never pauses
+    /// still shows this often.</summary>
+    public const int HandFrames = 30;
 
     /// <summary>The most half rungs a residency's bake coarsens every group's demand by to hold its meshes inside the
     /// mesh region's budget (<see cref="Biased"/>): eight rungs, a cell 256 times the demanded one.</summary>

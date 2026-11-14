@@ -385,8 +385,10 @@ public sealed partial class SdfMeshPathBake {
             m_allResident = all;
         }
     }
-    // Names the tables the products that wait ahead of the draws, then hands the draws to each whose every piece
+    // Names the tables the products that wait ahead of the draws, then hands the draws to those whose every piece
     // stands in the mesh region: the one place a product that replaces a drawn mesh takes the draws (Group.ShowOwn).
+    // The standing products take the draws together, once none is still landing or one has waited
+    // SdfMeshTier.HandFrames: each hand-over moves the draws every view renders from, so a wave moves them once.
     // A product handed its draws stays named ahead until the next frame's draws name it, so the region keeps its
     // words between the two. A piece the region had no room for beside the mesh it replaces (RefusesAhead) cannot
     // land until that mesh gives its words up, so its product takes the draws once its other pieces stand and the
@@ -413,24 +415,34 @@ public sealed partial class SdfMeshPathBake {
             m_aheadNamed = m_aheadRevision;
             m_aheadTables = tables;
         }
-        for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
-            var group = m_ahead[at];
-            var mesh = group.Mesh!;
-            var stands = true;
-            var refused = false;
+        var landing = false;
+        var waited = 0;
 
-            for (var piece = 0; (stands && (piece < mesh.PieceCount)); piece++) {
+        m_aheadStates.Clear();
+        foreach (var group in m_ahead) {
+            var mesh = group.Mesh!;
+            var state = AheadState.Stands;
+
+            for (var piece = 0; ((state != AheadState.Landing) && (piece < mesh.PieceCount)); piece++) {
                 var part = mesh.Piece(index: piece);
 
                 if (tables.MeshStands(mesh: part)) { continue; }
-                if (tables.RefusesAhead(mesh: part)) { refused = true; } else { stands = false; }
+                state = (tables.RefusesAhead(mesh: part) ? AheadState.StandsRefused : AheadState.Landing);
             }
-            if (!stands) { continue; }
-            group.ShowOwn();
+            group.AheadFrames++;
+            if (state == AheadState.Landing) { landing = true; } else { waited = Math.Max(val1: waited, val2: group.AheadFrames); }
+            m_aheadStates.Add(item: state);
+        }
+        if (landing && (waited < SdfMeshTier.HandFrames)) { return; }
+        for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
+            var state = m_aheadStates[at];
+
+            if (state == AheadState.Landing) { continue; }
+            m_ahead[at].ShowOwn();
             m_ahead.RemoveAt(index: at);
             m_aheadRevision++;
             m_handed++;
-            if (refused) { m_handedRefused++; }
+            if (state == AheadState.StandsRefused) { m_handedRefused++; }
         }
     }
     /// <summary>Describes where the resident triangles' detail is asked from: one line a demand point that sees some
