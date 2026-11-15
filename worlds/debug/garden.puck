@@ -27,7 +27,7 @@ let frameGold = 0 // #C9A43A
 
 metadata {
   title: "Garden"
-  description: "A destination of the debug world painting wing: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
+  description: "A destination of the debug world painting wing: a sunset plot with a green floor, a golden obelisk, two frames back to the debug world and one onto the hearth."
 }
 
 // A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
@@ -56,6 +56,10 @@ references [
     document: "debug"
     name: "debug"
   }
+  {
+    document: "hearth"
+    name: "hearth"
+  }
 ]
 
 destinations [
@@ -63,6 +67,12 @@ destinations [
     durability: persisted
     name: "debug"
     reference: "debug"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "hearth"
+    reference: "hearth"
     scope: global
   }
 ]
@@ -131,6 +141,33 @@ placements {
           $type: "session"
           destination: "debug"
           fallback: "#FF00FF"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  // The hearth frame: a window, and a way, onto a third world (hearth.puck) that no painting of the debug world
+  // shows. It stands off the line the garden painting looks along and faces the plot, so from the debug world it
+  // is a window behind a window: the hearth bakes only while something keeps that chain rendering.
+  placement "hearth" {
+    prototype: "frame"
+    position [-6, 0, -16]
+    yawDegrees: 90
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "arrival/glass"
+          destination: "hearth"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "hearth"
+          fallback: "#3A160C"
           projection: window
         }
       }
