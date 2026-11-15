@@ -138,36 +138,34 @@ public sealed partial class SdfMeshIrradianceScene {
     }
 
     // Allocations still read by the published root are freed only after the replacement root's fence.
-    // GpuMemoryRanges supplies the shared first-fit/coalescing mechanism; its unit here is bytes.
+    // The arena's unit is a word; word 0 is the root and never freed.
     internal sealed class GpuArena {
-        private readonly GpuMemoryRanges m_ranges = new(((ulong)uint.MaxValue >> SdfMeshProbeTrace.NodeCountBits) * sizeof(uint));
+        private readonly GpuRangeAllocator m_ranges = new(size: ((ulong)uint.MaxValue >> SdfMeshProbeTrace.NodeCountBits));
         private int m_prefix;
         private int m_words;
         internal Dictionary<Geometry, GpuPlacement> Geometries { get; } = [];
         internal int Words => m_words;
         internal GpuArena() => Allocate(1);
         internal int Allocate(int words) {
-            if (!m_ranges.TryAllocate(checked((ulong)words * sizeof(uint)), sizeof(uint), out var offset)) {
+            if (!m_ranges.TryAllocate(count: (ulong)words, start: out var start)) {
                 throw new InvalidOperationException("The probe scene exceeds its packed node address space.");
             }
-            var word = checked((int)(offset / sizeof(uint)));
+            var word = checked((int)start);
             m_words = Math.Max(m_words, checked(word + words));
             return word;
         }
         internal void Publish(GpuExport export) {
-            if (m_prefix != 0) { m_ranges.Free((ulong)m_prefix * sizeof(uint), (ulong)m_prefixWords * sizeof(uint)); }
+            if (m_prefix != 0) { _ = m_ranges.Free(start: (ulong)m_prefix); }
             foreach (var geometry in Geometries.Keys.Where(geometry => !export.Geometries.Contains(geometry)).ToArray()) {
-                var count = checked(geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords + geometry.Triangles.Length);
-                m_ranges.Free((ulong)Geometries[geometry].Word * sizeof(uint), (ulong)count * sizeof(uint));
+                _ = m_ranges.Free(start: (ulong)Geometries[geometry].Word);
                 Geometries.Remove(geometry);
             }
             m_prefix = export.Prefix;
-            m_prefixWords = export.Changed[^1].Count;
         }
         internal void Abandon(GpuExport export) {
             // Geometry is immutable and its completed chunks remain useful across roster changes. Only the obsolete
             // scene prefix is discarded. A later export resumes each geometry at its fence-proven written prefix.
-            m_ranges.Free((ulong)export.Prefix * sizeof(uint), (ulong)export.Changed[^1].Count * sizeof(uint));
+            _ = m_ranges.Free(start: (ulong)export.Prefix);
         }
         internal void Complete(GpuExport export, int word, int count) {
             foreach (var geometry in export.Geometries) {
@@ -177,7 +175,6 @@ public sealed partial class SdfMeshIrradianceScene {
                 if (start < end) { placement.Written.Add(start - placement.Word, end - start); }
             }
         }
-        private int m_prefixWords;
     }
 
     internal sealed class GpuPlacement(int word) {
