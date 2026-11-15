@@ -239,6 +239,9 @@ their own. A run is keyed by its owner's object, and the bake keeps the group
 object of every group a new program keeps, so such a group keeps its run and
 its bindings. An owner whose row count changes allocates a new run, writes it,
 and frees the old one; the allocator's lowest-first fit keeps the extent tight.
+An owner holds its run with the ticket the allocator gave it
+(`GpuRangeAllocator.TicketOf`) and frees it by that ticket, so an owner holding
+a run that was freed and given again cannot free its successor's.
 
 **The reconcile is the derivation.** Each frame, under the bake's frame gate as
 today, the dresser compares each group's shown mesh, piece count and copies
@@ -324,11 +327,12 @@ mechanism that exists:
   is the gain. A reused row's pixel can match history by identity only where a
   different surface also lies within the depth tolerance **[inference]**.
 - **Readbacks.** A pick is delivered only when its slot is proven complete
-  (`RenderGraphSlotResults`, `SdfWorldPicker.Complete`) and is discarded unless
-  the map it was recorded under is still the frame's. The row table keeps the
-  identity per row and the count at which each row's identity last changed; a
-  pick records the count it was taken at and is discarded when its row changed
-  since. No map is allocated or compared per change.
+  (`RenderGraphSlotResults`, `SdfWorldPicker.Complete`), and today it is
+  discarded unless the map it was recorded under is still the frame's. Under
+  this design the row table keeps the identity per row and the count at which
+  each row's identity last changed; a pick records the count it was taken at
+  and is discarded when its row changed since. No map is allocated or compared
+  per change.
 - **Landing.** A row leaves absent only when `SdfWorldTables.MeshStands`
   answers for its mesh, the landing invariant's one place (F5).
 - **Growth.** A table outgrowing the draw reserve, the previous-matrix table
@@ -392,8 +396,9 @@ the frame thread. 3d makes the rest proportional without changing a kernel
   hierarchy over them, and is built by one function from the entry list. A new
   scene partitions the static draws again, on its worker, and takes the
   previous scene's cluster for every cell whose list is equal, entry for entry;
-  only the others build. The scan stays the size of the static scene, with no
-  allocation; the builds, the claims and the upload follow the changed cells.
+  only the others build. The scan stays the size of the static scene, over
+  pooled workspace; the builds, the claims and the upload follow the changed
+  cells.
 - **A cluster is self-contained on the GPU.** Its block holds its nodes, its
   entries and its own copies of its instance records, placed in the scene's
   arena and kept across scenes exactly as a geometry's block is
@@ -446,10 +451,11 @@ span per part: managed arrays for an offline library, blocks of the mesh's
 native payload for a host. The mesh is built over those blocks, so the native
 copy of a store load goes; the group's material ids are applied as the material
 planes are read, so the managed renumbering goes; the entry's bytes are read
-into owned scratch, as its inflated planes already are. A restore passes a storage that accepts
-only normals and level indices and skips every other plane by its stated
-length. A chunked mesh needs its pieces' counts before the first plane to size
-the attributes its chunks share, which the entry's layout gains.
+into owned scratch, as its inflated planes already are. A restore passes a
+storage that accepts only normals and level indices and skips every other
+plane by its stated length. A chunked mesh needs its pieces' counts before the
+first plane to size the attributes its chunks share, which the entry's layout
+gains.
 
 **It pays.** The decode was the third allocator of the arrival's trace
 **[reading]**, its larger arrays go to the large object heap **[inference]**,
@@ -503,7 +509,7 @@ bytes).
 | S1 | Allocation trace across an arrival: the scene constructor, the export and the scene start's snapshot near zero; collections in `host.frames` | Meadow arrival p99 and worst frame |
 | D1 | Allocation trace: the decode and the managed renumbering near zero; restores read fewer planes | The same window |
 | R1a | A landing packs the rows that name its mesh: `SdfMeshHistory.RecordsPacked` and `SdfMeshHistory.Seeded` per landing stop following the list's size | Cold boot's owed frames |
-| R1b | `SdfMeshHistory.StagingPlanRecords` and `SdfMeshHistory.DressTopologyBuilds` move only on a packing; a hand-over's packed records equal its owner's rows; thread-allocated bytes of that frame; the late phase's draws on the frame after | The hand-over frame |
+| R1b | `SdfMeshHistory.StagingPlanRecords` and `SdfMeshHistory.DressTopologyBuilds` move only on a packing; a hand-over's packed records equal its owner's rows; thread-allocated bytes of that frame; the draws the late occlusion phase emits on the following frame | The hand-over frame |
 | R1c | A straddling body's frames compare and plan its own rows | A portal crossing at the meadow |
 | R2 | A hand-over's changed records equal its pieces | Decided by R0 |
 | S2 | Clusters built against reused, prefix and cluster bytes uploaded per scene, time from the last landing to a settled volume | Decided by S1's readings |
@@ -518,8 +524,8 @@ run beside them.
 | R0. Count | Small | The counts above, in `sdf.instances` and the scene's counters | None | The lead reads them across a meadow arrival and a cold boot |
 | S1. A scene build keeps what it allocates | Small | Pooled scene arrays returned at the last claim; a static-only snapshot; the prefix exported on demand | The export still has one publisher | The exported words equal the old export's for one scene (a change that claims to change nothing); the allocation trace |
 | D1. Decode into the mesh's storage | Medium | The storage parameter, material ids applied on read, the restore's plane filter, piece counts in the entry | One decoder | The codec's round trip for both storages; a warm boot loads every group; a relocation restores |
-| R1a. The staged table is the producer's | Medium | The absent bit and its kernel branch, rows per mesh, a landing staging its rows, the journal valid while meshes are owed | The tables' one row-staging function | The cross-check over a cold boot; a boot's captures fill in as before; `world.wait residency` still names what is owed |
-| R1b. Rows | Large | The row table and its door, runs per owner, the per-row arena names and claims, identity by row for picks, live-row enumeration in every consumer, the packing rule, the lever and the law, canonical packing for a lockstep capture | The row table | The cross-check over the tour and a meadow arrival, both backends; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over; two Worlds' lockstep stills |
+| R1a. The staged table is the producer's | Medium | The absent bit and its kernel branch, rows per mesh, a landing staging its rows, the journal valid while meshes are owed, the cross-check's pack half | The tables' one row-staging function | The cross-check over a cold boot; a boot's captures fill in as before; `world.wait residency` still names what is owed |
+| R1b. Rows | Large | The row table and its door, runs per owner, the per-row arena names and claims, identity by row for picks, live-row enumeration in every consumer, the packing rule, the cross-check's dress half and the law, canonical packing for a lockstep capture | The row table | The cross-check over the tour and a meadow arrival, both backends; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over; two Worlds' lockstep stills |
 | R1c. Clips are rows | Small to medium | A clip's copies as a run; the portal path's "everything" deleted | The row table | The cross-check through a portal crossing; a straddling body clipped on both sides |
 | R2. Piece rows | Large | With the visibility plan's V1b | That plan's | That plan's, and a hand-over's changed records |
 | S2. Clustered top level | Medium | Cells, clusters reused by equal lists, cluster blocks in the arena, the prefix over cells | The cluster's constructor; the one scene publisher | The cross-check's ray set; the irradiance scene laws; a scene change during an upload abandons without a lost device on Vulkan |
@@ -533,7 +539,7 @@ cluster keeps.
 | System | Verdict | Why |
 |---|---|---|
 | `GpuChangedRows` and `GpuUploadRuns` (the draw journal) | Reused | Captured-endpoint cursors per consumer and a conservative refusal are exactly F2's answer; rows that keep their place make "everything" rare instead of routine |
-| `GpuRangeAllocator` | Reused | Already the allocator of the mesh arena, the probe scene's arena and both backends' memory pools; rows are a fourth range space |
+| `GpuRangeAllocator` | Reused | Already the allocator of the mesh arena, the probe scene's arena and both backends' memory pools; rows are a fourth range space, and its per-allocation ticket is the stale-holder guard a run needs |
 | `SdfMeshRegionArena` | Kept, renamed by row | Placement, slack and relocation stand; the list walk in `SdfMeshRegionArena.Plan` is what a rebuild paid |
 | `SdfMeshHistory` | Reused unchanged in meaning | Generations that are never reused per cell are the proof a reused row needs |
 | `SdfWorldTables` changed-run staging (`SdfWorldTables.StageChangedDraws`) | Becomes the only staging | The whole-list branch is its "everything" case, not a second path |
@@ -592,9 +598,9 @@ cluster keeps.
   answer for the scene.
 - **The packing frames show in `host.frames`.** The budgeted move replaces the
   whole packing.
-- **The absent lanes show in a raster pass's GPU time.** The packing share is
-  lowered; the visibility plan's ordered compaction (V1a) removes the cost at
-  its cause.
+- **The absent rows show in a raster pass's GPU time.** The packing share is
+  lowered, which bounds their selection lanes; the empty command each still
+  emits goes with the visibility plan's ordered compaction (V1a).
 - **The review finds a holder of a row index this memo missed.** That holder
   gets the generation or the change count before R1b lands.
 
