@@ -3,7 +3,7 @@ using Puck.Abstractions.Presentation;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The drawn-cursor writer: renders each visible seat's pointer from an <see cref="ICursorSource"/> snapshot — a
+/// The drawn-cursor writer: renders each visible seat's pointer from an <see cref="IOverlaySource{OverlayCursorFrame}"/> snapshot — a
 /// hairline ring around a small center dot at the hotspot, plus the hover label (the tooltip text) beside it — all
 /// inside a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the seat's viewport rect, so the cursor is confined
 /// to its own split-screen view. Hover lights the ACCENT hue; the bare cursor stays in the primary text hue. A hovered
@@ -25,7 +25,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     /// size is validated against its document band; this is the render-side backstop the host clamps to).</summary>
     public const float MaxSizePx = 64f;
 
-    private readonly ICursorSource m_source;
+    private readonly IOverlaySource<OverlayCursorFrame> m_source;
     private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="CursorWriter"/> class.</summary>
@@ -33,7 +33,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     /// <param name="theme">The live resolved theme.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
     /// <see langword="null"/>.</exception>
-    public CursorWriter(ICursorSource source, OverlayThemeStore theme) {
+    public CursorWriter(IOverlaySource<OverlayCursorFrame> source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: theme);
 

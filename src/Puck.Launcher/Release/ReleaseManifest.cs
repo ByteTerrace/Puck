@@ -91,50 +91,11 @@ public static class ReleaseCanonicalizer {
         "payloads", "rollout", "revoked", "notes", "signature",
     };
 
-    // The manifest is portable: validate Windows path syntax even on a Unix publishing host. In particular,
-    // Path.IsPathRooted alone would admit a Windows drive/UNC path on Unix, and ':' admits NTFS alternate streams.
-    private static bool IsPortablePath(string? value, bool allowDirectories) {
-        if (string.IsNullOrWhiteSpace(value: value)) {
-            return false;
-        }
-
-        foreach (var character in value) {
-            if ((character < ' ') || (character is '\\' or ':' or '<' or '>' or '"' or '|' or '?' or '*')) {
-                return false;
-            }
-        }
-
-        var segments = value.Split(separator: '/');
-
-        if (!allowDirectories && (segments.Length != 1)) {
-            return false;
-        }
-
-        foreach (var segment in segments) {
-            if ((segment.Length == 0) || segment.StartsWith(value: ' ') || segment.EndsWith(value: '.') || segment.EndsWith(value: ' ')) {
-                return false;
-            }
-
-            var stem = segment.Split(separator: '.', count: 2)[0];
-
-            if (stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "CON") ||
-                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "PRN") ||
-                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "AUX") ||
-                stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "NUL") ||
-                ((stem.Length == 4) && (stem[3] is >= '1' and <= '9' or '\u00b9' or '\u00b2' or '\u00b3') &&
-                (stem.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "COM") ||
-                stem.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "LPT")))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     /// <summary>Reports whether <paramref name="version"/> is a name a release's <see cref="ReleaseManifest.Version"/> may
     /// carry: one portable directory name. A revoked entry that fails this can name no install.</summary>
     /// <param name="version">The candidate version name.</param>
     /// <returns><see langword="true"/> when the name could be a release version's directory.</returns>
-    public static bool IsVersionName(string? version) => IsPortablePath(value: version, allowDirectories: false);
+    public static bool IsVersionName(string? version) => PortablePath.IsRelative(allowDirectories: false, path: version);
     private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile? file, string path, HashSet<string>? seenPaths) {
         if (file is null) {
             errors.Add(item: new(Message: "a file is required.", Path: path));
@@ -143,10 +104,10 @@ public static class ReleaseCanonicalizer {
 
         // The applier writes the install record into every version directory beside its payload, so it may be neither a
         // payload file nor the directory a payload file sits in. A path a deserialized document omits is null, which
-        // IsPortablePath refuses.
+        // IsPortableRelative refuses.
         var first = (file.Path ?? "").Split(separator: '/')[0];
 
-        if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
+        if (!PortablePath.IsRelative(allowDirectories: true, path: file.Path) ||
             first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: InstallRecord.FileName)) {
             errors.Add(item: new(
                 Message: $"a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved '{InstallRecord.FileName}' name as its first segment, and no device names or alternate streams.",
@@ -312,7 +273,7 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (!IsPortablePath(value: document.Channel, allowDirectories: false)) {
+        if (!PortablePath.IsRelative(allowDirectories: false, path: document.Channel)) {
             errors.Add(item: new(
                 Message: "a channel must be a single portable directory name.",
                 Path: "channel"

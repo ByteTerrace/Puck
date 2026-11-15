@@ -79,7 +79,7 @@ public static partial class TestCommand {
 
             ConfinedDirectory.RemoveTree(path: destination);
             CopyRecording(destination: destination, source: first);
-            output.WriteLine(value: $"  recorded {legs[0].Label} -> {destination.Replace(newChar: '/', oldChar: '\\')}");
+            output.WriteLine(value: $"  recorded {legs[0].Label} -> {Puck.Abstractions.PuckPaths.Slashed(path: destination)}");
         }
         return (refused ? 2 : (diverged ? 1 : 0));
     }

@@ -29,29 +29,8 @@ internal static class WorldCheckpointPaths {
         path1: root,
         path2: relative
     ));
-    /// <summary>Returns whether a spelling a checkpoint carries is relative and stays under its root: forward-slashed,
-    /// not rooted on any platform, and with no empty, <c>.</c> or <c>..</c> segment. Empty names the root itself.</summary>
+    /// <summary>Returns whether a spelling a checkpoint carries is relative and stays under its root: the portable relative spelling (<see cref="Puck.Confinement.PortablePath.IsRelative"/>) without a parent segment. Empty names the root itself.</summary>
     /// <param name="path">The spelling to check.</param>
     /// <returns><see langword="true"/> when the spelling names something under a root.</returns>
-    public static bool IsRelativeUnderRoot(string path) {
-        if (path.Length == 0) {
-            return true;
-        }
-
-        if (
-            path.Contains(value: '\\') ||
-            path.Contains(value: ':') ||
-            path.StartsWith(value: '/')
-        ) {
-            return false;
-        }
-
-        foreach (var segment in path.Split(separator: '/')) {
-            if (segment is "" or "." or "..") {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    public static bool IsRelativeUnderRoot(string path) => ((path.Length == 0) || Puck.Confinement.PortablePath.IsRelative(path: path));
 }

@@ -15,6 +15,10 @@
         <ProjectReference Include="../../src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FieldLatticeHosts.cs" Link="FieldLatticeHosts.cs" />
+        <Compile Include="../Shared/FixedTestValues.cs" Link="FixedTestValues.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>

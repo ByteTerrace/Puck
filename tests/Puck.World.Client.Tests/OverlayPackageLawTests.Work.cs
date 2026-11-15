@@ -26,19 +26,6 @@ public sealed partial class OverlayPackageLawTests {
     private const string DrawnPass =
         "work overlay executed: dispatches=0 dispatches.indirect=0 draws=1 render-passes=1 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=2 push-constants=0 descriptor-writes=10 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=3 draws.indirect=0\nwork region copies executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=3 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=256 clears=1 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=72 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0 vertices=0 draws.indirect=0";
 
-    // The fake as a device context whose services pass through creation faults, as a backend's do.
-    private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
-        public long AdapterLuid => gpu.AdapterLuid;
-        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
-        public GpuDeviceIdentity? Identity => gpu.Identity;
-        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
-        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
-            faults: faults,
-            services: gpu.Services
-        );
-
-        public void WaitIdle() => gpu.WaitIdle();
-    }
 
     // The newest completed submission's report, without its submission line.
     private static string CompletedWork(ShaderPipelineRenderNode node) {

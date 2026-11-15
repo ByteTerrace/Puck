@@ -477,19 +477,6 @@ public sealed class PostProcessPackageLawTests {
         );
     }
 
-    // The fake as a device context whose services pass through creation faults, as a backend's do.
-    private sealed class FaultingDevice(FakePipelineGpu gpu, GpuCreationFaults faults) : IGpuDeviceContext {
-        public long AdapterLuid => gpu.AdapterLuid;
-        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
-        public GpuDeviceIdentity? Identity => gpu.Identity;
-        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
-        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
-            faults: faults,
-            services: gpu.Services
-        );
-
-        public void WaitIdle() => gpu.WaitIdle();
-    }
     private sealed record Recorded(string RenderPass, string Pipeline, IReadOnlyList<string> Commands, IReadOnlyList<string> Writes, IReadOnlyList<string> Blocks, int RenderPasses) {
         // Every push-constant write, which a post pass never makes.
         public IReadOnlyList<string> Pushes { get; init; } = [];

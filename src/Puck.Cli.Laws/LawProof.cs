@@ -124,13 +124,6 @@ public static partial class LawProof {
             path: full
         );
     }
-    private static string Relative(string root, string path) => Path.GetRelativePath(
-        path: path,
-        relativeTo: root
-    ).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
     // The project a law lives in: the one named, or the one test project whose sources declare a type named by one of
     // the law's segments, read from the rightmost segment leftward so `Class.Method` finds `Class`.
     private static bool TryResolveProject(string tree, string law, string? named, out string project, out string error) {
@@ -159,7 +152,7 @@ public static partial class LawProof {
                 return false;
             }
 
-            project = Relative(path: candidates[0], root: tree);
+            project = Puck.Abstractions.PuckPaths.Relative(path: candidates[0], relativeTo: tree);
 
             return true;
         }
@@ -178,7 +171,7 @@ public static partial class LawProof {
             var owners = declarations.Where(predicate: declaration => (declaration.Name == segments[index]))
                 .Select(selector: declaration => CliProjects.FindOwningProject(start: Path.GetDirectoryName(path: Path.Combine(path1: tree, path2: declaration.Path))!, root: tree)).OfType<string>()
                 .Distinct(comparer: StringComparer.Ordinal)
-                .Select(selector: path => Relative(path: path, root: tree))
+                .Select(selector: path => Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: tree))
                 .Order(comparer: StringComparer.Ordinal)
                 .ToArray();
 

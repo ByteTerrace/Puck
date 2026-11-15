@@ -125,7 +125,7 @@ public static class AffectedSuites {
 
             writer.WriteStartObject();
             writer.WriteStartObject(propertyName: "solution");
-            writer.WriteString(propertyName: "path", value: Path.Combine(path1: repositoryRoot, path2: "Puck.slnx").Replace(newChar: '/', oldChar: '\\'));
+            writer.WriteString(propertyName: "path", value: Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(path1: repositoryRoot, path2: "Puck.slnx")));
             writer.WriteStartArray(propertyName: "projects");
 
             foreach (var suite in suites) {

@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The toast writer: renders the latest <see cref="IOverlayToastSource"/> echo as a transient Tier-1 chip
+/// The toast writer: renders the latest <see cref="IOverlaySource{OverlayToastFrame}"/> echo as a transient Tier-1 chip
 /// (mid-right) — scrim-chip fill, the glow's ring + halo and a state rail in the [OK]/[ERR] hue, an inset icon
 /// square, and the message WORD-WRAPPED across up to <see cref="MaxMessageLines"/> lines, the chip growing
 /// vertically to hold them. Expires on the CONTENT tick (~3 seconds equivalent, never wall clock) with a trailing
@@ -31,7 +31,7 @@ public sealed class ToastWriter {
     // theme's dur.med, so it recomputes from m_theme.Current per Emit rather than latching once.
     private static readonly ulong DurationTicks = (3UL * FixedTickConversion.TicksPerSecond);
 
-    private readonly IOverlayToastSource m_source;
+    private readonly IOverlaySource<OverlayToastFrame> m_source;
     private readonly OverlayThemeStore m_theme;
 
     private ulong m_firstTicks;
@@ -49,7 +49,7 @@ public sealed class ToastWriter {
     /// <param name="theme">The live resolved theme.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
     /// <see langword="null"/>.</exception>
-    public ToastWriter(IOverlayToastSource source, OverlayThemeStore theme) {
+    public ToastWriter(IOverlaySource<OverlayToastFrame> source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: theme);
 

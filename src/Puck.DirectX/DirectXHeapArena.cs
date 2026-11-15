@@ -7,20 +7,18 @@ using Windows.Win32.Graphics.Direct3D12;
 namespace Puck.DirectX;
 
 /// <summary>
-/// The heaps one device places its buffers and images in, in place of a committed resource each: heaps of
-/// <see cref="HeapBytes"/> per heap type, resource category (buffers, render-target or depth textures, other textures, kept
-/// apart as resource heap tier 1 asks; a render target or depth stencil stays committed, see
-/// <see cref="DirectXTextures.Create"/>) and role, each resource placed at an offset a heap's free ranges hand out
-/// (<see cref="GpuMemoryRanges"/>) at the alignment the device reports for it. A resource larger than half a heap gets a
-/// heap of its own. A heap every resource left is released, but a pool keeps one empty shared heap; a resource's own
-/// heap goes with it, so a large staging buffer holds no memory once released. The device's memory counts
-/// (<see cref="GpuDeviceMemoryWork"/>) count heaps, the memory the device actually holds, and a placed resource's release
-/// (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range (<see cref="Release"/>), found through a token the
-/// resource itself carries (private data under <see cref="TokenKey"/>), never through its address, which a later resource
-/// may reuse. A placed resource holds its heap, so releasing the arena's reference never frees memory a resource still
-/// sits in: <see cref="FreeAll"/> releases every heap once as the device is torn down, whatever resources a device loss
-/// left in them, and retires the arena, which then places nothing; a resource released after it returns no range.
-/// Thread-safe.
+/// The heaps one device places its buffers and images in, in place of a committed resource each: a
+/// <see cref="GpuMemoryPool{TKey, TBlock}"/> of heaps of <see cref="HeapBytes"/> per heap type, resource category (buffers,
+/// render-target or depth textures, other textures, kept apart as resource heap tier 1 asks; a render target or depth
+/// stencil stays committed, see <see cref="DirectXTextures.Create"/>) and role, each resource placed at an offset aligned
+/// as the device reports for it. The pool's policy decides which heap a resource takes and when a heap goes. The device's
+/// memory counts (<see cref="GpuDeviceMemoryWork"/>) count heaps, the memory the device actually holds, and a placed
+/// resource's release (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range (<see cref="Release"/>), found
+/// through a token the resource itself carries (private data under <see cref="TokenKey"/>), never through its address,
+/// which a later resource may reuse. A placed resource holds its heap, so releasing the arena's reference never frees
+/// memory a resource still sits in: <see cref="FreeAll"/> releases every heap once as the device is torn down, whatever
+/// resources a device loss left in them, and retires the arena, which then places nothing; a resource released after it
+/// returns no range. Thread-safe.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXHeapArena {
@@ -32,38 +30,31 @@ public sealed unsafe class DirectXHeapArena {
 
     // Every placed resource of every arena, by the token it carries, so a release that names only the resource finds its
     // range.
-    private static readonly ConcurrentDictionary<long, (DirectXHeapArena Arena, Heap Heap, ulong Offset, ulong Size)> Placed = [];
+    private static readonly ConcurrentDictionary<long, (DirectXHeapArena Arena, GpuMemoryPlacement<nint> Placement)> Placed = [];
 
     private static long Tokens;
 
     private readonly IDirectXCommandCalls m_calls;
     private readonly nint m_device;
     private readonly GpuDeviceMemoryWork? m_memory;
-
-    private readonly Lock m_gate = new();
-    private bool m_retired;
-    private readonly Dictionary<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role), List<Heap>> m_pools = [];
+    private readonly GpuMemoryPool<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role), nint> m_pool;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXHeapArena"/> class.</summary>
     /// <param name="calls">The device calls it makes.</param>
     /// <param name="device">The device, which keys its memory counts.</param>
     /// <param name="memory">The device's memory counts, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="calls"/> is <see langword="null"/>.</exception>
     public DirectXHeapArena(IDirectXCommandCalls calls, nint device, GpuDeviceMemoryWork? memory) {
         ArgumentNullException.ThrowIfNull(argument: calls);
 
         m_calls = calls;
         m_device = device;
         m_memory = memory;
+        m_pool = new(allocate: Allocate, blockBytes: HeapBytes, free: (heap, _) => Free(heap: heap));
     }
 
     /// <summary>Gets the heaps the arena holds now.</summary>
-    public int Heaps {
-        get {
-            lock (m_gate) {
-                return m_pools.Values.Sum(selector: static pool => pool.Count);
-            }
-        }
-    }
+    public int Heaps => m_pool.Blocks;
 
     /// <summary>Creates a resource placed in a heap of a type: one with room, or a new one.</summary>
     /// <param name="description">The resource's description.</param>
@@ -83,29 +74,7 @@ public sealed unsafe class DirectXHeapArena {
             : (((description.Flags & (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) != 0)
                 ? D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES
                 : D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES));
-        var key = (heapType, category, role);
-        Heap? chosen = null;
-        var offset = 0UL;
-
-        lock (m_gate) {
-            ObjectDisposedException.ThrowIf(condition: m_retired, instance: this);
-            if (!m_pools.TryGetValue(key: key, value: out var pool)) {
-                pool = [];
-                m_pools.Add(key: key, value: pool);
-            }
-            foreach (var heap in pool) {
-                if (heap.Ranges.TryAllocate(alignment: info.Alignment, offset: out offset, size: info.SizeInBytes)) {
-                    chosen = heap;
-                    break;
-                }
-            }
-            if (chosen is null) {
-                chosen = Allocate(bytes: ((info.SizeInBytes > (HeapBytes / 2UL)) ? info.SizeInBytes : HeapBytes), key: key);
-                pool.Add(item: chosen);
-                _ = chosen.Ranges.TryAllocate(alignment: info.Alignment, offset: out offset, size: info.SizeInBytes);
-            }
-        }
-
+        var placement = m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), size: info.SizeInBytes);
         ID3D12Resource* resource = null;
         var clear = clearValue.GetValueOrDefault();
 
@@ -113,13 +82,13 @@ public sealed unsafe class DirectXHeapArena {
             m_calls.CreatePlacedResource(
                 clearValue: (clearValue.HasValue ? &clear : null),
                 description: &resourceDescription,
-                heap: chosen.Native,
+                heap: ((ID3D12Heap*)placement.Native),
                 initialState: initialState,
-                offset: offset,
+                offset: placement.Offset,
                 resource: &resource
             ).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreatePlacedResource");
         } catch {
-            lock (m_gate) { Return(heap: chosen, offset: offset, size: info.SizeInBytes); }
+            m_pool.Return(placement: placement);
             throw;
         }
         var token = Interlocked.Increment(location: ref Tokens);
@@ -128,10 +97,10 @@ public sealed unsafe class DirectXHeapArena {
 
         if (tagged.Failed) {
             m_calls.ReleaseResource(resource: resource);
-            lock (m_gate) { Return(heap: chosen, offset: offset, size: info.SizeInBytes); }
+            m_pool.Return(placement: placement);
             tagged.ThrowIfFailed(calls: m_calls, operation: "ID3D12Object::SetPrivateData");
         }
-        Placed[token] = (this, chosen, offset, info.SizeInBytes);
+        Placed[token] = (this, placement);
 
         return resource;
     }
@@ -146,43 +115,23 @@ public sealed unsafe class DirectXHeapArena {
         if (!(calls ?? new DirectXDeviceCommandCalls(device: null)).TryReadTag(key: TokenKey, resource: ((ID3D12Resource*)resource), value: out var token) || !Placed.TryRemove(key: token, value: out var placed)) {
             return false;
         }
-        lock (placed.Arena.m_gate) {
-            placed.Arena.Return(heap: placed.Heap, offset: placed.Offset, size: placed.Size);
-        }
+        placed.Arena.m_pool.Return(placement: placed.Placement);
 
         return true;
     }
     /// <summary>Releases every heap once, as the device is released, and retires the arena. A second call does
     /// nothing.</summary>
     public void FreeAll() {
-        lock (m_gate) {
-            if (m_retired) {
-                return;
-            }
-
-            m_retired = true;
-            foreach (var pool in m_pools.Values) {
-                foreach (var heap in pool) { Free(heap: heap); }
-            }
-            m_pools.Clear();
+        if (!m_pool.FreeAll()) {
+            return;
         }
         foreach (var (token, placed) in Placed) {
             if (ReferenceEquals(objA: placed.Arena, objB: this)) { _ = Placed.TryRemove(key: token, value: out _); }
         }
     }
 
-    // Returns a range to its heap; a heap left empty goes when it is a resource's own heap, or its pool already keeps
-    // another empty one.
-    private void Return(Heap heap, ulong offset, ulong size) {
-        heap.Ranges.Free(offset: offset, size: size);
-        if (!heap.Ranges.IsEmpty || !m_pools.TryGetValue(key: heap.Key, value: out var pool)) { return; }
-        if ((heap.Ranges.Capacity != HeapBytes) || pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: heap) && other.Ranges.IsEmpty))) {
-            _ = pool.Remove(item: heap);
-            Free(heap: heap);
-        }
-    }
     // Creates a heap and counts it.
-    private Heap Allocate(ulong bytes, (D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) key) {
+    private nint Allocate((D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) key, ulong bytes) {
         var description = new D3D12_HEAP_DESC {
             Flags = key.Category,
             Properties = new D3D12_HEAP_PROPERTIES { Type = key.Type },
@@ -193,18 +142,11 @@ public sealed unsafe class DirectXHeapArena {
         m_calls.CreateHeap(description: &description, heap: &heap).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreateHeap");
         m_memory?.CountAllocated(allocation: ((nint)heap), bytes: checked((long)bytes), device: m_device, role: key.Role);
 
-        return new Heap(key: key, native: heap, ranges: new GpuMemoryRanges(capacity: bytes));
+        return ((nint)heap);
     }
-    // Releases a heap and counts its release.
-    private void Free(Heap heap) {
-        _ = m_memory?.CountReleased(allocation: ((nint)heap.Native), device: m_device);
-        m_calls.ReleaseHeap(heap: heap.Native);
-    }
-
-    // One heap: its native object, its free ranges and the pool it belongs to.
-    private sealed class Heap((D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) key, ID3D12Heap* native, GpuMemoryRanges ranges) {
-        public (D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) Key { get; } = key;
-        public ID3D12Heap* Native { get; } = native;
-        public GpuMemoryRanges Ranges { get; } = ranges;
+    // Releases a heap and counts its release; the device's teardown and an emptied heap release alike.
+    private void Free(nint heap) {
+        _ = m_memory?.CountReleased(allocation: heap, device: m_device);
+        m_calls.ReleaseHeap(heap: ((ID3D12Heap*)heap));
     }
 }

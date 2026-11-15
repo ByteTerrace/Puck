@@ -2326,7 +2326,7 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: font.Source)) {
                 errors.Add(item: $"{path}.source is required.");
-            } else if (!WorldDocumentPaths.IsPortableRelativeFilePath(path: font.Source)) {
+            } else if (!Puck.Confinement.PortablePath.IsRelative(allowParentSegments: true, path: font.Source)) {
                 errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
             }
 

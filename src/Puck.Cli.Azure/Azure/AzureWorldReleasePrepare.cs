@@ -77,25 +77,19 @@ public static partial class AzureCommand {
                 new JsonObject {
                     ["type"] = "directory",
                     ["settings"] = new JsonObject {
-                        ["path"] = Path.Combine(
+                        ["path"] = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
                     path1: temporary.Path,
                     path2: "store"
-                ).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                )),
                     },
                 },
                 primary
             );
 
-            silo["stateDir"] = Path.Combine(
+            silo["stateDir"] = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
                 path1: temporary.Path,
                 path2: "state"
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            ));
             silo["doors"]!["budget"] = files.Length;
             var rows = silo["worlds"]!.AsArray();
             var prototype = rows[0]!.DeepClone(); rows.Clear();
@@ -142,13 +136,10 @@ public static partial class AzureCommand {
                     WorldDefinitionSerialization.Serialize(definition: definition)
                 );
                 using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
-                var keyPath = Path.Combine(
+                var keyPath = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
                     path1: temporary.Path,
                     path2: (name + ".pk8")
-                ).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                );
+                ));
 
                 File.WriteAllBytes(
                     keyPath,

@@ -1,6 +1,5 @@
 using Puck.Commands;
 using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 using Puck.Input.Devices;
 
 namespace Puck.Overlays;
@@ -120,24 +119,5 @@ public readonly record struct OverlayBindingBarFrame(
     GamepadType Family,
     ReadOnlyMemory<OverlayBindingSeat> Seats
 );
-/// <summary>The read seam <see cref="BindingBarWriter"/> consumes; the host's binding feed is the writer.</summary>
-public interface IBindingBarSource {
-    /// <summary>Copies the latest published frame, when one exists.</summary>
-    /// <param name="frame">The latest frame, when published.</param>
-    /// <returns><see langword="true"/> when a frame has been published.</returns>
-    bool TrySnapshot(out OverlayBindingBarFrame frame);
-}
-/// <summary>
-/// The binding-bar state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. When the feed
-/// runs on the SAME thread as the render node (the <c>FeedTick</c> hook), backing arrays may be reused across
-/// publishes with zero steady-state allocation; a cross-thread feed must publish freshly allocated snapshots.
-/// </summary>
-public sealed class BindingBarStore : IBindingBarSource {
-    private readonly PublishBuffer<OverlayBindingBarFrame> m_buffer = new();
-
-    /// <summary>Publishes a frame (the writer side).</summary>
-    /// <param name="frame">The frame to publish.</param>
-    public void Publish(in OverlayBindingBarFrame frame) => m_buffer.Publish(frame: frame);
-    /// <inheritdoc/>
-    public bool TrySnapshot(out OverlayBindingBarFrame frame) => m_buffer.TrySnapshot(frame: out frame);
-}
+/// <summary>The binding-bar state store, over the shared <see cref="OverlayStore{TFrame}"/>.</summary>
+public sealed class BindingBarStore : OverlayStore<OverlayBindingBarFrame>;

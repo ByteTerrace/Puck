@@ -341,8 +341,5 @@ public sealed record WorldUpdateDefaults(
 
     /// <summary>Whether an authored update cache stays below the host's updates directory on every platform.</summary>
     /// <param name="path">The authored path, or null for the host default.</param>
-    public static bool IsConfinedCachePath(string? path) => ((path is null) ||
-        (WorldDocumentPaths.IsPortableRelativeFilePath(path: path) &&
-         !path.Any(predicate: static c => ((c < ' ') || "<>\"|?*".Contains(value: c))) &&
-         !path.Split(separator: '/').Any(predicate: static part => ((part == "..") || part.EndsWith(value: '.') || part.EndsWith(value: ' ')))));
+    public static bool IsConfinedCachePath(string? path) => ((path is null) || Puck.Confinement.PortablePath.IsRelative(path: path));
 }

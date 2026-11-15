@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -49,11 +50,6 @@ public sealed class FixedStepUpLawTests {
     private static FixedStaticCollider Riser(double height) => FixedStaticCollider.AxisAlignedBox(
         center: Vector(x: 1.5d, y: (height / 2d), z: 0d),
         halfExtents: Vector(x: 0.5d, y: (height / 2d), z: 2d)
-    );
-    private static FixedVector3 Vector(double x, double y, double z) => new(
-        X: FixedQ4816.FromDouble(value: x),
-        Y: FixedQ4816.FromDouble(value: y),
-        Z: FixedQ4816.FromDouble(value: z)
     );
     // Runs the ordinary step 5 cm toward the riser, then the step-up. A level step is asserted blocked
     // first; a rising one may clear the riser's top, and the step-up must still decline it.

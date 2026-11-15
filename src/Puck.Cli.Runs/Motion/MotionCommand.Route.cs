@@ -52,7 +52,7 @@ public static partial class MotionCommand {
             MotionRouteReport.Write(directory, plan, route, tapeHash, recorded, a, b, problems);
             Console.Out.WriteLine($"motion: route {(problems.Count == 0 ? "MATCHED" : "UNMATCHED")} — controlled tick-throughput; normal realtime frame bar NOT measured.");
             foreach (var problem in problems) { Console.Out.WriteLine($"motion: {problem}"); }
-            Console.Out.WriteLine($"motion: report {Path.Combine(directory, "route-report.json").Replace('\\', '/')}");
+            Console.Out.WriteLine($"motion: report {Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(directory, "route-report.json"))}");
             return problems.Count == 0 ? CliExit.Success : CliExit.Failed;
         } catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException or ArgumentException or TimeoutException) {
             return CliExit.Refuse(Verb, "the route", exception.Message);

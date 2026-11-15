@@ -266,7 +266,7 @@ public static class MeasureCommand {
 
         if (Path.IsPathRooted(path: value)) {
             if (!PuckPaths.IsWithin(path: value, root: checkout)) { throw new ArgumentException(message: $"Input {PuckPaths.Normalize(path: value)} is outside the requesting checkout; place inputs in the declared tree and use relative paths."); }
-            value = Path.GetRelativePath(path: value, relativeTo: checkout).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar);
+            value = Puck.Abstractions.PuckPaths.Relative(path: value, relativeTo: checkout);
         } else if (!value.StartsWith(comparisonType: StringComparison.Ordinal, value: "--") && !PuckPaths.IsWithin(checkout, Path.GetFullPath(basePath: checkout, path: value))) {
             throw new ArgumentException(message: $"Input {value} escapes the frozen input tree.");
         }

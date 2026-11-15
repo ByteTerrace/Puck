@@ -703,13 +703,4 @@ public sealed class WorldCaptureFillLawTests {
         public nint Handle(int seat, WorldCameraSensor sensor) => pixels.Handle;
         public Vector3 Light(int seat, WorldCameraSensor sensor) => pixels.Light;
     }
-    private sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults faults) : IGpuDeviceContext {
-        public long AdapterLuid => gpu.AdapterLuid;
-        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
-        public GpuDeviceIdentity? Identity => gpu.Identity;
-        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
-        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(faults: faults, services: gpu.Services);
-
-        public void WaitIdle() => gpu.WaitIdle();
-    }
 }

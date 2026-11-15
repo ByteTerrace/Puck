@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -10,8 +11,6 @@ public sealed class FixedColliderFrameLawTests {
 
     private static double Next(ref Pcg32XshRr random, double minimum, double maximum) =>
         (minimum + ((maximum - minimum) * (random.NextUInt32() / 4294967296d)));
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
     private static FixedStaticCollider Collider(ref Pcg32XshRr random, FixedStaticColliderKind kind) {
         var center = Vector(x: Next(random: ref random, minimum: -200d, maximum: 200d), y: Next(random: ref random, minimum: -20d, maximum: 20d),
             z: Next(random: ref random, minimum: -200d, maximum: 200d));

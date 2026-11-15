@@ -64,6 +64,6 @@ public static class PlayerDerivedProducts {
         foreach (var build in guests) {
             _ = build.GetImage(packageDirectory: cache, prewarm: true);
         }
-        Console.WriteLine($"Prewarmed {(agbBios ? "the AGB BIOS and " : string.Empty)}{guests.Count} Rust addon guest(s) in {cache.Replace('\\', '/')}.");
+        Console.WriteLine($"Prewarmed {(agbBios ? "the AGB BIOS and " : string.Empty)}{guests.Count} Rust addon guest(s) in {Puck.Abstractions.PuckPaths.Slashed(path: cache)}.");
     }
 }

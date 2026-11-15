@@ -10,13 +10,6 @@ namespace Puck.World;
 /// wire) resolves no relative path: the refusal names the path. Files the engine ships beside its executable resolve
 /// through <see cref="PuckPaths.Shipped"/> instead.</summary>
 public static class WorldDocumentPaths {
-    /// <summary>Tests the portable relative spelling required by a font source: forward slashes, no drive or root,
-    /// and no empty or dot segments. Parent segments remain valid document-relative references.</summary>
-    /// <param name="path">The authored path.</param>
-    /// <returns>Whether the path has the portable relative spelling.</returns>
-    public static bool IsPortableRelativeFilePath(string? path) => (!string.IsNullOrWhiteSpace(value: path) &&
-        !path.Contains(value: '\\') && !path.StartsWith(comparisonType: StringComparison.Ordinal, value: "/") &&
-        !path.Contains(value: ':') && !path.Split(options: StringSplitOptions.None, separator: '/').Any(predicate: static segment => (segment is "" or ".")));
     /// <summary>Returns the directory a document file's relative paths resolve against.</summary>
     /// <param name="documentPath">The document file's path, absolute or relative to the current directory.</param>
     /// <returns>The full, forward-slashed path of the file's directory.</returns>
@@ -106,10 +99,7 @@ public static class WorldDocumentPaths {
             name: path,
             referrerName: sourceDocumentPath
         );
-        var targetDirectory = targetDocumentPath.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var targetDirectory = Puck.Abstractions.PuckPaths.Slashed(path: targetDocumentPath);
         var slash = targetDirectory.LastIndexOf(value: '/');
 
         targetDirectory = ((slash >= 0)
@@ -183,15 +173,12 @@ public static class WorldDocumentPaths {
             return path;
         }
 
-        return Path.GetRelativePath(
+        return Puck.Abstractions.PuckPaths.Relative(
             path: Path.GetFullPath(path: Path.Combine(
                 path1: FullDirectory(directory: sourceDirectory),
                 path2: path
             )),
             relativeTo: FullDirectory(directory: targetDirectory)
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         );
     }
     /// <summary>Returns a value indicating whether a document member holds a file path its document authors, one

@@ -90,7 +90,7 @@ public static partial class WorldDefinitionValidator {
                 for (var folderIndex = 0; (folderIndex < folders.Count); folderIndex++) {
                     var folder = folders[folderIndex];
 
-                    if (!WorldDocumentPaths.IsPortableRelativeFilePath(path: folder)) {
+                    if (!Puck.Confinement.PortablePath.IsRelative(allowParentSegments: true, path: folder)) {
                         errors.Add(item: $"{path}.contentFolders[{folderIndex}] '{folder}' must be a relative folder spelled with '/', with no root, drive, trailing '/', or empty or '.' segment.");
                     } else if (!seen.Add(item: folder)) {
                         errors.Add(item: $"{path}.contentFolders[{folderIndex}] '{folder}' is listed twice.");

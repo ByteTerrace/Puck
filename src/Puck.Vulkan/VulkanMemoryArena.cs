@@ -4,17 +4,16 @@ using Puck.Vulkan.Interop;
 namespace Puck.Vulkan;
 
 /// <summary>
-/// The device memory one device sub-allocates its buffers and offscreen images from: blocks of <see cref="BlockBytes"/>
-/// per memory type, role and resource kind (buffers and images apart, so no block mixes linear and optimal resources
-/// within the buffer-image granularity), each resource bound at an offset a block's free ranges hand out
-/// (<see cref="GpuMemoryRanges"/>). A resource larger than half a block gets a block of its own. A block holding
-/// host-visible memory is mapped once for its life, and a resource's mapping is the block's at its offset. A block every
-/// resource left is freed, but a pool keeps one empty shared block, so a bake that frees and makes staging buffers does
-/// not allocate again; a resource's own block goes with it. The device's memory counts (<see cref="GpuDeviceMemoryWork"/>) count blocks, the memory the device
-/// actually holds. A block is the arena's alone to free (<see cref="Owns"/>), exactly once: by the release that leaves a
-/// pool a second empty block, or by <see cref="FreeAll"/>, which unmaps and frees every block left as the device is torn
-/// down, whatever resources are still bound to it (a device loss leaves them so; freeing memory a lost device's resources
-/// are bound to is valid), and retires the arena, which then binds and maps nothing. Thread-safe.
+/// The device memory one device sub-allocates its buffers and offscreen images from: a
+/// <see cref="GpuMemoryPool{TKey, TBlock}"/> of blocks of <see cref="BlockBytes"/> per memory type, role and resource kind
+/// (buffers and images apart, so no block mixes linear and optimal resources within the buffer-image granularity), each
+/// resource bound at an offset aligned as its requirements ask. The pool's policy decides which block a resource takes and
+/// when a block goes. A block holding host-visible memory is mapped once for its life, and a resource's mapping is the
+/// block's at its offset. The device's memory counts (<see cref="GpuDeviceMemoryWork"/>) count blocks, the memory the
+/// device actually holds. A block is the arena's alone to free (<see cref="Owns"/>), exactly once: by the release that
+/// empties it, or by <see cref="FreeAll"/>, which unmaps and frees every block left as the device is torn down, whatever
+/// resources are still bound to it (a device loss leaves them so; freeing memory a lost device's resources are bound to is
+/// valid), and retires the arena, which then binds and maps nothing. Thread-safe.
 /// </summary>
 public sealed unsafe class VulkanMemoryArena {
     /// <summary>The bytes of a shared block.</summary>
@@ -24,30 +23,26 @@ public sealed unsafe class VulkanMemoryArena {
 
     private readonly VulkanDeviceCommands m_device;
 
+    // Guards the slices and the blocks' handles, and every call into the pool: the pool's allocate and free run under its
+    // own lock and write m_blocks, so a pool call made outside this gate would race Owns.
     private readonly Lock m_gate = new();
-    private readonly Dictionary<(uint Type, GpuMemoryRole Role, bool Image), List<Block>> m_pools = [];
-    // Each bound resource's range, by its handle and whether it is an image: a buffer and an image may share a handle
+    private readonly GpuMemoryPool<(uint Type, GpuMemoryRole Role, bool Image), (nint Memory, nint Mapped)> m_pool;
+    // Each bound resource's placement, by its handle and whether it is an image: a buffer and an image may share a handle
     // value, as a layer that wraps handles (RenderDoc) hands them out.
-    private readonly Dictionary<(nint Resource, bool Image), (Block Block, ulong Offset, ulong Size)> m_slices = [];
+    private readonly Dictionary<(nint Resource, bool Image), GpuMemoryPlacement<(nint Memory, nint Mapped)>> m_slices = [];
     // The memory of every block the arena holds, and once retired of every block it freed as it retired: no other
     // allocation reuses a retired arena's handles, since its device is being destroyed.
     private readonly HashSet<nint> m_blocks = [];
-    private bool m_retired;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanMemoryArena"/> class.</summary>
     /// <param name="device">The device whose memory it allocates.</param>
     public VulkanMemoryArena(VulkanDeviceCommands device) {
         m_device = device;
+        m_pool = new(allocate: Allocate, blockBytes: BlockBytes, free: Free);
     }
 
     /// <summary>Gets the blocks the arena holds now.</summary>
-    public int Blocks {
-        get {
-            lock (m_gate) {
-                return m_pools.Values.Sum(selector: static pool => pool.Count);
-            }
-        }
-    }
+    public int Blocks => m_pool.Blocks;
 
     /// <summary>Binds a buffer or an image to memory of a type: at an offset of a block with room, or of a new block.</summary>
     /// <param name="resource">The buffer or image, created unbound.</param>
@@ -57,45 +52,25 @@ public sealed unsafe class VulkanMemoryArena {
     /// <param name="role">What its memory is for, which decides whether the block is counted and mapped.</param>
     /// <returns>The block's memory, which the resource's handles name.</returns>
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
+    /// <exception cref="VulkanException">The block's allocation, mapping or the resource's binding failed.</exception>
     public nint Bind(nint resource, bool image, in VkMemoryRequirements requirements, uint memoryTypeIndex, GpuMemoryRole role) {
         lock (m_gate) {
-            ObjectDisposedException.ThrowIf(condition: m_retired, instance: this);
+            var placement = m_pool.Place(alignment: requirements.Alignment, key: (memoryTypeIndex, role, image), size: requirements.Size);
 
-            var key = (memoryTypeIndex, role, image);
-
-            if (!m_pools.TryGetValue(key: key, value: out var pool)) {
-                pool = [];
-                m_pools.Add(key: key, value: pool);
-            }
-
-            Block? chosen = null;
-            var offset = 0UL;
-
-            foreach (var block in pool) {
-                if (block.Ranges.TryAllocate(alignment: requirements.Alignment, offset: out offset, size: requirements.Size)) {
-                    chosen = block;
-                    break;
-                }
-            }
-            if (chosen is null) {
-                chosen = Allocate(bytes: ((requirements.Size > (BlockBytes / 2UL)) ? requirements.Size : BlockBytes), key: key);
-                pool.Add(item: chosen);
-                _ = chosen.Ranges.TryAllocate(alignment: requirements.Alignment, offset: out offset, size: requirements.Size);
-            }
             try {
                 (image ? m_device.BindImageMemory : m_device.BindBufferMemory)(
                     m_device.Handle,
                     resource,
-                    chosen.Memory,
-                    offset
+                    placement.Native.Memory,
+                    placement.Offset
                 ).ThrowIfFailed(device: m_device, operation: (image ? "vkBindImageMemory" : "vkBindBufferMemory"));
             } catch {
-                chosen.Ranges.Free(offset: offset, size: requirements.Size);
+                m_pool.Return(placement: placement);
                 throw;
             }
-            m_slices.Add(key: (resource, image), value: (chosen, offset, requirements.Size));
+            m_slices.Add(key: (resource, image), value: placement);
 
-            return chosen.Memory;
+            return placement.Native.Memory;
         }
     }
     /// <summary>Returns the memory a resource the arena bound held, once the resource is destroyed.</summary>
@@ -104,23 +79,11 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound it; one it did not still owns its memory.</returns>
     public bool Release(nint resource, bool image) {
         lock (m_gate) {
-            if (!m_slices.Remove(key: (resource, image), value: out var slice)) {
+            if (!m_slices.Remove(key: (resource, image), value: out var placement)) {
                 return false;
             }
 
-            var block = slice.Block;
-
-            block.Ranges.Free(offset: slice.Offset, size: slice.Size);
-            if (block.Ranges.IsEmpty) {
-                var pool = m_pools[block.Key];
-
-                // The pool keeps one empty shared block for the next resource; a second goes, and so does a resource's
-                // own block, whose size no other resource asked for.
-                if ((block.Ranges.Capacity != BlockBytes) || pool.Any(predicate: other => (!ReferenceEquals(objA: other, objB: block) && other.Ranges.IsEmpty))) {
-                    _ = pool.Remove(item: block);
-                    Free(block: block);
-                }
-            }
+            m_pool.Return(placement: placement);
 
             return true;
         }
@@ -131,8 +94,8 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound the resource to mapped memory.</returns>
     public bool TryMapped(nint resource, out nint pointer) {
         lock (m_gate) {
-            if (!m_retired && m_slices.TryGetValue(key: (resource, false), value: out var slice) && (slice.Block.Mapped != 0)) {
-                pointer = (slice.Block.Mapped + ((nint)slice.Offset));
+            if (!m_pool.IsRetired && m_slices.TryGetValue(key: (resource, false), value: out var placement) && (placement.Native.Mapped != 0)) {
+                pointer = (placement.Native.Mapped + ((nint)placement.Offset));
                 return true;
             }
         }
@@ -153,21 +116,12 @@ public sealed unsafe class VulkanMemoryArena {
     /// does nothing.</summary>
     public void FreeAll() {
         lock (m_gate) {
-            if (m_retired) {
-                return;
-            }
-
-            m_retired = true;
-            foreach (var pool in m_pools.Values) {
-                foreach (var block in pool) { Free(block: block, forget: false); }
-            }
-            m_pools.Clear();
-            m_slices.Clear();
+            if (m_pool.FreeAll()) { m_slices.Clear(); }
         }
     }
 
     // Allocates a block, counts it, and maps it for its life when its memory is host-visible.
-    private Block Allocate(ulong bytes, (uint Type, GpuMemoryRole Role, bool Image) key) {
+    private (nint Memory, nint Mapped) Allocate((uint Type, GpuMemoryRole Role, bool Image) key, ulong bytes) {
         var role = key.Role;
         var allocateInfo = new VkMemoryAllocateInfo {
             AllocationSize = bytes,
@@ -203,23 +157,15 @@ public sealed unsafe class VulkanMemoryArena {
 
         _ = m_blocks.Add(item: memory);
 
-        return new Block(key: key, mapped: mapped, memory: memory, ranges: new GpuMemoryRanges(capacity: bytes));
+        return (memory, mapped);
     }
     // Unmaps and frees a block, counting its release; a block a release frees is forgotten, since a later allocation may
-    // reuse its handle.
-    private void Free(Block block, bool forget = true) {
-        if (forget) { _ = m_blocks.Remove(item: block.Memory); }
+    // reuse its handle, while one the arena's retirement frees stays owned.
+    private void Free((nint Memory, nint Mapped) block, bool retiring) {
+        if (!retiring) { _ = m_blocks.Remove(item: block.Memory); }
         if (block.Mapped != 0) {
             m_device.UnmapMemory(m_device.Handle, block.Memory);
         }
         m_device.Destroy(destroy: m_device.FreeMemory, handle: block.Memory);
-    }
-
-    // One block: its memory, its mapping or zero, its free ranges and the pool it belongs to.
-    private sealed class Block((uint Type, GpuMemoryRole Role, bool Image) key, nint memory, nint mapped, GpuMemoryRanges ranges) {
-        public (uint Type, GpuMemoryRole Role, bool Image) Key { get; } = key;
-        public nint Memory { get; } = memory;
-        public nint Mapped { get; } = mapped;
-        public GpuMemoryRanges Ranges { get; } = ranges;
     }
 }

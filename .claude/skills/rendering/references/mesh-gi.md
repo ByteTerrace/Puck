@@ -81,7 +81,7 @@ world. The diagnostic additionally reports the first view's counts, median
 and oldest ages against those outside that frustum at each level.
 
 The runtime retains geometry addresses in `SdfMeshIrradianceScene.GpuArena`,
-using the shared `GpuMemoryRanges` allocator. A replacement allocates its own
+in words of the shared `GpuRangeAllocator`. A replacement allocates its own
 top hierarchy, braid entries and instance records, and only new geometry gets
 uploaded. A worker packs these changed ranges into a bounded queue of
 `SdfGpuWork.UploadChunkBytes` blocks. B1 admits their copies under its GPU,

@@ -148,13 +148,10 @@ public static partial class CanaryCommand {
 
             changed = true;
 
-            return Path.GetFullPath(path: Path.Combine(
+            return Puck.Abstractions.PuckPaths.Slashed(path: Path.GetFullPath(path: Path.Combine(
                 path1: sourceDirectory,
                 path2: name
-            )).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            )));
         }
 
         if (

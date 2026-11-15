@@ -64,10 +64,7 @@ public sealed class BrowserWorkspace {
     [ModuleInitializer]
     internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
 
-    private static string Normalize(string path) => Path.GetFullPath(path: path).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
+    private static string Normalize(string path) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetFullPath(path: path));
 
     /// <summary>Creates a workspace over <paramref name="root"/>.</summary>
     /// <param name="root">The workspace directory; it need not exist yet.</param>
@@ -112,10 +109,7 @@ public sealed class BrowserWorkspace {
     public string Relative(string fullPath) {
         ArgumentNullException.ThrowIfNull(argument: fullPath);
 
-        var normalized = fullPath.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: fullPath);
 
         return (normalized.StartsWith(
             comparisonType: (OperatingSystem.IsWindows()

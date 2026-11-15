@@ -20,6 +20,7 @@
     <ItemGroup>
         <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/World/ConsoleFixtures.cs" Link="World/ConsoleFixtures.cs" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Cli.Testing" />

@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -217,18 +218,6 @@ public sealed class SdfDistanceGridLawTests {
             }
         }
     }
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: Vector(
-            x: x,
-            y: y,
-            z: z
-        ));
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
 
     [Fact]
     public void AProgramWithNothingFiniteToCoverBakesNoGrid() {
