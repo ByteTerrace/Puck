@@ -2869,16 +2869,6 @@ Duplicates the survey left to the lanes that own their areas:
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
 confirmed the AV1 item in the code; the rest are unconfirmed):
-1. Machine cores and hosts (M): `HumbleGamingBrickCore.RestoreState` and
-   `FlushSave` (`Puck.HumbleGamingBrick/Hosting/HumbleGamingBrickCore.cs:120`,
-   `245`), `AdvancedGamingBrickCore` (`:114`) and `HumbleGamingDeckCore`
-   (`:122`) each carry the save and restore lifecycle, and `MachineHost`,
-   `AdvancedMachineHost` and `DeckMachineHost` each forward
-   `IMachineMemoryPeek` and pin `DefaultMaximumPendingSteps = 8` beside
-   `QueuedMachineHost` (`Puck.Machines/QueuedMachineHost.cs:11`). Restoring a
-   GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
-   earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
-   with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
 2. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside

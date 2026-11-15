@@ -104,10 +104,9 @@ this file is corrected in the same change.
   gain** (`MusicLayerDocument.GainThousandths`).
 - **Nothing proves a region crossing's `music.transition` cue end to end.**
 - **`LinearResampler` is linear**, not polyphase or anti-aliased.
-- **AV1 OBU framing is read twice.** `Av1Bitstream.TryReadObu` in
-  `Puck.Platform.Windows` omits the forbidden-bit check
-  `Av1TemporalDelimiterFilter.Strip` makes
-  ([refactoring packet](../../../docs/plans/open-items.md#refactoring-campaign)).
+- **AV1 OBU framing has one home.** `Av1Obu.TryRead` (`Puck.Abstractions`)
+  frames a header, extension and size and refuses a set forbidden bit;
+  `Av1Bitstream` and `Av1TemporalDelimiterFilter` both walk through it.
 - The references' and README's canaries (`voice-babble`,
   `music-conditional-layer-and-embellishment`, `instrument-clock-source`) are
   quarantined under `experimental/`.
