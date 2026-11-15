@@ -225,27 +225,25 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      not wave 1's code. Whether a loaded machine should cost Vulkan's pacer
      more than Direct3D 12's is not yet found.
    - A hand-over's own frame. A replacement that changes a group's piece or
-     copy count rebuilds the dresser's whole draw list
-     (`SdfMeshDresser.BuildDrawTopology`) and stages every row
-     (`SdfWorldTables.StageMeshRegionCore`): at the meadow that is the whole
-     list of blade draws, on the frame thread, in the one frame, and it is
-     the frame `host.frames` shows working several times a settled frame with
-     megabytes allocated on the frame thread; the meadow's arrivals showed one
-     or two such frames a window. The cause fix is the residency
-     packet's rows that keep their place
-     ([residency](#residency-and-streaming)), so a hand-over costs its own
-     rows.
+     copy count, and a group's first mesh, rebuild the dresser's whole draw
+     list (`SdfMeshDresser.BuildDrawTopology`) and stage every row
+     (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame;
+     it is the frame `host.frames` shows working several times a settled
+     frame, and the meadow's arrivals showed one or two such frames a window.
+     [Arrival work proportional to change](arrival-proportional.md#decision-1-rows-that-keep-their-place)
+     holds the design (rows that keep their place, a waiting draw as an
+     absent record, portal clips as rows) and its steps R0 to R2 with the
+     counts each lands on.
    - The arrival's background work and the garbage collector. Every
      collection of the young generations stops the frame thread, so what the
      workers allocate on arrival lands on frames as pauses. The lighting's
      trace-scene build (`SdfMeshIrradianceScene.Build`) now leaves only what the
      scene keeps (its hierarchy's workspace is pooled, and no node allocates).
-     What still allocates per arrival, largest first: the top-level scene and
-     its GPU export rebuilt whole on every scene change
-     (`SdfMeshIrradianceScene`'s constructor, `CreateGpuExport`), and a store
-     load's managed decode before the native copy (`SdfMeshStoreCodec.ReadMesh`,
-     `SdfMeshLibrary.RenumberManaged`; the memory item's lead too). Read them
-     with an EventPipe allocation trace across the arrival
+     What still allocates per arrival, largest first, is designed out in
+     [the same memo](arrival-proportional.md#steps): the top-level scene and
+     its GPU export rebuilt whole on every scene change (its steps S1 and
+     S2), and a store load's managed decode before the native copy (its step
+     D1). Read them with an EventPipe allocation trace across the arrival
      (`Microsoft-Windows-DotNETRuntime:0x1:5`), and `host.frames`' per-frame
      collections.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
@@ -277,11 +275,20 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
        rules (`RuleEvaluator.EvaluateDue`), the bodies (`WorldPopulation.AdvanceSimulated`:
        `WorldBody.ResolveProgramContacts`, the refusal snapshot), snapshot delivery
        (`WorldTick.EmitSnapshot`), and the session instances
-       (`WorldInstanceHost.StepInstances`). Its full scans: `WorldRuleHost.DeriveFacts`
-       visits every population slot and `WorldDisclosureImages.Current` every
-       authored row on each pass. The scoped replay's
-       `WorldScopedReplayRuntime.AfterTick` encodes each scope body's checkpoint
-       every tick the scope runs (`WorldPopulation.AppendContinuationHash`). The
+       (`WorldInstanceHost.StepInstances`). The scan left that does not follow
+       change is the rule host's fact derivation: `WorldRuleHost.DeriveFacts`
+       compares every population slot's pose and facts on each pass, eleven
+       passes a tick in the debug world (one before the walk and one after each
+       firing that delivers an arm), 4,530 slot comparisons a tick
+       (`world.counters world.tick`: `fact-derives`, `fact-slots`). Comparing
+       only the slots a rule has read saves nothing there, since rules read
+       nearly every slot (measured: 4,483 of 4,528). It needs the body's
+       observed-state door in the
+       [refactoring packet](#refactoring-campaign), which would hand the pass
+       the bodies that moved. A replay scope still encodes each of its bodies'
+       continuations every tick it runs
+       (`WorldScopedReplayRuntime.AfterTick`), 8.9 KB a body, for want of the
+       same door. The
        move off the frame thread is the presentation view's last cut
        ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
      - The creations' effector surface probes (`WorldCreationInstances.ApplyEffectors`):
@@ -2390,6 +2397,12 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · whole walks on ordinary frames] Walks over every row or copy each
+  frame that the arrival memo's row table does not absorb: the bake's copy
+  layout (`SdfMeshPathBake` copy layout walk), two walks in `SdfMeshDresser`
+  outside its topology build, and the residency's glass count
+  (`SdfWorldResidency`). Make each proportional to change or derive it once.
+  Seen by the arrival design lane from the code; not measured.
 - [low · probe scene arena] `SdfMeshIrradianceScene.GpuArena`'s word count is
   a high-water mark that never shrinks after frees; confirm it sizes a buffer
   that must not shrink, or release the tail. Seen by the GPU arenas lane from
@@ -2583,26 +2596,71 @@ and none has an authored field yet):
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
-- [medium] A body's simulation continuation has no single write door, so
-  nothing can say it is unchanged. `WorldPopulation.AppendContinuationHash`
-  encodes every active slot on every authority hash
-  (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs`); the fields it
-  serializes (`WorldBody.Transfer.cs` `TransferState` and
-  `ApplyIntegrationResidue`, the pose, the lane timer and press arrays, the
-  tether residue, and the population entry's producer, autonomy and navigation
-  state) are written directly from the step, commands, contacts and tethers. A
-  rest-epoch cache missed four such writes to sleeping bodies, so it was
-  deleted. The redesign: group those fields in storage the body reaches only
-  through one accessor that moves a version (arrays included, which a plain
-  field write bypasses), so the compiler rather than convention enforces it;
-  the population's entry state the same way; then cache a slot's digest by that
-  version. The stake is about 7 % of a long recording (go-tests), the share of
-  resting bodies; a version that also covers moving bodies' unchanged
-  fields would not help, since a moving body's pose changes every tick.
+- [high] A body's state has no single write door, so nothing can say a body
+  is unchanged, and two scans pay for every body on every pass:
+  - The continuation fold (`WorldPopulation.AppendContinuationHash`) encodes
+    every active slot on every authority hash: 8.9 KB a slot through the
+    checkpoint codec, 5.3 MB a recorded tick for the debug world's 590 bodies,
+    of which 488 are parked rigid bodies (`world.counters world.tick`:
+    `continuation-encodes`, `continuation-bytes`). It is the largest component
+    of a recorded tick's hash by an order of magnitude; a replay scope pays the
+    same for its own bodies every tick it runs.
+  - The rule host's fact derivation (`WorldRuleHost.DeriveFacts`) compares
+    every slot's pose and facts on each of about eleven passes a tick.
+  A rest-epoch cache of the fold missed four writes to sleeping bodies and was
+  deleted, so the door has to be one the compiler holds. The design:
+  - Each continuation field of `WorldBody` becomes a field-backed property
+    whose setter is its only writer (`set { if (field != value) { field =
+    value; ... } }`): the setter moves the body's version and puts the body on
+    its population's moved list, and it moves nothing when the value is the
+    one already held, so a parked body rewritten with what it holds stays
+    unmoved. The inventory is about ninety of the body's 156 fields (1,937
+    uses, 617 writes, 13 by `ref` or `out`, which a property refuses at
+    compile time).
+  - Three shapes need more than a property, and each fails silently if
+    converted like a scalar. An array (`m_laneTimers` and about twenty more)
+    is written by element, which bypasses a setter: it needs storage that
+    hands out a `ReadOnlySpan` and writes through an indexer that moves the
+    version, and the transfer-state view (`WorldBodyTransferState`), which
+    aliases the live arrays today, has to read through that. A mutable struct
+    (the `FixedRateAccumulator`s) mutated by a method call on a property
+    mutates a copy, with no compiler error: each such call site is rewritten
+    by hand to read, step and store. A referenced object with its own state
+    (`m_tether`, the contact list, the tape ring, `m_laneActions` written
+    through `ref`) is tracked inside itself or kept in the live part below.
+  - The slot digest splits into a part the version covers and a live part the
+    fold reads every time and compares by value: the action-state registers
+    (arena lanes, `WorldBody.ReadActionState`), the contact-field observation
+    (a function of `WorldPopulation.ContactFieldVersion`), and the population
+    entry's own fields until `Entry` gets the same door (about 35 fields, the
+    producer and autonomy structs written through `ref`).
+  - Nothing forces a new field to be tracked. Either the capture functions
+    (`WorldBody.TransferState`, `CaptureIntegrationResidue`) become static
+    over the tracked storage, or an analyzer refuses an untracked instance
+    field on the type. Until one of them holds, the check is the one the arena
+    rows have: `--reproduce` recomputing every slot against its cached digest,
+    and a sampled slot on every fold.
+  The fact derivation reads only the body's pose and the inputs of
+  `WorldBody.Facts` (about fourteen of those fields), so that subset can land
+  first and pay in every played tick. The fold's remaining constant cost is
+  the checkpoint image itself: three
+  nested multi-kilobyte record structs copied several times before the writer
+  sees them (`WorldPopulationEntryCheckpoint`, `WorldBodyIntegrationResidue`,
+  `WorldBodyTransferState`), and per-item delegate writes for the script actors
+  and strings. A sparse encoding of all-default arrays and input images would
+  cut the bytes about tenfold and shrinks every checkpoint with it; it changes
+  the checkpoint format and every recorded hash.
 - [medium] `WorldOverviewCamera.Resolve` (`src/Puck.World.Client/WorldOverviewCamera.cs`), the view of a world with
   no local seat or camera, bakes in its eye offset (`[0, 14, 18]`), target lift and PI/3 field of view. Those are an
   authored look: move them into the standard package's camera program and let the engine fall back to a neutral
   framing only.
+- [low] The work ledgers that wrap a `WorkCounterSet` in a class of their own
+  each repeat the same forwarding members (`Name`, `WorkKinds`, `Add`, `Read`,
+  `TryRead`): `WorldBodyWork`, `FixedContactSweepWork`, `FixedStaticContactWork`
+  and `WorldBootWork` are the ones the branch duplicate check names.
+  `WorkCounterSet` is itself an `IWorkCounterSource`, so a ledger with no
+  behaviour of its own is the set (`WorldTickWork.Process`). Unconfirmed which
+  of the four adds behaviour the set lacks.
 - [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
   no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
   Decide whether the link-local metadata endpoint needs the same bound.
@@ -2835,12 +2893,7 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
 
 Duplicates the survey left to the lanes that own their areas:
 
-- Tick cost: two frozen perception images, each a population snapshot with
-  lazily built `FixedSpatialNeighborhood`s per cell width and a range, cone and
-  sight test (`Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:20-135`,
-  `Puck.World.Server/WorldPopulation.Flock.cs:18-30`, `154-280`); and an input
-  image hashed field by field twice (`Puck.World.Server/WorldInputOwner.Checkpoint.cs:110`,
-  `Puck.World.Server/WorldTick.RoutedInput.cs:64`).
+
 - Cold bake: `sdfGlyphSampleFieldMedian` and `sdfBoxDistance(float2)`
   (`Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:6`, `413`) repeat
   `puckMsdfReconstruct` and `puckBoxDistance2` from
@@ -3271,25 +3324,42 @@ colliders report's only red findings left are the valley's relief
 
 ### Test runner and replay
 
-Owner: test runner and replay specialist · medium and low ·
-Next: the per-tick authority hash is incremental
-([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
-reproduce worker for what remains.
+Owner: test runner and replay specialist · high to low ·
+Next: the body's write door
+([refactoring packet](#refactoring-campaign)), then the rule latch's fold,
+both in the first item below.
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
-- [medium] Recording still costs about a third of the plain authored run. The
-  per-tick authority hash folds the arena from `RowVersion`-cached row digests
-  in 32-row segments, and every body slot's continuation afresh in 32-slot
-  segments; the scoped replay runtime reads the same row digests
-  ([design](engine-job-system.md#the-incremental-state-hash)). The body
-  continuation's cache needs the write-door redesign in the
-  [refactoring packet](#refactoring-campaign). Left: the components that still
-  fold whole every tick (body continuations, `PopulationPose`,
-  `BodyActionState`, `Navigation`, `Flock`, `Input`) and the probe's per-tick
-  input copy, unprofiled; `--reproduce`'s replay pays the full recompute every
-  tick, which is the check's price; a replica's fixed floor per scenario is
-  unmeasured. Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`)
-  before choosing the next segment.
+- [high] The per-tick authority hash is most of what a recording adds to a
+  tick, and one component is most of the hash. Timed per component in a
+  headless debug world with a recording armed (a stopwatch around each arm of
+  `WorldPersistence.AppendStateHashComponent`; a sampled profile misattributes
+  it), the order is: `BodyContinuation` by an order of magnitude, then
+  `RuleLatch`, `Input`, `BodyActionState`, `Search`, and the rest far below.
+  The arena folds from `RowVersion`-cached row digests, the declaration from
+  the digest its definition names, and a recording, a drive and a shadow
+  verify fold the state once a tick and derive the hash from the
+  per-component read (`WorldStateHashComposition.HashOf`)
+  ([design](engine-job-system.md#the-incremental-state-hash)). Left, in that
+  order:
+  - `BodyContinuation`: the write door in the
+    [refactoring packet](#refactoring-campaign).
+  - `RuleLatch`: `RuleLatch.AppendStateHash` hashes every rule's name, looks
+    its state up by name, and hashes every binding's key name, on every fold.
+    The names never change: hold each rule's name digest beside its state
+    (`RuleLatch.States` already aligns states with the compiled array) and
+    each key's digest by ordinal. A version on the held bits, moved by the
+    writers `RuleLatch` already funnels (`SetHeld`, `RemoveHeld`, the
+    lifecycle writers and `Undo`), would let an unchanged rule fold a cached
+    digest; `RuleState.Held` is a public dictionary today, so the door is the
+    two-dictionary merge in the state audit remainder.
+  - `Input`: `WorldInputOwner.AppendStateHash` folds every retained history
+    record of every owner on every fold; an owner's history changes only when
+    it admits an event.
+  - `BodyActionState`: `WorldBody.AppendActionStateHash` hashes each register
+    definition's name per body per fold.
+  `--reproduce`'s replay pays the full recompute every tick, which is the
+  check's price; a replica's fixed floor per scenario is unmeasured.
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines, and
@@ -3523,28 +3593,29 @@ Grounded causes and leads, largest first:
   door; the static ones follow once placement and classification move to the
   GPU trace. A restore decodes the whole store entry (`SdfMeshStoreCodec.TryDecode`)
   when it needs only the normals and level-index planes; a codec read of
-  those planes alone would cut a rebuilt region's restore work. Owner:
-  rendering/bake.
+  those planes alone would cut a rebuilt region's restore work, and
+  [the arrival memo](arrival-proportional.md#decision-4-the-store-decode)'s
+  step D1 is that read. Owner: rendering/bake.
 - [medium] A replacement that changes a group's piece or copy count still
-  rebuilds the dresser's whole draw list and stages every record once. A
-  mesh that replaces a drawn one lands ahead of the draws and takes them
-  only once its words stand, and a hand-over whose counts stand stages its
-  own rows
-  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)). A
-  chunked mesh whose chunks differ between tiers, or a shared geometry
-  whose copies change, shifts every later row, so
-  `SdfMeshDresser.BuildDrawTopology` runs, its journal names every row, and
-  `SdfWorldTables.StageMeshRegionCore` plans the arena and stages the list
-  whole. Rows that keep their place across such a change (a free row a
-  group's surplus pieces give up and its next pieces take, with a rebuild
-  only when free rows pass a share of the list) would make that hand-over
-  its own rows' work as well. No capture has yet shown a hand-over frame by
+  rebuilds the dresser's whole draw list and stages every record once, as
+  does a group's first mesh; a draw waiting for its mesh is filtered out of
+  the staged list, so each landing meanwhile packs the list again; and a
+  body straddling a portal journals every row each frame. A mesh that
+  replaces a drawn one lands ahead of the draws and takes them only once its
+  words stand, and a hand-over whose counts stand stages its own rows
+  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)).
+  [Arrival work proportional to change](arrival-proportional.md) is the
+  design: a run of rows per owner from the arena's allocator, free and
+  waiting rows as absent records, the staged table the producer's row for
+  row, and a packing only when free rows pass a share of the table (its
+  steps R1a to R1c), with the store's restore reading only the planes it
+  restores (its step D1). No capture has yet shown a hand-over frame by
   frame: a burst capture across one, with the group in every frame, is the
-  check the landing-ahead invariant still owes. Arriving at the meadow does not
-  always hand over with a count change (three 90 to 120 frame bursts across
-  arrivals saw none), so read `SdfMeshHistory.DressTopologyBuilds`
-  (`world.counters sdf.instances`) before and after a burst and keep only a
-  burst it moved across. Owner:
+  check the landing-ahead invariant still owes, and step R1b takes it.
+  Arriving at the meadow does not always hand over with a count change
+  (three 90 to 120 frame bursts across arrivals saw none), so read
+  `SdfMeshHistory.DressTopologyBuilds` (`world.counters sdf.instances`)
+  before and after a burst and keep only a burst it moved across. Owner:
   rendering/bake.
 - [medium] A device that refuses the mesh region's growth still ends the
   World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`

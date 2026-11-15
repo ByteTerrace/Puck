@@ -131,6 +131,26 @@ public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? So
 
         return hash.ToHashCode();
     }
+    /// <summary>Folds the whole image into a state hash: every axis lane in ordinal order, the button bank, then
+    /// whether a pointer ray is present and, when one is, its origin and direction. Two images fold alike exactly
+    /// when <see cref="Equals(PlayerIntent)"/> holds.</summary>
+    /// <param name="hash">The hash to fold into.</param>
+    public void AppendStateHash(ref Fnv1aHash hash) {
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
+            hash.Add(value: Channels.Axes[ordinal]);
+        }
+
+        hash.Add(value: Channels.Buttons);
+        hash.Add(value: ((byte)(SourceRay.HasValue ? 1 : 0)));
+        if (SourceRay is { } ray) {
+            hash.Add(value: ray.Origin.X.Value);
+            hash.Add(value: ray.Origin.Y.Value);
+            hash.Add(value: ray.Origin.Z.Value);
+            hash.Add(value: ray.Direction.X.Value);
+            hash.Add(value: ray.Direction.Y.Value);
+            hash.Add(value: ray.Direction.Z.Value);
+        }
+    }
     /// <summary>Returns this image with one Q32.32 displacement replaced.</summary>
     public PlayerIntent WithRelative(int ordinal, FixedQ3232 value) {
         var channels = Channels;

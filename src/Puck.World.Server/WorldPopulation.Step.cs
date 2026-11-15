@@ -98,7 +98,7 @@ public sealed partial class WorldPopulation {
                 (m_entries[designated.Index].Body is { } designatedBody)
             ) {
                 var position = (frozen
-                    ? m_flockPositions[designated.Index]
+                    ? m_flockImage!.Position(index: designated.Index)
                     : designatedBody.FixedPosition
                 );
 
@@ -130,7 +130,7 @@ public sealed partial class WorldPopulation {
                 }
 
                 var position = (frozen
-                    ? m_flockPositions[index]
+                    ? m_flockImage!.Position(index: index)
                     : body.FixedPosition
                 );
 
@@ -146,11 +146,11 @@ public sealed partial class WorldPopulation {
                     (sensed.RequiresLineOfSight && !HasLineOfSight(
                     from: self,
                     fromOrientation: (frozen
-                    ? m_flockOrientations[selfIndex]
+                    ? m_flockImage!.Orientation(index: selfIndex)
                     : m_entries[selfIndex].Body!.FixedOrientation),
                     to: position,
                     toOrientation: (frozen
-                    ? m_flockOrientations[index]
+                    ? m_flockImage!.Orientation(index: index)
                     : body.FixedOrientation)
                 ))
                 ) {
@@ -202,10 +202,10 @@ public sealed partial class WorldPopulation {
                 ? new BodySensorTarget(
                     Index: currentTarget,
                     Position: (frozen
-                    ? m_flockPositions[currentTarget]
+                    ? m_flockImage!.Position(index: currentTarget)
                     : held.FixedPosition),
                     DistanceSquared: ((frozen
-                    ? m_flockPositions[currentTarget]
+                    ? m_flockImage!.Position(index: currentTarget)
                     : held.FixedPosition) - self).LengthSquared
                 )
                 : BodySensorTarget.None
@@ -233,7 +233,7 @@ public sealed partial class WorldPopulation {
             (m_entries[designation.Index].Body is { } designatedBody)
         ) {
             goal = (frozen
-                ? m_flockPositions[designation.Index]
+                ? m_flockImage!.Position(index: designation.Index)
                 : designatedBody.FixedPosition
             );
             targetIndex = designation.Index;

@@ -1092,11 +1092,15 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteJaggedULongArray(WireWriter writer, IReadOnlyList<ulong[]?> rows) {
-        writer.WriteArrayCount(count: rows.Count);
+        // A body's rows are an array; walking it through the interface costs two interface calls a row.
+        var array = (rows as ulong[]?[]);
+        var count = (array?.Length ?? rows.Count);
+
+        writer.WriteArrayCount(count: count);
 
         // Indexed, never enumerated: the continuation hash writes this on every recorded tick.
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
+        for (var index = 0; (index < count); index++) {
+            var row = ((array is not null) ? array[index] : rows[index]);
             var present = (row is not null);
 
             writer.WriteBoolean(value: present);

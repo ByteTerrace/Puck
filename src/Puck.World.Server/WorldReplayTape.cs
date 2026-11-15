@@ -214,12 +214,7 @@ public sealed partial class WorldReplayTape {
             machineHostFactory: m_machineHostFactory,
             profiles: m_profiles,
             documents: m_liveServer.RebuildDocuments,
-            observeTick: ((shadowComponents is null)
-                ? null
-                : (tick, server) => shadowComponents[tick] = WorldStateHashComposition.AuthoritativeComponents(
-                    server: server,
-                    tick: (server.NextInputTick - 1UL)
-                ))
+            components: shadowComponents
         );
         var divergedAt = HashTrace.FirstDivergence(
             left: recording.RecordedAuthoritativeHashes,
@@ -373,11 +368,14 @@ public sealed partial class WorldReplayTape {
 
         var authority = m_currentAuthority;
         var intents = m_currentIntents;
-        // One authoritative fold per tick, shared by the recording's verdict trace and the history's own.
-        var authoritativeHash = WorldStateHashComposition.HashAuthoritative(
-            server: m_liveServer,
-            tick: (m_liveServer.NextInputTick - 1UL)
-        );
+        // One authoritative fold per tick, shared by the recording's verdict trace, its per-component trace and the
+        // history's own: a recording reads the components and folds them, anything else folds the hash alone.
+        var components = (((m_mode == WorldReplayMode.Recording) && (m_ticks is not null))
+            ? WorldStateHashComposition.AuthoritativeComponents(server: m_liveServer, tick: (m_liveServer.NextInputTick - 1UL))
+            : null);
+        var authoritativeHash = ((components is not null)
+            ? WorldStateHashComposition.HashOf(components: components)
+            : WorldStateHashComposition.HashAuthoritative(server: m_liveServer, tick: (m_liveServer.NextInputTick - 1UL)));
 
         m_history?.NoteTick(
             authoritativeHash: authoritativeHash,
@@ -388,7 +386,7 @@ public sealed partial class WorldReplayTape {
         }
 
         if (
-            (m_mode != WorldReplayMode.Recording) ||
+            (components is null) ||
             (m_ticks is not { } ticks)
         ) {
             // Only the history captures: it copies the group out, so the accumulators are reused and a steady tick
@@ -426,10 +424,7 @@ public sealed partial class WorldReplayTape {
         // Both stay one entry per tick, in lockstep with `ticks` above.
         m_liveHashes.Add(item: WorldReplaySnapshot.HashState(population: m_liveServer.Population));
         m_liveAuthoritativeHashes.Add(item: authoritativeHash);
-        m_liveComponentHashes.Add(item: WorldStateHashComposition.AuthoritativeComponents(
-            server: m_liveServer,
-            tick: (m_liveServer.NextInputTick - 1UL)
-        ));
+        m_liveComponentHashes.Add(item: components);
 
         // A REBUILD (world.reset/world.load/world.reload) applies inside THIS same tick's server.Step, before
         // NoteTick runs — so by now m_liveServer.Definition already reflects whatever it swapped to. A tape spans

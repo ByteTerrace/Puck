@@ -637,14 +637,54 @@ public sealed class WireWriter {
         ArgumentNullException.ThrowIfNull(argument: items);
         ArgumentNullException.ThrowIfNull(argument: writeItem);
 
+        // An array or a list is walked as a span: reading either through the interface costs two interface calls an
+        // item, which is most of what a mostly-empty fixed-size array costs to write.
+        if (items is T[] array) {
+            WriteItems(items: new ReadOnlySpan<T>(array: array), writeItem: writeItem);
+
+            return;
+        }
+        if (items is List<T> list) {
+            WriteItems(items: CollectionsMarshal.AsSpan(list: list), writeItem: writeItem);
+
+            return;
+        }
+
         WriteArrayCount(count: items.Count);
 
-        // Indexed, never enumerated: an interface enumerator over an array or a list allocates on every call.
+        // Indexed, never enumerated: an interface enumerator allocates on every call.
         for (var index = 0; (index < items.Count); index++) {
             writeItem(
                 this,
                 items[index]
             );
+        }
+    }
+    /// <summary>Writes a declared-count array from a span: the 32-bit count, then each item through
+    /// <paramref name="writeItem"/>, the same bytes <see cref="WriteArray"/> writes for the same items.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="items">The elements, in wire order.</param>
+    /// <param name="writeItem">The writer of one element; it must not change the collection the span views.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writeItem"/> is <see langword="null"/>.</exception>
+    public void WriteItems<T>(ReadOnlySpan<T> items, Action<WireWriter, T> writeItem) {
+        ArgumentNullException.ThrowIfNull(argument: writeItem);
+
+        WriteArrayCount(count: items.Length);
+        foreach (var item in items) {
+            writeItem(
+                this,
+                item
+            );
+        }
+    }
+    /// <summary>Writes contiguous booleans in wire order, each as the single 0/1 byte <see cref="WriteBoolean"/>
+    /// writes, without a count prefix.</summary>
+    /// <param name="values">The values.</param>
+    public void WriteBooleans(ReadOnlySpan<bool> values) {
+        var bytes = Reserve(count: values.Length);
+
+        for (var index = 0; (index < values.Length); index++) {
+            bytes[index] = ((byte)(values[index] ? 1 : 0));
         }
     }
     /// <summary>Writes a declared-count array's count alone, for a caller that then writes exactly that many items

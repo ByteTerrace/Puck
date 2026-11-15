@@ -276,15 +276,11 @@ public sealed partial class WorldReplayTape {
 
         var tick = drive.Cursor;
         var liveHash = WorldReplaySnapshot.HashState(population: m_liveServer.Population);
-        var liveAuthoritativeHash = WorldStateHashComposition.HashAuthoritative(
-            server: m_liveServer,
-            tick: (m_liveServer.NextInputTick - 1UL)
-        );
-
         var liveComponents = WorldStateHashComposition.AuthoritativeComponents(
             server: m_liveServer,
             tick: (m_liveServer.NextInputTick - 1UL)
         );
+        var liveAuthoritativeHash = WorldStateHashComposition.HashOf(components: liveComponents);
 
         drive.LiveHashes.Add(item: liveHash);
         drive.LiveAuthoritativeHashes.Add(item: liveAuthoritativeHash);

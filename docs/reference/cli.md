@@ -3153,9 +3153,11 @@ sampled tick as deterministic counts (the bodies advanced, the parked bodies a
 field change woke or left observing, the analytic solver's resolves, exact
 queries, convex queries and their support evaluations, certified sweeps and the
 bounds queries they charge, interval walks with their instructions and full
-rotation expansions, and point evaluations with their instructions, read from
-`physics.bodies`, `physics.contact`, `physics.sweep`, `sdf.bounds` and
-`sdf.point`). These counts do not depend on machine load, so they compare across
+rotation expansions, point evaluations with their instructions, and the
+population scans beside the step (fact derivations and the slots they compare,
+perception images), read from `physics.bodies`, `world.tick`,
+`physics.contact`, `physics.sweep`, `sdf.bounds` and `sdf.point`). These counts
+do not depend on machine load, so they compare across
 commits where the timing rows do not. It
 also boots a separate server with the world's addons and console edit echoes,
 activates seat zero, and measures standing plus three 60-tick gallery walks

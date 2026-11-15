@@ -1872,10 +1872,13 @@ public sealed partial class WorldReplaySnapshot {
     /// <param name="observeTick">Called after each re-driven tick with its recorded tick index and the shadow server,
     /// once both traces sampled it, for an inspection of the shadow's state that the traces only hash; it must not
     /// change the shadow.</param>
+    /// <param name="components">One slot per recorded tick, which receives that tick's per-component digests
+    /// (<see cref="WorldStateHashComposition.AuthoritativeComponents"/>), the read the tick's hash is then folded
+    /// from; <see langword="null"/> folds the hash alone.</param>
     /// <returns>Both traces, one entry per recorded tick.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
     /// <paramref name="machineHostFactory"/>, or <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null) {
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null, ulong[][]? components = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
@@ -1960,10 +1963,15 @@ public sealed partial class WorldReplaySnapshot {
                 tick: tick
             );
             poseHashes[tick] = HashState(population: population);
-            authoritativeHashes[tick] = WorldStateHashComposition.HashAuthoritative(
-                server: server,
-                tick: (server.NextInputTick - 1UL)
-            );
+            if (components is null) {
+                authoritativeHashes[tick] = WorldStateHashComposition.HashAuthoritative(
+                    server: server,
+                    tick: (server.NextInputTick - 1UL)
+                );
+            } else {
+                components[tick] = WorldStateHashComposition.AuthoritativeComponents(server: server, tick: (server.NextInputTick - 1UL));
+                authoritativeHashes[tick] = WorldStateHashComposition.HashOf(components: components[tick]);
+            }
             observeTick?.Invoke(
                 arg1: tick,
                 arg2: server
@@ -2054,19 +2062,44 @@ public sealed partial class WorldReplaySnapshot {
     /// <param name="population">The entity table to hash.</param>
     /// <returns>The state hash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>
-    /// <param name="bodies">A selected body set, or null for every active body.</param>
-    public static ulong HashState(WorldPopulation population, IReadOnlySet<int>? bodies = null) {
+    public static ulong HashState(WorldPopulation population) {
         ArgumentNullException.ThrowIfNull(argument: population);
 
         var hash = Fnv1aHash.Create();
 
         for (var index = 0; (index < population.Capacity); index++) {
-            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
+            AppendBodyState(hash: ref hash, index: index, population: population);
+        }
+
+        return hash.Value;
+    }
+    /// <summary>Returns the population hash of the named slots alone, each folded as
+    /// <see cref="HashState"/> folds it, in the order given; the fold visits no other slot.</summary>
+    /// <param name="population">The entity table to hash.</param>
+    /// <param name="bodies">The slots to fold, ascending.</param>
+    /// <returns>The state hash.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>
+    public static ulong HashBodies(WorldPopulation population, ReadOnlySpan<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: population);
+
+        var hash = Fnv1aHash.Create();
+
+        foreach (var index in bodies) {
+            if (((uint)index) < ((uint)population.Capacity)) {
+                AppendBodyState(hash: ref hash, index: index, population: population);
+            }
+        }
+
+        return hash.Value;
+    }
+    // One slot's share of the population hash; an inactive slot folds nothing.
+    private static void AppendBodyState(ref Fnv1aHash hash, WorldPopulation population, int index) {
+        {
             if (
                 !population.IsActive(index: index) ||
                 (population.EntryBody(index: index) is not { } body)
             ) {
-                continue;
+                return;
             }
 
             var position = body.FixedPosition;
@@ -2112,7 +2145,5 @@ public sealed partial class WorldReplaySnapshot {
             // Scale changes every scaled quantity a later tick reads (colliders, speed, mass) before pose diverges.
             hash.Add(value: unchecked((ulong)body.Scale.Value));
         }
-
-        return hash.Value;
     }
 }
