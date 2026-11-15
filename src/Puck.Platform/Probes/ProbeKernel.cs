@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.Platform.Probes;
@@ -124,7 +125,7 @@ public interface IProbeKernelHost {
     /// <param name="run">When this returns <see langword="true"/>, the attached run.</param>
     /// <param name="fault">A human-readable refusal reason when this returns <see langword="false"/>; otherwise empty.</param>
     /// <returns><see langword="true"/> if the request was accepted by this host.</returns>
-    bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault);
+    bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault);
 }
 /// <summary>The kernel host on the render adapter's own device, for kernels whose trigger socket reads a rendered source
 /// (a view export or another probe's output) and whose sockets bind no camera. Its worker wakes on

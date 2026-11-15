@@ -64,7 +64,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         IReadOnlyList<IMachineRuntime> machines,
         IReadOnlyList<QueuedMachineWorker> workers,
         Func<IReadOnlyList<IQueuedMachineCore>, IMachineGroupCore> createCore,
-        int maximumPendingSteps = 8,
+        int maximumPendingSteps = QueuedMachineWorker.DefaultMaximumPendingSteps,
         string workerName = "machine-link"
     ) {
         ArgumentNullException.ThrowIfNull(argument: createCore);

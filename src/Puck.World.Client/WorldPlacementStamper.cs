@@ -237,39 +237,29 @@ public static class WorldPlacementStamper {
             return;
         }
 
-        var shapes = (creation.Shapes ?? []);
-
-        foreach (var volume in authored) {
-            if (!volume.Enabled) {
+        for (var position = 0; (position < authored.Count); position++) {
+            if (!WorldShapeIsolation.TryAdmitVolume(
+                creation: creation,
+                emitted: volumes.Count,
+                hidden: hidden,
+                parentIndex: out var parentIndex,
+                position: position,
+                volume: out var volume
+            )) {
                 continue;
-            }
-            if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                throw new InvalidOperationException(message: $"Creation '{creation.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var frameOrigin = origin;
             var frameRotation = rotation;
 
-            if (volume.Parent is { } parent) {
-                if (WorldShapeIsolation.IsHidden(hidden: hidden, name: parent, shapes: shapes)) {
-                    continue;
-                }
+            if (parentIndex >= 0) {
+                var shape = creation.Shapes![parentIndex];
 
-                foreach (var shape in shapes) {
-                    if (string.Equals(
-                        a: shape.Name?.Value,
-                        b: parent,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        frameOrigin = (origin + Vector3.Transform(
-                            rotation: rotation,
-                            value: (shape.Position.Value * scale)
-                        ));
-                        frameRotation = Quaternion.Normalize(value: (rotation * shape.Rotation.Value));
-
-                        break;
-                    }
-                }
+                frameOrigin = (origin + Vector3.Transform(
+                    rotation: rotation,
+                    value: (shape.Position.Value * scale)
+                ));
+                frameRotation = Quaternion.Normalize(value: (rotation * shape.Rotation.Value));
             }
 
             volumes.Add(item: volume.ToVolume(

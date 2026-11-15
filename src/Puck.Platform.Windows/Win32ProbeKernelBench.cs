@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
 
@@ -40,7 +41,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
     private bool m_closed;
 
-    public IProbeKernelRun Attach(in ProbeKernelRequest request, ProbeReadingRing ring) {
+    public IProbeKernelRun Attach(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring) {
         var attachment = new Attachment(
             request: request,
             ring: ring
@@ -344,7 +345,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         }
     }
 
-    private sealed class Attachment(in ProbeKernelRequest request, ProbeReadingRing ring) : IProbeKernelRun {
+    private sealed class Attachment(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring) : IProbeKernelRun {
         private volatile bool m_detached;
         private volatile bool m_ended;
         private string? m_fault;
@@ -358,7 +359,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         private Win32D3D11FenceWait?[] m_ringWaits = [];
 
         public readonly ProbeKernelRequest Request = request;
-        public readonly ProbeReadingRing Ring = ring;
+        public readonly PublishBuffer<ProbeReading> Ring = ring;
 
         public long Cycles => (Kernel?.Cycles ?? 0L);
         public bool Detached => m_detached;

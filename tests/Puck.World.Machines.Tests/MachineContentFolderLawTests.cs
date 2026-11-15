@@ -232,7 +232,7 @@ public sealed class MachineContentFolderLawTests {
             Assert.Contains(expectedSubstring: "cannot be mounted", actualString: registry.Submit(line: "machine.default cabinet banked.rom").Output);
             Assert.Contains(expectedSubstring: "no machine 'nobody' - machine.state lists them", actualString: registry.Submit(line: "machine.default nobody plain.rom").Output);
             Assert.Contains(
-                expectedSubstring: "requires a local console or seat",
+                expectedSubstring: "a local verb, for the console or a local seat",
                 actualString: registry.SubmitSession(line: "machine.default cabinet plain.rom", session: new TextCommandSource(registry: registry).CreateSession(principal: Principal.Peer(generation: 0, index: 0))).Output
             );
 

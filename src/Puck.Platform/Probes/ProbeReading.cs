@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Puck.Abstractions;
 using Puck.Maths;
 
 namespace Puck.Platform.Probes;
@@ -18,8 +19,8 @@ public struct ProbeChannelValues {
 }
 /// <summary>
 /// One probe publication — the neutral currency between an probe and every binding that consumes it. Blittable
-/// and fixed size so it sits unmodified in a <see cref="ProbeReadingRing"/> slot (managed today; the same layout
-/// an out-of-process shared-memory ring will use for a model probe): named fixed-point channels, a confidence,
+/// and fixed size so it sits unmodified in a <see cref="PublishBuffer{ProbeReading}"/> slot (managed today; the same layout
+/// an out-of-process shared-memory slot will use for a model probe): named fixed-point channels, a confidence,
 /// and the two <see cref="System.Diagnostics.Stopwatch"/>-domain timestamps that bound its latency — when the
 /// analyzed frame was captured, and when this reading finished computing from it. Never carries pixels.
 /// </summary>

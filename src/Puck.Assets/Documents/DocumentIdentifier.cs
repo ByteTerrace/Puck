@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -67,6 +68,22 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
         return true;
     }
 
+    /// <summary>Returns whether a string is read as a state reference: it begins with <see cref="ReferencePrefix"/>, a
+    /// bare prefix included, which resolution then refuses for naming no row.</summary>
+    /// <param name="value">The candidate string.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> begins with <see cref="ReferencePrefix"/>.</returns>
+    public static bool IsReference([NotNullWhen(true)] string? value) =>
+        ((value is not null) && value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ReferencePrefix
+        ));
+    /// <summary>Returns whether a string names a state cell: <see cref="ReferencePrefix"/> followed by at least one
+    /// character.</summary>
+    /// <param name="value">The candidate string.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> is a reference that names something after the prefix.</returns>
+    public static bool IsCellReference(string? value) =>
+        (IsReference(value: value) && (value.Length > ReferencePrefix.Length));
+
     /// <summary>Wraps a literal identifier.</summary>
     public static implicit operator DocumentIdentifier(string value) => new(value: value);
     /// <summary>Reads the resolved identifier.</summary>
@@ -116,10 +133,7 @@ public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIden
             throw new JsonException(message: "a document identifier must be a non-null string.");
         }
 
-        return (value.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: DocumentIdentifier.ReferencePrefix
-        )
+        return (DocumentIdentifier.IsReference(value: value)
             ? DocumentIdentifier.FromReference(reference: value)
             : new DocumentIdentifier(value: value)
         );

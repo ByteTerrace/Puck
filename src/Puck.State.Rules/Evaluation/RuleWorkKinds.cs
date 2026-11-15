@@ -11,33 +11,23 @@ public static class RuleWorkKinds {
     /// <summary>The name a counters report heads a rule evaluator's section with.</summary>
     public const string SourceName = "state.rules";
 
+    private static readonly WorkKindRegistry Registry = new();
+
     /// <summary>Gets the kind counting rule evaluations: one per rule and binding the evaluator is asked to judge,
     /// whether it runs the gate, keeps a closed verdict, or fires.</summary>
-    public static WorkKind Evaluations { get; } = new(name: "state.rules.evaluations", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Evaluations { get; } = Registry.Declare(name: "state.rules.evaluations", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the evaluations the schedule answered without running bindings or gate, because
     /// nothing the rule reads had changed since its gate last closed.</summary>
-    public static WorkKind Skips { get; } = new(name: "state.rules.skips", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Skips { get; } = Registry.Declare(name: "state.rules.skips", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the firings that committed and moved the arena.</summary>
-    public static WorkKind Firings { get; } = new(name: "state.rules.firings", unit: "count", workClass: WorkClass.Deterministic);
-
+    public static WorkKind Firings { get; } = Registry.Declare(name: "state.rules.firings", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list visited: each rule once per tick it was due.</summary>
-    public static WorkKind Due { get; } = new(name: "state.rules.due", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Due { get; } = Registry.Declare(name: "state.rules.due", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list left unvisited: each rule once per tick nothing it reads
     /// had moved and its last verdict asked for nothing.</summary>
-    public static WorkKind Elided { get; } = new(name: "state.rules.elided", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Elided { get; } = Registry.Declare(name: "state.rules.elided", unit: "count", workClass: WorkClass.Deterministic);
 
     /// <summary>Gets the evaluator's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
-        Order.Kinds;
-
-    // A nested holder initializes after every kind above, whatever order the members are declared in.
-    private static class Order {
-        internal static readonly WorkKind[] Kinds = [
-            Evaluations,
-            Skips,
-            Firings,
-            Due,
-            Elided,
-        ];
-    }
+        Registry.Kinds;
 }

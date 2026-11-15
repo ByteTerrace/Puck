@@ -418,10 +418,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // value is some other string. WorldPlacement.Id is a plain literal, which is why this is creation-only.
             if (
                 (grant.Subject.Kind == GrantSubjectKind.Creation) &&
-                rowId.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix
-            )
+                Puck.Assets.Documents.DocumentIdentifier.IsReference(value: rowId)
             ) {
                 reason = $"{grant.Subject.Describe()} names a state reference rather than a row id — a '{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}' token resolves to some other string at load, so the row it addresses can never equal this subject; name the resolved id";
 

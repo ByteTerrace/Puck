@@ -13,13 +13,11 @@ namespace Puck.HumbleGamingBrick;
 /// simulation/render pump. Hardware observations and writes marshal to the same worker or coupled-link boundary.
 /// The synchronous core remains available separately for embedding without a worker or GPU.
 /// </summary>
-public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconfigurableMachine {
+public sealed partial class MachineHost : QueuedHardwareMachineHost, IReconfigurableMachine {
     /// <summary>The machine's native framebuffer width (160).</summary>
     public const int ScreenWidth = Framebuffer.ScreenWidth;
     /// <summary>The machine's native framebuffer height (144).</summary>
     public const int ScreenHeight = Framebuffer.ScreenHeight;
-    /// <summary>The finite number of exact tick/input segments that may be accepted but incomplete.</summary>
-    public const int DefaultMaximumPendingSteps = 8;
 
     // The CURRENT revision — construction-fixed at boot, then live-mutable through TryReconfigure (the device swap).
     private ConsoleModel m_model;
@@ -43,7 +41,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
-        maximumPendingSteps: DefaultMaximumPendingSteps,
         workerName: "Puck GamingBrick",
         audioSampleRate: audioSampleRate,
         savePath: savePath
@@ -79,22 +76,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
             );
         }
     }
-
-    /// <inheritdoc/>
-    public byte PeekByte(int address) =>
-        Worker.PeekByte(address: address);
-    /// <inheritdoc/>
-    public void PeekBytes(int address, Span<byte> destination) =>
-        Worker.PeekBytes(
-            address: address,
-            destination: destination
-        );
-    /// <inheritdoc/>
-    public void PokeByte(int address, byte value) =>
-        Worker.PokeByte(
-            address: address,
-            value: value
-        );
 
     /// <inheritdoc/>
     public string Options =>

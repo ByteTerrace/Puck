@@ -302,14 +302,7 @@ public sealed record WorldPlacementDeal(
     }
     private static ImmutableArray<FixedVector3> DeriveOffsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution?.Region is WorldDistributionRegion.Lattice lattice) {
-            var countA = Math.Max(
-                val1: lattice.CountA,
-                val2: 1
-            );
-            var countB = Math.Max(
-                val1: lattice.CountB,
-                val2: 1
-            );
+            var (countA, countB) = LatticeCounts(lattice: lattice);
             var stepA = FixedVector3.FromVector3(value: lattice.StepA);
             var stepB = FixedVector3.FromVector3(value: lattice.StepB);
             var offsets = new FixedVector3[(countA * countB)];
@@ -332,19 +325,25 @@ public sealed record WorldPlacementDeal(
             : []
         );
     }
-    /// <summary>Returns the number of instances a template's region deals — <see cref="Offsets"/>' length, the exact count
-    /// (seed-resolved for Noise) the dealt row's capacity is bounded by and <c>world.budget</c> folds into the
-    /// placement census.</summary>
+    // A lattice's grid along each axis: the one definition of its instance count, which the offsets walk and the count
+    // multiplies.
+    private static (int CountA, int CountB) LatticeCounts(WorldDistributionRegion.Lattice lattice) => (
+        Math.Max(val1: lattice.CountA, val2: 1),
+        Math.Max(val1: lattice.CountB, val2: 1)
+    );
+    private static int LatticeInstanceCount(WorldDistributionRegion.Lattice lattice) {
+        var (countA, countB) = LatticeCounts(lattice: lattice);
+
+        return (countA * countB);
+    }
+    /// <summary>Returns the number of instances a template's region deals: the length of <see cref="Offsets"/>, the one
+    /// count the dealt row's capacity is bounded by, the deal sweep and the re-deal read, and <c>world.budget</c> folds
+    /// into the placement census. A lattice and a scatter state it without deriving their offsets, from the same
+    /// definitions the derivation walks; a noise region resolves its offsets for it (seed-resolved).</summary>
     /// <param name="template">The template placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static int InstanceCount(WorldPlacement template, ulong worldSeed) => template.Distribution?.Region switch {
-        WorldDistributionRegion.Lattice lattice => (Math.Max(
-        val1: lattice.CountA,
-        val2: 1
-    ) * Math.Max(
-        val1: lattice.CountB,
-        val2: 1
-    )),
+        WorldDistributionRegion.Lattice lattice => LatticeInstanceCount(lattice: lattice),
         WorldDistributionRegion.Scatter scatter => checked((int)CreationStampSampling.ScatterInstanceCeiling(
         width: scatter.Width,
         depth: scatter.Depth,

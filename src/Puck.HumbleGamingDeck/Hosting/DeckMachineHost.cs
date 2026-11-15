@@ -1,5 +1,3 @@
-using Puck.Abstractions.Machines;
-
 namespace Puck.HumbleGamingDeck;
 
 /// <summary>
@@ -8,13 +6,11 @@ namespace Puck.HumbleGamingDeck;
 /// 256 by 240 picture and stereo audio, with two controller ports: <c>controls</c> for $4016 and <c>controls-2</c> for
 /// $4017. Its debug memory window reads and writes the CPU address map on the worker thread, between steps.
 /// </summary>
-public sealed class DeckMachineHost : QueuedMachineHost, IMachineMemoryPeek {
+public sealed class DeckMachineHost : QueuedMachineHost {
     /// <summary>The picture's width in pixels.</summary>
     public const int ScreenWidth = HgdPpu.Width;
     /// <summary>The picture's height in lines.</summary>
     public const int ScreenHeight = HgdPpu.Height;
-    /// <summary>The finite number of exact tick and input segments that may be accepted but incomplete.</summary>
-    public const int DefaultMaximumPendingSteps = 8;
 
     private static readonly string[] InputPortNames = ["controls", "controls-2"];
 
@@ -29,14 +25,11 @@ public sealed class DeckMachineHost : QueuedMachineHost, IMachineMemoryPeek {
     /// <exception cref="InvalidDataException"><paramref name="cartridgeImage"/>'s header or payload is damaged or ambiguous.</exception>
     /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
     /// family, or memory layout.</exception>
-    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
-    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public DeckMachineHost(byte[]? cartridgeImage = null, string? savePath = null, int audioSampleRate = 0, HgdPowerOnProfile? powerOn = null)
         : base(
         audioSampleRate: audioSampleRate,
         height: ScreenHeight,
         inputPorts: InputPortNames,
-        maximumPendingSteps: DefaultMaximumPendingSteps,
         savePath: savePath,
         width: ScreenWidth,
         workerName: "Puck HumbleGamingDeck"
@@ -49,22 +42,6 @@ public sealed class DeckMachineHost : QueuedMachineHost, IMachineMemoryPeek {
             );
         }
     }
-
-    /// <inheritdoc/>
-    public byte PeekByte(int address) =>
-        Worker.PeekByte(address: address);
-    /// <inheritdoc/>
-    public void PeekBytes(int address, Span<byte> destination) =>
-        Worker.PeekBytes(
-            address: address,
-            destination: destination
-        );
-    /// <inheritdoc/>
-    public void PokeByte(int address, byte value) =>
-        Worker.PokeByte(
-            address: address,
-            value: value
-        );
 
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>

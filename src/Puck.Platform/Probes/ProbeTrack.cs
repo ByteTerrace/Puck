@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Serialization;
+using Puck.Abstractions;
 using Puck.Maths;
 
 namespace Puck.Platform.Probes;
@@ -36,7 +37,7 @@ public sealed record ProbeTrackDocument(string? Schema = ProbeTrackDocument.Sche
 public sealed partial class ProbeTrackJsonContext : JsonSerializerContext {
 }
 /// <summary>
-/// Plays a <see cref="ProbeTrackDocument"/> into a <see cref="ProbeReadingRing"/> on a <see cref="Stopwatch"/>
+/// Plays a <see cref="ProbeTrackDocument"/> into a <see cref="PublishBuffer{ProbeReading}"/> on a <see cref="Stopwatch"/>
 /// clock, looping — the hardware-free substitute for a live probe input. Each sample publishes once its own
 /// <see cref="ProbeTrackSample.T"/> has elapsed since the playback origin (plus whole loops), so an irregularly
 /// recorded track replays at its recorded cadence. <see cref="Advance"/> is driven from the host's own frame loop;
@@ -47,7 +48,7 @@ public sealed partial class ProbeTrackJsonContext : JsonSerializerContext {
 public sealed class ProbeTrackPlayer {
     private readonly int m_channelCount;
     private readonly long m_loopTicks;
-    private readonly ProbeReadingRing m_ring;
+    private readonly PublishBuffer<ProbeReading> m_ring;
     private readonly long[] m_sampleTicks;
     private readonly ProbeTrackSample[] m_samples;
 
@@ -66,7 +67,7 @@ public sealed class ProbeTrackPlayer {
     /// <c>0..</c><see cref="ProbeReadingLimits.MaxChannels"/>, no samples, a sample whose channel count
     /// disagrees with the declared <see cref="ProbeTrackDocument.Channels"/>, or a sample time that is not finite,
     /// is negative, or does not strictly ascend from the previous sample's.</exception>
-    public ProbeTrackPlayer(ProbeTrackDocument document, ProbeReadingRing ring) {
+    public ProbeTrackPlayer(ProbeTrackDocument document, PublishBuffer<ProbeReading> ring) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(ring);
 
@@ -179,7 +180,7 @@ public sealed class ProbeTrackPlayer {
             channels[channel] = FixedQ4816.FromDouble(value: (sample.C?[channel] ?? 0.0));
         }
 
-        m_ring.Publish(reading: new ProbeReading(
+        m_ring.Publish(value: new ProbeReading(
             sequence: m_sequence++,
             captureTimestamp: captureTimestamp,
             completionTimestamp: nowTimestamp,

@@ -1,3 +1,5 @@
+using Puck.Assets.Documents;
+
 namespace Puck.World.Authoring;
 
 /// <summary>A palette slot's cel style chosen live by a state cell (<see cref="PaletteEntryDocument.ToonSelect"/>): the
@@ -17,7 +19,7 @@ public sealed record PaletteToonSelectDocument(string State, IReadOnlyList<ToonS
     /// <param name="path">The selection's document path, such as <c>palette[2].toonSelect</c>.</param>
     /// <returns>One message per refusal; empty when the selection is admissible.</returns>
     public IEnumerable<string> Refusals(string path) {
-        if (!ColorStateBinding.IsStateBinding(value: State)) {
+        if (!DocumentIdentifier.IsCellReference(value: State)) {
             yield return $"{path}.state must be a state.<row>[.<key>] binding";
         }
         if ((Cases is null) || (Cases.Count == 0)) {

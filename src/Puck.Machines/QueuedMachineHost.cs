@@ -10,7 +10,7 @@ namespace Puck.Machines;
 /// </summary>
 public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime, IMachineContentSlot,
     IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
-    IMachineInputPorts, IFeedbackMachine, ITimeTravelMachine, IMachineCheckpointRuntime, IMachineFrameProgress {
+    IMachineInputPorts, IFeedbackMachine, IMachineMemoryPeek, ITimeTravelMachine, IMachineCheckpointRuntime, IMachineFrameProgress {
     private readonly SeatPort[] m_seats;
     private readonly QueuedMachineWorker m_worker;
 
@@ -20,16 +20,16 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <summary>Initializes a queued screen-machine host.</summary>
     /// <param name="width">The native framebuffer width.</param>
     /// <param name="height">The native framebuffer height.</param>
-    /// <param name="maximumPendingSteps">The maximum accepted but incomplete step count.</param>
     /// <param name="workerName">The worker thread's diagnostic name.</param>
     /// <param name="audioSampleRate">The requested audio sample rate, or zero to disable audio synthesis.</param>
     /// <param name="savePath">The initial battery-save path.</param>
     /// <param name="inputPorts">The controller ports' names in seat order, one to <see cref="MachinePads.MaxSeats"/>
     /// distinct names; <see langword="null"/> declares the single port <c>controls</c>.</param>
+    /// <param name="maximumPendingSteps">The maximum accepted but incomplete step count.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inputPorts"/> names no port or more than
     /// <see cref="MachinePads.MaxSeats"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="inputPorts"/> repeats a name or holds a blank one.</exception>
-    protected QueuedMachineHost(int width, int height, int maximumPendingSteps, string workerName, int audioSampleRate, string? savePath, IReadOnlyList<string>? inputPorts = null) {
+    protected QueuedMachineHost(int width, int height, string workerName, int audioSampleRate, string? savePath, IReadOnlyList<string>? inputPorts = null, int maximumPendingSteps = QueuedMachineWorker.DefaultMaximumPendingSteps) {
         inputPorts ??= ["controls"];
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
@@ -162,6 +162,21 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
             savePath: m_savePath
         ));
     }
+    /// <inheritdoc/>
+    public byte PeekByte(int address) =>
+        m_worker.PeekByte(address: address);
+    /// <inheritdoc/>
+    public void PeekBytes(int address, Span<byte> destination) =>
+        m_worker.PeekBytes(
+            address: address,
+            destination: destination
+        );
+    /// <inheritdoc/>
+    public void PokeByte(int address, byte value) =>
+        m_worker.PokeByte(
+            address: address,
+            value: value
+        );
     /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) =>
         m_worker.ReadAudioSamples(destination: destination);
