@@ -392,6 +392,7 @@ public sealed class WorldDisclosureImages {
         if (ReferenceEquals(entry.Arena, arena) && arena.TryReadMoves(entry.MovesRead, moved)) {
             foreach (var row in moved) {
                 if (!Refresh(view, entry, audience, row, skeletons)) { return Compose(view, audience); }
+                if ((uint)row >= (uint)m_dependents.Length) { continue; }
                 foreach (var dependent in m_dependents[row]) {
                     if (!Refresh(view, entry, audience, dependent, skeletons)) { return Compose(view, audience); }
                 }
