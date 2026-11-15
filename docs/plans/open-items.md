@@ -2879,15 +2879,6 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   node without a proof) was not traced; if it can, the fence needs an
   abandoned state that `Wait` reports.
 
-Duplicates the survey left to the lanes that own their areas:
-
-
-- Cold bake: `sdfGlyphSampleFieldMedian` and `sdfBoxDistance(float2)`
-  (`Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:6`, `413`) repeat
-  `puckMsdfReconstruct` and `puckBoxDistance2` from
-  `Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli`; the merge moves the bake
-  closure, so it lands with that lane's closure change.
-
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
 confirmed the AV1 item in the code; the rest are unconfirmed):

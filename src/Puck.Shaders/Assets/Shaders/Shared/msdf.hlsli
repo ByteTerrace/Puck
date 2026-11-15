@@ -1,6 +1,8 @@
-// Shared distance-field helpers for shade-time consumers: the multi-channel glyph decode (bilinear, then the median of
-// the three channels) and its coverage ramp, and the 2D box distance. Each consumer keeps its own texel fetch, since
-// HLSL has no function pointers; Puck.Text.MtsdfSampling is the CPU twin of the decode.
+// Shared distance-field helpers: the multi-channel glyph decode (bilinear, then the median of the three channels) and its
+// coverage ramp, for shade-time consumers (the overlays, the SDF glyph decal), and the 2D box distance, which the SDF
+// field's 2D profiles read as well. Each consumer keeps its own texel fetch, since HLSL has no function pointers;
+// Puck.Text.MtsdfSampling is the CPU twin of the decode. The SDF field includes this file, so an edit here moves the mesh
+// bake's identity (SdfMeshBakeIdentity).
 #ifndef PUCK_MSDF_HLSLI
 #define PUCK_MSDF_HLSLI
 
