@@ -2736,21 +2736,6 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    suspected the create-only `CliLease` stamp (`CliLease.cs`, the
    `pending.Commit(overwrite: false)` call) depends on Unix `link()` for that
    (unverified); a law that races two stamps on each platform settles it.
-2. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
-   `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
-   `166`) and `VulkanMemoryArena.Bind`/`Release`
-   (`Puck.Vulkan/VulkanMemoryArena.cs:58`, `102`) repeat one policy over the
-   shared `GpuMemoryRanges`: 64 MiB blocks per key, first fit across the pool,
-   a block of its own above half a block, keep one empty shared block per pool,
-   retire on `FreeAll`. They differ only in the native calls, in how a resource
-   finds its range (a private-data token on Direct3D 12, a handle map on
-   Vulkan) and in Vulkan mapping host-visible blocks. Survivor: a generic pool
-   in `Puck.Abstractions/Gpu` with backend allocate, free and bind callbacks.
-   Beside it, `GpuRangeAllocator` (`Puck.Abstractions/Gpu/Residency/GpuRangeAllocator.cs`,
-   `uint`, allocation-free, no alignment) and `GpuMemoryRanges`
-   (`Puck.Abstractions/Gpu/Device/GpuMemoryRanges.cs`, `ulong`, aligned,
-   `List`-backed) are two first-fit coalescing range allocators; unify that core (array-backed, `ulong`, aligned,
-   allocation-free) and keep each caller's own bookkeeping.
 3. Surface upload and readback per backend (L, specialist; a GPU leg).
    `DirectXSurfaceUpload` (`Puck.DirectX/Interop/DirectXSurfaceUpload.cs`, 592
    lines) and the readback in `DirectXGpuSurfaceTransferFactory.cs:61`, beside
