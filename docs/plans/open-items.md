@@ -2861,18 +2861,6 @@ State and rules audit remainder (paths under `src/`):
 
 Rendering duplicates the dup-render audit found (paths under `src/`):
 
-- [medium · owner: author shaders] The generated light phase recomputes what
-  `sdfLightResponse` just computed: `sdfShadeLightPhase`
-  (`SdfShadeHlsl.Invocation.cs`, written into `isa/sdf-shade.hlsli`) calls
-  `sdfLightResponse`, then evaluates `sdfMeshLightVisibility`, `sdfLightVisibility`
-  (always, even when the probe share replaces it) and `sdfPointReach` again, and
-  restates the probe-or-cascade visibility choice that `sdfLightResponse` makes
-  in `shade/sdf-light.hlsli`. The copies already disagree for a point light: the
-  response scales by ambient occlusion times the probe share, while the phase's
-  `light.visibility` is either the slot search's answer (ambient occlusion for an
-  unslotted light) or the probe share alone, never their product. One light-geometry
-  function (direction, reach, visibility, probe share) in `sdf-light.hlsli`, read
-  by both, removes the second evaluation and the drift.
 - [low] The render node's own retirement still polls fences beside the slot
   proof its packages use: `RetiredGraph` disposes on `Fence.IsSignaled`
   (`ShaderPipelineRenderNode.RetireCompleted`), and the node's completions and
