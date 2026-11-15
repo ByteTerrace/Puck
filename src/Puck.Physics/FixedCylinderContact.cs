@@ -44,8 +44,8 @@ internal static class FixedCylinderContact {
         if (volume.Kind == FixedBodyColliderKind.Box) {
             // The existing capsule/box path is conservative at box edges. Here retain the body's bounds in
             // the cylinder frame, but test its rectangle against the circle rather than against a square.
-            var (_, extent) = FixedColliderBounds.WorldBounds(position: FixedVector3.Zero,
-                orientation: (rotation.Conjugate() * orientation).Normalize(), volume: in volume);
+            var extent = FixedColliderBounds.WorldBounds(position: FixedVector3.Zero,
+                orientation: (rotation.Conjugate() * orientation).Normalize(), volume: in volume).Extent;
             var radial = new FixedVector3(
                 X: (first.X - FixedQ4816.Clamp(value: first.X, minimum: -extent.X, maximum: extent.X)),
                 Y: FixedQ4816.Zero,

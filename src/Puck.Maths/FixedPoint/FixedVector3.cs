@@ -399,6 +399,25 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
                 y: right.Z
             )
         );
+    /// <summary>Takes the lesser of each pair of matching components.</summary>
+    /// <param name="left">The first vector.</param>
+    /// <param name="right">The second vector.</param>
+    /// <returns>The vector of <see cref="FixedQ4816.Min"/> applied to each component pair.</returns>
+    public static FixedVector3 Min(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: FixedQ4816.Min(
+                x: left.X,
+                y: right.X
+            ),
+            Y: FixedQ4816.Min(
+                x: left.Y,
+                y: right.Y
+            ),
+            Z: FixedQ4816.Min(
+                x: left.Z,
+                y: right.Z
+            )
+        );
     /// <summary>Takes the greatest of a vector's three components.</summary>
     /// <param name="value">The vector to read.</param>
     /// <returns>The largest of <see cref="X"/>, <see cref="Y"/> and <see cref="Z"/>.</returns>

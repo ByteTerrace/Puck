@@ -2,25 +2,6 @@ using Puck.Maths;
 
 namespace Puck.Physics;
 
-/// <summary>A world-axis box about a static collider that the collider's exact query never pushes a body outside of:
-/// six raw Q48.16 words, read without touching the collider record.</summary>
-/// <param name="Center">The box's world center: the collider's <see cref="FixedStaticCollider.Center"/>.</param>
-/// <param name="Extent">The collider's padded <see cref="FixedStaticCollider.WorldHalfExtent"/>, or a negative half-extent
-/// for a collider without bounds.</param>
-public readonly record struct FixedColliderBox(FixedVector3 Center, FixedVector3 Extent) {
-    private static readonly FixedVector3 NoBounds = new(X: -FixedQ4816.One, Y: -FixedQ4816.One, Z: -FixedQ4816.One);
-
-    /// <summary>Gets whether the collider has bounds; a half-space or an unbounded field has none and may meet any
-    /// body.</summary>
-    public bool IsBounded => (Extent.X >= FixedQ4816.Zero);
-
-    /// <summary>Creates the box of one collider.</summary>
-    /// <param name="collider">The collider.</param>
-    /// <returns>The collider's centre and padded world half-extent, or a box without bounds when the collider has
-    /// none.</returns>
-    public static FixedColliderBox Of(in FixedStaticCollider collider) =>
-        new(Center: collider.Center, Extent: (collider.WorldHalfExtent() ?? NoBounds));
-}
 /// <summary>An oriented box about a turned static collider's centre: the collider's unit axes in world space and its
 /// padded half-extent along each, outside which the collider's exact query never pushes a body. A collider whose
 /// world-axis box is already as tight (a sphere, an axis-aligned box, a box turned onto the world axes), or that has no
@@ -88,14 +69,14 @@ public readonly record struct FixedColliderFrame(FixedVector3 AxisX, FixedVector
             (FixedQ4816.Abs(value: FixedVector3.Dot(left: axis, right: offset)) - (reach + FixedVector3.Dot(left: FixedVector3.Abs(value: axis), right: bodyExtent)));
     }
 }
-/// <summary>Colliders with their <see cref="FixedColliderBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
+/// <summary>Colliders with their <see cref="FixedStaticCollider.WorldBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
 /// computed from the colliders themselves: the only form in which <see cref="FixedStaticContactSolver"/> takes colliders,
 /// so every bound it culls by is the collider's own and no caller supplies one. A set is either compiled once over an
 /// array or refreshed by its owner with the colliders it recomputes each tick.</summary>
 public sealed class FixedStaticColliderSet {
     private readonly bool m_refreshable;
     private FixedStaticCollider[] m_colliders;
-    private FixedColliderBox[] m_boxes;
+    private FixedAabb[] m_boxes;
     private FixedColliderFrame[] m_frames;
     private int m_count;
 
@@ -106,7 +87,7 @@ public sealed class FixedStaticColliderSet {
     public FixedStaticColliderSet(FixedStaticCollider[] colliders) {
         ArgumentNullException.ThrowIfNull(argument: colliders);
         m_colliders = colliders;
-        m_boxes = new FixedColliderBox[colliders.Length];
+        m_boxes = new FixedAabb[colliders.Length];
         m_frames = new FixedColliderFrame[colliders.Length];
         Compile(count: colliders.Length);
     }
@@ -125,7 +106,7 @@ public sealed class FixedStaticColliderSet {
     /// <summary>Gets the colliders, in query order.</summary>
     public ReadOnlySpan<FixedStaticCollider> Colliders => m_colliders.AsSpan(start: 0, length: m_count);
     /// <summary>Gets each collider's bounds, at the collider's index.</summary>
-    public ReadOnlySpan<FixedColliderBox> Boxes => m_boxes.AsSpan(start: 0, length: m_count);
+    public ReadOnlySpan<FixedAabb> Boxes => m_boxes.AsSpan(start: 0, length: m_count);
     /// <summary>Gets each collider's oriented frame, at the collider's index.</summary>
     public ReadOnlySpan<FixedColliderFrame> Frames => m_frames.AsSpan(start: 0, length: m_count);
     /// <summary>Gets the number of colliders.</summary>
@@ -139,7 +120,7 @@ public sealed class FixedStaticColliderSet {
         if (!m_refreshable) { throw new InvalidOperationException(message: "A collider set compiled over a caller's array is fixed."); }
         if (m_colliders.Length < colliders.Length) {
             m_colliders = new FixedStaticCollider[colliders.Length];
-            m_boxes = new FixedColliderBox[colliders.Length];
+            m_boxes = new FixedAabb[colliders.Length];
             m_frames = new FixedColliderFrame[colliders.Length];
         }
         colliders.CopyTo(destination: m_colliders);
@@ -148,7 +129,7 @@ public sealed class FixedStaticColliderSet {
 
     private void Compile(int count) {
         for (var index = 0; (index < count); index++) {
-            m_boxes[index] = FixedColliderBox.Of(collider: in m_colliders[index]);
+            m_boxes[index] = m_colliders[index].WorldBox();
             m_frames[index] = FixedColliderFrame.Of(collider: in m_colliders[index]);
         }
         m_count = count;

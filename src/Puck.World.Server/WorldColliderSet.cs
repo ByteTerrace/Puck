@@ -959,23 +959,23 @@ public sealed partial class WorldColliderSet : IContactField {
     }
 
     // The cells a world-axis box covers, inclusive: GridCellShift makes each cell 4 m of Q48.16 raw units.
-    private static (int X0, int X1, int Z0, int Z1) CellRange(in FixedVector3 center, in FixedVector3 extent) =>
-        (((int)((center.X - extent.X).Value >> GridCellShift)), ((int)((center.X + extent.X).Value >> GridCellShift)),
-         ((int)((center.Z - extent.Z).Value >> GridCellShift)), ((int)((center.Z + extent.Z).Value >> GridCellShift)));
+    private static (int X0, int X1, int Z0, int Z1) CellRange(in FixedAabb box) =>
+        (((int)(box.Minimum.X.Value >> GridCellShift)), ((int)(box.Maximum.X.Value >> GridCellShift)),
+         ((int)(box.Minimum.Z.Value >> GridCellShift)), ((int)(box.Maximum.Z.Value >> GridCellShift)));
     private static long CellCount((int X0, int X1, int Z0, int Z1) range) =>
         (((((long)range.X1) - range.X0) + 1L) * ((((long)range.Z1) - range.Z0) + 1L));
-    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(ReadOnlySpan<FixedColliderBox> boxes) {
+    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(ReadOnlySpan<FixedAabb> boxes) {
         var cells = new Dictionary<(int X, int Z), List<int>>();
         var unbounded = new List<int>();
 
         for (var index = 0; (index < boxes.Length); index++) {
             ref readonly var box = ref boxes[index];
 
-            if (!box.IsBounded) {
+            if (box.IsEverywhere) {
                 unbounded.Add(item: index);
                 continue;
             }
-            var range = CellRange(center: box.Center, extent: box.Extent);
+            var range = CellRange(box: in box);
 
             if (CellCount(range: range) > GridCellLimit) {
                 unbounded.Add(item: index);
@@ -1004,33 +1004,23 @@ public sealed partial class WorldColliderSet : IContactField {
     private FixedColliderCandidates Candidates(in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes) {
         if (volumes.IsEmpty) { return default; }
-        var (firstCenter, firstExtent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volumes[0]);
-        // The least corner is carried negated, so one component-wise maximum grows both corners.
-        var negatedMinimum = -(firstCenter - firstExtent);
-        var maximum = (firstCenter + firstExtent);
+        var swept = FixedAabb.Empty;
 
         foreach (ref readonly var volume in volumes) {
             foreach (var at in ((ReadOnlySpan<FixedVector3>)[previousPosition, position])) {
-                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
-
-                negatedMinimum = FixedVector3.Max(left: negatedMinimum, right: -(center - extent));
-                maximum = FixedVector3.Max(left: maximum, right: (center + extent));
+                swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume));
             }
         }
-        var minimum = -negatedMinimum;
-        var margin = new FixedVector3(X: RegionMargin, Y: RegionMargin, Z: RegionMargin);
-        var two = FixedQ4816.FromInteger(value: 2);
-        var regionCenter = ((minimum + maximum) / two);
-        var regionExtent = (((maximum - minimum) / two) + margin);
-        var skin = new FixedVector3(X: m_solver.ContactSkin, Y: m_solver.ContactSkin, Z: m_solver.ContactSkin);
-        var range = CellRange(center: regionCenter, extent: (regionExtent + skin));
+        var region = swept.Grow(margin: RegionMargin);
+        var reach = region.Grow(margin: m_solver.ContactSkin);
+        var range = CellRange(box: in reach);
 
         if (CellCount(range: range) > GridCellLimit) { return default; }
         m_candidates.Clear();
         var boxes = m_staticSet.Boxes;
 
         foreach (var index in m_unboundedColliders) {
-            if (!m_solver.Misses(box: in boxes[index], bodyCenter: regionCenter, bodyExtent: regionExtent)) {
+            if (boxes[index].Intersects(other: in reach)) {
                 m_candidates.Add(item: index);
             }
         }
@@ -1038,7 +1028,7 @@ public sealed partial class WorldColliderSet : IContactField {
             for (var z = range.Z0; (z <= range.Z1); z++) {
                 if (!m_colliderGrid.TryGetValue(key: (x, z), value: out var cell)) { continue; }
                 foreach (var index in cell) {
-                    if (!m_solver.Misses(box: in boxes[index], bodyCenter: regionCenter, bodyExtent: regionExtent)) {
+                    if (boxes[index].Intersects(other: in reach)) {
                         m_candidates.Add(item: index);
                     }
                 }
@@ -1051,7 +1041,7 @@ public sealed partial class WorldColliderSet : IContactField {
         for (var read = 0; (read < span.Length); read++) {
             if ((count == 0) || (span[(count - 1)] != span[read])) { span[count++] = span[read]; }
         }
-        return new FixedColliderCandidates(indices: span[..count], regionCenter: regionCenter, regionExtent: regionExtent);
+        return new FixedColliderCandidates(indices: span[..count], region: region);
     }
 
     /// <inheritdoc/>

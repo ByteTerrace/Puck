@@ -337,7 +337,7 @@ public sealed partial class WorldServer {
         }
         // Query scope is known before blocker discovery. It encloses every original child and every candidate,
         // including an edited seed that moved or shrank, so discovery and the negative dependency share one region.
-        var spatialRegion = WorldSpatialReadRegion.Empty;
+        var spatialRegion = FixedAabb.Empty;
 
         foreach (var volumes in optionVolumes.SelectMany(selector: optionsForChild => optionsForChild)
             .Concat(second: children.Select(selector: child => WorldSpatialQueryCompilation.CompilePlacement(
@@ -346,7 +346,7 @@ public sealed partial class WorldServer {
             worldSeed: worldSeed
         )))) {
             foreach (var volume in volumes) {
-                spatialRegion = spatialRegion.Enclose(box: volume.Bounds);
+                spatialRegion = spatialRegion.Enclose(other: volume.Bounds);
             }
         }
         var localRows = WorldDefinitionFingerprint.SpatialRows(
@@ -528,16 +528,16 @@ public sealed partial class WorldServer {
         // The guard region remains local: distant placements do not tax this proposal, while the census' negative
         // space catches a new, moved, or enlarged obstacle entering it at commit.
         var spatialRead = new WorldSpatialReadDependency(
-            spatialRegion.MinXRaw,
-            spatialRegion.MinZRaw,
-            spatialRegion.MaxXRaw,
-            spatialRegion.MaxZRaw,
+            spatialRegion.Minimum.X.Value,
+            spatialRegion.Minimum.Z.Value,
+            spatialRegion.Maximum.X.Value,
+            spatialRegion.Maximum.Z.Value,
             WorldDefinitionFingerprint.ComputeSpatial(
                 definition: definition,
                 region: spatialRegion
             ),
-            spatialRegion.MinYRaw,
-            spatialRegion.MaxYRaw
+            spatialRegion.Minimum.Y.Value,
+            spatialRegion.Maximum.Y.Value
         );
         var dependencies = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -636,7 +636,7 @@ public sealed partial class WorldServer {
     private readonly record struct CoverageRead(string PlacementId, string Channel, int Minimum);
 
     private static bool TryPrepareCoverage(WorldSpatialQueryIndex before, IEnumerable<CompiledSpatialVolume> candidates,
-        WorldSpatialReadRegion region, ref int work, int budget, out CoverageRead[] reads) {
+        FixedAabb region, ref int work, int budget, out CoverageRead[] reads) {
         reads = [];
         var channels = before.Volumes.Concat(second: candidates)
             .Where(predicate: volume => (volume.Role == WorldPlacementSpatialRole.Influence))
@@ -646,10 +646,7 @@ public sealed partial class WorldServer {
             volume => volume.PlacementId,
             StringComparer.Ordinal
         )
-            .Where(predicate: volume => region.Bounds.Intersects(other: new FixedSpatialAabb(
-            Center: volume.Shape.Center,
-            Extent: FixedVector3.Zero
-        )))
+            .Where(predicate: volume => region.Contains(point: volume.Shape.Center))
             .Select(selector: volume => volume.PlacementId).Order(comparer: StringComparer.Ordinal).ToArray();
         var cost = ((((long)targets.Length) * channels.Length) * Math.Max(
             val1: before.Volumes.Count,

@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
+using Puck.Maths;
 
 namespace Puck.World.Authoring;
 

@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
-using Puck.World.Authoring;
+using Puck.Maths;
 
 namespace Puck.World;
 

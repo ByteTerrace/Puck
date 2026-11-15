@@ -21,14 +21,10 @@ public readonly record struct FixedOrientedBox(FixedVector3 Center, FixedVector3
     // already separate what it would.
     private static readonly FixedQ4816 DegenerateAxisLengthSquared = FixedQ4816.FromRawBits(value: 1L);
 
-    /// <summary>Gets the box's extent along each world axis: the half-size of its world-axis-aligned bounds.</summary>
-    /// <remarks>Each lane is <see cref="ProjectionRadius"/> on that world axis, which for a unit axis is exactly
-    /// <c>|AxisX·e|·h.X + |AxisY·e|·h.Y + |AxisZ·e|·h.Z</c> over the axes' own components.</remarks>
-    public FixedVector3 WorldExtent => new(
-        X: ProjectionRadius(axis: FixedVector3.UnitX),
-        Y: ProjectionRadius(axis: FixedVector3.UnitY),
-        Z: ProjectionRadius(axis: FixedVector3.UnitZ)
-    );
+    /// <summary>Gets the box's extent along each world axis: the half-size of its world-axis-aligned bounds, as
+    /// <see cref="FixedAabb.OrientedHalfExtent(FixedVector3, FixedVector3, FixedVector3, FixedVector3)"/> gives it, and
+    /// on each world axis the same bits as <see cref="ProjectionRadius"/> on that axis.</summary>
+    public FixedVector3 WorldExtent => FixedAabb.OrientedHalfExtent(axisX: AxisX, axisY: AxisY, axisZ: AxisZ, halfExtent: HalfExtents);
 
     // Appends the fifteen candidate separating axes of a box pair in the fixed order every caller shares: left's three
     // face axes, right's three, then the nine edge cross products left-major.

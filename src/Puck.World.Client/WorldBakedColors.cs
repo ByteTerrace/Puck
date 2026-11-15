@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.World.Authoring;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 

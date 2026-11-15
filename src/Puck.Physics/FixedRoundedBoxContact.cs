@@ -184,7 +184,8 @@ internal static class FixedRoundedBoxContact {
         }
         var localOrientation = (box.Rotation.Conjugate() * orientation).Normalize();
 
-        var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);
+        var bounds = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);
+        var (center, extent) = (bounds.Center, bounds.Extent);
         var limit = ((box.Extent + new FixedVector3(X: (box.Radius + skin), Y: (box.Radius + skin), Z: (box.Radius + skin))) + extent);
 
         if ((FixedQ4816.Abs(value: center.X) > limit.X) || (FixedQ4816.Abs(value: center.Y) > limit.Y) ||

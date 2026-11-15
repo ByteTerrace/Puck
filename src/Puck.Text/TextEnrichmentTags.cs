@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Globalization;
 using Puck.Maths;
 using System.Numerics;
@@ -151,9 +150,9 @@ public static class TextEnrichmentTags {
 
             if (
                 (name is "color" or "colour" or "hex" or "tint") &&
-                TryParseHexColor(
-                value: parameter.Value,
-                color: out var tint
+                HexColor.TryParseRgba(
+                rgba: out var tint,
+                value: parameter.Value.Trim()
             )
             ) {
                 effect = effect with { TintColor = tint };
@@ -375,52 +374,6 @@ public static class TextEnrichmentTags {
             VariableHash: Fnv1aHash.Compute(values: variableName),
             BindingMode: mode
         );
-
-        return true;
-    }
-    // Parses RGB/RGBA hex in three-, four-, six-, or eight-digit form into a linear-agnostic 0..1 RGBA vector.
-    private static bool TryParseHexColor(string value, out Vector4 color) {
-        color = Vector4.One;
-
-        var text = value.Trim();
-
-        if (text.StartsWith(value: '#')) {
-            text = text[1..];
-        }
-
-        if (text.Length is not (3 or 4 or 6 or 8)) {
-            return false;
-        }
-
-        if (!uint.TryParse(
-            s: text,
-            style: NumberStyles.HexNumber,
-            provider: CultureInfo.InvariantCulture,
-            result: out var packed
-        )) {
-            return false;
-        }
-
-        if (text.Length is 3 or 4) {
-            var red = (packed >> ((text.Length - 1) * 4)) & 0xFu;
-            var green = (packed >> ((text.Length - 2) * 4)) & 0xFu;
-            var blue = (packed >> ((text.Length - 3) * 4)) & 0xFu;
-            var alpha = ((text.Length == 4)
-                ? packed & 0xFu
-                : 0xFu
-            );
-
-            packed =
-                ((red * 0x11u) << 24) |
-                ((green * 0x11u) << 16) |
-                ((blue * 0x11u) << 8) |
-                (alpha * 0x11u);
-        } else if (text.Length == 6) {
-            packed = (packed << 8) | 0xFFu;
-        }
-
-        // The authored word is RRGGBBAA; the unpacker reads red in the low byte.
-        color = VectorFunctions.UnpackRgba8(packed: BinaryPrimitives.ReverseEndianness(value: packed));
 
         return true;
     }

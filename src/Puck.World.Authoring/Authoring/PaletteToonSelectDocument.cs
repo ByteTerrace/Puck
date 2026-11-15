@@ -17,7 +17,7 @@ public sealed record PaletteToonSelectDocument(string State, IReadOnlyList<ToonS
     /// <param name="path">The selection's document path, such as <c>palette[2].toonSelect</c>.</param>
     /// <returns>One message per refusal; empty when the selection is admissible.</returns>
     public IEnumerable<string> Refusals(string path) {
-        if (!HexColor.IsStateBinding(value: State)) {
+        if (!ColorStateBinding.IsStateBinding(value: State)) {
             yield return $"{path}.state must be a state.<row>[.<key>] binding";
         }
         if ((Cases is null) || (Cases.Count == 0)) {
