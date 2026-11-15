@@ -20,12 +20,9 @@ public static class WhitespacePhase {
 
     // Each path as `--include` matches it: forward-slashed and relative to the workspace folder.
     public static string[] Includes(string workspace, IEnumerable<string> files) =>
-        [.. files.Select(selector: file => Path.GetRelativePath(
+        [.. files.Select(selector: file => Puck.Abstractions.PuckPaths.Relative(
             path: file,
             relativeTo: workspace
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         ))];
     // Splits `includes` into consecutive batches, in order, each costing at most `budget`. A path costs its length plus
     // three: the separating space and the quotes a path with a space is wrapped in. A path that alone exceeds the budget

@@ -3,7 +3,7 @@ using Puck.Commands;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The radial-action-menu writer: renders each presented seat's wheel from an <see cref="IWheelSource"/> snapshot —
+/// The radial-action-menu writer: renders each presented seat's wheel from an <see cref="IOverlaySource{OverlayWheelFrame}"/> snapshot —
 /// up to <see cref="MaxRings"/> concentric bands of filled sector pieces around a hub, each piece carrying its
 /// resolved icon or text fallback. The active/hovered selection and a successfully dispatched command glow accent;
 /// a local dispatch failure glows danger while the whole wheel fades; the hovered/outcome label and active ring
@@ -33,7 +33,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     /// <summary>The half-width, px, trimmed off each angular edge of a piece so neighbours read as separate pieces.</summary>
     public const float SectorGapPx = 2f;
 
-    private readonly IWheelSource m_source;
+    private readonly IOverlaySource<OverlayWheelFrame> m_source;
     private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="WheelWriter"/> class.</summary>
@@ -41,7 +41,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     /// <param name="theme">The live resolved theme.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
     /// <see langword="null"/>.</exception>
-    public WheelWriter(IWheelSource source, OverlayThemeStore theme) {
+    public WheelWriter(IOverlaySource<OverlayWheelFrame> source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: theme);
 

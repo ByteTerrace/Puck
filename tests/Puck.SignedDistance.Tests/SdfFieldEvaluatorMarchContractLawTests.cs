@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -132,12 +133,6 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             mode: SdfCellMode.F1,
             randomness: 0f,
             seed: 0u
-        );
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
         );
 
     [Fact]

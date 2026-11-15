@@ -228,7 +228,7 @@ public sealed class WorldStagingFontLawTests {
                 }
                 if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "invalid-")) {
                     Assert.Contains(collection: invalidPaths, expected: path);
-                    Assert.False(condition: WorldDocumentPaths.IsPortableRelativeFilePath(path: path));
+                    Assert.False(condition: Puck.Confinement.PortablePath.IsRelative(allowParentSegments: true, path: path));
                     continue;
                 }
                 Assert.False(condition: Path.IsPathRooted(path: path));

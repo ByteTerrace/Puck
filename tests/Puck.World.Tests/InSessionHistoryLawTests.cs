@@ -1,7 +1,6 @@
 using Puck.World.Client;
 using Puck.Commands;
 using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -580,20 +579,4 @@ public sealed class InSessionHistoryLawTests {
 
     private static Puck.Maths.FixedQ4816 FixedQ4816FromTick(int tick) => Puck.Maths.FixedQ4816.FromRawBits(value: ((((long)(tick % 5)) - 2L) * 16384L));
 
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            return false;
-        }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
-    }
 }

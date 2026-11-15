@@ -236,7 +236,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
             return true;
         }
     }
-    private sealed class FixedHudSource(OverlayHudFrame frame) : IHudSource {
+    private sealed class FixedHudSource(OverlayHudFrame frame) : IOverlaySource<OverlayHudFrame> {
         public bool TrySnapshot(out OverlayHudFrame frame) {
             frame = this.m_frame;
 

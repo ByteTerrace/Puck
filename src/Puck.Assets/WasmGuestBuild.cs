@@ -78,7 +78,7 @@ public sealed record WasmGuestBuild(string Crate, IReadOnlyList<string>? Feature
     public static bool TryFind(string path, out WasmGuestBuild? build, out string? workspace) {
         build = null;
         workspace = null;
-        var normalized = path.Replace('\\', '/');
+        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: path);
         if (!normalized.Contains("/wasm/", StringComparison.Ordinal) || !normalized.EndsWith(".wasm", StringComparison.Ordinal)) {
             return false;
         }

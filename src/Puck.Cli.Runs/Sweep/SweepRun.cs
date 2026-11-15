@@ -243,7 +243,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
                 // The baseline still is read before this run writes its own, so a run never compares an image with itself.
                 File.WriteAllBytes(bytes: png, path: file);
-                relative = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
+                relative = Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory);
                 images[stop.Name] = MotionSheets.Read(path: file);
 
                 if (before is not null) {
@@ -475,7 +475,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             IReadOnlyDictionary<string, string>? metrics = null;
 
             if (File.Exists(path: file)) {
-                relative = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
+                relative = Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory);
                 images[name] = MotionSheets.Read(path: file);
 
                 if ((baseline?.StillFor(name: name) is { } earlier) && (MotionSheets.Read(path: earlier) is var before)) {
@@ -683,7 +683,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var result = new SweepSignalResult(
                 Changes: changes,
                 Comparison: ((baseline is null) ? null : ((changes.Count > 0) ? SweepStatus.Red : SweepStatus.Clean)),
-                File: Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'),
+                File: Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory),
                 Leg: world.Leg,
                 Line: signal.Line,
                 Metrics: metrics,
@@ -734,7 +734,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var file = Path.Combine(path1: folder, path2: $"{name}.png");
 
             MotionSheets.Write(image: MotionSheets.Compose(frames: frames, labels: labels, layout: layout), path: file);
-            sheets[group.Key] = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
+            sheets[group.Key] = Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory);
         }
 
         return new Dictionary<string, string>(dictionary: sheets, comparer: StringComparer.Ordinal);

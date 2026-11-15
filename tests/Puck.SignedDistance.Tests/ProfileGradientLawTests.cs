@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 using Puck.Maths;
 using Puck.SignedDistance.Queries;
@@ -12,12 +13,6 @@ namespace Puck.SignedDistance.Tests;
 /// bake's gradient taps read, which flattened the gradient to the nearest axis.
 /// </summary>
 public sealed class ProfileGradientLawTests {
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
     private static Vector3 Gradient(SdfFieldEvaluator field, double x, double y, double z) {
         Assert.True(condition: field.TryFieldGradient(
             epsilon: FixedQ4816.FromDouble(value: 0.0005),

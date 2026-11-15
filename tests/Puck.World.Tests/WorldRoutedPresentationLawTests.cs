@@ -35,24 +35,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
         public void Dispose() {
         }
     }
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public IReadOnlyList<WorldAdjacencyProjection> Projections { get; init; } = [];
-
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            return false;
-        }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => Projections;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
-    }
 
     // One active body at index 0, posed.
     private static WorldSnapshot Snapshot(string authority, Vector3 position) => new(

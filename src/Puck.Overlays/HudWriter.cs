@@ -36,7 +36,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
 
     private readonly IHudBindingResolver m_bindings;
     private readonly OverlayFrameSlots m_frameSlots;
-    private readonly IHudSource m_source;
+    private readonly IOverlaySource<OverlayHudFrame> m_source;
     private readonly OverlayThemeStore m_theme;
 
     private OverlayHudFrame m_frame;
@@ -53,7 +53,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     /// <param name="frameSlots">The node-owned frame-slot table a <see cref="OverlayHudElementKind.Frame"/> element
     /// binds against.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public HudWriter(IHudSource source, IHudBindingResolver bindings, OverlayThemeStore theme, OverlayFrameSlots frameSlots) {
+    public HudWriter(IOverlaySource<OverlayHudFrame> source, IHudBindingResolver bindings, OverlayThemeStore theme, OverlayFrameSlots frameSlots) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: theme);

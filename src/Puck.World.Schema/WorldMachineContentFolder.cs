@@ -355,7 +355,7 @@ public static class WorldMachineContentFolder {
     private static bool SamePath(string? left, string right) => string.Equals(
         a: left,
         b: right,
-        comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+        comparisonType: Puck.Abstractions.PuckPaths.Comparison
     );
     private static string Describe(IReadOnlyList<Entry> entries, bool qualified) => ((entries.Count == 0)
         ? "none"

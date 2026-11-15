@@ -2,7 +2,7 @@ using Puck.Commands;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The binding-bar writer: renders each seat's authored banks from an <see cref="IBindingBarSource"/> snapshot as
+/// The binding-bar writer: renders each seat's authored banks from an <see cref="IOverlaySource{OverlayBindingBarFrame}"/> snapshot as
 /// icon elements — every bank's slot cluster (the mirrored-diamond layout plus the menu-trio and exotics rows, each
 /// bank displaced by its own authored offset), the modifier indicators, and the active page's name — CONFINED to that
 /// seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars with the render
@@ -20,7 +20,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     /// <summary>The character clamp on every text run the bar writes (the page label and a hint's label alike).</summary>
     public const int MaxLineChars = 46;
 
-    private readonly IBindingBarSource m_source;
+    private readonly IOverlaySource<OverlayBindingBarFrame> m_source;
     private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="BindingBarWriter"/> class.</summary>
@@ -28,7 +28,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     /// <param name="theme">The live resolved theme.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
     /// <see langword="null"/>.</exception>
-    public BindingBarWriter(IBindingBarSource source, OverlayThemeStore theme) {
+    public BindingBarWriter(IOverlaySource<OverlayBindingBarFrame> source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: theme);
 

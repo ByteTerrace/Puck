@@ -377,18 +377,4 @@ public sealed class BodySleepLawTests {
         }
     }
 
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-            return false;
-        }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-            return false;
-        }
-    }
 }

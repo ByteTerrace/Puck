@@ -72,7 +72,7 @@ public sealed partial class SdfMeshIrradiance {
     private GpuRangeAllocator m_hitSlots = new(size: 1u, maxRanges: 1);
     private readonly Dictionary<(int Level, (int X, int Y, int Z) Cell), (uint Slot, ulong Token)> m_hitOwners = [];
     private ulong m_hitToken;
-    internal uint GpuHitCapacity => m_hitSlots.Size;
+    internal uint GpuHitCapacity => ((uint)m_hitSlots.Size);
     private static uint HitCapacityOf(Layout layout) => checked((uint)(layout.TotalCount + (2 * DrainBatchProbes)));
 
     // A new tier's probes are all new, so its cache starts empty at its own size.
@@ -98,7 +98,7 @@ public sealed partial class SdfMeshIrradiance {
     // A fresh slot the trace writes a placed probe's hits into; the probe's relight adopts it (AdoptGpuHits).
     private uint AllocateGpuHits(Layout layout, (int X, int Y, int Z)[] lows) {
         if (m_hitSlots.FreeCount == 0) { TrimGpuHits(layout: layout, lows: lows, force: true); }
-        return m_hitSlots.Allocate(count: 1);
+        return ((uint)m_hitSlots.Allocate(count: 1));
     }
 
     // Makes a placed probe's fresh slot its cell's owner under a new token, freeing the slot the cell owned before.

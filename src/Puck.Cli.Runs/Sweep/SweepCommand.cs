@@ -265,7 +265,7 @@ public static partial class SweepCommand {
             signals.AddRange(collection: baseline.MissingSignals(current: signals, legs: legs).ToArray());
         }
         var report = new SweepReport(
-            Baseline: baseline?.Path.Replace(newChar: '/', oldChar: '\\'),
+            Baseline: (baseline?.Path is { } baselineSpelling ? Puck.Abstractions.PuckPaths.Slashed(path: baselineSpelling) : null),
             Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"),
             Legs: legs,
             Scenarios: Scenarios(artifact: artifact, budget: budget, cacheDirectory: cacheDirectory, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
@@ -295,7 +295,6 @@ public static partial class SweepCommand {
     public static string CliEntry => PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll"));
 
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
-    private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
     private static WorldLaunchRequest Request(string artifact, string world, string state, string? cacheDirectory, TimeSpan deadline, WorldShape shape, string repositoryRoot, IReadOnlyList<string> extra) => new(Artifact: artifact, Step: Verb) {
         Arguments = [.. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", PuckPaths.Normalize(path: cacheDirectory)]), .. extra],
         ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
@@ -328,7 +327,7 @@ public static partial class SweepCommand {
                 }
                 expanded.UnionWith(other: matches.Select(selector: PuckPaths.Normalize));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
-                reasons.Add(item: $"cannot read scenario sources {file}: {exception.Message.Replace(oldChar: Path.DirectorySeparatorChar, newChar: '/')}");
+                reasons.Add(item: $"cannot read scenario sources {file}: {Puck.Abstractions.PuckPaths.Slashed(path: exception.Message)}");
                 status = SweepStatus.Red;
             }
         }

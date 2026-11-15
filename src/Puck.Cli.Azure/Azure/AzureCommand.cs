@@ -489,10 +489,7 @@ public static partial class AzureCommand {
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*.bicep*"
         ).Where(predicate: path => (Path.GetExtension(path: path) is ".bicep" or ".bicepparam")).Order(comparer: StringComparer.Ordinal)) {
-            var path = file.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            var path = Puck.Abstractions.PuckPaths.Slashed(path: file);
             var report = JsonNode.Parse(json: await AzAsync(
                 "bicep",
                 "lint",

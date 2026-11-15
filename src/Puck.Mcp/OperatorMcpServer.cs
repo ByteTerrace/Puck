@@ -559,7 +559,7 @@ public static class OperatorMcpServer {
 
                             metadata["processId"] = Environment.ProcessId;
                             metadata["moduleId"] = moduleId;
-                            metadata["directory"] = AppContext.BaseDirectory.Replace(newChar: '/', oldChar: '\\');
+                            metadata["directory"] = Puck.Abstractions.PuckPaths.Slashed(path: AppContext.BaseDirectory);
                             var data = JsonElement.Parse(metadata.ToJsonString());
 
                             return new() { Content = [new TextContentBlock { Text = $"{Environment.ProcessId} {moduleId}" }], StructuredContent = data };

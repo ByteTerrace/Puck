@@ -335,19 +335,6 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         ViewHeapSize = views,
     }));
 
-    // The fake as a device context whose services pass through creation faults, as a backend's do.
-    private sealed class FaultingDevice(FakeGpuDevice gpu, GpuCreationFaults faults) : IGpuDeviceContext {
-        public long AdapterLuid => gpu.AdapterLuid;
-        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
-        public GpuDeviceIdentity? Identity => gpu.Identity;
-        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
-        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
-            faults: faults,
-            services: gpu.Services
-        );
-
-        public void WaitIdle() => gpu.WaitIdle();
-    }
     private sealed class Rig : IDisposable {
         private readonly FrameContext m_context;
         private readonly FixedFrameSource m_source;

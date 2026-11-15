@@ -132,11 +132,9 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
     public const long MaxPersistedBytes = (256L << 20);
 
     private const string EntryExtension = ".compiled";
-    private const string TemporaryExtension = ".tmp";
 
     // A temporary file untouched for this long belongs to a write that will never finish; a younger one may be
     // another process's write in flight.
-    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromMinutes(minutes: 1);
     private static readonly byte[] Magic = "PUCKWCC1"u8.ToArray();
     private readonly ConcurrentDictionary<string, Lock> m_compiling = new(comparer: StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, WorldCompiledSource> m_held = new(comparer: StringComparer.Ordinal);
@@ -465,37 +463,5 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
             writer.Write(buffer: world.Json);
         }
     }
-    // Keeps the most recently used entries within MaxPersistedEntries and MaxPersistedBytes, the one just written among
-    // them, and removes every temporary file an interrupted write abandoned, matched ignoring case as the file system
-    // does, so a temporary another writer named .TMP is reclaimed too.
-    private static void Trim(string directory, string written) {
-        var files = new DirectoryInfo(path: directory).GetFiles();
-        var abandoned = (DateTime.UtcNow - AbandonedAfter);
-        var entries = new List<FileInfo>(capacity: files.Length);
-
-        foreach (var file in files) {
-            if (file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: EntryExtension)) {
-                entries.Add(item: file);
-            } else if (file.Name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: TemporaryExtension) && (file.LastWriteTimeUtc < abandoned)) {
-                Remove(file: file);
-            }
-        }
-
-        foreach (var stale in Puck.Abstractions.CacheRetention.SelectEvictions(
-            bound: new Puck.Abstractions.CacheBound(MaxBytes: MaxPersistedBytes, MaxEntries: MaxPersistedEntries),
-            entries: entries.Select(selector: static entry => new Puck.Abstractions.CacheEntry(Bytes: entry.Length, LastUsedUtc: entry.LastWriteTimeUtc, Path: entry.FullName)),
-            inUse: Path.GetFullPath(path: written)
-        )) {
-            Remove(file: new FileInfo(fileName: stale.Path));
-        }
-    }
-    private static void Remove(FileInfo file) {
-        try {
-            file.Delete();
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return;
-        }
-    }
-
     private static readonly Lazy<(string Built, IReadOnlySet<string> Modules)> Identity = new(valueFactory: ComputeCompilerIdentity);
 }

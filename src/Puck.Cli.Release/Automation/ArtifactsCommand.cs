@@ -126,9 +126,9 @@ public static class ArtifactsCommand {
         );
         for (var index = 0; (index < files.Length); index++) {
             var file = files[index];
-            var relative = RepositoryRelative(
+            var relative = Puck.Abstractions.PuckPaths.Relative(
                 path: file,
-                root: root
+                relativeTo: root
             );
             var hash = hashes[index];
 
@@ -166,9 +166,9 @@ public static class ArtifactsCommand {
                     throw new InvalidDataException(message: $"Invalid test assembly marker: {file}");
                 }
                 tests.Add(item: new JsonObject {
-                    ["assembly"] = RepositoryRelative(
+                    ["assembly"] = Puck.Abstractions.PuckPaths.Relative(
                     path: assembly,
-                    root: root
+                    relativeTo: root
                 ),
                 });
             }
@@ -242,13 +242,6 @@ public static class ArtifactsCommand {
         }
         return (archive, source, copies, paths);
     }
-    private static string RepositoryRelative(string root, string path) => Path.GetRelativePath(
-        path: path,
-        relativeTo: root
-    ).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
     private static async Task<int> RestoreAsync() {
         var root = RepositoryPaths.RequireRoot();
 

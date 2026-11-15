@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -14,12 +15,6 @@ namespace Puck.SignedDistance.Tests;
 /// is the ISA's one ellipsoid: packed as this same shape, on a pow-free fast path that computes the same gauge.
 /// </summary>
 public sealed class SuperellipsoidLawTests {
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
     private static SdfFieldEvaluator Superellipsoid(Vector3 radii, float exponent) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

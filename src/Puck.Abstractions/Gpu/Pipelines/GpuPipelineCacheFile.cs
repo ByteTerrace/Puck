@@ -65,7 +65,7 @@ public sealed class GpuPipelineCacheFile {
         } catch (Exception exception) when ((exception is DirectoryNotFoundException)) {
             return;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {Slashed(path: backend.FullName)}: {exception.Message}");
+            Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {PuckPaths.Slashed(path: backend.FullName)}: {exception.Message}");
 
             return;
         }
@@ -85,7 +85,7 @@ public sealed class GpuPipelineCacheFile {
 
                 continue;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {Slashed(path: devices[device].FullName)}: {exception.Message}");
+                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {PuckPaths.Slashed(path: devices[device].FullName)}: {exception.Message}");
                 remaining[device] = -1;
 
                 continue;
@@ -102,7 +102,7 @@ public sealed class GpuPipelineCacheFile {
                     b: opened,
                     comparisonType: StringComparison.Ordinal
                 )) {
-                    var name = Slashed(path: file.FullName);
+                    var name = PuckPaths.Slashed(path: file.FullName);
 
                     candidates.Add(item: new CacheEntry(Bytes: 0, LastUsedUtc: file.LastWriteTimeUtc, Path: name));
                     deviceOf[name] = device;
@@ -111,7 +111,7 @@ public sealed class GpuPipelineCacheFile {
         }
 
         // The opened file holds one of the places whether or not it exists yet: it is the one in use, and a miss writes it.
-        var inUse = Slashed(path: opened);
+        var inUse = PuckPaths.Slashed(path: opened);
 
         candidates.Add(item: new CacheEntry(Bytes: 0, LastUsedUtc: DateTime.MaxValue, Path: inUse));
         foreach (var eviction in CacheRetention.SelectEvictions(bound: CacheBound.Entries(maxEntries: RetainedFiles), entries: candidates, inUse: inUse)) {
@@ -136,7 +136,7 @@ public sealed class GpuPipelineCacheFile {
             } catch (Exception exception) when ((exception is DirectoryNotFoundException)) {
                 // Another process removed it first.
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"[pipeline-cache] not removed {Slashed(path: devices[device].FullName)}: {exception.Message}");
+                Console.Error.WriteLine(value: $"[pipeline-cache] not removed {PuckPaths.Slashed(path: devices[device].FullName)}: {exception.Message}");
             }
         }
     }
@@ -154,11 +154,7 @@ public sealed class GpuPipelineCacheFile {
             Console.Error.WriteLine(value: $"[pipeline-cache] not refreshed {path}: {exception.Message}");
         }
     }
-    private static string Slashed(string path) =>
-        path.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+
     private bool Save(string path, ReadOnlySpan<byte> data) {
         try {
             AtomicFile.WriteAllBytes(

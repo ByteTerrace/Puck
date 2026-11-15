@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders.Tests;
@@ -9,19 +10,6 @@ namespace Puck.Shaders.Tests;
 /// presenting, and installs the same replacement when it is tried again.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
-    // A fake as a device context whose services pass through creation faults, as a backend's do.
-    private sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults faults) : IGpuDeviceContext {
-        public long AdapterLuid => gpu.AdapterLuid;
-        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
-        public GpuDeviceIdentity? Identity => gpu.Identity;
-        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
-        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
-            faults: faults,
-            services: gpu.Services
-        );
-
-        public void WaitIdle() => gpu.WaitIdle();
-    }
 
     // A node over the faulting device with the feedback graph installed and every frame slot warm, and the faults'
     // counts cleared, so the next replacement's creations count from one.

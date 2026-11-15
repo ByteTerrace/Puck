@@ -217,7 +217,7 @@ public sealed partial class WorldInspectorText {
             : diagnostic);
 
         if (!string.IsNullOrEmpty(value: root)) {
-            var directory = (root.Replace(newChar: '/', oldChar: '\\').TrimEnd(trimChar: '/') + "/");
+            var directory = (Puck.Abstractions.PuckPaths.Slashed(path: root).TrimEnd(trimChar: '/') + "/");
 
             text = text.Replace(comparisonType: PuckPaths.Comparison, newValue: string.Empty, oldValue: directory)
                 .Replace(comparisonType: PuckPaths.Comparison, newValue: string.Empty, oldValue: directory.Replace(newChar: '\\', oldChar: '/'));

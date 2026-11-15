@@ -48,7 +48,7 @@ public static partial class MotionTranscript {
 
         stamp = new MotionStillStamp(
             Hash: match.Groups["hash"].Value,
-            Path: match.Groups["path"].Value.Replace(newChar: '/', oldChar: '\\'),
+            Path: Puck.Abstractions.PuckPaths.Slashed(path: match.Groups["path"].Value),
             Pose: match.Groups["pose"].Value,
             Shown: match.Groups["shown"].Value,
             ShowsAnotherTick: match.Groups["rest"].Value.Contains(comparisonType: StringComparison.Ordinal, value: "another tick"),
@@ -72,7 +72,7 @@ public static partial class MotionTranscript {
 
         slot = new MotionSlotFile(
             Camera: match.Groups["camera"].Value,
-            Path: match.Groups["path"].Value.Replace(newChar: '/', oldChar: '\\')
+            Path: Puck.Abstractions.PuckPaths.Slashed(path: match.Groups["path"].Value)
         );
 
         return true;

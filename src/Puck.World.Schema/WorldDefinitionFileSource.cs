@@ -1198,20 +1198,11 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="name">The authored reference, exactly as the document spells it.</param>
     /// <returns>The resolved, normalized document name.</returns>
     public static string CombineRelativeDocumentName(string referrerName, string name) {
-        var directory = referrerName.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var directory = Puck.Abstractions.PuckPaths.Slashed(path: referrerName);
         var slash = directory.LastIndexOf(value: '/');
         var combined = ((slash >= 0)
-            ? $"{directory[..slash]}/{name.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            )}"
-            : name.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            )
+            ? $"{directory[..slash]}/{Puck.Abstractions.PuckPaths.Slashed(path: name)}"
+            : Puck.Abstractions.PuckPaths.Slashed(path: name)
         );
 
         return NormalizeRelativeDocumentName(path: combined);

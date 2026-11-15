@@ -14,6 +14,7 @@
         <Compile Include="../Shared/AppliedCodeUpdate.cs" Link="AppliedCodeUpdate.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
         <Compile Include="../Shared/RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
         <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />

@@ -21,7 +21,7 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
         var files = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Select(selector: path => {
             var bytes = File.ReadAllBytes(path: path);
 
-            return new ReleasePayloadFile(Path.GetRelativePath(path: path, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'), store.Put(content: bytes).ToString(), bytes.LongLength);
+            return new ReleasePayloadFile(Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: directory), store.Put(content: bytes).ToString(), bytes.LongLength);
         }).ToArray();
 
         if (files.Length == 0) { throw new IOException(message: $"No release files under {directory}"); }

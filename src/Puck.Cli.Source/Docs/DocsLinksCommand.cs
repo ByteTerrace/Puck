@@ -359,7 +359,7 @@ public static class DocsLinksCommand {
             }
 
             var documentDirectory = (Path.GetDirectoryName(path: documentPath) ?? repositoryRoot);
-            var relative = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: documentPath)).Replace(newChar: '/', oldChar: '\\');
+            var relative = Puck.Abstractions.PuckPaths.Relative(repositoryRoot, Path.GetFullPath(path: documentPath));
             var enforceBareFileNames = (relative.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "src/"

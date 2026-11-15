@@ -141,7 +141,7 @@ public static class ReferenceCapture {
             );
 
             if (options.ReuseLowering && File.Exists(path: objectPath)) {
-                Console.WriteLine(value: $"state-evidence: {plan.Key}: reusing the lowering already at {objectPath.Replace(newChar: '/', oldChar: '\\')}.");
+                Console.WriteLine(value: $"state-evidence: {plan.Key}: reusing the lowering already at {Puck.Abstractions.PuckPaths.Slashed(path: objectPath)}.");
             } else if (await CompileAsync(
                 cancellationToken: cancellationToken,
                 clock: clock,
@@ -192,7 +192,7 @@ public static class ReferenceCapture {
         );
 
         foreach (var difference in differences) { Console.Error.WriteLine(value: $"state-evidence: {difference}"); }
-        Console.WriteLine(value: $"state-evidence: rendered the captured manifest to {rendered.Replace(newChar: '/', oldChar: '\\')}.");
+        Console.WriteLine(value: $"state-evidence: rendered the captured manifest to {Puck.Abstractions.PuckPaths.Slashed(path: rendered)}.");
         Console.WriteLine(value: ((differences.Count == 0)
             ? "state-evidence: the capture reproduces every declared kernel's pinned evidence."
             : $"state-evidence: the capture differs from the pinned manifest in {differences.Count} place(s)."));
