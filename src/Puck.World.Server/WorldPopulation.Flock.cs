@@ -187,7 +187,7 @@ public sealed partial class WorldPopulation {
         for (var candidate = 0; (candidate < work.NeighborsWritten); candidate++) {
             var other = m_neighborScratch[candidate].Index;
             var offset = (m_flockImage!.Position(index: other) - self);
-            var neighbor = ((count < flock.Source.MaxNeighbors) && WorldPerceptionImage.WithinCone(
+            var neighbor = ((count < flock.Source.MaxNeighbors) && BodyTargetConeSense.ContainsOffset(
                 forward: in forward,
                 minimumDot: flock.MinimumDot,
                 offset: in offset,

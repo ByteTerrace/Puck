@@ -2660,6 +2660,13 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   no local seat or camera, bakes in its eye offset (`[0, 14, 18]`), target lift and PI/3 field of view. Those are an
   authored look: move them into the standard package's camera program and let the engine fall back to a neutral
   framing only.
+- [low] The work ledgers that wrap a `WorkCounterSet` in a class of their own
+  each repeat the same forwarding members (`Name`, `WorkKinds`, `Add`, `Read`,
+  `TryRead`): `WorldBodyWork`, `FixedContactSweepWork`, `FixedStaticContactWork`
+  and `WorldBootWork` are the ones the branch duplicate check names.
+  `WorkCounterSet` is itself an `IWorkCounterSource`, so a ledger with no
+  behaviour of its own is the set (`WorldTickWork.Process`). Unconfirmed which
+  of the four adds behaviour the set lacks.
 - [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
   no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
   Decide whether the link-local metadata endpoint needs the same bound.

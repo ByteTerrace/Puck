@@ -132,15 +132,4 @@ internal sealed class WorldPerceptionImage {
             destination
         );
     }
-    /// <summary>Returns whether an offset from an observer lies within a range and inside the cone about the observer's
-    /// forward axis: the test every perception applies before a sight line.</summary>
-    /// <param name="offset">The offset from the observer to the candidate.</param>
-    /// <param name="forward">The observer's forward axis.</param>
-    /// <param name="range">The range.</param>
-    /// <param name="minimumDot">The cosine of the cone's half angle.</param>
-    /// <returns><see langword="true"/> when the candidate is in range and in the cone.</returns>
-    public static bool WithinCone(in FixedVector3 offset, in FixedVector3 forward, FixedQ4816 range, FixedQ4816 minimumDot) => (
-        offset.IsWithin(radius: range) &&
-        offset.IsWithinCone(cosineHalfAngle: minimumDot, forward: forward)
-    );
 }

@@ -95,7 +95,7 @@ public sealed partial class WorldRuleHost {
         )) { return false; }
         var forward = image.Orientation(index: observer).Rotate(vector: -FixedVector3.UnitZ);
 
-        if (!WorldPerceptionImage.WithinCone(
+        if (!BodyTargetConeSense.ContainsOffset(
             forward: in forward,
             minimumDot: neighbors.MinimumDot,
             offset: in offset,
