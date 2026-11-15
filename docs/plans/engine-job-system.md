@@ -480,9 +480,18 @@ parallel without changing a value:
   standalone `RowDigest` read took it. Inside an open scope the arena folds
   afresh. The scoped replay runtime folds its rows through the same
   `RowDigest`, so there is one cache.
+- **The declaration.** The declaration component reads the installed
+  definition alone, and a definition and every value it holds never change
+  once built, so the definition's identity names the component's digest
+  (`WorldPersistence.DeclarationDigest`); an install hands the document
+  another definition, which folds again, and a recompute folds afresh.
+- **One fold a tick.** A caller that keeps both the hash and the per-component
+  read (a recording, a drive, a shadow verify) takes the read and folds it
+  (`WorldStateHashComposition.HashOf`), so the state is folded once.
 - **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
   digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
-  partition, which divides E4's 256-row partition evenly. Every slot encodes
+  partition, which divides E4's 256-row partition evenly; a replay scope folds
+  its own slots alone, in ascending order. Every slot encodes
   on every fold; nothing caches it. A cached slot needs one door every write to
   a serialized body field passes, and a body's continuation is dozens of fields
   and arrays its step, commands, contacts and tethers write directly (the
@@ -515,9 +524,10 @@ destination still runs and discloses.
 
 The incremental hash cut a recording's own cost by about two thirds and a
 tick refolds under two rows; the always-on sample costs microseconds a tick.
-What the recording still costs is the components that fold whole every tick
-(body continuations, poses, body action state, navigation, flock and input),
-unprofiled.
+What the recording still costs is the components that fold whole every tick,
+body continuations far ahead of the rule latch, input and body action state
+([the packet](open-items.md#test-runner-and-replay) holds the order and what
+each needs).
 
 ### Rule evaluation stays serial
 

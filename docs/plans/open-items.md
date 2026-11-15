@@ -247,11 +247,20 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
        rules (`RuleEvaluator.EvaluateDue`), the bodies (`WorldPopulation.AdvanceSimulated`:
        `WorldBody.ResolveProgramContacts`, the refusal snapshot), snapshot delivery
        (`WorldTick.EmitSnapshot`), and the session instances
-       (`WorldInstanceHost.StepInstances`). Its full scans: `WorldRuleHost.DeriveFacts`
-       visits every population slot and `WorldDisclosureImages.Current` every
-       authored row on each pass. The scoped replay's
-       `WorldScopedReplayRuntime.AfterTick` encodes each scope body's checkpoint
-       every tick the scope runs (`WorldPopulation.AppendContinuationHash`). The
+       (`WorldInstanceHost.StepInstances`). The scan left that does not follow
+       change is the rule host's fact derivation: `WorldRuleHost.DeriveFacts`
+       compares every population slot's pose and facts on each pass, eleven
+       passes a tick in the debug world (one before the walk and one after each
+       firing that delivers an arm), 4,530 slot comparisons a tick
+       (`world.counters world.tick`: `fact-derives`, `fact-slots`). Comparing
+       only the slots a rule has read saves nothing there, since rules read
+       nearly every slot (measured: 4,483 of 4,528). It needs the body's
+       observed-state door in the
+       [refactoring packet](#refactoring-campaign), which would hand the pass
+       the bodies that moved. A replay scope still encodes each of its bodies'
+       continuations every tick it runs
+       (`WorldScopedReplayRuntime.AfterTick`), 8.9 KB a body, for want of the
+       same door. The
        move off the frame thread is the presentation view's last cut
        ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
      - The creations' effector surface probes (`WorldCreationInstances.ApplyEffectors`):
@@ -2562,22 +2571,60 @@ and none has an authored field yet):
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
-- [medium] A body's simulation continuation has no single write door, so
-  nothing can say it is unchanged. `WorldPopulation.AppendContinuationHash`
-  encodes every active slot on every authority hash
-  (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs`); the fields it
-  serializes (`WorldBody.Transfer.cs` `TransferState` and
-  `ApplyIntegrationResidue`, the pose, the lane timer and press arrays, the
-  tether residue, and the population entry's producer, autonomy and navigation
-  state) are written directly from the step, commands, contacts and tethers. A
-  rest-epoch cache missed four such writes to sleeping bodies, so it was
-  deleted. The redesign: group those fields in storage the body reaches only
-  through one accessor that moves a version (arrays included, which a plain
-  field write bypasses), so the compiler rather than convention enforces it;
-  the population's entry state the same way; then cache a slot's digest by that
-  version. The stake is about 7 % of a long recording (go-tests), the share of
-  resting bodies; a version that also covers moving bodies' unchanged
-  fields would not help, since a moving body's pose changes every tick.
+- [high] A body's state has no single write door, so nothing can say a body
+  is unchanged, and two scans pay for every body on every pass:
+  - The continuation fold (`WorldPopulation.AppendContinuationHash`) encodes
+    every active slot on every authority hash: 8.9 KB a slot through the
+    checkpoint codec, 5.3 MB a recorded tick for the debug world's 590 bodies,
+    of which 488 are parked rigid bodies (`world.counters world.tick`:
+    `continuation-encodes`, `continuation-bytes`). It is the largest component
+    of a recorded tick's hash by an order of magnitude; a replay scope pays the
+    same for its own bodies every tick it runs.
+  - The rule host's fact derivation (`WorldRuleHost.DeriveFacts`) compares
+    every slot's pose and facts on each of about eleven passes a tick.
+  A rest-epoch cache of the fold missed four writes to sleeping bodies and was
+  deleted, so the door has to be one the compiler holds. The design:
+  - Each continuation field of `WorldBody` becomes a field-backed property
+    whose setter is its only writer (`set { if (field != value) { field =
+    value; ... } }`): the setter moves the body's version and puts the body on
+    its population's moved list, and it moves nothing when the value is the
+    one already held, so a parked body rewritten with what it holds stays
+    unmoved. The inventory is about ninety of the body's 156 fields (1,937
+    uses, 617 writes, 13 by `ref` or `out`, which a property refuses at
+    compile time).
+  - Three shapes need more than a property, and each fails silently if
+    converted like a scalar. An array (`m_laneTimers` and about twenty more)
+    is written by element, which bypasses a setter: it needs storage that
+    hands out a `ReadOnlySpan` and writes through an indexer that moves the
+    version, and the transfer-state view (`WorldBodyTransferState`), which
+    aliases the live arrays today, has to read through that. A mutable struct
+    (the `FixedRateAccumulator`s) mutated by a method call on a property
+    mutates a copy, with no compiler error: each such call site is rewritten
+    by hand to read, step and store. A referenced object with its own state
+    (`m_tether`, the contact list, the tape ring, `m_laneActions` written
+    through `ref`) is tracked inside itself or kept in the live part below.
+  - The slot digest splits into a part the version covers and a live part the
+    fold reads every time and compares by value: the action-state registers
+    (arena lanes, `WorldBody.ReadActionState`), the contact-field observation
+    (a function of `WorldPopulation.ContactFieldVersion`), and the population
+    entry's own fields until `Entry` gets the same door (about 35 fields, the
+    producer and autonomy structs written through `ref`).
+  - Nothing forces a new field to be tracked. Either the capture functions
+    (`WorldBody.TransferState`, `CaptureIntegrationResidue`) become static
+    over the tracked storage, or an analyzer refuses an untracked instance
+    field on the type. Until one of them holds, the check is the one the arena
+    rows have: `--reproduce` recomputing every slot against its cached digest,
+    and a sampled slot on every fold.
+  The fact derivation reads only the body's pose and the inputs of
+  `WorldBody.Facts` (about fourteen of those fields), so that subset can land
+  first and pay in every played tick. The fold's remaining constant cost is
+  the checkpoint image itself: three
+  nested multi-kilobyte record structs copied several times before the writer
+  sees them (`WorldPopulationEntryCheckpoint`, `WorldBodyIntegrationResidue`,
+  `WorldBodyTransferState`), and per-item delegate writes for the script actors
+  and strings. A sparse encoding of all-default arrays and input images would
+  cut the bytes about tenfold and shrinks every checkpoint with it; it changes
+  the checkpoint format and every recorded hash.
 - [medium] `WorldOverviewCamera.Resolve` (`src/Puck.World.Client/WorldOverviewCamera.cs`), the view of a world with
   no local seat or camera, bakes in its eye offset (`[0, 14, 18]`), target lift and PI/3 field of view. Those are an
   authored look: move them into the standard package's camera program and let the engine fall back to a neutral
@@ -2885,12 +2932,7 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
 
 Duplicates the survey left to the lanes that own their areas:
 
-- Tick cost: two frozen perception images, each a population snapshot with
-  lazily built `FixedSpatialNeighborhood`s per cell width and a range, cone and
-  sight test (`Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:20-135`,
-  `Puck.World.Server/WorldPopulation.Flock.cs:18-30`, `154-280`); and an input
-  image hashed field by field twice (`Puck.World.Server/WorldInputOwner.Checkpoint.cs:110`,
-  `Puck.World.Server/WorldTick.RoutedInput.cs:64`).
+
 - Cold bake: `sdfGlyphSampleFieldMedian` and `sdfBoxDistance(float2)`
   (`Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:6`, `413`) repeat
   `puckMsdfReconstruct` and `puckBoxDistance2` from
@@ -3331,25 +3373,42 @@ colliders report's only red findings left are the valley's relief
 
 ### Test runner and replay
 
-Owner: test runner and replay specialist · medium and low ·
-Next: the per-tick authority hash is incremental
-([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
-reproduce worker for what remains.
+Owner: test runner and replay specialist · high to low ·
+Next: the body's write door
+([refactoring packet](#refactoring-campaign)), then the rule latch's fold,
+both in the first item below.
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
-- [medium] Recording still costs about a third of the plain authored run. The
-  per-tick authority hash folds the arena from `RowVersion`-cached row digests
-  in 32-row segments, and every body slot's continuation afresh in 32-slot
-  segments; the scoped replay runtime reads the same row digests
-  ([design](engine-job-system.md#the-incremental-state-hash)). The body
-  continuation's cache needs the write-door redesign in the
-  [refactoring packet](#refactoring-campaign). Left: the components that still
-  fold whole every tick (body continuations, `PopulationPose`,
-  `BodyActionState`, `Navigation`, `Flock`, `Input`) and the probe's per-tick
-  input copy, unprofiled; `--reproduce`'s replay pays the full recompute every
-  tick, which is the check's price; a replica's fixed floor per scenario is
-  unmeasured. Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`)
-  before choosing the next segment.
+- [high] The per-tick authority hash is most of what a recording adds to a
+  tick, and one component is most of the hash. Timed per component in a
+  headless debug world with a recording armed (a stopwatch around each arm of
+  `WorldPersistence.AppendStateHashComponent`; a sampled profile misattributes
+  it), the order is: `BodyContinuation` by an order of magnitude, then
+  `RuleLatch`, `Input`, `BodyActionState`, `Search`, and the rest far below.
+  The arena folds from `RowVersion`-cached row digests, the declaration from
+  the digest its definition names, and a recording, a drive and a shadow
+  verify fold the state once a tick and derive the hash from the
+  per-component read (`WorldStateHashComposition.HashOf`)
+  ([design](engine-job-system.md#the-incremental-state-hash)). Left, in that
+  order:
+  - `BodyContinuation`: the write door in the
+    [refactoring packet](#refactoring-campaign).
+  - `RuleLatch`: `RuleLatch.AppendStateHash` hashes every rule's name, looks
+    its state up by name, and hashes every binding's key name, on every fold.
+    The names never change: hold each rule's name digest beside its state
+    (`RuleLatch.States` already aligns states with the compiled array) and
+    each key's digest by ordinal. A version on the held bits, moved by the
+    writers `RuleLatch` already funnels (`SetHeld`, `RemoveHeld`, the
+    lifecycle writers and `Undo`), would let an unchanged rule fold a cached
+    digest; `RuleState.Held` is a public dictionary today, so the door is the
+    two-dictionary merge in the state audit remainder.
+  - `Input`: `WorldInputOwner.AppendStateHash` folds every retained history
+    record of every owner on every fold; an owner's history changes only when
+    it admits an event.
+  - `BodyActionState`: `WorldBody.AppendActionStateHash` hashes each register
+    definition's name per body per fold.
+  `--reproduce`'s replay pays the full recompute every tick, which is the
+  check's price; a replica's fixed floor per scenario is unmeasured.
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines, and
