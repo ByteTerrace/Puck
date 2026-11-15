@@ -1,0 +1,241 @@
+// The hearth: a third world, reached only through the garden. A small warm room under a dark sky with one glowing
+// ember, so a window onto it reads at a glance against the garden's sunset. The garden's hearth frame (`hearth`,
+// garden.puck) opens onto the arrival frame here, and the arrival frame is the way back. No painting of the debug
+// world shows it: from the debug world it stands behind two windows, the garden painting and the garden's hearth
+// frame, so it is the world that bakes only if a window out of sight keeps the chain to it rendering. Boot the debug
+// world, never this one. See debug.md beside this file.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "hearth"
+
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
+import "moth-controls"
+import "suit"
+import "size"
+
+// The hearth draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
+metadata {
+  title: "Hearth"
+  description: "A world reached only through the garden: a warm room under a dark sky with a glowing ember and a frame back to the garden."
+}
+
+// A traveller from the garden arrives here, and the garden's window onto the hearth observes it whole.
+admission [
+  {
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+references [
+  {
+    document: "garden"
+    name: "garden"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "garden"
+    reference: "garden"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  // The garden's hearth frame's counterpart. Its glass is the way back to the garden.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0, -6]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "hearth/glass"
+          destination: "garden"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "garden"
+          fallback: "#FF9A4D"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "ember" {
+    prototype: "ember"
+    position [0, 0, -14]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        {
+          color: "#5A3A2C"
+          roughness: 0.85
+          specular: 0.08
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, -0.2, 0]
+        scale [12, 0.2, 16]
+      }
+    }
+  }
+
+  // A dark frame round a canvas whose bottom reaches the ground, so a body's feet cross the glass. Face 0, the rim,
+  // names the glass, which shows through the opening carved out of it.
+  prototype "frame" {
+    document {
+      behavior {
+        faces [
+          {
+            name: "glass"
+            shapeId: 0
+          }
+        ]
+      }
+      name: "frame"
+      palette [
+        {
+          color: "#1B1512"
+          roughness: 0.45
+          specular: 0.2
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "rim" {
+        material: 0
+        position [0, 1.3, 0]
+        scale [1.12, 1.42, 0.04]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: 0
+        position [0, 1.3, 0]
+        scale [1.1, 1.4, 0.3]
+      }
+      shape Box "frame-left" {
+        material: 0
+        position [-1.2, 1.38, 0]
+        scale [0.08, 1.48, 0.08]
+      }
+      shape Box "frame-right" {
+        material: 0
+        position [1.2, 1.38, 0]
+        scale [0.08, 1.48, 0.08]
+      }
+      shape Box "frame-top" {
+        material: 0
+        position [0, 2.78, 0]
+        scale [1.1, 0.08, 0.08]
+      }
+    }
+  }
+
+  // The landmark: a stone bowl holding a glowing ember.
+  prototype "ember" {
+    document {
+      name: "ember"
+      palette [
+        {
+          color: "#3A332E"
+          roughness: 0.8
+        }
+        {
+          color: "#FF6A2A"
+          emissive: 600
+          roughness: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "bowl" {
+        material: 0
+        position [0, 0.4, 0]
+        scale [0.9, 0.4, 0.9]
+      }
+      shape Sphere "coal" {
+        material: 1
+        position [0, 1.1, 0]
+        scale [0.45, 0.45, 0.45]
+      }
+    }
+  }
+}
+
+render {
+  farDistance: 60
+  lighting {
+    lights [
+      directional(
+        name: "key",
+        direction: [-2, 3, -4],
+        color: "#FFB27A",
+        illuminance: 250lx,
+        shadow: always,
+        angularRadius: 0.2
+      )
+      directional(direction: [0.6, 0.3, 0.7], color: "#8C5A4A", illuminance: 90lx)
+    ]
+  }
+  sky {
+    layers [
+      gradient(name: "air", luminance: 120nit, stops: [
+        { elevation: -1, color: "#120806" }
+        { elevation: 0, color: "#3A160C" }
+        { elevation: 0.5, color: "#1C0C08" }
+        { elevation: 1, color: "#0A0504" }
+      ])
+    ]
+  }
+  atmosphere {
+    fog {
+      density: 0.01
+    }
+  }
+}

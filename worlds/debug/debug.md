@@ -5,7 +5,10 @@ The debug world's portals are five paintings in the gallery hall's east wing
 framed canvas that is a door: walk or jump into it. Two lead to other lands, the
 garden ([garden.puck](garden.puck)), a small plot under a sunset sky with a green
 floor and a golden obelisk, and the night field ([night.puck](night.puck)), a
-snowfield under stars. Two face each other across the room, and the fifth is the
+snowfield under stars. The garden holds a frame of its own onto a third land,
+the hearth ([hearth.puck](hearth.puck)), a warm room round a glowing ember that
+no painting here shows: from this world it stands behind two windows, so it
+bakes only while the hidden windows on the way to it keep rendering. Two face each other across the room, and the fifth is the
 endless fall, a painting in the floor under its twin in the ceiling. A canvas
 shows where it leads as a window and ripples like an event horizon, and walking
 through it crosses there with no load. The garden holds two frames of its own
