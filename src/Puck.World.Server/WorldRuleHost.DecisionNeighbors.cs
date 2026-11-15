@@ -83,6 +83,8 @@ public sealed partial class WorldRuleHost {
         }
         foreach (var grid in image.Grids.Values) { grid.Built = false; }
         m_decisionWork = m_decisionWork with { ImagePoints = image.Count };
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionFreezes);
+        WorldTickWork.Process.Add(amount: image.Count, kind: WorldTickWork.PerceptionPoints);
     }
     private bool DecisionBodyLive(int index, int generation) => ((((uint)index) < ((uint)Host.Population.Capacity)) &&
         Host.Population.IsActive(index: index) && (Host.Population.EntryBody(index: index) is not null) && (Host.Population.Generation(index: index) == generation));
@@ -264,6 +266,7 @@ public sealed partial class WorldRuleHost {
                         start: 0
                     )); grid.Built = true;
                     m_decisionWork = m_decisionWork with { GridBuilds = (m_decisionWork.GridBuilds + 1) };
+                    WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionGrids);
                 }
                 var width = ((ulong)image.Active.Length).NextPowerOfTwo();
                 var bits = BitOperations.Log2(value: width);

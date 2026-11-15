@@ -27,9 +27,12 @@ public sealed partial class WorldPopulation {
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
     public void AppendContinuationHash(ref Fnv1aHash hash, IReadOnlySet<int>? bodies = null) {
         RequireCapturePoint();
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
 
         if (bodies is not null) {
             var count = 0;
+
+            WorldTickWork.Process.Add(amount: (2L * Capacity), kind: WorldTickWork.ContinuationSlots);
 
             for (var index = 0; (index < Capacity); index++) {
                 if (bodies.Contains(item: index) && (m_entries[index] is { Active: true, Body: not null })) { count++; }
@@ -46,6 +49,7 @@ public sealed partial class WorldPopulation {
         var digests = ((m_foldDigests.Length == Capacity) ? m_foldDigests : (m_foldDigests = new ulong[Capacity]));
         var present = ((m_foldPresent.Length == Capacity) ? m_foldPresent : (m_foldPresent = new bool[Capacity]));
 
+        WorldTickWork.Process.Add(amount: Capacity, kind: WorldTickWork.ContinuationSlots);
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -61,15 +65,22 @@ public sealed partial class WorldPopulation {
     private ulong[] m_foldDigests = [];
     private bool[] m_foldPresent = [];
 
-    private ulong SlotDigest(int index, Entry entry, WorldBody body) => WorldAuthorityCheckpointCodec.ContinuationDigest(
-        entry: EntryCheckpoint(
-            alias: true,
-            body: body,
-            entry: entry,
-            index: index
-        ),
-        writer: (m_continuationWriter ??= new WireWriter())
-    );
+    private ulong SlotDigest(int index, Entry entry, WorldBody body) {
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var digest = WorldAuthorityCheckpointCodec.ContinuationDigest(
+            entry: EntryCheckpoint(
+                alias: true,
+                body: body,
+                entry: entry,
+                index: index
+            ),
+            writer: writer
+        );
+
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationEncodes);
+        WorldTickWork.Process.Add(amount: writer.WrittenSpan.Length, kind: WorldTickWork.ContinuationBytes);
+        return digest;
+    }
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed

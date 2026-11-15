@@ -202,6 +202,11 @@ public sealed partial class WorldRuleHost {
 
         var placementMoved = (m_watchPlacements && SeeInhabitants());
 
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.FactDerives);
+        if (m_watchPoses || m_watchFacts) {
+            WorldTickWork.Process.Add(amount: capacity, kind: WorldTickWork.FactSlots);
+        }
+
         for (var index = 0; (index < capacity); index++) {
             var live = population.IsActive(index: index);
 

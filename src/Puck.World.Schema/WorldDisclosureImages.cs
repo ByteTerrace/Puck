@@ -46,7 +46,12 @@ public sealed class WorldDisclosureImages {
     /// <summary>Gets the kind counting the bytes serialized to identify disclosed definitions: a whole composition's
     /// document less its rows, and each row's cell-free declaration and storage.</summary>
     public static WorkKind DefinitionBytes { get; } = new(name: "world.disclosure.definition-bytes", unit: "bytes", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes];
+    /// <summary>Gets the kind counting the rows whose versions a pass read to find the ones that changed: each window's
+    /// start, and each audience's definition and frame check.</summary>
+    public static WorkKind RowVisits { get; } = new(name: "world.disclosure.row-visits", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the interned images a pass tested for reclamation.</summary>
+    public static WorkKind ContentVisits { get; } = new(name: "world.disclosure.content-visits", unit: "count", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits];
 
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     // One audience's disclosed definition. Between whole compositions it changes only row by row: a keyed write changes
@@ -139,7 +144,9 @@ public sealed class WorldDisclosureImages {
         if (m_windowArena is { } arena) {
             if (m_windowVersions.Length != arena.Rows.Count) { m_windowVersions = new ulong[arena.Rows.Count]; }
             for (var row = 0; row < m_windowVersions.Length; row++) { m_windowVersions[row] = arena.RowVersion(row); }
+            m_work.Add(RowVisits, m_windowVersions.Length);
         }
+        m_work.Add(ContentVisits, m_content.Count);
         foreach (var (pin, reference) in m_content) { if (!reference.TryGetTarget(out _)) { m_reclaimed.Add(pin); } }
         foreach (var pin in m_reclaimed) { m_content.Remove(pin); }
         m_reclaimed.Clear();
@@ -341,6 +348,7 @@ public sealed class WorldDisclosureImages {
         var audience = Audience(view);
         if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, view.Source)) { return Compose(view, audience).Frame; }
         var arena = view.Arena;
+        m_work.Add(RowVisits, entry.FrameRowOrdinals.Length);
         foreach (var row in entry.FrameRowOrdinals) {
             // The entry's row record changes only in Current, which refreshes skeletons with it; here a row whose image
             // stands is left to Current, and the image table answers its repeated reads from its own cache.
@@ -365,6 +373,7 @@ public sealed class WorldDisclosureImages {
         if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, source)) { return Compose(view, audience); }
         var arena = view.Arena;
         var skeletons = (entry.Revision != arena.DisclosureRevision);
+        m_work.Add(RowVisits, entry.Images.Length);
         for (var row = 0; row < entry.Images.Length; row++) {
             var version = arena.RowVersion(row);
             var dependencies = DependencyVersions(arena, row);

@@ -151,6 +151,8 @@ public sealed partial class WorldPopulation {
             );
         }
         m_flockPointCount = count;
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionFreezes);
+        WorldTickWork.Process.Add(amount: count, kind: WorldTickWork.PerceptionPoints);
         foreach (var grid in m_flockGrids.Values) { grid.Frozen = false; }
     }
     private void RefreshFlockPerception(int index, Entry entry, CompiledBodyProducer producer, ulong stepTicks) {
@@ -212,6 +214,7 @@ public sealed partial class WorldPopulation {
                 start: 0
             ));
             grid.Frozen = true;
+            WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionGrids);
         }
         var work = grid.Neighborhood.Query(
             self,
