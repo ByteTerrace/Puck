@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Numerics;
 
 namespace Puck.Maths;
 
@@ -135,41 +134,4 @@ public readonly partial record struct FixedQ4816 {
         );
 
     static int ISignedFixedPointFormat<FixedQ4816>.FractionBitCount => FractionBitCount;
-
-    static bool INumberBase<FixedQ4816>.TryConvertFromChecked<TOther>(TOther value, out FixedQ4816 result) =>
-        FixedPointConvert.TryConvertFromChecked<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
-    static bool INumberBase<FixedQ4816>.TryConvertFromSaturating<TOther>(TOther value, out FixedQ4816 result) =>
-        FixedPointConvert.TryConvertFromSaturating<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
-    static bool INumberBase<FixedQ4816>.TryConvertFromTruncating<TOther>(TOther value, out FixedQ4816 result) =>
-        FixedPointConvert.TryConvertFromTruncating<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
-    static bool INumberBase<FixedQ4816>.TryConvertToChecked<TOther>(FixedQ4816 value, out TOther result) =>
-        FixedPointConvert.TryConvertToChecked<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
-    static bool INumberBase<FixedQ4816>.TryConvertToSaturating<TOther>(FixedQ4816 value, out TOther result) =>
-        FixedPointConvert.TryConvertToSaturating<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
-    static bool INumberBase<FixedQ4816>.TryConvertToTruncating<TOther>(FixedQ4816 value, out TOther result) =>
-        FixedPointConvert.TryConvertToTruncating<FixedQ4816, TOther>(
-            fractionBitCount: FractionBitCount,
-            result: out result,
-            value: value
-        );
 }

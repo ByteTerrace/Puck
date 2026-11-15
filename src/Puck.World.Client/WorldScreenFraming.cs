@@ -1,7 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm.Views;
-using Puck.World.Authoring;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 

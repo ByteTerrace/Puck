@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
 
@@ -20,4 +21,27 @@ internal interface ISignedFixedPointFormat<TSelf> : INumberBase<TSelf> where TSe
     /// <param name="value">The pre-scaled raw value.</param>
     /// <returns>The carrier whose <see cref="Value"/> equals <paramref name="value"/>.</returns>
     static abstract TSelf FromRawBits(long value);
+
+    // The generic-math conversion hooks, written once for every signed carrier: each reads the carrier's own fraction
+    // width, so no carrier can pass another's. A carrier is a struct, so the JIT resolves a call through INumberBase to
+    // these bodies directly; without the inlining hint it keeps a default interface body out of line, where a member
+    // declared on the carrier was inlined.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertFromChecked<TOther>(TOther value, out TSelf result) =>
+        FixedPointConvert.TryConvertFromChecked<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertFromSaturating<TOther>(TOther value, out TSelf result) =>
+        FixedPointConvert.TryConvertFromSaturating<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertFromTruncating<TOther>(TOther value, out TSelf result) =>
+        FixedPointConvert.TryConvertFromTruncating<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertToChecked<TOther>(TSelf value, out TOther result) =>
+        FixedPointConvert.TryConvertToChecked<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertToSaturating<TOther>(TSelf value, out TOther result) =>
+        FixedPointConvert.TryConvertToSaturating<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool INumberBase<TSelf>.TryConvertToTruncating<TOther>(TSelf value, out TOther result) =>
+        FixedPointConvert.TryConvertToTruncating<TSelf, TOther>(fractionBitCount: TSelf.FractionBitCount, result: out result, value: value);
 }

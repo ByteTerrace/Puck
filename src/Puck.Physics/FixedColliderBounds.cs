@@ -6,8 +6,6 @@ namespace Puck.Physics;
 /// consumer reads, so dynamic-vs-dynamic and dynamic-vs-static pairs, and the event feed's overlap sense, cannot
 /// disagree about the same volume.</summary>
 public static class FixedColliderBounds {
-    private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
-
     /// <summary>The smallest support radius of a convex volume: its sphere/capsule radius or least box/ellipsoid half-extent.</summary>
     /// <param name="volume">The body's convex volume.</param>
     /// <returns>The least radius, before contact skin.</returns>
@@ -36,20 +34,17 @@ public static class FixedColliderBounds {
     /// <param name="position">The body's world position.</param>
     /// <param name="orientation">The body's world orientation.</param>
     /// <param name="volume">The body-local convex volume.</param>
-    /// <returns>The bounds' center and half-extent: a sphere's center and radius; a capsule's segment midpoint and
-    /// half the segment's absolute span plus its radius; a box's center and <see cref="FixedOrientedBox.WorldExtent"/>.</returns>
+    /// <returns>The bounds: a sphere's cube of its radius about its center; a capsule's segment spanned and grown by
+    /// its radius; a box's center and <see cref="FixedOrientedBox.WorldExtent"/>; an ellipsoid's least and greatest
+    /// support along each world axis.</returns>
     /// <exception cref="InvalidOperationException">The volume's kind has no support map.</exception>
-    public static (FixedVector3 Center, FixedVector3 Extent) WorldBounds(
+    public static FixedAabb WorldBounds(
         FixedVector3 position,
         in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume
     ) {
         if (volume.Kind == FixedBodyColliderKind.Sphere) {
-            return (Center: (position + orientation.Rotate(vector: volume.Center)), Extent: new FixedVector3(
-                X: volume.Radius,
-                Y: volume.Radius,
-                Z: volume.Radius
-            ));
+            return FixedAabb.Around(center: (position + orientation.Rotate(vector: volume.Center)), radius: volume.Radius);
         }
 
         if (volume.Kind == FixedBodyColliderKind.Capsule) {
@@ -58,14 +53,7 @@ public static class FixedColliderBounds {
                 position: position,
                 volume: in volume
             );
-            var radius = new FixedVector3(
-                X: volume.Radius,
-                Y: volume.Radius,
-                Z: volume.Radius
-            );
-            var delta = (upper - lower);
-
-            return (Center: ((lower + upper) / Two), Extent: ((FixedVector3.Abs(value: delta) / Two) + radius));
+            return new FixedAabb(Maximum: FixedVector3.Max(left: lower, right: upper), Minimum: FixedVector3.Min(left: lower, right: upper)).Grow(margin: volume.Radius);
         }
 
         if (volume.Kind == FixedBodyColliderKind.Box) {
@@ -75,7 +63,7 @@ public static class FixedColliderBounds {
                 volume: in volume
             );
 
-            return (Center: box.Center, Extent: box.WorldExtent);
+            return FixedAabb.FromCenter(center: box.Center, extent: box.WorldExtent);
         }
 
         if (volume.Kind == FixedBodyColliderKind.Ellipsoid) {
@@ -84,7 +72,7 @@ public static class FixedColliderBounds {
             var y = (-MinimumProjection(position, in orientation, in volume, -FixedVector3.UnitY) - center.Y);
             var z = (-MinimumProjection(position, in orientation, in volume, -FixedVector3.UnitZ) - center.Z);
 
-            return (center, new FixedVector3(X: x, Y: y, Z: z));
+            return FixedAabb.FromCenter(center: center, extent: new FixedVector3(X: x, Y: y, Z: z));
         }
 
         throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");

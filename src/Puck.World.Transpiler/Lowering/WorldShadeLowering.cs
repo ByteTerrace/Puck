@@ -8,6 +8,7 @@ using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Rewriting;
 using Puck.World.Authoring;
+using Puck.Maths;
 
 namespace Puck.World.Transpiler.Lowering;
 

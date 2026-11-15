@@ -259,13 +259,13 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         if (Kind == FixedStaticColliderKind.Sphere) { return (new FixedVector3(X: Extent.X, Y: Extent.X, Z: Extent.X) + padding); }
         if (Kind == FixedStaticColliderKind.AxisAlignedBox) { return (Extent + padding); }
-        var local = LocalHalfExtent();
-        var axisX = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitX));
-        var axisY = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitY));
-        var axisZ = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitZ));
 
-        return ((((axisX * local.X) + (axisY * local.Y)) + (axisZ * local.Z)) + padding);
+        return (FixedAabb.OrientedHalfExtent(halfExtent: LocalHalfExtent(), rotation: Rotation) + padding);
     }
+    /// <summary>Returns the world-axis box about <see cref="Center"/> that the solid's exact query never pushes a body
+    /// outside of: <see cref="WorldHalfExtent"/> about the centre.</summary>
+    /// <returns>The padded box; <see cref="FixedAabb.Everywhere"/> for a solid without bounds, which may meet any body.</returns>
+    public FixedAabb WorldBox() => ((WorldHalfExtent() is { } extent) ? FixedAabb.FromCenter(center: Center, extent: extent) : FixedAabb.Everywhere);
     // A solid turned by Rotation reaches no further than this along each of its own axes about Center, unpadded: the
     // outer face of a rounded box, the support of a chamfered box or superellipsoid (both symmetric about Center), and
     // Extent for an oriented box, a cylinder's radius and half-height, or a field's frame.
@@ -323,7 +323,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         if (Kind == FixedStaticColliderKind.Field) {
             var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
 
-            switch (NarrowQuery(center: bounds.Center, extent: bounds.Extent, reach: skin, collider: out var narrowed)) {
+            switch (NarrowQuery(region: in bounds, reach: skin, collider: out var narrowed)) {
                 case FixedFieldRegion.Empty: {
                         push = default;
                         uncertain = false;
@@ -351,13 +351,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     /// and a support witness names the piece. A projection from a point (<see cref="FixedSurfaceQuery"/>'s nearest
     /// point for a hold or an anchor) has no bounded region and reads the field, which agrees with the piece within
     /// the field's bracket where both answer.</summary>
-    /// <param name="center">The region's world centre.</param>
-    /// <param name="extent">The region's world half-extent before the reach.</param>
+    /// <param name="region">The region's world box before the reach.</param>
     /// <param name="reach">The distance, in metres, the query looks past the region; a negative reach counts as zero.</param>
     /// <param name="collider">The exact analytic collider when the answer is <see cref="FixedFieldRegion.Base"/>.</param>
     /// <returns><see cref="FixedFieldRegion.Field"/> for a collider that is not a field, a field without a partition, or a
     /// region the partition does not narrow.</returns>
-    internal FixedFieldRegion Narrow(FixedVector3 center, FixedVector3 extent, FixedQ4816 reach, out FixedStaticCollider collider) {
+    internal FixedFieldRegion Narrow(in FixedAabb region, FixedQ4816 reach, out FixedStaticCollider collider) {
         collider = default;
 
         if ((Kind != FixedStaticColliderKind.Field) || (Field?.Partition is not { } partition)) {
@@ -366,23 +365,22 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         var grow = (FixedQ4816.Max(x: reach, y: FixedQ4816.Zero) + BoundsPadding);
 
-        return partition.Narrow(center: in center, collider: out collider, extent: (extent + new FixedVector3(X: grow, Y: grow, Z: grow)));
+        return partition.Narrow(collider: out collider, region: region.Grow(margin: grow));
     }
     /// <summary>Narrows a field collider for a query that a narrowed answer replaces a field solve for, counting the
     /// replacement as <see cref="FixedStaticContactWork.FieldNarrowed"/>.</summary>
-    /// <param name="center">The region's world centre.</param>
-    /// <param name="extent">The region's world half-extent before the reach.</param>
+    /// <param name="region">The region's world box before the reach.</param>
     /// <param name="reach">The distance, in metres, the query looks past the region.</param>
     /// <param name="collider">The exact analytic collider when the answer is <see cref="FixedFieldRegion.Base"/>.</param>
     /// <returns>What <see cref="Narrow"/> answers.</returns>
-    internal FixedFieldRegion NarrowQuery(FixedVector3 center, FixedVector3 extent, FixedQ4816 reach, out FixedStaticCollider collider) {
-        var region = Narrow(center: center, collider: out collider, extent: extent, reach: reach);
+    internal FixedFieldRegion NarrowQuery(in FixedAabb region, FixedQ4816 reach, out FixedStaticCollider collider) {
+        var narrowed = Narrow(collider: out collider, reach: reach, region: in region);
 
-        if (region != FixedFieldRegion.Field) {
+        if (narrowed != FixedFieldRegion.Field) {
             FixedStaticContactWork.Process.CountNarrowed();
         }
 
-        return region;
+        return narrowed;
     }
     /// <summary>Returns whether a query against this collider can answer with a collider: this one, or one of the exact
     /// pieces its field's partition narrows to (<see cref="Narrow"/>), as a support witness names.</summary>

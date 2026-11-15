@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
+using Puck.Maths;
 
 namespace Puck.World.Authoring;
 
@@ -12,7 +13,7 @@ public static partial class CreationCanonicalizer {
                 rgb: out _,
                 value: color
             ) &&
-                !HexColor.IsStateBinding(value: color)
+                !ColorStateBinding.IsStateBinding(value: color)
             ) {
                 errors.Add(item: new(
                     Message: "Layer colors require #RRGGBB or a state binding.",
@@ -165,7 +166,7 @@ public static partial class CreationCanonicalizer {
         }
 
         void Color(string? value, string name) {
-            if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !HexColor.IsStateBinding(value: value)) {
+            if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !ColorStateBinding.IsStateBinding(value: value)) {
                 errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
             }
         }

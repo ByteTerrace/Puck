@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Puck.Maths;
 using Puck.SignedDistance;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
@@ -319,10 +320,7 @@ public sealed partial class SdfMeshPathBake {
     private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) => TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
     // The world-axis box about a box carried through a matrix.
     private static (Vector3 Center, Vector3 Half) TransformBox(Vector3 center, Vector3 half, Matrix4x4 matrix) {
-        return (Vector3.Transform(center, matrix), new Vector3(
-            ((MathF.Abs(matrix.M11) * half.X) + (MathF.Abs(matrix.M21) * half.Y) + (MathF.Abs(matrix.M31) * half.Z)),
-            ((MathF.Abs(matrix.M12) * half.X) + (MathF.Abs(matrix.M22) * half.Y) + (MathF.Abs(matrix.M32) * half.Z)),
-            ((MathF.Abs(matrix.M13) * half.X) + (MathF.Abs(matrix.M23) * half.Y) + (MathF.Abs(matrix.M33) * half.Z))));
+        return (Vector3.Transform(center, matrix), VectorFunctions.OrientedHalfExtent(halfExtent: half, matrix: in matrix));
     }
     // A shared geometry is wanted where its actual occurrences stand. Never union distant occurrence boxes:
     // the empty space between them is neither visible demand nor a nearby surface.

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -24,13 +25,9 @@ public sealed record WorldSpatialReadDependency(
 ) {
     /// <summary>Gets the exact region re-read at commit.</summary>
     [JsonIgnore]
-    public WorldSpatialReadRegion Region => new(
-        MinXRaw,
-        MinZRaw,
-        MaxXRaw,
-        MaxZRaw,
-        MinYRaw,
-        MaxYRaw
+    public FixedAabb Region => new(
+        Maximum: new FixedVector3(X: FixedQ4816.FromRawBits(value: MaxXRaw), Y: FixedQ4816.FromRawBits(value: MaxYRaw), Z: FixedQ4816.FromRawBits(value: MaxZRaw)),
+        Minimum: new FixedVector3(X: FixedQ4816.FromRawBits(value: MinXRaw), Y: FixedQ4816.FromRawBits(value: MinYRaw), Z: FixedQ4816.FromRawBits(value: MinZRaw))
     );
 
     /// <summary>Validates the wire shape without reading the world document.</summary>

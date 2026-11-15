@@ -53,11 +53,10 @@ public sealed partial class WorldColliderSet {
     // margined field reads at or below zero; and a piece's exact collider is the copy's own contact surface
     // (ExactCollider). The caller asks for none over relief, which displaces the union everywhere.
     private static List<FixedStaticCollider> PrimitiveColliders(CreationDocument document, in FixedCreationStampTransform transform, FixedQ4816 margin,
-        FixedQ4816 growth, bool partitioned, out bool unbounded, out (FixedVector3 Center, FixedVector3 HalfExtent) bounds, out FixedFieldPartition? partition) {
+        FixedQ4816 growth, bool partitioned, out bool unbounded, out FixedAabb bounds, out FixedFieldPartition? partition) {
         var colliders = new List<FixedStaticCollider>();
         var plane = false;
-        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
-        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+        var box = FixedAabb.Empty;
         var reach = (growth + margin);
         var pieces = (partitioned ? new List<FixedFieldPiece>() : null);
         var carves = new List<FixedFieldReach>();
@@ -94,15 +93,12 @@ public sealed partial class WorldColliderSet {
                     return;
                 }
 
-                var box = CopyReach(copy: in copy, dilation: reach).Box;
-
-                low = -FixedVector3.Max(left: -low, right: (box.Extent - box.Center));
-                high = FixedVector3.Max(left: high, right: (box.Center + box.Extent));
+                box = box.Enclose(other: CopyReach(copy: in copy, dilation: reach).Box);
             }
         );
 
         unbounded = plane;
-        bounds = (((low + high) / FixedQ4816.FromInteger(value: 2)), ((high - low) / FixedQ4816.FromInteger(value: 2)));
+        bounds = box;
         partition = ((pieces is null) ? null : new FixedFieldPartition(carves: carves, pieces: pieces));
         return colliders;
     }
@@ -113,7 +109,7 @@ public sealed partial class WorldColliderSet {
     // it past rounding. An erosion stays inside the box. A half-space has no reach to bound.
     private static FixedFieldReach CopyReach(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 dilation) {
         if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-            return FixedFieldReach.Unbounded(center: copy.Center);
+            return FixedFieldReach.Unbounded();
         }
 
         var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(scale: copy.Shape.Scale, type: copy.Shape.Type));
@@ -145,7 +141,7 @@ public sealed partial class WorldColliderSet {
             Z: (ball.SupportPoint(direction: FixedVector3.UnitZ).Z - ball.Center.Z)
         ) + padding);
 
-        return (reach with { Box = new FixedColliderBox(Center: copy.Center, Extent: -FixedVector3.Max(left: -reach.Box.Extent, right: -world)) });
+        return (reach with { Box = FixedAabb.FromCenter(center: copy.Center, extent: FixedVector3.Min(left: reach.Box.Extent, right: world)) });
     }
     // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a Box's
     // rounded or chamfered box, a round capsule and a half-space are the drawn primitive dilated by the margin, as the
@@ -231,7 +227,7 @@ public sealed partial class WorldColliderSet {
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
             partitioned: !relieved, transform: transform, unbounded: out var unbounded);
 
-        var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);
+        var (center, half) = ((unbounded || box.IsEmpty) ? (transform.Origin, FixedVector3.Zero) : (box.Center, box.Extent));
         var local = (transform with { Origin = (transform.Origin - center) });
         var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, partition: partition, transform: local);
 

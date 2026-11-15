@@ -1480,7 +1480,7 @@ public static partial class CreationStampEmitter {
         var center = (StampedPosition(frame: frame, local: position).ToVector3() + (((axisX * bounds.Center.X) + (axisY * bounds.Center.Y)) + (axisZ * bounds.Center.Z)));
         var raise = ((shape.Panel is { Depth: < 0f } panel) ? -panel.Depth : 0f);
         var widen = (((raise + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale);
-        var half = ((((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen));
+        var half = (VectorFunctions.OrientedHalfExtent(axisX: axisX, axisY: axisY, axisZ: axisZ, halfExtent: bounds.HalfExtents) + new Vector3(value: widen));
 
         return ((center - half), (center + half));
     }
@@ -1579,11 +1579,7 @@ public static partial class CreationStampEmitter {
 
                 visitor(obj: new FixedCreationStampPrimitiveCopy(
                     Center: (transform.Origin + stampRotation.Rotate(vector: (localBoundsCenter * stampScale))),
-                    HalfExtents: new FixedVector3(
-                        X: (((FixedQ4816.Abs(value: axisX.X) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * boundsHalfExtents.Z)),
-                        Y: (((FixedQ4816.Abs(value: axisX.Y) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * boundsHalfExtents.Z)),
-                        Z: (((FixedQ4816.Abs(value: axisX.Z) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * boundsHalfExtents.Z))
-                    ),
+                    HalfExtents: FixedAabb.OrientedHalfExtent(axisX: axisX, axisY: axisY, axisZ: axisZ, halfExtent: boundsHalfExtents),
                     LocalHalfExtents: (boundsHalfExtents * stampScale),
                     PlaneNormal: (bounds.IsUnbounded
                     ? axisY.Normalize()
