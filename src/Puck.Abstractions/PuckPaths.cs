@@ -1,3 +1,5 @@
+using Puck.Confinement;
+
 namespace Puck.Abstractions;
 
 /// <summary>
@@ -26,20 +28,14 @@ public static class PuckPaths {
 
     /// <summary>Gets whether this platform's file system ignores case in a path. <see langword="true"/> on Windows,
     /// <see langword="false"/> everywhere else.</summary>
-    public static bool FoldsCase { get; } = OperatingSystem.IsWindows();
+    public static bool FoldsCase => FileSystemCase.Folds;
     /// <summary>Gets the comparer two file-system paths compare equal, distinct, or sorted under: case-insensitive
     /// where <see cref="FoldsCase"/>, ordinal otherwise.</summary>
-    public static StringComparer Comparer { get; } = (FoldsCase
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal
-    );
+    public static StringComparer Comparer => FileSystemCase.Comparer;
     /// <summary>Gets the <see cref="StringComparison"/> equivalent of <see cref="Comparer"/>, for
     /// <see cref="string.Equals(string?, string?, StringComparison)"/>, <see cref="string.StartsWith(string, StringComparison)"/>,
     /// and similar overloads that take a comparison rather than a comparer.</summary>
-    public static StringComparison Comparison { get; } = (FoldsCase
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal
-    );
+    public static StringComparison Comparison => FileSystemCase.Comparison;
 
     /// <summary>Returns <paramref name="path"/> resolved to a full path with <c>/</c> as its only separator, per
     /// Puck's file-path convention: authored paths, configuration, stored path identities, and path output spell a
@@ -50,6 +46,17 @@ public static class PuckPaths {
     public static string Normalize(string path) => Path.GetFullPath(path: path).Replace(
         newChar: '/',
         oldChar: Path.DirectorySeparatorChar
+    );
+    /// <summary>Returns <paramref name="path"/> with every backslash spelled as <c>/</c>, without resolving it: the form
+    /// for a path that is already as relative or as full as the caller wants it (a relative path under a root, a path
+    /// printed in output, a resource name, a path a report on another platform spelled with its own separator).
+    /// Puck's wire form has <c>/</c> as its only separator, so a backslash is a separator wherever a path is spelled;
+    /// <see cref="Normalize"/> is the form that also makes the path full.</summary>
+    /// <param name="path">A path spelled with either separator.</param>
+    /// <returns>The same path with <c>/</c> as its only separator.</returns>
+    public static string Slashed(string path) => path.Replace(
+        newChar: '/',
+        oldChar: '\\'
     );
     /// <summary>Returns the full path of a file this build ships beside the executable: the one resolver for the
     /// engine's own content (the default world, the shipped fonts, shaders and probe kinds), which the build copies

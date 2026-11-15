@@ -94,7 +94,7 @@ public static class MotionRun {
             return world with { BootTick = bootTick, Error = $"the World had reached tick {bootTick.ToString(provider: CultureInfo.InvariantCulture)} when it was ready, past the start tick {start.ToString(provider: CultureInfo.InvariantCulture)} the run was asked to pin to", TooLateStart = StartFor(bootTick: bootTick), Seconds = clock.Elapsed.TotalSeconds };
         }
 
-        var stills = Path.GetFullPath(path: request.Directory).Replace(newChar: '/', oldChar: '\\');
+        var stills = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetFullPath(path: request.Directory));
         var plan = MotionPlan.Build(selected: request.Selected, set: request.Set, startTick: start, stillsRoot: stills);
 
         progress.WriteLine(value: $"motion: ready at tick {bootTick.ToString(provider: CultureInfo.InvariantCulture)}; pinning {request.Selected.Count.ToString(provider: CultureInfo.InvariantCulture)} scenario(s) to ticks {start.ToString(provider: CultureInfo.InvariantCulture)}..{plan.LastTick.ToString(provider: CultureInfo.InvariantCulture)}");

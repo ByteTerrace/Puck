@@ -49,7 +49,7 @@ public static partial class WorldDocumentEmitter {
         }
         if (string.IsNullOrEmpty(value: name) || (name.Length > 100) || !char.IsAsciiLetter(c: name[0]) ||
             name.Any(predicate: static c => (!char.IsAsciiLetterOrDigit(c: c) && (c is not '_' and not '-'))) ||
-            IsDeviceName(name: name)) {
+            Puck.Confinement.PortablePath.IsDeviceName(segment: name)) {
             Refuse(message: "A world name must be a portable filename: an ASCII letter followed by at most 99 letters, digits, underscores or hyphens, and no reserved device name.", node: declaration, scope: scope);
             return;
         }
@@ -78,8 +78,6 @@ public static partial class WorldDocumentEmitter {
         }
         composition.Worlds.Add(key: name, value: new PendingWorld(Declaration: declaration, Json: root, Map: map, Name: name, Scope: child));
     }
-    private static bool IsDeviceName(string name) => ((name.ToUpperInvariant() is "CON" or "PRN" or "AUX" or "NUL") ||
-        ((name.Length == 4) && (name.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "COM") || name.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "LPT")) && (name[3] is >= '1' and <= '9')));
     private static void DeclareLink(WorldLinkNode declaration, DocumentScope scope) {
         if (!scope.Annotations.TryGetValue(key: CompositionAnnotation, value: out var value) || (value is not Composition composition)) {
             Refuse(message: "A border or door belongs at the composition root.", node: declaration, scope: scope);

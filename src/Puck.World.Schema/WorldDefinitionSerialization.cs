@@ -954,10 +954,10 @@ public sealed record WorldInputHoldAuthoring(
 /// The shared shape behind every enum this document graph reads/writes as an explicit lowercase token rather than
 /// the context's camelCase enum policy: a <c>Read</c> that parses via <paramref name="tokens"/>'s owning vocabulary
 /// and refuses by name, and a <c>Write</c> that prints through the same map, so nothing that reads or prints a
-/// value disagrees with the document. A closed subclass supplies only the vocabulary's parse/print pair and the
-/// field name a refusal names.
+/// value disagrees with the document. A closed subclass names the vocabulary's parse/print pair, its tokens and the
+/// field name a refusal names; the context registers it by type.
 /// </summary>
-internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyList<string> tokens) : JsonConverter<T>, IJsonSchemaStringConverter where T : struct {
+internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyList<string> tokens, Func<string?, T?> parse, Func<T, string> print) : JsonConverter<T>, IJsonSchemaStringConverter where T : struct {
     /// <inheritdoc/>
     public IReadOnlyList<string>? SchemaTokens { get; } = tokens;
 
@@ -974,19 +974,14 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
         });
     }
 
-    /// <summary>Parses <paramref name="token"/> against the closed vocabulary, or <see langword="null"/> when it names none.</summary>
-    protected abstract T? Parse(string? token);
-    /// <summary>Prints <paramref name="value"/>'s declared token.</summary>
-    protected abstract string ToToken(T value);
-
     /// <inheritdoc/>
     public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         var token = reader.GetString();
 
-        return (Parse(token: token) ?? throw new JsonException(message: $"{fieldName} '{token}' must be {DescribeTokens()}."));
+        return (parse(token) ?? throw new JsonException(message: $"{fieldName} '{token}' must be {DescribeTokens()}."));
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value: ToToken(value: value));
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value: print(value));
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
@@ -995,14 +990,11 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
 /// <c>world.host</c> read-back all speak the same map.
 /// </summary>
 internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>(
-    "backend",
-    [WorldBackendTokens.Auto, WorldBackendTokens.DirectX, WorldBackendTokens.Vulkan]
-) {
-    /// <inheritdoc/>
-    protected override WorldBackendPreference? Parse(string? token) => WorldBackendTokens.Parse(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(WorldBackendPreference value) => WorldBackendTokens.Token(backend: value);
-}
+    fieldName: "backend",
+    parse: static token => WorldBackendTokens.Parse(token: token),
+    print: static value => WorldBackendTokens.Token(backend: value),
+    tokens: [WorldBackendTokens.Auto, WorldBackendTokens.DirectX, WorldBackendTokens.Vulkan]
+);
 /// <summary>
 /// Reads and writes the two authorable surface formats, <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> and
 /// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/>, as explicit tokens (<c>r8g8b8a8</c> / <c>b8g8r8a8</c>), which would
@@ -1010,14 +1002,11 @@ internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConve
 /// one set another way. The <c>world.host</c> read-back prints through the same map.
 /// </summary>
 internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<GpuPixelFormat>(
-    "surfaceFormat",
-    [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]
-) {
-    /// <inheritdoc/>
-    protected override GpuPixelFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(GpuPixelFormat value) => WorldHostTokens.SurfaceFormatToken(format: value);
-}
+    fieldName: "surfaceFormat",
+    parse: static token => WorldHostTokens.ParseSurfaceFormat(token: token),
+    print: static value => WorldHostTokens.SurfaceFormatToken(format: value),
+    tokens: [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]
+);
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationDurability"/> as the lowercase token
 /// <c>Puck.World.WorldInstanceHost</c>'s <c>world.transfer</c> verb already speaks (<c>ephemeral</c> /
@@ -1025,54 +1014,42 @@ internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<GpuP
 /// disagree on spelling. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
 internal sealed class WorldDestinationDurabilityJsonConverter() : TokenEnumJsonConverter<WorldDestinationDurability>(
-    "destination durability",
-    [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted]
-) {
-    /// <inheritdoc/>
-    protected override WorldDestinationDurability? Parse(string? token) => WorldDestinationTokens.ParseDurability(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(WorldDestinationDurability value) => WorldDestinationTokens.DurabilityToken(durability: value);
-}
+    fieldName: "destination durability",
+    parse: static token => WorldDestinationTokens.ParseDurability(token: token),
+    print: static value => WorldDestinationTokens.DurabilityToken(durability: value),
+    tokens: [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted]
+);
 /// <summary>
 /// Reads and writes a <see cref="WorldPortalTravel"/> as the lowercase token <c>world.transfer</c>'s <c>party</c>
 /// slot argument already speaks (<c>party</c> / <c>body</c>). See <see cref="WorldDestinationTokens"/>.
 /// </summary>
 internal sealed class WorldPortalTravelJsonConverter() : TokenEnumJsonConverter<WorldPortalTravel>(
-    "portal travel",
-    [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody]
-) {
-    /// <inheritdoc/>
-    protected override WorldPortalTravel? Parse(string? token) => WorldDestinationTokens.ParseTravel(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(WorldPortalTravel value) => WorldDestinationTokens.TravelToken(travel: value);
-}
+    fieldName: "portal travel",
+    parse: static token => WorldDestinationTokens.ParseTravel(token: token),
+    print: static value => WorldDestinationTokens.TravelToken(travel: value),
+    tokens: [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody]
+);
 /// <summary>
 /// Reads and writes a <see cref="WorldPortalArrival"/> as the lowercase token <c>spawn</c>/<c>mapped</c>, mirroring
 /// <see cref="WorldPortalTravelJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
 internal sealed class WorldPortalArrivalJsonConverter() : TokenEnumJsonConverter<WorldPortalArrival>(
-    "portal arrival",
-    [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped]
-) {
-    /// <inheritdoc/>
-    protected override WorldPortalArrival? Parse(string? token) => WorldDestinationTokens.ParseArrival(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(WorldPortalArrival value) => WorldDestinationTokens.ArrivalToken(arrival: value);
-}
+    fieldName: "portal arrival",
+    parse: static token => WorldDestinationTokens.ParseArrival(token: token),
+    print: static value => WorldDestinationTokens.ArrivalToken(arrival: value),
+    tokens: [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped]
+);
 /// <summary>
 /// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/architecture/worlds.md's "Durability,
 /// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>), mirroring
 /// <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
 internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConverter<WorldDestinationScope>(
-    "destination scope",
-    [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal]
-) {
-    /// <inheritdoc/>
-    protected override WorldDestinationScope? Parse(string? token) => WorldDestinationTokens.ParseScope(token: token);
-    /// <inheritdoc/>
-    protected override string ToToken(WorldDestinationScope value) => WorldDestinationTokens.ScopeToken(scope: value);
-}
+    fieldName: "destination scope",
+    parse: static token => WorldDestinationTokens.ParseScope(token: token),
+    print: static value => WorldDestinationTokens.ScopeToken(scope: value),
+    tokens: [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal]
+);
 /// <summary>
 /// Reads and writes a <see cref="GrantSubject"/> as the same compact token <c>world.grant</c> takes — <c>all</c>,
 /// <c>composition</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>,

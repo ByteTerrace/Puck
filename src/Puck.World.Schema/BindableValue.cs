@@ -622,45 +622,61 @@ public sealed class BindableAngleJsonConverter : JsonConverter<BindableAngle>, I
         writer: writer
     );
 }
-/// <summary>Reads/writes <see cref="BindableDirection"/> as an <c>[x, y, z]</c> array or a keyed object whose values
-/// are arrays.</summary>
-public sealed class BindableDirectionJsonConverter : JsonConverter<BindableDirection>, IJsonSchemaNodeConverter {
-    private static readonly Vector3JsonConverter Vector = new();
+/// <summary>The one reader and writer of a bindable vector's wire form: a literal vector array, or a keyed object
+/// whose values are vector arrays. A subclass names its bindable and how it holds a literal or keys.</summary>
+/// <typeparam name="TBindable">The bindable struct.</typeparam>
+/// <typeparam name="TVector">The vector a literal or key holds.</typeparam>
+public abstract class BindableVectorJsonConverter<TBindable, TVector> : JsonConverter<TBindable>, IJsonSchemaNodeConverter
+    where TBindable : struct
+    where TVector : struct {
+    private readonly int m_arity;
+    private readonly string m_kind;
+    private readonly JsonConverter<TVector> m_vector;
+
+    /// <summary>Initializes a new instance of the <see cref="BindableVectorJsonConverter{TBindable, TVector}"/> class.</summary>
+    /// <param name="vector">The converter of the vector a literal or key holds.</param>
+    /// <param name="arity">The number of components the vector's array carries.</param>
+    /// <param name="kind">The bindable's name, for refusals.</param>
+    protected BindableVectorJsonConverter(JsonConverter<TVector> vector, int arity, string kind) {
+        m_arity = arity;
+        m_kind = kind;
+        m_vector = vector;
+    }
 
     /// <inheritdoc/>
     public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
         ["anyOf"] = new JsonArray(
-            FixedArityNumberArraySchema.Build(arity: 3),
-            WorldKeyTrackJson.Schema(value: FixedArityNumberArraySchema.Build(arity: 3))
+            FixedArityNumberArraySchema.Build(arity: m_arity),
+            WorldKeyTrackJson.Schema(value: FixedArityNumberArraySchema.Build(arity: m_arity))
         ),
     };
     /// <inheritdoc/>
-    public override BindableDirection Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+    public override TBindable Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType == JsonTokenType.StartObject) {
-            return new BindableDirection(keys: WorldKeyTrackJson.Read(
-                kind: "direction",
+            return FromKeys(keys: WorldKeyTrackJson.Read(
+                kind: m_kind,
                 reader: ref reader,
-                readValue: static (ref Utf8JsonReader value) => Vector.Read(
+                readValue: (ref Utf8JsonReader value) => m_vector.Read(
                     options: WorldJsonContext.Default.Options,
                     reader: ref value,
-                    typeToConvert: typeof(Vector3)
+                    typeToConvert: typeof(TVector)
                 )
             ));
         }
 
-        return new BindableDirection(literal: Vector.Read(
+        return FromLiteral(literal: m_vector.Read(
             options: options,
             reader: ref reader,
-            typeToConvert: typeof(Vector3)
+            typeToConvert: typeof(TVector)
         ));
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, BindableDirection value, JsonSerializerOptions options) {
-        if (value.Keys is { } keys) {
+    public override void Write(Utf8JsonWriter writer, TBindable value, JsonSerializerOptions options) {
+        if (KeysOf(value: value) is { } keys) {
             WorldKeyTrackJson.Write(
                 track: keys,
                 writer: writer,
-                writeValue: static (target, key) => Vector.Write(
+                writeValue: (target, key) => m_vector.Write(
                     options: WorldJsonContext.Default.Options,
                     value: key,
                     writer: target
@@ -670,120 +686,84 @@ public sealed class BindableDirectionJsonConverter : JsonConverter<BindableDirec
             return;
         }
 
-        Vector.Write(
+        m_vector.Write(
             options: options,
-            value: (value.Literal ?? Vector3.Zero),
+            value: (LiteralOf(value: value) ?? default),
             writer: writer
         );
     }
+
+    /// <summary>Builds the bindable from a literal vector.</summary>
+    /// <param name="literal">The vector.</param>
+    /// <returns>The bindable.</returns>
+    protected abstract TBindable FromLiteral(TVector literal);
+    /// <summary>Builds the bindable from keys on a clock.</summary>
+    /// <param name="keys">The keys.</param>
+    /// <returns>The bindable.</returns>
+    protected abstract TBindable FromKeys(WorldKeyTrack<TVector> keys);
+    /// <summary>Gets a bindable's keys.</summary>
+    /// <param name="value">The bindable.</param>
+    /// <returns>The keys, or <see langword="null"/> when it is a literal.</returns>
+    protected abstract WorldKeyTrack<TVector>? KeysOf(TBindable value);
+    /// <summary>Gets a bindable's literal.</summary>
+    /// <param name="value">The bindable.</param>
+    /// <returns>The literal, or <see langword="null"/> when it is keyed.</returns>
+    protected abstract TVector? LiteralOf(TBindable value);
+}
+/// <summary>Reads/writes <see cref="BindableDirection"/> as an <c>[x, y, z]</c> array or a keyed object whose values
+/// are arrays.</summary>
+public sealed class BindableDirectionJsonConverter : BindableVectorJsonConverter<BindableDirection, Vector3> {
+    /// <summary>Initializes a new instance of the <see cref="BindableDirectionJsonConverter"/> class.</summary>
+    public BindableDirectionJsonConverter() : base(
+        arity: 3,
+        kind: "direction",
+        vector: new Vector3JsonConverter()
+    ) { }
+
+    /// <inheritdoc/>
+    protected override BindableDirection FromLiteral(Vector3 literal) => new(literal: literal);
+    /// <inheritdoc/>
+    protected override BindableDirection FromKeys(WorldKeyTrack<Vector3> keys) => new(keys: keys);
+    /// <inheritdoc/>
+    protected override WorldKeyTrack<Vector3>? KeysOf(BindableDirection value) => value.Keys;
+    /// <inheritdoc/>
+    protected override Vector3? LiteralOf(BindableDirection value) => value.Literal;
 }
 /// <summary>Reads/writes <see cref="BindableVector2"/> as an <c>[x, y]</c> array or a keyed object whose values are
 /// arrays.</summary>
-public sealed class BindableVector2JsonConverter : JsonConverter<BindableVector2>, IJsonSchemaNodeConverter {
-    private static readonly Vector2JsonConverter Vector = new();
+public sealed class BindableVector2JsonConverter : BindableVectorJsonConverter<BindableVector2, Vector2> {
+    /// <summary>Initializes a new instance of the <see cref="BindableVector2JsonConverter"/> class.</summary>
+    public BindableVector2JsonConverter() : base(
+        arity: 2,
+        kind: "vector",
+        vector: new Vector2JsonConverter()
+    ) { }
 
     /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
-        ["anyOf"] = new JsonArray(
-            FixedArityNumberArraySchema.Build(arity: 2),
-            WorldKeyTrackJson.Schema(value: FixedArityNumberArraySchema.Build(arity: 2))
-        ),
-    };
+    protected override BindableVector2 FromLiteral(Vector2 literal) => new(literal: literal);
     /// <inheritdoc/>
-    public override BindableVector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.StartObject) {
-            return new BindableVector2(keys: WorldKeyTrackJson.Read(
-                kind: "vector",
-                reader: ref reader,
-                readValue: static (ref Utf8JsonReader value) => Vector.Read(
-                    options: WorldJsonContext.Default.Options,
-                    reader: ref value,
-                    typeToConvert: typeof(Vector2)
-                )
-            ));
-        }
-
-        return new BindableVector2(literal: Vector.Read(
-            options: options,
-            reader: ref reader,
-            typeToConvert: typeof(Vector2)
-        ));
-    }
+    protected override BindableVector2 FromKeys(WorldKeyTrack<Vector2> keys) => new(keys: keys);
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, BindableVector2 value, JsonSerializerOptions options) {
-        if (value.Keys is { } keys) {
-            WorldKeyTrackJson.Write(
-                track: keys,
-                writer: writer,
-                writeValue: static (target, key) => Vector.Write(
-                    options: WorldJsonContext.Default.Options,
-                    value: key,
-                    writer: target
-                )
-            );
-
-            return;
-        }
-
-        Vector.Write(
-            options: options,
-            value: (value.Literal ?? Vector2.Zero),
-            writer: writer
-        );
-    }
+    protected override WorldKeyTrack<Vector2>? KeysOf(BindableVector2 value) => value.Keys;
+    /// <inheritdoc/>
+    protected override Vector2? LiteralOf(BindableVector2 value) => value.Literal;
 }
 /// <summary>Reads/writes <see cref="BindableVector3"/> as an <c>[x, y, z]</c> array or a keyed object whose values are
 /// arrays.</summary>
-public sealed class BindableVector3JsonConverter : JsonConverter<BindableVector3>, IJsonSchemaNodeConverter {
-    private static readonly Vector3JsonConverter Vector = new();
+public sealed class BindableVector3JsonConverter : BindableVectorJsonConverter<BindableVector3, Vector3> {
+    /// <summary>Initializes a new instance of the <see cref="BindableVector3JsonConverter"/> class.</summary>
+    public BindableVector3JsonConverter() : base(
+        arity: 3,
+        kind: "vector",
+        vector: new Vector3JsonConverter()
+    ) { }
 
     /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
-        ["anyOf"] = new JsonArray(
-            FixedArityNumberArraySchema.Build(arity: 3),
-            WorldKeyTrackJson.Schema(value: FixedArityNumberArraySchema.Build(arity: 3))
-        ),
-    };
+    protected override BindableVector3 FromLiteral(Vector3 literal) => new(literal: literal);
     /// <inheritdoc/>
-    public override BindableVector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.StartObject) {
-            return new BindableVector3(keys: WorldKeyTrackJson.Read(
-                kind: "vector",
-                reader: ref reader,
-                readValue: static (ref Utf8JsonReader value) => Vector.Read(
-                    options: WorldJsonContext.Default.Options,
-                    reader: ref value,
-                    typeToConvert: typeof(Vector3)
-                )
-            ));
-        }
-
-        return new BindableVector3(literal: Vector.Read(
-            options: options,
-            reader: ref reader,
-            typeToConvert: typeof(Vector3)
-        ));
-    }
+    protected override BindableVector3 FromKeys(WorldKeyTrack<Vector3> keys) => new(keys: keys);
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, BindableVector3 value, JsonSerializerOptions options) {
-        if (value.Keys is { } keys) {
-            WorldKeyTrackJson.Write(
-                track: keys,
-                writer: writer,
-                writeValue: static (target, key) => Vector.Write(
-                    options: WorldJsonContext.Default.Options,
-                    value: key,
-                    writer: target
-                )
-            );
-
-            return;
-        }
-
-        Vector.Write(
-            options: options,
-            value: (value.Literal ?? Vector3.Zero),
-            writer: writer
-        );
-    }
+    protected override WorldKeyTrack<Vector3>? KeysOf(BindableVector3 value) => value.Keys;
+    /// <inheritdoc/>
+    protected override Vector3? LiteralOf(BindableVector3 value) => value.Literal;
 }

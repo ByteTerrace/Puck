@@ -152,7 +152,7 @@ public static class ShaderDeclarations {
         }
 
         return [.. Directory.EnumerateFiles(path: source, searchOption: SearchOption.AllDirectories, searchPattern: ("*" + InterfaceSuffix))
-            .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: repositoryRoot).Replace(newChar: '/', oldChar: '\\'))
+            .Select(selector: file => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: file, relativeTo: repositoryRoot)))
             .Where(predicate: static file => !file.Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .Order(comparer: StringComparer.Ordinal)];
     }

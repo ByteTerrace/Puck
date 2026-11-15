@@ -38,7 +38,7 @@ public static partial class CliReferenceAssemblyRecovery {
 
                 if (!Path.IsPathFullyQualified(path: named)) { throw new IOException(message: "the diagnosed reference path is not absolute"); }
                 var path = Path.GetFullPath(path: named);
-                var relative = Path.GetRelativePath(path: path, relativeTo: root).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar);
+                var relative = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: path, relativeTo: root));
                 var parts = relative.Split('/');
 
                 if (Path.IsPathRooted(path: relative) || parts.Contains(value: "..") ||

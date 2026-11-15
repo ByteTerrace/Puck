@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -24,12 +25,6 @@ public sealed class ContactKernelTests {
         Rotation: FixedQuaternion.Identity,
         Radius: Scalar(value: radius)
     );
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: Scalar(value: x),
-            Y: Scalar(value: y),
-            Z: Scalar(value: z)
-        );
 
     [Fact]
     public void DynamicBoxPairAlongAWorldAxisMatchesTheAxisAlignedOverlap() {

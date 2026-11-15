@@ -27,9 +27,9 @@ public static class InstallLayout {
     /// <summary>Gets how two version directory names are compared: ignoring case on Windows, where such names name one
     /// directory, and ordinally on Linux. Every comparison of a version name with another (a registration, the release
     /// record's current version, a proof of health, a pruner entry) uses it.</summary>
-    public static StringComparison NameComparison => (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    public static StringComparison NameComparison => FileSystemCase.Comparison;
     /// <summary>Gets the comparer form of <see cref="NameComparison"/>.</summary>
-    public static StringComparer NameComparer => (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    public static StringComparer NameComparer => FileSystemCase.Comparer;
 
     /// <summary>Reports whether <paramref name="name"/> can name a version directory: one non-empty component that is
     /// not <c>.</c> or <c>..</c> and holds no separator, drive colon or NUL.</summary>
@@ -169,7 +169,7 @@ public sealed class InstallRegistration : IDisposable {
     /// <exception cref="PlatformNotSupportedException">The platform is neither Windows nor Linux x64.</exception>
     public static InstallRegistration RegisterImage(string baseDirectory, string? entryAssemblyLocation, string? processPath, nint imageAddress, CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: baseDirectory);
-        var comparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        var comparison = FileSystemCase.Comparison;
         var directory = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: baseDirectory));
         var parent = Path.GetDirectoryName(path: directory);
         var parentName = ((parent is null) ? "" : Path.GetFileName(path: parent));

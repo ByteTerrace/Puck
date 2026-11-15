@@ -1,3 +1,4 @@
+using Puck.World.Testing;
 using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -469,14 +470,6 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                 inner.Dispose();
                 owner.ChangeActive(by: -1);
             }
-        }
-    }
-    private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
-        public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
-            refusal = string.Empty;
-
-            return true;
         }
     }
     private sealed class NullAuthenticator : IAuthenticator {

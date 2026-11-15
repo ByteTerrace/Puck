@@ -12,19 +12,12 @@ public readonly record struct OverlayToastFrame(
     string Message,
     bool IsError
 );
-/// <summary>The read seam <see cref="ToastWriter"/> consumes; any host echo path is the writer.</summary>
-public interface IOverlayToastSource {
-    /// <summary>Copies the latest published toast, when one exists.</summary>
-    /// <param name="frame">The latest toast, when published.</param>
-    /// <returns><see langword="true"/> when a toast has been published.</returns>
-    bool TrySnapshot(out OverlayToastFrame frame);
-}
 /// <summary>
 /// The toast state store: event-driven (a host publishes on each echo; nothing ticks it), sequence-stamped so the
 /// writer can restart the lifetime on every distinct publish even when the text repeats. A thin named wrapper over
 /// the shared <see cref="PublishBuffer{T}"/>.
 /// </summary>
-public sealed class OverlayToastStore : IOverlayToastSource {
+public sealed class OverlayToastStore : IOverlaySource<OverlayToastFrame> {
     private readonly PublishBuffer<OverlayToastFrame> m_buffer = new();
 
     private int m_sequence;

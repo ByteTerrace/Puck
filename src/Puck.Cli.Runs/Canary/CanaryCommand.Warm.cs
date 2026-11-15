@@ -82,7 +82,7 @@ public static partial class CanaryCommand {
                     separator: Environment.NewLine,
                     values: [
                         $"world.wait ready {((WarmSeconds - 20) - WarmCaptureSeconds).ToString(provider: CultureInfo.InvariantCulture)}",
-                        $"world.screenshot {Path.Combine(path1: runDirectory, path2: WarmCaptureName(backend: backend)).Replace(newChar: '/', oldChar: '\\')}",
+                        $"world.screenshot {Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(path1: runDirectory, path2: WarmCaptureName(backend: backend)))}",
                         $"world.wait captures {WarmCaptureSeconds.ToString(provider: CultureInfo.InvariantCulture)}",
                         $"world.counters pipeline-cache.{backend}",
                         RunnerQuit,

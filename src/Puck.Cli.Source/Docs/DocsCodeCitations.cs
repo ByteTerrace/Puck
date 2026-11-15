@@ -65,13 +65,13 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
             return (null, $"revision not found: {occurrence.Revision}");
         }
         var paths = Tree(revision: commit);
-        var path = Uri.UnescapeDataString(stringToUnescape: occurrence.Path).Replace(newChar: '/', oldChar: '\\');
+        var path = Puck.Abstractions.PuckPaths.Slashed(path: Uri.UnescapeDataString(stringToUnescape: occurrence.Path));
 
         if (path.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "file://")) {
-            path = new Uri(uriString: path).LocalPath.Replace(newChar: '/', oldChar: '\\');
+            path = Puck.Abstractions.PuckPaths.Slashed(path: new Uri(uriString: path).LocalPath);
         }
-        var relative = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: document))).Replace(newChar: '/', oldChar: '\\');
-        var neighbor = Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: (Path.GetDirectoryName(path: relative) ?? ""), path3: path))).Replace(newChar: '/', oldChar: '\\');
+        var relative = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: document))));
+        var neighbor = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: (Path.GetDirectoryName(path: relative) ?? ""), path3: path))));
         // A report may link to its original worktree. Only a unique suffix in this revision identifies its blob.
         var candidates = paths.Where(predicate: candidate => ((candidate == neighbor) || (candidate == path))).ToArray();
 

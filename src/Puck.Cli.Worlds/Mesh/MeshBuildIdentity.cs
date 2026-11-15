@@ -79,7 +79,7 @@ internal sealed record MeshBuildIdentity(
             m_resolver ??= new AssemblyDependencyResolver(Path.Combine(directory, "Puck.SdfVm.dll"));
             var resolved = m_resolver.ResolveAssemblyToPath(assemblyName);
             var prefix = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if ((resolved is not null) && Path.GetFullPath(resolved).StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) {
+            if ((resolved is not null) && Path.GetFullPath(resolved).StartsWith(prefix, Puck.Abstractions.PuckPaths.Comparison)) {
                 return LoadFromAssemblyPath(resolved);
             }
             // Never fall back to the CLI's Puck assemblies, hash implementation or other application dependencies.

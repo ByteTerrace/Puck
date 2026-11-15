@@ -1,5 +1,4 @@
 using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 
 namespace Puck.Overlays;
 
@@ -49,24 +48,5 @@ public readonly record struct OverlayMarkerSeat(
 public readonly record struct OverlayMarkerFrame(
     ReadOnlyMemory<OverlayMarkerSeat> Seats
 );
-/// <summary>The read seam <see cref="MarkerWriter"/> consumes; the host's frame source is the writer.</summary>
-public interface IMarkerSource {
-    /// <summary>Copies the latest published frame, when one exists.</summary>
-    /// <param name="frame">The latest frame, when published.</param>
-    /// <returns><see langword="true"/> when a frame has been published.</returns>
-    bool TrySnapshot(out OverlayMarkerFrame frame);
-}
-/// <summary>
-/// The marker state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>: the host's produce
-/// path publishes and the same-thread overlay writer reads, so backing arrays may be reused across publishes with
-/// zero steady-state allocation.
-/// </summary>
-public sealed class MarkerStore : IMarkerSource {
-    private readonly PublishBuffer<OverlayMarkerFrame> m_buffer = new();
-
-    /// <summary>Publishes a frame (the writer side).</summary>
-    /// <param name="frame">The frame to publish.</param>
-    public void Publish(in OverlayMarkerFrame frame) => m_buffer.Publish(frame: frame);
-    /// <inheritdoc/>
-    public bool TrySnapshot(out OverlayMarkerFrame frame) => m_buffer.TrySnapshot(frame: out frame);
-}
+/// <summary>The marker state store, over the shared <see cref="OverlayStore{TFrame}"/>.</summary>
+public sealed class MarkerStore : OverlayStore<OverlayMarkerFrame>;

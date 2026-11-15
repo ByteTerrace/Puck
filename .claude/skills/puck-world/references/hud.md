@@ -314,9 +314,11 @@ a template with no document row behind it at all.
 `Cursor = 5`, `Wheel = 6`, `Editor = 7` (the inspector, drawn after the seat
 panels), `Annotation = 8` (`AnnotationWriter`, the `view.annotate` outlines,
 drawn after the editor and just before the wheel and cursor, unclipped; see
-[views.md](views.md)). The FOUR first-party writers are
-`ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
-(`FirstPartyChannelCount = 4`); `HudWriter`
+[views.md](views.md)). `AnnotationWriter` is the one writer of marks over the
+frame: it also draws the `Markers` channel (`EmitMarkers`, seat-clipped chips
+and rings) and the diagnostic pins (`EmitDiagnostics`). The FOUR first-party
+writers are `ConsolePanelWriter`, `BindingBarWriter`, the marker emission of
+`AnnotationWriter` and `ToastWriter` (`FirstPartyChannelCount = 4`); `HudWriter`
 is the fifth channel, banded, not one of the four; `WheelWriter` and
 `CursorWriter` are the frame's last two scopes (wheel drawn first, cursor on
 top), outside the replace-band suppression — see [views.md](views.md).

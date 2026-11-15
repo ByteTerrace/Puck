@@ -43,7 +43,7 @@ public static class CompareCommand {
                 }
             }
             foreach (var file in Directory.EnumerateFiles(path: directory).Where(predicate: IsSpirv)) {
-                files[Path.GetRelativePath(path: file, relativeTo: root).Replace(newChar: '/', oldChar: '\\')] = file;
+                files[Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: file, relativeTo: root))] = file;
             }
         }
 

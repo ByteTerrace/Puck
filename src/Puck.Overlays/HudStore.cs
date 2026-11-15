@@ -1,4 +1,3 @@
-using Puck.Hosting;
 
 namespace Puck.Overlays;
 
@@ -142,13 +141,6 @@ public readonly record struct OverlayHudFrame(
     ReadOnlyMemory<OverlayHudPanel> Panels,
     ReadOnlyMemory<OverlayHudSeatPanel> SeatPanels = default
 );
-/// <summary>The read seam <see cref="HudWriter"/> consumes; the host's HUD feed is the writer.</summary>
-public interface IHudSource {
-    /// <summary>Copies the latest published frame, when one exists.</summary>
-    /// <param name="frame">The latest frame, when published.</param>
-    /// <returns><see langword="true"/> when a frame has been published.</returns>
-    bool TrySnapshot(out OverlayHudFrame frame);
-}
 /// <summary>Resolves a closed-vocabulary HUD binding token to its live value, once per produced frame — the seam that
 /// keeps binding resolution out of Puck.Overlays (which cannot know what <c>world.tick</c> or a seat position means)
 /// while keeping the actual per-frame resolve inside the writer (presentation float; no document round-trip).</summary>
@@ -164,18 +156,5 @@ public interface IHudBindingResolver {
     /// resolver still reports honestly rather than assuming).</returns>
     bool TryResolve(string binding, int seat, out float fraction, out ReadOnlySpan<char> text);
 }
-/// <summary>
-/// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. The world feed
-/// publishes every produced frame because visibility, seat membership, and per-seat panels are live even while the
-/// delivered document structure is unchanged; <see cref="HudWriter"/> resolves binding values from that snapshot in
-/// the same frame. Same threading contract as every other overlay store.
-/// </summary>
-public sealed class HudStore : IHudSource {
-    private readonly PublishBuffer<OverlayHudFrame> m_buffer = new();
-
-    /// <summary>Publishes a frame (the writer side).</summary>
-    /// <param name="frame">The frame to publish.</param>
-    public void Publish(in OverlayHudFrame frame) => m_buffer.Publish(frame: frame);
-    /// <inheritdoc/>
-    public bool TrySnapshot(out OverlayHudFrame frame) => m_buffer.TrySnapshot(frame: out frame);
-}
+/// <summary>The HUD structure state store, over the shared <see cref="OverlayStore{TFrame}"/>.</summary>
+public sealed class HudStore : OverlayStore<OverlayHudFrame>;

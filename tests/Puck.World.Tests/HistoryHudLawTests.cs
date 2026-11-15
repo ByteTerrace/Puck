@@ -2,8 +2,6 @@ using Puck.Hosting;
 using Puck.Overlays;
 using Puck.Text;
 using Puck.World.Client;
-using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -80,19 +78,5 @@ public sealed class HistoryHudLawTests {
 
     private sealed class NoFrames : IOverlayFrameSources {
         public bool TryAcquire(int key, out GpuImageLease lease) => throw new InvalidOperationException(message: "the history line contains no sampled frame");
-    }
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-            return false;
-        }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-            return false;
-        }
     }
 }

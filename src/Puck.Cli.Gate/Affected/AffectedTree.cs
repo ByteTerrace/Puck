@@ -48,7 +48,7 @@ internal static class AffectedTreePaths {
     /// <param name="full">The full path, with either separator.</param>
     /// <returns>The repository-relative path with forward slashes, or <see langword="null"/>.</returns>
     public static string? Relative(this IAffectedTree tree, string full) {
-        var relative = Path.GetRelativePath(path: Path.GetFullPath(path: full), relativeTo: tree.Root).Replace(newChar: '/', oldChar: '\\');
+        var relative = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: Path.GetFullPath(path: full), relativeTo: tree.Root));
 
         return ((relative.StartsWith(comparisonType: StringComparison.Ordinal, value: "..") || Path.IsPathRooted(path: relative))
             ? null
@@ -78,7 +78,7 @@ public sealed class AffectedWorkingTree(string root) : IAffectedTree {
         }
 
         return [.. Directory.EnumerateFiles(path: full, searchOption: SearchOption.AllDirectories, searchPattern: "*")
-            .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
+            .Select(selector: path => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: path, relativeTo: Root)))
             .Where(predicate: path => !IsBuildOutput(directory: directory, path: path))
             .Order(comparer: StringComparer.Ordinal)];
     }

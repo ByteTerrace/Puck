@@ -3,7 +3,6 @@ using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Client.Tests;
@@ -148,12 +147,4 @@ public sealed class WorldSharedGeometryRegressionLawTests {
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0, Views: []) { DynamicTransforms = transforms, MovedTransforms = moved };
     }
     private sealed class SilentAudio : IWorldAudioCueSink { public void SubmitCue(string eventToken, Vector3? site) { } }
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) { neighbour = null; return false; }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) { departedFrom = default; return false; }
-    }
 }

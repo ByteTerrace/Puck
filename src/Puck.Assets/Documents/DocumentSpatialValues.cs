@@ -251,133 +251,118 @@ public sealed class DocumentQuaternion : DocumentSpatialValue<Quaternion>, IEqua
     public override int GetHashCode() => GetHashCodeCore();
 }
 
-internal static class DocumentSpatialValueJson {
+/// <summary>The one reader and writer of a document spatial value's wire form: its literal, or a
+/// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference string the containing document resolves from a cell. A subclass
+/// names its document type, its literal's converter and its schema.</summary>
+/// <typeparam name="TDocument">The document value.</typeparam>
+/// <typeparam name="TValue">The literal it wraps.</typeparam>
+public abstract class DocumentSpatialValueJsonConverter<TDocument, TValue> : JsonConverter<TDocument>, IJsonSchemaNodeConverter
+    where TDocument : DocumentSpatialValue<TValue>
+    where TValue : struct, IEquatable<TValue> {
+    private readonly string m_kind;
+    private readonly Func<JsonObject> m_literalSchema;
+    private readonly JsonConverter<TValue> m_value;
+
+    /// <summary>Initializes a new instance of the <see cref="DocumentSpatialValueJsonConverter{TDocument, TValue}"/> class.</summary>
+    /// <param name="value">The converter of the literal.</param>
+    /// <param name="kind">The value's name, for refusals.</param>
+    /// <param name="literalSchema">Builds the schema of the literal form.</param>
+    private protected DocumentSpatialValueJsonConverter(JsonConverter<TValue> value, string kind, Func<JsonObject> literalSchema) {
+        m_kind = kind;
+        m_literalSchema = literalSchema;
+        m_value = value;
+    }
+
     /// <summary>Builds the schema every document spatial value shares: the literal form, or a
     /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference string the containing document resolves.</summary>
-    public static JsonObject LiteralOrReference(JsonObject literal) => new() {
+    /// <param name="exportType">Exports a type's schema; unused, the literal is a fixed shape.</param>
+    /// <returns>The schema node.</returns>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
         ["anyOf"] = new JsonArray(
-        literal,
-        new JsonObject {
-            ["type"] = "string",
-            ["minLength"] = 1,
-            ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
-        }
-    ),
+            m_literalSchema(),
+            new JsonObject {
+                ["type"] = "string",
+                ["minLength"] = 1,
+                ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
+            }
+        ),
     };
-    public static string ReadReference(ref Utf8JsonReader reader, string kind) {
-        var reference = reader.GetString();
-
-        if (string.IsNullOrWhiteSpace(value: reference)) {
-            throw new JsonException(message: $"a {kind} reference must be a non-empty string.");
-        }
-        return reference;
-    }
-    public static T ReadValueOrReference<T, TValue>(
-        ref Utf8JsonReader reader,
-        string kind,
-        JsonSerializerOptions options,
-        JsonConverter<TValue> converter,
-        Func<string, T> fromReference,
-        Func<TValue, T> fromValue
-    ) where TValue : struct {
+    /// <inheritdoc/>
+    public override TDocument Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType == JsonTokenType.String) {
-            return fromReference(ReadReference(kind: kind, reader: ref reader));
+            var reference = reader.GetString();
+
+            if (string.IsNullOrWhiteSpace(value: reference)) {
+                throw new JsonException(message: $"a {m_kind} reference must be a non-empty string.");
+            }
+
+            return FromReference(reference: reference);
         }
 
-        return fromValue(converter.Read(
+        return FromValue(value: m_value.Read(
             options: options,
             reader: ref reader,
             typeToConvert: typeof(TValue)
         ));
     }
-    public static void WriteValueOrReference<TValue>(
-        Utf8JsonWriter writer,
-        DocumentSpatialValue<TValue> value,
-        JsonSerializerOptions options,
-        Action<Utf8JsonWriter, TValue, JsonSerializerOptions> writeValue
-    ) where TValue : struct, IEquatable<TValue> {
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, TDocument value, JsonSerializerOptions options) {
         if (value.Reference is { } reference) {
             writer.WriteStringValue(value: reference);
         } else {
-            writeValue(writer, value.Value, options);
+            m_value.Write(
+                options: options,
+                value: value.Value,
+                writer: writer
+            );
         }
     }
+
+    /// <summary>Builds the document value over an unresolved reference.</summary>
+    /// <param name="reference">The reference.</param>
+    /// <returns>The value.</returns>
+    private protected abstract TDocument FromReference(string reference);
+    /// <summary>Builds the document value over a literal.</summary>
+    /// <param name="value">The literal.</param>
+    /// <returns>The value.</returns>
+    private protected abstract TDocument FromValue(TValue value);
 }
 
 /// <summary>Reads and writes <see cref="DocumentVector2"/>.</summary>
-public sealed class DocumentVector2JsonConverter : JsonConverter<DocumentVector2>, IJsonSchemaNodeConverter {
-    private static readonly Vector2JsonConverter Vector2Converter = new();
+public sealed class DocumentVector2JsonConverter : DocumentSpatialValueJsonConverter<DocumentVector2, Vector2> {
+    /// <summary>Initializes a new instance of the <see cref="DocumentVector2JsonConverter"/> class.</summary>
+    public DocumentVector2JsonConverter() : base(
+        kind: "Vector2",
+        literalSchema: static () => FixedArityNumberArraySchema.Build(arity: 2),
+        value: new Vector2JsonConverter()
+    ) { }
 
-    /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 2));
-    /// <inheritdoc/>
-    public override DocumentVector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.ReadValueOrReference(
-            converter: Vector2Converter,
-            fromReference: static r => new DocumentVector2(reference: r),
-            fromValue: static v => new DocumentVector2(value: v),
-            kind: "Vector2",
-            options: options,
-            reader: ref reader
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, DocumentVector2 value, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.WriteValueOrReference(
-            options: options,
-            value: value,
-            writeValue: Vector2Converter.Write,
-            writer: writer
-        );
+    private protected override DocumentVector2 FromReference(string reference) => new(reference: reference);
+    private protected override DocumentVector2 FromValue(Vector2 value) => new(value: value);
 }
 /// <summary>Reads and writes <see cref="DocumentVector3"/>.</summary>
-public sealed class DocumentVector3JsonConverter : JsonConverter<DocumentVector3>, IJsonSchemaNodeConverter {
-    private static readonly Vector3JsonConverter Vector3Converter = new();
+public sealed class DocumentVector3JsonConverter : DocumentSpatialValueJsonConverter<DocumentVector3, Vector3> {
+    /// <summary>Initializes a new instance of the <see cref="DocumentVector3JsonConverter"/> class.</summary>
+    public DocumentVector3JsonConverter() : base(
+        kind: "Vector3",
+        literalSchema: static () => FixedArityNumberArraySchema.Build(arity: 3),
+        value: new Vector3JsonConverter()
+    ) { }
 
-    /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 3));
-    /// <inheritdoc/>
-    public override DocumentVector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.ReadValueOrReference(
-            converter: Vector3Converter,
-            fromReference: static r => new DocumentVector3(reference: r),
-            fromValue: static v => new DocumentVector3(value: v),
-            kind: "Vector3",
-            options: options,
-            reader: ref reader
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, DocumentVector3 value, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.WriteValueOrReference(
-            options: options,
-            value: value,
-            writeValue: Vector3Converter.Write,
-            writer: writer
-        );
+    private protected override DocumentVector3 FromReference(string reference) => new(reference: reference);
+    private protected override DocumentVector3 FromValue(Vector3 value) => new(value: value);
 }
 /// <summary>Reads and writes <see cref="DocumentQuaternion"/>.</summary>
-public sealed class DocumentQuaternionJsonConverter : JsonConverter<DocumentQuaternion>, IJsonSchemaNodeConverter {
-    private static readonly QuaternionJsonConverter QuaternionConverter = new();
+public sealed class DocumentQuaternionJsonConverter : DocumentSpatialValueJsonConverter<DocumentQuaternion, Quaternion> {
+    /// <summary>Initializes a new instance of the <see cref="DocumentQuaternionJsonConverter"/> class.</summary>
+    public DocumentQuaternionJsonConverter() : base(
+        kind: "Quaternion",
+        literalSchema: static () => FixedArityNumberArraySchema.Build(arity: 4),
+        value: new QuaternionJsonConverter()
+    ) { }
 
-    /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 4));
-    /// <inheritdoc/>
-    public override DocumentQuaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.ReadValueOrReference(
-            converter: QuaternionConverter,
-            fromReference: static r => new DocumentQuaternion(reference: r),
-            fromValue: static v => new DocumentQuaternion(value: v),
-            kind: "Quaternion",
-            options: options,
-            reader: ref reader
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, DocumentQuaternion value, JsonSerializerOptions options) =>
-        DocumentSpatialValueJson.WriteValueOrReference(
-            options: options,
-            value: value,
-            writeValue: QuaternionConverter.Write,
-            writer: writer
-        );
+    private protected override DocumentQuaternion FromReference(string reference) => new(reference: reference);
+    private protected override DocumentQuaternion FromValue(Quaternion value) => new(value: value);
 }
 /// <summary>A number authored as a JSON number or as a symbolic reference string (<c>state.&lt;row&gt;[.&lt;key&gt;]</c>),
 /// resolved by its containing document from a numeric or text cell.</summary>
@@ -412,24 +397,20 @@ public sealed class DocumentScalar : DocumentSpatialValue<float>, IEquatable<Doc
     public override int GetHashCode() => GetHashCodeCore();
 }
 /// <summary>Reads and writes <see cref="DocumentScalar"/>.</summary>
-public sealed class DocumentScalarJsonConverter : JsonConverter<DocumentScalar>, IJsonSchemaNodeConverter {
-    /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: new JsonObject { ["type"] = "number" });
-    /// <inheritdoc/>
-    public override DocumentScalar Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        ((reader.TokenType == JsonTokenType.String)
-            ? new DocumentScalar(reference: DocumentSpatialValueJson.ReadReference(
-                kind: "number",
-                reader: ref reader
-            ))
-            : new DocumentScalar(value: reader.GetSingle())
-        );
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, DocumentScalar value, JsonSerializerOptions options) {
-        if (value.Reference is { } reference) {
-            writer.WriteStringValue(value: reference);
-        } else {
-            writer.WriteNumberValue(value: value.Value);
-        }
+public sealed class DocumentScalarJsonConverter : DocumentSpatialValueJsonConverter<DocumentScalar, float> {
+    /// <summary>Initializes a new instance of the <see cref="DocumentScalarJsonConverter"/> class.</summary>
+    public DocumentScalarJsonConverter() : base(
+        kind: "number",
+        literalSchema: static () => new JsonObject { ["type"] = "number" },
+        value: new NumberConverter()
+    ) { }
+
+    private protected override DocumentScalar FromReference(string reference) => new(reference: reference);
+    private protected override DocumentScalar FromValue(float value) => new(value: value);
+
+    // The literal's wire form is a bare JSON number, whatever the options' number handling.
+    private sealed class NumberConverter : JsonConverter<float> {
+        public override float Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.GetSingle();
+        public override void Write(Utf8JsonWriter writer, float value, JsonSerializerOptions options) => writer.WriteNumberValue(value: value);
     }
 }

@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -82,12 +83,6 @@ public sealed class ChamferLawTests {
             val2: bevel
         );
     }
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
     // The uniform-scale emission path rides one Scale transform over the unit primitive; the non-uniform path bakes
     // its dimensions natively and emits none.
     private static float UniformScale(SdfProgram program) =>

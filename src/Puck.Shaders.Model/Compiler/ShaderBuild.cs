@@ -100,7 +100,7 @@ public sealed partial class ShaderBuild {
         }
 
         m_reads.AddRange(collection: plans.SelectMany(selector: static plan => plan.Plan.Includes.Select(selector: static include => include.Path).Append(element: plan.Plan.Stage.Path))
-            .Select(selector: static path => Path.GetFullPath(path: path).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar))
+            .Select(selector: static path => PuckPaths.Normalize(path: path))
             .Distinct(comparer: StringComparer.Ordinal)
             .Order(comparer: StringComparer.Ordinal));
 
@@ -445,7 +445,7 @@ public sealed partial class ShaderBuild {
 
         return ((Path.IsPathRooted(path: relative) || relative.StartsWith(comparisonType: StringComparison.Ordinal, value: ".."))
             ? PuckPaths.Normalize(path: path)
-            : relative.Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar));
+            : PuckPaths.Slashed(path: relative));
     }
     // Writes one error in MSBuild's canonical format, which the build host logs as an error, and answers false.
     private bool Error(string message, string? path = null, int line = 0, int column = 0) {

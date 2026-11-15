@@ -83,7 +83,7 @@ public static class ScanCommand {
             return null;
         }
 
-        var relative = Path.GetRelativePath(path: scanRoot, relativeTo: repositoryRoot).Replace(newChar: '/', oldChar: '\\');
+        var relative = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: scanRoot, relativeTo: repositoryRoot));
         var baseCommit = string.Empty;
         var headCommit = string.Empty;
 

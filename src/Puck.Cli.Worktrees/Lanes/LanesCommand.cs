@@ -274,7 +274,7 @@ public static partial class LanesCommand {
         if (mode == FindingsMode) {
             var reports = ((reportPath is { } declaredPath) ? new[] { declaredPath } : scratchRoots.SelectMany(selector: scratch => LogNames(branch: worktree.Branch, name: name).Select(selector: candidate => System.IO.Path.Combine(path1: scratch, path2: (candidate + "-findings.md")))));
 
-            report = reports.FirstOrDefault(predicate: Delivered)?.Replace(newChar: '/', oldChar: '\\');
+            report = (reports.FirstOrDefault(predicate: Delivered) is { } deliveredReport ? Puck.Abstractions.PuckPaths.Slashed(path: deliveredReport) : null);
         }
         var names = LaneNames(branch: worktree.Branch, name: name);
         // A holder or waiter that recorded its checkout belongs to the worktree at that path, whatever it is called; only

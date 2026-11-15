@@ -110,7 +110,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         var full = System.IO.Path.GetFullPath(path: path);
 
         if (System.IO.Path.GetDirectoryName(path: rootFull) is null) {
-            return string.Equals(a: System.IO.Path.GetPathRoot(path: full), b: System.IO.Path.GetPathRoot(path: rootFull), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            return string.Equals(a: System.IO.Path.GetPathRoot(path: full), b: System.IO.Path.GetPathRoot(path: rootFull), comparisonType: FileSystemCase.Comparison);
         }
         using var held = OpenAnchor(create: false, path: rootFull);
 

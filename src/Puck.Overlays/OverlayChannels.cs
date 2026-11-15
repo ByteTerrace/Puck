@@ -20,7 +20,7 @@ public enum OverlayChannel {
     /// <summary>The per-seat binding bars (one instance per joined seat).</summary>
     BindingBar = 1,
     /// <summary>The per-seat marker chips (one instance per seat) — an authored <c>markers</c> row's projected
-    /// world-space overlay, per <see cref="MarkerWriter"/>.</summary>
+    /// world-space overlay, per <see cref="AnnotationWriter.EmitMarkers"/>.</summary>
     Markers = 2,
     /// <summary>The transient toast echo (one singleton instance).</summary>
     Toast = 3,
@@ -90,7 +90,7 @@ public readonly record struct OverlayChannelUsage(
 /// the document validator refuses a composed profile past, so the bar's per-seat reservation, the feed's modifier
 /// array, and the validator's boot-time count all size from one number.</param>
 /// <param name="MarkerMaxChipsPerSeat">The most projected marker chips one seat draws — the same ceiling the
-/// marker feed culls to (nearest the camera) and <see cref="MarkerWriter"/> refuses past, so the channel's
+/// marker feed culls to (nearest the camera) and <see cref="AnnotationWriter.EmitMarkers"/> refuses past, so the channel's
 /// reservation and the render-side cull never disagree.</param>
 /// <param name="WheelMaxRings">The most concentric rings one seat's radial action menu presents — mirrors the
 /// binding substrate's wheel bound, so the channel's reservation and <see cref="WheelWriter"/>'s render-side

@@ -12,18 +12,6 @@ namespace Puck.World.Server.Tests;
 /// run a real engine.
 /// </summary>
 public sealed partial class WorldWaitReadyLawTests {
-    // Resolves every invocation to the fixture's one row, as the desktop's boot console authority does.
-    private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
-        public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
-            refusal = string.Empty;
-
-            return true;
-        }
-    }
-    private sealed class FixedGate(WorldConsoleWaitGate gate) : IWorldWaitGateResolver {
-        public WorldConsoleWaitGate GateFor(WorldInstance instance) => gate;
-    }
     private sealed class FlagReadiness : IWorldEngineReadiness {
         public bool CapturesSettled { get; set; }
         public bool IsReady { get; set; }

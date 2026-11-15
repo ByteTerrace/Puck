@@ -20,11 +20,11 @@ public static partial class AffectedConsumers {
     [GeneratedRegex(pattern: "Include=\"(?<path>[^\";]+)\"")]
     private static partial Regex IncludePattern();
     private static IEnumerable<string> Includes(string projectFile) => IncludePattern().Matches(input: File.ReadAllText(path: projectFile))
-        .Select(selector: static match => match.Groups["path"].Value.Replace(newChar: '/', oldChar: '\\'));
-    private static string Relative(string repositoryRoot, string path) => Path.GetRelativePath(
+        .Select(selector: static match => Puck.Abstractions.PuckPaths.Slashed(path: match.Groups["path"].Value));
+    private static string Relative(string repositoryRoot, string path) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(
         path: Path.GetFullPath(path: path),
         relativeTo: repositoryRoot
-    ).Replace(newChar: '/', oldChar: '\\');
+    ));
     // Whether an include, resolved from its project's directory, names the repository-relative path: the literal
     // directories before its first glob segment are resolved, and the rest matched as a glob below them.
     private static bool Names(string repositoryRoot, string projectDirectory, string include, string path) {

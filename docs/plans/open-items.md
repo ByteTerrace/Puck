@@ -2419,10 +2419,6 @@ a refactor rewrites or deletes tests freely and is verified by building and
 running what it changed. A `.puck` rewrite proves itself cheaply: `puck compile`
 lowers it to the same JSON as before, except where the look changes on purpose.
 
-- [low] Share the delegate-backed field test host: `LambdaHost` in
-  `tests/Puck.Physics.Tests/FieldLatticeLawTests.cs:978` duplicates
-  `tests/Shared/World/Fixtures.cs:963`. Put the fixture below the World test
-  dependencies so physics and World laws can use one accepted-transfer adapter.
 
 - [medium] The rot sweep found two places where code and its own
   documentation disagree. `puck docs links` does not read XML comments, so
@@ -2607,27 +2603,15 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
     (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
     `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
-  - [low] JSON converters written once per type: `BindableDirectionJsonConverter`
-    and two siblings (`Puck.World.Schema/BindableValue.cs:627`, `:682`, `:737`),
-    `DocumentVector2JsonConverter` and two siblings
-    (`Puck.Assets/Documents/DocumentSpatialValues.cs:253`, `:278`, `:303`), six
-    enum converters from `WorldBackendPreferenceJsonConverter`
-    (`Puck.World.Schema/WorldDefinitionSerialization.cs:964`).
   - [low] Three work-kind registries with one body (`Puck.State.Rules/Evaluation/RuleWorkKinds.cs:10`,
-    `Puck.State.Search/SearchWorkKinds.cs:11`, `Puck.State/Arena/ArenaWork.cs:10`), two GPU
-    work registrations (`Puck.Abstractions/Gpu/Counters/GpuDeviceMemoryWorkRegistration.cs:12`,
-    `GpuPipelineCacheWorkRegistration.cs:12`), and five overlay stores
-    (`Puck.Overlays/BindingBarStore.cs:135`, `CursorStore.cs:51`, `HudStore.cs:173`,
-    `MarkerStore.cs:64`, `WheelStore.cs:91`).
-  - [low] Test helpers pasted instead of shared (`tests/Shared` holds the one
-    copy): `FixedAuthority` eighteen times (first `tests/Puck.Mcp.Tests/RemoteMcpFixture.cs:474`),
-    `NoNeighbours` ten times (first `tests/Puck.World.Client.Tests/PrototypeMeshLawTests.cs:382`),
-    a `Vector` helper sixteen times in fourteen files (first
-    `tests/Puck.Maths.Tests/MoveTowardAndEmitterClaims.cs:82`), `Position` twelve
-    times (first `tests/Puck.SignedDistance.Tests/BakedWorldQueryTests.cs:86`),
-    `Space` seventeen times (first `tests/Puck.Maths.Tests/Subjects.FixedVectors.cs:13`),
-    and a `FaultingDevice` five times (first
-    `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
+    `Puck.State.Search/SearchWorkKinds.cs:11`, `Puck.State/Arena/ArenaWork.cs:10`).
+  - [low] Test helpers whose copies differ and stay per file: the raw-bit and
+    whole-number `FixedVector3` builders in `tests/Puck.Maths.Tests`
+    (`Vector(long, long, long)` in `MoveTowardAndEmitterClaims.cs`, `Vector` over
+    raw spans in `SharedKernelClaims.cs` and `Subjects.VectorBounds.cs`, `Space` in
+    `Subjects.FixedVectors.cs`), and the `Position` overloads beside a second
+    `Position` in `BakedWorldQueryTests.cs` and `SdfFieldEvaluatorCullBoundaryLawTests.cs`.
+    The decimal builders live once in `tests/Shared/FixedTestValues.cs`.
 - Enforce the uniform view limit where `GpuRegion` grows (`Grow` already reselects a
   profile-created region's policy):
   - [medium · owner: rendering] Uniform region growth accepts an unbindable size
@@ -2649,10 +2633,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     This has no production `Grow` caller yet and is source-confirmed, not exercised
     on hardware. It needs a shared capability change across both backends rather
     than a guessed Vulkan limit in the region.
-- Two overlay writers: `MarkerWriter` (`src/Puck.Overlays/MarkerWriter.cs:11`) and
-  `AnnotationWriter` (`src/Puck.Overlays/AnnotationWriter.cs:45`) are two writers
-  of overlay content. Keep one; editor E6 ([editor](editor.md#open-items)) and the
-  debug tools' `view.annotate` name it.
+
 - [medium] Delete the retired march-step budget, a dead fallback:
   `WorldDynamicResolutionSignal.Steps` and
   `WorldDynamicResolution.StepBudgetPerPixel`
@@ -2666,12 +2647,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   the grid never falls. Rebase that fallback on a per-frame signal the frame
   still has, or delete it with the load signal that reads it and the mentions
   in the rendering plan and `frame-rendering.md`. Not run.
-- [medium] `puck gate`'s default `--merge-base` names a deleted branch:
-  its `DefaultTarget` names `features/gfx-pipeline` on `origin`
-  (`src/Puck.Cli.Gate/Gate/GateRun.cs:29`), which no longer exists, so a gate
-  run without the option compares against nothing. Default it to the
-  integration branch or make the option required, and correct
-  `docs/reference/cli.md`'s `puck gate` section with it.
 - Recursive `Directory.Delete` remains in the assemblies the browser payload
   links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
   (`Puck.Hosting`). Route them
@@ -2761,29 +2736,7 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    `VulkanSurfaceUpload` directly instead of through `IGpuSurfaceUpload`.
    Written once over `IGpuBufferFactory` and `IGpuRecorder`, which needs
    buffer-to-image and image-to-buffer copies added to the recorder.
-4. Paths (M, implementer).
-   - About 107 hand-rolled `Replace('\\', '/')` calls in 65 files (the CLI
-     verbs, `CliPaths.cs:28` and `:51`, `GpuPipelineCacheFile.cs:156`), because
-     `PuckPaths.Normalize` (`Puck.Abstractions/PuckPaths.cs:36`) always makes
-     a path full. Add a separator-only form beside it and use it everywhere.
-   - Eight hand-written case-fold choices beside `PuckPaths.Comparison`:
-     `Puck.Mcp/OperatorWorlds.cs:358`, `Puck.Launcher/Release/InstallPruner.cs:59`,
-     `Puck.Confinement/InstallRegistration.cs:134`,
-     `Puck.World.Schema/WorldMachineContentFolder.cs:358`,
-     `Puck.Launcher/Release/HealthGateFile.cs:67`,
-     `Puck.World.Browser/Engine/BrowserWorkspace.cs:121`, `CliPaths.cs:44`,
-     `Puck.Cli.Runs/Sweep/SweepCommand.cs:310`.
-   - `[medium]` Three portable relative path validators that disagree:
-     `WorldDocumentPaths.IsPortableRelativeFilePath`
-     (`Puck.World.Schema/WorldDocumentPaths.cs:17`, admits `..`),
-     `OfficialCanonicalizer.IsWellFormedWorkspaceName`
-     (`Puck.Launcher/Release/OfficialCanonicalizer.cs:19`), and
-     `ReleaseCanonicalizer.IsPortablePath` (`Puck.Launcher/Release/ReleaseManifest.cs:95`),
-     the only one refusing device names (`CON`, `COM1`) and `<>"|?*`. A
-     workspace name lands on a client's disk, so the official one is the
-     weaker where it matters. Survivor: the release rules, with a parent-segment
-     switch for documents.
-5. The World boot line inside the World and on Linux (S, implementer).
+4. The World boot line inside the World and on Linux (S, implementer).
    Every World process the CLI starts goes through `WorldLaunch`
    (`Puck.Cli.Harness/WorldLaunch.cs`), whose `WorldLaunchRequest.CommandLine` spells
    the shared arguments once. The test-batch worker's in-process boot still spells
@@ -2796,7 +2749,7 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    equivalent needs the starts on one long-lived thread (or the World watching its
    parent). Until then a World's `--exit-after-seconds` backstop bounds it there,
    and an MCP World, which has none, outlives a killed adapter.
-6. Small merges (S each; one implementer lane can take them together).
+5. Small merges (S each; one implementer lane can take them together).
    - Fixed-point boxes (specialist):
      `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
      centre and extent, an `Int128` overlap test that cannot overflow),
@@ -2814,6 +2767,12 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      optional), and `PuckParser.ParseHexColor`
      (`Puck.Transpiler/Parsing/PuckParser.cs:1404`), which lexes `#RGB` and
      lowers it verbatim for `HexColor` to refuse `[medium]`. Decide one grammar.
+   - Separator spelling beside `PuckPaths.Slashed` in the projects that cannot
+     reference `Puck.Abstractions`: `build/ProjectArchitecture.cs` (two),
+     `Puck.Launcher.Stub/Program.cs`, `Puck.Analyzers/AnalyzerAllowlistPath.cs` and
+     `Puck.Shaders.Generator/Program.cs`; the test projects spell it by hand in
+     a few laws too. `Puck.Confinement` is the BCL-only leaf both could take a
+     one-line separator helper from.
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
      `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`. A shared include is refused
@@ -2932,9 +2891,7 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    deadline across `SteamController`, `SteamControllerTriton` and
    `DualSenseController` (`Puck.Input/Devices/`), and `GamepadDevice` beside
    `XInputGamepadConnection` (S).
-7. `BindableDirectionJsonConverter` beside `BindableVector3JsonConverter`
-   (`Puck.World.Schema/BindableValue.cs:627-788`) (S).
-8. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
+7. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).
 

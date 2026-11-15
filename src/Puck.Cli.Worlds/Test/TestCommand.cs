@@ -247,7 +247,7 @@ public static partial class TestCommand {
         var world = test.Path;
 
         output.WriteLine(value: $"test {name}: {world}");
-        output.WriteLine(value: $"  artifacts: {worldDirectory.Replace(newChar: '/', oldChar: '\\')}");
+        output.WriteLine(value: $"  artifacts: {Puck.Abstractions.PuckPaths.Slashed(path: worldDirectory)}");
         if (!TryReadSchedule(reason: out var scheduleReason, schedule: out var schedule, world: world)) {
             error.WriteLine(value: $"ERROR: {scheduleReason}");
             return 2;

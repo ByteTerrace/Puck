@@ -85,7 +85,7 @@ public sealed class AffectedShaders {
                 continue;
             }
 
-            matcher.AddIncludePatterns(patterns.Select(selector: static pattern => pattern.Replace(newChar: '/', oldChar: '\\')));
+            matcher.AddIncludePatterns(patterns.Select(selector: static pattern => Puck.Abstractions.PuckPaths.Slashed(path: pattern)));
 
             var directory = Path.Combine(path1: tree.Root, path2: project.Directory);
             var matched = matcher.Match(
@@ -152,8 +152,8 @@ public sealed class AffectedShaders {
         return found;
     }
 
-    private static string Relative(string path, string repositoryRoot) => Path.GetRelativePath(
+    private static string Relative(string path, string repositoryRoot) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(
         path: Path.GetFullPath(path: path),
         relativeTo: repositoryRoot
-    ).Replace(newChar: '/', oldChar: '\\');
+    ));
 }

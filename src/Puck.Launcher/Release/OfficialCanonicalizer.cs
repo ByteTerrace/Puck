@@ -1,5 +1,6 @@
 using Puck.Assets;
 using Puck.Assets.Documents;
+using Puck.Confinement;
 
 namespace Puck.Launcher.Release;
 
@@ -13,19 +14,6 @@ public static class OfficialCanonicalizer {
         "schema", "channel", "build", "worldSchemaBundle", "engine", "sources", "documents", "composed", "assets", "signature",
     };
 
-    // A workspace name (a sources[] file, or a document name) is a forward-slash path relative to the worlds
-    // directory: no backslash, no drive or scheme colon, and no empty, '.', or '..' segment (so no rooted form
-    // either), so a client mounting the workspace can never place a file outside the mounted tree.
-    private static bool IsWellFormedWorkspaceName(string name) => (
-        !string.IsNullOrEmpty(value: name) &&
-        !name.Contains(value: '\\') &&
-        !name.Contains(value: ':') &&
-        name.Split(separator: '/').All(predicate: static segment => (
-            (segment.Length > 0) &&
-            (segment != ".") &&
-            (segment != "..")
-        ))
-    );
     private static void ValidateAssets(IReadOnlyList<OfficialAssetEntry> assets, List<DocumentValidationError> errors) {
         if (assets is null) {
             errors.Add(item: new(
@@ -156,7 +144,7 @@ public static class OfficialCanonicalizer {
                 ));
             }
 
-            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
+            if (!PortablePath.IsRelative(path: entry.Name)) {
                 errors.Add(item: new(
                     Message: $"'{entry.Name}' is not a forward-slash document name relative to the worlds directory with no empty, '.', or '..' segment.",
                     Path: $"{path}.name"
@@ -214,7 +202,7 @@ public static class OfficialCanonicalizer {
             var entry = documents[i];
             var path = $"documents[{i}]";
 
-            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
+            if (!PortablePath.IsRelative(path: entry.Name)) {
                 errors.Add(item: new(
                     Message: $"'{entry.Name}' is not a forward-slash document name relative to the worlds directory with no empty, '.', or '..' segment.",
                     Path: $"{path}.name"
@@ -434,7 +422,7 @@ public static class OfficialCanonicalizer {
             var entry = sources[i];
             var path = $"sources[{i}]";
 
-            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
+            if (!PortablePath.IsRelative(path: entry.Name)) {
                 errors.Add(item: new(
                     Message: $"'{entry.Name}' is not a forward-slash path relative to the worlds directory with no empty, '.', or '..' segment.",
                     Path: $"{path}.name"
