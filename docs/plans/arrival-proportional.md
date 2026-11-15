@@ -959,6 +959,11 @@ And in the scene's counters (`SdfMeshIrradiance.Counters`): totals of scene
 builds, static draws, top-level entries and prefix bytes exported, and the
 peak of the entries and of the prefix bytes of one build.
 
+`SdfMeshHistory.ProcessWork` lists its kinds by hand today, so a kind can be
+declared and left out of the set. R0 moves its kinds to a
+`WorkKindRegistry`, where declaring a kind is what lists it
+(`WorkKindRegistry.Declare`), before it adds the per-cause families.
+
 **A peak** is a per-frame high-water count: the largest value one staging (or
 one scene build) published since the peaks were last cleared. `WorkCounterSet`
 gains the raise beside `WorkCounterSet.Add`, and `world.counters` gains a form
@@ -1059,7 +1064,7 @@ arrays are what a cluster keeps.
 | The bake's product revision | Rejected as a change signal | Eight writers move it by hand; the dresser's comparison needs none |
 | The background work's readback (`SdfGpuWorkRecording.CopyToReadback`) | Reused for the device comparison | It is how a background job already answers with device bytes at a point in the queue |
 | `gpu.faults` and `host.memory collect` | Reused as forcing levers | A lost device and a trim already have operator levers; the new forcing forms follow `gpu.faults record` |
-| `WorkCounterSet` | Extended with a peak | Its totals cannot give a per-frame high-water count, which R0's rule reads |
+| `WorkCounterSet` and `WorkKindRegistry` | Reused; the set is extended with a peak | Its totals cannot give a per-frame high-water count, which R0's rule reads; the registry lists R0's per-cause kinds by declaring them |
 | The geometry cache and the arena's fence-proven blocks (`SdfMeshIrradianceScene.Geometry`, `SdfMeshIrradianceScene.GpuArena`) | Reused one level up | Clusters are identified and kept exactly as geometries are |
 | `SdfMeshIrradiance.ChangedBoxes` and the probes' affected test | Reused | The change set stays the invalidation; its source becomes the cluster difference |
 | The native payload's blocks and the restore's fill (`SdfMesh.NativeCopy`, `SdfMesh.Hold`) | Reused as the decode's destination | The decode writes where the copy wrote |
