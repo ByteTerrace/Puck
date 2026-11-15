@@ -2399,9 +2399,12 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 - [low · whole walks on ordinary frames] Walks over every row or copy each
   frame that the arrival memo's row table does not absorb: the bake's copy
-  layout (`SdfMeshPathBake` copy layout walk), two walks in `SdfMeshDresser`
-  outside its topology build, and the residency's glass count
-  (`SdfWorldResidency`). Make each proportional to change or derive it once.
+  layout (`SdfMeshPathBake` copy layout walk) and two walks over the frame's
+  instances in `SdfMeshDresser` outside its topology build (its copy
+  comparison and its input commit). Make each proportional to change or
+  derive it once. The glass counts and the dresser's claims walk are the row
+  table's to keep
+  ([counts the door keeps](arrival-proportional.md#counts-the-door-keeps)).
   Seen by the arrival design lane from the code; not measured.
 - [low · probe scene arena] `SdfMeshIrradianceScene.GpuArena`'s word count is
   a high-water mark that never shrinks after frees; confirm it sizes a buffer
