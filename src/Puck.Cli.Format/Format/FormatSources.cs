@@ -32,8 +32,8 @@ public static class FormatSources {
     // pruned directory.
     public static bool Admits(string path) =>
         (IsFormattable(path: path)
-        && !path.Contains(value: '\\') && !path.Contains(value: ':')
-        && !path.Split('/').Any(predicate: static part => ((part is "" or "." or "..") || IsPruned(name: part))));
+        && Puck.Confinement.PortablePath.IsRelative(path: path)
+        && !path.Split('/').Any(predicate: static part => IsPruned(name: part)));
     // Every formattable file under `root`, or null when `root` does not exist (already reported).
     public static List<string>? Enumerate(string root) =>
         FileWalk.Enumerate(
