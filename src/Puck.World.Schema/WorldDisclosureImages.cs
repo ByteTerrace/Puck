@@ -72,6 +72,10 @@ public sealed class WorldDisclosureImages {
         public ulong[] Versions { get; } = versions;
         public ulong[] Dependencies { get; } = dependencies;
         public long Revision { get; set; } = revision;
+        // The arena whose rows Versions and Dependencies describe, and the place in its move log they are current to:
+        // a row the log has not named since then, and that depends on none it named, stands as recorded.
+        public StateArena? Arena { get; set; }
+        public long MovesRead { get; set; } = -1L;
         public byte[] Digests { get; } = digests;
         public ContentPin Identity { get; private set; } = ContentPin.Compute(digests);
         // The frame slot is written once, at composition: rows refresh only their own slots.
@@ -96,6 +100,7 @@ public sealed class WorldDisclosureImages {
     private readonly System.Buffers.ArrayBufferWriter<byte> m_imageBytes = new();
     private Utf8JsonWriter? m_imageWriter;
     private readonly List<StateCell> m_cellScratch = [];
+    private readonly List<int> m_movedScratch = [];
     private StateArena? m_exportArena;
     private StateRow?[] m_exports = [];
     /// <summary>Gets the table's monotonic work totals, an operator measurement like <see cref="Describe"/>.</summary>
@@ -113,6 +118,8 @@ public sealed class WorldDisclosureImages {
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
     private readonly Dictionary<ImageDigest, WeakReference<WorldRecipientImage>> m_content = [];
     private readonly List<ImageDigest> m_reclaimed = [];
+    private const int MinimumContentSweep = 256;
+    private int m_contentSweepAt = MinimumContentSweep;
     private readonly Dictionary<string, AudienceDefinition> m_definitions = [];
     private ArenaChangedKeys? m_changes;
     private StateArena? m_windowArena;
@@ -146,10 +153,14 @@ public sealed class WorldDisclosureImages {
             for (var row = 0; row < m_windowVersions.Length; row++) { m_windowVersions[row] = arena.RowVersion(row); }
             m_work.Add(RowVisits, m_windowVersions.Length);
         }
+        // Reclaimed entries are swept when the table has doubled since the last sweep left it, so a window pays for the
+        // images interned since then rather than for every image held; a dead entry found by an intern is replaced there.
+        if (m_content.Count < m_contentSweepAt) { return; }
         m_work.Add(ContentVisits, m_content.Count);
         foreach (var (pin, reference) in m_content) { if (!reference.TryGetTarget(out _)) { m_reclaimed.Add(pin); } }
         foreach (var pin in m_reclaimed) { m_content.Remove(pin); }
         m_reclaimed.Clear();
+        m_contentSweepAt = Math.Max(MinimumContentSweep, 2 * m_content.Count);
     }
     /// <summary>Reports live shared image storage and current tick work, for the operator's budget.</summary>
     /// <returns>The one-line report.</returns>
@@ -373,31 +384,58 @@ public sealed class WorldDisclosureImages {
         if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, source)) { return Compose(view, audience); }
         var arena = view.Arena;
         var skeletons = (entry.Revision != arena.DisclosureRevision);
-        m_work.Add(RowVisits, entry.Images.Length);
-        for (var row = 0; row < entry.Images.Length; row++) {
-            var version = arena.RowVersion(row);
-            var dependencies = DependencyVersions(arena, row);
-            if ((version == entry.Versions[row]) && (dependencies == entry.Dependencies[row])) { continue; }
-            var image = Image(view, row, audience);
-            if (entry.FrameRows[row] && !image.Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return Compose(view, audience); }
-            entry.Versions[row] = version; entry.Dependencies[row] = dependencies;
-            entry.Images[row] = image;
-            entry.Store(AudienceDefinition.ImageSlot(row), image.Digest);
-            if (skeletons) {
-                var observer = view.Observer;
-                var skeleton = WorldStateDisclosure.DiscloseRow(arena, row, ref observer, entry.Fields, out _) with { Cells = null };
-                entry.Rows[row] = skeleton;
-                entry.Store(AudienceDefinition.SkeletonSlot(row), DigestOf(skeleton));
+        var moved = m_movedScratch;
+        moved.Clear();
+        // A row's version and its dependencies' versions move only through the arena's move log, so the rows it names
+        // since this entry was last brought current, and the rows whose policies read them, are the only ones that
+        // can differ from the record. An entry the log cannot serve (another arena, or too far behind) checks every row.
+        if (ReferenceEquals(entry.Arena, arena) && arena.TryReadMoves(entry.MovesRead, moved)) {
+            foreach (var row in moved) {
+                if (!Refresh(view, entry, audience, row, skeletons)) { return Compose(view, audience); }
+                foreach (var dependent in m_dependents[row]) {
+                    if (!Refresh(view, entry, audience, dependent, skeletons)) { return Compose(view, audience); }
+                }
+            }
+        } else {
+            for (var row = 0; row < entry.Images.Length; row++) {
+                if (!Refresh(view, entry, audience, row, skeletons)) { return Compose(view, audience); }
             }
         }
+        entry.Arena = arena;
+        entry.MovesRead = arena.MoveSequence;
         entry.Revision = arena.DisclosureRevision;
         entry.Settle();
         return entry;
+    }
+    // Brings one row of an audience's definition current, reporting false when the frame moved with it and the whole
+    // definition must be composed again. A row beyond the authored rows, or one whose version and dependency versions
+    // stand as recorded, is left as it is.
+    private bool Refresh(WorldRecipientView view, AudienceDefinition entry, string audience, int row, bool skeletons) {
+        if ((uint)row >= (uint)entry.Images.Length) { return true; }
+        var arena = view.Arena;
+        m_work.Count(RowVisits);
+        var version = arena.RowVersion(row);
+        var dependencies = DependencyVersions(arena, row);
+        if ((version == entry.Versions[row]) && (dependencies == entry.Dependencies[row])) { return true; }
+        var image = Image(view, row, audience);
+        if (entry.FrameRows[row] && !image.Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return false; }
+        entry.Versions[row] = version; entry.Dependencies[row] = dependencies;
+        entry.Images[row] = image;
+        entry.Store(AudienceDefinition.ImageSlot(row), image.Digest);
+        if (skeletons) {
+            var observer = view.Observer;
+            var skeleton = WorldStateDisclosure.DiscloseRow(arena, row, ref observer, entry.Fields, out _) with { Cells = null };
+            entry.Rows[row] = skeleton;
+            entry.Store(AudienceDefinition.SkeletonSlot(row), DigestOf(skeleton));
+        }
+        return true;
     }
     private AudienceDefinition Compose(WorldRecipientView view, string audience) {
         var source = view.Source;
         var arena = view.Arena;
         var count = source.AuthoredState.Count;
+        // Read before any row: a row that moved after this place is one the next pass visits.
+        var moves = arena.MoveSequence;
         var images = new WorldRecipientImage[count];
         var versions = new ulong[count];
         var dependencies = new ulong[count];
@@ -423,7 +461,7 @@ public sealed class WorldDisclosureImages {
         DefinitionsComposed++;
         m_work.Count(DefinitionCompositions);
         return m_definitions[audience] = new AudienceDefinition(source, composed, fields, frameRows, rows, images, versions, dependencies,
-            arena.DisclosureRevision, digests);
+            arena.DisclosureRevision, digests) { Arena = arena, MovesRead = moves };
     }
     private byte[] DigestOf(WorldStateRow skeleton) {
         var bytes = CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow);
