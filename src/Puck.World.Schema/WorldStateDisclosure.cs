@@ -665,7 +665,7 @@ public static class WorldStateDisclosure {
     // (WorldPlacementFrameCompilation.LocalFrame) is the re-dealt slot's fixed-point offset plus that displacement, so
     // nothing of the authority's slot, its offset or that offset's rounding reaches the recipient.
     private static void Redeal(WorldPlacement template, int rowOrdinal, Dictionary<string, WorldPlacement>? children, StateArena arena, ref Observer observer, Func<string, string?, bool> withheld, ulong worldSeed, List<WorldPlacement> result) {
-        var slots = WorldPlacementDeal.Offsets(template: template, worldSeed: worldSeed).Length;
+        var slots = WorldPlacementDeal.InstanceCount(template: template, worldSeed: worldSeed);
         var row = arena.Rows[rowOrdinal];
         // Under Placeholder a reader the row admits is shown a back for each withheld cell, in order, as the row's
         // observation shows it; a reader the row's own policy excludes is shown nothing of it.

@@ -577,10 +577,7 @@ public static class WorldModuleNamespace {
                     if (
                         (value is JsonValue leaf) &&
                         leaf.TryGetValue<string>(value: out var text) &&
-                        text.StartsWith(
-                        comparisonType: StringComparison.Ordinal,
-                        value: "state."
-                    )
+                        Puck.Assets.Documents.DocumentIdentifier.IsReference(value: text)
                     ) {
                         visitor(
                             obj,
@@ -1205,8 +1202,6 @@ public static class WorldModuleNamespace {
     private sealed class Rewriter(INameMap names) {
         public JsonNode? Scope { get; set; }
 
-        private const string BindingPrefix = "state.";
-
         private bool IsInstanceBinding(string name) {
             for (var node = Scope; (node is not null); node = node.Parent) {
                 if (node is not JsonObject scope) {
@@ -1303,14 +1298,11 @@ public static class WorldModuleNamespace {
         }
 
         private string RewriteBinding(string token) {
-            if (!token.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: BindingPrefix
-            )) {
+            if (!Puck.Assets.Documents.DocumentIdentifier.IsReference(value: token)) {
                 return token;
             }
 
-            var rest = token[BindingPrefix.Length..];
+            var rest = token[Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix.Length..];
             var dot = rest.IndexOf(value: '.');
             var row = ((dot < 0)
                 ? rest
@@ -1321,7 +1313,7 @@ public static class WorldModuleNamespace {
                 : rest[dot..]
             );
 
-            return $"{BindingPrefix}{Map(kind: WorldNameKind.State, name: row)}{tail}";
+            return $"{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}{Map(kind: WorldNameKind.State, name: row)}{tail}";
         }
         // The text between a name's brackets: a bare or backquoted name is a cell key and stays; a reserved token
         // rewrites as a key; anything else is an expression.

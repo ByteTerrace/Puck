@@ -63,7 +63,7 @@ internal sealed partial class WorldProbes {
 
         foreach (var instance in m_liveInstances) {
             foreach (var axis in instance.AxisBindings) {
-                if (!instance.Ring.TryReadLatest(reading: out var reading)) {
+                if (!instance.Ring.TrySnapshot(value: out var reading)) {
                     continue;
                 }
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Shaders;
@@ -263,7 +264,7 @@ internal sealed partial class WorldProbes {
         try {
             _ = new ProbeTrackPlayer(
                 document: document,
-                ring: new ProbeReadingRing()
+                ring: new PublishBuffer<ProbeReading>()
             );
         } catch (InvalidDataException exception) {
             throw new InvalidOperationException(
@@ -398,7 +399,7 @@ internal sealed partial class WorldProbes {
     // its own "id$seat" ring), its track player when the row plays one back, and every one of its bindings' live
     // state (built from the row's already-validated templates — never re-validated per instance).
     private ProbeInstance CreateInstance(ProbeRowInfo rowInfo, int seat) {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var isSeatRelative = rowInfo.IsSeatRelative;
         var key = (isSeatRelative
             ? InstanceKey(id: rowInfo.Row.Id, seat: seat)

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.Maths;
 
@@ -11,8 +12,6 @@ namespace Puck.World;
 public static class WorldStateBindingContext {
     /// <summary>The prefix identifying a world-state-backed binding-context family.</summary>
     public const string FamilyPrefix = "state:";
-    /// <summary>The prefix a <c>state.&lt;row&gt;</c> row reference carries.</summary>
-    public const string RowReferencePrefix = "state.";
 
     /// <summary>Validates an optional state-row reference used as a keyed text presentation table.</summary>
     /// <param name="reference">The optional <c>state.&lt;row&gt;</c> reference.</param>
@@ -127,17 +126,11 @@ public static class WorldStateBindingContext {
     public static bool TryParseRowReference(string? reference, [NotNullWhen(true)] out string? rowName) {
         rowName = null;
 
-        if (
-            (reference is not { Length: > 0 }) ||
-            !reference.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: RowReferencePrefix
-        )
-        ) {
+        if (!DocumentIdentifier.IsReference(value: reference)) {
             return false;
         }
 
-        var candidate = reference[RowReferencePrefix.Length..];
+        var candidate = reference[DocumentIdentifier.ReferencePrefix.Length..];
 
         if (!CellName.TryParse(
             candidate: candidate,

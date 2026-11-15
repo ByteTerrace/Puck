@@ -43,7 +43,7 @@ corrected in the same change.
 | A webcam's frames, CPU pixels or shared GPU textures | `ICameraCaptureService` (`EnumerateDevices`, `TryOpenPixels`, `TryOpenShared`) → `ICameraGraph`; `Win32MediaFoundationCameraService`, `Win32CameraGraph`'s MTA worker, `Win32D3D11CameraFrameConverter`; discovery polling in `CameraDeviceScanner` | [camera capture](../../../src/Puck.Platform.Windows/README.md#camera-capture) |
 | A desktop or another window's pixels as a feed | `INativeImageCaptureService`: `Win32NativeImageCaptureService`, `Win32GraphicsCaptureFeed` | [Windows README](../../../src/Puck.Platform.Windows/README.md#contents) |
 | A passthrough screen that forwards input to a desktop window | `Win32DesktopPassthrough`, `Win32PassthroughWindow` | [device input](../../../docs/reference/input.md) |
-| A probe: a kernel over camera, strobe or rendered frames | `ProbeReading`, `ProbeReadingRing`, `IProbeKernelHost`, `ProbeKernelRequest`; `Win32ProbeKernelBench`, `Win32RenderedProbeKernelHost`; `ProbeTrackPlayer` replays recorded readings | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
+| A probe: a kernel over camera, strobe or rendered frames | `ProbeReading`, `PublishBuffer<ProbeReading>` (the shared latest-value seqlock), `IProbeKernelHost`, `ProbeKernelRequest`; `Win32ProbeKernelBench`, `Win32RenderedProbeKernelHost`; `ProbeTrackPlayer` replays recorded readings | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | The audio output device | `IAudioRenderDeviceFactory`: `WasapiAudioRenderDeviceFactory`; none on Linux | `media` |
 | Video encoders, loopback and microphone capture | `IVideoEncoderFactory`, `IAudioCaptureSourceFactory`: `MediaFoundationVideoEncoderFactory`, `WasapiAudioCaptureSourceFactory`; declining factories on Linux | `media` |
 
@@ -128,8 +128,7 @@ process-wide timer resolution. In this area that means:
   Wayland and XCB behaviour has not been run on real Linux hardware.
 - **Duplicates recorded in the refactoring packet:** camera plane validation
   and L8/BGRA packing (`Win32FaceAuthenticationCameraGraph.cs` beside
-  `CameraFramePacking`), and the latest-value seqlock (`ProbeReadingRing`
-  beside `Puck.Hosting`'s `PublishBuffer<T>`)
+  `CameraFramePacking`)
   ([refactoring campaign](../../../docs/plans/open-items.md#refactoring-campaign)).
 - A reading taken while the compositor is not composing still looks like a
   slow frame ([open items](../../../docs/plans/open-items.md)).

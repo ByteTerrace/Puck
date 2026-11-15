@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.Platform.Probes;
 using static Puck.Platform.Windows.MfInterop;
@@ -855,7 +856,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     protected override void OnStopping() => m_stream?.CancelStart();
 
     /// <inheritdoc/>
-    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
 
         foreach (var input in request.Inputs) {

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 
 namespace Puck.Platform.Windows;
@@ -46,7 +47,7 @@ public sealed class Win32RenderedProbeKernelHost : IRenderedProbeKernelHost {
     /// <inheritdoc/>
     /// <remarks>A kernel is refused when a socket reads a camera sensor, or when its trigger socket reads no
     /// ring.</remarks>
-    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,

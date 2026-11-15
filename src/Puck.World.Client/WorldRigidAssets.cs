@@ -270,11 +270,12 @@ public sealed partial class WorldRigidAssets {
             if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots)) {
                 m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale, IsDynamic: true) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
             }
-            foreach (var volume in (body.Creation.EngineDocument.Volumes ?? [])) {
-                if (!volume.Enabled) { continue; }
-                if ((volume.Parent is { } parentName) && WorldShapeIsolation.IsHidden(hidden: hidden, name: parentName, shapes: (body.Creation.EngineDocument.Shapes ?? []))) { continue; }
-                if (m_rootVolumes.Count == SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"Creation '{body.Creation.Id}' on body {body.BodyIndex} exceeds the {SdfProgramBuilder.MaxVolumes}-volume frame capacity."); }
-                var parent = body.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: shape => (shape.Name?.Value == volume.Parent));
+            var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
+
+            for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {
+                if (!WorldShapeIsolation.TryAdmitVolume(creation: body.Creation.EngineDocument, emitted: m_rootVolumes.Count, hidden: hidden, parentIndex: out var parentIndex, position: volumeIndex, volume: out var volume)) { continue; }
+
+                var parent = ((parentIndex >= 0) ? body.Creation.EngineDocument.Shapes![parentIndex] : null);
 
                 m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
             }

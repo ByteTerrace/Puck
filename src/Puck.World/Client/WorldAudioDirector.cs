@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.Audio.Mixing;
@@ -1692,7 +1692,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 count: (m_pendingTriggers.Count - write)
             );
 
-            m_buffer.Publish(frame: slab);
+            m_buffer.Publish(value: slab);
 
             return slab;
         }
@@ -2015,7 +2015,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         lock (m_gate) {
             if (
                 (m_mixer is not { } mixer) ||
-                !m_buffer.TrySnapshot(frame: out var snapshot)
+                !m_buffer.TrySnapshot(value: out var snapshot)
             ) {
                 return false;
             }
@@ -2070,7 +2070,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <summary>Copies the latest published snapshot, when one exists (the raw consumer seam; the device pump uses
     /// <see cref="TryMixBlock"/>, which folds the snapshot read and the mix under the gate).</summary>
     /// <param name="snapshot">The latest snapshot.</param>
-    public bool TrySnapshot(out AudioSnapshot snapshot) => m_buffer.TrySnapshot(frame: out snapshot);
+    public bool TrySnapshot(out AudioSnapshot snapshot) => m_buffer.TrySnapshot(value: out snapshot);
 
     private enum EmitterAnchorKind : byte {
         Fixed,

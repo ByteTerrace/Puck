@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 using Xunit;
 
@@ -12,7 +13,7 @@ public sealed class ProbeTrackPlayerTests {
 
     [Fact]
     public void Capture_timestamp_is_the_sample_own_declared_time_not_the_advance_call_time() {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var document = new ProbeTrackDocument(
             RateHz: 30.0,
             Channels: 1,
@@ -35,7 +36,7 @@ public sealed class ProbeTrackPlayerTests {
         var secondSampleOffsetTicks = PeriodTicks;
 
         Assert.True(condition: player.Advance(nowTimestamp: Origin));
-        Assert.True(condition: ring.TryReadLatest(reading: out var first));
+        Assert.True(condition: ring.TrySnapshot(value: out var first));
         Assert.Equal(
             actual: first.CaptureTimestamp,
             expected: Origin
@@ -46,7 +47,7 @@ public sealed class ProbeTrackPlayerTests {
         var lateArrival = ((Origin + PeriodTicks) + (PeriodTicks / 3));
 
         Assert.True(condition: player.Advance(nowTimestamp: lateArrival));
-        Assert.True(condition: ring.TryReadLatest(reading: out var second));
+        Assert.True(condition: ring.TrySnapshot(value: out var second));
         Assert.Equal(
             actual: second.CaptureTimestamp,
             expected: (Origin + secondSampleOffsetTicks)
@@ -58,7 +59,7 @@ public sealed class ProbeTrackPlayerTests {
     }
     [Fact]
     public void Irregular_sample_times_set_the_playback_cadence_and_the_loop_length() {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var document = new ProbeTrackDocument(
             RateHz: 30.0,
             Channels: 1,
@@ -88,7 +89,7 @@ public sealed class ProbeTrackPlayerTests {
         Assert.True(condition: player.Advance(nowTimestamp: Origin));
         Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.25))));
         Assert.True(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.5))));
-        Assert.True(condition: ring.TryReadLatest(reading: out var second));
+        Assert.True(condition: ring.TrySnapshot(value: out var second));
         Assert.Equal(
             expected: 1,
             actual: ((int)Math.Round(a: ((double)second[0])))
@@ -99,7 +100,7 @@ public sealed class ProbeTrackPlayerTests {
         );
         Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.55))));
         Assert.True(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.6))));
-        Assert.True(condition: ring.TryReadLatest(reading: out var third));
+        Assert.True(condition: ring.TrySnapshot(value: out var third));
         Assert.Equal(
             expected: 2,
             actual: ((int)Math.Round(a: ((double)third[0])))
@@ -111,7 +112,7 @@ public sealed class ProbeTrackPlayerTests {
 
         Assert.False(condition: player.Advance(nowTimestamp: (Origin + Seconds(seconds: 0.61))));
         Assert.True(condition: player.Advance(nowTimestamp: ((Origin + Seconds(seconds: loopSeconds)) + 1L)));
-        Assert.True(condition: ring.TryReadLatest(reading: out var looped));
+        Assert.True(condition: ring.TrySnapshot(value: out var looped));
         Assert.Equal(
             expected: 0,
             actual: ((int)Math.Round(a: ((double)looped[0])))
@@ -123,7 +124,7 @@ public sealed class ProbeTrackPlayerTests {
     }
     [Fact]
     public void Publishes_each_sample_exactly_once_per_period_and_loops() {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var document = new ProbeTrackDocument(
             RateHz: 30.0,
             Channels: 1,
@@ -158,7 +159,7 @@ public sealed class ProbeTrackPlayerTests {
             Assert.False(condition: player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 4))));
             Assert.False(condition: player.Advance(nowTimestamp: (windowStart + (PeriodTicks / 2))));
 
-            Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+            Assert.True(condition: ring.TrySnapshot(value: out var reading));
             observedSlots.Add(item: ((int)Math.Round(a: ((double)reading[0]))));
             observedVersions.Add(item: ring.Version);
         }
@@ -174,7 +175,7 @@ public sealed class ProbeTrackPlayerTests {
     }
     [Fact]
     public void Rejects_a_document_that_fails_a_shape_check() {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
 
         _ = Assert.Throws<InvalidDataException>(testCode: () => new ProbeTrackPlayer(
             document: new ProbeTrackDocument(Schema: "wrong"),
@@ -201,7 +202,7 @@ public sealed class ProbeTrackPlayerTests {
     }
     [Fact]
     public void Rejects_sample_times_that_are_negative_not_finite_or_not_ascending() {
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
 
         _ = Assert.Throws<InvalidDataException>(testCode: () => new ProbeTrackPlayer(
             document: new ProbeTrackDocument(Samples: [new ProbeTrackSample(T: -0.1)]),
