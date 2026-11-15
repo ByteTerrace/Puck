@@ -145,7 +145,18 @@ outside this contract and takes the references as written.
 - A capturing local function can allocate its display class at method entry,
   before a cache check returns. Keep a hot cache-check method separate from its
   closure-bearing slow rebuild. A test of it measures warmed calls on an active
-  path; an inactive-tick test cannot see the allocation.
+  path; an inactive-tick test cannot see the allocation. A lambda in a rarely
+  taken branch does the same: the compiler merges the branch's closure scope
+  into the method's, so a recursive builder allocated a display class on every
+  node (`SdfMeshIrradianceScene.Hierarchy.BuildNode`'s median sort, most of the
+  small-object garbage a meadow arrival made). Pass a struct comparer to the
+  generic span sort, or move the lambda into a method of its own.
+- Background workers' garbage stops the frame thread: every young-generation
+  collection suspends every managed thread. Read a worker's allocations with an
+  EventPipe trace of `Microsoft-Windows-DotNETRuntime:0x1:5` (allocation ticks
+  with stacks; `AllocationKind` separates small from large objects) beside
+  `host.frames`' per-iteration collections and pauses, and pool or keep a
+  build's workspace rather than letting it die young.
 - Start with a profile, benchmark, allocation trace or demonstrated hot path. A
   suspected hot path is not one; ask for the evidence. A change is kept when it
   wins on a measured metric (time, bytes, work counters) or when it simplifies,

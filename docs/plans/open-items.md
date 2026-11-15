@@ -128,12 +128,13 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar (item 1 below): the meadow's p99 varies from sample to
-   sample on Direct3D 12 (median at its pre-wave figure, two of five samples
-   above 21 ms), and Vulkan's interval on a loaded machine. Read on a quiet
-   machine (`puck lease quiet`), Vulkan's studio p99 is at the bar, and the
-   cold bake is under it on Direct3D 12; the readings are in the commit that
-   recorded them.
+D. The frame bar (item 1 below): the meadow's arrival. A stop's window can
+   still hold part of the arrival's work, which `world.wait bakes` and
+   `world.wait residency` do not wait for (the store loads, the tier
+   hand-overs and the lighting's trace scene rebuilt over them), so a sample
+   that catches it misses the bar where one that does not holds it. What the
+   arrival still costs the frame thread is item 1's hand-over and arrival
+   bullets; Vulkan's interval on a loaded machine is its own bullet.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
@@ -223,16 +224,45 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      studio's p99 is at the bar, so the interval tracks the machine's load,
      not wave 1's code. Whether a loaded machine should cost Vulkan's pacer
      more than Direct3D 12's is not yet found.
-   - A hand-over's own frame. At the resamples after boot, the frame that
-     takes a replaced mesh's draws works 14 to 16 ms on the frame's thread
-     where a settled frame works 5 to 9 (`host.frames`, about 1 MB allocated
-     in it). Whether the meadow's one to three frames over 16.7 ms a window
-     are such frames is not confirmed.
+   - A hand-over's own frame. A replacement that changes a group's piece or
+     copy count rebuilds the dresser's whole draw list
+     (`SdfMeshDresser.BuildDrawTopology`) and stages every row
+     (`SdfWorldTables.StageMeshRegionCore`): at the meadow that is the whole
+     list of blade draws, on the frame thread, in the one frame, and it is
+     the frame `host.frames` shows working several times a settled frame with
+     megabytes allocated on the frame thread; the meadow's arrivals showed one
+     or two such frames a window. The cause fix is the residency
+     packet's rows that keep their place
+     ([residency](#residency-and-streaming)), so a hand-over costs its own
+     rows.
+   - The arrival's background work and the garbage collector. Every
+     collection of the young generations stops the frame thread, so what the
+     workers allocate on arrival lands on frames as pauses. The lighting's
+     trace-scene build (`SdfMeshIrradianceScene.Build`) now leaves only what the
+     scene keeps (its hierarchy's workspace is pooled, and no node allocates).
+     What still allocates per arrival, largest first: the top-level scene and
+     its GPU export rebuilt whole on every scene change
+     (`SdfMeshIrradianceScene`'s constructor, `CreateGpuExport`), and a store
+     load's managed decode before the native copy (`SdfMeshStoreCodec.ReadMesh`,
+     `SdfMeshLibrary.RenumberManaged`; the memory item's lead too). Read them
+     with an EventPipe allocation trace across the arrival
+     (`Microsoft-Windows-DotNETRuntime:0x1:5`), and `host.frames`' per-frame
+     collections.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
-     lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
-     during play still submits jobs of several frames' length. Cutting them with
-     `SdfGpuWorkRate` changes the cold-bake bar's job count and needs its own
-     measured change.
+     lattices of `SdfMeshPathBake.LatticeTaps`) and charged at a fixed
+     `SdfMeshPathBake.NanosecondsPerTap`, so a bake during play still submits
+     jobs of several frames' length (a 2M-sample point batch estimated at a
+     fifth of its measured time). Cutting them at the bake's `SdfGpuWorkRate`
+     to `SdfGpuWork.FrameShareSeconds` was tried: jobs past the share fell to
+     about one in a hundred, but the batches more than doubled and the groups
+     in flight a take fell to a third, since a per-tap rate rises at once to
+     its costliest group and the bake's lattices are sequential per group, so
+     the four slots carry less. Landing it needs both: a rate that does not
+     shrink every batch to its costliest group's (a rate per lattice kind, or
+     one that follows the mean), and enough jobs in flight for share-sized
+     jobs; then the cold bake measured against the bar. Changing
+     `SdfMeshPathBake.TryTake` changes the bake identity, so it costs every
+     store one cold bake.
    - The volume's fill at a place with many point lights. A fresh probe's relight
      traces every hit texel toward every shadowing point light in range
      (`sdfProbeShade`), so filling the window beside the teal room's lamps spends
@@ -3554,8 +3584,11 @@ Grounded causes and leads, largest first:
   only when free rows pass a share of the list) would make that hand-over
   its own rows' work as well. No capture has yet shown a hand-over frame by
   frame: a burst capture across one, with the group in every frame, is the
-  check the landing-ahead invariant still owes.
-  `SdfMeshHistory.DressTopologyBuilds` counts the rebuilds. Owner:
+  check the landing-ahead invariant still owes. Arriving at the meadow does not
+  always hand over with a count change (three 90 to 120 frame bursts across
+  arrivals saw none), so read `SdfMeshHistory.DressTopologyBuilds`
+  (`world.counters sdf.instances`) before and after a burst and keep only a
+  burst it moved across. Owner:
   rendering/bake.
 - [medium] A device that refuses the mesh region's growth still ends the
   World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`

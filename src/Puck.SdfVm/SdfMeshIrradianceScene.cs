@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -241,10 +243,15 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
     private SdfMeshIrradianceScene(Dictionary<GeometryKey, Geometry> geometries, IReadOnlyList<SdfMeshDraw> draws, List<Instance> instances, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
-        var entries = new List<Entry>();
-        var lows = new List<Vector3>();
-        var highs = new List<Vector3>();
+        var count = 0;
         var triangles = 0L;
+
+        foreach (var instance in instances) { count += instance.Geometry.Braids.Length; }
+
+        var entries = new Entry[count];
+        var lows = new Vector3[count];
+        var highs = new Vector3[count];
+        var at = 0;
 
         // The top level indexes each draw's braid subtrees, not its root, so overlapping draws separate as one hierarchy
         // over all their triangles would.
@@ -255,26 +262,18 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             foreach (var braid in instance.Geometry.Braids) {
                 ref readonly var node = ref instance.Geometry.Nodes[braid];
 
-                if (instance.Identity) {
-                    lows.Add(item: node.Low);
-                    highs.Add(item: node.High);
-                } else {
-                    var (low, high) = Bounds(high: node.High, low: node.Low, matrix: instance.ObjectToWorld);
-
-                    lows.Add(item: low);
-                    highs.Add(item: high);
-                }
-                entries.Add(item: new Entry(Instance: index, Node: braid));
+                (lows[at], highs[at]) = (instance.Identity ? (node.Low, node.High) : Bounds(high: node.High, low: node.Low, matrix: instance.ObjectToWorld));
+                entries[at++] = new Entry(Instance: index, Node: braid);
             }
         }
 
-        var (nodes, order, _, depth, medians) = ((entries.Count == 0)
+        var (nodes, order, _, depth, medians) = ((count == 0)
             ? (Array.Empty<Node>(), Array.Empty<int>(), Array.Empty<int>(), 0, 0)
-            : Hierarchy.Build(braid: 0, highs: [.. highs], leaf: 1, lows: [.. lows], name: "mesh GI static scene"));
+            : Hierarchy.Build(braid: 0, count: count, highs: highs, leaf: 1, lows: lows, name: "mesh GI static scene"));
 
         m_instances = [.. instances];
-        m_entries = new Entry[entries.Count];
-        for (var index = 0; (index < entries.Count); index++) {
+        m_entries = new Entry[count];
+        for (var index = 0; (index < count); index++) {
             m_entries[index] = entries[order[index]];
         }
         m_nodes = nodes;
@@ -649,24 +648,32 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             });
 
             var total = pieces.Sum(selector: static piece => piece.Count);
-            var lows = new Vector3[total];
-            var highs = new Vector3[total];
-            var owners = new int[total];
-            var at = 0;
+            // Build workspace only, rented: the hierarchy keeps none of these past its build.
+            var lows = ArrayPool<Vector3>.Shared.Rent(minimumLength: total);
+            var highs = ArrayPool<Vector3>.Shared.Rent(minimumLength: total);
+            var owners = ArrayPool<int>.Shared.Rent(minimumLength: total);
 
-            foreach (var piece in pieces) {
-                piece.CopyTo(at: at, highs: highs, lows: lows, owners: owners);
-                at += piece.Count;
+            try {
+                var at = 0;
+
+                foreach (var piece in pieces) {
+                    piece.MoveTo(at: at, highs: highs, lows: lows, owners: owners);
+                    at += piece.Count;
+                }
+
+                var (nodes, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, count: total, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)");
+                var triangles = new int[order.Length];
+
+                for (var index = 0; (index < order.Length); index++) {
+                    triangles[index] = owners[order[index]];
+                }
+
+                return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
+            } finally {
+                ArrayPool<Vector3>.Shared.Return(array: lows);
+                ArrayPool<Vector3>.Shared.Return(array: highs);
+                ArrayPool<int>.Shared.Return(array: owners);
             }
-
-            var (nodes, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)");
-            var triangles = new int[order.Length];
-
-            for (var index = 0; (index < order.Length); index++) {
-                triangles[index] = owners[order[index]];
-            }
-
-            return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
         }
 
         private static void Chunked(int count, Action<int, int> body) {
@@ -681,15 +688,17 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // whose box's surface is more than LooseBox times its own area halves across its longest edge, down to MaxSplits
         // halvings, and a piece is boxed as its own triangle is. A flat right triangle along two axes, the tightest a box
         // holds, reads 4; a long thin triangle across a face reads its length over its width.
+        // Its storage is rented, and goes back to the pool when MoveTo copies it out.
         private sealed class Pieces(int capacity) {
             private const float LooseBox = 64f;
             private const int MaxSplits = 6;
 
-            private readonly List<Vector3> m_lows = new(capacity: capacity);
-            private readonly List<Vector3> m_highs = new(capacity: capacity);
-            private readonly List<int> m_owners = new(capacity: capacity);
+            private Vector3[] m_lows = ArrayPool<Vector3>.Shared.Rent(minimumLength: capacity);
+            private Vector3[] m_highs = ArrayPool<Vector3>.Shared.Rent(minimumLength: capacity);
+            private int[] m_owners = ArrayPool<int>.Shared.Rent(minimumLength: capacity);
 
-            public int Count => m_owners.Count;
+            public int Count { get; private set; }
+            private int Capacity => Math.Min(val1: m_owners.Length, val2: Math.Min(val1: m_lows.Length, val2: m_highs.Length));
 
             public void Add(Vector3 a, Vector3 b, Vector3 c, int triangle, int depth) {
                 var low = Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c));
@@ -699,9 +708,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 var surface = (2f * (((size.X * size.Y) + (size.Y * size.Z)) + (size.Z * size.X)));
 
                 if ((depth >= MaxSplits) || !(area > 0f) || (surface <= (LooseBox * area))) {
-                    m_lows.Add(item: low);
-                    m_highs.Add(item: high);
-                    m_owners.Add(item: triangle);
+                    if (Count == Capacity) { Grow(); }
+                    m_lows[Count] = low;
+                    m_highs[Count] = high;
+                    m_owners[Count] = triangle;
+                    Count++;
                     return;
                 }
 
@@ -724,16 +735,29 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                     Add(a: middle, b: b, c: c, depth: (depth + 1), triangle: triangle);
                 }
             }
-            public void CopyTo(Vector3[] lows, Vector3[] highs, int[] owners, int at) {
-                m_lows.CopyTo(array: lows, arrayIndex: at);
-                m_highs.CopyTo(array: highs, arrayIndex: at);
-                m_owners.CopyTo(array: owners, arrayIndex: at);
+            public void MoveTo(Vector3[] lows, Vector3[] highs, int[] owners, int at) {
+                m_lows.AsSpan(start: 0, length: Count).CopyTo(destination: lows.AsSpan(start: at));
+                m_highs.AsSpan(start: 0, length: Count).CopyTo(destination: highs.AsSpan(start: at));
+                m_owners.AsSpan(start: 0, length: Count).CopyTo(destination: owners.AsSpan(start: at));
+                ArrayPool<Vector3>.Shared.Return(array: m_lows);
+                ArrayPool<Vector3>.Shared.Return(array: m_highs);
+                ArrayPool<int>.Shared.Return(array: m_owners);
+                m_lows = m_highs = [];
+                m_owners = [];
+            }
+            private void Grow() {
+                var size = Math.Max(val1: 16, val2: (2 * Capacity));
+
+                m_lows = RentedArrays.Grow(array: m_lows, keep: Count, minimumLength: size);
+                m_highs = RentedArrays.Grow(array: m_highs, keep: Count, minimumLength: size);
+                m_owners = RentedArrays.Grow(array: m_owners, keep: Count, minimumLength: size);
             }
         }
     }
     // A binned surface-area hierarchy over primitive bounds, its wide ranges' children built in parallel. Its nodes
-    // are written into chunks allocated as the build reaches them, since the bound a range can need (2n - 1 nodes)
-    // is several times what a build of leaves several primitives wide uses; the result is copied out at its size.
+    // are written into chunks rented as the build reaches them, since the bound a range can need (2n - 1 nodes) is
+    // several times what a build of leaves several primitives wide uses; the result is copied out at its size and the
+    // chunks, like the centroids, go back to the pool, so a build leaves only what the scene keeps.
     private sealed class Hierarchy {
         private const int ChunkMask = ((1 << ChunkShift) - 1);
         private const int ChunkShift = 16;
@@ -752,14 +776,12 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private int m_medianSplits;
         private string m_name = "";
 
-        private Hierarchy(Vector3[] lows, Vector3[] highs, int leaf, int braid) {
-            var count = lows.Length;
-
+        private Hierarchy(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid) {
             m_lows = lows;
             m_highs = highs;
             m_leaf = leaf;
             m_braid = braid;
-            m_centroids = new Vector3[count];
+            m_centroids = ArrayPool<Vector3>.Shared.Rent(minimumLength: count);
             m_order = new int[count];
             m_capacity = Math.Max(val1: 1, val2: ((2 * count) - 1));
             m_chunks = new Node[]?[(((m_capacity - 1) >> ChunkShift) + 1)];
@@ -770,19 +792,23 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
 
         // The nodes, root first, the primitive each leaf position holds, and with a braid width the widest nodes at most
-        // that many primitives wide.
-        public static (Node[] Nodes, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int leaf, int braid, string name) {
+        // that many primitives wide, over the first count primitives of the bounds.
+        public static (Node[] Nodes, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name) {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: leaf, other: Node.MaxCount);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: count, other: Math.Min(val1: lows.Length, val2: highs.Length));
 
-            var hierarchy = new Hierarchy(braid: braid, highs: highs, leaf: leaf, lows: lows) { m_name = name };
+            var hierarchy = new Hierarchy(braid: braid, count: count, highs: highs, leaf: leaf, lows: lows) { m_name = name };
 
-            var depth = hierarchy.BuildNode(count: lows.Length, first: 0, node: 0, wide: true, depth: 0);
-            hierarchy.m_braids.Sort();
-            return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids], depth, hierarchy.m_medianSplits);
+            try {
+                var depth = hierarchy.BuildNode(count: count, first: 0, node: 0, wide: true, depth: 0);
+                hierarchy.m_braids.Sort();
+                return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids], depth, hierarchy.m_medianSplits);
+            } finally {
+                hierarchy.ReturnWorkspace();
+            }
         }
 
-        // A node's storage, its chunk allocated by the first build task to reach it; the last chunk is as long as the
-        // bound needs, so a small hierarchy allocates no more than it could use.
+        // A node's storage, its chunk rented by the first build task to reach it.
         private ref Node At(int node) {
             var index = (node >> ChunkShift);
             var chunk = Volatile.Read(location: ref m_chunks[index]);
@@ -791,7 +817,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 lock (m_chunks) {
                     chunk = m_chunks[index];
                     if (chunk is null) {
-                        chunk = new Node[Math.Min(val1: (1 << ChunkShift), val2: (m_capacity - (index << ChunkShift)))];
+                        chunk = ArrayPool<Node>.Shared.Rent(minimumLength: Math.Min(val1: (1 << ChunkShift), val2: (m_capacity - (index << ChunkShift))));
                         Volatile.Write(location: ref m_chunks[index], value: chunk);
                     }
                 }
@@ -799,6 +825,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             return ref chunk[node & ChunkMask];
         }
+        // Every node below the count was written by the build before it ends, so a rented chunk's earlier contents are
+        // never read.
         private Node[] CopyNodes() {
             var nodes = new Node[m_nodeCount];
 
@@ -807,6 +835,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             }
 
             return nodes;
+        }
+        private void ReturnWorkspace() {
+            ArrayPool<Vector3>.Shared.Return(array: m_centroids);
+            for (var index = 0; (index < m_chunks.Length); index++) {
+                if (m_chunks[index] is { } chunk) { ArrayPool<Node>.Shared.Return(array: chunk); }
+                m_chunks[index] = null;
+            }
         }
         // Builds a node over a range of the order; wide says its parent, if any, is wider than the braid width.
         private int BuildNode(int node, int first, int count, bool wide, int depth) {
@@ -848,11 +883,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             var median = levelsLeft == balanced;
             int mid;
             if (median) {
-                var axis = LongestAxis(centroidHigh - centroidLow);
-                Array.Sort(m_order, first, count, Comparer<int>.Create((a, b) => {
-                    var order = Component(m_centroids[a], axis).CompareTo(Component(m_centroids[b], axis));
-                    return order != 0 ? order : a.CompareTo(b);
-                }));
+                m_order.AsSpan(start: first, length: count).Sort(comparer: new CentroidOrder(Axis: LongestAxis(centroidHigh - centroidLow), Centroids: m_centroids));
                 mid = first + count / 2;
                 Interlocked.Increment(ref m_medianSplits);
             } else {
@@ -952,6 +983,16 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             }
 
             return (((left > first) && (left < (first + count))) ? left : mid);
+        }
+        // Primitives by centroid along an axis, ties by index: a total order, so any sort leaves one arrangement. A value
+        // type passed to the generic span sort, since a lambda here would put its closure on every BuildNode call: the
+        // compiler merges a branch's closure scope into the method's.
+        private readonly record struct CentroidOrder(Vector3[] Centroids, int Axis) : IComparer<int> {
+            public int Compare(int x, int y) {
+                var order = Component(axis: Axis, value: Centroids[x]).CompareTo(value: Component(axis: Axis, value: Centroids[y]));
+
+                return ((order != 0) ? order : x.CompareTo(value: y));
+            }
         }
         private static int BinOf(float value, float low, float extent) =>
             Math.Clamp(max: (Bins - 1), min: 0, value: ((int)(((value - low) / extent) * Bins)));
