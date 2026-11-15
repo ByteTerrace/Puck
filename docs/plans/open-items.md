@@ -128,8 +128,12 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar (item 1 below): Vulkan's p99 near 18.4 ms at every stop,
-   which no frame's work accounts for, and the meadow's few worst frames.
+D. The frame bar (item 1 below): the meadow's p99 varies from sample to
+   sample on Direct3D 12 (median at its pre-wave figure, two of five samples
+   above 21 ms), and Vulkan's interval on a loaded machine. Read on a quiet
+   machine (`puck lease quiet`), Vulkan's studio p99 is at the bar, and the
+   cold bake is under it on Direct3D 12; the readings are in the commit that
+   recorded them.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
@@ -212,13 +216,13 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      (`most-job`); a queued measurement holds the timing question. A probe scene
      upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
      share against its `SdfGpuWork.UploadSecondsOf` estimate.
-   - Vulkan's frame interval. Its median reads 16.55 to 16.60 ms and its p99
-     18.3 to 18.5 ms at every stop, in windows whose busiest frame worked
-     under 16.7 ms, and `host.frames` names frames that worked 6 ms and then
-     waited 16 to 27 ms in the pacer; Direct3D 12 on the same machine reads a
-     16.66 ms median and a 16.7 ms p99. An earlier run on this machine read
-     17.2 ms at the Vulkan studio, so the cause is in presentation pacing or
-     the display's state, and is not yet found (`PresentPacingPolicy`).
+   - Vulkan's frame interval under load. On a busy machine its p99 read 18.3
+     to 18.5 ms at every stop, in windows whose busiest frame worked under
+     16.7 ms, and `host.frames` named frames that worked 6 ms and then waited
+     16 to 27 ms in the pacer (`PresentPacingPolicy`). In a quiet window the
+     studio's p99 is at the bar, so the interval tracks the machine's load,
+     not wave 1's code. Whether a loaded machine should cost Vulkan's pacer
+     more than Direct3D 12's is not yet found.
    - A hand-over's own frame. At the resamples after boot, the frame that
      takes a replaced mesh's draws works 14 to 16 ms on the frame's thread
      where a settled frame works 5 to 9 (`host.frames`, about 1 MB allocated
@@ -3517,6 +3521,16 @@ presentation orders and bounds residency from every demand point; a door never
 waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
 and `world.residency [radius]` reads its measures.
+
+Open on the windows that render for a bake (`WorldViewGraphHost.ReserveBakes`):
+
+- The search walks through session windows only, so a world behind a camera
+  view that its rate holds back has no window rendering for its bake.
+- The nearest window onto a baking world renders at the least share even when
+  a seen window onto the same world renders anyway: one extra view.
+- `world.instance.stop` on a routed world leaves per-view residencies of that
+  world (`session$N$2`) in `world.residency` beside the stale routed line, some
+  landed and never resident. Whether that is intended is not confirmed.
 
 #### Memory on the Deck tier
 
