@@ -2388,6 +2388,12 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · whole walks on ordinary frames] Walks over every row or copy each
+  frame that the arrival memo's row table does not absorb: the bake's copy
+  layout (`SdfMeshPathBake` copy layout walk), two walks in `SdfMeshDresser`
+  outside its topology build, and the residency's glass count
+  (`SdfWorldResidency`). Make each proportional to change or derive it once.
+  Seen by the arrival design lane from the code; not measured.
 - [low · probe scene arena] `SdfMeshIrradianceScene.GpuArena`'s word count is
   a high-water mark that never shrinks after frees; confirm it sizes a buffer
   that must not shrink, or release the tail. Seen by the GPU arenas lane from
