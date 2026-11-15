@@ -2360,6 +2360,11 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · probe scene arena] `SdfMeshIrradianceScene.GpuArena`'s word count is
+  a high-water mark that never shrinks after frees; confirm it sizes a buffer
+  that must not shrink, or release the tail. Seen by the GPU arenas lane from
+  the code; not measured.
+
 - [low · readback copy] `SdfGpuWork.CopyToReadback` (`src/Puck.SdfVm/SdfGpuWork.cs`)
   and `GpuKernelCounters`' handle-based copy repeat `GpuReadbackCopy`; fold
   them in with the next change that moves the bake identity anyway, since the
