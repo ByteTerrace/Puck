@@ -225,11 +225,8 @@ public sealed class GpuRangeAllocator {
             (m_liveStarts[live] != start)
         ) {
             // The free run that begins at or before start, if any.
-            var free = (UpperBound(
-                count: m_freeCount,
-                starts: m_freeStarts,
-                value: start
-            ) - 1);
+            var found = m_freeStarts.AsSpan(length: m_freeCount, start: 0).BinarySearch(comparable: start);
+            var free = ((found >= 0) ? found : (~found - 1));
 
             throw new InvalidOperationException(message: ((
                 (free >= 0) &&
@@ -333,39 +330,11 @@ public sealed class GpuRangeAllocator {
         lengths[index] = length;
         count++;
     }
-    // The first index whose start is at or past value.
+    // The first index whose start is at or past value; the starts are sorted and distinct.
     private static int LowerBound(ulong[] starts, int count, ulong value) {
-        var low = 0;
-        var high = count;
+        var found = starts.AsSpan(length: count, start: 0).BinarySearch(comparable: value);
 
-        while (low < high) {
-            var middle = ((low + high) >>> 1);
-
-            if (starts[middle] < value) {
-                low = (middle + 1);
-            } else {
-                high = middle;
-            }
-        }
-
-        return low;
-    }
-    // The first index whose start is past value.
-    private static int UpperBound(ulong[] starts, int count, ulong value) {
-        var low = 0;
-        var high = count;
-
-        while (low < high) {
-            var middle = ((low + high) >>> 1);
-
-            if (starts[middle] <= value) {
-                low = (middle + 1);
-            } else {
-                high = middle;
-            }
-        }
-
-        return low;
+        return ((found >= 0) ? found : ~found);
     }
     private static void RemoveAt(ulong[] starts, ulong[] lengths, ref int count, int index) {
         count--;
