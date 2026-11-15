@@ -427,46 +427,35 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
     }
 
     /// <inheritdoc/>
-    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
-        ArgumentNullException.ThrowIfNull(ring);
-
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) => m_bench.TryAttach(
+        fault: out fault,
+        refusal: Refuse(request: in request),
+        request: in request,
+        ring: ring,
+        run: out run
+    );
+    private static string? Refuse(in ProbeKernelRequest request) {
         foreach (var input in request.Inputs) {
             switch (input) {
                 case ProbeKernelInput.Sensor sensorInput:
                     if (sensorInput.Kind is not (CameraSensor.Color or CameraSensor.Infrared)) {
-                        run = null;
-                        fault = $"this graph carries no {sensorInput.Kind} stream";
-
-                        return false;
+                        return $"this graph carries no {sensorInput.Kind} stream";
                     }
 
                     break;
                 case ProbeKernelInput.StrobePair strobeInput:
                     if (CameraSensor.Infrared != strobeInput.Kind) {
-                        run = null;
-                        fault = "only the infrared stream strobes; a strobe-pair socket must name it";
-
-                        return false;
+                        return "only the infrared stream strobes; a strobe-pair socket must name it";
                     }
 
                     break;
             }
         }
 
-        if (request.TriggerSensor is null) {
-            run = null;
-            fault = $"the trigger socket {request.Trigger} reads no sensor or strobe pair";
-
-            return false;
-        }
-
-        run = m_bench.Attach(
-            request: in request,
-            ring: ring
+        return ((request.TriggerSensor is null)
+            ? $"the trigger socket {request.Trigger} reads no sensor or strobe pair"
+            : null
         );
-        fault = "";
-
-        return true;
     }
 
     nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (sensor switch {

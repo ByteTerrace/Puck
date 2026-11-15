@@ -54,29 +54,25 @@ public sealed class Win32RenderedProbeKernelHost : IRenderedProbeKernelHost {
             instance: this
         );
 
+        return m_bench.TryAttach(
+            fault: out fault,
+            refusal: Refuse(request: in request),
+            request: in request,
+            ring: ring,
+            run: out run
+        );
+    }
+    private static string? Refuse(in ProbeKernelRequest request) {
         foreach (var input in request.Inputs) {
             if (input is ProbeKernelInput.Sensor or ProbeKernelInput.StrobePair) {
-                run = null;
-                fault = "a kernel on the render adapter binds no camera socket";
-
-                return false;
+                return "a kernel on the render adapter binds no camera socket";
             }
         }
 
-        if (request.TriggerRing is null) {
-            run = null;
-            fault = $"the trigger socket {request.Trigger} reads no rendered source";
-
-            return false;
-        }
-
-        run = m_bench.Attach(
-            request: in request,
-            ring: ring
+        return ((request.TriggerRing is null)
+            ? $"the trigger socket {request.Trigger} reads no rendered source"
+            : null
         );
-        fault = "";
-
-        return true;
     }
     /// <inheritdoc/>
     public void Dispose() {

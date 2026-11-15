@@ -23,7 +23,7 @@ internal sealed partial class WorldProbes {
             Deadband: FixedQ4816.FromDouble(value: axis.Deadband),
             Hysteresis: FixedQ4816.FromDouble(value: axis.Hysteresis),
             Maximum: FixedQ4816.FromDouble(value: spec.Max),
-            MaxAgeTicks: ((long)(axis.MaxAgeSeconds * Stopwatch.Frequency)),
+            MaxAgeTicks: MaxAgeTicks(seconds: axis.MaxAgeSeconds),
             Minimum: FixedQ4816.FromDouble(value: spec.Min),
             Neutral: FixedQ4816.FromDouble(value: spec.Neutral),
             QuantizeBits: axis.QuantizeBits,

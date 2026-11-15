@@ -1611,6 +1611,20 @@ public interface IFixedCreationStampVisitor {
 /// fixed-point walk, which the render path reads through <see cref="ForEachInstance"/> as single-precision
 /// conversions of the same instances.</summary>
 public static class CreationStampLattice {
+    /// <summary>Returns a pattern's copy count along each step: the declared count, at least one, and one for no
+    /// pattern. The one definition of a grid's extent, which the instance walk, the counts and the placement deal
+    /// all read.</summary>
+    /// <param name="pattern">The pattern declaration, or <see langword="null"/> for one copy.</param>
+    public static (int CountA, int CountB) GridCounts(CreationStampPattern? pattern) => (
+        Math.Max(
+            val1: (pattern?.CountA ?? 1),
+            val2: 1
+        ),
+        Math.Max(
+            val1: (pattern?.CountB ?? 1),
+            val2: 1
+        )
+    );
     /// <summary>Visits pattern copies in A-major, then B-major order, followed immediately by each reflected copy.
     /// When <paramref name="sampledOffsets"/> is supplied (a resolved <see cref="CreationStampSampling"/>
     /// Noise/Scatter offset set), those offsets replace the regular pattern grid entirely — <paramref name="pattern"/>
@@ -1672,14 +1686,7 @@ public static class CreationStampLattice {
                 );
             }
         } else {
-            var countA = Math.Max(
-                val1: (pattern?.CountA ?? 1),
-                val2: 1
-            );
-            var countB = Math.Max(
-                val1: (pattern?.CountB ?? 1),
-                val2: 1
-            );
+            var (countA, countB) = GridCounts(pattern: pattern);
             var stepA = FixedVector3.FromVector3(value: (pattern?.StepA ?? Vector3.Zero));
             var stepB = FixedVector3.FromVector3(value: (pattern?.StepB ?? Vector3.Zero));
 
@@ -1792,13 +1799,8 @@ public static class CreationStampLattice {
     /// <paramref name="pattern"/>'s grid instead.</param>
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     public static int InstanceCount(CreationStampPattern? pattern, int? sampledCount, CreationStampPlane? mirror) {
-        var copies = (sampledCount ?? checked((Math.Max(
-            val1: (pattern?.CountA ?? 1),
-            val2: 1
-        ) * Math.Max(
-            val1: (pattern?.CountB ?? 1),
-            val2: 1
-        ))));
+        var (countA, countB) = GridCounts(pattern: pattern);
+        var copies = (sampledCount ?? checked((countA * countB)));
 
         return ((mirror is null)
             ? copies
@@ -1812,6 +1814,7 @@ public static class CreationStampLattice {
     /// <param name="mirror">The authored local reflection plane, or <see langword="null"/>.</param>
     /// <param name="ceiling">The largest returned value.</param>
     public static long MaterializedCopyCount(CreationStampPattern? pattern, long? sampledCount, CreationStampPlane? mirror, long ceiling = long.MaxValue) {
+        var (countA, countB) = GridCounts(pattern: pattern);
         var copies = ((sampledCount is { } sampled)
             ? Math.Min(
                 val1: sampled,
@@ -1819,14 +1822,8 @@ public static class CreationStampLattice {
             )
             : MultiplySaturated(
                 ceiling: ceiling,
-                left: Math.Max(
-                    val1: (pattern?.CountA ?? 1),
-                    val2: 1
-                ),
-                right: Math.Max(
-                    val1: (pattern?.CountB ?? 1),
-                    val2: 1
-                )
+                left: countA,
+                right: countB
             )
         );
 
