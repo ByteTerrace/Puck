@@ -225,27 +225,25 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      not wave 1's code. Whether a loaded machine should cost Vulkan's pacer
      more than Direct3D 12's is not yet found.
    - A hand-over's own frame. A replacement that changes a group's piece or
-     copy count rebuilds the dresser's whole draw list
-     (`SdfMeshDresser.BuildDrawTopology`) and stages every row
-     (`SdfWorldTables.StageMeshRegionCore`): at the meadow that is the whole
-     list of blade draws, on the frame thread, in the one frame, and it is
-     the frame `host.frames` shows working several times a settled frame with
-     megabytes allocated on the frame thread; the meadow's arrivals showed one
-     or two such frames a window. The cause fix is the residency
-     packet's rows that keep their place
-     ([residency](#residency-and-streaming)), so a hand-over costs its own
-     rows.
+     copy count, and a group's first mesh, rebuild the dresser's whole draw
+     list (`SdfMeshDresser.BuildDrawTopology`) and stage every row
+     (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame;
+     it is the frame `host.frames` shows working several times a settled
+     frame, and the meadow's arrivals showed one or two such frames a window.
+     [Arrival work proportional to change](arrival-proportional.md#decision-1-rows-that-keep-their-place)
+     holds the design (rows that keep their place, a waiting draw as an
+     absent record, portal clips as rows) and its steps R0 to R2 with the
+     counts each lands on.
    - The arrival's background work and the garbage collector. Every
      collection of the young generations stops the frame thread, so what the
      workers allocate on arrival lands on frames as pauses. The lighting's
      trace-scene build (`SdfMeshIrradianceScene.Build`) now leaves only what the
      scene keeps (its hierarchy's workspace is pooled, and no node allocates).
-     What still allocates per arrival, largest first: the top-level scene and
-     its GPU export rebuilt whole on every scene change
-     (`SdfMeshIrradianceScene`'s constructor, `CreateGpuExport`), and a store
-     load's managed decode before the native copy (`SdfMeshStoreCodec.ReadMesh`,
-     `SdfMeshLibrary.RenumberManaged`; the memory item's lead too). Read them
-     with an EventPipe allocation trace across the arrival
+     What still allocates per arrival, largest first, is designed out in
+     [the same memo](arrival-proportional.md#steps): the top-level scene and
+     its GPU export rebuilt whole on every scene change (its steps S1 and
+     S2), and a store load's managed decode before the native copy (its step
+     D1). Read them with an EventPipe allocation trace across the arrival
      (`Microsoft-Windows-DotNETRuntime:0x1:5`), and `host.frames`' per-frame
      collections.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
@@ -3545,28 +3543,29 @@ Grounded causes and leads, largest first:
   door; the static ones follow once placement and classification move to the
   GPU trace. A restore decodes the whole store entry (`SdfMeshStoreCodec.TryDecode`)
   when it needs only the normals and level-index planes; a codec read of
-  those planes alone would cut a rebuilt region's restore work. Owner:
-  rendering/bake.
+  those planes alone would cut a rebuilt region's restore work, and
+  [the arrival memo](arrival-proportional.md#decision-4-the-store-decode)'s
+  step D1 is that read. Owner: rendering/bake.
 - [medium] A replacement that changes a group's piece or copy count still
-  rebuilds the dresser's whole draw list and stages every record once. A
-  mesh that replaces a drawn one lands ahead of the draws and takes them
-  only once its words stand, and a hand-over whose counts stand stages its
-  own rows
-  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)). A
-  chunked mesh whose chunks differ between tiers, or a shared geometry
-  whose copies change, shifts every later row, so
-  `SdfMeshDresser.BuildDrawTopology` runs, its journal names every row, and
-  `SdfWorldTables.StageMeshRegionCore` plans the arena and stages the list
-  whole. Rows that keep their place across such a change (a free row a
-  group's surplus pieces give up and its next pieces take, with a rebuild
-  only when free rows pass a share of the list) would make that hand-over
-  its own rows' work as well. No capture has yet shown a hand-over frame by
+  rebuilds the dresser's whole draw list and stages every record once, as
+  does a group's first mesh; a draw waiting for its mesh is filtered out of
+  the staged list, so each landing meanwhile packs the list again; and a
+  body straddling a portal journals every row each frame. A mesh that
+  replaces a drawn one lands ahead of the draws and takes them only once its
+  words stand, and a hand-over whose counts stand stages its own rows
+  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)).
+  [Arrival work proportional to change](arrival-proportional.md) is the
+  design: a run of rows per owner from the arena's allocator, free and
+  waiting rows as absent records, the staged table the producer's row for
+  row, and a packing only when free rows pass a share of the table (its
+  steps R1a to R1c), with the store's restore reading only the planes it
+  restores (its step D1). No capture has yet shown a hand-over frame by
   frame: a burst capture across one, with the group in every frame, is the
-  check the landing-ahead invariant still owes. Arriving at the meadow does not
-  always hand over with a count change (three 90 to 120 frame bursts across
-  arrivals saw none), so read `SdfMeshHistory.DressTopologyBuilds`
-  (`world.counters sdf.instances`) before and after a burst and keep only a
-  burst it moved across. Owner:
+  check the landing-ahead invariant still owes, and step R1b takes it.
+  Arriving at the meadow does not always hand over with a count change
+  (three 90 to 120 frame bursts across arrivals saw none), so read
+  `SdfMeshHistory.DressTopologyBuilds` (`world.counters sdf.instances`)
+  before and after a burst and keep only a burst it moved across. Owner:
   rendering/bake.
 - [medium] A device that refuses the mesh region's growth still ends the
   World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`
