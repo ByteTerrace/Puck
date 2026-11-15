@@ -372,12 +372,12 @@ public sealed partial class WorldScreenBinder {
     }    /// <inheritdoc/>
     /// <remarks>Reads the residency the session already renders, the World's own, its endpoint scene's or its own, and
     /// creates none.</remarks>
-    public bool Bakes(string view) {
+    public object? BakingWorld(string view, string consumer) {
         if (!m_feedsByName.TryGetValue(
             key: view,
             value: out var feed
         )) {
-            return false;
+            return null;
         }
 
         var residency = (feed.Home
@@ -386,7 +386,11 @@ public sealed partial class WorldScreenBinder {
                 ? m_routedResidencies.GetValueOrDefault(key: window.Scene)
                 : m_viewResidencies.GetValueOrDefault(key: feed.RegistrationName)?.Residency));
 
-        return (residency?.MeshPathBake.Pending ?? false);
+        if ((residency is null) || !residency.MeshPathBake.Pending) { return null; }
+        // The consumer's own render dispatches the bake of the world it renders.
+        if ((ViewHost is { } host) && ReferenceEquals(objA: ResolveInstanceView(name: consumer, world: host)?.Residency, objB: residency)) { return null; }
+
+        return residency;
     }
 
     // What one level's screens present: the instance whose screen sessions they show, the world their glass stands in,

@@ -303,9 +303,12 @@ stays scheduled. A residency bakes its meshes in whichever of its views the
 graph records first, so a residency whose first view is a level out of view
 still bakes for the views that show. A window whose glass is out of sight keeps
 rendering at a sixteenth of its consumer's extent while its world still bakes
-(`WorldPortalVisibility.BakingShare`), since nothing else would record one of
-that world's views, so the garden behind the debug world's spawn camera bakes
-as fast as it does in view. Worlds whose windows show each other light
+(`WorldPortalVisibility.BakingShare`) where nothing else would record one of
+that world's views: one such window a world a frame, and none onto the world
+its consumer renders itself (`IWorldViewScenes.BakingWorld`), so the garden
+behind the debug world's spawn camera bakes as fast as it does in view, and a
+world's own cameras and windows stay held while it bakes. Worlds whose windows
+show each other light
 each other through ordinary frame feedback
 ([screen emission](lighting-and-shading.md#screen-emission)); no residency
 holds a frame for it.

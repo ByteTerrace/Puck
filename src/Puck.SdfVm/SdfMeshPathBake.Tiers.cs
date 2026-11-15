@@ -23,6 +23,8 @@ public sealed partial class SdfMeshPathBake {
     // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
     // measured, which a frame's share is taken of.
     private int m_measureAt;
+    // The frames since Retier last decided the tiers, which it does once a measure (SdfMeshTier.MeasureFrames).
+    private int m_decideFrames;
     private long m_measureSweep;
     private long m_measureBoxes;
     // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
@@ -117,8 +119,8 @@ public sealed partial class SdfMeshPathBake {
     // Measures a frame's share of the groups' demand (Group.DemandPixel), from the group the last frame's share
     // ended at: the boxes one whole sweep reads, spread over SdfMeshTier.MeasureFrames frames, so the measure costs a
     // frame that share of the resident world whatever its size, and every group is measured again within that many
-    // frames. Retier reads the tiers from the measured pixels each frame, so a change of the bias shows at once, and
-    // measures a group it has no pixel of where it meets it. Under the gate, on the frame's thread.
+    // frames. Retier reads the tiers from the measured pixels once a measure, so a change of the bias shows within
+    // one, and measures a group it has no pixel of where it meets it. Under the gate, on the frame's thread.
     private void MeasureDemands() {
         var count = m_groups.Count;
 
@@ -206,8 +208,11 @@ public sealed partial class SdfMeshPathBake {
             if (group.Stored) { settles.Count(kind: SdfMeshSettle.Reused); }
         }
     }
-    // Reads every group's demanded tier, from the pixel its demand was last measured at (MeasureDemands, a share of
-    // the groups each frame), against the one it draws, counts the debt, and plans again at the demanded tier each
+    // Measures a frame's share of the demand (MeasureDemands), and once a measure (SdfMeshTier.MeasureFrames frames,
+    // since no group's pixel moves faster) decides the tiers: every count of frames below then advances by the
+    // frames since the last decision, so a frame between decisions pays the measure's share alone. A decision
+    // reads every group's demanded tier, from the pixel its demand was last measured at,
+    // against the one it draws, counts the debt, and plans again at the demanded tier each
     // landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
     // SdfMeshTier.MaxInFlight at once: the replacement bakes (or lands from the library) while the coarser mesh draws.
     // Detail is budgeted by demand inside the mesh region's budget (RegionBudgetBytes). A finer tier starts only while
@@ -225,6 +230,13 @@ public sealed partial class SdfMeshPathBake {
     // demanded changes nothing: the finer mesh stays, so a viewer who comes back finds it. Under the gate, on the
     // frame's thread.
     private void Retier(SdfFrame frame) {
+        MeasureDemands();
+        if (++m_decideFrames < SdfMeshTier.MeasureFrames) { return; }
+
+        var elapsed = m_decideFrames;
+
+        m_decideFrames = 0;
+
         var budget = RegionBudgetBytes;
         var replacement = (budget / SdfMeshTier.ReplacementShare);
         var target = (budget - (2L * replacement));
@@ -267,7 +279,6 @@ public sealed partial class SdfMeshPathBake {
 
         candidates.Clear();
         spare.Clear();
-        MeasureDemands();
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
@@ -299,7 +310,7 @@ public sealed partial class SdfMeshPathBake {
                     continue;
                 }
                 spares++;
-                group.SpareFrames++;
+                group.SpareFrames += elapsed;
                 if (!group.Done || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { continue; }
                 if (group.SpareFrames < SdfMeshTier.HoldFrames) {
                     sparesWaiting++;
@@ -312,7 +323,7 @@ public sealed partial class SdfMeshPathBake {
                 continue;
             }
             group.SpareFrames = 0;
-            group.OwedFrames++;
+            group.OwedFrames += elapsed;
             owed++;
             error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
             frames = Math.Max(val1: frames, val2: group.OwedFrames);
@@ -367,7 +378,7 @@ public sealed partial class SdfMeshPathBake {
             pressing = ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0) || (bias < SdfMeshTier.MaxBias));
             if ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) {
                 m_biasPressed = 0;
-            } else if ((++m_biasPressed >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
+            } else if (((m_biasPressed += elapsed) >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
                 Volatile.Write(location: ref m_bias, value: (bias + 1));
                 m_biasRaised++;
                 m_biasPressed = 0;
@@ -378,7 +389,7 @@ public sealed partial class SdfMeshPathBake {
         } else {
             m_biasPressed = 0;
             if ((bias > 0) && (owed == 0) && (inFlight == 0) && (landing == 0) && (finer <= target)) {
-                if (++m_biasQuiet >= m_biasWait) {
+                if ((m_biasQuiet += elapsed) >= m_biasWait) {
                     Volatile.Write(location: ref m_bias, value: (bias - 1));
                     m_biasLowered++;
                     m_biasQuiet = 0;
@@ -388,11 +399,11 @@ public sealed partial class SdfMeshPathBake {
                 m_biasQuiet = 0;
             }
         }
-        if (m_biasSinceLowered < int.MaxValue) { m_biasSinceLowered++; }
+        if (m_biasSinceLowered < int.MaxValue) { m_biasSinceLowered = ((int)Math.Min(val1: (((long)m_biasSinceLowered) + elapsed), val2: (int.MaxValue - 1L))); }
         if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,
-            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + 1), val2: SdfMeshTier.SettleFrames))
+            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
         );
     }
     // Plans a group again at another tier, as Plan would plan it at this frame, and starts it in the group's place: the

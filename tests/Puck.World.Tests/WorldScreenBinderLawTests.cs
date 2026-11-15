@@ -461,8 +461,8 @@ public sealed class WorldScreenBinderLawTests {
         Assert.True(condition: binder.TryResolveView(name: session, view: out var again));
         Assert.Same(actual: again.Residency, expected: own.Residency);
         Assert.NotSame(actual: own.Residency, expected: world);
-        Assert.False(condition: binder.Bakes(view: session));
-        Assert.False(condition: binder.Bakes(view: "nothing"));
+        Assert.Null(@object: binder.BakingWorld(consumer: registration, view: session));
+        Assert.Null(@object: binder.BakingWorld(consumer: registration, view: "nothing"));
         Assert.False(condition: binder.TryResolveView(name: "nothing", view: out _));
         Assert.Same(actual: binder.ResolveInstanceView(name: "nothing", world: world)!.Value.Residency, expected: world);
         Assert.True(condition: binder.TryPlacements(placements: out _, view: session));

@@ -243,7 +243,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // A scene whose boot session stands on a glass in the boot world, far from the camera when held, and whose routed
     // session stands on a glass in front of the boot session's camera.
     private sealed record HeldChainScenes(bool Held) : IWorldViewScenes {
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera(x: 0f);
 
@@ -273,7 +273,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // A scene whose filming camera stands at a given pose and whose session "session" stands on a given glass of the
     // boot world.
     private sealed record FilmedGlassScenes(CameraSnapshot Camera, WorldScreen Glass) : IWorldViewScenes {
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
         public bool TryVisibilityCamera(string view, out CameraSnapshot camera) => TryCamera(view, out camera);
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera;

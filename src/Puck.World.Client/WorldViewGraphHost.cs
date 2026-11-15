@@ -1587,11 +1587,27 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
+    // The window out of sight that renders for each baking world this frame (RendersForBake).
+    private readonly Dictionary<object, string> m_bakingWorlds = new(comparer: ReferenceEqualityComparer.Instance);
+
+    // Whether a window out of its consumer's sight, or too small in it, renders at the least share for its world's
+    // bake: a world bakes only in frames that render one of its views, so one such window a world is enough, and
+    // none where the consumer renders that world itself. The frame's first such window of a world is the one, and
+    // every later decision about that window in the frame answers the same.
+    private bool RendersForBake(string view, string consumer) {
+        if (ViewScenes!.BakingWorld(consumer: consumer, view: view) is not { } world) { return false; }
+        if (m_bakingWorlds.TryGetValue(key: world, value: out var chosen)) { return string.Equals(a: chosen, b: view, comparisonType: StringComparison.Ordinal); }
+        m_bakingWorlds.Add(key: world, value: view);
+
+        return true;
+    }
+
     // Finish only after this frame's cameras and placements have been composed. First form the visible graph without
     // rate holds, then measure its display shares before deciding which glass is small. Measuring last frame's pruned
     // graph would delay wake-up when a consumer grows or a portal becomes visible again.
     private void CompleteFootprints() {
         var frame = new FootprintFrame(this);
+        m_bakingWorlds.Clear();
         RootFilmedViews(frame: in frame);
         var firstScreen = m_footprints.Count;
 
@@ -1626,9 +1642,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
                     break;
                 // A window out of its consumer's sight, or too small in it, whose world still bakes renders at the least
-                // share, since a world bakes only in frames that render one of its views: its world then bakes before the
+                // share where no other view dispatches that bake (RendersForBake): its world then bakes before the
                 // glass comes into view.
-                case PortalSight.Unseen or PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
+                case PortalSight.Unseen or PortalSight.Small when RendersForBake(consumer: footprint.Consumer, view: footprint.Producer):
                     m_footprints.Add(item: (footprint with {
                         Height = WorldPortalVisibility.BakingShare,
                         Width = WorldPortalVisibility.BakingShare,
@@ -1728,7 +1744,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
 
         switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
-            case PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
+            case PortalSight.Small when RendersForBake(consumer: footprint.Consumer, view: footprint.Producer):
                 footprint = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
 
                 return true;
@@ -1768,7 +1784,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                         (width, height) = coverage;
 
                         break;
-                    case PortalSight.Unseen or PortalSight.Small when ViewScenes!.Bakes(view: filmed.Name):
+                    case PortalSight.Unseen or PortalSight.Small when RendersForBake(consumer: camera.Name, view: filmed.Name):
                         (width, height) = (WorldPortalVisibility.BakingShare, WorldPortalVisibility.BakingShare);
 
                         break;

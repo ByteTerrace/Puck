@@ -438,8 +438,9 @@ laws exercise that boundary.
   below). The demand is measured a share of the groups each frame
   (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
   `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
-  with the resident world; `Retier` reads the tiers from the measured
-  pixels every frame. A bake whose groups have all landed can still owe
+  with the resident world; `Retier` decides the tiers from the measured
+  pixels once a measure, since no pixel moves faster, and a frame between
+  decisions pays the measure's share alone. A bake whose groups have all landed can still owe
   the tiers its demand moved to, which `SdfMeshPathBake.Pending` does not
   say: `SdfMeshPathBake.DetailSettled` does, once `Retier` has replaced
   nothing, had nothing landing or waiting its hold, and pressed on nothing

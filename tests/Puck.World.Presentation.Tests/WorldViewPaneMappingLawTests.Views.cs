@@ -327,7 +327,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
         public bool TrySourceExtent(string instance, out int width, out int height) {
             (width, height) = (Width, Height);
 
@@ -359,6 +359,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
     }
 }

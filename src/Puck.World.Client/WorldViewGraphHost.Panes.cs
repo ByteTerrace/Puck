@@ -50,11 +50,14 @@ public interface IWorldViewScenes {
     /// <param name="glass">The screen row the session shows on, when this returns <see cref="WorldPortalGlass.Found"/>.</param>
     /// <returns>Whether the producer is a session the consumer's world shows, and where.</returns>
     WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass);
-    /// <summary>Returns whether the world a session view renders still bakes its meshes, which a view of that world
-    /// dispatches only in a frame that renders the view.</summary>
+    /// <summary>Returns the world a session view renders when that world still bakes its meshes and the view's
+    /// consumer renders another: a world's bake is dispatched only in a frame that renders one of its views, and a
+    /// consumer that renders the same world dispatches it already.</summary>
     /// <param name="view">The session view's instance name.</param>
-    /// <returns><see langword="true"/> when the view's world has a residency whose bake is pending.</returns>
-    bool Bakes(string view);
+    /// <param name="consumer">The instance whose image shows the view.</param>
+    /// <returns>The world's residency, as an identity to compare by reference; <see langword="null"/> when the
+    /// view's world has no pending bake or is the world its consumer renders.</returns>
+    object? BakingWorld(string view, string consumer);
     /// <summary>Finds the extent of what a source instance's image shows, when that differs from the extent the instance
     /// renders at: a window capture scales the captured window into its profile extent, and shows the window's own
     /// pixels at the window's own aspect ratio. A pane's published mapping is in these pixels.</summary>

@@ -187,6 +187,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
     }
 }

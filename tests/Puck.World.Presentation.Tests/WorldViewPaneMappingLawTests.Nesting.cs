@@ -41,7 +41,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     }
 
     private sealed class NestedGlassScenes : IWorldViewScenes {
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera(x: 100f);
             return true;
@@ -191,12 +191,12 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public bool Bakes(string view) => false;
+        public object? BakingWorld(string view, string consumer) => null;
     }
     // A scene whose boot session stands on a given glass in the boot world, and whose routed session stands in a world
     // no view shows; every session's world bakes, or none does.
     private sealed record GlassScenes(WorldScreen Glass, bool Bakes) : IWorldViewScenes {
-        bool IWorldViewScenes.Bakes(string view) => Bakes;
+        object? IWorldViewScenes.BakingWorld(string view, string consumer) => (Bakes ? view : null);
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = default;
 
