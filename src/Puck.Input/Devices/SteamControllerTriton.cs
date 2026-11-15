@@ -112,9 +112,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     private readonly byte[] m_outputBuffer;
     private readonly ImuOrientationTracker m_tracker = new();
 
-    private bool m_hasSensorTimestamp;
     private bool m_hasState;
-    private uint m_lastSensorTimestamp;
     private GamepadState m_lastState = GamepadState.Neutral;
     private GamepadPower m_power;
 
@@ -151,24 +149,20 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     public bool IsIgnoredReport(ReadOnlySpan<byte> report) => (!report.IsEmpty && (report[0] == 0x7b));
 
     void IGamepadStreamReset.ResetStreamState() {
-        m_hasSensorTimestamp = false;
         m_hasState = false;
-        m_lastSensorTimestamp = 0u;
         m_lastState = GamepadState.Neutral;
         m_power = GamepadPower.Unknown;
         m_tracker.Reset();
     }
 
     // Builds a feature message under report id 1: [1][command][payload length][payload].
-    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) {
-        var buffer = m_featureBuffer;
-
-        buffer.AsSpan().Clear();
-        buffer[0] = FeatureReportId;
-        buffer[1] = command;
-        buffer[2] = ((byte)payload.Length);
-        payload.CopyTo(destination: buffer.AsSpan(start: 3));
-    }
+    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) =>
+        SteamFeatureMessage.Write(
+            buffer: m_featureBuffer,
+            command: command,
+            payload: payload,
+            reportId: FeatureReportId
+        );
     // The pulse report numbers the pads as the classic pulse command does, left 1 and right 0 (Linux
     // steam_haptic_pulse); the other haptic reports take Valve's MsgTriggerHaptic side codes, left 1, right 2 and
     // both 3.
@@ -246,19 +240,6 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
         );
 
         return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
-    }
-    // Converts the IMU clock into a seconds delta since the previous report; the unsigned subtraction carries the
-    // delta across a wrap of the clock's width, and the tracker clamps a first or implausible sample.
-    private float SensorDeltaSeconds(uint sensorTimestamp, uint mask, float secondsPerUnit) {
-        var delta = (m_hasSensorTimestamp
-            ? unchecked((sensorTimestamp - m_lastSensorTimestamp)) & mask
-            : 0u
-        );
-
-        m_hasSensorTimestamp = true;
-        m_lastSensorTimestamp = sensorTimestamp;
-
-        return (delta * secondsPerUnit);
     }
     // Maps the IMU into the fusion frame (X right, Y up, Z toward the player) as (x, z, -y), for the gyro and the
     // accelerometer alike (SDL, Linux); the pad rests with +Z up.
@@ -493,15 +474,15 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
             : BinaryPrimitives.ReadUInt32LittleEndian(source: report[ImuTimestampOffset..])
         );
         var deltaSeconds = (shortTimestamp
-            ? SensorDeltaSeconds(
+            ? m_tracker.ElapsedSeconds(
                 mask: 0xFFFFu,
                 secondsPerUnit: ShortTimestampSecondsPerUnit,
-                sensorTimestamp: timestamp
+                timestamp: timestamp
             )
-            : SensorDeltaSeconds(
+            : m_tracker.ElapsedSeconds(
                 mask: uint.MaxValue,
                 secondsPerUnit: TimestampSecondsPerUnit,
-                sensorTimestamp: timestamp
+                timestamp: timestamp
             )
         );
 

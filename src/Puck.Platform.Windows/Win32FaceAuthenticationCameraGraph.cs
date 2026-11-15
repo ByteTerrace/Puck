@@ -186,9 +186,10 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         if (CameraSensor.Infrared == sensor) {
             // The unlit half of a strobing stream never publishes; an unstamped frame publishes.
             if (video.InfraredMediaFrame is not { IsIlluminated: false }) {
-                PublishInfraredBitmap(
+                PublishBitmap(
                     bitmap: bitmap,
-                    buffer: StreamFor(sensor: sensor).Frames
+                    buffer: StreamFor(sensor: sensor).Frames,
+                    scratch: ref m_infraredScratch
                 );
             }
         } else {
@@ -200,71 +201,11 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         }
     }
 
-    // L8 is already the one-byte luminance shape; expanding it directly avoids a converted SoftwareBitmap per frame.
-    private unsafe void PublishInfraredBitmap(SoftwareBitmap bitmap, LatestFrameBuffer buffer) {
-        if (BitmapPixelFormat.Gray8 != bitmap.BitmapPixelFormat) {
-            PublishBitmap(
-                bitmap: bitmap,
-                buffer: buffer,
-                scratch: ref m_infraredScratch
-            );
-
-            return;
-        }
-
-        var width = bitmap.PixelWidth;
-        var height = bitmap.PixelHeight;
-
-        using var locked = bitmap.LockBuffer(mode: BitmapBufferAccessMode.Read);
-        using var reference = locked.CreateReference();
-
-        var plane = locked.GetPlaneDescription(index: 0);
-
-        reference.As<IMemoryBufferByteAccess>().GetBuffer(
-            buffer: out var pixels,
-            capacity: out var capacity
-        );
-
-        if (
-            (plane.Stride < width) ||
-            (plane.StartIndex < 0) ||
-            (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + width) > capacity)
-        ) {
-            throw new InvalidOperationException(message: "the camera returned an invalid L8 bitmap plane");
-        }
-
-        if (m_infraredScratch.Length != ((width * height) * 4)) {
-            m_infraredScratch = new byte[((width * height) * 4)];
-        }
-
-        var destination = MemoryMarshal.Cast<byte, uint>(span: m_infraredScratch.AsSpan());
-
-        for (var row = 0; (row < height); row++) {
-            var source = new ReadOnlySpan<byte>(
-                length: width,
-                pointer: ((pixels + plane.StartIndex) + (((long)row) * plane.Stride))
-            );
-            var output = destination.Slice(
-                length: width,
-                start: (row * width)
-            );
-
-            for (var column = 0; (column < width); column++) {
-                var luminance = ((uint)source[column]);
-
-                output[column] = 0xFF000000u | (luminance * 0x00010101u);
-            }
-        }
-
-        buffer.Publish(
-            height: height,
-            pixels: m_infraredScratch,
-            width: width
-        );
-    }
-    // Tightly repacks the (possibly padded) BGRA rows into the reusable scratch and publishes.
+    // Repacks the (possibly padded or bottom-up) plane into the reusable top-down BGRA scratch and publishes. L8 is already
+    // the one-byte luminance shape, so it expands directly instead of through a converted SoftwareBitmap per frame.
     private static unsafe void PublishBitmap(SoftwareBitmap bitmap, LatestFrameBuffer buffer, ref byte[] scratch) {
-        using var converted = ((BitmapPixelFormat.Bgra8 == bitmap.BitmapPixelFormat)
+        var luminance = (BitmapPixelFormat.Gray8 == bitmap.BitmapPixelFormat);
+        using var converted = ((luminance || (BitmapPixelFormat.Bgra8 == bitmap.BitmapPixelFormat))
             ? null
             : SoftwareBitmap.Convert(
                 format: BitmapPixelFormat.Bgra8,
@@ -280,11 +221,6 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         using var reference = locked.CreateReference();
 
         var plane = locked.GetPlaneDescription(index: 0);
-        var tight = (width * 4);
-
-        if (scratch.Length != (tight * height)) {
-            scratch = new byte[(tight * height)];
-        }
 
         // CsWinRT wrappers answer classic COM interop interfaces through As<T>, never a runtime cast.
         reference.As<IMemoryBufferByteAccess>().GetBuffer(
@@ -293,20 +229,42 @@ internal sealed class Win32FaceAuthenticationPixelGraph : Win32FaceAuthenticatio
         );
 
         if (
-            (plane.Stride < tight) ||
             (plane.StartIndex < 0) ||
-            (((((long)plane.StartIndex) + (((long)(height - 1)) * plane.Stride)) + tight) > capacity)
+            (plane.StartIndex > capacity)
         ) {
-            throw new InvalidOperationException(message: "the camera returned an invalid BGRA bitmap plane");
+            throw new InvalidOperationException(message: "the camera returned an invalid bitmap plane");
         }
 
-        for (var row = 0; (row < height); row++) {
-            Marshal.Copy(
+        var packedLength = checked(((width * height) * 4));
+
+        if (scratch.Length != packedLength) {
+            scratch = new byte[packedLength];
+        }
+
+        var plane0 = new ReadOnlySpan<byte>(
+            length: ((int)(capacity - plane.StartIndex)),
+            pointer: (pixels + plane.StartIndex)
+        );
+        var complete = (luminance
+            ? CameraFramePacking.TryExpandLuminance(
                 destination: scratch,
-                length: tight,
-                source: ((nint)((pixels + plane.StartIndex) + (((long)row) * plane.Stride))),
-                startIndex: (row * tight)
-            );
+                height: height,
+                luminanceSum: out _,
+                source: plane0,
+                sourceStride: plane.Stride,
+                width: width
+            )
+            : CameraFramePacking.TryPackBgra(
+                destination: scratch,
+                height: height,
+                source: plane0,
+                sourceStride: plane.Stride,
+                width: width
+            )
+        );
+
+        if (!complete) {
+            throw new InvalidOperationException(message: "the camera returned an invalid bitmap plane");
         }
 
         buffer.Publish(

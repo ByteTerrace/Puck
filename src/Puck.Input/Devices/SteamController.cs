@@ -228,28 +228,30 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
             )
         );
     }
+    // The vendor collection is written as report id 0.
+    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) =>
+        SteamFeatureMessage.Write(
+            buffer: m_featureBuffer,
+            command: command,
+            payload: payload,
+            reportId: 0
+        );
     private bool SendFeature(byte command, ReadOnlySpan<byte> payload) {
-        var buffer = m_featureBuffer;
+        BuildFeature(
+            command: command,
+            payload: payload
+        );
 
-        buffer.AsSpan().Clear();
-        buffer[0] = 0;                       // the vendor collection is written as report id 0
-        buffer[1] = command;
-        buffer[2] = ((byte)payload.Length);
-        payload.CopyTo(destination: buffer.AsSpan(start: 3));
-
-        return m_device.TrySetFeatureReport(buffer: buffer);
+        return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
     }
     private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
-        var buffer = m_featureBuffer;
-
-        buffer.AsSpan().Clear();
-        buffer[0] = 0;
-        buffer[1] = command;
-        buffer[2] = ((byte)payload.Length);
-        payload.CopyTo(destination: buffer.AsSpan(start: 3));
+        BuildFeature(
+            command: command,
+            payload: payload
+        );
 
         return await HidFeatureWriteRetry.TryWriteAsync(
-            buffer: buffer,
+            buffer: m_featureBuffer,
             cancellationToken: cancellationToken,
             device: m_device
         );

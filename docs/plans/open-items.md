@@ -2869,23 +2869,14 @@ Duplicates the survey left to the lanes that own their areas:
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
 confirmed the AV1 item in the code; the rest are unconfirmed):
-2. Camera plane validation and L8/BGRA packing:
-   `Win32FaceAuthenticationPixelGraph`
-   (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
-   `CameraFramePacking` (`Puck.Platform/CameraFramePacking.cs:15`); the first
-   throws on a bottom-up (negative stride) frame (S) `[low]`.
-3. AV1 OBU framing: `Av1Bitstream.TryReadObu`
-   (`Puck.Platform.Windows/Recording/Av1Bitstream.cs:273`) beside
-   `Av1TemporalDelimiterFilter.Strip`
-   (`Puck.Recording/Session/Av1TemporalDelimiterFilter.cs:30`); the first omits
-   the forbidden-bit check the second makes (S) `[low]` (confirmed).
 4. Latest-value seqlock publication: `PublishBuffer<T>`
    (`Puck.Hosting/PublishBuffer.cs:12`) beside `ProbeReadingRing`
    (`Puck.Platform/Probes/ProbeReadingRing.cs:12`) (S).
-5. Controller HID feature-report framing, IMU timestamp delta and rumble
-   deadline across `SteamController`, `SteamControllerTriton` and
-   `DualSenseController` (`Puck.Input/Devices/`), and `GamepadDevice` beside
-   `XInputGamepadConnection` (S).
+5. Rumble duration expiry: `GamepadDevice` (`NextRumbleDeadline`,
+   `Puck.Input/Devices/GamepadDevice.cs`) beside `XInputGamepadConnection`
+   (`Puck.Platform.Windows/Gamepad/XInputGamepadConnection.cs`, which keeps its
+   own `timeProvider` expiry), unconfirmed (S). The per-parser refresh and write
+   intervals are device constants, not a shared deadline.
 6. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).

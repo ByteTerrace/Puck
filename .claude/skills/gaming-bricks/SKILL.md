@@ -96,6 +96,12 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   once in a `TransferState` (a Humble mapper's `TransferRegisters`). No file
   records the layout; a deliberate layout change raises `CurrentVersion` of
   `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced).
+- **Battery saves share one lifecycle.** `BatterySaveFile` (`Puck.Machines`)
+  owns the path, the reported read, the atomic replacement and the stale mark a
+  `RestoreState` sets (the disk does not rewind with a snapshot; the dirty flag
+  is not snapshot state). A core supplies its save bytes and its own dirty test:
+  HGB and AGB read a cartridge flag, the Deck compares against what it last
+  wrote. The `battery-save` and `host-persistence` stages pin the restore case.
 - **Deck boards own offsets, not memory, and time from bus edges.** NROM,
   MMC1 (`HgdMmc1`) and MMC3 (`HgdMmc3`) keep every RAM byte, the battery save's
   layout and its snapshot order in one `HgdBoardMemory`; a new board does the
