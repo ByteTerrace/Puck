@@ -21,7 +21,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
 
     /// <summary>Folds the simulation continuation of captured population entries through the checkpoint's field codecs,
-    /// excluding rendered appearance: the value <see cref="WorldPopulation.AppendContinuationHash"/> folds from the live
+    /// excluding rendered appearance: the value <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/> folds from the live
     /// slots the entries were captured from.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="entries">The entries, in slot order.</param>

@@ -11,6 +11,8 @@ public sealed partial class WorldScopedReplayRuntime {
     private readonly WorldServer m_server;
     private readonly WorldScopedReplay m_source;
     private readonly HashSet<int> m_bodies;
+    // The scope's bodies ascending: the order its pose and continuation folds visit them in.
+    private readonly int[] m_orderedBodies;
     private readonly HashSet<int> m_rows = [];
 
     private readonly List<(int Tick, WorldMutation Mutation)> m_inputs = [];
@@ -49,6 +51,7 @@ public sealed partial class WorldScopedReplayRuntime {
         m_server = server;
         m_source = source;
         m_bodies = source.Bodies.ToHashSet();
+        m_orderedBodies = m_bodies.Order().ToArray();
         BindRows(arena: server.Arena);
     }
 
@@ -138,8 +141,8 @@ public sealed partial class WorldScopedReplayRuntime {
         lock (m_server.AuthorityGate) {
             var hash = RowsHash();
 
-            hash.Add(value: WorldReplaySnapshot.HashState(m_server.Population, m_bodies));
-            m_server.Population.AppendContinuationHash(bodies: m_bodies, hash: ref hash);
+            hash.Add(value: WorldReplaySnapshot.HashBodies(bodies: m_orderedBodies, population: m_server.Population));
+            m_server.Population.AppendContinuationHash(bodies: m_orderedBodies, hash: ref hash);
             AppendRuleHash(hash: ref hash);
             return hash.Value;
         }
