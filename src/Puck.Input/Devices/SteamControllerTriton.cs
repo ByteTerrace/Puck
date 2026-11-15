@@ -108,7 +108,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     private const byte WirelessStatusReportIdAlternate = 0x46;
 
     private readonly IHidDevice m_device;
-    private readonly byte[] m_featureBuffer;
+    private readonly SteamFeatureChannel m_feature;
     private readonly byte[] m_outputBuffer;
     private readonly ImuOrientationTracker m_tracker = new();
 
@@ -124,10 +124,11 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
 
         m_device = device;
         // Composition writes at protocol offsets, so both buffers are floored to their documented reports.
-        m_featureBuffer = new byte[Math.Max(
-            val1: device.FeatureReportByteLength,
-            val2: HidFeatureReportBytes
-        )];
+        m_feature = new SteamFeatureChannel(
+            device: device,
+            minimumBytes: HidFeatureReportBytes,
+            reportId: FeatureReportId
+        );
         m_outputBuffer = new byte[Math.Max(
             val1: device.OutputReportByteLength,
             val2: HidRumbleOutputReportBytes
@@ -155,14 +156,6 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
         m_tracker.Reset();
     }
 
-    // Builds a feature message under report id 1: [1][command][payload length][payload].
-    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) =>
-        SteamFeatureMessage.Write(
-            buffer: m_featureBuffer,
-            command: command,
-            payload: payload,
-            reportId: FeatureReportId
-        );
     // The pulse report numbers the pads as the classic pulse command does, left 1 and right 0 (Linux
     // steam_haptic_pulse); the other haptic reports take Valve's MsgTriggerHaptic side codes, left 1, right 2 and
     // both 3.
@@ -221,26 +214,6 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
             )
         );
     }
-    private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
-        BuildFeature(
-            command: command,
-            payload: payload
-        );
-
-        return await HidFeatureWriteRetry.TryWriteAsync(
-            buffer: m_featureBuffer,
-            cancellationToken: cancellationToken,
-            device: m_device
-        );
-    }
-    private bool SendFeature(byte command, ReadOnlySpan<byte> payload) {
-        BuildFeature(
-            command: command,
-            payload: payload
-        );
-
-        return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
-    }
     // Maps the IMU into the fusion frame (X right, Y up, Z toward the player) as (x, z, -y), for the gyro and the
     // accelerometer alike (SDL, Linux); the pad rests with +Z up.
     private static Vector3 ToFusionFrame(Vector3 sensor) {
@@ -294,23 +267,23 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     /// Best-effort and synchronous, while the handle is still open after the I/O loop stopped.
     /// </summary>
     public void Dispose() {
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandSetDefaultDigitalMappings,
             payload: []
         );
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandLoadDefaultSettings,
             payload: []
         );
     }
     /// <inheritdoc />
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
-        _ = await SendFeatureAsync(
+        _ = await m_feature.SendAsync(
             cancellationToken: cancellationToken,
             command: CommandClearDigitalMappings,
             payload: []
         );
-        _ = await SendFeatureAsync(
+        _ = await m_feature.SendAsync(
             cancellationToken: cancellationToken,
             command: SetSettingsValuesCommand,
             payload: [

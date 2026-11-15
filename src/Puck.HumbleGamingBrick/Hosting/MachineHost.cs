@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick;
 /// simulation/render pump. Hardware observations and writes marshal to the same worker or coupled-link boundary.
 /// The synchronous core remains available separately for embedding without a worker or GPU.
 /// </summary>
-public sealed partial class MachineHost : QueuedMachineHost, IReconfigurableMachine {
+public sealed partial class MachineHost : QueuedHardwareMachineHost, IReconfigurableMachine {
     /// <summary>The machine's native framebuffer width (160).</summary>
     public const int ScreenWidth = Framebuffer.ScreenWidth;
     /// <summary>The machine's native framebuffer height (144).</summary>

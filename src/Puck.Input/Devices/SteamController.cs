@@ -79,7 +79,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     private const uint MaskStickClicked = 0x00400000;
 
     private readonly IHidDevice m_device;
-    private readonly byte[] m_featureBuffer;
+    private readonly SteamFeatureChannel m_feature;
     private readonly ImuOrientationTracker m_tracker = new();
 
     private bool m_hasPacketNumber;
@@ -98,11 +98,12 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
         ArgumentNullException.ThrowIfNull(device);
 
         m_device = device;
-        // Composition writes at protocol offsets, so the buffer is floored to the documented feature report.
-        m_featureBuffer = new byte[Math.Max(
-            val1: device.FeatureReportByteLength,
-            val2: FeatureReportBytes
-        )];
+        // The vendor collection is written as report id 0.
+        m_feature = new SteamFeatureChannel(
+            device: device,
+            minimumBytes: FeatureReportBytes,
+            reportId: 0
+        );
     }
 
     /// <inheritdoc />
@@ -149,7 +150,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     }
     // MsgFireHapticPulse: pad, on-time and off-time in µs, pulse count, gain in dB (Linux steam_haptic_pulse).
     private bool FirePulse(byte side, ushort on, ushort off, ushort count, sbyte gainDecibels) {
-        return SendFeature(
+        return m_feature.Send(
             command: CommandTriggerHapticPulse,
             payload: [
                 side,
@@ -163,14 +164,14 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     // Reads the controller's attributes (feature 0x83) for its connection interval, which is the spacing of its
     // state reports and so the IMU's sample period.
     private void LoadConnectionInterval() {
-        if (!SendFeature(
+        if (!m_feature.Send(
             command: CommandGetAttributes,
             payload: []
         )) {
             return;
         }
 
-        var reply = m_featureBuffer;
+        var reply = m_feature.Buffer;
 
         reply.AsSpan().Clear();
 
@@ -226,34 +227,6 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
                 x: ((pad.X + TrackpadHalf) / TrackpadRange),
                 y: (1f - ((pad.Y + TrackpadHalf) / TrackpadRange))
             )
-        );
-    }
-    // The vendor collection is written as report id 0.
-    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) =>
-        SteamFeatureMessage.Write(
-            buffer: m_featureBuffer,
-            command: command,
-            payload: payload,
-            reportId: 0
-        );
-    private bool SendFeature(byte command, ReadOnlySpan<byte> payload) {
-        BuildFeature(
-            command: command,
-            payload: payload
-        );
-
-        return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
-    }
-    private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
-        BuildFeature(
-            command: command,
-            payload: payload
-        );
-
-        return await HidFeatureWriteRetry.TryWriteAsync(
-            buffer: m_featureBuffer,
-            cancellationToken: cancellationToken,
-            device: m_device
         );
     }
     // The report begins with unReportVersion (0x0001) then ucType. Windows may or may not prepend a report-id
@@ -461,15 +434,15 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     /// Best-effort and synchronous, while the handle is still open after the I/O loop stopped.
     /// </summary>
     public void Dispose() {
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandSetDefaultDigitalMappings,
             payload: []
         );
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandLoadDefaultSettings,
             payload: []
         );
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandSetSettings,
             payload: [SettingRightTrackpadMode, TrackpadModeAbsoluteMouse, 0,]
         );
@@ -478,12 +451,12 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
         // Leave lizard mode: drop the keyboard mappings, stop both trackpads emulating a mouse, use the current
         // wireless packet format, and stream raw IMU (SDL ResetSteamController). Each write is best-effort.
-        _ = await SendFeatureAsync(
+        _ = await m_feature.SendAsync(
             cancellationToken: cancellationToken,
             command: CommandClearDigitalMappings,
             payload: []
         );
-        _ = await SendFeatureAsync(
+        _ = await m_feature.SendAsync(
             cancellationToken: cancellationToken,
             command: CommandSetSettings,
             payload: [
@@ -528,7 +501,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
             )
         ) * 100) / 255));
 
-        _ = SendFeature(
+        _ = m_feature.Send(
             command: CommandSetSettings,
             payload: [SettingLedBrightness, brightness, 0,]
         );
