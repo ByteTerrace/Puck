@@ -9,14 +9,11 @@ namespace Puck.AdvancedGamingBrick;
 /// worker thread, the bounded eight-segment FIFO with producer backpressure, the triple-buffer publication rotation, and
 /// the native-frame-keyed save-flush debounce; this class only wires the core's BIOS and cartridge.
 /// </summary>
-public sealed partial class AdvancedMachineHost : QueuedMachineHost {
+public sealed partial class AdvancedMachineHost : QueuedHardwareMachineHost {
     /// <summary>The native framebuffer width.</summary>
     public const int ScreenWidth = 240;
     /// <summary>The native framebuffer height.</summary>
     public const int ScreenHeight = 160;
-    /// <summary>The finite number of exact tick/input segments that may be accepted but incomplete. This is a segment
-    /// bound, not a wall-clock duration.</summary>
-    public const int DefaultMaximumPendingSteps = 8;
 
     private readonly byte[] m_bios;
     private readonly AgbMachineOptions m_options;
@@ -38,7 +35,6 @@ public sealed partial class AdvancedMachineHost : QueuedMachineHost {
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
-        maximumPendingSteps: DefaultMaximumPendingSteps,
         workerName: "Puck AdvancedGamingBrick",
         audioSampleRate: audioSampleRate,
         savePath: savePath

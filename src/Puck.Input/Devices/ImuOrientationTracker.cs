@@ -21,15 +21,37 @@ internal sealed class ImuOrientationTracker {
 
     private Vector3 m_gyroBias;
     private bool m_hasSample;
+    private bool m_hasTimestamp;
+    private uint m_lastTimestamp;
     private Quaternion m_orientation = Quaternion.Identity;
 
     /// <summary>The current fused orientation.</summary>
     public Quaternion Orientation => m_orientation;
 
+    /// <summary>Converts a free-running device report clock into the seconds since the previous report. The unsigned
+    /// subtraction carries the delta across a wrap of the clock's width, and <see cref="Update"/> clamps a first or
+    /// implausible step.</summary>
+    /// <param name="timestamp">The report's clock value in the device's native units.</param>
+    /// <param name="mask">The clock's width as a bit mask, such as <see cref="uint.MaxValue"/> or <c>0xFFFF</c>.</param>
+    /// <param name="secondsPerUnit">The clock's unit in seconds.</param>
+    /// <returns>The elapsed seconds, or zero for the first report of a stream.</returns>
+    public float ElapsedSeconds(uint timestamp, uint mask, float secondsPerUnit) {
+        var delta = (m_hasTimestamp
+            ? (unchecked((timestamp - m_lastTimestamp)) & mask)
+            : 0u
+        );
+
+        m_hasTimestamp = true;
+        m_lastTimestamp = timestamp;
+
+        return (delta * secondsPerUnit);
+    }
     /// <summary>Returns the tracker to its first-sample state for a new physical controller stream.</summary>
     public void Reset() {
         m_gyroBias = Vector3.Zero;
         m_hasSample = false;
+        m_hasTimestamp = false;
+        m_lastTimestamp = 0u;
         m_orientation = Quaternion.Identity;
     }
     /// <summary>Advances the orientation by one IMU sample (gyro in rad/s, accel in g, both right-handed).</summary>

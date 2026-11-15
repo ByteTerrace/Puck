@@ -238,7 +238,7 @@ internal static class Av1Bitstream {
         while (true) {
             var start = index;
 
-            if (!TryReadObu(
+            if (!Av1Obu.TryRead(
                 index: ref index,
                 obuType: out var obuType,
                 payloadLength: out var payloadLength,
@@ -266,51 +266,6 @@ internal static class Av1Bitstream {
         payload = [];
 
         return false;
-    }
-    // Reads one OBU at index and advances index past it. Returns false at the end of the unit or on a header the walk
-    // cannot trust (a truncated size or a payload running past the buffer) — a malformed tail stops the walk rather
-    // than being guessed at.
-    private static bool TryReadObu(ReadOnlySpan<byte> temporalUnit, ref int index, out int obuType, out int payloadOffset, out int payloadLength) {
-        obuType = 0;
-        payloadOffset = 0;
-        payloadLength = 0;
-
-        if (index >= temporalUnit.Length) {
-            return false;
-        }
-
-        var headerByte = temporalUnit[index];
-        var extensionFlag = (headerByte >> 2) & 0x1;
-        var hasSizeField = (headerByte >> 1) & 0x1;
-        var cursor = (index + (1 + extensionFlag));
-
-        obuType = (headerByte >> 3) & 0xF;
-
-        if (hasSizeField == 1) {
-            if (!Av1Leb128.TryRead(
-                data: temporalUnit,
-                offset: ref cursor,
-                value: out var size
-            )) {
-                return false;
-            }
-
-            payloadLength = ((int)size);
-        } else {
-            payloadLength = (temporalUnit.Length - cursor);
-        }
-
-        if (
-            (payloadLength < 0) ||
-            ((cursor + payloadLength) > temporalUnit.Length)
-        ) {
-            return false;
-        }
-
-        payloadOffset = cursor;
-        index = (cursor + payloadLength);
-
-        return true;
     }
 
     /// <summary>Finds the sequence-header OBU inside an AV1 temporal unit and builds <c>av1C</c> from it.</summary>
@@ -354,7 +309,7 @@ internal static class Av1Bitstream {
     public static bool? TryReadIsKeyFrame(ReadOnlySpan<byte> temporalUnit) {
         var index = 0;
 
-        while (TryReadObu(
+        while (Av1Obu.TryRead(
             index: ref index,
             obuType: out var obuType,
             payloadLength: out var payloadLength,

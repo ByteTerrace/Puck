@@ -26,6 +26,87 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.A;
 
+    // The disk cannot rewind with a snapshot: the dirty flag is not snapshot state, so a core restored to RAM that an
+    // earlier flush already overtook is "clean" while its save file holds the abandoned future.
+    private static string? RunRewoundSaveLeg(string directory) {
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0x13,
+            ramSize: 0x03
+        );
+        var path = Path.Combine(
+            path1: directory,
+            path2: "rewound.sav"
+        );
+
+        using (var core = new HumbleGamingBrickCore(
+            bootMode: Puck.Machines.MachineBootMode.Fast,
+            cartridgeRom: rom,
+            model: ConsoleModel.DmgC,
+            savePath: path
+        )) {
+            var cartridge = core.Instance.GetRequiredService<ICartridge>();
+
+            cartridge.WriteControl(
+                address: 0x0000,
+                value: 0x0A
+            );
+            cartridge.WriteControl(
+                address: 0x4000,
+                value: 0x00
+            );
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: 0x11
+            );
+
+            byte[] earlier = [];
+            var earlierLength = core.CaptureState(buffer: ref earlier);
+
+            core.FlushSave(force: false);
+
+            if (File.ReadAllBytes(path: path)[0] != 0x11) {
+                return "the first flush did not persist the stored byte";
+            }
+
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: 0x22
+            );
+            core.FlushSave(force: false);
+
+            if (File.ReadAllBytes(path: path)[0] != 0x22) {
+                return "the second flush did not persist the stored byte";
+            }
+
+            core.RestoreState(
+                buffer: earlier,
+                length: earlierLength
+            );
+            core.FlushSave(force: false);
+
+            if (File.ReadAllBytes(path: path)[0] != 0x11) {
+                return "restoring an earlier snapshot left the abandoned later save on disk";
+            }
+
+            core.RestoreState(
+                buffer: earlier,
+                length: earlierLength
+            );
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: 0x33
+            );
+            core.RestoreState(
+                buffer: earlier,
+                length: earlierLength
+            );
+        }
+
+        return ((File.ReadAllBytes(path: path)[0] == 0x11)
+            ? null
+            : "disposal after a restore did not leave the restored RAM on disk"
+        );
+    }
     private static string? RunHuC3ClockLeg() {
         var rom = SyntheticRom.Create(
             cartridgeType: 0xFE,
@@ -258,6 +339,23 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
         // fresh machine, and verify by protocol read-back plus a re-export field compare.
         if (RunHuC3ClockLeg() is { } huc3Failure) {
             return PostStageOutcome.Fail(detail: huc3Failure);
+        }
+
+        var directory = Path.Combine(
+            path1: context.ArtifactsDirectory,
+            path2: $"battery-save-{Guid.NewGuid():N}"
+        );
+
+        _ = Directory.CreateDirectory(path: directory);
+        try {
+            if (RunRewoundSaveLeg(directory: directory) is { } rewoundFailure) {
+                return PostStageOutcome.Fail(detail: rewoundFailure);
+            }
+        } finally {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
         }
 
         return PostStageOutcome.Pass(detail: $"MBC3+RAM+BATTERY: store sets dirty, export preserves it, acknowledge/import clear it, a {save.Length}-byte save round-trips into a fresh machine byte-identical, and the {footer.Length}-byte clock footer restores the RTC registers (interop timestamp stamped and ignored); HuC3: the 16-byte minutes/days footer round-trips through the nibble protocol");
