@@ -2773,6 +2773,18 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      `Puck.Shaders.Generator/Program.cs`; the test projects spell it by hand in
      a few laws too. `Puck.Confinement` is the BCL-only leaf both could take a
      one-line separator helper from.
+   - Relative-path guards that still spell their own segment test beside
+     `PortablePath.IsRelative` (`Puck.Confinement/PortablePath.cs`), each refusing
+     fewer spellings than it: `Puck.Cli.Release/Automation/BundleCommand.cs:79`,
+     `ArtifactsCommand.cs:223`, `Puck.Cli.Format/Format/FormatSources.cs:36`,
+     `Puck.Cli.Harness/Canary/CanaryManifestLoader.Boots.cs:139`,
+     `Puck.Cli.Core/CliOptions.cs:310`, `Puck.Cli.Runs/Qualification/ReleaseProfileLoader.cs:243`,
+     `Puck.Machines.Post/CorpusManifest.Files.cs:45`,
+     `Puck.World.Browser/Engine/BrowserWorkspace.cs:96` and
+     `Puck.World.Azure/AzureResourceBinding.cs:88`. Route each through it where
+     its input is a path that lands on a disk; `Puck.Storage/ObjectBlobAddressPath.cs`
+     also splits on both separators, drops empty segments and reserves `.puck-`, so it
+     keeps those and takes the device-name rule from `PortablePath.IsDeviceName`.
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
      `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`. A shared include is refused
@@ -2869,29 +2881,24 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
    GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
    earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
    with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
-2. `WorldCompileCache.Trim`
-   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs`) repeats
-   `CacheRetention.EnforceOnWrite`,
-   skipping its per-process write tally (it lists only once its own writes pass
-   the bound, or a minute on) on every cache write (S) `[low]`.
-3. Camera plane validation and L8/BGRA packing:
+2. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
    `CameraFramePacking` (`Puck.Platform/CameraFramePacking.cs:15`); the first
    throws on a bottom-up (negative stride) frame (S) `[low]`.
-4. AV1 OBU framing: `Av1Bitstream.TryReadObu`
+3. AV1 OBU framing: `Av1Bitstream.TryReadObu`
    (`Puck.Platform.Windows/Recording/Av1Bitstream.cs:273`) beside
    `Av1TemporalDelimiterFilter.Strip`
    (`Puck.Recording/Session/Av1TemporalDelimiterFilter.cs:30`); the first omits
    the forbidden-bit check the second makes (S) `[low]` (confirmed).
-5. Latest-value seqlock publication: `PublishBuffer<T>`
+4. Latest-value seqlock publication: `PublishBuffer<T>`
    (`Puck.Hosting/PublishBuffer.cs:12`) beside `ProbeReadingRing`
    (`Puck.Platform/Probes/ProbeReadingRing.cs:12`) (S).
-6. Controller HID feature-report framing, IMU timestamp delta and rumble
+5. Controller HID feature-report framing, IMU timestamp delta and rumble
    deadline across `SteamController`, `SteamControllerTriton` and
    `DualSenseController` (`Puck.Input/Devices/`), and `GamepadDevice` beside
    `XInputGamepadConnection` (S).
-7. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
+6. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).
 
@@ -5234,9 +5241,7 @@ Launch and process lifecycles:
   `CanaryLegRun.BudgetExpired`) still counts external lease queueing, so a later
   leg can read `BudgetExpired`. Sweep and offscreen legs now share
   `SuiteBudget.Pause`; canary needs accounting that excludes external queueing
-  without stopping its budget while another leg runs. Delete
-  `SweepCommand.SamePath` (`src/Puck.Cli.Runs/Sweep/SweepCommand.cs:294`), which
-  nothing calls.
+  without stopping its budget while another leg runs.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion`
   (`src/Puck.Abstractions/FileLock.cs:49-68`) deletes a lock file while it holds
   it, and the artifact store deletes keyed locks

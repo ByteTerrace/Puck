@@ -390,7 +390,7 @@ can open a fourth. All four charge the one Hud reservation.
   from `PlayerRoster` + each joined seat's live identity handle instead — no
   cheap revision to key off, and no extra propagation seam for a write to
   reach the render path — into a preallocated array, then both halves publish
-  together in one `HudStore.Publish` call so neither can lag the other.
+  together in one `OverlayStore.Publish` call so neither can lag the other.
   `HudWriter.EmitSeatPanels` draws them, one `BeginClip` per seat viewport
   (a seat panel's own rect is LOCAL to that viewport, not the whole screen),
   as a fourth `OverlayChannel.Hud`

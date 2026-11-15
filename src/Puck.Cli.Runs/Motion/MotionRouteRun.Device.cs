@@ -69,7 +69,7 @@ public static class MotionRouteRun {
                 path.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.Ordinal)) {
             using var stream = File.OpenRead(file);
-            files[Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(artifactRoot, file))] = Convert.ToHexStringLower(SHA256.HashData(stream));
+            files[Puck.Abstractions.PuckPaths.Relative(artifactRoot, file)] = Convert.ToHexStringLower(SHA256.HashData(stream));
         }
         var hash = files[Path.GetFileName(artifact)];
         WorldProcess started;

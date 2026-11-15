@@ -61,12 +61,9 @@ internal static class OfficialEngineScanner {
                 continue;
             }
 
-            var name = Path.GetRelativePath(
+            var name = Puck.Abstractions.PuckPaths.Relative(
                 path: filePath,
                 relativeTo: full
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             );
             var bytes = File.ReadAllBytes(path: filePath);
 

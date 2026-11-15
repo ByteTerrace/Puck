@@ -70,8 +70,8 @@ public sealed partial class DocsCodeCitations(string repositoryRoot) {
         if (path.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "file://")) {
             path = Puck.Abstractions.PuckPaths.Slashed(path: new Uri(uriString: path).LocalPath);
         }
-        var relative = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: document))));
-        var neighbor = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: (Path.GetDirectoryName(path: relative) ?? ""), path3: path))));
+        var relative = Puck.Abstractions.PuckPaths.Relative(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: document)));
+        var neighbor = Puck.Abstractions.PuckPaths.Relative(repositoryRoot, Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: (Path.GetDirectoryName(path: relative) ?? ""), path3: path)));
         // A report may link to its original worktree. Only a unique suffix in this revision identifies its blob.
         var candidates = paths.Where(predicate: candidate => ((candidate == neighbor) || (candidate == path))).ToArray();
 

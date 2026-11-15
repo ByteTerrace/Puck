@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Puck.Confinement;
 
 namespace Puck.Abstractions;
 
@@ -63,6 +64,11 @@ public static class CacheRetention {
     /// <summary>The longest a writing process goes without listing a directory it writes, so that it counts other
     /// processes' writes; within it, it lists only when its own tally passes the bound.</summary>
     public static readonly TimeSpan EnforceInterval = TimeSpan.FromMinutes(minutes: 1);
+
+    /// <summary>How long a temporary file an <see cref="AtomicFile"/> write staged may go unwritten before a listing of its
+    /// directory takes it for abandoned by a write that was killed, and removes it. A name's case does not matter, as the file
+    /// system's does not.</summary>
+    public static readonly TimeSpan AbandonedTemporaryAge = TimeSpan.FromMinutes(minutes: 1);
 
     private static readonly ConcurrentDictionary<string, Tally> Tallies = new(comparer: StringComparer.Ordinal);
 
@@ -303,9 +309,13 @@ public static class CacheRetention {
         var entries = new List<CacheEntry>();
 
         try {
+            var abandonedBefore = (DateTime.UtcNow - AbandonedTemporaryAge);
+
             foreach (var file in new DirectoryInfo(path: directory).EnumerateFiles(searchOption: search, searchPattern: "*")) {
                 if (isEntry(arg: file)) {
                     entries.Add(item: new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName));
+                } else if (file.Name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: AtomicFile.TemporarySuffix) && (file.LastWriteTimeUtc < abandonedBefore)) {
+                    _ = TryDelete(path: file.FullName);
                 }
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {

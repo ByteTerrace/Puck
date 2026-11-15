@@ -58,6 +58,16 @@ public static class PuckPaths {
         newChar: '/',
         oldChar: '\\'
     );
+    /// <summary>Returns <paramref name="path"/> relative to <paramref name="relativeTo"/>, spelled with <c>/</c>:
+    /// <see cref="Path.GetRelativePath(string, string)"/> in Puck's path form. Either path may be relative to the
+    /// current directory; a path on another root or volume stays full.</summary>
+    /// <param name="relativeTo">The directory the result is relative to.</param>
+    /// <param name="path">The file or directory to name.</param>
+    /// <returns>The relative path with <c>/</c> as its only separator.</returns>
+    public static string Relative(string relativeTo, string path) => Slashed(path: Path.GetRelativePath(
+        path: path,
+        relativeTo: relativeTo
+    ));
     /// <summary>Returns the full path of a file this build ships beside the executable: the one resolver for the
     /// engine's own content (the default world, the shipped fonts, shaders and probe kinds), which the build copies
     /// under <see cref="AppContext.BaseDirectory"/>. A path a document authors never resolves here; it resolves beside

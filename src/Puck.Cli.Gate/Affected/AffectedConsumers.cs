@@ -21,10 +21,7 @@ public static partial class AffectedConsumers {
     private static partial Regex IncludePattern();
     private static IEnumerable<string> Includes(string projectFile) => IncludePattern().Matches(input: File.ReadAllText(path: projectFile))
         .Select(selector: static match => Puck.Abstractions.PuckPaths.Slashed(path: match.Groups["path"].Value));
-    private static string Relative(string repositoryRoot, string path) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(
-        path: Path.GetFullPath(path: path),
-        relativeTo: repositoryRoot
-    ));
+
     // Whether an include, resolved from its project's directory, names the repository-relative path: the literal
     // directories before its first glob segment are resolved, and the rest matched as a glob below them.
     private static bool Names(string repositoryRoot, string projectDirectory, string include, string path) {
@@ -33,15 +30,15 @@ public static partial class AffectedConsumers {
 
         if (literal == segments.Length) {
             return string.Equals(
-                a: Relative(path: Path.Combine(path1: repositoryRoot, path2: projectDirectory, path3: include), repositoryRoot: repositoryRoot),
+                a: Puck.Abstractions.PuckPaths.Relative(path: Path.Combine(path1: repositoryRoot, path2: projectDirectory, path3: include), relativeTo: repositoryRoot),
                 b: path,
                 comparisonType: StringComparison.Ordinal
             );
         }
 
-        var directory = Relative(
+        var directory = Puck.Abstractions.PuckPaths.Relative(
             path: Path.Combine(path1: repositoryRoot, path2: projectDirectory, path3: string.Join(separator: '/', values: segments.Take(count: literal))),
-            repositoryRoot: repositoryRoot
+            relativeTo: repositoryRoot
         );
 
         if (!path.StartsWith(comparisonType: StringComparison.Ordinal, value: (directory + "/"))) {

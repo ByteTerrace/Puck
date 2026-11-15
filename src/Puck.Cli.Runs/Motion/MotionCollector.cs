@@ -67,7 +67,7 @@ public static class MotionCollector {
                 var where = $"tick {still.Tick.ToString(provider: CultureInfo.InvariantCulture)} (t+{still.Offset.ToString(provider: CultureInfo.InvariantCulture)})";
 
                 foreach (var slot in slots.Where(predicate: slot => (slot.Path.StartsWith(value: (still.Stem + "-"), comparisonType: StringComparison.OrdinalIgnoreCase) && File.Exists(path: slot.Path)))) {
-                    files[slot.Camera] = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(path: slot.Path, relativeTo: directory));
+                    files[slot.Camera] = Puck.Abstractions.PuckPaths.Relative(path: slot.Path, relativeTo: directory);
                 }
 
                 if (stamp is null) {

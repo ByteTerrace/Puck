@@ -251,12 +251,9 @@ public static partial class CanaryCommand {
             ).ToDictionary(
                 comparer: StringComparer.Ordinal,
                 elementSelector: File.ReadAllBytes,
-                keySelector: path => Path.GetRelativePath(
+                keySelector: path => Puck.Abstractions.PuckPaths.Relative(
                     path: path,
                     relativeTo: directory
-                ).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
                 )
             )
             : new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal));

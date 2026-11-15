@@ -66,7 +66,7 @@ public sealed class AffectedShaders {
             return [.. reached.Where(predicate: byName.ContainsKey).Select(selector: name => byName[name].Directory).Order(comparer: StringComparer.Ordinal)];
         }
 
-        string? ReadFull(string path) => tree.ReadText(path: Relative(path: path, repositoryRoot: tree.Root));
+        string? ReadFull(string path) => tree.ReadText(path: Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: tree.Root));
 
         foreach (var project in projects.Where(predicate: static project => !project.IsSuite)) {
             if (tree.ReadText(path: $"{project.Directory}/{project.Name}.csproj") is not { } projectText) {
@@ -102,8 +102,8 @@ public sealed class AffectedShaders {
                     );
 
                     kernels.Add(item: new AffectedKernel(
-                        Closure: [.. closure.Sources.Concat(second: closure.Includes).Select(selector: dependency => Relative(path: dependency.Path, repositoryRoot: tree.Root))],
-                        Path: Relative(path: file, repositoryRoot: tree.Root),
+                        Closure: [.. closure.Sources.Concat(second: closure.Includes).Select(selector: dependency => Puck.Abstractions.PuckPaths.Relative(path: dependency.Path, relativeTo: tree.Root))],
+                        Path: Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: tree.Root),
                         Projects: ProjectsOf(project: project)
                     ));
                 } catch (ShaderClosureRefusedException) {
@@ -151,9 +151,4 @@ public sealed class AffectedShaders {
 
         return found;
     }
-
-    private static string Relative(string path, string repositoryRoot) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(
-        path: Path.GetFullPath(path: path),
-        relativeTo: repositoryRoot
-    ));
 }

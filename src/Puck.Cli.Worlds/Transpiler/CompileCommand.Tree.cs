@@ -413,10 +413,7 @@ public static partial class CompileCommand {
     // file the run already wrote, given twice, is two claims to one name, refused in the words every door uses.
     private static int ShipDocument(string source, string relative, string destination, IReadOnlyDictionary<string, string> carrierOf, Dictionary<string, string> written) {
         var target = Path.GetFullPath(path: destination);
-        var name = WorldDocumentName.OfDocumentFile(path: relative.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        ));
+        var name = WorldDocumentName.OfDocumentFile(path: Puck.Abstractions.PuckPaths.Slashed(path: relative));
 
         if (carrierOf.TryGetValue(
             key: name,

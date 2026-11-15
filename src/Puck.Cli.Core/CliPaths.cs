@@ -24,10 +24,10 @@ public static class CliPaths {
 
     // Path globs match relative paths even outside the working directory.
     public static string RelForGlob(string fullPath) =>
-        Puck.Abstractions.PuckPaths.Slashed(path: Path.GetRelativePath(
+        Puck.Abstractions.PuckPaths.Relative(
             path: fullPath,
             relativeTo: WorkingDirectory
-        ));
+        );
     /// <summary>Returns whether two paths name the same file or directory: compared in full, without a trailing separator,
     /// and without case on Windows.</summary>
     /// <param name="left">One path, absolute or relative to the working directory.</param>

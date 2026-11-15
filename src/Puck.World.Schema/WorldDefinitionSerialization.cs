@@ -1427,12 +1427,9 @@ public static partial class WorldDefinitionSerialization {
         var output = new JsonObject();
 
         if (peekedBasis is { } basis) {
-            output[propertyName: WorldDocumentBasis.BasisMemberName] = WorldDocumentName.OfDocumentFile(path: Path.GetRelativePath(
+            output[propertyName: WorldDocumentBasis.BasisMemberName] = WorldDocumentName.OfDocumentFile(path: Puck.Abstractions.PuckPaths.Relative(
                 path: basis,
                 relativeTo: targetDirectory
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             ));
         }
 
@@ -1441,12 +1438,9 @@ public static partial class WorldDefinitionSerialization {
 
             foreach (var (importPath, alias) in peekedImports) {
                 var entry = new JsonObject {
-                    [propertyName: WorldImport.DocumentMemberName] = WorldDocumentName.OfDocumentFile(path: Path.GetRelativePath(
+                    [propertyName: WorldImport.DocumentMemberName] = WorldDocumentName.OfDocumentFile(path: Puck.Abstractions.PuckPaths.Relative(
                     path: importPath,
                     relativeTo: targetDirectory
-                ).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
                 )),
                 };
 

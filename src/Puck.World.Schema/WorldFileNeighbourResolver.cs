@@ -84,12 +84,9 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
                 path2: document
             ));
 
-            reference["document"] = Path.GetRelativePath(
+            reference["document"] = Puck.Abstractions.PuckPaths.Relative(
                 path: absolute,
                 relativeTo: baseDirectory
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             );
         }
     }

@@ -99,10 +99,7 @@ public static class WorldDocumentPaths {
             name: path,
             referrerName: sourceDocumentPath
         );
-        var targetDirectory = targetDocumentPath.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var targetDirectory = Puck.Abstractions.PuckPaths.Slashed(path: targetDocumentPath);
         var slash = targetDirectory.LastIndexOf(value: '/');
 
         targetDirectory = ((slash >= 0)
@@ -176,15 +173,12 @@ public static class WorldDocumentPaths {
             return path;
         }
 
-        return Path.GetRelativePath(
+        return Puck.Abstractions.PuckPaths.Relative(
             path: Path.GetFullPath(path: Path.Combine(
                 path1: FullDirectory(directory: sourceDirectory),
                 path2: path
             )),
             relativeTo: FullDirectory(directory: targetDirectory)
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         );
     }
     /// <summary>Returns a value indicating whether a document member holds a file path its document authors, one
