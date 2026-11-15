@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Platform;
@@ -415,7 +416,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             builder.Append(value: " output=").Append(value: output.Of);
         }
 
-        if (instance.Ring.TryReadLatest(reading: out var reading)) {
+        if (instance.Ring.TrySnapshot(value: out var reading)) {
             var age = Stopwatch.GetElapsedTime(
                 startingTimestamp: reading.CaptureTimestamp,
                 endingTimestamp: nowTimestamp
@@ -444,7 +445,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         builder.Append(value: " source=").Append(value: axis.Source);
         builder.Append(value: " seat=").Append(value: axis.Instance.Seat);
 
-        if (!axis.Instance.Ring.TryReadLatest(reading: out var reading)) {
+        if (!axis.Instance.Ring.TrySnapshot(value: out var reading)) {
             builder.Append(value: " no-reading");
 
             return;
@@ -550,7 +551,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var ring = recording.Instance.Ring;
 
         if (
-            ring.TryReadLatest(reading: out var reading) &&
+            ring.TrySnapshot(value: out var reading) &&
             (reading.Sequence != recording.LastSequence)
         ) {
             recording.LastSequence = reading.Sequence;
@@ -796,7 +797,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public object? OutputSet { get; set; }
         public List<ParameterState> ParameterBindings { get; } = [];
         public required object?[] ResolvedGenerations { get; init; }
-        public required ProbeReadingRing Ring { get; init; }
+        public required PublishBuffer<ProbeReading> Ring { get; init; }
         public required ProbeRowInfo RowInfo { get; init; }
         public IProbeKernelRun? Run { get; set; }
         public required int Seat { get; init; }

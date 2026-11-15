@@ -1,4 +1,4 @@
-namespace Puck.Hosting.Tests;
+namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="PublishBuffer{T}"/>, the one slot a writer publishes frames into and a reader snapshots from: an
@@ -13,7 +13,7 @@ public sealed class PublishBufferLawTests {
     public void AnEmptyBufferReportsNoFrame() {
         var buffer = new PublishBuffer<Wide>();
 
-        Assert.False(condition: buffer.TrySnapshot(frame: out var frame));
+        Assert.False(condition: buffer.TrySnapshot(value: out var frame));
         Assert.Equal(
             actual: frame,
             expected: default
@@ -23,10 +23,10 @@ public sealed class PublishBufferLawTests {
     public void ASnapshotReadsTheLatestPublishedFrame() {
         var buffer = new PublishBuffer<Wide>();
 
-        buffer.Publish(frame: new Wide(A: 1, B: 1, C: 1, D: 1));
-        buffer.Publish(frame: new Wide(A: 2, B: 2, C: 2, D: 2));
+        buffer.Publish(value: new Wide(A: 1, B: 1, C: 1, D: 1));
+        buffer.Publish(value: new Wide(A: 2, B: 2, C: 2, D: 2));
 
-        Assert.True(condition: buffer.TrySnapshot(frame: out var frame));
+        Assert.True(condition: buffer.TrySnapshot(value: out var frame));
         Assert.Equal(
             actual: frame,
             expected: new Wide(A: 2, B: 2, C: 2, D: 2)
@@ -48,7 +48,7 @@ public sealed class PublishBufferLawTests {
         using var start = new Barrier(participantCount: 3);
         using var readerSnapshotted = new ManualResetEventSlim(initialState: false);
 
-        buffer.Publish(frame: default);
+        buffer.Publish(value: default);
 
         var writers = Enumerable.Range(count: 2, start: 1).Select(selector: writer => Task.Factory.StartNew(action: () => {
             start.SignalAndWait(cancellationToken: ct);
@@ -60,7 +60,7 @@ public sealed class PublishBufferLawTests {
 
                 var word = ((value * 2) + writer);
 
-                buffer.Publish(frame: new Wide(A: word, B: word, C: word, D: word));
+                buffer.Publish(value: new Wide(A: word, B: word, C: word, D: word));
             }
 
             _ = Interlocked.Decrement(location: ref writing);
@@ -69,7 +69,7 @@ public sealed class PublishBufferLawTests {
             start.SignalAndWait(cancellationToken: ct);
 
             do {
-                if (buffer.TrySnapshot(frame: out var frame)) {
+                if (buffer.TrySnapshot(value: out var frame)) {
                     snapshots++;
                     readerSnapshotted.Set();
 
@@ -93,18 +93,86 @@ public sealed class PublishBufferLawTests {
         );
     }
     [Fact]
+    public void TheVersionCountsCompletedPublications() {
+        var buffer = new PublishBuffer<Wide>();
+
+        Assert.Equal(
+            actual: buffer.Version,
+            expected: 0L
+        );
+
+        buffer.Publish(value: new Wide(A: 1, B: 1, C: 1, D: 1));
+        Assert.Equal(
+            actual: buffer.Version,
+            expected: 1L
+        );
+
+        buffer.Publish(value: new Wide(A: 2, B: 2, C: 2, D: 2));
+        Assert.Equal(
+            actual: buffer.Version,
+            expected: 2L
+        );
+    }
+    [Fact]
+    public async Task AReaderRacingOneWriterNeverSeesAValueRegress() {
+        const long Publishes = 200_000;
+
+        var buffer = new PublishBuffer<Wide>();
+        var stop = 0;
+        var ct = TestContext.Current.CancellationToken;
+        using var firstRead = new ManualResetEventSlim(initialState: false);
+
+        buffer.Publish(value: default);
+
+        // The writer holds its remaining publications until the reader has read once, so the reads overlap writes.
+        var writer = Task.Factory.StartNew(action: () => {
+            try {
+                firstRead.Wait(cancellationToken: ct);
+
+                for (var value = 1L; (value < Publishes); value++) {
+                    buffer.Publish(value: new Wide(A: value, B: value, C: value, D: value));
+                }
+            } finally {
+                Volatile.Write(location: ref stop, value: 1);
+            }
+        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
+        var reader = Task.Factory.StartNew(action: () => {
+            var last = -1L;
+
+            try {
+                do {
+                    Assert.True(condition: buffer.TrySnapshot(value: out var value));
+                    firstRead.Set();
+                    Assert.True(condition: (value.A >= last), userMessage: $"{value.A} after {last}");
+                    Assert.True(condition: ((value.B == value.A) && (value.C == value.A) && (value.D == value.A)), userMessage: $"torn {value}");
+                    last = value.A;
+                } while (Volatile.Read(location: ref stop) == 0);
+            } finally {
+                firstRead.Set();
+            }
+
+            Assert.True(condition: buffer.TrySnapshot(value: out var final));
+            Assert.Equal(
+                actual: final.A,
+                expected: (Publishes - 1)
+            );
+        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
+
+        await Task.WhenAll(tasks: [writer, reader]);
+    }
+    [Fact]
     public void ASteadyPublishAndSnapshotAllocateNothing() {
         var buffer = new PublishBuffer<Wide>();
         var frame = new Wide(A: 3, B: 3, C: 3, D: 3);
 
-        buffer.Publish(frame: frame);
-        _ = buffer.TrySnapshot(frame: out _);
+        buffer.Publish(value: frame);
+        _ = buffer.TrySnapshot(value: out _);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
         for (var index = 0; (index < 64); index++) {
-            buffer.Publish(frame: frame);
-            _ = buffer.TrySnapshot(frame: out _);
+            buffer.Publish(value: frame);
+            _ = buffer.TrySnapshot(value: out _);
         }
 
         Assert.Equal(

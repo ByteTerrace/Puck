@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -18,7 +19,7 @@ public sealed partial class ProbeKernelTests {
 
         var (input, view) = FloatInput(bench: bench, color: [0.25f, 0.5f, 2f, 1f]);
         var targets = bench.CreateSharedRing(slots: 2);
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "average"),
             AccumulateEntry: "accumulate",
@@ -35,7 +36,7 @@ public sealed partial class ProbeKernelTests {
         using var kernel = bench.CreateKernel(request: in request, ring: ring);
 
         Assert.True(condition: kernel.TryRun(views: [view], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         AssertClose(expected: 0.25, actual: ((double)reading[0]), tolerance: 0.001);
         AssertClose(expected: 0.5, actual: ((double)reading[1]), tolerance: 0.001);
         AssertClose(expected: 1.0, actual: ((double)reading[2]), tolerance: 0.001);
@@ -54,7 +55,7 @@ public sealed partial class ProbeKernelTests {
 
         // 64 * 64 pixels at 1024, scaled by 1024, sum to 2^32 unless each sample is clamped first.
         var (input, view) = FloatInput(bench: bench, color: [1024f, 0f, 0f, 1f]);
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "ir-blob"),
             AccumulateEntry: "accumulate",
@@ -70,7 +71,7 @@ public sealed partial class ProbeKernelTests {
         using var kernel = bench.CreateKernel(request: in request, ring: ring);
 
         Assert.True(condition: kernel.TryRun(views: [view], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         AssertClose(expected: 0.0, actual: ((double)reading[0]), tolerance: 0.001);
         AssertClose(expected: 0.0, actual: ((double)reading[1]), tolerance: 0.001);
         AssertClose(expected: 1.0, actual: ((double)reading[2]), tolerance: 0.001);
@@ -91,7 +92,7 @@ public sealed partial class ProbeKernelTests {
         var (painting, paintingView) = FloatInput(bench: bench, color: [0.25f, 0.5f, 0.75f, 1f]);
         var dark = bench.CreateFrame(pixels: BuildSquare(inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
         var targets = bench.CreateSharedRing(slots: 2);
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "faerie"),
             AccumulateEntry: "accumulate",
@@ -121,7 +122,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: (paintingBound ? 0b111u : 0b011u),
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
 
         var pixels = bench.ReadBack(target: targets.Targets[reading.OutputSlot]);
 

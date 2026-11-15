@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Abstractions;
 
 namespace Puck.Overlays;
 
@@ -22,7 +22,7 @@ public abstract class OverlayStore<TFrame> : IOverlaySource<TFrame> {
 
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
-    public void Publish(in TFrame frame) => m_buffer.Publish(frame: frame);
+    public void Publish(in TFrame frame) => m_buffer.Publish(value: frame);
     /// <inheritdoc/>
-    public bool TrySnapshot(out TFrame frame) => m_buffer.TrySnapshot(frame: out frame);
+    public bool TrySnapshot(out TFrame frame) => m_buffer.TrySnapshot(value: out frame);
 }

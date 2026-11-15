@@ -2415,16 +2415,6 @@ certified-contact packet and step 8 closes. The measured state is in the
   still say "meter" (`sdf-probe-meter.comp.hlsl`, `ScheduleGpuMeters`,
   `GpuMeterNanoseconds`, `MeterOutputWords`) now that the image meter owns
   that word.
-- [low · volume emission] `WorldPlacementStamper.AppendStaticVolumes` and
-  `WorldCreationInstances.AppendVolumes` repeat enabled-volume admission,
-  capacity refusal, parent lookup and isolation filtering. Share that walk
-  and keep each caller's static or motion-slot frame resolution at its boundary.
-  The deformation fix pass's duplicate scan found the existing pair; the next
-  volume/client pass owns its unification.
-- [low · deal slot count] `WorldPlacementDeal.InstanceCount` counts scatter
-  slots with `ScatterInstanceCeiling`, while the sweep and the re-deal count
-  `WorldPlacementDeal.Offsets(...).Length`; they agree in the one law case.
-  Make one count.
 - [low · bake identity] A group's `Outcome` text (`SdfMeshPathBake`'s
   "no surface, as baked before", "contour refused" and the rest) is a string
   literal in the bake's code closure that only the done line's `empty=[...]`
@@ -2684,8 +2674,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     laws' kernel stand-ins share; the HLSL tap set (`SdfBakeTaps` in
     `passes/sdf-mesh-bake.comp.hlsl`) is still a hand pair with it, which a
     generated declaration would close.
-  - [low] Three work-kind registries with one body (`Puck.State.Rules/Evaluation/RuleWorkKinds.cs:10`,
-    `Puck.State.Search/SearchWorkKinds.cs:11`, `Puck.State/Arena/ArenaWork.cs:10`).
   - [low] Test helpers whose copies differ and stay per file: the raw-bit and
     whole-number `FixedVector3` builders in `tests/Puck.Maths.Tests`
     (`Vector(long, long, long)` in `MoveTowardAndEmitterClaims.cs`, `Vector` over
@@ -2816,13 +2804,6 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    parent). Until then a World's `--exit-after-seconds` backstop bounds it there,
    and an MCP World, which has none, outlives a killed adapter.
 5. Small merges (S each; one implementer lane can take them together).
-   - The `state.` reference prefix has a constant per reader:
-     `DocumentIdentifier.ReferencePrefix` (`Puck.Assets/Documents`, the shared
-     home, which `ColorStateBinding` reads), `CreationDriverDocument.SignalStatePrefix`,
-     `WorldHud` (`StatePrefix`), `WorldModuleNamespace` (twice),
-     `WorldStateBindingContext.RowReferencePrefix` and `PuckLinter.References`
-     (`BindingPrefix`). One constant, and one "is this a state reference" test
-     beside it.
    - Separator spelling beside `PuckPaths.Slashed` in the projects that cannot
      reference `Puck.Abstractions`: `build/ProjectArchitecture.cs` (two),
      `Puck.Launcher.Stub/Program.cs`, `Puck.Analyzers/AnalyzerAllowlistPath.cs` and
@@ -2922,15 +2903,12 @@ Duplicates the survey left to the lanes that own their areas:
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
 confirmed the AV1 item in the code; the rest are unconfirmed):
-4. Latest-value seqlock publication: `PublishBuffer<T>`
-   (`Puck.Hosting/PublishBuffer.cs:12`) beside `ProbeReadingRing`
-   (`Puck.Platform/Probes/ProbeReadingRing.cs:12`) (S).
-5. Rumble duration expiry: `GamepadDevice` (`NextRumbleDeadline`,
+1. Rumble duration expiry: `GamepadDevice` (`NextRumbleDeadline`,
    `Puck.Input/Devices/GamepadDevice.cs`) beside `XInputGamepadConnection`
    (`Puck.Platform.Windows/Gamepad/XInputGamepadConnection.cs`, which keeps its
    own `timeProvider` expiry), unconfirmed (S). The per-parser refresh and write
    intervals are device constants, not a shared deadline.
-6. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
+2. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).
 

@@ -76,7 +76,7 @@ internal sealed partial class WorldProbes {
 
         foreach (var instance in m_liveInstances) {
             foreach (var control in instance.ControlBindings) {
-                if (!instance.Ring.TryReadLatest(reading: out var reading)) {
+                if (!instance.Ring.TrySnapshot(value: out var reading)) {
                     continue;
                 }
                 if ((nowTimestamp - reading.CaptureTimestamp) > control.MaxAgeTicks) {

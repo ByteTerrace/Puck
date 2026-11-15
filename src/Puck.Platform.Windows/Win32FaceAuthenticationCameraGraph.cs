@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Graphics.Imaging;
 using Windows.Media.Capture;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 using Windows.Media.Capture.Frames;
 using WinRT;
@@ -426,7 +427,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
     }
 
     /// <inheritdoc/>
-    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
 
         foreach (var input in request.Inputs) {

@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Abstractions;
 
 namespace Puck.Overlays;
 
@@ -28,12 +28,12 @@ public sealed class OverlayToastStore : IOverlaySource<OverlayToastFrame> {
     public void Publish(string message, bool isError) {
         ArgumentNullException.ThrowIfNull(argument: message);
 
-        m_buffer.Publish(frame: new OverlayToastFrame(
+        m_buffer.Publish(value: new OverlayToastFrame(
             IsError: isError,
             Message: message,
             Sequence: Interlocked.Increment(location: ref m_sequence)
         ));
     }
     /// <inheritdoc/>
-    public bool TrySnapshot(out OverlayToastFrame frame) => m_buffer.TrySnapshot(frame: out frame);
+    public bool TrySnapshot(out OverlayToastFrame frame) => m_buffer.TrySnapshot(value: out frame);
 }
