@@ -57,7 +57,7 @@ internal sealed partial class WorldCursorFeed {
     private readonly WorldClient m_client;
     private readonly WorldSeatBindings m_bindings;
     private readonly WorldOverlayFacts m_facts;
-    private readonly IHudSource m_hud;
+    private readonly IOverlaySource<OverlayHudFrame> m_hud;
     private readonly WorldViewGraphHost m_panes;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
@@ -98,7 +98,7 @@ internal sealed partial class WorldCursorFeed {
     /// <param name="facts">The overlay-visibility fact evaluator the cursor policy's <c>visible</c> reads.</param>
     /// <param name="panes">The render graph host whose published panes the pointer hovers.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldCursorFeed(WorldSeatBindings bindings, WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IHudSource hud, CursorStore store, WorldOverlayFacts facts, WorldViewGraphHost panes) {
+    public WorldCursorFeed(WorldSeatBindings bindings, WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IOverlaySource<OverlayHudFrame> hud, CursorStore store, WorldOverlayFacts facts, WorldViewGraphHost panes) {
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(argument: panes);
         m_facts = facts;

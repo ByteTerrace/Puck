@@ -115,12 +115,9 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         }
 
         foreach (var listed in directories) {
-            var relative = Path.GetRelativePath(
+            var relative = Puck.Abstractions.PuckPaths.Relative(
                 path: listed,
                 relativeTo: directory
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             );
             var beside = ((relative == ".")
                 ? string.Empty
@@ -246,10 +243,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// compiled again.</remarks>
     public bool StillReads(string resolvedName, byte[] content) {
         try {
-            var path = resolvedName.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            var path = Puck.Abstractions.PuckPaths.Slashed(path: resolvedName);
 
             if (!(WorldDocumentName.IsSourceFile(path: path) || WorldDocumentName.IsDocumentFile(path: path))) {
                 return CompileInputs.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content);
@@ -336,10 +330,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             composed: out composed,
             reason: out reason,
             rootBytes: rootBytes,
-            rootResolvedName: rootResolvedPath.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ),
+            rootResolvedName: Puck.Abstractions.PuckPaths.Slashed(path: rootResolvedPath),
             source: ((sourceCompilation is null) ? Instance : new PuckDocumentComposer(cache: WorldCompileCache.Shared, sourceCompilation: sourceCompilation)),
             catalogFingerprint: catalogFingerprint,
             catalog: catalog
@@ -348,10 +339,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <inheritdoc />
     public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
         content = null;
-        referrerName = referrerName.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        referrerName = Puck.Abstractions.PuckPaths.Slashed(path: referrerName);
 
         if (!WorldDefinitionFileSource.TryResolveDocumentBeside(
             documentPath: out var documentPath,

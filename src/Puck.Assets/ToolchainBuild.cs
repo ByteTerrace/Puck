@@ -18,7 +18,7 @@ public static class ToolchainBuild {
     public static SortedDictionary<string, byte[]> Sources(Assembly assembly, string prefix, string? directory = null) {
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var resource in assembly.GetManifestResourceNames().Where(name => name.StartsWith(prefix, StringComparison.Ordinal))) {
-            var path = resource[prefix.Length..].Replace('\\', '/');
+            var path = Puck.Abstractions.PuckPaths.Slashed(path: resource[prefix.Length..]);
             using var stream = assembly.GetManifestResourceStream(resource)!;
             using var bytes = new MemoryStream();
             stream.CopyTo(bytes);
@@ -78,7 +78,7 @@ public static class ToolchainBuild {
             throw new InvalidOperationException($"Required toolchain '{executable}' needs version {minimum} or later; got {identity}. See {Setup}.");
         }
         var executablePath = ChildProcess.FindExecutable(executable);
-        return identity.Replace('\\', '/') + "\n" + ContentPin.Compute(File.ReadAllBytes(executablePath));
+        return Puck.Abstractions.PuckPaths.Slashed(path: identity) + "\n" + ContentPin.Compute(File.ReadAllBytes(executablePath));
     }
 
     /// <summary>Materializes a source snapshot in a run directory and builds one product.</summary>
@@ -89,7 +89,7 @@ public static class ToolchainBuild {
         using var run = RunDirectory.Create("puck-toolchain-");
         foreach (var (name, bytes) in files) {
             var path = Path.GetFullPath(Path.Combine(run.Path, name));
-            if (!path.StartsWith(run.Path + Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) {
+            if (!path.StartsWith(run.Path + Path.DirectorySeparatorChar, Puck.Abstractions.PuckPaths.Comparison)) {
                 throw new InvalidDataException($"Source path escapes compiler workspace: {name}.");
             }
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);

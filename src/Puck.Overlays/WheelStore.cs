@@ -1,5 +1,4 @@
 using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 
 namespace Puck.Overlays;
 
@@ -75,25 +74,5 @@ public readonly record struct OverlayWheelSeat(
 public readonly record struct OverlayWheelFrame(
     ReadOnlyMemory<OverlayWheelSeat> Seats
 );
-/// <summary>The read seam <see cref="WheelWriter"/> consumes; the host's wheel feed is the writer.</summary>
-public interface IWheelSource {
-    /// <summary>Copies the latest published frame, when one exists.</summary>
-    /// <param name="frame">The latest frame, when published.</param>
-    /// <returns><see langword="true"/> when a frame has been published.</returns>
-    bool TrySnapshot(out OverlayWheelFrame frame);
-}
-/// <summary>
-/// The radial-action-menu state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. Same
-/// threading contract as <see cref="CursorStore"/>: the host's feed publishes once per produced frame and the
-/// same-thread overlay writer reads, so backing arrays may be reused across publishes with zero steady-state
-/// allocation.
-/// </summary>
-public sealed class WheelStore : IWheelSource {
-    private readonly PublishBuffer<OverlayWheelFrame> m_buffer = new();
-
-    /// <summary>Publishes a frame (the writer side).</summary>
-    /// <param name="frame">The frame to publish.</param>
-    public void Publish(in OverlayWheelFrame frame) => m_buffer.Publish(frame: frame);
-    /// <inheritdoc/>
-    public bool TrySnapshot(out OverlayWheelFrame frame) => m_buffer.TrySnapshot(frame: out frame);
-}
+/// <summary>The radial-action-menu state store, over the shared <see cref="OverlayStore{TFrame}"/>.</summary>
+public sealed class WheelStore : OverlayStore<OverlayWheelFrame>;

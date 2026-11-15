@@ -51,7 +51,14 @@ public sealed partial class WorldCompileCache {
                 }
                 stream.Write(buffer: hash.Hash!);
             });
-            Trim(directory: Path.GetDirectoryName(path: path)!, written: path);
+            // The bound holds the most recently used entries, the one just written among them, and listing the
+            // directory also removes the temporaries a killed write abandoned.
+            _ = Puck.Abstractions.CacheRetention.EnforceOnWrite(
+                bound: new Puck.Abstractions.CacheBound(MaxBytes: MaxPersistedBytes, MaxEntries: MaxPersistedEntries),
+                directory: Path.GetDirectoryName(path: path)!,
+                inUse: path,
+                isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: EntryExtension)
+            );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // A refused write only costs a future derivation.
         }

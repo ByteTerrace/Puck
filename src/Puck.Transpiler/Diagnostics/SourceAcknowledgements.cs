@@ -7,8 +7,6 @@ namespace Puck.Transpiler.Diagnostics;
 /// names, and whose span starts inside the statement that <c>allow</c> covers in the same file, is acknowledged: the
 /// author keeps what it reports on purpose, so it is not reported. An error is never acknowledged.</summary>
 public sealed class SourceAcknowledgements {
-    private static readonly StringComparer PathComparer = (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-
     private readonly List<Range> m_ranges = [];
     private readonly string? m_rootPath;
 
@@ -21,7 +19,7 @@ public sealed class SourceAcknowledgements {
     /// <summary>Gets the acknowledgements of a source that did not parse: none.</summary>
     public static SourceAcknowledgements None { get; } = new(rootPath: null);
 
-    private static string? Normalize(string? path) => ((path is null) ? null : Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'));
+    private static string? Normalize(string? path) => ((path is null) ? null : Puck.Abstractions.PuckPaths.Normalize(path: path));
 
     /// <summary>Reads every <c>allow</c> line in <paramref name="document"/>, at any depth.</summary>
     /// <param name="document">The parsed source, with the declarations its imports brought in.</param>
@@ -90,7 +88,7 @@ public sealed class SourceAcknowledgements {
         foreach (var range in m_ranges) {
             if (
                 string.Equals(a: range.Code, b: diagnostic.Code, comparisonType: StringComparison.Ordinal) &&
-                ((range.Path is null) ? (path is null) : ((path is not null) && PathComparer.Equals(x: range.Path, y: path))) &&
+                ((range.Path is null) ? (path is null) : ((path is not null) && Puck.Abstractions.PuckPaths.Comparer.Equals(x: range.Path, y: path))) &&
                 (offset >= range.Start) &&
                 (offset < range.End)
             ) {

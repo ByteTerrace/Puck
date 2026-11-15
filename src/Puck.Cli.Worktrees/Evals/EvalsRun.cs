@@ -131,7 +131,7 @@ public static partial class EvalsRun {
 
     private static int Tier(string model) => ((FullModelId().Match(input: model) is { Success: true } match) ? System.Array.IndexOf(array: Tiers, value: match.Groups["tier"].Value) : -1);
     private static string Quote(string argument) => ((argument.Length != 0) && !argument.Any(predicate: static c => (char.IsWhiteSpace(c: c) || (c is '"' or '\'' or '*' or '?' or '[' or '$')))) ? argument : $"'{argument.Replace(oldValue: "'", newValue: "'\\''")}'";
-    private static string Display(string path) => path.Replace(oldChar: '\\', newChar: '/');
+    private static string Display(string path) => Puck.Abstractions.PuckPaths.Slashed(path: path);
 
     /// <summary>Builds the fixture text ahead of every case's task: the rules file a session in the repository has
     /// loaded, then each skill the lane preloads, each under a heading naming what it is.</summary>

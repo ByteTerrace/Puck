@@ -38,7 +38,7 @@ public static class WorktreeReportCommand {
     private static ChildProcessResult Git(string repository, string[] arguments, string? input = null) =>
         CliGit.ReadOnlyAsync(repository: repository, arguments: arguments, input: input).GetAwaiter().GetResult();
     private static string Failure(string operation, ChildProcessResult result) =>
-        $"git {operation} exited {result.ExitCode}: {result.Stderr.Trim().Replace(newChar: '/', oldChar: '\\')}";
+        $"git {operation} exited {result.ExitCode}: {Puck.Abstractions.PuckPaths.Slashed(path: result.Stderr.Trim())}";
     private static string Read(string repository, string[] arguments, string? input = null, List<string>? warnings = null) {
         var result = Git(arguments: arguments, input: input, repository: repository);
 

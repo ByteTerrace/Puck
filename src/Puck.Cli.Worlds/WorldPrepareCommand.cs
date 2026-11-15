@@ -176,7 +176,7 @@ public static class WorldPrepareCommand {
                 Console.Error.WriteLine(value: $"world prepare: specialized shading kernels for {target} skipped, the runtime compiles them on a miss: {exception.Message}");
             }
         }
-        Console.WriteLine(value: $"Prepared {kernels} specialized shading kernel(s) for {distinct.Length} program set(s) in {store.Replace(oldChar: '\\', newChar: '/')}.");
+        Console.WriteLine(value: $"Prepared {kernels} specialized shading kernel(s) for {distinct.Length} program set(s) in {Puck.Abstractions.PuckPaths.Slashed(path: store)}.");
     }
 
     public static Command Create() {

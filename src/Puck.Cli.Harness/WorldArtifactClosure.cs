@@ -111,10 +111,7 @@ public static partial class WorldArtifactClosure {
         // MSBuild reads a backslash as a directory separator on every platform, and the project files spell most of
         // their references that way; off Windows a backslash is an ordinary file-name character, so the walk reads
         // it as MSBuild does before any path is combined.
-        text = text.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        text = Puck.Abstractions.PuckPaths.Slashed(path: text);
 
         var anchored = false;
 

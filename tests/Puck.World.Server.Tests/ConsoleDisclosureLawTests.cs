@@ -325,14 +325,6 @@ public sealed partial class ConsoleDisclosureLawTests {
             return [.. leaking];
         }
     }
-    private class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
-        public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
-            refusal = string.Empty;
-
-            return true;
-        }
-    }
     private sealed class LeakyAuthority(WorldInstance instance) : FixedAuthority(instance: instance), IWorldConsoleAuthority {
         public WorldStateReadView ReadView(CommandContext context, WorldInstance instance) => WorldStateReadView.Of(
             reader: Principal.Console,

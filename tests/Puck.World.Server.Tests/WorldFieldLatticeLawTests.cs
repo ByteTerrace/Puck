@@ -5,6 +5,7 @@ using Xunit;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.Physics.Fields;
+using Puck.Physics.Testing;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
@@ -235,7 +236,7 @@ public sealed class WorldFieldLatticeLawTests {
         var population = new WorldPopulation(definition: original);
         var lattice = Assert.IsType<FieldLattice>(@object: population.FieldRegions[0].Lattice);
 
-        Fixtures.StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
         population.Rebuild(
             definition: replacement,
             solids: null
@@ -253,7 +254,7 @@ public sealed class WorldFieldLatticeLawTests {
             )
         );
 
-        Fixtures.StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
 
         Assert.Equal(
             expected: FixedQ4816.FromInteger(value: 3),

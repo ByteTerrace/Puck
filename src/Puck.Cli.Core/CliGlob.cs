@@ -12,10 +12,7 @@ public sealed class CliGlob {
     public bool BasenameOnly { get; }
 
     public CliGlob(string glob) {
-        var normalized = glob.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: glob);
 
         BasenameOnly = !normalized.Contains(value: '/');
         m_regex = new Regex(

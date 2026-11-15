@@ -25,6 +25,9 @@ namespace Puck.Confinement;
 /// access control.</para>
 /// </summary>
 public static class AtomicFile {
+    /// <summary>The suffix every temporary file a write stages ends in, and the one a write killed mid-way leaves behind.</summary>
+    public const string TemporarySuffix = ".tmp";
+
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
 
     [UnsupportedOSPlatform(platformName: "windows")]
@@ -92,7 +95,7 @@ public static class AtomicFile {
         var directory = Path.GetDirectoryName(path: destination)!;
         var temporary = Path.Combine(
             path1: directory,
-            path2: $"{Path.GetFileName(path: destination)}.{Guid.NewGuid():N}.tmp"
+            path2: $"{Path.GetFileName(path: destination)}.{Guid.NewGuid():N}{TemporarySuffix}"
         );
         var options = new FileStreamOptions {
             Access = FileAccess.Write,

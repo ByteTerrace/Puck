@@ -312,13 +312,10 @@ public static class ParityCommand {
         // composes the world's companion SDF document, turns temporal reconstruction on at the reconstruction tick when the world converges a station, and
         // waits past the last tick its captures rows schedule. A line after a wait releasing at tick R runs before tick
         // R + 1, so the reconstruction tick is exact.
-        var script = $"world.sdf.load \"{Path.Combine(
+        var script = $"world.sdf.load \"{Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
             path2: sdfDocumentName
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        )}\"\n{((reconstructionTick is { } on) ? $"world.wait {on}\nworld.temporal on\nworld.wait {(waitTick - on)}\n" : $"world.wait {waitTick}\n")}";
+        ))}\"\n{((reconstructionTick is { } on) ? $"world.wait {on}\nworld.temporal on\nworld.wait {(waitTick - on)}\n" : $"world.wait {waitTick}\n")}";
         var leg = WorldOffscreenLeg.Run(
             arguments: ["--capture-dir", captureDirectory, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)],
             artifact: artifact,

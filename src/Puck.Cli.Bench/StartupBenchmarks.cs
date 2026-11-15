@@ -151,7 +151,7 @@ public static class StartupBenchmarks {
     private static bool IsCaptureCompletion(CliProcessOutputLine line, string capture) =>
         ((line.Stream == CliProcessOutputStream.Stderr) &&
         line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") &&
-        line.Line.Replace(newChar: '/', oldChar: '\\').EndsWith($" -> {capture.Replace(newChar: '/', oldChar: '\\')}", StringComparison.Ordinal));
+        Puck.Abstractions.PuckPaths.Slashed(path: line.Line).EndsWith($" -> {Puck.Abstractions.PuckPaths.Slashed(path: capture)}", StringComparison.Ordinal));
 
     // Every sample of every world, or null until all of them passed.
     public static BenchMetric? Summarize(IReadOnlyList<StartupSample> rows, int expected, bool headless, bool bake = false) {

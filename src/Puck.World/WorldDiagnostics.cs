@@ -87,7 +87,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var snapshot = ++m_snapshot;
         var revision = Revision;
         var instance = Instance;
-        var sourcePath = sourceDocument?.SourcePath.Replace(newChar: '/', oldChar: '\\');
+        var sourcePath = (sourceDocument?.SourcePath is { } rawSourcePath ? Puck.Abstractions.PuckPaths.Slashed(path: rawSourcePath) : null);
         var collision = server.Definition.Collision;
         var contacts = new List<ContactInput>();
 

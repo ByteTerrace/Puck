@@ -24,14 +24,6 @@ public static class AffectedCommand {
 
     private const string Verb = "affected";
 
-    private static string Relative(string repositoryRoot, string path) => Path.GetRelativePath(
-        path: Path.GetFullPath(path: path),
-        relativeTo: repositoryRoot
-    ).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
-
     /// <summary>Reads the working tree's changes against <paramref name="since"/>: tracked files that differ from it,
     /// staged or not, plus untracked files git does not ignore; and of those, the ones deleted since it.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
@@ -100,12 +92,12 @@ public static class AffectedCommand {
         }
 
         canaries = [.. manifests.Select(selector: manifest => new AffectedCanary(
-            Directory: Relative(path: manifest.DirectoryPath, repositoryRoot: repositoryRoot),
+            Directory: Puck.Abstractions.PuckPaths.Relative(path: manifest.DirectoryPath, relativeTo: repositoryRoot),
             Files: [.. new[] { manifest.Positive, manifest.Discriminating }
                 .SelectMany(selector: static leg => new[] { leg.WorldPath, leg.ScriptPath, leg.AuthorityWorldPath })
                 .Concat(second: manifest.Fixtures)
                 .OfType<string>()
-                .Select(selector: path => Relative(path: path, repositoryRoot: repositoryRoot))],
+                .Select(selector: path => Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: repositoryRoot))],
             Id: manifest.Id,
             RequiresGpu: manifest.Requirements.Contains(value: "gpu", comparer: StringComparer.Ordinal)
         ))];
@@ -122,9 +114,9 @@ public static class AffectedCommand {
     /// <param name="repositoryRoot">The repository root.</param>
     /// <returns>The projects.</returns>
     public static AffectedProject[] Projects(ArchitectureModel model, string repositoryRoot) => [.. model.Projects.Values.Select(selector: project => {
-        var directory = Relative(
+        var directory = Puck.Abstractions.PuckPaths.Relative(
             path: Path.GetDirectoryName(path: project.File)!,
-            repositoryRoot: repositoryRoot
+            relativeTo: repositoryRoot
         );
 
         return new AffectedProject(

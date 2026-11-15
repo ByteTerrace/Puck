@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics.Fields;
+using Puck.Physics.Testing;
 using Puck.State;
 
 namespace Puck.Physics.Tests;
@@ -93,11 +94,6 @@ public sealed class FieldLatticeLawTests {
 
         return handle;
     }
-    private static void StepLattice(FieldLattice lattice, IFieldLatticeHost? host = null) => lattice.Step(
-        tick: 1,
-        bodyCount: 0,
-        host: (host ?? new LambdaHost())
-    );
     private static long SumBits(FieldLattice lattice, int cells) {
         var sum = 0L;
 
@@ -572,7 +568,7 @@ public sealed class FieldLatticeLawTests {
             full: false,
             isFull: out _
         );
-        StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
         var preservedRevision = lattice.Revision;
         var preservedRaw = lattice.Capture().Raw[0][0];
         var replacement = Fields(reactions: [
@@ -618,7 +614,7 @@ public sealed class FieldLatticeLawTests {
             actual: lattice.Input
         );
 
-        StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
 
         // Document order is add two, then decay by half: (1 + 2) / 2 = 1.5.
         Assert.Equal(
@@ -648,7 +644,7 @@ public sealed class FieldLatticeLawTests {
             FixedQ4816.Zero.Value,
         ]]));
 
-        StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
 
         Assert.Equal(
             expected: FixedQ4816.FromInteger(value: 3),
@@ -843,7 +839,7 @@ public sealed class FieldLatticeLawTests {
             full: false,
             isFull: out _
         );
-        StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
 
         var deltas = lattice.TakeDeltas(
             full: false,
@@ -878,7 +874,7 @@ public sealed class FieldLatticeLawTests {
             full: false,
             isFull: out _
         );
-        StepLattice(lattice: lattice);
+        FieldLatticeSteps.Step(lattice: lattice);
 
         var primer = lattice.TakeDeltas(
             full: true,
@@ -970,34 +966,6 @@ public sealed class FieldLatticeLawTests {
                 cell: 0,
                 field: 0
             )
-        );
-    }
-
-    // The test double for IFieldLatticeHost: every hook defaults to the same no-op/zero Step itself falls back to
-    // when a caller omits a delegate.
-    private sealed class LambdaHost(
-        Func<int, FixedVector3?>? bodyPosition = null,
-        Func<StateHandle, int, ulong, long>? readTag = null,
-        Action<StateHandle, int, long, ulong>? writeTag = null,
-        Func<StateHandle, ulong, FixedQ4816>? readScalar = null,
-        Action<StateHandle, FixedQ4816, ulong>? addScalar = null
-    ) : IFieldLatticeHost {
-        public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) { addScalar?.Invoke(row, amount, tick); return addScalar is null ? FixedQ4816.Zero : amount; }
-        public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
-        public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => (readScalar?.Invoke(
-            row,
-            tick
-        ) ?? FixedQ4816.Zero);
-        public long ReadTag(StateHandle row, int body, ulong tick) => (readTag?.Invoke(
-            row,
-            body,
-            tick
-        ) ?? 0L);
-        public void WriteTag(StateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(
-            row,
-            body,
-            value,
-            tick
         );
     }
 }

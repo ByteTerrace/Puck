@@ -26,12 +26,9 @@ public static class BundleCommand {
             searchPattern: "*"
         ).Order(comparer: StringComparer.Ordinal)) {
             files.Add(item: ReleaseInventory.Entry(
-                name: Path.GetRelativePath(
+                name: Puck.Abstractions.PuckPaths.Relative(
                 path: file,
                 relativeTo: root
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             ),
                 nameKey: "path",
                 path: file
@@ -69,10 +66,7 @@ public static class BundleCommand {
         var paths = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var file in release["files"]!.AsArray()) {
-            var relative = ((string)file!["path"]!).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            var relative = Puck.Abstractions.PuckPaths.Slashed(path: ((string)file!["path"]!));
             var path = Path.GetFullPath(path: Path.Combine(
                 path1: root,
                 path2: relative
@@ -97,12 +91,9 @@ public static class BundleCommand {
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         )
-            .Where(predicate: file => (file != manifestPath)).Select(selector: file => Path.GetRelativePath(
+            .Where(predicate: file => (file != manifestPath)).Select(selector: file => Puck.Abstractions.PuckPaths.Relative(
             path: file,
             relativeTo: root
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         )).ToArray();
 
         if (

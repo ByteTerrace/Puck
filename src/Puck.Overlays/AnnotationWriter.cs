@@ -34,15 +34,21 @@ public interface IAnnotationSource {
     bool TrySnapshot(out OverlayAnnotationFrame frame);
 }
 /// <summary>
-/// Draws the annotation outlines a person circles on screen to point something out: each kept outline as a magenta
-/// stroke over a dark halo, so it reads on any scene, with its one-based index beside it; the outline a drag in
-/// progress would keep; and, while annotate mode is on, a one-line banner. Unclipped and outside the replace-band
-/// suppression, so an outline can circle any part of the frame, a HUD panel included. A presentation instrument like
-/// the inspector, so its look is the writer's own.
+/// The one writer of marks over the frame. It draws the annotation outlines a person circles on screen to point
+/// something out: each kept outline as a magenta stroke over a dark halo, so it reads on any scene, with its
+/// one-based index beside it; the outline a drag in progress would keep; and, while annotate mode is on, a one-line
+/// banner. Unclipped and outside the replace-band suppression, so an outline can circle any part of the frame, a HUD
+/// panel included. A presentation instrument like the inspector, so its look is the writer's own. It also draws each
+/// seat's projected marker chips (<see cref="EmitMarkers"/>) and the diagnostic pins
+/// (<see cref="EmitDiagnostics"/>), each in its own channel.
 /// </summary>
-/// <param name="source">The annotation state.</param>
+/// <param name="source">The annotation state, or <see langword="null"/> when the world has none.</param>
 /// <param name="theme">The live overlay theme (the label and banner type size).</param>
-public sealed partial class AnnotationWriter(IAnnotationSource source, OverlayThemeStore theme) {
+/// <param name="markers">The per-seat marker snapshot source, or <see langword="null"/> when the world has none.</param>
+/// <param name="maxChipsPerSeat">The projected-chip ceiling one seat draws, schema-derived
+/// (<c>Puck.World.WorldMarkerCapacity.MaxChipsPerSeat</c>), never restated here.</param>
+/// <exception cref="ArgumentOutOfRangeException"><paramref name="maxChipsPerSeat"/> is negative.</exception>
+public sealed partial class AnnotationWriter(IAnnotationSource? source, OverlayThemeStore theme, IOverlaySource<OverlayMarkerFrame>? markers = null, int maxChipsPerSeat = 0) {
     /// <summary>The most outlines one frame keeps; the host refuses another past it.</summary>
     public const int MaxCircles = 16;
     /// <summary>The characters of one outline's index label.</summary>
@@ -107,7 +113,7 @@ public sealed partial class AnnotationWriter(IAnnotationSource source, OverlayTh
     public void Emit(OverlayFrameBuilder builder) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        if (!source.TrySnapshot(frame: out var frame)) {
+        if ((source is null) || !source.TrySnapshot(frame: out var frame)) {
             return;
         }
 

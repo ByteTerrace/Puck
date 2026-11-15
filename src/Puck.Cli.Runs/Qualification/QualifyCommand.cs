@@ -297,14 +297,8 @@ public static class QualifyCommand {
             Deferred: profile.Deferred,
             Functional: functional,
             Outcome: outcome,
-            Package: package.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ),
-            Profile: profileFile.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ),
+            Package: Puck.Abstractions.PuckPaths.Slashed(path: package),
+            Profile: Puck.Abstractions.PuckPaths.Slashed(path: profileFile),
             Publish: profile.Publish,
             Schema: QualificationReport.SchemaVersion
         );

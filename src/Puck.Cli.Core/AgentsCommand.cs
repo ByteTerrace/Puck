@@ -53,7 +53,7 @@ public static class AgentsCommand {
 
         return ((run.ExitCode == 0) ? run.Stdout.Trim() : null);
     }
-    private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path)).Replace(newChar: '/', oldChar: '\\');
+    private static string Normalize(string path) => Puck.Abstractions.PuckPaths.Slashed(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path)));
     /// <summary>Reads one checkout's branch and configuration keys.</summary>
     /// <param name="roles">What the checkout is to the session.</param>
     /// <param name="path">The checkout's top level.</param>

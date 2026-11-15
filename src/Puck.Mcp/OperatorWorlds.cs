@@ -207,7 +207,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var path = Path.GetFullPath(path: Path.Combine(path1: checkout, path2: document));
         var worlds = (Path.Combine(path1: checkout, path2: "worlds") + Path.DirectorySeparatorChar);
 
-        if (!path.StartsWith(comparisonType: PathComparison, value: worlds) || !(File.Exists(path: path) || Directory.Exists(path: path))) {
+        if (!path.StartsWith(comparisonType: PuckPaths.Comparison, value: worlds) || !(File.Exists(path: path) || Directory.Exists(path: path))) {
             return Refuse(output: $"Refused: {path} is not a world document or package under {worlds}; a start boots only the checkout's own worlds.");
         }
 
@@ -395,8 +395,6 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         ));
     }
 
-    private static StringComparison PathComparison => (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path));
     private static CallToolResult Refuse(string output, Started? started = null) => Result(metadata: Metadata(output: output, started: started, status: "refused"));
     private static OperatorMcpWorldRun Metadata(string? output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null, string? startId = null) {
@@ -464,7 +462,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var own = Normalize(path: launch!.Checkout);
         var wanted = ((requested is null) ? own : Normalize(path: requested));
 
-        if (string.Equals(a: wanted, b: own, comparisonType: PathComparison)) {
+        if (string.Equals(a: wanted, b: own, comparisonType: PuckPaths.Comparison)) {
             return (own, null);
         }
 
@@ -496,7 +494,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             .Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree "))
             .Select(selector: static line => Normalize(path: line["worktree ".Length..].Trim()));
 
-        return (worktrees.Any(predicate: worktree => string.Equals(a: worktree, b: wanted, comparisonType: PathComparison))
+        return (worktrees.Any(predicate: worktree => string.Equals(a: worktree, b: wanted, comparisonType: PuckPaths.Comparison))
             ? (wanted, null)
             : (null, $"Refused: {wanted} is not a checkout of this repository ({own} or one of its worktrees); a start boots only those."));
     }

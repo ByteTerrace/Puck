@@ -946,18 +946,12 @@ public static partial class CanaryCommand {
         var input = File.ReadAllText(path: leg.ScriptPath)
             .Replace(
             oldValue: "{fixtures}",
-            newValue: manifest.DirectoryPath.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ),
+            newValue: Puck.Abstractions.PuckPaths.Slashed(path: manifest.DirectoryPath),
             comparisonType: StringComparison.Ordinal
         )
             .Replace(
             oldValue: "{run}",
-            newValue: runDirectory.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ),
+            newValue: Puck.Abstractions.PuckPaths.Slashed(path: runDirectory),
             comparisonType: StringComparison.Ordinal
         );
         var executionWorld = leg.WorldPath;
@@ -1173,18 +1167,12 @@ public static partial class CanaryCommand {
             var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",
-                newValue: manifest.DirectoryPath.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                newValue: Puck.Abstractions.PuckPaths.Slashed(path: manifest.DirectoryPath),
                 comparisonType: StringComparison.Ordinal
             )
                 .Replace(
                 oldValue: "{run}",
-                newValue: runDirectory.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                newValue: Puck.Abstractions.PuckPaths.Slashed(path: runDirectory),
                 comparisonType: StringComparison.Ordinal
             );
 

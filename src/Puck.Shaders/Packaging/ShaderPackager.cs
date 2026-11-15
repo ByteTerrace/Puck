@@ -545,12 +545,9 @@ public sealed partial class ShaderPackager {
             );
         }
 
-        var logical = Path.GetRelativePath(
+        var logical = Puck.Abstractions.PuckPaths.Relative(
             path: path,
             relativeTo: rootPath
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         );
 
         if (string.Equals(

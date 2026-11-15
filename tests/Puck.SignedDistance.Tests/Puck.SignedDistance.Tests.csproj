@@ -13,6 +13,7 @@
         <ProjectReference Include="../../src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FixedTestValues.cs" Link="FixedTestValues.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
     </ItemGroup>
 </Project>

@@ -120,7 +120,7 @@ file:<path>\t<hash>\t<size>\n   (one line per file, ordered by path, ordinal)
 ```
 
 The manifest validator refuses control characters in a path
-(`ReleaseCanonicalizer.IsPortablePath`), so the tab and newline separators are
+(`PortablePath.IsRelative`), so the tab and newline separators are
 unambiguous. Rollout, notes, channel, `MinimumSupported`, `Revoked`, the version
 label, the archive and the signature are excluded: re-signing, advancing a
 rollout or relabelling identical files yields the same pin; changing any file's

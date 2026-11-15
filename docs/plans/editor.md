@@ -52,7 +52,7 @@ Several pieces exist with nothing using them:
   `WorldFieldEmitter`) are their one producer.
 
 The overlay draws rects, rings, wedges, panels, icons and text
-(`OverlayFrameBuilder`), and has no line primitive. `MarkerWriter` projects
+(`OverlayFrameBuilder`), and has no line primitive. `AnnotationWriter.EmitMarkers` projects
 world points into each seat's viewport. `WorldPointerRayCapture` casts the OS
 pointer through a seat's camera, and the cursor already outlines a hovered pane
 (`WorldViewGraphHost.Hover`, `CursorWriter`).
@@ -98,7 +98,7 @@ names a placement id they had to look up.
    thickness, role, alpha), drawn by the overlay kernel as an antialiased
    capsule distance, charged to a new `Editor` overlay channel leased in
    `OverlayChannelLeases`. A world-space polyline projects through the seat's
-   viewport camera, the way `MarkerWriter` projects a point, and clips to the
+   viewport camera, the way `AnnotationWriter.EmitMarkers` projects a point, and clips to the
    viewport.
 2. **An identity for every drawn instance.** P13 supplies the shared identity
    and readback mechanism described above. `WorldPickMapBuilder` maps the
@@ -366,8 +366,9 @@ changes it. A contribution the captured renderer data cannot establish says
 The same diagnostics path absorbs Debug tools' findings, pins, `goto`, and
 `annotate`. `world.problems` gathers spatial refusals and source warnings,
 selects and frames findings through E2/E8, and retains pins and annotations
-through one overlay writer. Consolidate `MarkerWriter` and `AnnotationWriter`
-rather than adding a third path. `world.goto <placement>` selects and frames
+through one overlay writer: `AnnotationWriter` is it, and already carries the
+marker chips and the diagnostic pins beside the outlines, so a finding or pin
+extends it rather than adding a third path. `world.goto <placement>` selects and frames
 the target with the editor camera.
 
 **Touches:** `Puck.World`'s inspection commands and picker, `Puck.World.Client`
@@ -378,7 +379,7 @@ debug world; compare each answer with its captured pixel on both backends.
 Exercise unavailable data and cancellation, and show findings, pins, goto, and
 annotations through the same overlay path.
 
-**Depends on:** E2; E8 for framing; the overlay-writer consolidation.
+**Depends on:** E2; E8 for framing.
 
 ### E7 — Gizmos and pointer dragging
 

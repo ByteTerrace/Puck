@@ -26,6 +26,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
         <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
         <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
@@ -42,6 +43,7 @@
         <Compile Include="../Shared/World/EditorBarFixtures.cs" Link="World/EditorBarFixtures.cs" />
         <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/NoNeighbours.cs" Link="World/NoNeighbours.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/MirrorBindings.cs" Link="World/MirrorBindings.cs" />

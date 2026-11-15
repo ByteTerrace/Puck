@@ -24,12 +24,9 @@ public static class CliPaths {
 
     // Path globs match relative paths even outside the working directory.
     public static string RelForGlob(string fullPath) =>
-        Path.GetRelativePath(
+        Puck.Abstractions.PuckPaths.Relative(
             path: fullPath,
             relativeTo: WorkingDirectory
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
         );
     /// <summary>Returns whether two paths name the same file or directory: compared in full, without a trailing separator,
     /// and without case on Windows.</summary>
@@ -53,13 +50,10 @@ public static class CliPaths {
         fullPath = Path.GetFullPath(path: fullPath);
         var contained = Puck.Abstractions.PuckPaths.IsWithin(path: fullPath, root: relativeTo);
 
-        return (contained
+        return Puck.Abstractions.PuckPaths.Slashed(path: (contained
             ? Path.GetRelativePath(path: fullPath, relativeTo: relativeTo)
             : fullPath
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        ));
     }
     // The repository root, or false with the failure already reported — scan turns that into exit 2
     // rather than an unhandled exception.

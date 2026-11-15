@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -108,12 +109,6 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
             new SdfFieldEvaluator(program: referenceBuilder.Build())
         );
     }
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
 
     [InlineData(false)]
     [InlineData(true)]

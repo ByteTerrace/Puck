@@ -41,8 +41,8 @@ public static class MotionRouteRun {
 
     public static MotionRouteLeg Execute(MotionRoutePlan plan, string artifact, string world, string repository,
         string directory, WorldBackendPreference? backend, string? cache, TimeSpan deadline, string? tape, string? buildSourceKey) {
-        artifact = artifact.Replace('\\', '/');
-        directory = directory.Replace('\\', '/');
+        artifact = Puck.Abstractions.PuckPaths.Slashed(path: artifact);
+        directory = Puck.Abstractions.PuckPaths.Slashed(path: directory);
         Directory.CreateDirectory(directory);
         // Reusing an output folder must never reuse an authority catalog, machine id or checkpoint.
         var state = Path.Combine(directory, "state-" + Guid.NewGuid().ToString("N"));
@@ -69,7 +69,7 @@ public static class MotionRouteRun {
                 path.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.Ordinal)) {
             using var stream = File.OpenRead(file);
-            files[Path.GetRelativePath(artifactRoot, file).Replace('\\', '/')] = Convert.ToHexStringLower(SHA256.HashData(stream));
+            files[Puck.Abstractions.PuckPaths.Relative(artifactRoot, file)] = Convert.ToHexStringLower(SHA256.HashData(stream));
         }
         var hash = files[Path.GetFileName(artifact)];
         WorldProcess started;
@@ -199,7 +199,7 @@ public static class MotionRouteRun {
                 // The finite authority pause, all metric endpoints and trace snapshot are already behind us.
                 // End observation explicitly, then use the ordinary presented-capture path: no temporal settling,
                 // no additional authority ticks, and no screenshot work enters the measured interval.
-                var image = Path.Combine(directory, "post-window-" + Guid.NewGuid().ToString("N") + ".png").Replace('\\', '/');
+                var image = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(directory, "post-window-" + Guid.NewGuid().ToString("N") + ".png"));
                 _ = Direct("trace-end", "world.view.trace end");
                 _ = Direct("capture", $"world.screenshot {CommandEcho.Quote(image)} presented 1");
                 var completed = Direct("capture-wait", "world.wait captures 60");

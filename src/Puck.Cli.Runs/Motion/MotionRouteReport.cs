@@ -160,7 +160,7 @@ public static class MotionRouteReport {
             memoryScope = "Process and memory readings include the diagnostic observer and authority replay machinery. Normal-play physical budget qualification is a separate workload.",
             equivalent = problems.Count == 0, unmatched = problems,
             equivalenceEvidence = "Canonical per-tick authority replay verdicts and 64-bit semantic content signatures; diagnostic equivalence evidence, not a formal collision-free byte proof.",
-            route = Path.GetFullPath(routePath).Replace('\\', '/'), plan,
+            route = Puck.Abstractions.PuckPaths.Normalize(path: routePath), plan,
             canonicalTapeSha256 = tapeSha256,
             first = new { a.Artifact, a.ArtifactSha256, a.BuildFiles, a.BuildSourceKey, a.ReplayStatus, a.PostWindowImage, a.DirectReceipts, a.BeforeChecks, a.AfterChecks, timing = Timing(a), metrics = Metrics(plan, a) },
             second = new { b.Artifact, b.ArtifactSha256, b.BuildFiles, b.BuildSourceKey, b.ReplayStatus, b.PostWindowImage, b.DirectReceipts, b.BeforeChecks, b.AfterChecks, timing = Timing(b), metrics = Metrics(plan, b) },

@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -40,12 +41,6 @@ public sealed class FixedStaticContactSolverTests {
             Kind: FixedBodyColliderKind.Sphere,
             Radius: FixedQ4816.One,
             Rotation: FixedQuaternion.Identity
-        );
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
         );
 
     [Fact]

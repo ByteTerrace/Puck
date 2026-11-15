@@ -80,7 +80,7 @@ public sealed class CliLease : IDisposable {
             throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, lane and checkout, and a nonnegative wait.");
         }
         lane = (lane?.Trim() ?? DefaultLane(holder: holder));
-        checkout = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)).Replace(newChar: '/', oldChar: '\\');
+        checkout = Puck.Abstractions.PuckPaths.Slashed(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)));
         Directory.CreateDirectory(path: root);
         var request = new Request(Ancestor: Remembered(ancestor: ancestor), Checkout: checkout, Clock: clock, Holder: holder, Lane: lane, Name: name, Quiet: quiet, Root: root);
         var started = clock.GetTimestamp();

@@ -53,8 +53,8 @@ public static class OfficialWorldDocumentScanner {
         }
 
         foreach (var path in carriers.Select(selector: static carrier => carrier.Path).Concat(second: libraries)) {
-            sources[WorkspaceName(
-                full: full,
+            sources[Puck.Abstractions.PuckPaths.Relative(
+                relativeTo: full,
                 path: path
             )] = path;
 
@@ -64,8 +64,8 @@ public static class OfficialWorldDocumentScanner {
 
             foreach (var sidecar in ((ReadOnlySpan<string>)[EmbeddingLock.DeriveLockPath(sourcePath: path), AssetLock.DeriveLockPath(sourcePath: path)])) {
                 if (File.Exists(path: sidecar)) {
-                    sources[WorkspaceName(
-                        full: full,
+                    sources[Puck.Abstractions.PuckPaths.Relative(
+                        relativeTo: full,
                         path: sidecar
                     )] = sidecar;
                 }
@@ -216,15 +216,6 @@ public static class OfficialWorldDocumentScanner {
 
         return true;
     }
-    // A file's forward-slash path relative to the worlds directory — the name sources[] carries.
-    private static string WorkspaceName(string full, string path) => Path.GetRelativePath(
-        path: path,
-        relativeTo: full
-    ).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
-
     public static bool TryScan(
         string worldsDirectory,
         OfficialObjectWriter writer,

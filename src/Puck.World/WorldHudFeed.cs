@@ -13,7 +13,7 @@ namespace Puck.World;
 /// (who is joined, in what view order), which the definition revision does not cover; the walk is bounded to
 /// <see cref="PlayerRoster.MaxSlots"/> seats and each seat's panel is memoized against the document row it was
 /// built from, so a steady frame allocates nothing. Both halves publish
-/// together (one <see cref="HudStore.Publish"/> call) so neither half's snapshot can lag behind a call that only
+/// together (one <see cref="OverlayStore{TFrame}.Publish"/> call) so neither half's snapshot can lag behind a call that only
 /// refreshed the other. Live binding values are resolved separately, every frame, by <see cref="HudWriter"/> through
 /// <see cref="WorldHudBindingResolver"/>; this feed only republishes structure (which panels/elements exist, their
 /// rects, their style, which binding token or parsed template runs each names, and which seat's viewport a

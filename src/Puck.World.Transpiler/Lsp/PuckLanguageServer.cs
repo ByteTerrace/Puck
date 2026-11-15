@@ -1505,10 +1505,7 @@ public sealed partial class PuckLanguageServer {
         ) &&
             parsed.IsFile
         ) {
-            path = parsed.LocalPath.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            path = Puck.Abstractions.PuckPaths.Slashed(path: parsed.LocalPath);
             // VS Code escapes the drive colon (file:///d%3A/...), which Uri.LocalPath treats as /d:/... .
             if (
                 OperatingSystem.IsWindows() &&
