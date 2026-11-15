@@ -9,6 +9,9 @@ namespace Puck.World.Azure;
 /// needs no timeout of its own.</param>
 /// <param name="timeProvider">The host clock; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
 public sealed class AzureScheduledEvents(HttpClient client, TimeProvider? timeProvider = null) {
+    // The link-local endpoint answers with a few kilobytes (the compute document carries at most a base64 user-data
+    // blob of 64 KiB), but a proxied or misrouted client must never hand the JSON parser an unbounded body.
+    private const int MaximumResponseBytes = (1 << 20);
     private const string Metadata = "http://169.254.169.254/metadata/";
 
     private readonly TimeProvider m_clock = (timeProvider ?? TimeProvider.System);
@@ -39,10 +42,13 @@ public sealed class AzureScheduledEvents(HttpClient client, TimeProvider? timePr
         );
 
         response.EnsureSuccessStatusCode();
-        return await JsonDocument.ParseAsync(
-            await response.Content.ReadAsStreamAsync(cancellationToken: cancellationToken),
-            cancellationToken: cancellationToken
-        );
+        using var body = await response.Content.ReadAsStreamAsync(cancellationToken: cancellationToken);
+
+        return (await AzureArmPipeline.ReadJsonAsync(
+            cancellationToken: cancellationToken,
+            maximumBytes: MaximumResponseBytes,
+            stream: body
+        ) ?? throw new JsonException(message: "The instance-metadata response has no body."));
     }
 
     /// <summary>Polls events for this VM and invokes the host's deadline-aware retirement operation.</summary>
@@ -94,7 +100,7 @@ public sealed class AzureScheduledEvents(HttpClient client, TimeProvider? timePr
                     );
                     break;
                 }
-            } catch (Exception ex) when (((ex is HttpRequestException or JsonException) || ((ex is OperationCanceledException) && !cancellationToken.IsCancellationRequested))) {
+            } catch (Exception ex) when (((ex is HttpRequestException or JsonException or IOException) || ((ex is OperationCanceledException) && !cancellationToken.IsCancellationRequested))) {
                 Console.Error.WriteLine(value: $"[azure.events: metadata unavailable ({ex.GetType().Name})]");
             }
             // Retirement errors, including HTTP and timeout errors from persistence, must escape the metadata retry.

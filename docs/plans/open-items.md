@@ -2661,11 +2661,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `WorkCounterSet` is itself an `IWorkCounterSource`, so a ledger with no
   behaviour of its own is the set (`WorldTickWork.Process`). Unconfirmed which
   of the four adds behaviour the set lacks.
-- [low] `AzureScheduledEvents.ReadAsync` parses the instance-metadata body with
-  no byte budget, unlike every ARM read, which passes `AzureArmPipeline.ReadJsonAsync`.
-  Decide whether the link-local metadata endpoint needs the same bound.
-- [low] `IAllocator`'s documentation names a `NativeMemory`-backed implementation
-  that `src` does not have (the test allocators are now one, `tests/Shared/HeapAllocator.cs`).
 - Duplicates the clone scan's type and expression passes found (the
   [hazards page](../development/hazards.md#two-copies-of-one-computation) says
   how the passes work; paths under `src/` unless named). One implementation each:
@@ -2810,18 +2805,9 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
      `Puck.Shaders.Generator/Program.cs`; the test projects spell it by hand in
      a few laws too. `Puck.Confinement` is the BCL-only leaf both could take a
      one-line separator helper from.
-   - Relative-path guards that still spell their own segment test beside
-     `PortablePath.IsRelative` (`Puck.Confinement/PortablePath.cs`), each refusing
-     fewer spellings than it: `Puck.Cli.Release/Automation/BundleCommand.cs:79`,
-     `ArtifactsCommand.cs:223`, `Puck.Cli.Format/Format/FormatSources.cs:36`,
-     `Puck.Cli.Harness/Canary/CanaryManifestLoader.Boots.cs:139`,
-     `Puck.Cli.Core/CliOptions.cs:310`, `Puck.Cli.Runs/Qualification/ReleaseProfileLoader.cs:243`,
-     `Puck.Machines.Post/CorpusManifest.Files.cs:45`,
-     `Puck.World.Browser/Engine/BrowserWorkspace.cs:96` and
-     `Puck.World.Azure/AzureResourceBinding.cs:88`. Route each through it where
-     its input is a path that lands on a disk; `Puck.Storage/ObjectBlobAddressPath.cs`
-     also splits on both separators, drops empty segments and reserves `.puck-`, so it
-     keeps those and takes the device-name rule from `PortablePath.IsDeviceName`.
+   - `Puck.Storage/ObjectBlobAddressPath.cs` splits on both separators, drops
+     empty segments and reserves `.puck-`, so it keeps its own walk; it takes the
+     device-name rule from `PortablePath.IsDeviceName`.
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
      `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`. A shared include is refused
@@ -5498,11 +5484,9 @@ Monitor hook check remain supporting work alongside the landscape priority.
 
 - Once the current batch has landed: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
-  done research and reading only, so its numbers are checked before use). Two
-  bounded issue fixes from this file, each in its own worktree with a
-  mechanical check: the five duplicate `HeapAllocator` test allocators and
-  `IAllocator`'s untrue documentation (small,
-  [refactoring](#refactoring-campaign)), and the Superellipsoid's loose far
+  done research and reading only, so its numbers are checked before use). One
+  bounded issue fix from this file, in its own worktree with a
+  mechanical check: the Superellipsoid's loose far
   field ([certified field contact](#certified-field-contact)) plus its
   small-radius CPU/GPU disagreement ([the valley's terrain](#the-valleys-terrain))
   in both interpreters (medium, shown working by running both interpreters on
