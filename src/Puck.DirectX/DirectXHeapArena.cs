@@ -18,7 +18,8 @@ namespace Puck.DirectX;
 /// which a later resource may reuse. A placed resource holds its heap, so releasing the arena's reference never frees
 /// memory a resource still sits in: <see cref="FreeAll"/> releases every heap once as the device is torn down, whatever
 /// resources a device loss left in them, and retires the arena, which then places nothing; a resource released after it
-/// returns no range. Thread-safe.
+/// returns no range. Thread-safe: a resource is created inside the pool's lock, so one device's placed creations run one
+/// at a time and none overlaps <see cref="FreeAll"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXHeapArena {
@@ -68,41 +69,43 @@ public sealed unsafe class DirectXHeapArena {
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     public ID3D12Resource* Create(in D3D12_RESOURCE_DESC description, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue, GpuMemoryRole role) {
         var resourceDescription = description;
-        var info = m_calls.AllocationInfo(description: &resourceDescription);
+        var sized = description;
+        var info = m_calls.AllocationInfo(description: &sized);
         var category = ((description.Dimension == D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER)
             ? D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS
             : (((description.Flags & (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) != 0)
                 ? D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES
                 : D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES));
-        var placement = m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), size: info.SizeInBytes);
-        ID3D12Resource* resource = null;
+        var hasClear = clearValue.HasValue;
         var clear = clearValue.GetValueOrDefault();
 
-        try {
+        // The resource is created and registered under the pool's lock, so FreeAll, which takes it too, never releases its
+        // heap between the placement and the creation, and its sweep of Placed sees every resource the arena created.
+        return ((ID3D12Resource*)m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), size: info.SizeInBytes, bind: placement => {
+            var placedDescription = resourceDescription;
+            var placedClear = clear;
+            ID3D12Resource* resource = null;
+
             m_calls.CreatePlacedResource(
-                clearValue: (clearValue.HasValue ? &clear : null),
-                description: &resourceDescription,
+                clearValue: (hasClear ? &placedClear : null),
+                description: &placedDescription,
                 heap: ((ID3D12Heap*)placement.Native),
                 initialState: initialState,
                 offset: placement.Offset,
                 resource: &resource
             ).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreatePlacedResource");
-        } catch {
-            m_pool.Return(placement: placement);
-            throw;
-        }
-        var token = Interlocked.Increment(location: ref Tokens);
 
-        var tagged = m_calls.Tag(key: TokenKey, resource: resource, value: token);
+            var token = Interlocked.Increment(location: ref Tokens);
+            var tagged = m_calls.Tag(key: TokenKey, resource: resource, value: token);
 
-        if (tagged.Failed) {
-            m_calls.ReleaseResource(resource: resource);
-            m_pool.Return(placement: placement);
-            tagged.ThrowIfFailed(calls: m_calls, operation: "ID3D12Object::SetPrivateData");
-        }
-        Placed[token] = (this, placement);
+            if (tagged.Failed) {
+                m_calls.ReleaseResource(resource: resource);
+                tagged.ThrowIfFailed(calls: m_calls, operation: "ID3D12Object::SetPrivateData");
+            }
+            Placed[token] = (this, placement);
 
-        return resource;
+            return ((nint)resource);
+        }));
     }
     /// <summary>Returns the range a placed resource held, as the resource is released.</summary>
     /// <param name="resource">The resource.</param>

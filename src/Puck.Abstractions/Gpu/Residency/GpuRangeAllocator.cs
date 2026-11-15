@@ -3,11 +3,14 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// Hands out contiguous ranges of a fixed span <c>[0, size)</c>: a descriptor heap's slots, a buffer's words, a block of
 /// device memory's bytes. First fit in address order at the alignment each request asks for; the gap an alignment leaves
-/// stays free for a later fit; each range is returned whole by <see cref="Free"/>, which names it by its start; and free
+/// stays free for a later fit; each range is returned whole by <see cref="Free(ulong)"/>, which names it by its start; and free
 /// neighbours coalesce, so a span every range left is one free range again (<see cref="LiveRanges"/> is zero).
 /// <para>The live ranges never overlap one another or a free range: every range comes from a free run, and a free names a
 /// live range's start exactly, refusing a start in free space (freed already) or inside a live range (never allocated),
-/// so no caller can free part of a range or free one twice. The span never grows: a request no free range holds is
+/// so no caller can free part of a range or free one twice. Each live range also carries a ticket no other allocation of
+/// the span ever carries (<see cref="TicketOf"/>), and a free that names one (<see cref="Free(ulong, ulong)"/>) is refused
+/// once the start it names was freed and given again, so a holder of a stale range cannot free its successor. The span
+/// never grows: a request no free range holds is
 /// refused with <see cref="GpuRangeExhaustedException"/>, which states the request, the largest free range and the size,
 /// and so is one past <see cref="MaxRanges"/> live ranges.</para>
 /// <para>The live and free ranges are held in arrays sorted by start that double as the live ranges pass their earlier
@@ -24,8 +27,11 @@ public sealed class GpuRangeAllocator {
     private ulong[] m_freeStarts;
     private ulong[] m_liveLengths;
     private ulong[] m_liveStarts;
+    // Each live range's ticket, beside its start; tickets count up from one and are never reused.
+    private ulong[] m_liveTickets;
 
     private int m_freeCount;
+    private ulong m_lastTicket;
     private int m_liveCount;
 
     /// <summary>Initializes a new instance of the <see cref="GpuRangeAllocator"/> class, wholly free.</summary>
@@ -55,6 +61,7 @@ public sealed class GpuRangeAllocator {
         m_freeStarts = new ulong[(first + 1)];
         m_liveLengths = new ulong[first];
         m_liveStarts = new ulong[first];
+        m_liveTickets = new ulong[first];
         m_freeLengths[0] = size;
         m_freeCount = 1;
         Size = size;
@@ -199,7 +206,9 @@ public sealed class GpuRangeAllocator {
                 length: count,
                 lengths: m_liveLengths,
                 start: aligned,
-                starts: m_liveStarts
+                starts: m_liveStarts,
+                ticket: ++m_lastTicket,
+                tickets: m_liveTickets
             );
             start = aligned;
 
@@ -208,12 +217,38 @@ public sealed class GpuRangeAllocator {
 
         return false;
     }
+    /// <summary>Returns the ticket of the live range that starts at <paramref name="start"/>: a number no other allocation
+    /// of this span carries, before or after.</summary>
+    /// <param name="start">The start <see cref="Allocate"/> or <see cref="TryAllocate"/> returned.</param>
+    /// <returns>The range's ticket.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="start"/> starts no live range.</exception>
+    public ulong TicketOf(ulong start) => m_liveTickets[LiveIndexOf(start: start)];
     /// <summary>Frees the live range that starts at <paramref name="start"/>, merging it with any free neighbour.</summary>
     /// <param name="start">The start <see cref="Allocate"/> or <see cref="TryAllocate"/> returned.</param>
     /// <returns>The freed range's length.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="start"/> lies in free space, so the range was freed
     /// already, or it starts no live range, so it was never allocated.</exception>
-    public ulong Free(ulong start) {
+    public ulong Free(ulong start) => FreeAt(live: LiveIndexOf(start: start), start: start);
+    /// <summary>Frees the live range that starts at <paramref name="start"/> when it is the allocation
+    /// <paramref name="ticket"/> names, merging it with any free neighbour; a range freed and given again since carries
+    /// another ticket and is left live.</summary>
+    /// <param name="start">The start <see cref="Allocate"/> or <see cref="TryAllocate"/> returned.</param>
+    /// <param name="ticket">The ticket <see cref="TicketOf"/> returned for that allocation.</param>
+    /// <returns>The freed range's length.</returns>
+    /// <exception cref="InvalidOperationException">The allocation was freed already, so <paramref name="start"/> lies in
+    /// free space or starts a later allocation, or it was never made.</exception>
+    public ulong Free(ulong start, ulong ticket) {
+        var live = LiveIndexOf(start: start);
+
+        if (m_liveTickets[live] != ticket) {
+            throw new InvalidOperationException(message: $"The range at {start} was freed and given again (ticket {m_liveTickets[live]}, not {ticket}); a range is freed once.");
+        }
+
+        return FreeAt(live: live, start: start);
+    }
+
+    // The index of the live range that starts at start, or a refusal naming why none does.
+    private int LiveIndexOf(ulong start) {
         var live = LowerBound(
             count: m_liveCount,
             starts: m_liveStarts,
@@ -236,13 +271,18 @@ public sealed class GpuRangeAllocator {
                 : $"No range was allocated at {start} in this span of {Size}."));
         }
 
+        return live;
+    }
+    // Frees the live range at an index, merging it with any free neighbour; its length.
+    private ulong FreeAt(int live, ulong start) {
         var length = m_liveLengths[live];
 
         RemoveAt(
             count: ref m_liveCount,
             index: live,
             lengths: m_liveLengths,
-            starts: m_liveStarts
+            starts: m_liveStarts,
+            tickets: m_liveTickets
         );
 
         var at = LowerBound(
@@ -307,27 +347,16 @@ public sealed class GpuRangeAllocator {
 
         Array.Resize(array: ref m_liveStarts, newSize: length);
         Array.Resize(array: ref m_liveLengths, newSize: length);
+        Array.Resize(array: ref m_liveTickets, newSize: length);
         Array.Resize(array: ref m_freeStarts, newSize: (length + 1));
         Array.Resize(array: ref m_freeLengths, newSize: (length + 1));
     }
 
-    private static void InsertAt(ulong[] starts, ulong[] lengths, ref int count, int index, ulong start, ulong length) {
-        Array.Copy(
-            destinationArray: starts,
-            destinationIndex: (index + 1),
-            length: (count - index),
-            sourceArray: starts,
-            sourceIndex: index
-        );
-        Array.Copy(
-            destinationArray: lengths,
-            destinationIndex: (index + 1),
-            length: (count - index),
-            sourceArray: lengths,
-            sourceIndex: index
-        );
-        starts[index] = start;
-        lengths[index] = length;
+    // Inserts a range at an index of sorted parallel arrays, and its ticket when the arrays carry tickets.
+    private static void InsertAt(ulong[] starts, ulong[] lengths, ref int count, int index, ulong start, ulong length, ulong[]? tickets = null, ulong ticket = 0UL) {
+        Shift(array: starts, count: count, index: index, value: start);
+        Shift(array: lengths, count: count, index: index, value: length);
+        if (tickets is not null) { Shift(array: tickets, count: count, index: index, value: ticket); }
         count++;
     }
     // The first index whose start is at or past value; the starts are sorted and distinct.
@@ -336,23 +365,21 @@ public sealed class GpuRangeAllocator {
 
         return ((found >= 0) ? found : ~found);
     }
-    private static void RemoveAt(ulong[] starts, ulong[] lengths, ref int count, int index) {
+    // Removes the range at an index of sorted parallel arrays, and its ticket when the arrays carry tickets.
+    private static void RemoveAt(ulong[] starts, ulong[] lengths, ref int count, int index, ulong[]? tickets = null) {
         count--;
-        Array.Copy(
-            destinationArray: starts,
-            destinationIndex: index,
-            length: (count - index),
-            sourceArray: starts,
-            sourceIndex: (index + 1)
-        );
-        Array.Copy(
-            destinationArray: lengths,
-            destinationIndex: index,
-            length: (count - index),
-            sourceArray: lengths,
-            sourceIndex: (index + 1)
-        );
+        Unshift(array: starts, count: count, index: index);
+        Unshift(array: lengths, count: count, index: index);
+        if (tickets is not null) { Unshift(array: tickets, count: count, index: index); }
     }
+    // Moves the count elements from index up by one and writes value at index.
+    private static void Shift(ulong[] array, int count, int index, ulong value) {
+        array.AsSpan(length: (count - index), start: index).CopyTo(destination: array.AsSpan(start: (index + 1)));
+        array[index] = value;
+    }
+    // Moves the elements past index down by one, over it; count is the length after the removal.
+    private static void Unshift(ulong[] array, int count, int index) =>
+        array.AsSpan(length: (count - index), start: (index + 1)).CopyTo(destination: array.AsSpan(start: index));
 }
 /// <summary>A <see cref="GpuRangeAllocator"/>'s refusal of a range it cannot hand out: no free range holds the request,
 /// or its most live ranges already are.</summary>

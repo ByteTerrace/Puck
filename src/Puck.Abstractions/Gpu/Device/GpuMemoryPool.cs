@@ -8,14 +8,16 @@ namespace Puck.Abstractions.Gpu;
 /// in a block of its own, a block every resource left freed when it was a resource's own or its key keeps another empty
 /// shared block, and every block freed once by <see cref="FreeAll"/>, which
 /// retires the pool. The backend supplies only the native calls: <c>allocate</c> makes a block's memory, <c>free</c>
-/// releases it, and the backend binds or places each resource at its <see cref="GpuMemoryPlacement{TBlock}"/> and finds
-/// that placement again when the resource is released.
-/// <para>Placements never overlap: a block's ranges are handed out only here, and a placement is returned whole, once,
-/// by <see cref="Return"/>, which refuses a placement it already took back. A range is reused only once it is returned,
-/// so a range a queue may still read stays held as long as the resource's owner holds the resource: the pool sees no
-/// fence, and retiring a resource after the submissions that read it is its owner's (a
-/// <see cref="GpuRetirementQueue{T}"/> or a slot fence).</para>
-/// <para>Thread-safe: <c>allocate</c> and <c>free</c> run under the pool's lock, so they must not call back into it.</para>
+/// releases it, and the <c>bind</c> each <see cref="Place"/> takes binds or places the resource at its
+/// <see cref="GpuMemoryPlacement{TBlock}"/>; the backend finds that placement again when the resource is released.
+/// <para>Placements never overlap: a block's ranges are handed out only here, and each placement carries its range's
+/// ticket (<see cref="GpuRangeAllocator.TicketOf"/>), which <see cref="Return"/> checks before it frees anything, so a
+/// placement is returned once and a stale copy of one is refused even after its offset was given to another resource. A
+/// range is reused only once it is returned, so a range a queue may still read stays held as long as the resource's owner
+/// holds the resource: the pool sees no fence, and retiring a resource after the submissions that read it is its owner's
+/// (a <see cref="GpuRetirementQueue{T}"/> or a slot fence).</para>
+/// <para>Thread-safe: <c>allocate</c>, <c>free</c> and a placement's <c>bind</c> run under the pool's lock, so they must
+/// not call back into it, and no resource is bound into a block that <see cref="FreeAll"/> released.</para>
 /// </summary>
 /// <typeparam name="TKey">The key of a pool of blocks: what keeps resources apart, such as memory type and role.</typeparam>
 /// <typeparam name="TBlock">A block's native memory, as the backend's calls name it.</typeparam>
@@ -70,17 +72,23 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
         }
     }
 
-    /// <summary>Places a resource in a block of a key: the first with room at its alignment, or a new one.</summary>
+    /// <summary>Places a resource in a block of a key, the first with room at its alignment or a new one, and binds it
+    /// there under the pool's lock. A <paramref name="bind"/> that throws gives the range back before the exception
+    /// leaves.</summary>
+    /// <typeparam name="TResult">What the binding answers, such as the resource it created.</typeparam>
     /// <param name="key">The key of the blocks it may share.</param>
     /// <param name="size">The bytes it needs; at least one.</param>
     /// <param name="alignment">The alignment its offset needs, as the device reports it: a power of two, or zero or one
     /// for none.</param>
-    /// <returns>Its placement, which the caller returns (<see cref="Return"/>) when the resource is released or its
-    /// binding fails.</returns>
+    /// <param name="bind">The call that binds or places the resource at its placement and records the placement for the
+    /// resource's release, which returns it (<see cref="Return"/>); it must not call back into the pool.</param>
+    /// <returns>What <paramref name="bind"/> answered.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bind"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is zero, or <paramref name="alignment"/> is
     /// not a power of two.</exception>
     /// <exception cref="ObjectDisposedException">The pool was retired (<see cref="FreeAll"/>).</exception>
-    public GpuMemoryPlacement<TBlock> Place(TKey key, ulong size, ulong alignment) {
+    public TResult Place<TResult>(TKey key, ulong size, ulong alignment, Func<GpuMemoryPlacement<TBlock>, TResult> bind) {
+        ArgumentNullException.ThrowIfNull(argument: bind);
         ArgumentOutOfRangeException.ThrowIfZero(value: size);
         GpuRangeAllocator.ThrowIfNotAlignment(alignment: alignment);
 
@@ -92,27 +100,41 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
                 pool = [];
                 m_pools.Add(key: key, value: pool);
             }
+            var placement = default(GpuMemoryPlacement<TBlock>);
+
             foreach (var block in pool) {
                 if (!block.Own && block.Ranges.TryAllocate(alignment: alignment, count: size, start: out var offset)) {
-                    return new GpuMemoryPlacement<TBlock>(block: block, offset: offset, size: size);
+                    placement = new GpuMemoryPlacement<TBlock>(block: block, offset: offset, size: size, ticket: block.Ranges.TicketOf(start: offset));
+                    break;
                 }
             }
+            if (placement.Block is null) {
+                var bytes = (own ? size : BlockBytes);
+                var created = new GpuMemoryBlock<TBlock>(native: m_allocate(arg1: key, arg2: bytes), own: own, owner: this, pool: pool, ranges: new GpuRangeAllocator(size: bytes));
 
-            var bytes = (own ? size : BlockBytes);
-            var created = new GpuMemoryBlock<TBlock>(native: m_allocate(arg1: key, arg2: bytes), own: own, owner: this, pool: pool, ranges: new GpuRangeAllocator(size: bytes));
+                pool.Add(item: created);
 
-            pool.Add(item: created);
+                // An empty block holds any size up to its own at offset zero, which every alignment admits.
+                var offset = created.Ranges.Allocate(count: size);
 
-            // An empty block holds any size up to its own at offset zero, which every alignment admits.
-            return new GpuMemoryPlacement<TBlock>(block: created, offset: created.Ranges.Allocate(count: size), size: size);
+                placement = new GpuMemoryPlacement<TBlock>(block: created, offset: offset, size: size, ticket: created.Ranges.TicketOf(start: offset));
+            }
+            try {
+                return bind(arg: placement);
+            } catch {
+                // A bind that reached FreeAll on this thread left no block to give the range back to.
+                if (!m_retired) { Give(placement: placement); }
+                throw;
+            }
         }
     }
-    /// <summary>Returns a placement's range to its block as its resource is released, or as its binding failed. A block
+    /// <summary>Returns a placement's range to its block as its resource is released. A block
     /// left empty is freed when it was a resource's own, or when its key already keeps another empty block. A retired
     /// pool takes nothing back: <see cref="FreeAll"/> freed every block.</summary>
     /// <param name="placement">The placement <see cref="Place"/> returned.</param>
     /// <exception cref="ArgumentException"><paramref name="placement"/> is not one this pool placed.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="placement"/> was returned already.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="placement"/> was returned already, whether or not its
+    /// offset has been given to another resource since.</exception>
     public void Return(GpuMemoryPlacement<TBlock> placement) {
         var block = placement.Block;
 
@@ -125,13 +147,7 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
                 return;
             }
 
-            _ = block.Ranges.Free(start: placement.Offset);
-            if ((block.Ranges.LiveRanges != 0) || (!block.Own && !HoldsAnotherEmpty(block: block))) {
-                return;
-            }
-
-            _ = block.Pool.Remove(item: block);
-            m_free(arg1: block.Native, arg2: false);
+            Give(placement: placement);
         }
     }
     /// <summary>Frees every block once, as the device is torn down, whatever resources a device loss left in them, and
@@ -153,6 +169,19 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
         }
     }
 
+    // Frees a placement's range, refused for a stale placement before anything changes, and frees its block when the
+    // range left it empty and the block was a resource's own or its key keeps another empty one; the caller holds the lock.
+    private void Give(GpuMemoryPlacement<TBlock> placement) {
+        var block = placement.Block;
+
+        _ = block.Ranges.Free(start: placement.Offset, ticket: placement.Ticket);
+        if ((block.Ranges.LiveRanges != 0) || (!block.Own && !HoldsAnotherEmpty(block: block))) {
+            return;
+        }
+
+        _ = block.Pool.Remove(item: block);
+        m_free(arg1: block.Native, arg2: false);
+    }
     // Whether a block's key keeps an empty shared block besides it.
     private static bool HoldsAnotherEmpty(GpuMemoryBlock<TBlock> block) {
         foreach (var other in block.Pool) {
@@ -168,10 +197,11 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
 /// range of it the resource holds until the placement is returned.</summary>
 /// <typeparam name="TBlock">A block's native memory, as the backend's calls name it.</typeparam>
 public readonly struct GpuMemoryPlacement<TBlock> {
-    internal GpuMemoryPlacement(GpuMemoryBlock<TBlock> block, ulong offset, ulong size) {
+    internal GpuMemoryPlacement(GpuMemoryBlock<TBlock> block, ulong offset, ulong size, ulong ticket) {
         Block = block;
         Offset = offset;
         Size = size;
+        Ticket = ticket;
     }
 
     /// <summary>Gets the block's native memory, which the backend binds or places the resource in.</summary>
@@ -182,6 +212,8 @@ public readonly struct GpuMemoryPlacement<TBlock> {
     public ulong Size { get; }
 
     internal GpuMemoryBlock<TBlock> Block { get; }
+    // The ticket of the range in its block, which tells this placement from a later one at the same offset.
+    internal ulong Ticket { get; }
 }
 /// <summary>One block of a <see cref="GpuMemoryPool{TKey, TBlock}"/>: its native memory, its ranges, whether it is one
 /// resource's own, and the key's blocks it belongs to.</summary>
