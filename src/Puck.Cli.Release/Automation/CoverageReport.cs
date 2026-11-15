@@ -24,7 +24,7 @@ public static class CoverageReport {
         .Select(selector: static line => {
             var comment = line.IndexOf(value: '#');
 
-            return ((comment < 0) ? line : line[..comment]).Trim().Replace(oldChar: '\\', newChar: '/');
+            return Puck.Abstractions.PuckPaths.Slashed(path: ((comment < 0) ? line : line[..comment]).Trim());
         })
         .Where(predicate: static line => (line.Length != 0))];
     /// <summary>Returns whether a repository-relative <c>src/</c> path lies in a verification harness: a project whose
@@ -44,7 +44,7 @@ public static class CoverageReport {
     /// <param name="fileName">The report's file name, absolute or mapped.</param>
     /// <returns>The path, starting <c>src/</c>, or <see langword="null"/>.</returns>
     public static string? SourcePath(string fileName) {
-        var path = fileName.Replace(oldChar: '\\', newChar: '/');
+        var path = Puck.Abstractions.PuckPaths.Slashed(path: fileName);
         var at = path.LastIndexOf(comparisonType: StringComparison.Ordinal, value: "/src/Puck.");
 
         if (at < 0) {

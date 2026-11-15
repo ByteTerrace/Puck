@@ -962,9 +962,15 @@ compares and fails naming the file that drifted, it writes nothing.
   `GpuResidencyLawTests.ARegionGrowsUnderEveryPolicyAndEverySlotReadsItExact`
   does.
 - Large GPU buffers give their memory back. Both arenas (`DirectXHeapArena`,
-  `VulkanMemoryArena`) free a resource's own heap (one past half a shared
-  heap) as it empties and keep only a shared one spare; a kept large heap takes
-  later small buffers and is pinned for the run. A staged `GpuRegion` slot's
+  `VulkanMemoryArena`) are one `GpuMemoryPool` each, which holds the policy:
+  first fit across a key's shared blocks, a block of its own for a resource
+  past half a block that no shared block holds, freed as it empties, and one
+  empty shared block kept spare per key. A backend supplies only the native
+  allocate, free and bind calls and finds a resource's placement again (a
+  private-data token on Direct3D 12, a handle map on Vulkan). The pool reuses a
+  range only once its resource's release returns it and sees no fence: a range
+  a queue may still read stays held only because the owner retires the
+  resource after those submissions. A staged `GpuRegion` slot's
   staging buffer shrinks to twice its flush (`GpuRegion.StagingFloorBytes`
   floor) once it holds four times more, and a relocated mesh region shrinks to
   its need (`GpuRegion.Shrink`). Upload heaps are system memory: a staging

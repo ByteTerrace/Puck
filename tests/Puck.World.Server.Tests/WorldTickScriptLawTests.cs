@@ -10,17 +10,6 @@ namespace Puck.World.Server.Tests;
 /// server, every step owed in one catch-up burst: a pinned line runs right after its tick completes whatever else that
 /// tick runs, and a wait for an absolute tick releases the line behind it there.</summary>
 public sealed class WorldTickScriptLawTests {
-    private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
-        public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
-            refusal = string.Empty;
-
-            return true;
-        }
-    }
-    private sealed class FixedGate(WorldConsoleWaitGate gate) : IWorldWaitGateResolver {
-        public WorldConsoleWaitGate GateFor(WorldInstance instance) => gate;
-    }
     private sealed class NoBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }

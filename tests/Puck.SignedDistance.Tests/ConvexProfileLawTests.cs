@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using System.Numerics;
 
 using Puck.Maths;
@@ -27,12 +28,6 @@ public sealed class ConvexProfileLawTests {
 
         return new SdfFieldEvaluator(program: builder.Build());
     }
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
     private static SdfFieldEvaluator RoundedRectangle(float halfWidth, float halfHeight, float halfDepth) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

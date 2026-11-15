@@ -78,11 +78,11 @@ public sealed class GpuDescriptorHeapBudget {
     /// <summary>Gets the pools holding views live now.</summary>
     public int LivePools => m_views.LiveRanges;
     /// <summary>Gets the sampler descriptors not admitted to any pool.</summary>
-    public uint FreeSamplerDescriptors => m_samplers.FreeCount;
+    public uint FreeSamplerDescriptors => ((uint)m_samplers.FreeCount);
     /// <summary>Gets the sampler heap's size in descriptors.</summary>
     public uint SamplerDescriptors { get; }
     /// <summary>Gets the view descriptors not admitted to any pool.</summary>
-    public uint FreeViewDescriptors => m_views.FreeCount;
+    public uint FreeViewDescriptors => ((uint)m_views.FreeCount);
     /// <summary>Gets the view heap's size in descriptors.</summary>
     public uint ViewDescriptors { get; }
 
@@ -114,14 +114,14 @@ public sealed class GpuDescriptorHeapBudget {
                 var count = pool.HeapDescriptors;
 
                 if (count != 0) {
-                    starts.Add(item: (m_views.Allocate(count: count), count));
+                    starts.Add(item: (((uint)m_views.Allocate(count: count)), count));
                 }
             }
             foreach (var pool in pools) {
                 var count = pool.SamplerHeapDescriptors;
 
                 if (count != 0) {
-                    samplerStarts.Add(item: (m_samplers.Allocate(count: count), count));
+                    samplerStarts.Add(item: (((uint)m_samplers.Allocate(count: count)), count));
                 }
             }
         } catch (GpuRangeExhaustedException exception) {

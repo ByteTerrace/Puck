@@ -59,7 +59,7 @@ public static partial class CompileCommand {
                     .Where(predicate: file => !(file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".lock") && string.Equals(a: Path.GetDirectoryName(path: file), b: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), comparisonType: StringComparison.Ordinal)))
                 : []
             ))
-            .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: catalog).Replace(newChar: '/', oldChar: '\\'))
+            .Select(selector: file => Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: catalog))
             .ToArray();
 
         foreach (var relative in owned.Where(predicate: relative => !expected.Contains(item: relative)).Order(comparer: StringComparer.Ordinal)) {

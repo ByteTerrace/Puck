@@ -49,6 +49,7 @@
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <!-- The memory model a staged source region's copy runs on, and the fake it wraps. -->
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
 </Project>

@@ -1,3 +1,5 @@
+using Puck.Confinement;
+
 namespace Puck.Storage;
 
 /// <summary>Validates portable relative storage paths before a host publishes or materializes content.</summary>
@@ -89,8 +91,6 @@ public static class ObjectBlobAddressPath {
         }
 
         foreach (var segment in segments) {
-            var device = segment.Split('.')[0];
-
             if (
                 (segment is "." or "..") ||
                 segment.EndsWith(value: '.') ||
@@ -100,30 +100,7 @@ public static class ObjectBlobAddressPath {
                 comparisonType: StringComparison.OrdinalIgnoreCase,
                 value: ".puck-"
             ) ||
-                device.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "CON"
-            ) ||
-                device.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "PRN"
-            ) ||
-                device.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "AUX"
-            ) ||
-                device.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "NUL"
-            ) ||
-                ((device.Length == 4) && (device.StartsWith(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "COM"
-            ) ||
-                    device.StartsWith(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "LPT"
-            )) && "123456789¹²³".Contains(value: device[3]))
+                PortablePath.IsDeviceName(segment: segment)
             ) {
                 throw new ArgumentException(
                     message: $"The {description} contains an unsafe or reserved path segment.",

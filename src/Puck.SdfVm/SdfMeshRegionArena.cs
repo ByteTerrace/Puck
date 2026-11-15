@@ -33,8 +33,6 @@ namespace Puck.SdfVm;
 public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>The fewest draw records the region reserves.</summary>
     public const int MinimumDrawCapacity = 256;
-    /// <summary>The fewest meshes the arena has room to place at once; the room doubles when a plan needs more.</summary>
-    public const int MinimumMeshCapacity = 4096;
     /// <summary>The multiple of the named meshes' words the free words under the last placed mesh may reach before a
     /// plan packs the arena, where they also pass the retained slack.</summary>
     public const int PackedShare = 3;
@@ -57,7 +55,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private readonly int m_retainedSlackWords;
 
     // The region's words up to the limit: the reserve is the range at zero, and each placed mesh a range of its own.
-    private GpuRangeAllocator m_ranges;
+    private readonly GpuRangeAllocator m_ranges;
 
     private int m_drawCapacity;
     // Whether a trim forgot a mesh since the latest full plan, so a list naming a refused mesh is planned again.
@@ -80,7 +78,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         ArgumentOutOfRangeException.ThrowIfLessThan(other: ((ulong)(MinimumDrawCapacity * SdfMeshRegion.DrawBytes)), value: limitBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(other: SdfWorldTables.MostMeshRegionBytes, value: limitBytes);
 
-        m_ranges = new GpuRangeAllocator(maxRanges: (MinimumMeshCapacity + 1), size: ((uint)(limitBytes / sizeof(uint))));
+        m_ranges = new GpuRangeAllocator(size: (limitBytes / sizeof(uint)));
         m_retainedSlackWords = retainedSlackWords;
     }
 
@@ -103,7 +101,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>Gets the draw records the region reserves ahead of the arena.</summary>
     public int DrawCapacity => m_drawCapacity;
     /// <summary>Gets the most words the arena places, the reserve included.</summary>
-    public long LimitWords => m_ranges.Size;
+    public long LimitWords => ((long)m_ranges.Size);
     /// <summary>Gets the region's words: the reserved draw records and the arena up to its last placed mesh.</summary>
     public int Words => checked((int)m_ranges.LiveEnd);
     /// <summary>Gets the meshes the latest plan placed, whose words it owes; every placed mesh when it
@@ -216,7 +214,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         placedWords += PlaceAhead();
 
         var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
-        var free = ((m_ranges.LiveEnd - reserveWords) - placedWords);
+        var free = ((Words - reserveWords) - placedWords);
         // A first list with no draw reserves nothing, and the next list is the first again.
         var relocate = (first && (m_drawCapacity > 0));
 
@@ -337,18 +335,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         return true;
     }
-    // Places a mesh at the lowest free run that holds it, doubling the room for placed meshes when it is spent; false
-    // when no free run under the limit holds it.
+    // Places a mesh at the lowest free run that holds it; false when no free run under the limit holds it.
     private bool TryPlace(SdfMesh mesh) {
         // A range is at least one word, so a mesh without words still has a place of its own.
-        var words = ((uint)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
+        var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
 
-        if (!m_ranges.TryAllocate(count: words, start: out var start)) {
-            if (m_ranges.LiveRanges < m_ranges.MaxRanges) { return false; }
-
-            m_ranges = new GpuRangeAllocator(maxRanges: checked((2 * m_ranges.MaxRanges)), source: m_ranges);
-            if (!m_ranges.TryAllocate(count: words, start: out start)) { return false; }
-        }
+        if (!m_ranges.TryAllocate(count: words, start: out var start)) { return false; }
 
         var vertexWord = ((int)start);
         var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
@@ -366,7 +358,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         _ = m_placements.Remove(key: mesh, value: out var placement);
         mesh.Release(cached: true);
 
-        return m_ranges.Free(start: ((uint)placement.VertexWord));
+        return ((long)m_ranges.Free(start: ((ulong)placement.VertexWord)));
     }
     // Forgets every placed mesh the latest list does not name; their words.
     private long ForgetUnnamed() {
@@ -433,10 +425,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
             }
         }
         m_scratch.Clear();
-        if (held) { _ = m_ranges.Free(start: 0u); }
+        if (held) { _ = m_ranges.Free(start: 0UL); }
 
         // Every range that began under the reserve's end is free, so the lowest run that holds the reserve begins at zero.
-        _ = m_ranges.Allocate(count: ((uint)reserveEnd));
+        _ = m_ranges.Allocate(count: ((ulong)reserveEnd));
     }
 
     /// <summary>Releases the arena's CPU source claims after all uploads and staged draw readers finish.</summary>

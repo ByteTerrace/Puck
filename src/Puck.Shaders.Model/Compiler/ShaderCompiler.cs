@@ -520,16 +520,13 @@ public sealed partial class ShaderCompiler {
         var root = Path.GetFullPath(path: (Path.DirectorySeparatorChar + "snapshot"));
 
         string LayoutPath(string path) =>
-            Path.GetRelativePath(
+            Puck.Abstractions.PuckPaths.Relative(
                 path: SnapshotPath(
                     path: path,
                     root: root,
                     snapshotBase: snapshotBase
                 ),
                 relativeTo: root
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
             );
         var layout = new StringBuilder();
 

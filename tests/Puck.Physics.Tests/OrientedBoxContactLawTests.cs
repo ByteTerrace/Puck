@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -34,12 +35,6 @@ public sealed class OrientedBoxContactLawTests {
             userMessage: $"expected {expected.ToVector3()}, got {actual.ToVector3()}"
         );
     private static FixedVector3 Foot(double offset) => (WallNormal * FixedQ4816.FromDouble(value: offset));
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
 
     [Fact]
     public void AnUnturnedBoxKeepsTheAxisAlignedCollider() {

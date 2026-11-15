@@ -60,10 +60,7 @@ public static class WorldSourceIndex {
         var claims = new List<WorldDocumentClaims>();
 
         foreach (var file in CompileInputs.List(directory: directory)) {
-            var path = file.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            var path = Puck.Abstractions.PuckPaths.Slashed(path: file);
 
             if (WorldDocumentName.IsDocumentFile(path: path)) {
                 claims.Add(item: new WorldDocumentClaims(

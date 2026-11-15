@@ -32,7 +32,7 @@ public static class RefusalCensus {
 
         foreach (var project in Projects) {
             foreach (var file in Directory.EnumerateFiles(path: Path.Combine(path1: repositoryRoot, path2: "src", path3: project), searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)) {
-                var relative = file.Replace(newChar: '/', oldChar: '\\');
+                var relative = Puck.Abstractions.PuckPaths.Slashed(path: file);
 
                 if (relative.Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") || relative.Contains(comparisonType: StringComparison.Ordinal, value: "/bin/")) {
                     continue;

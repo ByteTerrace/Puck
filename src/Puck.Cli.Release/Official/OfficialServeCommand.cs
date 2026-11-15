@@ -79,10 +79,7 @@ internal static class OfficialServeCommand {
             );
 
             response.ContentType = (contentTypesByPath.TryGetValue(
-                key: relative.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                key: Puck.Abstractions.PuckPaths.Slashed(path: relative),
                 value: out var contentType
             )
                 ? contentType
@@ -141,44 +138,26 @@ internal static class OfficialServeCommand {
                 continue;
             }
 
-            map[manifest.WorldSchemaBundle.Path.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            )] = manifest.WorldSchemaBundle.ContentType;
+            map[Puck.Abstractions.PuckPaths.Slashed(path: manifest.WorldSchemaBundle.Path)] = manifest.WorldSchemaBundle.ContentType;
 
             foreach (var file in manifest.Engine.Files) {
-                map[file.Path.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                )] = file.ContentType;
+                map[Puck.Abstractions.PuckPaths.Slashed(path: file.Path)] = file.ContentType;
             }
 
             foreach (var entry in manifest.Sources) {
-                map[entry.Path.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                )] = entry.ContentType;
+                map[Puck.Abstractions.PuckPaths.Slashed(path: entry.Path)] = entry.ContentType;
             }
 
             foreach (var entry in manifest.Documents) {
-                map[entry.Path.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                )] = entry.ContentType;
+                map[Puck.Abstractions.PuckPaths.Slashed(path: entry.Path)] = entry.ContentType;
             }
 
             foreach (var entry in manifest.Composed) {
-                map[entry.Path.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                )] = entry.ContentType;
+                map[Puck.Abstractions.PuckPaths.Slashed(path: entry.Path)] = entry.ContentType;
             }
 
             foreach (var entry in manifest.Assets) {
-                map[entry.Path.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                )] = entry.ContentType;
+                map[Puck.Abstractions.PuckPaths.Slashed(path: entry.Path)] = entry.ContentType;
             }
         }
 

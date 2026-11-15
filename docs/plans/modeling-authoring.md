@@ -262,7 +262,7 @@ motion phase?
 **The evidence.**
 
 - **[opened]** The Moth's limbs were, until a lane's unlanded commit, two
-  hand-mirrored copies: the unlanded Moth commit on `worktree-agent-adc0788caaad70cba` ("moth: author each arm and leg
+  hand-mirrored copies: the unlanded Moth commit on `lane/moth-suit` ("moth: author each arm and leg
   once as a side-mirrored template") says "The right arm and leg were a
   hand-mirrored copy of the left (about 1,250 lines each)", and its templates
   mirror by a sign parameter per field: `position [sx * 0.295, 1.4515, 0]`,
@@ -287,9 +287,9 @@ motion phase?
   rods from the side (probably edge-on)" is not explained by the permutation,
   which this memo did not run.
 - **[opened]** Two rotation libraries were written on two branches and neither
-  landed: `worlds/standard/rotations.puck` on `worktree-agent-ab9cc0f9d3272cd9a` (`turn`, `turned`,
+  landed: `worlds/standard/rotations.puck` on `lane/swallow-7` (`turn`, `turned`,
   `turnThen`, `inverseTurn`, `turnBetween`) and `worlds/standard/turns.puck` on
-  `worktree-agent-acceb2335ab743f3b` (`turnAbout`, `turnThen`, `turnVector`,
+  `lane/moth-pilot` (`turnAbout`, `turnThen`, `turnVector`,
   `turnPoint`): the same technique under two names, the duplication
   `AGENTS.md`'s vigilance rule forbids.
 - **[opened]** The engine already has one mirror: the `symmetry` domain fold,
@@ -789,9 +789,9 @@ builder's, headless and mechanical, so the critic sees fewer regressions.
   (`cli.md:3603`, `MeshRaster.cs`): the headless loop S4 extends (section 6).
 - `puck creation shape` (`cli.md:3500`): the readout `--frame` extends
   (decision 2).
-- The two unlanded rotation libraries (`rotations.puck` on `worktree-agent-ab9cc0f9d3272cd9a`,
-  `turns.puck` on `worktree-agent-acceb2335ab743f3b`) and the Moth's
-  `prismMirror` and `mothArm`/`mothLeg` templates (`worktree-agent-adc0788caaad70cba`): prior art
+- The two unlanded rotation libraries (`rotations.puck` on `lane/swallow-7`,
+  `turns.puck` on `lane/moth-pilot`) and the Moth's
+  `prismMirror` and `mothArm`/`mothLeg` templates (`lane/moth-suit`): prior art
   the builtins and the `mirror` block replace; none lands.
 - `experimental/`: a search for "mirror" finds only emulator and bench code;
   `experimental/Puck.Demo` (git history) held a sculptor with an undo ring and

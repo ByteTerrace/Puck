@@ -325,7 +325,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
                 condition: (0 == m_viewHeap),
                 instance: this
             );
-            slot = m_clears.Allocate(count: 1U);
+            slot = ((uint)m_clears.Allocate(count: 1U));
         }
 
         var heapSlot = (m_clearAdmission.Ranges[0].Start + slot);

@@ -22,10 +22,7 @@ public sealed class GpuPipelineCacheStore {
         );
 
         ContentKey = contentKey;
-        Directory = Path.GetFullPath(path: directory).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        Directory = Puck.Abstractions.PuckPaths.Slashed(path: Path.GetFullPath(path: directory));
     }
 
     /// <summary>Gets the host's content key.</summary>

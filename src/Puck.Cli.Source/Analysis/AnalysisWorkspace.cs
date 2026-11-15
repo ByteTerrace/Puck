@@ -20,7 +20,7 @@ internal sealed class AnalysisWorkspace : IDisposable {
 
             if (Directory.Exists(path: sdk)) {
                 // Use the installed machine SDK without probing unrelated per-user SDK registrations.
-                properties["TargetPlatformSdkPath"] = (sdk.Replace(newChar: '/', oldChar: '\\') + "/");
+                properties["TargetPlatformSdkPath"] = (Puck.Abstractions.PuckPaths.Slashed(path: sdk) + "/");
                 properties["TargetPlatformDisplayName"] = "Windows";
             }
         }

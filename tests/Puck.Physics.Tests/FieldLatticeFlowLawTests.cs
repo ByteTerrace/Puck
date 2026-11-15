@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics.Fields;
+using Puck.Physics.Testing;
 using Puck.State;
 
 namespace Puck.Physics.Tests;
@@ -97,11 +98,6 @@ public sealed class FieldLatticeFlowLawTests {
 
         return values;
     }
-    private static void StepLattice(FieldLattice lattice) => lattice.Step(
-        tick: 1,
-        bodyCount: 0,
-        host: new NoopHost()
-    );
     private static long SumRaw(FieldLattice lattice, int field, int cellCount) {
         var sum = 0L;
 
@@ -120,12 +116,12 @@ public sealed class FieldLatticeFlowLawTests {
         var input = FlowFields(width: 3, depth: 1, waterHeightScale: FixedQ4816.Zero);
         var tiny = new FieldLattice(input);
         tiny.Restore(new FieldLattice.Checkpoint(Raw: [[0, 3, 0], [0, 65536, 0]]));
-        StepLattice(tiny);
+        FieldLatticeSteps.Step(tiny);
         Assert.Equal(3, SumRaw(tiny, 0, 3));
 
         var full = new FieldLattice(input);
         full.Restore(IntCheckpoint([100, 100, 100], [0, 1, 0]));
-        StepLattice(full);
+        FieldLatticeSteps.Step(full);
         Assert.Equal(300L * 65536, SumRaw(full, 0, 3));
     }
     [Fact]
@@ -160,7 +156,7 @@ public sealed class FieldLatticeFlowLawTests {
         var position = WeightedPosition();
 
         for (var step = 0; (step < 3); step++) {
-            StepLattice(lattice: lattice);
+            FieldLatticeSteps.Step(lattice: lattice);
 
             var next = WeightedPosition();
 
@@ -287,7 +283,7 @@ public sealed class FieldLatticeFlowLawTests {
         );
 
         for (var step = 0; (step < 20); step++) {
-            StepLattice(lattice: lattice);
+            FieldLatticeSteps.Step(lattice: lattice);
         }
 
         var after = SumRaw(
@@ -324,7 +320,7 @@ public sealed class FieldLatticeFlowLawTests {
         var gap = (values.Max() - values.Min());
 
         for (var step = 0; (step < 12); step++) {
-            StepLattice(lattice: lattice);
+            FieldLatticeSteps.Step(lattice: lattice);
 
             var next = Snapshot(
                 cellCount: Cells,
@@ -370,8 +366,8 @@ public sealed class FieldLatticeFlowLawTests {
         b.Restore(checkpoint: checkpoint);
 
         for (var step = 0; (step < 15); step++) {
-            StepLattice(lattice: a);
-            StepLattice(lattice: b);
+            FieldLatticeSteps.Step(lattice: a);
+            FieldLatticeSteps.Step(lattice: b);
 
             Assert.Equal(
                 expected: Snapshot(
@@ -388,13 +384,6 @@ public sealed class FieldLatticeFlowLawTests {
         }
     }
 
-    private sealed class NoopHost : IFieldLatticeHost {
-        public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => FixedQ4816.Zero;
-        public FixedVector3? BodyPosition(int body) => null;
-        public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => FixedQ4816.Zero;
-        public long ReadTag(StateHandle row, int body, ulong tick) => 0L;
-        public void WriteTag(StateHandle row, int body, long value, ulong tick) { }
-    }
     private sealed class SpillHost(Action<StateHandle, FixedQ4816> onAddScalar, FixedQ4816? capacity = null) : IFieldLatticeHost {
         private FixedQ4816 m_remaining = capacity ?? FixedQ4816.MaxValue;
         public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) {

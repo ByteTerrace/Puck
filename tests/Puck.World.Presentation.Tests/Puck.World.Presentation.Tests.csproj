@@ -60,6 +60,7 @@
         <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/NoNeighbours.cs" Link="World/NoNeighbours.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />

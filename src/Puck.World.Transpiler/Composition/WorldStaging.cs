@@ -175,7 +175,7 @@ public static class WorldStaging {
                 (JsonNode.Parse(json: origin.Json) is not JsonValue original) || !original.TryGetValue<string>(value: out var source)) {
                 continue;
             }
-            if (!WorldDocumentPaths.IsPortableRelativeFilePath(path: source)) {
+            if (!Puck.Confinement.PortablePath.IsRelative(allowParentSegments: true, path: source)) {
                 row["source"] = source;
                 continue;
             }

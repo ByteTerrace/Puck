@@ -14,18 +14,6 @@ namespace Puck.World.Server.Tests;
 public sealed class WorldWaitTickExactnessLawTests {
     private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / 30UL);
 
-    // Resolves every invocation to the fixture's one row, as the desktop's boot console authority does.
-    private sealed class FixedAuthority(WorldInstance instance) : IWorldConsoleAuthority {
-        public bool TryResolve(CommandContext context, out WorldInstance resolved, out string refusal) {
-            resolved = instance;
-            refusal = string.Empty;
-
-            return true;
-        }
-    }
-    private sealed class FixedGate(WorldConsoleWaitGate gate) : IWorldWaitGateResolver {
-        public WorldConsoleWaitGate GateFor(WorldInstance instance) => gate;
-    }
     private sealed class NoBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }

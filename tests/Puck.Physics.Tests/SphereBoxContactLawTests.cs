@@ -1,3 +1,4 @@
+using static Puck.Testing.FixedTestValues;
 using Puck.Abstractions.Counting;
 using Puck.Maths;
 
@@ -5,7 +6,6 @@ namespace Puck.Physics.Tests;
 
 public sealed class SphereBoxContactLawTests {
     private static FixedQ4816 Scalar(double value) => FixedQ4816.FromDouble(value: value);
-    private static FixedVector3 Vector(double x, double y, double z) => new(X: Scalar(value: x), Y: Scalar(value: y), Z: Scalar(value: z));
 
     private static readonly FixedBodyColliderVolume Sphere = new(
         FixedBodyColliderKind.Sphere, FixedVector3.Zero, FixedVector3.Zero, FixedVector3.Zero,

@@ -38,7 +38,6 @@ public sealed class OverlayFrameComposer {
     private readonly OverlayFrameSlots m_frameSlots;
     // The authored world-scope HUD's banded writer, or null when the host wired no Hud/HudBindings source pair.
     private readonly HudWriter? m_hudWriter;
-    private readonly MarkerWriter? m_markerWriter;
     private readonly UnifiedOverlaySources m_sources;
     private readonly OverlayThemeStore m_theme;
     private readonly ToastWriter? m_toastWriter;
@@ -115,13 +114,6 @@ public sealed class OverlayFrameComposer {
             : null
         );
         m_frameSlots = new OverlayFrameSlots(sources: frameSources);
-        m_markerWriter = ((sources.Markers is { } markers)
-            ? new MarkerWriter(
-                maxChipsPerSeat: capacity.MarkerMaxChipsPerSeat,
-                source: markers
-            )
-            : null
-        );
         m_hudWriter = (((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings))
             ? new HudWriter(
                 bindings: hudBindings,
@@ -134,7 +126,15 @@ public sealed class OverlayFrameComposer {
         m_sources = sources;
         m_inspectorWriter = ((sources.Inspector is { } inspector) ? new InspectorWriter(source: inspector, theme: m_theme) : null);
         m_historyRowWriter = ((sources.HistoryRow is { } historyRow) ? new HistoryRowWriter(source: historyRow, theme: m_theme) : null);
-        m_annotationWriter = ((sources.Annotations is { } annotations) ? new AnnotationWriter(source: annotations, theme: m_theme) : null);
+        m_annotationWriter = (((sources.Annotations is not null) || (sources.Markers is not null))
+            ? new AnnotationWriter(
+                markers: sources.Markers,
+                maxChipsPerSeat: capacity.MarkerMaxChipsPerSeat,
+                source: sources.Annotations,
+                theme: m_theme
+            )
+            : null
+        );
         m_diagnostics = sources.Diagnostics;
         m_toastWriter = ((sources.Toast is { } toast)
             ? new ToastWriter(
@@ -155,8 +155,8 @@ public sealed class OverlayFrameComposer {
             ? (builder => bindingBarForTable.Emit(builder: builder))
             : null
         );
-        m_channelWriters[((int)OverlayChannel.Markers)] = ((m_markerWriter is { } markersForTable)
-            ? (builder => markersForTable.Emit(builder: builder))
+        m_channelWriters[((int)OverlayChannel.Markers)] = (((m_annotationWriter is { } markersForTable) && (sources.Markers is not null))
+            ? (builder => markersForTable.EmitMarkers(builder: builder))
             : null
         );
         m_channelWriters[((int)OverlayChannel.Toast)] = ((m_toastWriter is { } toastForTable)
@@ -353,7 +353,7 @@ public sealed class OverlayFrameComposer {
             m_builder.EndChannel();
         }
 
-        if (m_annotationWriter is { } annotationWriter) {
+        if ((m_annotationWriter is { } annotationWriter) && (m_sources.Annotations is not null)) {
             m_builder.BeginChannel(channel: OverlayChannel.Annotation);
             annotationWriter.Emit(builder: m_builder);
             m_builder.EndChannel();

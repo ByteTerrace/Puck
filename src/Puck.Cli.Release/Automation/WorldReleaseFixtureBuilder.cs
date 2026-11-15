@@ -123,13 +123,10 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
                 if (!published.Ok) { throw new IOException(message: published.Detail); }
             }
             using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
-            var keyPath = Path.Combine(
+            var keyPath = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
                 path1: keys.FullName,
                 path2: $"{owner:D}-{world.Key}.pk8"
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+            ));
 
             await File.WriteAllBytesAsync(
                 keyPath,
@@ -150,19 +147,13 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
             ["store"] = new JsonObject {
                 ["type"] = "directory",
                 ["settings"] = new JsonObject {
-                    ["path"] = Path.Combine(
+                    ["path"] = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(
             path1: directory,
             path2: "store"
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        ),
+        )),
                 },
             },
-            ["stateDir"] = state.FullName.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        ),
+            ["stateDir"] = Puck.Abstractions.PuckPaths.Slashed(path: state.FullName),
             ["clustering"] = new JsonObject { ["kind"] = "Localhost" },
         };
         var path = Path.Combine(

@@ -36,6 +36,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
+        <Compile Include="../Shared/FieldLatticeHosts.cs" Link="FieldLatticeHosts.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
@@ -62,6 +63,8 @@
         <Compile Include="../Shared/World/FakeObjectBlobStore.cs" Link="World/FakeObjectBlobStore.cs" />
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/ConsoleFixtures.cs" Link="World/ConsoleFixtures.cs" />
+        <Compile Include="../Shared/World/NoNeighbours.cs" Link="World/NoNeighbours.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/JournalDepthFixtures.cs" Link="World/JournalDepthFixtures.cs" />
