@@ -32,6 +32,8 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A weight or probability that must reach 1 | `UnitInterval32` (closed `[0, 1]`) | `UnitFraction32`, which has no `One` |
 | A 2D or 3D displacement | `FixedVector2` / `FixedVector3` | Three scalars |
 | A rotation | `FixedComplex` (2D), `FixedQuaternion` (3D), `FixedRigidTransform` (rotation plus translation) | Hand-built matrices |
+| A world-axis box: bounds, a broadphase envelope, a read region, a cache key | `FixedAabb` (exact corners; `Intersects`, `Contains`, `Enclose` from `Empty`, saturating `Grow`; `Everywhere` for no bounds); a turned box's world extent is `FixedAabb.OrientedHalfExtent` | A centre/extent tuple, a hand min/max accumulator, a negated-maximum minimum, a centre rounded by `/ 2` |
+| A hex colour (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) | `HexColor` (`TryParse` for opaque, `TryParseRgba`, `TryCanonicalize` for the long uppercase form a compiled document holds) | `int.TryParse(..., NumberStyles.HexNumber)`, which admits whitespace; a second length check |
 | A world position beyond a small scene | `FixedPosition` (cell indices plus a local offset) | A bare `FixedVector3`, which is a displacement |
 | A rate integrated over ticks | `FixedRateAccumulator` / `FixedVector3RateAccumulator` | A per-second velocity pre-rounded into one per-tick delta |
 | A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower3` and `SecondOrderFollower4`, the presentation-only float twins |
@@ -105,7 +107,8 @@ maps each question to its wing and README section.
   a tiny squared length into a divisor containing zero, or overflow a large
   one, and leave an otherwise valid SDF program with no query frame.
 - **Float presentation helpers live in `VectorFunctions`.** The angle wraps,
-  easings, shortest arc, −Z-forward attitude readbacks and unorm packers every
+  easings, shortest arc, the rotation of a right/up/forward basis (`FromBasis`),
+  a turned box's world half-extent, −Z-forward attitude readbacks and unorm packers every
   presentation seam shares are in `Puck.Maths.VectorFunctions`, outside the
   determinism contract and in every project's closure; a second float copy in
   a client or shader-side file is a defect.

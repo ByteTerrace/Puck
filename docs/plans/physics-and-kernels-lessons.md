@@ -86,7 +86,7 @@ idle tick (on a loaded machine) put all contact work at 0.31 ms a tick, 17 % of
 the tick's managed CPU, with walker queries near 0.08 µs each. Lesson 1 has
 landed: the per-tick (attached) colliders are culled like the static ones,
 behind one door (`FixedStaticColliderSet`, which compiles each collider's
-`FixedColliderBox` and `FixedColliderFrame` from the collider itself), and the
+box (`FixedStaticCollider.WorldBox`, a `FixedAabb`) and `FixedColliderFrame` from the collider itself), and the
 ground snap asks one support-distance query instead of bisecting with sweeps.
 The commits carry the counts.
 

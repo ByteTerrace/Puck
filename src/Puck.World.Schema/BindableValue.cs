@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
+using Puck.Maths;
 
 namespace Puck.World;
 

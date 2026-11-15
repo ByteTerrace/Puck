@@ -59,6 +59,7 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
                 return m_field.TryDistanceBounds(distance: out distance, lower: lower, upper: upper);
             }
 
+            var box = new FixedAabb(Maximum: high, Minimum: low);
             var hash = Fnv1aHash.Create();
 
             hash.Add(value: low.X.Value);
@@ -73,7 +74,7 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             for (var way = 0; (way < Ways); way++) {
                 ref readonly var entry = ref m_entries[(first + way)];
 
-                if (entry.Valid && (entry.Lower == low) && (entry.Upper == high)) {
+                if (entry.Valid && (entry.Box == box)) {
                     distance = entry.Distance;
                     return true;
                 }
@@ -89,7 +90,7 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             ProcessWork.Add(amount: rotations, kind: Rotations);
 
             if (answered) {
-                m_entries[(first + m_next[set])] = new Entry(Distance: distance, Lower: low, Upper: high, Valid: true);
+                m_entries[(first + m_next[set])] = new Entry(Box: box, Distance: distance, Valid: true);
                 m_next[set] = ((byte)((m_next[set] + 1) % Ways));
             }
 
@@ -97,5 +98,5 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
         }
     }
 
-    private readonly record struct Entry(FixedVector3 Lower, FixedVector3 Upper, FixedInterval Distance, bool Valid);
+    private readonly record struct Entry(FixedAabb Box, FixedInterval Distance, bool Valid);
 }

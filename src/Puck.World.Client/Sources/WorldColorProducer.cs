@@ -3,7 +3,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.Maths;
-using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 

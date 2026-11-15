@@ -53,24 +53,29 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>The block's memory, which the resource's handles name.</returns>
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     /// <exception cref="VulkanException">The block's allocation, mapping or the resource's binding failed.</exception>
+    /// <exception cref="InvalidOperationException">The arena holds a binding of this handle already.</exception>
     public nint Bind(nint resource, bool image, in VkMemoryRequirements requirements, uint memoryTypeIndex, GpuMemoryRole role) {
-        lock (m_gate) {
-            var placement = m_pool.Place(alignment: requirements.Alignment, key: (memoryTypeIndex, role, image), size: requirements.Size);
+        var alignment = requirements.Alignment;
+        var size = requirements.Size;
 
-            try {
+        lock (m_gate) {
+            // A handle still recorded is one whose release never came; binding over it would orphan its range.
+            if (m_slices.ContainsKey(key: (resource, image))) {
+                throw new InvalidOperationException(message: $"The {(image ? "image" : "buffer")} 0x{resource:X} is bound already; a handle is bound once until its release.");
+            }
+
+            // The bind and its record run inside the pool's lock: a throw from either gives the range back.
+            return m_pool.Place(alignment: alignment, key: (memoryTypeIndex, role, image), size: size, bind: placement => {
                 (image ? m_device.BindImageMemory : m_device.BindBufferMemory)(
                     m_device.Handle,
                     resource,
                     placement.Native.Memory,
                     placement.Offset
                 ).ThrowIfFailed(device: m_device, operation: (image ? "vkBindImageMemory" : "vkBindBufferMemory"));
-            } catch {
-                m_pool.Return(placement: placement);
-                throw;
-            }
-            m_slices.Add(key: (resource, image), value: placement);
+                m_slices.Add(key: (resource, image), value: placement);
 
-            return placement.Native.Memory;
+                return placement.Native.Memory;
+            });
         }
     }
     /// <summary>Returns the memory a resource the arena bound held, once the resource is destroyed.</summary>

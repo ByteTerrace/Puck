@@ -8,7 +8,6 @@ using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Assets;
 using Puck.Maths;
-using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Server;
 

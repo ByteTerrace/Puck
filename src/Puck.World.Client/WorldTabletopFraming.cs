@@ -59,14 +59,9 @@ public sealed class WorldTabletopFraming {
             return false;
         }
 
-        WorldTabletopFrame.Bounds(
-            maximum: out var maximum,
-            minimum: out var minimum,
-            topology: topology
-        );
-
-        var low = minimum.ToVector3();
-        var high = maximum.ToVector3();
+        var footprint = WorldTabletopFrame.Bounds(topology: topology);
+        var low = footprint.Minimum.ToVector3();
+        var high = footprint.Maximum.ToVector3();
         var halfX = ((high.X - low.X) * 0.5f);
         var halfZ = ((high.Z - low.Z) * 0.5f);
         var radius = (MathF.Sqrt(x: ((halfX * halfX) + (halfZ * halfZ))) + ((float)engage.Margin));

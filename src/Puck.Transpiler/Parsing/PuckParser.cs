@@ -1,6 +1,7 @@
 using Parlot;
 using Parlot.Fluent;
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -1481,13 +1482,11 @@ public static partial class PuckParser {
             cursor.Advance();
         }
 
-        var hexLen = (cursor.Offset - hexStart);
+        var hex = ("#" + context.Scanner.Buffer.Substring(length: (cursor.Offset - hexStart), startIndex: hexStart));
 
-        if (hexLen is not (3 or 4 or 6 or 8)) {
-            throw CreateException(context: context, message: $"Invalid hex color length #{context.Scanner.Buffer.Substring(length: hexLen, startIndex: hexStart)}");
+        if (!HexColor.TryCanonicalize(canonical: out _, value: hex)) {
+            throw CreateException(context: context, message: $"Invalid hex color length {hex}: a colour is # and 3, 4, 6 or 8 hex digits");
         }
-
-        var hex = ("#" + context.Scanner.Buffer.Substring(length: hexLen, startIndex: hexStart));
 
         return new ColorExpressionNode(Hex: hex, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
     }

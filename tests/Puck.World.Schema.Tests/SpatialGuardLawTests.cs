@@ -65,15 +65,10 @@ public sealed class SpatialGuardLawTests {
             )]
     );
     private static WorldDefinition Definition(params WorldPlacement[] placements) => new(PlacementsRaw: new WorldPlacementsSection(placements));
-    private static long Raw(int value) => FixedQ4816.FromInteger(value: value).Value;
-    private static WorldSpatialReadRegion Region(int minX = -1, int minZ = -1, int maxX = 1, int maxZ = 1, int minY = -1, int maxY = 1) =>
+    private static FixedAabb Region(int minX = -1, int minZ = -1, int maxX = 1, int maxZ = 1, int minY = -1, int maxY = 1) =>
         new(
-            Raw(value: minX),
-            Raw(value: minZ),
-            Raw(value: maxX),
-            Raw(value: maxZ),
-            Raw(value: minY),
-            Raw(value: maxY)
+            Maximum: new FixedVector3(X: FixedQ4816.FromInteger(value: maxX), Y: FixedQ4816.FromInteger(value: maxY), Z: FixedQ4816.FromInteger(value: maxZ)),
+            Minimum: new FixedVector3(X: FixedQ4816.FromInteger(value: minX), Y: FixedQ4816.FromInteger(value: minY), Z: FixedQ4816.FromInteger(value: minZ))
         );
 
     [Fact]

@@ -57,11 +57,8 @@ public static class FixedSupportDistance {
         // onto the one exact collider the solid there is.
         var start = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
         var end = FixedColliderBounds.WorldBounds(orientation: in orientation, position: (position - (up * reach)), volume: in volume);
-        var low = -FixedVector3.Max(left: (start.Extent - start.Center), right: (end.Extent - end.Center));
-        var high = FixedVector3.Max(left: (start.Center + start.Extent), right: (end.Center + end.Extent));
 
-        switch (collider.NarrowQuery(center: ((low + high) / Two), collider: out var narrowed, extent: (((high - low) / Two) + new FixedVector3(X: PaddingSlack, Y: PaddingSlack, Z: PaddingSlack)),
-            reach: skin)) {
+        switch (collider.NarrowQuery(collider: out var narrowed, reach: skin, region: start.Enclose(other: in end))) {
             case FixedFieldRegion.Empty: {
                     descent = FixedQ4816.Zero;
                     return false;

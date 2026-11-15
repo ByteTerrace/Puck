@@ -31,7 +31,8 @@ public static class WorldTabletopFrame {
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
     private static readonly ConditionalWeakTable<CompiledTopology, Footprint> Footprints = new();
 
-    private sealed record Footprint(FixedVector3 Minimum, FixedVector3 Maximum);
+    // A class, so the weak table can hold it against its topology.
+    private sealed record Footprint(FixedAabb Box);
 
     /// <summary>Finds the tabletop a placement carries: its board facet's engagement and its anchored topology.</summary>
     /// <param name="definition">The document.</param>
@@ -76,36 +77,20 @@ public static class WorldTabletopFrame {
     /// <summary>Returns the board's footprint on the ground plane: the smallest box holding every cell's centre, grown
     /// by half a cell on X and Z, at the topology origin's height.</summary>
     /// <param name="topology">The anchored topology.</param>
-    /// <param name="minimum">The footprint's least corner, in world units.</param>
-    /// <param name="maximum">The footprint's greatest corner, in world units.</param>
+    /// <returns>The footprint, in world units, flat at the topology origin's height.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="topology"/> is <see langword="null"/>.</exception>
-    public static void Bounds(CompiledTopology topology, out FixedVector3 minimum, out FixedVector3 maximum) {
+    public static FixedAabb Bounds(CompiledTopology topology) {
         ArgumentNullException.ThrowIfNull(argument: topology);
 
-        var footprint = Footprints.GetValue(
+        return Footprints.GetValue(
             key: topology,
             createValueCallback: static compiled => Measure(topology: compiled)
-        );
-
-        minimum = footprint.Minimum;
-        maximum = footprint.Maximum;
+        ).Box;
     }
     /// <summary>Returns the centre of the board's footprint (<see cref="Bounds"/>), at the topology origin's height.</summary>
     /// <param name="topology">The anchored topology.</param>
-    /// <returns>The centre, in world units.</returns>
-    public static FixedVector3 Centre(CompiledTopology topology) {
-        Bounds(
-            maximum: out var maximum,
-            minimum: out var minimum,
-            topology: topology
-        );
-
-        return new FixedVector3(
-            X: ((minimum.X + maximum.X) * Half),
-            Y: minimum.Y,
-            Z: ((minimum.Z + maximum.Z) * Half)
-        );
-    }
+    /// <returns>The centre, in world units: the footprint's midpoint, rounded to nearest with ties to even.</returns>
+    public static FixedVector3 Centre(CompiledTopology topology) => Bounds(topology: topology).Center;
     /// <summary>Returns the side of the board a seat standing at a position plays from: the edge of the authored chair
     /// (<see cref="WorldTabletopEngage.Seats"/>) that faces the position most squarely from the board's centre, the
     /// first authored on a tie, or, for a table with no chairs authored, the edge of the four facing the position (a
@@ -237,37 +222,16 @@ public static class WorldTabletopFrame {
     }
     // A compiled topology holds at least one cell (TopologyCompilation.TryValidate refuses an empty one).
     private static Footprint Measure(CompiledTopology topology) {
-        var minimum = topology.CellCentre(cell: 0);
-        var maximum = minimum;
+        var centres = FixedAabb.Empty;
 
-        for (var cell = 1; (cell < topology.CellCount); cell++) {
+        for (var cell = 0; (cell < topology.CellCount); cell++) {
             var centre = topology.CellCentre(cell: cell);
 
-            minimum = new FixedVector3(
-                X: FixedQ4816.Min(x: minimum.X, y: centre.X),
-                Y: minimum.Y,
-                Z: FixedQ4816.Min(x: minimum.Z, y: centre.Z)
-            );
-            maximum = new FixedVector3(
-                X: FixedQ4816.Max(x: maximum.X, y: centre.X),
-                Y: maximum.Y,
-                Z: FixedQ4816.Max(x: maximum.Z, y: centre.Z)
-            );
+            centres = centres.Enclose(point: centre with { Y = topology.Origin.Y });
         }
 
         var reach = (topology.CellSize * Half);
 
-        return new Footprint(
-            Maximum: new FixedVector3(
-                X: (maximum.X + reach),
-                Y: topology.Origin.Y,
-                Z: (maximum.Z + reach)
-            ),
-            Minimum: new FixedVector3(
-                X: (minimum.X - reach),
-                Y: topology.Origin.Y,
-                Z: (minimum.Z - reach)
-            )
-        );
+        return new Footprint(Box: centres.Grow(margin: new FixedVector3(X: reach, Y: FixedQ4816.Zero, Z: reach)));
     }
 }

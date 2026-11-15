@@ -29,7 +29,7 @@ public sealed partial class WorldPopulation {
             var lattice = m_fieldRegions[index].Lattice;
 
             if ((index < m_sleepRegionRevisions.Length) && (lattice.BodyReadRevision(solids: solids) == m_sleepRegionRevisions[index])) { continue; }
-            box.Fold(minimum: lattice.ReadMinimum, maximum: lattice.ReadMaximum);
+            box.Fold(box: lattice.ReadBox);
         }
     }
     private void RecordFieldRegionRevisions() {

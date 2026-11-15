@@ -422,13 +422,13 @@ public sealed partial class WorldPopulation {
                 }
                 return count;
             }
-            var reach = margin.Value.AddSaturating(right: m_maximumRadius);
-            var firstY = box.Minimum.Y.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
-            var lastY = box.Maximum.Y.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
-            var firstZ = box.Minimum.Z.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
-            var lastZ = box.Maximum.Z.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
-            var minimum = box.Minimum.X.Value.SubtractSaturating(right: reach);
-            var maximum = box.Maximum.X.Value.AddSaturating(right: reach);
+            var grown = box.Box.Grow(margin: FixedQ4816.FromRawBits(value: margin.Value.AddSaturating(right: m_maximumRadius)));
+            var firstY = grown.Minimum.Y.Value.FloorDivide(divisor: m_width);
+            var lastY = grown.Maximum.Y.Value.FloorDivide(divisor: m_width);
+            var firstZ = grown.Minimum.Z.Value.FloorDivide(divisor: m_width);
+            var lastZ = grown.Maximum.Z.Value.FloorDivide(divisor: m_width);
+            var minimum = grown.Minimum.X.Value;
+            var maximum = grown.Maximum.X.Value;
             var range = (((((Int128)lastY) - firstY) + 1) * ((((Int128)lastZ) - firstZ) + 1));
 
             if (range > m_cells.Count) {

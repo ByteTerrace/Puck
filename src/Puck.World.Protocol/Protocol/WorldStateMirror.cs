@@ -1,8 +1,8 @@
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
-using Puck.World.Authoring;
 using Puck.World.Protocol;
+using Puck.Maths;
 
 namespace Puck.World.Client;
 

@@ -6,28 +6,20 @@ namespace Puck.Physics;
 /// the contact skin of the region, in ascending index order. A body whose bounds stay inside the region needs no other
 /// collider's exact query; once its bounds leave the region the sweep queries every remaining collider.</summary>
 /// <param name="indices">The candidate collider indices, ascending and distinct.</param>
-/// <param name="regionCenter">The region's world center.</param>
-/// <param name="regionExtent">The region's world-axis half-extent.</param>
-public readonly ref struct FixedColliderCandidates(ReadOnlySpan<int> indices, FixedVector3 regionCenter, FixedVector3 regionExtent) {
+/// <param name="region">The region's world box.</param>
+public readonly ref struct FixedColliderCandidates(ReadOnlySpan<int> indices, FixedAabb region) {
     /// <summary>Gets the candidate collider indices, ascending and distinct.</summary>
     public ReadOnlySpan<int> Indices { get; } = indices;
-    /// <summary>Gets the region's world center.</summary>
-    public FixedVector3 RegionCenter { get; } = regionCenter;
-    /// <summary>Gets the region's world-axis half-extent.</summary>
-    public FixedVector3 RegionExtent { get; } = regionExtent;
+    /// <summary>Gets the region's world box.</summary>
+    public FixedAabb Region { get; } = region;
     /// <summary>Gets whether a region was supplied; <see langword="false"/> for the default value, which queries
     /// every collider.</summary>
     public bool IsActive { get; } = true;
 
     /// <summary>Returns whether a world-axis box lies inside the region.</summary>
-    /// <param name="center">The box's world center.</param>
-    /// <param name="extent">The box's world-axis half-extent.</param>
+    /// <param name="box">The box, not empty.</param>
     /// <returns><see langword="true"/> when the box lies inside the region on every axis.</returns>
-    public bool Contains(in FixedVector3 center, in FixedVector3 extent) {
-        var slack = (RegionExtent - (FixedVector3.Abs(value: (center - RegionCenter)) + extent));
-
-        return ((slack.X >= FixedQ4816.Zero) && (slack.Y >= FixedQ4816.Zero) && (slack.Z >= FixedQ4816.Zero));
-    }
+    public bool Contains(in FixedAabb box) => Region.Contains(inner: in box);
 }
 /// <summary>One static surface a body volume lies within a margin of: the collider it belongs to and its exact gap.</summary>
 /// <param name="Source">The collider span: static or per-tick.</param>
@@ -126,14 +118,14 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
 
         var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
         var reach = (margin + ContactSkin);
-        var grown = (bounds.Extent + new FixedVector3(X: reach, Y: reach, Z: reach));
+        var grown = bounds.Grow(margin: reach);
         var written = Collect(boxes: colliders.Boxes, candidates: in candidates, colliders: colliders.Colliders, destination: destination,
-            frames: colliders.Frames, grown: grown, reach: reach, orientation: in orientation, position: position,
-            source: FixedSurfaceColliderSource.Static, volume: in volume, written: 0, center: bounds.Center);
+            frames: colliders.Frames, grown: in grown, reach: reach, orientation: in orientation, position: position,
+            source: FixedSurfaceColliderSource.Static, volume: in volume, written: 0);
 
         return (written < 0) ? written : Collect(boxes: dynamicColliders.Boxes, candidates: default, colliders: dynamicColliders.Colliders, destination: destination,
-            frames: dynamicColliders.Frames, grown: grown, reach: reach, orientation: in orientation, position: position,
-            source: FixedSurfaceColliderSource.Dynamic, volume: in volume, written: written, center: bounds.Center);
+            frames: dynamicColliders.Frames, grown: in grown, reach: reach, orientation: in orientation, position: position,
+            source: FixedSurfaceColliderSource.Dynamic, volume: in volume, written: written);
     }
     /// <summary>Builds the diagnostic support witness of the deepest walkable surface among those
     /// <see cref="CollectContacts"/> wrote: its collider, its normal and its depth into the skin. Nothing is queried.</summary>
@@ -181,7 +173,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         if (collider.Kind == FixedStaticColliderKind.Field) {
             var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
 
-            if (collider.Narrow(center: bounds.Center, collider: out var piece, extent: bounds.Extent, reach: (contact.Separation + ContactSkin)) == FixedFieldRegion.Base) {
+            if (collider.Narrow(collider: out var piece, reach: (contact.Separation + ContactSkin), region: in bounds) == FixedFieldRegion.Base) {
                 collider = piece;
             }
         }
@@ -194,13 +186,14 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             WalkableThreshold = GroundedThreshold,
         };
     }
-    private int Collect(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedColliderBox> boxes,
+    private int Collect(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedAabb> boxes,
         ReadOnlySpan<FixedColliderFrame> frames, in FixedColliderCandidates candidates, FixedSurfaceColliderSource source,
-        FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedVector3 center,
-        FixedVector3 grown, FixedQ4816 reach, Span<FixedSurfaceContact> destination, int written) {
-        var indexed = (candidates.IsActive && candidates.Contains(center: center, extent: grown));
+        FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume,
+        in FixedAabb grown, FixedQ4816 reach, Span<FixedSurfaceContact> destination, int written) {
+        var indexed = (candidates.IsActive && candidates.Contains(box: in grown));
         var next = 0;
-        var noSkin = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: FixedQ4816.Zero, MaxIterations: 0);
+        var center = grown.Center;
+        var extent = grown.Extent;
 
         for (var index = 0; ((index < colliders.Length) && (written < destination.Length)); index++) {
             if (indexed) {
@@ -208,16 +201,16 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 if (next == candidates.Indices.Length) { break; }
                 index = candidates.Indices[next];
             }
-            if (noSkin.Misses(box: in boxes[index], bodyCenter: center, bodyExtent: grown)) {
+            if (!boxes[index].Intersects(other: in grown)) {
                 continue;
             }
-            if (frames[index].Separates(bodyExtent: in grown, offset: (center - boxes[index].Center), skin: FixedQ4816.Zero)) {
+            if (frames[index].IsOriented && frames[index].Separates(bodyExtent: in extent, offset: (center - boxes[index].Center), skin: FixedQ4816.Zero)) {
                 continue;
             }
             var collider = colliders[index];
 
             if (collider.Kind == FixedStaticColliderKind.Field) {
-                switch (collider.NarrowQuery(center: center, collider: out var narrowed, extent: grown, reach: FixedQ4816.Zero)) {
+                switch (collider.NarrowQuery(collider: out var narrowed, reach: FixedQ4816.Zero, region: in grown)) {
                     case FixedFieldRegion.Empty: {
                             continue;
                         }
@@ -253,30 +246,17 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
 
         return written;
     }
-    /// <summary>Returns whether a collider's bounds lie further than the contact skin from a body's along some world
-    /// axis, so its exact query would find no push.</summary>
-    /// <param name="colliderCenter">The collider's world center.</param>
-    /// <param name="colliderExtent">The collider's padded world half-extent.</param>
-    /// <param name="bodyCenter">The body bounds' world center.</param>
-    /// <param name="bodyExtent">The body bounds' world half-extent.</param>
-    /// <returns><see langword="true"/> when the collider cannot push the body.</returns>
-    public bool Misses(in FixedVector3 colliderCenter, in FixedVector3 colliderExtent, in FixedVector3 bodyCenter, in FixedVector3 bodyExtent) {
-        var gap = (FixedVector3.Abs(value: (colliderCenter - bodyCenter)) - ((colliderExtent + bodyExtent) + new FixedVector3(X: ContactSkin, Y: ContactSkin, Z: ContactSkin)));
-
-        return ((gap.X > FixedQ4816.Zero) || (gap.Y > FixedQ4816.Zero) || (gap.Z > FixedQ4816.Zero));
-    }
     /// <summary>Returns whether a collider's box lies further than the contact skin from a body's bounds along some
-    /// world axis, so its exact query would find no push; a collider without bounds never misses.</summary>
+    /// world axis, so its exact query would find no push; a collider without bounds (<see cref="FixedAabb.Everywhere"/>)
+    /// never misses.</summary>
     /// <param name="box">The collider's box.</param>
-    /// <param name="bodyCenter">The body bounds' world center.</param>
-    /// <param name="bodyExtent">The body bounds' world half-extent.</param>
+    /// <param name="body">The body's bounds.</param>
     /// <returns><see langword="true"/> when the collider cannot push the body.</returns>
-    public bool Misses(in FixedColliderBox box, in FixedVector3 bodyCenter, in FixedVector3 bodyExtent) =>
-        (box.IsBounded && Misses(bodyCenter: bodyCenter, bodyExtent: bodyExtent, colliderCenter: box.Center, colliderExtent: box.Extent));
+    public bool Misses(in FixedAabb box, in FixedAabb body) => !box.Intersects(other: body.Grow(margin: ContactSkin));
 
     private bool Sweep(
         ReadOnlySpan<FixedStaticCollider> colliders,
-        ReadOnlySpan<FixedColliderBox> boxes,
+        ReadOnlySpan<FixedAabb> boxes,
         ReadOnlySpan<FixedColliderFrame> frames,
         in FixedColliderCandidates candidates,
         FixedSurfaceColliderSource source,
@@ -298,8 +278,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var pushed = false;
         var culls = (boxes.Length == colliders.Length);
         var bounds = (culls ? FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume) : default);
+        var reach = bounds.Grow(margin: ContactSkin);
 
-        var indexed = (culls && candidates.IsActive && candidates.Contains(center: bounds.Center, extent: bounds.Extent));
+        var indexed = (culls && candidates.IsActive && candidates.Contains(box: in bounds));
         var next = 0;
 
         for (var index = 0; (index < colliders.Length); index++) {
@@ -308,10 +289,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 if (next == candidates.Indices.Length) { break; }
                 index = candidates.Indices[next];
             }
-            if (culls && Misses(box: in boxes[index], bodyCenter: bounds.Center, bodyExtent: bounds.Extent)) {
+            if (culls && !boxes[index].Intersects(other: in reach)) {
                 continue;
             }
-            if (culls && frames[index].Separates(bodyExtent: in bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: ContactSkin)) {
+            if (culls && frames[index].IsOriented && frames[index].Separates(bodyExtent: bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: ContactSkin)) {
                 continue;
             }
             // The collider that answered: a field collider's exact piece where it narrowed, whose surface the edge witness
@@ -377,7 +358,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 pushed = true;
                 if (culls) {
                     bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
-                    indexed &= candidates.Contains(center: bounds.Center, extent: bounds.Extent);
+                    reach = bounds.Grow(margin: ContactSkin);
+                    indexed &= candidates.Contains(box: in bounds);
                 }
             }
         }
@@ -518,12 +500,12 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         }
         var met = false;
         var nearest = reach;
-        var (center, extent) = SweptBounds(orientation: in orientation, position: in lowest, previousPosition: in position, volumes: volumes);
+        var swept = SweptBounds(orientation: in orientation, position: in lowest, previousPosition: in position, volumes: volumes);
 
         foreach (ref readonly var volume in volumes) {
-            Descend(boxes: colliders.Boxes, candidates: in candidates, center: in center, colliders: colliders.Colliders, extent: in extent,
+            Descend(boxes: colliders.Boxes, candidates: in candidates, colliders: colliders.Colliders, swept: in swept,
                 frames: colliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
-            Descend(boxes: dynamicColliders.Boxes, candidates: default, center: in center, colliders: dynamicColliders.Colliders, extent: in extent,
+            Descend(boxes: dynamicColliders.Boxes, candidates: default, colliders: dynamicColliders.Colliders, swept: in swept,
                 frames: dynamicColliders.Frames, met: ref met, nearest: ref nearest, orientation: in orientation, position: in position, up: in up, volume: in volume);
         }
         descent = (met ? nearest : FixedQ4816.Zero);
@@ -531,12 +513,15 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     }
     // Lowers the nearest support distance found by every collider of one span the descent's box can reach. Each collider
     // searches only as far as the nearest found so far, since a support met past it cannot lower it.
-    private void Descend(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedColliderBox> boxes, ReadOnlySpan<FixedColliderFrame> frames,
-        in FixedColliderCandidates candidates, in FixedVector3 center, in FixedVector3 extent, in FixedVector3 position, in FixedQuaternion orientation,
+    private void Descend(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedAabb> boxes, ReadOnlySpan<FixedColliderFrame> frames,
+        in FixedColliderCandidates candidates, in FixedAabb swept, in FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, in FixedVector3 up, ref FixedQ4816 nearest, ref bool met) {
         var culls = (boxes.Length == colliders.Length);
-        var indexed = (culls && candidates.IsActive && candidates.Contains(center: center, extent: extent));
+        var indexed = (culls && candidates.IsActive && candidates.Contains(box: in swept));
         var next = 0;
+        var reach = swept.Grow(margin: ContactSkin);
+        var center = swept.Center;
+        var extent = swept.Extent;
 
         for (var index = 0; (index < colliders.Length); index++) {
             if (indexed) {
@@ -544,8 +529,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 if (next == candidates.Indices.Length) { break; }
                 index = candidates.Indices[next];
             }
-            if (culls && (Misses(box: in boxes[index], bodyCenter: center, bodyExtent: extent) ||
-                frames[index].Separates(bodyExtent: in extent, offset: (center - boxes[index].Center), skin: ContactSkin))) {
+            if (culls && (!boxes[index].Intersects(other: in reach) ||
+                (frames[index].IsOriented && frames[index].Separates(bodyExtent: in extent, offset: (center - boxes[index].Center), skin: ContactSkin)))) {
                 continue;
             }
             if (FixedSupportDistance.TryDescend(collider: in colliders[index], descent: out var descent, orientation: in orientation,
@@ -562,44 +547,36 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     private bool SweptBoundsMeetCollider(FixedStaticColliderSet colliders, FixedStaticColliderSet dynamicColliders,
         in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedColliderCandidates candidates) {
-        var (middle, half) = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
+        var swept = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
+        var reach = swept.Grow(margin: ContactSkin);
         var boxes = colliders.Boxes;
 
-        if (candidates.IsActive && candidates.Contains(center: middle, extent: half)) {
+        if (candidates.IsActive && candidates.Contains(box: in swept)) {
             foreach (var index in candidates.Indices) {
-                if (!Misses(box: in boxes[index], bodyCenter: middle, bodyExtent: half)) { return true; }
+                if (boxes[index].Intersects(other: in reach)) { return true; }
             }
         } else {
             foreach (ref readonly var box in boxes) {
-                if (!Misses(box: in box, bodyCenter: middle, bodyExtent: half)) { return true; }
+                if (box.Intersects(other: in reach)) { return true; }
             }
         }
         foreach (ref readonly var box in dynamicColliders.Boxes) {
-            if (!Misses(box: in box, bodyCenter: middle, bodyExtent: half)) { return true; }
+            if (box.Intersects(other: in reach)) { return true; }
         }
         return false;
     }
-    // The world box every volume's bounds lie in at every pose of a straight move, as a centre and a half-extent widened
-    // by one raw.
-    private static (FixedVector3 Center, FixedVector3 Extent) SweptBounds(in FixedVector3 previousPosition, in FixedVector3 position,
+    // The world box every volume's bounds lie in at every pose of a straight move: the orientation is fixed, so each
+    // volume's bounds only translate, and the box enclosing them at both ends holds every pose between.
+    private static FixedAabb SweptBounds(in FixedVector3 previousPosition, in FixedVector3 position,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
-        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+        var swept = FixedAabb.Empty;
 
         foreach (ref readonly var volume in volumes) {
             foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
-                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
-
-                low = Lowest(left: low, right: (center - extent));
-                high = FixedVector3.Max(left: high, right: (center + extent));
+                swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume));
             }
         }
-        var halfSpan = ((high - low) / FixedQ4816.FromInteger(value: 2L));
-
-        return ((low + halfSpan), (halfSpan + new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon)));
-
-        static FixedVector3 Lowest(FixedVector3 left, FixedVector3 right) => new(X: FixedQ4816.Min(x: left.X, y: right.X),
-            Y: FixedQ4816.Min(x: left.Y, y: right.Y), Z: FixedQ4816.Min(x: left.Z, y: right.Z));
+        return swept;
     }
 
     // previousPosition is the whole move's start, the pre-move foot every slice's edge test measures from, as

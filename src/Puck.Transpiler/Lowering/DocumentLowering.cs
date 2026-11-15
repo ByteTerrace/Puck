@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -99,7 +100,8 @@ public static partial class DocumentLowering {
                 }
 
             case ColorExpressionNode color:
-                return JsonValue.Create(value: color.Hex);
+                // The parser admitted the literal, so it canonicalizes: every spelling of one colour lowers to one text.
+                return JsonValue.Create(value: (HexColor.TryCanonicalize(canonical: out var canonical, value: color.Hex) ? canonical : color.Hex));
 
             case IdentifierExpressionNode ident:
                 if (scope.TryRefuseRead(name: ident.Name, span: ident.Span)) {

@@ -14,11 +14,11 @@ public enum FixedFieldRegion {
 }
 /// <summary>An oriented box outside which one operand of a composed field reads above zero, with its world-axis box: the
 /// operand's reach.</summary>
-/// <param name="Box">The world-axis box about the oriented box, or a box without bounds for an operand with none (a
-/// half-space).</param>
+/// <param name="Box">The world-axis box about the oriented box, or <see cref="FixedAabb.Everywhere"/> for an operand
+/// with none (a half-space).</param>
 /// <param name="Frame">The oriented box's world axes and half-extent along each, or a frame that separates nothing for an
 /// operand without bounds.</param>
-public readonly record struct FixedFieldReach(FixedColliderBox Box, FixedColliderFrame Frame) {
+public readonly record struct FixedFieldReach(FixedAabb Box, FixedColliderFrame Frame) {
     /// <summary>Gets the padding, in metres, an oriented reach adds past its operand's extent on every axis: far wider than
     /// any rounding of a primitive's field or of a turned box, as a collider's own bounds padding is.</summary>
     public static FixedQ4816 Padding => FixedStaticCollider.BoundsPadding;
@@ -33,37 +33,24 @@ public readonly record struct FixedFieldReach(FixedColliderBox Box, FixedCollide
         var axisY = rotation.Rotate(vector: FixedVector3.UnitY);
         var axisZ = rotation.Rotate(vector: FixedVector3.UnitZ);
         var padding = new FixedVector3(X: Padding, Y: Padding, Z: Padding);
-        var world = ((((FixedVector3.Abs(value: axisX) * halfExtent.X) + (FixedVector3.Abs(value: axisY) * halfExtent.Y)) + (FixedVector3.Abs(value: axisZ) * halfExtent.Z)) + padding);
+        var world = (FixedAabb.OrientedHalfExtent(axisX: axisX, axisY: axisY, axisZ: axisZ, halfExtent: halfExtent) + padding);
 
-        return new FixedFieldReach(Box: new FixedColliderBox(Center: center, Extent: world),
+        return new FixedFieldReach(Box: FixedAabb.FromCenter(center: center, extent: world),
             Frame: new FixedColliderFrame(AxisX: axisX, AxisY: axisY, AxisZ: axisZ, Reach: (halfExtent + padding)));
     }
     /// <summary>Creates the reach of an operand without bounds, which every box meets.</summary>
-    /// <param name="center">A world point of the operand.</param>
     /// <returns>The reach.</returns>
-    public static FixedFieldReach Unbounded(FixedVector3 center) {
-        var none = new FixedVector3(X: -FixedQ4816.One, Y: -FixedQ4816.One, Z: -FixedQ4816.One);
-
-        return new FixedFieldReach(Box: new FixedColliderBox(Center: center, Extent: none),
-            Frame: new FixedColliderFrame(AxisX: default, AxisY: default, AxisZ: default, Reach: none));
-    }
+    public static FixedFieldReach Unbounded() =>
+        new(Box: FixedAabb.Everywhere, Frame: new FixedColliderFrame(AxisX: default, AxisY: default, AxisZ: default,
+            Reach: new FixedVector3(X: -FixedQ4816.One, Y: -FixedQ4816.One, Z: -FixedQ4816.One)));
 
     /// <summary>Returns whether a world box may meet the reach: neither its world-axis box nor its oriented box separates
     /// them. Conservative: a box this answers false for holds no point where the operand reads at or below zero.</summary>
-    /// <param name="center">The box's world centre.</param>
-    /// <param name="extent">The box's world half-extent, at least zero on every axis.</param>
+    /// <param name="region">The world box, not empty.</param>
     /// <returns><see langword="false"/> when the box is proved apart from the reach.</returns>
-    public bool Meets(in FixedVector3 center, in FixedVector3 extent) {
-        if (!Box.IsBounded) {
-            return true;
-        }
-
-        var offset = (center - Box.Center);
-        var gap = (FixedVector3.Abs(value: offset) - (Box.Extent + extent));
-
-        return ((gap.X <= FixedQ4816.Zero) && (gap.Y <= FixedQ4816.Zero) && (gap.Z <= FixedQ4816.Zero) &&
-            !Frame.Separates(bodyExtent: in extent, offset: in offset, skin: FixedQ4816.Zero));
-    }
+    public bool Meets(in FixedAabb region) =>
+        (Box.Intersects(other: in region) &&
+        (!Frame.IsOriented || !Frame.Separates(bodyExtent: region.Extent, offset: (region.Center - Box.Center), skin: FixedQ4816.Zero)));
 }
 /// <summary>One hard-union piece of a composed field: its reach, and the analytic collider that is exactly its surface,
 /// when it has one.</summary>
@@ -115,15 +102,14 @@ public sealed class FixedFieldPartition {
         return false;
     }
     /// <summary>Narrows a query confined to a world box: the one exact piece the solid there is, or none of it.</summary>
-    /// <param name="center">The box's world centre.</param>
-    /// <param name="extent">The box's world half-extent, at least zero on every axis.</param>
+    /// <param name="region">The world box, not empty.</param>
     /// <param name="collider">The piece's exact collider when the answer is <see cref="FixedFieldRegion.Base"/>.</param>
     /// <returns>What the solid within the box is proved to be.</returns>
-    public FixedFieldRegion Narrow(in FixedVector3 center, in FixedVector3 extent, out FixedStaticCollider collider) {
+    public FixedFieldRegion Narrow(in FixedAabb region, out FixedStaticCollider collider) {
         collider = default;
 
         foreach (ref readonly var carve in m_carves.AsSpan()) {
-            if (carve.Meets(center: in center, extent: in extent)) {
+            if (carve.Meets(region: in region)) {
                 return FixedFieldRegion.Field;
             }
         }
@@ -131,7 +117,7 @@ public sealed class FixedFieldPartition {
         var met = -1;
 
         for (var index = 0; (index < m_pieces.Length); index++) {
-            if (m_pieces[index].Reach.Meets(center: in center, extent: in extent)) {
+            if (m_pieces[index].Reach.Meets(region: in region)) {
                 if (met >= 0) {
                     return FixedFieldRegion.Field;
                 }

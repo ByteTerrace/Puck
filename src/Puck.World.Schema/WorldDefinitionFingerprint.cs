@@ -107,17 +107,17 @@ public static class WorldDefinitionFingerprint {
     /// distributions and dealt slots even when the selected census stays equal.</summary>
     /// <param name="definition">The document being observed.</param>
     /// <param name="region">The finite fixed-point world XYZ read bounds.</param>
-    public static string ComputeSpatial(WorldDefinition definition, in WorldSpatialReadRegion region) {
+    public static string ComputeSpatial(WorldDefinition definition, in FixedAabb region) {
         using var bytes = new MemoryStream();
 
         using (var writer = new Utf8JsonWriter(bytes)) {
             writer.WriteStartArray();
-            writer.WriteNumberValue(value: region.MinXRaw);
-            writer.WriteNumberValue(value: region.MinZRaw);
-            writer.WriteNumberValue(value: region.MaxXRaw);
-            writer.WriteNumberValue(value: region.MaxZRaw);
-            writer.WriteNumberValue(value: region.MinYRaw);
-            writer.WriteNumberValue(value: region.MaxYRaw);
+            writer.WriteNumberValue(value: region.Minimum.X.Value);
+            writer.WriteNumberValue(value: region.Minimum.Z.Value);
+            writer.WriteNumberValue(value: region.Maximum.X.Value);
+            writer.WriteNumberValue(value: region.Maximum.Z.Value);
+            writer.WriteNumberValue(value: region.Minimum.Y.Value);
+            writer.WriteNumberValue(value: region.Maximum.Y.Value);
             // Noise/Scatter offsets (including a dealt child's slot) and distributed footprints read this input.
             writer.WriteNumberValue(value: (definition.Generation?.WorldSeed ?? 0UL));
 
@@ -164,7 +164,7 @@ public static class WorldDefinitionFingerprint {
     public static bool EntersSpatialCensus(WorldPlacement placement) =>
         (placement.Spatial is { Count: > 0 }) || (placement.Deal is { Preserve: { Facets: true } });
     /// <summary>Returns the authored rows observed by a bounded spatial read in document order.</summary>
-    public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in WorldSpatialReadRegion region) {
+    public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in FixedAabb region) {
         if (definition.PlacementsRaw is not { } section) { return []; }
         var lookup = Placements.GetValue(
             section,
@@ -186,7 +186,7 @@ public static class WorldDefinitionFingerprint {
         }
         var index = definition.SpatialQueryIndex;
 
-        foreach (var volume in index.Query(region.Bounds).Volumes) { Include(id: volume.PlacementId); }
+        foreach (var volume in index.Query(bounds: region).Volumes) { Include(id: volume.PlacementId); }
         // A dynamic spatial row has no static exclusion proof. Preserve it as an explicit uncertainty dependency.
         foreach (var unsupported in index.Unsupported) { Include(id: unsupported.PlacementId); }
         // A template's current children are not a negative-dependency proof: an empty source can grow a child,
@@ -199,82 +199,4 @@ public static class WorldDefinitionFingerprint {
         }
         return selected.Where(predicate: lookup.ContainsKey).Select(selector: id => lookup[id]).OrderBy(keySelector: item => item.Ordinal).Select(selector: item => item.Row).ToArray();
     }
-}
-/// <summary>A fixed-point world XYZ box used by a guarded spatial read.</summary>
-public readonly record struct WorldSpatialReadRegion(long MinXRaw, long MinZRaw, long MaxXRaw, long MaxZRaw,
-    long MinYRaw = -long.MaxValue, long MaxYRaw = long.MaxValue) {
-    /// <summary>The conservatively rounded fixed-point query envelope.</summary>
-    public FixedSpatialAabb Bounds {
-        get {
-            static (FixedQ4816 Center, FixedQ4816 Extent) Axis(long min, long max) {
-                var center = ((((Int128)min) + max) / 2);
-                var extent = Int128.Max(
-                    x: (center - min),
-                    y: (((Int128)max) - center)
-                );
-
-                return (FixedQ4816.FromRawBits(value: checked((long)center)), FixedQ4816.FromRawBits(value: checked((long)extent)));
-            }
-            var x = Axis(
-                MinXRaw,
-                MaxXRaw
-            ); var y = Axis(
-                MinYRaw,
-                MaxYRaw
-            ); var z = Axis(
-                MinZRaw,
-                MaxZRaw
-            );
-
-            return new(
-                Center: new(
-                    X: x.Center,
-                    Y: y.Center,
-                    Z: z.Center
-                ),
-                Extent: new(
-                    X: x.Extent,
-                    Y: y.Extent,
-                    Z: z.Extent
-                )
-            );
-        }
-    }
-    /// <summary>An empty accumulation region; enclose at least one shape before querying.</summary>
-    public static WorldSpatialReadRegion Empty => new(
-        MaxXRaw: long.MinValue,
-        MaxYRaw: long.MinValue,
-        MaxZRaw: long.MinValue,
-        MinXRaw: long.MaxValue,
-        MinYRaw: long.MaxValue,
-        MinZRaw: long.MaxValue
-    );
-
-    /// <summary>Expands the region to include a finite shape's full world envelope.</summary>
-    public WorldSpatialReadRegion Enclose(in FixedSpatialAabb box) => new(
-        Math.Min(
-            val1: MinXRaw,
-            val2: checked((box.Center.X.Value - box.Extent.X.Value))
-        ),
-        Math.Min(
-            val1: MinZRaw,
-            val2: checked((box.Center.Z.Value - box.Extent.Z.Value))
-        ),
-        Math.Max(
-            val1: MaxXRaw,
-            val2: checked((box.Center.X.Value + box.Extent.X.Value))
-        ),
-        Math.Max(
-            val1: MaxZRaw,
-            val2: checked((box.Center.Z.Value + box.Extent.Z.Value))
-        ),
-        Math.Min(
-            val1: MinYRaw,
-            val2: checked((box.Center.Y.Value - box.Extent.Y.Value))
-        ),
-        Math.Max(
-            val1: MaxYRaw,
-            val2: checked((box.Center.Y.Value + box.Extent.Y.Value))
-        )
-    );
 }

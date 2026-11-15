@@ -207,6 +207,25 @@ public sealed class GpuRangeAllocatorLawTests {
         Assert.Equal(expected: (0, 1, 4096UL), actual: (ranges.LiveRanges, ranges.FreeRanges, ranges.FreeCount));
     }
     [Fact]
+    public void AFreeNamingAnEarlierTicketLeavesTheRangeGivenAgainLive() {
+        var ranges = new GpuRangeAllocator(size: 100UL);
+        var start = ranges.Allocate(count: 10UL);
+        var stale = ranges.TicketOf(start: start);
+
+        _ = ranges.Free(start: start, ticket: stale);
+        Assert.Equal(expected: start, actual: ranges.Allocate(count: 10UL));
+
+        var fresh = ranges.TicketOf(start: start);
+
+        Assert.NotEqual(expected: stale, actual: fresh);
+        Assert.Contains(
+            actualString: Assert.Throws<InvalidOperationException>(testCode: () => ranges.Free(start: start, ticket: stale)).Message,
+            expectedSubstring: "was freed and given again"
+        );
+        Assert.Equal(expected: 1, actual: ranges.LiveRanges);
+        Assert.Equal(expected: 10UL, actual: ranges.Free(start: start, ticket: fresh));
+    }
+    [Fact]
     public void ADoubleFreeIsRefusedByName() {
         var ranges = new GpuRangeAllocator(
             maxRanges: 8,

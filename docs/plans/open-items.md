@@ -225,27 +225,25 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      not wave 1's code. Whether a loaded machine should cost Vulkan's pacer
      more than Direct3D 12's is not yet found.
    - A hand-over's own frame. A replacement that changes a group's piece or
-     copy count rebuilds the dresser's whole draw list
-     (`SdfMeshDresser.BuildDrawTopology`) and stages every row
-     (`SdfWorldTables.StageMeshRegionCore`): at the meadow that is the whole
-     list of blade draws, on the frame thread, in the one frame, and it is
-     the frame `host.frames` shows working several times a settled frame with
-     megabytes allocated on the frame thread; the meadow's arrivals showed one
-     or two such frames a window. The cause fix is the residency
-     packet's rows that keep their place
-     ([residency](#residency-and-streaming)), so a hand-over costs its own
-     rows.
+     copy count, and a group's first mesh, rebuild the dresser's whole draw
+     list (`SdfMeshDresser.BuildDrawTopology`) and stage every row
+     (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame;
+     it is the frame `host.frames` shows working several times a settled
+     frame, and the meadow's arrivals showed one or two such frames a window.
+     [Arrival work proportional to change](arrival-proportional.md#decision-1-rows-that-keep-their-place)
+     holds the design (rows that keep their place, a waiting draw as an
+     absent record, portal clips as rows) and its steps R0 to R2 with the
+     counts each lands on.
    - The arrival's background work and the garbage collector. Every
      collection of the young generations stops the frame thread, so what the
      workers allocate on arrival lands on frames as pauses. The lighting's
      trace-scene build (`SdfMeshIrradianceScene.Build`) now leaves only what the
      scene keeps (its hierarchy's workspace is pooled, and no node allocates).
-     What still allocates per arrival, largest first: the top-level scene and
-     its GPU export rebuilt whole on every scene change
-     (`SdfMeshIrradianceScene`'s constructor, `CreateGpuExport`), and a store
-     load's managed decode before the native copy (`SdfMeshStoreCodec.ReadMesh`,
-     `SdfMeshLibrary.RenumberManaged`; the memory item's lead too). Read them
-     with an EventPipe allocation trace across the arrival
+     What still allocates per arrival, largest first, is designed out in
+     [the same memo](arrival-proportional.md#steps): the top-level scene and
+     its GPU export rebuilt whole on every scene change (its steps S1 and
+     S2), and a store load's managed decode before the native copy (its step
+     D1). Read them with an EventPipe allocation trace across the arrival
      (`Microsoft-Windows-DotNETRuntime:0x1:5`), and `host.frames`' per-frame
      collections.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
@@ -2675,23 +2673,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Duplicates the clone scan's type and expression passes found (the
   [hazards page](../development/hazards.md#two-copies-of-one-computation) says
   how the passes work; paths under `src/` unless named). One implementation each:
-  - [low] The oriented box's world half-extents (the absolute rotation times the
-    half-size) three times, twice fixed and once float:
-    `Puck.Physics/FixedStaticCollider.cs:221`,
-    `Puck.SdfVm/SdfMeshPathBake.Residency.cs:355`,
-    `Puck.World.Authoring/Authoring/CreationStampEmitter.cs:1602`.
-  - [low] A quaternion from a right/up/forward basis through a `Matrix4x4`,
-    three times: `Puck.SignedDistance/SdfProgramBuilder.Text.cs:225`,
-    `Puck.World.Client/WorldFramePresenter.cs:951`,
-    `Puck.World.Client/WorldScreenStamper.cs:23`.
   - [low] The bake's tetrahedral gradient taps have one C# home,
     `SdfMeshBakeTaps`, which the offline bake, the field levels and the `SdfVm`
     laws' kernel stand-ins share; the HLSL tap set (`SdfBakeTaps` in
     `passes/sdf-mesh-bake.comp.hlsl`) is still a hand pair with it, which a
     generated declaration would close.
-  - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
-    (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
-    `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
   - [low] Three work-kind registries with one body (`Puck.State.Rules/Evaluation/RuleWorkKinds.cs:10`,
     `Puck.State.Search/SearchWorkKinds.cs:11`, `Puck.State/Arena/ArenaWork.cs:10`).
   - [low] Test helpers whose copies differ and stay per file: the raw-bit and
@@ -2824,23 +2810,13 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    parent). Until then a World's `--exit-after-seconds` backstop bounds it there,
    and an MCP World, which has none, outlives a killed adapter.
 5. Small merges (S each; one implementer lane can take them together).
-   - Fixed-point boxes (specialist):
-     `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
-     centre and extent, an `Int128` overlap test that cannot overflow),
-     `WorldColliderBox` (`Puck.World.Server/WorldColliderBox.cs`, minimum and
-     maximum), the tuple `FixedColliderBounds.WorldBounds` returns
-     (`Puck.Physics/FixedColliderBounds.cs`), `WorldTabletopFrame.Footprint`
-     (`Puck.World.Schema/WorldTabletopFrame.cs:30`) and `SdfBoundsCache.Entry`
-     (`Puck.SignedDistance/Queries/SdfBoundsCache.cs:94`). `Puck.Maths` has no
-     fixed box; add one with the `Int128` test; `WorldTabletopFrame.Footprint` stays a class
-     for its `ConditionalWeakTable`.
-   - Hex colours, three grammars (specialist): `HexColor`
-     (`Puck.World.Authoring/Authoring/HexColor.cs:105`, `#RRGGBB` and
-     `#RRGGBBAA` only), `TextEnrichmentTags.TryParseHexColor`
-     (`Puck.Text/TextEnrichmentTags.cs:382`, 3, 4, 6 or 8 digits, `#`
-     optional), and `PuckParser.ParseHexColor`
-     (`Puck.Transpiler/Parsing/PuckParser.cs:1404`), which lexes `#RGB` and
-     lowers it verbatim for `HexColor` to refuse `[medium]`. Decide one grammar.
+   - The `state.` reference prefix has a constant per reader:
+     `DocumentIdentifier.ReferencePrefix` (`Puck.Assets/Documents`, the shared
+     home, which `ColorStateBinding` reads), `CreationDriverDocument.SignalStatePrefix`,
+     `WorldHud` (`StatePrefix`), `WorldModuleNamespace` (twice),
+     `WorldStateBindingContext.RowReferencePrefix` and `PuckLinter.References`
+     (`BindingPrefix`). One constant, and one "is this a state reference" test
+     beside it.
    - Separator spelling beside `PuckPaths.Slashed` in the projects that cannot
      reference `Puck.Abstractions`: `build/ProjectArchitecture.cs` (two),
      `Puck.Launcher.Stub/Program.cs`, `Puck.Analyzers/AnalyzerAllowlistPath.cs` and
@@ -3633,28 +3609,29 @@ Grounded causes and leads, largest first:
   door; the static ones follow once placement and classification move to the
   GPU trace. A restore decodes the whole store entry (`SdfMeshStoreCodec.TryDecode`)
   when it needs only the normals and level-index planes; a codec read of
-  those planes alone would cut a rebuilt region's restore work. Owner:
-  rendering/bake.
+  those planes alone would cut a rebuilt region's restore work, and
+  [the arrival memo](arrival-proportional.md#decision-4-the-store-decode)'s
+  step D1 is that read. Owner: rendering/bake.
 - [medium] A replacement that changes a group's piece or copy count still
-  rebuilds the dresser's whole draw list and stages every record once. A
-  mesh that replaces a drawn one lands ahead of the draws and takes them
-  only once its words stand, and a hand-over whose counts stand stages its
-  own rows
-  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)). A
-  chunked mesh whose chunks differ between tiers, or a shared geometry
-  whose copies change, shifts every later row, so
-  `SdfMeshDresser.BuildDrawTopology` runs, its journal names every row, and
-  `SdfWorldTables.StageMeshRegionCore` plans the arena and stages the list
-  whole. Rows that keep their place across such a change (a free row a
-  group's surplus pieces give up and its next pieces take, with a rebuild
-  only when free rows pass a share of the list) would make that hand-over
-  its own rows' work as well. No capture has yet shown a hand-over frame by
+  rebuilds the dresser's whole draw list and stages every record once, as
+  does a group's first mesh; a draw waiting for its mesh is filtered out of
+  the staged list, so each landing meanwhile packs the list again; and a
+  body straddling a portal journals every row each frame. A mesh that
+  replaces a drawn one lands ahead of the draws and takes them only once its
+  words stand, and a hand-over whose counts stand stages its own rows
+  ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)).
+  [Arrival work proportional to change](arrival-proportional.md) is the
+  design: a run of rows per owner from the arena's allocator, free and
+  waiting rows as absent records, the staged table the producer's row for
+  row, and a packing only when free rows pass a share of the table (its
+  steps R1a to R1c), with the store's restore reading only the planes it
+  restores (its step D1). No capture has yet shown a hand-over frame by
   frame: a burst capture across one, with the group in every frame, is the
-  check the landing-ahead invariant still owes. Arriving at the meadow does not
-  always hand over with a count change (three 90 to 120 frame bursts across
-  arrivals saw none), so read `SdfMeshHistory.DressTopologyBuilds`
-  (`world.counters sdf.instances`) before and after a burst and keep only a
-  burst it moved across. Owner:
+  check the landing-ahead invariant still owes, and step R1b takes it.
+  Arriving at the meadow does not always hand over with a count change
+  (three 90 to 120 frame bursts across arrivals saw none), so read
+  `SdfMeshHistory.DressTopologyBuilds` (`world.counters sdf.instances`)
+  before and after a burst and keep only a burst it moved across. Owner:
   rendering/bake.
 - [medium] A device that refuses the mesh region's growth still ends the
   World: `GpuRegion.Grow` throws from `SdfWorldTables.EnsureMeshRegionCapacity`

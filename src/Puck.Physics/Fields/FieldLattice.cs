@@ -77,8 +77,7 @@ public sealed class FieldLattice {
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
-    private readonly FixedVector3 m_readMaximum;
-    private readonly FixedVector3 m_readMinimum;
+    private readonly FixedAabb m_readBox;
     private readonly FixedQ4816[] m_scratch;
     private readonly int m_stepEveryTicks;
     private readonly ulong[] m_valueRevisions;
@@ -177,11 +176,13 @@ public sealed class FieldLattice {
 
         var reach = (m_cellSize * FixedQ4816.FromInteger(value: FieldLatticeSolid.ReachCells));
 
-        m_readMinimum = new FixedVector3(X: (m_origin.X - reach), Y: ((m_origin.Y - m_cellSize) - reach), Z: (m_origin.Z - reach));
-        m_readMaximum = new FixedVector3(
-            X: ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: m_width))) + reach),
-            Y: ((m_origin.Y + m_bodyCouplingCeiling) + reach),
-            Z: ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: m_depth))) + reach)
+        m_readBox = new FixedAabb(
+            Maximum: new FixedVector3(
+                X: ((m_origin.X + (m_cellSize * FixedQ4816.FromInteger(value: m_width))) + reach),
+                Y: ((m_origin.Y + m_bodyCouplingCeiling) + reach),
+                Z: ((m_origin.Z + (m_cellSize * FixedQ4816.FromInteger(value: m_depth))) + reach)
+            ),
+            Minimum: new FixedVector3(X: (m_origin.X - reach), Y: ((m_origin.Y - m_cellSize) - reach), Z: (m_origin.Z - reach))
         );
 
         m_reactionSets = CompileReactionSets(reactions: input.Reactions);
@@ -2026,12 +2027,9 @@ public sealed class FieldLattice {
         }
         return revision;
     }
-    /// <summary>Gets the least corner of the box outside which no body reads this lattice; see
-    /// <see cref="ReadMaximum"/>.</summary>
-    public FixedVector3 ReadMinimum => m_readMinimum;
-    /// <summary>Gets the greatest corner of the box outside which no body reads this lattice: the coupling volume
+    /// <summary>Gets the box outside which no body reads this lattice, in world units: the coupling volume
     /// <see cref="TryBodyCellOf"/> resolves a body in (so every position <see cref="MediumSurface"/> answers for), from
     /// the cell under the origin where a solid column's box starts up to the tallest surface a field can raise, grown on
-    /// every side by the <see cref="FieldLatticeSolid.ReachCells"/> cells a solid's answer reads. World units.</summary>
-    public FixedVector3 ReadMaximum => m_readMaximum;
+    /// every side by the <see cref="FieldLatticeSolid.ReachCells"/> cells a solid's answer reads.</summary>
+    public FixedAabb ReadBox => m_readBox;
 }
