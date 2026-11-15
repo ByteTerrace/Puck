@@ -128,8 +128,8 @@ B. Land `lane/g5` (the occlusion-aware rate floor): every review finding is
 C. The owner reviews the [modeling authoring plan](modeling-authoring.md);
    then its slices S1 to S3 (mirror, orientation builtins, relative
    placement).
-D. The frame bar (item 1 below): the frames after a change of geometry, when
-   the views that stood render again together.
+D. The frame bar (item 1 below): Vulkan's p99 near 18.4 ms at every stop,
+   which no frame's work accounts for, and the meadow's few worst frames.
 E. The Azure release's three failures ([delivery](#delivery-launcher-and-ci)):
    ordinary work, since nothing is live.
 F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
@@ -172,17 +172,15 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
    place.
 1. The frame bar [high]: measured on the head with `bench frames` (five fresh
    processes per backend, Direct3D 12 then Vulkan), every stop holds 60 FPS on
-   average but the Direct3D 12 studio (16.94 ms); at p99 flight B reads 16.7
-   and 18.4 ms, the teal roof 16.7 and 19.3 ms, the meadow 18.8 and 18.5 ms
-   and the studio 22.5 and 18.5 ms, with worst frames of 17.4 and 18.5, 20.1
-   and 28.6, 29.6 and 19.6, and 49.6 and 18.9 ms. A window holds about 240
-   frames, so its p99 lies between its third and fourth worst, and a stop's
-   reading moves by whether a change of geometry falls in its window (the
-   second bullet below): the Direct3D 12 studio read p99 16.7 ms in two
-   samples of five and 22 to 58 ms in the three one fell in, and the meadow
-   16.7 to 31.5 ms. Vulkan's p99 sat near 18.3 ms at every stop of that run,
-   in windows where no frame's work passed 16.7 ms. The far cascade's cadence
-   is settled: a
+   average (16.66 to 16.73 ms); at p99 the studio reads 16.7 and 18.5 ms,
+   the meadow 16.7 and 18.3 ms, flight B 16.7 and 18.4 ms and the teal roof
+   16.7 and 18.5 ms, with worst frames of 16.9 and 18.6, 20.0 and 28.0, 26.3
+   and 18.7, and 17.0 and 20.6 ms. On Direct3D 12 every stop is at or under
+   its reading from before the demand tiers but the meadow's worst frame
+   (17.4 ms then): one to three frames of a 240-frame window pass 16.7 ms
+   there. Vulkan's p99 sits near 18.4 ms at every stop, in windows where no
+   frame's work passed 16.7 ms (the second bullet below). The far cascade's
+   cadence is settled: a
    receiver-conditioned cascade's coverage identity names the sample grid alone
    (`SdfWorldPasses.ReceiverSignatureOf`), and every timed refresh splits over
    two frames, so no frame draws both far layers for the rate's sake. `bench
@@ -214,27 +212,18 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
      (`most-job`); a queued measurement holds the timing question. A probe scene
      upload chunk (`SdfMeshProbeGpuWork` scene upload) can still measure past the
      share against its `SdfGpuWork.UploadSecondsOf` estimate.
-   - The frame that takes a change of geometry, and the one after it. In the
-     debug world a sampled field moves a few times in the half minute after
-     boot, each time resampling one or two groups (`cause=resample` on the
-     bake's start line), whatever stop the body stands at; `bench frames`
-     measures settled stops, so the stop a resample falls in reads it as its
-     worst frames, and the reading moves between stops with the timing of the
-     run. `host.frames` with a worst count names the frames: one of 40 to
-     60 ms whose `produce` is mostly a wait on the previous upload's fence
-     (`SdfWorldTables.SubmitUpload`, 25 to 33 ms), beside one whose pass
-     recording takes 8 to 10 ms where a settled frame's takes under 2
-     (`ShaderPipelineRenderNode.RecordFrame`, sampled thread time). The
-     staging of the changed draws is no longer in it (the hand-over stages
-     its own rows, [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md)).
-     Unconfirmed cause: every view's signature folds the mesh and sampled
-     revisions (`SdfWorldTables.Cadence.cs`), and a view stands only while
-     its signature does and the lighting is settled
-     (`SdfWorldResidency.IsUnchanged`), so the views of a settled world all
-     render in the frame a revision moves, and again while the irradiance
-     volume settles over the change. Next step: count the views recorded a
-     frame (`world.counters`) across one resample, then spread the due views
-     over frames by what each can see of the change.
+   - Vulkan's frame interval. Its median reads 16.55 to 16.60 ms and its p99
+     18.3 to 18.5 ms at every stop, in windows whose busiest frame worked
+     under 16.7 ms, and `host.frames` names frames that worked 6 ms and then
+     waited 16 to 27 ms in the pacer; Direct3D 12 on the same machine reads a
+     16.66 ms median and a 16.7 ms p99. An earlier run on this machine read
+     17.2 ms at the Vulkan studio, so the cause is in presentation pacing or
+     the display's state, and is not yet found (`PresentPacingPolicy`).
+   - A hand-over's own frame. At the resamples after boot, the frame that
+     takes a replaced mesh's draws works 14 to 16 ms on the frame's thread
+     where a settled frame works 5 to 9 (`host.frames`, about 1 MB allocated
+     in it). Whether the meadow's one to three frames over 16.7 ms a window
+     are such frames is not confirmed.
    - The bake's batches are still cut by count (`SdfMeshPathBake.BatchTaps`, eight
      lattices of `SdfMeshPathBake.LatticeTaps`), not by measured time, so a bake
      during play still submits jobs of several frames' length. Cutting them with
