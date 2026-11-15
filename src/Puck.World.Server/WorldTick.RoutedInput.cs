@@ -62,12 +62,7 @@ public sealed partial class WorldTick {
             hash.Add(value: route.PopulationRevision); hash.Add(value: ((byte)route.Principal.Kind)); hash.Add(value: route.Principal.Index);
             hash.Add(value: route.Principal.Generation); hash.Add(value: route.Principal.Name); hash.Add(value: route.Revision);
             hash.Add(value: route.SourceEpoch); hash.Add(value: route.TargetEpoch); hash.Add(value: route.Mapping);
-            for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) { hash.Add(value: route.Image.Channels.Axes[ordinal]); }
-            hash.Add(value: route.Image.Channels.Buttons); hash.Add(value: ((byte)(route.Image.SourceRay.HasValue ? 1 : 0)));
-            if (route.Image.SourceRay is { } ray) {
-                hash.Add(value: ray.Origin.X.Value); hash.Add(value: ray.Origin.Y.Value); hash.Add(value: ray.Origin.Z.Value);
-                hash.Add(value: ray.Direction.X.Value); hash.Add(value: ray.Direction.Y.Value); hash.Add(value: ray.Direction.Z.Value);
-            }
+            route.Image.AppendStateHash(hash: ref hash);
         }
     }
 }
