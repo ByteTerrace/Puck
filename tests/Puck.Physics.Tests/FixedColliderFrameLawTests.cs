@@ -75,7 +75,8 @@ public sealed class FixedColliderFrameLawTests {
                     var position = (collider.Center + collider.Rotation.Rotate(vector: local));
                     var orientation = FixedQuaternion.FromYawPitchRoll(yaw: FixedQ4816.FromDouble(value: Next(random: ref random, minimum: -3.1d, maximum: 3.1d)),
                         pitch: FixedQ4816.FromDouble(value: Next(random: ref random, minimum: -0.4d, maximum: 0.4d)), roll: FixedQ4816.Zero);
-                    var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+                    var bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+                    var (center, extent) = (bounds.Center, bounds.Extent);
 
                     samples++;
                     if (!frame.Separates(bodyExtent: in extent, offset: (center - collider.Center), skin: Skin)) { continue; }

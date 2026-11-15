@@ -89,40 +89,26 @@ public static class HexColor {
 
     private static int Byte(float value) => ((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: value) * 255f)));
     // The R8G8B8A8 word VectorFunctions.UnpackRgba8 reads, red in the low byte; a form without alpha digits is opaque.
+    // AllowHexSpecifier alone admits hex digits only: no sign, prefix or whitespace.
     private static bool TryPack(string? value, out uint packed, out bool withAlpha) {
         packed = 0U;
         withAlpha = false;
-        if ((value is not { Length: (4 or 5 or 7 or 9) }) || (value[0] != '#')) { return false; }
-        var digits = (value.Length - 1);
-        var shortForm = (digits <= 4);
-        var channels = (shortForm ? digits : (digits / 2));
-        var cursor = 1;
+        if ((value is not { Length: (4 or 5 or 7 or 9) }) || (value[0] != '#') ||
+            !uint.TryParse(s: value.AsSpan(start: 1), style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture, result: out var digits)) {
+            return false;
+        }
+        var count = (value.Length - 1);
+        var shortForm = (count <= 4);
+        var channels = (shortForm ? count : (count / 2));
+        var width = (shortForm ? 4 : 8);
 
         for (var channel = 0; (channel < channels); channel++) {
-            int byteValue;
+            var field = ((digits >> (((channels - 1) - channel) * width)) & ((1U << width) - 1U));
 
-            if (shortForm) {
-                var nibble = HexDigit(character: value[cursor++]);
-
-                if (nibble < 0) { return false; }
-                byteValue = (nibble * 0x11);
-            } else {
-                var high = HexDigit(character: value[cursor++]);
-                var low = HexDigit(character: value[cursor++]);
-
-                if ((high < 0) || (low < 0)) { return false; }
-                byteValue = ((high << 4) | low);
-            }
-            packed |= (((uint)byteValue) << (channel * 8));
+            packed |= ((shortForm ? (field * 0x11U) : field) << (channel * 8));
         }
         withAlpha = (channels == 4);
         if (!withAlpha) { packed |= 0xFF000000U; }
         return true;
     }
-    private static int HexDigit(char character) => character switch {
-        >= '0' and <= '9' => (character - '0'),
-        >= 'a' and <= 'f' => ((character - 'a') + 10),
-        >= 'A' and <= 'F' => ((character - 'A') + 10),
-        _ => -1,
-    };
 }

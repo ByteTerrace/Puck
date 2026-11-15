@@ -2590,23 +2590,13 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Duplicates the clone scan's type and expression passes found (the
   [hazards page](../development/hazards.md#two-copies-of-one-computation) says
   how the passes work; paths under `src/` unless named). One implementation each:
-  - [low] The oriented box's world half-extents (the absolute rotation times the
-    half-size) three times, twice fixed and once float:
-    `Puck.Physics/FixedStaticCollider.cs:221`,
-    `Puck.SdfVm/SdfMeshPathBake.Residency.cs:355`,
-    `Puck.World.Authoring/Authoring/CreationStampEmitter.cs:1602`.
-  - [low] A quaternion from a right/up/forward basis through a `Matrix4x4`,
-    three times: `Puck.SignedDistance/SdfProgramBuilder.Text.cs:225`,
-    `Puck.World.Client/WorldFramePresenter.cs:951`,
-    `Puck.World.Client/WorldScreenStamper.cs:23`.
+
   - [low] The bake's tetrahedral gradient taps have one C# home,
     `SdfMeshBakeTaps`, which the offline bake, the field levels and the `SdfVm`
     laws' kernel stand-ins share; the HLSL tap set (`SdfBakeTaps` in
     `passes/sdf-mesh-bake.comp.hlsl`) is still a hand pair with it, which a
     generated declaration would close.
-  - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
-    (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
-    `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
+
   - [low] JSON converters written once per type: `BindableDirectionJsonConverter`
     and two siblings (`Puck.World.Schema/BindableValue.cs:627`, `:682`, `:737`),
     `DocumentVector2JsonConverter` and two siblings
@@ -2797,23 +2787,13 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    parent). Until then a World's `--exit-after-seconds` backstop bounds it there,
    and an MCP World, which has none, outlives a killed adapter.
 6. Small merges (S each; one implementer lane can take them together).
-   - Fixed-point boxes (specialist):
-     `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
-     centre and extent, an `Int128` overlap test that cannot overflow),
-     `WorldColliderBox` (`Puck.World.Server/WorldColliderBox.cs`, minimum and
-     maximum), the tuple `FixedColliderBounds.WorldBounds` returns
-     (`Puck.Physics/FixedColliderBounds.cs`), `WorldTabletopFrame.Footprint`
-     (`Puck.World.Schema/WorldTabletopFrame.cs:30`) and `SdfBoundsCache.Entry`
-     (`Puck.SignedDistance/Queries/SdfBoundsCache.cs:94`). `Puck.Maths` has no
-     fixed box; add one with the `Int128` test; `WorldTabletopFrame.Footprint` stays a class
-     for its `ConditionalWeakTable`.
-   - Hex colours, three grammars (specialist): `HexColor`
-     (`Puck.World.Authoring/Authoring/HexColor.cs:105`, `#RRGGBB` and
-     `#RRGGBBAA` only), `TextEnrichmentTags.TryParseHexColor`
-     (`Puck.Text/TextEnrichmentTags.cs:382`, 3, 4, 6 or 8 digits, `#`
-     optional), and `PuckParser.ParseHexColor`
-     (`Puck.Transpiler/Parsing/PuckParser.cs:1404`), which lexes `#RGB` and
-     lowers it verbatim for `HexColor` to refuse `[medium]`. Decide one grammar.
+   - The `state.` reference prefix has a constant per reader:
+     `DocumentIdentifier.ReferencePrefix` (`Puck.Assets/Documents`, the shared
+     home, which `ColorStateBinding` reads), `CreationDriverDocument.SignalStatePrefix`,
+     `WorldHud` (`StatePrefix`), `WorldModuleNamespace` (twice),
+     `WorldStateBindingContext.RowReferencePrefix` and `PuckLinter.References`
+     (`BindingPrefix`). One constant, and one "is this a state reference" test
+     beside it.
    - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
      accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
      `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`. A shared include is refused
