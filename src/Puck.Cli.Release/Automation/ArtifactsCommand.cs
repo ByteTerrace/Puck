@@ -201,12 +201,16 @@ public static class ArtifactsCommand {
         var copies = (source["copies"]?.AsObject() ?? new JsonObject());
 
         foreach (var name in archive.Entries.Where(predicate: entry => (entry.FullName != Identity)).Select(selector: entry => entry.FullName).Concat(second: copies.Select(selector: copy => copy.Key))) {
-            var destination = Path.GetFullPath(path: Path.Combine(
+            var admitted = Puck.Confinement.PortablePath.IsRelative(path: name);
+            var destination = (admitted
+                ? Path.GetFullPath(path: Path.Combine(
                 path1: root,
                 path2: name
-            ));
+            ))
+                : root);
 
             if (
+                !admitted ||
                 (!name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "src/"
@@ -218,9 +222,6 @@ public static class ArtifactsCommand {
                 comparisonType: StringComparison.Ordinal,
                 value: "/bin/Release/"
             ) ||
-                name.Contains(value: '\\') ||
-                name.Contains(value: ':') ||
-                name.Split('/').Any(predicate: part => (part is ".." or "." or "")) ||
                 !Puck.Abstractions.PuckPaths.IsWithin(
                 path: destination,
                 root: root

@@ -237,12 +237,8 @@ public static class ReleaseProfileLoader {
         )) {
             return $"'{world}' is not a {WorldSuffix} document, the one form a generated overlay can take as its basis";
         }
-        if (
-            world.Contains(value: '\\') ||
-            Path.IsPathRooted(path: world) ||
-            world.Split(separator: '/').Any(predicate: static segment => (segment is "" or "." or ".."))
-        ) {
-            return $"'{world}' must be a package-relative path with forward slashes and no '.', '..' or empty segment";
+        if (!Puck.Confinement.PortablePath.IsRelative(path: world)) {
+            return $"'{world}' must be a portable package-relative path: forward slashes, no '.', '..' or empty segment, no reserved name or character";
         }
 
         return null;

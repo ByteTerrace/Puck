@@ -326,16 +326,16 @@ internal sealed partial class WorldProbes {
             ));
         }
         foreach (var template in instance.RowInfo.ParameterTemplates) {
-            instance.ParameterBindings.Add(item: BuildParameter(
-                instance: instance,
-                template: template
-            ));
+            instance.ParameterBindings.Add(item: new ParameterState {
+                Instance = instance,
+                Template = template,
+            });
         }
         foreach (var template in instance.RowInfo.ControlTemplates) {
-            instance.ControlBindings.Add(item: BuildControl(
-                instance: instance,
-                template: template
-            ));
+            instance.ControlBindings.Add(item: new ControlState {
+                Instance = instance,
+                Template = template,
+            });
         }
     }
     private static CameraSensor ToCameraSensor(WorldCameraSensor sensor) => (sensor switch {

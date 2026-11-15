@@ -325,12 +325,9 @@ public sealed record WorldPlacementDeal(
             : []
         );
     }
-    // A lattice's grid along each axis: the one definition of its instance count, which the offsets walk and the count
-    // multiplies.
-    private static (int CountA, int CountB) LatticeCounts(WorldDistributionRegion.Lattice lattice) => (
-        Math.Max(val1: lattice.CountA, val2: 1),
-        Math.Max(val1: lattice.CountB, val2: 1)
-    );
+    // A lattice's grid along each axis, from the stamp walk's own definition, so the offsets walk and the count multiply
+    // exactly what the render path walks.
+    private static (int CountA, int CountB) LatticeCounts(WorldDistributionRegion.Lattice lattice) => CreationStampLattice.GridCounts(pattern: WorldPlacementStamp.PatternOf(lattice: lattice));
     private static int LatticeInstanceCount(WorldDistributionRegion.Lattice lattice) {
         var (countA, countB) = LatticeCounts(lattice: lattice);
 
