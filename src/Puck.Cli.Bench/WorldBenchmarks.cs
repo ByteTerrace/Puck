@@ -567,6 +567,7 @@ internal static class WorldBenchmarks {
     // enumerating it also includes newly added counters without maintaining a second list beside the sources.
     private static readonly (IWorkCounterSource Source, WorkKind Kind)[] TickWork = new IWorkCounterSource[] {
         Puck.World.Server.WorldBodyWork.Process,
+        Puck.World.Server.WorldTickWork.Process,
         FixedStaticContactWork.Process,
         FixedContactSweepWork.Process,
         SdfBoundsCache.ProcessWork,

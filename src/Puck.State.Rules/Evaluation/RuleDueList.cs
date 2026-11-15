@@ -9,7 +9,7 @@ namespace Puck.State.Rules;
 /// would reproduce its last verdict bit for bit. A rule goes on when its schedule is volatile or names a sweep set no
 /// version covers (always), when its last visit left a verdict to judge again (a Level gate that held, a refusal),
 /// or when a row or host fact its schedule names moved. The only producers of a move are the arena's moved-row feed,
-/// fed by the one door every row version passes (<see cref="StateArena.DrainMovedRows"/>), and the host's moved-fact
+/// fed by the one door every row version passes (<see cref="StateArena.TryReadMoves"/>), and the host's moved-fact
 /// feed (<see cref="IStateReader.DrainFactMoves"/>), whose versions are what <see cref="RuleEvaluator"/>'s version door
 /// reads; a dependency neither feed can report keeps its schedule volatile.</para>
 /// <para>Order: a mark lands where the walk has not yet reached (this tick) or has passed (next tick), which is exactly
@@ -45,6 +45,8 @@ internal sealed class RuleDueList {
     private readonly List<int> m_liveNow = [];
 
     private StateArena? m_arena;
+    // The list's place in the arena's move log: every row that moved before it has been pushed onto the list.
+    private long m_movesRead = -1L;
     private long m_latchEpoch = -1L;
 
     /// <summary>Initializes a due list over one compiled family, every rule due.</summary>
@@ -235,7 +237,7 @@ internal sealed class RuleDueList {
                 Latch.InvalidateScheduler();
             }
             m_arena = arena;
-            arena.OpenMoveFeed();
+            m_movesRead = -1L;
             MarkAll();
         }
         if (Latch.SchedulerEpoch != m_latchEpoch) {
@@ -244,9 +246,11 @@ internal sealed class RuleDueList {
         }
 
         m_rows.Clear();
-        if (arena.DrainMovedRows(into: m_rows)) {
+        if (!arena.TryReadMoves(into: m_rows, since: m_movesRead)) {
+            m_movesRead = arena.MoveSequence;
             MarkAll();
         } else {
+            m_movesRead = arena.MoveSequence;
             foreach (var row in m_rows) {
                 if (m_rowReaders.TryGetValue(key: row, value: out var readers)) {
                     foreach (var reader in readers) {

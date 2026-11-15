@@ -1,49 +1,58 @@
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    // The rows whose version moved since the feed's reader last drained it, each once, and whether every row must be
-    // taken as moved. Fed only by BumpRowVersion and MarkEveryRowMoved, the doors every version change goes
-    // through, so a reader that drains it misses no move. Off until a reader opens it, so an arena nobody schedules
-    // against pays one branch per moved row.
-    private bool m_moveFeedOpen;
-    private bool m_moveFeedAll;
-    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_moveFeedRows = new();
+    /// <summary>The moves the log holds before its oldest is overwritten: a reader further behind than this takes
+    /// every row as moved.</summary>
+    public const int MoveLogCapacity = 1024;
 
-    /// <summary>Opens the moved-row feed for its one reader, the evaluator that walks a due list over this arena:
-    /// from now on every row whose version moves is recorded until <see cref="DrainMovedRows"/> hands it over. The
-    /// first drain after opening reports every row moved.</summary>
-    public void OpenMoveFeed() {
-        m_moveFeedOpen = true;
-        m_moveFeedAll = true;
-        m_moveFeedRows.Clear();
-    }
-    /// <summary>Hands every row whose version moved since the last drain to the caller and forgets them.</summary>
-    /// <param name="into">The moved rows' catalog ordinals, appended.</param>
-    /// <returns><see langword="true"/> when every row must be taken as moved: the feed was just opened, or the arena
-    /// adopted another's rows or was rebuilt, which moves every version at once.</returns>
-    public bool DrainMovedRows(List<int> into) {
+    // The rows whose version moved, in the order they moved: a ring any number of readers follow, each from the place
+    // it keeps. Fed only by BumpRowVersion and MarkEveryRowMoved, the doors every version change goes through, so a
+    // reader that resumes from its place misses no move. A row that moved twice since a reader's place appears twice.
+    private readonly int[] m_moveLog = new int[MoveLogCapacity];
+    // The moves logged so far: the place a reader resumes from after reading them all.
+    private long m_moveSequence;
+    // The earliest place a reader may still resume from: every version moved or restarted at once just before it.
+    private long m_moveFloor;
+
+    /// <summary>Gets the place after every row version move so far: what a reader of <see cref="TryReadMoves"/> keeps
+    /// once it has taken everything up to now. It moves exactly when a row's version does.</summary>
+    public long MoveSequence => m_moveSequence;
+
+    /// <summary>Hands a reader every row whose version moved since the place it kept, when the log still holds them
+    /// all.</summary>
+    /// <param name="since">The place the reader kept: a <see cref="MoveSequence"/> it read from this arena, or a
+    /// negative value for a reader that has read nothing.</param>
+    /// <param name="into">The moved rows' catalog ordinals, appended in the order they moved; a row that moved more
+    /// than once appears once per move.</param>
+    /// <returns><see langword="false"/> when the reader must take every row as moved and nothing was appended: it has
+    /// read nothing, more than <see cref="MoveLogCapacity"/> moves passed since its place, or every version moved at
+    /// once since then (the arena adopted another's rows or was rebuilt).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="into"/> is <see langword="null"/>.</exception>
+    public bool TryReadMoves(long since, List<int> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        var all = m_moveFeedAll;
+        if ((since < m_moveFloor) || (since > m_moveSequence) || ((m_moveSequence - since) > MoveLogCapacity)) {
+            return false;
+        }
+        for (var place = since; (place < m_moveSequence); place++) {
+            into.Add(item: m_moveLog[((int)(place & (MoveLogCapacity - 1)))]);
+        }
 
-        into.AddRange(source: m_moveFeedRows.Members);
-        m_moveFeedRows.Clear();
-        m_moveFeedAll = false;
-
-        return all;
+        return true;
     }
 
     // Moves one row's version: the only increment of m_rowVersions outside a wholesale reset.
     private void BumpRowVersion(int rowOrdinal, bool changesRecorded = false) {
         if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
         m_rowVersions[rowOrdinal]++;
-        if (m_moveFeedOpen) { m_moveFeedRows.Add(index: rowOrdinal); }
+        m_moveLog[((int)(m_moveSequence & (MoveLogCapacity - 1)))] = rowOrdinal;
+        m_moveSequence++;
     }
-    // Every version moved or restarted at once (adoption, a rebuilt store): the reader must take every row as moved.
+    // Every version moved or restarted at once (adoption, a rebuilt store): every reader must take every row as moved.
     private void MarkEveryRowMoved() {
         ChangedKeys.Clear();
         for (var row = 0; row < m_layout.RowCount; row++) { MarkDisclosureRow(row); }
-        m_moveFeedAll = true;
-        m_moveFeedRows.Clear();
+        m_moveSequence++;
+        m_moveFloor = m_moveSequence;
     }
 }

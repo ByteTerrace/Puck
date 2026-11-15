@@ -15,24 +15,10 @@ public readonly record struct WorldFlockStatistics(int Followers, int Updates, i
 /// <param name="Position">Position in the frozen image at observation time.</param>
 public readonly record struct WorldFlockObservation(int Index, int Generation, FixedVector3 Position);
 public sealed partial class WorldPopulation {
-    private sealed class FlockGrid(int capacity, long widthRaw) {
-        public readonly FixedSpatialNeighborhood Neighborhood = new(
-            capacity: capacity,
-            cellWidth: new FixedQ4816(Value: widthRaw)
-        );
-
-        public bool Frozen;
-    }
-
+    // The bodies as they stood before this step's first advance, or null for a world no producer flocks in.
     // Power-of-two widths make a small-range observer's sampling independent of unrelated wide-range profiles.
-    // Only levels used this step are rebuilt; all levels share one frozen point image.
-    private readonly Dictionary<long, FlockGrid> m_flockGrids = [];
-
-    private int m_flockPointCount;
-    private FixedSpatialPoint[] m_flockPoints = [];
-    private FixedVector3[] m_flockPositions = [];
-    private FixedVector3[] m_flockTravel = [];
-    private FixedQuaternion[] m_flockOrientations = [];
+    // Only levels used this step are rebuilt; all levels share the one frozen image.
+    private WorldPerceptionImage? m_flockImage;
     private FixedSpatialNeighbor[] m_neighborScratch = [];
     private FixedFlockNeighbor[] m_flockScratch = [];
 
@@ -72,30 +58,20 @@ public sealed partial class WorldPopulation {
     public string DescribeFlockWork() {
         var work = FlockStatistics;
 
-        return $"flock grid {((m_flockGrids.Count == 0)
+        return $"flock grid {((m_flockImage is null)
             ? 0
-            : Capacity)} point(s) at {m_flockGrids.Count} scale(s), scratch {m_neighborScratch.Length} candidate(s)/{m_flockScratch.Length} neighbor(s), last {work.Followers} follower(s), {work.Updates} update(s), {work.Candidates} candidate(s), {work.RetainedNeighbors} retained, {work.BudgetLimitedQueries} budget-limited, {work.LineOfSightTests} sight test(s), {work.MotionChecks} movement check(s)/{work.MotionRefusals} refused, {work.AffinityEvaluations} affinity evaluation(s)/{work.AffinityFailures} failed, {work.AffinityWorkUnits}/{m_flockAffinityCeiling} affinity work units";
+            : Capacity)} point(s) at {(m_flockImage?.Scales ?? 0)} scale(s), scratch {m_neighborScratch.Length} candidate(s)/{m_flockScratch.Length} neighbor(s), last {work.Followers} follower(s), {work.Updates} update(s), {work.Candidates} candidate(s), {work.RetainedNeighbors} retained, {work.BudgetLimitedQueries} budget-limited, {work.LineOfSightTests} sight test(s), {work.MotionChecks} movement check(s)/{work.MotionRefusals} refused, {work.AffinityEvaluations} affinity evaluation(s)/{work.AffinityFailures} failed, {work.AffinityWorkUnits}/{m_flockAffinityCeiling} affinity work units";
     }
 
     private void CompileFlocks() {
-        m_flockGrids.Clear();
+        m_flockImage = null;
         var candidates = 0;
         var neighbors = 0;
 
         foreach (var kit in m_kits) {
             foreach (var producer in kit.Producers.Values) {
                 if (producer.Flock is not { } flock) { continue; }
-                var width = FlockGridWidth(range: FlockQueryRange(producer: producer));
-
-                if (!m_flockGrids.ContainsKey(key: width)) {
-                    m_flockGrids.Add(
-                    key: width,
-                    value: new FlockGrid(
-                        capacity: Capacity,
-                        widthRaw: width
-                    )
-                );
-                }
+                (m_flockImage ??= new WorldPerceptionImage(capacity: Capacity)).Declare(cellWidthRaw: FlockGridWidth(range: FlockQueryRange(producer: producer)));
                 candidates = Math.Max(
                     val1: candidates,
                     val2: flock.Source.CandidateBudget
@@ -106,22 +82,7 @@ public sealed partial class WorldPopulation {
                 );
             }
         }
-        m_flockPoints = ((m_flockGrids.Count != 0)
-            ? new FixedSpatialPoint[Capacity]
-            : []
-        );
-        m_flockPositions = ((m_flockGrids.Count != 0)
-            ? new FixedVector3[Capacity]
-            : []
-        );
-        m_flockTravel = ((m_flockGrids.Count != 0)
-            ? new FixedVector3[Capacity]
-            : []
-        );
-        m_flockOrientations = ((m_flockGrids.Count != 0)
-            ? new FixedQuaternion[Capacity]
-            : []
-        );
+
         m_neighborScratch = new FixedSpatialNeighbor[candidates];
         m_flockScratch = new FixedFlockNeighbor[neighbors];
     }
@@ -135,23 +96,7 @@ public sealed partial class WorldPopulation {
     private static long FlockGridWidth(FixedQ4816 range) => checked((long)((ulong)range.Value).NextPowerOfTwo());
     private void FreezeFlockImage() {
         FlockStatistics = default;
-        if (m_flockGrids.Count == 0) { return; }
-        var count = 0;
-
-        for (var index = 0; (index < Capacity); index++) {
-            if (m_entries[index] is not { Active: true, Body: { } body }) { continue; }
-            m_flockPositions[index] = body.FixedPosition;
-            // Displacement carries actual movement (including free flight and contact corrections). Its common
-            // previous-step time scale cancels when the flock kernel takes the weighted mean direction.
-            m_flockTravel[index] = (body.FixedPosition - body.FixedPreviousPosition);
-            m_flockOrientations[index] = body.FixedOrientation;
-            m_flockPoints[count++] = new FixedSpatialPoint(
-                Index: index,
-                Position: body.FixedPosition
-            );
-        }
-        m_flockPointCount = count;
-        foreach (var grid in m_flockGrids.Values) { grid.Frozen = false; }
+        m_flockImage?.Freeze(population: this);
     }
     private void RefreshFlockPerception(int index, Entry entry, CompiledBodyProducer producer, ulong stepTicks) {
         var flock = producer.Flock!;
@@ -197,23 +142,16 @@ public sealed partial class WorldPopulation {
                 val2: Capacity
             )));
         }
-        var self = m_flockPositions[index];
-        var forward = m_flockOrientations[index].Rotate(vector: LocalForward);
+        var image = m_flockImage!;
+        var self = image.Position(index: index);
+        var forward = image.Orientation(index: index).Rotate(vector: LocalForward);
         var sensedTarget = ((producer.Target is { Source: BodyTargetSource.Sensed })
             ? producer.Target
             : null
         );
         var range = FlockQueryRange(producer: producer);
-        var grid = m_flockGrids[FlockGridWidth(range: range)];
-
-        if (!grid.Frozen) {
-            grid.Neighborhood.Rebuild(points: m_flockPoints.AsSpan(
-                length: m_flockPointCount,
-                start: 0
-            ));
-            grid.Frozen = true;
-        }
-        var work = grid.Neighborhood.Query(
+        var work = image.Query(
+            FlockGridWidth(range: range),
             self,
             range,
             index,
@@ -248,17 +186,19 @@ public sealed partial class WorldPopulation {
 
         for (var candidate = 0; (candidate < work.NeighborsWritten); candidate++) {
             var other = m_neighborScratch[candidate].Index;
-            var offset = (m_flockPositions[other] - self);
-            var neighbor = ((count < flock.Source.MaxNeighbors) && offset.IsWithin(radius: flock.Range) && offset.IsWithinCone(
-                cosineHalfAngle: flock.MinimumDot,
-                forward: forward
+            var offset = (m_flockImage!.Position(index: other) - self);
+            var neighbor = ((count < flock.Source.MaxNeighbors) && BodyTargetConeSense.ContainsOffset(
+                forward: in forward,
+                minimumDot: flock.MinimumDot,
+                offset: in offset,
+                range: flock.Range
             ));
             var target = ((state.FlockTarget is null) && (sensedTarget is { Source: BodyTargetSource.Sensed sensed } source) &&
                 ((sensed.Scope != BodyTargetScope.Seats) || (m_entries[other].Kind == PopulationKind.LocalSeat)) &&
                 BodyTargetConeSense.Contains(
                 self,
                 forward,
-                m_flockPositions[other],
+                m_flockImage!.Position(index: other),
                 source.Range,
                 source.MinimumDot,
                 out _
@@ -272,9 +212,9 @@ public sealed partial class WorldPopulation {
                 sightTests++;
                 if (!HasLineOfSight(
                     from: self,
-                    fromOrientation: m_flockOrientations[index],
-                    to: m_flockPositions[other],
-                    toOrientation: m_flockOrientations[other]
+                    fromOrientation: m_flockImage!.Orientation(index: index),
+                    to: m_flockImage!.Position(index: other),
+                    toOrientation: m_flockImage!.Orientation(index: other)
                 )) {
                     neighbor &= !flock.Source.RequiresLineOfSight;
                     target &= !targetNeedsSight;
@@ -284,14 +224,14 @@ public sealed partial class WorldPopulation {
                 state.FlockTarget = new WorldFlockObservation(
                 other,
                 m_entries[other].Generation,
-                m_flockPositions[other]
+                m_flockImage!.Position(index: other)
             );
             }
             if (neighbor) {
                 m_flockScratch[count++] = new FixedFlockNeighbor(
                     other,
                     offset,
-                    m_flockTravel[other],
+                    m_flockImage!.Travel(index: other),
                     ReadFlockAffinity(
                         affinities?.Cohesion,
                         index,
@@ -363,12 +303,12 @@ public sealed partial class WorldPopulation {
     }
     private FixedVector3 BlendFlockPreference(int index, Entry entry, FixedWorldFlockProfile flock, BodySensorTarget goal) {
         var direction = ((goal.Exists && (goal.DistanceSquared > (flock.ArrivalDistance * flock.ArrivalDistance)))
-            ? (goal.Position - m_flockPositions[index])
+            ? (goal.Position - m_flockImage!.Position(index: index))
             : FixedVector3.Zero
         );
-        var heading = ((m_flockTravel[index] == FixedVector3.Zero)
-            ? m_flockOrientations[index].Rotate(vector: LocalForward)
-            : m_flockTravel[index]
+        var heading = ((m_flockImage!.Travel(index: index) == FixedVector3.Zero)
+            ? m_flockImage!.Orientation(index: index).Rotate(vector: LocalForward)
+            : m_flockImage!.Travel(index: index)
         );
         var normal = ((flock.Source.Space == WorldFlockSpace.Tangent)
             ? entry.Body!.FixedUp

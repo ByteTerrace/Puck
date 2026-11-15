@@ -190,11 +190,23 @@ public static class BodyTargetConeSense {
 
         distanceSquared = delta.LengthSquared;
 
-        return (delta.IsWithin(radius: range) && delta.IsWithinCone(
+        return ContainsOffset(forward: in forward, minimumDot: minimumDot, offset: in delta, range: range);
+    }
+    /// <summary>Reports whether an offset from the cone's apex lies inside the cone, as <see cref="Contains"/> does
+    /// for the candidate at that offset: for a caller that already holds the offset, or that must first prove the
+    /// fixed-point carrier can hold it.</summary>
+    /// <param name="offset">The offset from the sensing body to the candidate.</param>
+    /// <param name="forward">The cone's axis, of any non-zero length.</param>
+    /// <param name="range">The sensing range.</param>
+    /// <param name="minimumDot">The cosine of the cone's half-angle.</param>
+    /// <returns><see langword="true"/> when the offset is inside or on both the range sphere and the cone.</returns>
+    public static bool ContainsOffset(in FixedVector3 offset, in FixedVector3 forward, FixedQ4816 range, FixedQ4816 minimumDot) => (
+        offset.IsWithin(radius: range) &&
+        offset.IsWithinCone(
             cosineHalfAngle: minimumDot,
             forward: forward
-        ));
-    }
+        )
+    );
 }
 /// <summary>Selects whether authored target decisions require the deterministic solid-field query provider.</summary>
 public static class WorldTargetSelection {

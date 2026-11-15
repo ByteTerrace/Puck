@@ -28,10 +28,32 @@ public sealed partial class WorldPersistence {
         return digest;
     }
 
+    // The declaration component's digest and the definition it was folded from. The component reads the definition
+    // alone (its state section's declarations and its pool bindings), and a definition and every value it holds never
+    // change once built, so the definition's identity names the digest: an install hands the document another
+    // definition, which folds again. A recompute folds afresh and never reads this.
+    private WorldDefinition? m_declarationFor;
+    private ulong m_declarationDigest;
+
+    internal ulong DeclarationDigest() {
+        var definition = Host.Document.Definition;
+
+        if (!ReferenceEquals(objA: m_declarationFor, objB: definition)) {
+            var hash = Fnv1aHash.Create();
+
+            AppendStateHashComponent(component: WorldStateHashComponent.Declaration, hash: ref hash, recompute: true, seed: 0UL, tick: 0UL);
+            m_declarationDigest = hash.Value;
+            m_declarationFor = definition;
+        }
+
+        return m_declarationDigest;
+    }
+
     // The one switch over the world hash's component vocabulary. WorldStateHashComposition owns which components a
     // scope folds and in what order; each arm here folds one of them through its own owner, and a component with no
     // arm throws rather than folding nothing. Recompute folds the arena's rows afresh instead of from their
-    // version-keyed digests; every other arm folds whole either way.
+    // version-keyed digests, and the declaration afresh instead of from the digest its definition names
+    // (DeclarationDigest); every other arm folds whole either way.
     internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
         switch (component) {
             case WorldStateHashComponent.Input:

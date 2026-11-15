@@ -108,13 +108,7 @@ public sealed partial class WorldInputOwner {
     /// <summary>Hashes canonical future-decision state independently of ring storage layout.</summary>
     public void AppendStateHash(ref Fnv1aHash hash) {
         hash.Add(value: Revision); hash.Add(value: Epoch); hash.Add(value: Mapping.Id);
-        for (var index = 0; (index < ChannelLimits.MaxAxes); index++) { hash.Add(value: Image.Channels.Axes[index]); }
-        hash.Add(value: Image.Channels.Buttons);
-        hash.Add(value: ((byte)(Image.SourceRay.HasValue ? 1 : 0)));
-        if (Image.SourceRay is { } ray) {
-            hash.Add(value: ray.Origin.X.Value); hash.Add(value: ray.Origin.Y.Value); hash.Add(value: ray.Origin.Z.Value);
-            hash.Add(value: ray.Direction.X.Value); hash.Add(value: ray.Direction.Y.Value); hash.Add(value: ray.Direction.Z.Value);
-        }
+        Image.AppendStateHash(hash: ref hash);
         hash.Add(value: Calibration.Value); hash.Add(value: RefusedBatches); hash.Add(value: m_sequence); hash.Add(value: m_eventId);
         AddInterval(hash: ref hash, interval: m_lastCapture); hash.Add(value: m_lastOffset.Value); hash.Add(value: m_step); hash.Add(value: ((uint)m_stepEvents));
         AddSwitch(ref hash, LastSwitch);

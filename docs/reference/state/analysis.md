@@ -397,8 +397,10 @@ decision, an interaction), a rule with live rows or a `maxFirings`, and a
 sweep over a set no version names (a pool, a zone table) are due every tick.
 
 Moves are pushed, not polled. Every row version moves through one door in the
-arena (`BumpRowVersion`), which records the row in the moved-row feed
-(`StateArena.DrainMovedRows`); the host records each fact that moved
+arena (`BumpRowVersion`), which appends the row to the arena's move log
+(`StateArena.TryReadMoves`, a ring every reader follows from its own place: the
+due list here, and each audience's disclosed definition); the host records each
+fact that moved
 (`IStateReader.DrainFactMoves`) when it derives its versions again: the
 evaluator tells it host state may have moved before a walk and after any firing
 that delivered an arm (`IStateReader.RefreshFacts`), and the host derives once,
