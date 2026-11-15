@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Client;
@@ -18,26 +19,9 @@ public static class WorldScreenStamper {
             vector2: unitUp
         ));
         var center = (screen.Origin - (normal * screen.HalfDepth));
-        // Local X/Y/Z = Right/Up/normal — the same right/up/forward-to-matrix frame Text() builds, so the slab's
+        // Local X/Y/Z = Right/Up/normal, the same basis Text() builds, so the slab's
         // emitted geometry is rotated to match the UV frame ScreenSlab's world-orientation overload stores for it.
-        var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
-            m11: unitRight.X,
-            m12: unitRight.Y,
-            m13: unitRight.Z,
-            m14: 0f,
-            m21: unitUp.X,
-            m22: unitUp.Y,
-            m23: unitUp.Z,
-            m24: 0f,
-            m31: normal.X,
-            m32: normal.Y,
-            m33: normal.Z,
-            m34: 0f,
-            m41: 0f,
-            m42: 0f,
-            m43: 0f,
-            m44: 1f
-        ));
+        var orientation = VectorFunctions.FromBasis(forward: normal, right: unitRight, up: unitUp);
 
         var halfExtents = new Vector3(
             x: screen.HalfWidth,

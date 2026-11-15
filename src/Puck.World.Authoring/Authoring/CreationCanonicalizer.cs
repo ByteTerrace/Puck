@@ -1496,7 +1496,7 @@ public static partial class CreationCanonicalizer {
                     rgb: out _,
                     value: entry.Color
                 ) &&
-                !HexColor.IsStateBinding(value: entry.Color)
+                !ColorStateBinding.IsStateBinding(value: entry.Color)
             ) {
                 errors.Add(item: new(
                     Message: "color must be #RRGGBB or a state.<row>[.<key>] binding.",
@@ -1541,7 +1541,7 @@ public static partial class CreationCanonicalizer {
                 if ((glass.Ior is { } ior) && (!float.IsFinite(f: ior) || (ior < SdfGlass.MinIor) || (ior > SdfGlass.MaxIor))) {
                     errors.Add(item: new(Message: $"glass ior must be finite and in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}].", Path: $"palette[{i}].glass.ior"));
                 }
-                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !HexColor.IsStateBinding(value: scatter)) {
+                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !ColorStateBinding.IsStateBinding(value: scatter)) {
                     errors.Add(item: new(Message: "glass scatter requires #RRGGBB or a state binding.", Path: $"palette[{i}].glass.scatter"));
                 }
                 if ((glass.Scattering is { } scattering) && (!float.IsFinite(f: scattering) || (scattering < 0f))) {

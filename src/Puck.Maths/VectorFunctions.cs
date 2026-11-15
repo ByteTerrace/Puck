@@ -176,6 +176,40 @@ public static class VectorFunctions {
             z: axis.Z
         ));
     }
+    /// <summary>Creates the rotation that carries the local axes onto an orthonormal right, up and forward basis: local
+    /// +X onto <paramref name="right"/>, +Y onto <paramref name="up"/> and +Z onto <paramref name="forward"/>, under
+    /// <see cref="System.Numerics"/>' row-vector <see cref="Vector3.Transform(Vector3, Quaternion)"/>.</summary>
+    /// <param name="right">The unit image of local +X.</param>
+    /// <param name="up">The unit image of local +Y, orthogonal to <paramref name="right"/>.</param>
+    /// <param name="forward">The unit image of local +Z, orthogonal to both; <c>right × up</c> for a proper rotation.</param>
+    /// <returns><see cref="Quaternion.CreateFromRotationMatrix"/> of the matrix whose rows are the basis.</returns>
+    public static Quaternion FromBasis(Vector3 right, Vector3 up, Vector3 forward) => Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
+        m11: right.X, m12: right.Y, m13: right.Z, m14: 0f,
+        m21: up.X, m22: up.Y, m23: up.Z, m24: 0f,
+        m31: forward.X, m32: forward.Y, m33: forward.Z, m34: 0f,
+        m41: 0f, m42: 0f, m43: 0f, m44: 1f
+    ));
+    /// <summary>Returns the world-axis half-extent of a box whose own axes point along three world directions: on each
+    /// world axis, <c>|axisX|·h.X + |axisY|·h.Y + |axisZ|·h.Z</c> of that axis's components, summed in that order. The
+    /// float twin of <see cref="FixedAabb.OrientedHalfExtent(FixedVector3, FixedVector3, FixedVector3, FixedVector3)"/>.</summary>
+    /// <param name="axisX">The world image of the box's local +X axis; its length scales the extent.</param>
+    /// <param name="axisY">The world image of the box's local +Y axis.</param>
+    /// <param name="axisZ">The world image of the box's local +Z axis.</param>
+    /// <param name="halfExtent">The half-extent along the box's own axes.</param>
+    /// <returns>The world-axis half-extent.</returns>
+    public static Vector3 OrientedHalfExtent(Vector3 axisX, Vector3 axisY, Vector3 axisZ, Vector3 halfExtent) =>
+        (((Vector3.Abs(value: axisX) * halfExtent.X) + (Vector3.Abs(value: axisY) * halfExtent.Y)) + (Vector3.Abs(value: axisZ) * halfExtent.Z));
+    /// <summary>Returns the world-axis half-extent of a box carried through a matrix's linear part.</summary>
+    /// <param name="matrix">The box-to-world matrix; its rows <c>M1*</c>, <c>M2*</c> and <c>M3*</c> are the images of
+    /// local +X, +Y and +Z under the row-vector convention, scale included.</param>
+    /// <param name="halfExtent">The half-extent along the box's own axes.</param>
+    /// <returns><see cref="OrientedHalfExtent(Vector3, Vector3, Vector3, Vector3)"/> of the matrix's three rows.</returns>
+    public static Vector3 OrientedHalfExtent(in Matrix4x4 matrix, Vector3 halfExtent) => OrientedHalfExtent(
+        axisX: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13),
+        axisY: new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23),
+        axisZ: new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33),
+        halfExtent: halfExtent
+    );
     /// <summary>Returns a vector scaled to unit length, or a fallback where it is too short or not finite to have a
     /// direction.</summary>
     /// <param name="value">The vector.</param>

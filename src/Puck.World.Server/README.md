@@ -1027,7 +1027,7 @@ on that bump only where the change can reach it
 (`WorldPopulation.ObserveContactFieldChange`): attached rows that moved fold the
 box their colliders swept (before and after the move,
 `WorldColliderSet.TakeAttachedChange`), a region whose body-read cells changed
-folds its read bounds (`FieldLattice.ReadMinimum`/`ReadMaximum`: the coupling
+folds its read bounds (`FieldLattice.ReadBox`: the coupling
 volume grown by a solid's two-cell reach), and only the sleepers whose
 broadphase radius, grown by the contact reach (two contact skins and a
 fixed-point step, `FixedWorldCollision.ContactReach`) and a rigid support

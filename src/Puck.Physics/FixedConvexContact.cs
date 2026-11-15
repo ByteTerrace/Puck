@@ -303,7 +303,8 @@ public static class FixedConvexContact {
         var localPosition = rotation.RotateInverse(vector: (position - collider.Center));
         var localOrientation = (rotation.Conjugate() * orientation).Normalize();
 
-        var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);
+        var bounds = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);
+        var (center, extent) = (bounds.Center, bounds.Extent);
         var padding = (collider.Radius + skin);
         var shapeExtent = ((collider.Kind == FixedStaticColliderKind.Sphere)
             ? new FixedVector3(X: collider.Extent.X, Y: collider.Extent.X, Z: collider.Extent.X) : collider.Extent);

@@ -77,14 +77,7 @@ public readonly record struct FixedSpatialShape(
     /// <summary>Gets a box's half-extents along its own axes; zero for a sphere.</summary>
     public FixedVector3 HalfExtents => Box.HalfExtents;
 }
-/// <summary>An inclusive world-space AABB used only for exhaustive spatial index candidate discovery.</summary>
-public readonly record struct FixedSpatialAabb(FixedVector3 Center, FixedVector3 Extent) {
-    /// <summary>Returns whether two closed AABBs overlap.</summary>
-    public bool Intersects(FixedSpatialAabb other) =>
-        ((Int128.Abs(value: (((Int128)Center.X.Value) - other.Center.X.Value)) <= (((Int128)Extent.X.Value) + other.Extent.X.Value)) &&
-        (Int128.Abs(value: (((Int128)Center.Y.Value) - other.Center.Y.Value)) <= (((Int128)Extent.Y.Value) + other.Extent.Y.Value)) &&
-        (Int128.Abs(value: (((Int128)Center.Z.Value) - other.Center.Z.Value)) <= (((Int128)Extent.Z.Value) + other.Extent.Z.Value)));
-}
+
 /// <summary>One compiled named volume and its broadphase envelope.</summary>
 public readonly record struct CompiledSpatialVolume(
     string PlacementId,
@@ -93,7 +86,7 @@ public readonly record struct CompiledSpatialVolume(
     string? Channel,
     bool Pinned,
     FixedSpatialShape Shape,
-    FixedSpatialAabb Bounds
+    FixedAabb Bounds
 );
 /// <summary>Why a row's authored spatial volumes are ineligible for this static index.</summary>
 public readonly record struct SpatialQueryUnsupported(string PlacementId, string Reason);
@@ -220,13 +213,13 @@ public sealed class WorldSpatialQueryIndex {
     /// <summary>Gets all statically queryable volumes in deterministic authored order.</summary>
     public IReadOnlyList<CompiledSpatialVolume> Volumes => m_volumes;
 
-    private static FixedSpatialAabb BoundsFor(int[] order, int start, int count, IReadOnlyList<CompiledSpatialVolume> volumes) {
-        var region = WorldSpatialReadRegion.Empty;
+    private static FixedAabb BoundsFor(int[] order, int start, int count, IReadOnlyList<CompiledSpatialVolume> volumes) {
+        var region = FixedAabb.Empty;
 
         for (var index = start; (index < (start + count)); index++) {
-            region = region.Enclose(box: volumes[order[index]].Bounds);
+            region = region.Enclose(other: volumes[order[index]].Bounds);
         }
-        return region.Bounds;
+        return region;
     }
     private static int BuildBvh(List<SpatialBvhNode> nodes, int[] order, int start, int count, IReadOnlyList<CompiledSpatialVolume> volumes) {
         var nodeIndex = nodes.Count;
@@ -439,7 +432,7 @@ public sealed class WorldSpatialQueryIndex {
     /// <summary>Finds every indexed volume whose full AABB intersects <paramref name="bounds"/>.</summary>
     /// <remarks>This is a bounded-volume query, not nearest-neighbor sampling. The returned work count equals the
     /// number of BVH nodes inspected and therefore exposes the bounded broadphase cost.</remarks>
-    public SpatialQueryResult Query(FixedSpatialAabb bounds, WorldSpatialQueryMask mask = WorldSpatialQueryMask.All) {
+    public SpatialQueryResult Query(FixedAabb bounds, WorldSpatialQueryMask mask = WorldSpatialQueryMask.All) {
         var matches = new List<CompiledSpatialVolume>();
         var tree = m_bvh.Value;
 
@@ -460,7 +453,7 @@ public sealed class WorldSpatialQueryIndex {
             var node = tree.Nodes[stack[--stackCount]];
 
             work++;
-            if (!node.Bounds.Intersects(other: bounds)) {
+            if (!node.Bounds.Intersects(other: in bounds)) {
                 continue;
             }
             if (node.VolumeIndex >= 0) {
@@ -525,7 +518,7 @@ public sealed class WorldSpatialQueryIndex {
         );
     }
 
-    private readonly record struct SpatialBvhNode(FixedSpatialAabb Bounds, int Left, int Right, int VolumeIndex);
+    private readonly record struct SpatialBvhNode(FixedAabb Bounds, int Left, int Right, int VolumeIndex);
     private readonly record struct SpatialBvh(ImmutableArray<SpatialBvhNode> Nodes, int Root);
 }
 /// <summary>Compiles authored placement spatial volumes and their world-space fixed query shapes.</summary>
@@ -538,22 +531,9 @@ public static class WorldSpatialQueryCompilation {
     private static readonly ConditionalWeakTable<WorldPlacementsSection, CompiledIndex> Cache = new();
     private static readonly WorldSpatialQueryIndex Empty = new([]);
 
-    private static FixedSpatialAabb BoundsFor(FixedSpatialShape shape) {
-        if (shape.Kind == FixedSpatialShapeKind.Sphere) {
-            return new FixedSpatialAabb(
-                Center: shape.Center,
-                Extent: new FixedVector3(
-                    X: shape.Radius,
-                    Y: shape.Radius,
-                    Z: shape.Radius
-                )
-            );
-        }
-        return new FixedSpatialAabb(
-            Center: shape.Center,
-            Extent: shape.Box.WorldExtent
-        );
-    }
+    private static FixedAabb BoundsFor(FixedSpatialShape shape) => ((shape.Kind == FixedSpatialShapeKind.Sphere)
+        ? FixedAabb.Around(center: shape.Center, radius: shape.Radius)
+        : FixedAabb.FromCenter(center: shape.Center, extent: shape.Box.WorldExtent));
     private static FixedSpatialShape CompileShape(WorldSpatialShape authored, CompiledPlacementFrame frame) {
         var center = checked((frame.FixedPosition + Rotate(
             vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.FixedScale)),
@@ -591,7 +571,7 @@ public static class WorldSpatialQueryCompilation {
         return Yaw(radians: yaw).Rotate(vector: vector);
     }
     private static bool TryCompileGeometry(WorldSpatialShape authored, CompiledPlacementFrame frame,
-        out FixedSpatialShape shape, out FixedSpatialAabb bounds, out string reason) {
+        out FixedSpatialShape shape, out FixedAabb bounds, out string reason) {
         shape = default;
         bounds = default;
         if (frame.FixedScale <= FixedQ4816.Zero) {

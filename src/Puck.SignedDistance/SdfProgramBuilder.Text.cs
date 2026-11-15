@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Maths;
 using Puck.Text;
 
 namespace Puck.SignedDistance;
@@ -222,24 +223,7 @@ public sealed partial class SdfProgramBuilder {
             vector1: unitRight,
             vector2: unitUp
         ));
-        var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
-            m11: unitRight.X,
-            m12: unitRight.Y,
-            m13: unitRight.Z,
-            m14: 0f,
-            m21: unitUp.X,
-            m22: unitUp.Y,
-            m23: unitUp.Z,
-            m24: 0f,
-            m31: forward.X,
-            m32: forward.Y,
-            m33: forward.Z,
-            m34: 0f,
-            m41: 0f,
-            m42: 0f,
-            m43: 0f,
-            m44: 1f
-        ));
+        var orientation = VectorFunctions.FromBasis(forward: forward, right: unitRight, up: unitUp);
         var laidOut = (precomputedLayout ?? new TextLayout().Layout(
             atlas: atlas,
             options: (layout ?? TextLayoutOptions.Default),

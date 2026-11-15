@@ -115,17 +115,15 @@ public sealed class WorldPlacementSpatialLawTests {
             after.Volumes
         );
         Assert.Equal(
-            fresh.Query(bounds: new FixedSpatialAabb(
-                Center: FixedVector3.Zero,
-                Extent: FixedVector3.FromVector3(value: new Vector3(
+            fresh.Query(bounds: FixedAabb.FromCenter(center: FixedVector3.Zero,
+                extent: FixedVector3.FromVector3(value: new Vector3(
                     x: 9f,
                     y: 9f,
                     z: 9f
                 ))
             )).Volumes,
-            after.Query(bounds: new FixedSpatialAabb(
-                Center: FixedVector3.Zero,
-                Extent: FixedVector3.FromVector3(value: new Vector3(
+            after.Query(bounds: FixedAabb.FromCenter(center: FixedVector3.Zero,
+                extent: FixedVector3.FromVector3(value: new Vector3(
                     x: 9f,
                     y: 9f,
                     z: 9f
@@ -228,13 +226,12 @@ public sealed class WorldPlacementSpatialLawTests {
         };
         var index = WorldSpatialQueryCompilation.Compile(placements: [first, second], worldSeed: 0UL);
         var edge = FixedQ4816.FromRawBits(value: 32769L);
-        var result = index.Query(new FixedSpatialAabb(
-            Center: new FixedVector3(
+        var result = index.Query(FixedAabb.FromCenter(center: new FixedVector3(
                 X: edge,
                 Y: FixedQ4816.Zero,
                 Z: FixedQ4816.Zero
             ),
-            Extent: FixedVector3.Zero
+            extent: FixedVector3.Zero
         ));
 
         Assert.Contains(
@@ -272,9 +269,8 @@ public sealed class WorldPlacementSpatialLawTests {
                 .25f
             )
         ));
-        var query = WorldSpatialQueryCompilation.Compile(placements: placements, worldSeed: 0UL).Query(new FixedSpatialAabb(
-            Center: FixedVector3.Zero,
-            Extent: FixedVector3.FromVector3(value: new Vector3(
+        var query = WorldSpatialQueryCompilation.Compile(placements: placements, worldSeed: 0UL).Query(FixedAabb.FromCenter(center: FixedVector3.Zero,
+            extent: FixedVector3.FromVector3(value: new Vector3(
                 x: 1f,
                 y: 1f,
                 z: 1f
@@ -481,13 +477,12 @@ public sealed class WorldPlacementSpatialLawTests {
             ((float)((double)volume.Bounds.Extent.X)),
             3
         );
-        Assert.Single(collection: index.Query(new FixedSpatialAabb(
-            Center: FixedVector3.FromVector3(value: new Vector3(
+        Assert.Single(collection: index.Query(FixedAabb.FromCenter(center: FixedVector3.FromVector3(value: new Vector3(
                 x: 16f,
                 y: 0f,
                 z: 0f
             )),
-            Extent: FixedVector3.FromVector3(value: new Vector3(
+            extent: FixedVector3.FromVector3(value: new Vector3(
                 x: .1f,
                 y: .1f,
                 z: .1f
@@ -710,9 +705,8 @@ public sealed class WorldPlacementSpatialLawTests {
         ),
         };
         var index = WorldSpatialQueryCompilation.Compile(placements: [court, bridge], worldSeed: 0UL);
-        var result = index.Query(new FixedSpatialAabb(
-            Center: FixedVector3.Zero,
-            Extent: FixedVector3.FromVector3(value: new Vector3(
+        var result = index.Query(FixedAabb.FromCenter(center: FixedVector3.Zero,
+            extent: FixedVector3.FromVector3(value: new Vector3(
                 x: 3f,
                 y: .5f,
                 z: 3f

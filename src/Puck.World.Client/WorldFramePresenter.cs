@@ -948,12 +948,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             program: camera.Rig
         );
         var anchor = new SdfAnchor(
-            Orientation: Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
-                m11: right.X, m12: right.Y, m13: right.Z, m14: 0f,
-                m21: up.X, m22: up.Y, m23: up.Z, m24: 0f,
-                m31: normal.X, m32: normal.Y, m33: normal.Z, m34: 0f,
-                m41: 0f, m42: 0f, m43: 0f, m44: 1f
-            )),
+            Orientation: VectorFunctions.FromBasis(forward: normal, right: right, up: up),
             Position: carried.Origin
         );
         var clock = new SdfCameraClock(

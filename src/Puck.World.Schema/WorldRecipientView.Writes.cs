@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using Puck.State.Rules;
 using Puck.World.Protocol;
 
@@ -244,7 +245,7 @@ public sealed partial class WorldRecipientView {
     /// <summary>Hashes named inputs from this capability.</summary>
     public string Fingerprint(WorldDefinitionReadDependency inputs) => WorldDefinitionFingerprint.ComputeInputs(Definition, inputs.PlacementIds, inputs.StateRows);
     /// <summary>Hashes a spatial census from this capability's placements and rows.</summary>
-    public string Fingerprint(in WorldSpatialReadRegion region) => WorldDefinitionFingerprint.ComputeSpatial(Definition, region);
+    public string Fingerprint(in FixedAabb region) => WorldDefinitionFingerprint.ComputeSpatial(Definition, region);
     /// <summary>Checks a numeric/text guard against the live value this capability discloses.</summary>
     public bool Fingerprint(WorldStateExpectation cell) {
         if (!Discloses(cell.Row, cell.Key) || !WorldStateReader.TryRead(Source, cell.Row, cell.Key, Time.Tick, Time.EngineTick,
