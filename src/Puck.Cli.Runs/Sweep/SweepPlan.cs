@@ -134,6 +134,11 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
 
                 return false;
             }
+            if ((stop.Opens is < 0) || ((stop.Route is null) && (stop.Opens > (stop.Settle ?? plan.Tour.Settle)))) {
+                error = $"the tour stop '{stop.Name}' opens its window at {stop.Opens}, which is not a tick of its timeline";
+
+                return false;
+            }
 
             foreach (var step in (stop.Steps ?? [])) {
                 if ((step.At < 0) || string.IsNullOrWhiteSpace(value: step.Run) || step.Run.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait")) {
@@ -307,7 +312,10 @@ public sealed record SweepAuditRules(IReadOnlyList<string>? Red = null, IReadOnl
 /// <c>when</c> lines become the stop's steps from its start tick, its export tick the stop's capture, and its body
 /// position and grounded expectations the arrival the stop is judged by (<see cref="SweepRoute"/>).</param>
 /// <param name="Captures">Settled stills taken inside the stop's timeline, each beside the exhibit it frames.</param>
-public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null, string? ExpectedMotion = null, string? Route = null, IReadOnlyList<SweepCapture>? Captures = null);
+/// <param name="Opens">The ticks after the stop's start tick at which a window over its timeline opens
+/// (<c>puck bench frames --window</c>): the span before it is the approach the window leaves out, since the body is
+/// posed at the start tick. Absent, the window opens at the start tick.</param>
+public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null, string? ExpectedMotion = null, string? Route = null, IReadOnlyList<SweepCapture>? Captures = null, int? Opens = null);
 /// <summary>One console line pinned to a tick of a stop.</summary>
 /// <param name="At">The ticks after the stop's start tick.</param>
 /// <param name="Run">The console line; never a <c>world.wait</c>.</param>

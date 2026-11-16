@@ -28,14 +28,15 @@ left stick's camera-relative strafe are exercised), from a declared spawn point
 `expect` lines are the arrival: the body within a box about where the segment
 should end, standing.
 
-The one block is played twice, by two existing verbs:
+The one block is played by existing verbs:
 
 | Run | Verb | What it shows |
 |---|---|---|
 | Headless | `puck test worlds/debug/walkthrough-tests.puck --reproduce` (and the sweep's scenarios, whose `*-tests.puck` glob includes it) | The segment arrives, and its input reproduces every authority tick from the checkpoint. |
 | Windowed | `puck sweep --tour`, a tour stop naming the block as its `route` | A settled still square in front of each exhibit the walk passes, beside the text the exhibit's creation authors (its plaque says what to look for); `off course` when the walker stood off the exhibit's spawn point or missed the arrival; the mesh audit's topology defects for each exhibit's prototype; `host.frames` over the segment. |
+| Windowed, as a player takes it | `puck bench frames --window`, the same stop | The streaming plan's [seam walk](streaming-and-memory.md#the-seam-walk): the stop's timeline display-paced with nothing settled first, its slowest frame, the counters' change and a presented burst across it. The nine `seam walk:` tests below the blend and primitives rows are its segments. |
 
-No new runner, record directory or flag exists: the program lives in the
+No new runner or record directory exists: the program lives in the
 document vocabulary that already pins seat input to ticks (`test`, lowered to a
 `schedule`), and the windowed play is a kind of tour stop
 ([the CLI reference](../reference/cli.md#puck-sweepthe-debug-worlds-sweep)).

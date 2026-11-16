@@ -355,7 +355,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             // The tour's frame lines run first at the start tick, then the program, whose first line poses the body.
-            played = stop with { Settle = route!.Duration, Steps = [.. route.Steps, .. (stop.Steps ?? []), new SweepStep(At: 0, Run: "host.frames reset")] };
+            played = route!.Played(stop: stop);
         }
 
         var settle = (played.Settle ?? tour.Settle);
@@ -398,11 +398,18 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         return played with { Steps = [.. (played.Steps ?? []), .. extra, new SweepStep(At: settle, Run: take)] };
     }
-    // Holds the tour until the World has completed a tick of a stop's timeline, a bounded wait at a time. A wait whose
-    // call ends first is no stall while the World still advances: held stills converge at the machine's pace. False,
-    // with the reason added, when a whole wait passed without a tick or the World's tick could not be read.
-    private bool WaitThrough(ulong tick, List<string> reasons) {
-        if (Completed(reasons: reasons) is not { } completed) {
+    // Holds the tour until the World has completed a tick of a stop's timeline (WaitThrough on this run's World).
+    private bool WaitThrough(ulong tick, List<string> reasons) => WaitThrough(world: world, tick: tick, reasons: reasons);
+
+    /// <summary>Holds until the World has completed a tick of a stop's timeline, a bounded wait at a time. A wait whose
+    /// call ends first is no stall while the World still advances: held stills converge at the machine's pace.</summary>
+    /// <param name="world">The World.</param>
+    /// <param name="tick">The tick to reach.</param>
+    /// <param name="reasons">Receives why the wait failed.</param>
+    /// <returns><see langword="false"/>, with the reason added, when a whole wait passed without a tick or the World's tick
+    /// could not be read.</returns>
+    public static bool WaitThrough(SweepWorld world, ulong tick, List<string> reasons) {
+        if (Completed(world: world, reasons: reasons) is not { } completed) {
             return false;
         }
 
@@ -415,7 +422,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
                 continue;
             }
-            if ((Stopped() is { } stopped) || (Completed(reasons: reasons) is not { } now) || (now <= completed)) {
+            if ((Stopped(world: world) is { } stopped) || (Completed(world: world, reasons: reasons) is not { } now) || (now <= completed)) {
                 reasons.Add(item: $"the stop's timeline stalled before tick {next.ToString(provider: CultureInfo.InvariantCulture)}: {string.Join(separator: "; ", values: waited.Refusals)}");
 
                 return false;
@@ -427,7 +434,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         return true;
     }
     // The tick the World has completed, or null with the reason added when it could not be read.
-    private ulong? Completed(List<string> reasons) {
+    private static ulong? Completed(SweepWorld world, List<string> reasons) {
         var read = world.Run(script: "world.at --json");
 
         try {
@@ -539,7 +546,12 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         return results;
     }
     // The answer a pinned line gave, found in the world.at log by its tick and command.
-    private static string? Ran(string log, string command, ulong tick) {
+    /// <summary>Finds the answer a pinned line gave in a <c>world.at --json</c> log.</summary>
+    /// <param name="log">The <c>world.at --json</c> answer.</param>
+    /// <param name="command">The pinned line as armed.</param>
+    /// <param name="tick">The tick it was pinned to.</param>
+    /// <returns>The line's output, or <see langword="null"/> when the log holds no answer for it.</returns>
+    public static string? Ran(string log, string command, ulong tick) {
         try {
             using var document = JsonDocument.Parse(json: log);
 
@@ -606,7 +618,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         return true;
     }
     // Why the World can no longer be driven, or null while it can.
-    private string? Stopped() => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
+    private string? Stopped() => Stopped(world: world);
+    private static string? Stopped(SweepWorld world) => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
     // Tick waits advance a bounded interval; readiness waits and coordinator round trips leave authority held.
     private SweepAnswer TourLine(string line) => RunTourLine(world, line);
 
