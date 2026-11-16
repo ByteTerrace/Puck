@@ -783,7 +783,13 @@ brief that says to commit it gets a force-add that the next merge carries into
 the tree. The lead copies the file into the main checkout's `.claude/scratch/`
 before removing the lane's worktree: `git worktree remove` deletes ignored
 files without asking, and one research file was lost that way and recovered
-only from the lane's log. A headless run also ends when the agent
+only from the lane's log. A Claude lane's Write tool refuses a path outside its
+worktree too, so its brief names an output path inside the worktree or asks for
+the findings in the hand-back. The lead never removes a worktree that a running
+review or lane still reads: point the reader at the merged branch first. Shared
+inputs that live only in ignored scratch (findings, briefs, readings) are lost
+to another machine, so while lanes consume them the lead pushes them to a
+temporary `backup/` branch, deleted once the work lands. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
