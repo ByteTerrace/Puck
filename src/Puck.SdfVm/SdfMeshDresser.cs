@@ -30,6 +30,8 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     // The dressed groups a frame replaced, group or mesh, with as many pieces and copies as before, by their place in
     // m_dressedGroups: each keeps its run of bindings, whose draws alone change (Replace).
     private readonly List<(int At, SdfMeshBakeGroup Group, SdfMesh Mesh)> m_replaced = [];
+    // Each group's run length in the topology a rebuild replaces, which the rebuild compares its owners against.
+    private readonly Dictionary<SdfMeshBakeGroup, int> m_previousRuns = new(comparer: ReferenceEqualityComparer.Instance);
     private int m_hostDrawCount;
 
     // Reverse membership belongs to retained draw topology, not a second instance index. A changed source slot/copy
@@ -73,7 +75,12 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             m_publicationPending = true;
             // The bake's product revision is not compared: every product a frame draws is a (group, mesh) pair the
             // walk below reads, and a pair replaced with its piece and copy counts standing keeps the topology.
-            var topologyChanged = (retry || (m_hostDrawCount != frame.MeshDraws.Count) || (m_copyLayoutRevision != access.CopyLayoutRevision));
+            // The first reason that fires names the rebuild (SdfMeshHistory.TopologyBuildsOf).
+            SdfMeshTopologyReason? reason = (retry
+                ? SdfMeshTopologyReason.Retry
+                : ((m_hostDrawCount != frame.MeshDraws.Count)
+                    ? SdfMeshTopologyReason.HostDraws
+                    : ((m_copyLayoutRevision != access.CopyLayoutRevision) ? SdfMeshTopologyReason.CopyLayout : null)));
             var programChanged = !ReferenceEquals(frame.Program, m_bindingProgram);
             var portalPath = (m_hadClips || (frame.SlotClips.Count > 0));
             var finished = 0;
@@ -83,27 +90,30 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                 var group = groups[groupIndex];
                 if (access.MeshOf(group) is not { } mesh) { continue; }
                 if (finished >= m_dressedGroups.Count) {
-                    topologyChanged = true;
+                    reason ??= SdfMeshTopologyReason.GroupNew;
                 } else if (m_dressedGroups[finished] is var listed && (!ReferenceEquals(listed.Group, group) || !ReferenceEquals(listed.Mesh, mesh))) {
-                    if (!topologyChanged && (mesh.PieceCount == listed.Mesh.PieceCount) && ((access.CopiesOf(group)?.Count ?? -1) == listed.Copies)) {
+                    if ((reason is null) && (mesh.PieceCount == listed.Mesh.PieceCount) && ((access.CopiesOf(group)?.Count ?? -1) == listed.Copies)) {
                         m_replaced.Add((finished, group, mesh));
                     } else {
-                        topologyChanged = true;
+                        reason ??= SdfMeshTopologyReason.GroupReshaped;
                     }
                 }
                 finished++;
             }
-            topologyChanged |= (finished != m_drawnMeshes);
+            if (finished != m_drawnMeshes) { reason ??= SdfMeshTopologyReason.GroupCount; }
+            var topologyChanged = (reason is not null);
             m_changedDraws.Clear();
             m_bindingCandidates.Clear();
             var visited = 0;
             var matrices = 0;
             var updated = 0;
+            // The rows whose owner the frame changed, whole (SdfMeshHistory.RowsOwnedChanged).
+            var owned = 0;
             var meshesChanged = topologyChanged;
             var identitiesChanged = (topologyChanged || (m_replaced.Count > 0));
 
-            if (topologyChanged) {
-                BuildDrawTopology(frame, access, ref visited, ref matrices);
+            if (reason is { } rebuilt) {
+                BuildDrawTopology(frame, access, rebuilt, ref visited, ref matrices, ref owned);
             } else {
                 // A kept group can be interpreted under another slot after a new program. Refresh reverse slot
                 // membership and visit all bindings without rebuilding geometry or assuming the moved rows reseated it.
@@ -128,14 +138,14 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                 // use the complete base path until clipping itself supplies exact provenance.
                 var baseCount = (m_hostDrawCount + m_drawBindings.Count);
                 if (m_draws.Count > baseCount) { m_draws.RemoveRange(baseCount, m_draws.Count - baseCount); }
-                if (m_replaced.Count > 0) { Replace(frame, access, ref visited, ref matrices, ref updated); }
+                if (m_replaced.Count > 0) { Replace(frame, access, ref visited, ref matrices, ref updated, ref owned); }
                 for (var run = 0; run < m_hostCandidates.Count; run++) {
                     var end = (m_hostCandidates.Start(run) + m_hostCandidates.Length(run));
                     for (var index = m_hostCandidates.Start(run); index < end; index++) {
                         var draw = frame.MeshDraws[index];
                         var previous = m_draws[index];
                         if (previous.SameStagedContent(in draw)) { continue; }
-                        meshesChanged |= !ReferenceEquals(previous.Mesh, draw.Mesh);
+                        if (!ReferenceEquals(previous.Mesh, draw.Mesh)) { meshesChanged = true; owned++; }
                         identitiesChanged |= !Equals(previous.Identity, draw.Identity);
                         m_draws[index] = draw;
                         m_changedDraws.Add(start: index, length: 1);
@@ -149,7 +159,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                         var draw = m_drawBindings[index].Pose(frame, ref matrices);
                         var previous = m_draws[destination];
                         if (previous.SameStagedContent(in draw)) { continue; }
-                        meshesChanged |= !ReferenceEquals(previous.Mesh, draw.Mesh);
+                        if (!ReferenceEquals(previous.Mesh, draw.Mesh)) { meshesChanged = true; owned++; }
                         identitiesChanged |= !Equals(previous.Identity, draw.Identity);
                         m_draws[destination] = draw;
                         m_changedDraws.Add(start: destination, length: 1);
@@ -164,7 +174,7 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
                 if (meshesChanged) { (m_drawClaims ??= new SdfMeshClaims()).Update(draws: m_draws); }
             }
             if (!changed && ReferenceEquals(frame, m_dressedSource) && (m_dressed is { } held)) {
-                CountWork(visited, matrices, updated);
+                CountWork(visited, matrices, updated, owned);
                 CommitInputs(frame);
                 m_publicationPending = false;
                 access.Acknowledge();
@@ -194,6 +204,9 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             var dressed = (frame with {
                 MeshDraws = m_draws, MeshDrawsRevision = revision, PickMap = dressedMap,
                 MeshDrawChanges = m_drawChanges, MeshDrawChangesSerial = serial,
+                MeshDrawChangesCause = (topologyChanged
+                    ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild)
+                    : (portalPath ? SdfMeshStagingCause.Portal : null)),
             });
             m_drawChanges.Begin(everything: (topologyChanged || portalPath), rows: m_draws.Count);
             for (var run = 0; run < m_changedDraws.Count; run++) {
@@ -207,14 +220,15 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             m_revision = revision;
             m_copyLayoutRevision = access.CopyLayoutRevision;
             CommitInputs(frame);
-            CountWork(visited, matrices, updated);
+            CountWork(visited, matrices, updated, owned);
             m_publicationPending = false;
             access.Acknowledge();
             return dressed;
         }
     }
 
-    private void CountWork(int visited, int matrices, int updated) {
+    private void CountWork(int visited, int matrices, int updated, int owned) {
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RowsOwnedChanged, amount: owned);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressPoseCandidates, amount: m_drawBindings.Count);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressBindingsVisited, amount: visited);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressMatricesComputed, amount: matrices);
@@ -312,11 +326,12 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
     // Replaces, in their runs, the bindings of each group a frame replaced with its piece and copy counts standing
     // (m_replaced), as a topology rebuild would list them: every other binding, draw and row stands, the journal
     // names the rows whose staged content moved, and each such draw's claim moves with it.
-    private void Replace(SdfFrame frame, SdfMeshPathBake.FrameAccess access, ref int visited, ref int matrices, ref int updated) {
+    private void Replace(SdfFrame frame, SdfMeshPathBake.FrameAccess access, ref int visited, ref int matrices, ref int updated, ref int owned) {
         var reindex = false;
 
         foreach (var (at, group, mesh) in m_replaced) {
             var dressed = m_dressedGroups[at];
+            owned += dressed.Count;
             var copies = access.CopiesOf(group);
             var pieces = mesh.PieceCount;
             var chunked = ((copies is null) && (mesh.Chunks.Count > 0));
@@ -351,38 +366,54 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
         if (reindex) { IndexBindings(frame); }
     }
 
-    private void BuildDrawTopology(SdfFrame frame, SdfMeshPathBake.FrameAccess access, ref int visited, ref int matrices) {
+    private void BuildDrawTopology(SdfFrame frame, SdfMeshPathBake.FrameAccess access, SdfMeshTopologyReason reason, ref int visited, ref int matrices, ref int owned) {
         SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressTopologyBuilds);
+        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.TopologyBuildsOf(reason: reason));
+        // An owner keeps its rows when it draws what it drew: the host's list at its count, each host row its mesh, and a
+        // group or an instance's own mesh every binding it held, at the run length it had.
+        var host = frame.MeshDraws;
+        if ((host.Count != m_hostDrawCount) || (m_draws.Count < host.Count)) {
+            owned += host.Count;
+        } else {
+            for (var index = 0; index < host.Count; index++) {
+                if (!ReferenceEquals(m_draws[index].Mesh, host[index].Mesh)) { owned++; }
+            }
+        }
+        m_previousRuns.Clear();
+        foreach (var dressed in m_dressedGroups) { m_previousRuns[dressed.Group] = dressed.Count; }
         m_draws.Clear();
         m_chunkOwners.Clear();
         foreach (var binding in m_drawBindings) { m_reusableBindings.TryAdd(binding.Identity, binding); }
         m_drawBindings.Clear();
         m_dressedGroups.Clear();
-        m_hostDrawCount = frame.MeshDraws.Count;
-        m_draws.AddRange(frame.MeshDraws);
+        m_hostDrawCount = host.Count;
+        m_draws.AddRange(host);
         foreach (var group in access.Groups) {
             if (access.MeshOf(group) is not { } mesh) { continue; }
 
             var start = m_drawBindings.Count;
+            var kept = true;
 
             if (access.CopiesOf(group) is { } copies) {
                 foreach (var copy in copies) {
                     for (var piece = 0; piece < mesh.PieceCount; piece++) {
-                        Bind(mesh.Piece(piece), group, copy, chunked: false);
+                        kept &= Bind(mesh.Piece(piece), group, copy, chunked: false);
                     }
                 }
                 m_dressedGroups.Add((group, mesh, start, (m_drawBindings.Count - start), copies.Count));
+                owned += OwnedChange(group, start, kept);
                 continue;
             }
             for (var piece = 0; piece < mesh.PieceCount; piece++) {
                 var part = mesh.Piece(piece);
-                Bind(part, group, -1, chunked: (mesh.Chunks.Count > 0));
+                kept &= Bind(part, group, -1, chunked: (mesh.Chunks.Count > 0));
                 if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
             }
             m_dressedGroups.Add((group, mesh, start, (m_drawBindings.Count - start), -1));
+            owned += OwnedChange(group, start, kept);
         }
         for (var index = 0; index < frame.MeshInstances.Count; index++) {
-            if (frame.MeshInstances[index].Mesh is { } mesh) { Bind(mesh, null, index, chunked: false); }
+            if ((frame.MeshInstances[index].Mesh is { } mesh) && !Bind(mesh, null, index, chunked: false)) { owned++; }
         }
         IndexBindings(frame);
         for (var index = 0; index < m_drawBindings.Count; index++) {
@@ -392,10 +423,21 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
         // A binding the previous topology held for the same draw and no binding of this one took is not reused again.
         m_reusableBindings.Clear();
     }
-    // Lists the binding of one draw: the previous topology's for it, or a new one.
-    private void Bind(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked) =>
-        m_drawBindings.Add(m_reusableBindings.Remove(new DrawBinding.Key(mesh, group, copyIndex, chunked), out var kept)
-            ? kept : new DrawBinding(mesh, group, copyIndex, chunked));
+    // Lists the binding of one draw: the previous topology's for it, or a new one. Returns whether it was the previous
+    // topology's.
+    private bool Bind(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked) {
+        var reused = m_reusableBindings.Remove(new DrawBinding.Key(mesh, group, copyIndex, chunked), out var kept);
+
+        m_drawBindings.Add(reused ? kept! : new DrawBinding(mesh, group, copyIndex, chunked));
+        return reused;
+    }
+    // The rows a group's new run changed the owner of: none when every binding was the previous topology's and the run
+    // kept its length, the whole run otherwise.
+    private int OwnedChange(SdfMeshBakeGroup group, int start, bool kept) {
+        var count = (m_drawBindings.Count - start);
+
+        return ((kept && m_previousRuns.TryGetValue(group, out var previous) && (previous == count)) ? 0 : count);
+    }
 
     private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false) {
         // What a binding draws: its mesh or chunk and group by reference, its copy and whether its group is chunked.

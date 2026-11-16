@@ -954,7 +954,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     }
 
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.
-    private static SdfFrame Frame(SdfProgram program, float time, DynamicTransform[] transforms) => new(
+    internal static SdfFrame Frame(SdfProgram program, float time, DynamicTransform[] transforms) => new(
         Program: program,
         ProgramChanged: false,
         Time: time,
@@ -1121,7 +1121,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         return builder.Build();
     }
     // Distinct, nonzero poses: slot i sits at (i, 0, 0) under the identity rotation.
-    private static DynamicTransform[] Transforms(int slots) {
+    internal static DynamicTransform[] Transforms(int slots) {
         var transforms = new DynamicTransform[slots];
 
         for (var slot = 0; (slot < slots); slot++) {
@@ -1135,7 +1135,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     }
 
     // A producer's moved set: every Move owes its slot on the next rendered frame, as an emitter would.
-    private sealed class Rig : IDisposable {
+    internal sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();
         private readonly List<int> m_pendingMoves = [];
         private readonly List<(int Slot, DynamicTransform Previous)> m_pendingReseats = [];

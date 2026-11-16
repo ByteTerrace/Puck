@@ -3,8 +3,9 @@ using System.Runtime.CompilerServices;
 namespace Puck.Abstractions.Counting;
 
 /// <summary>
-/// One monotonic count of deterministic work, held as a mutable field of the instance that owns it. It starts at
-/// zero, only goes up, and is never reset; a reader takes a window by reading it twice and subtracting.
+/// One count of work, held as a mutable field of the instance that owns it. A total starts at zero, only goes up, and
+/// is never reset; a reader takes a window by reading it twice and subtracting. A peak (<see cref="WorkKind.IsPeak"/>)
+/// holds the largest value raised (<see cref="RaiseShared"/>) since its source cleared it (<see cref="ClearPeak"/>).
 /// <para>
 /// One thread writes a count through <see cref="Increment"/> and <see cref="Add"/>. A count that several threads
 /// genuinely write uses <see cref="IncrementShared"/> and <see cref="AddShared"/> for every write instead, which are
@@ -61,4 +62,30 @@ public struct WorkCount {
     /// <exception cref="OverflowException">The count is already <see cref="long.MaxValue"/>; it is unchanged.</exception>
     public void IncrementShared() =>
         AddShared(amount: 1L);
+    /// <summary>Raises a peak count (<see cref="WorkKind.IsPeak"/>) to <paramref name="value"/> when it is larger, from
+    /// one of several writers. A total is never raised: it only adds.</summary>
+    /// <param name="value">The value one step of the owner's work published, in the kind's unit.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
+    public void RaiseShared(long value) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: value);
+
+        var observed = Volatile.Read(location: ref m_value);
+
+        while (value > observed) {
+            var replaced = Interlocked.CompareExchange(
+                comparand: observed,
+                location1: ref m_value,
+                value: value
+            );
+
+            if (replaced == observed) {
+                return;
+            }
+
+            observed = replaced;
+        }
+    }
+    /// <summary>Returns a peak count to zero, opening a reader's window. A total is never cleared.</summary>
+    public void ClearPeak() =>
+        Volatile.Write(location: ref m_value, value: 0L);
 }

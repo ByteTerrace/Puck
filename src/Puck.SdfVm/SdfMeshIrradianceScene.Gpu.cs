@@ -75,6 +75,9 @@ public sealed partial class SdfMeshIrradianceScene {
         // not name it. An empty scene still exports one zero prefix word, so a prefix allocation always exists to free.
         var prefixCount = Math.Max(1, PrefixWords);
         var prefix = arena.Allocate(prefixCount);
+        var prefixBytes = ((long)prefixCount * sizeof(uint));
+        Counters.Add(kind: SdfMeshIrradiance.PrefixBytes, amount: prefixBytes);
+        Counters.Raise(kind: SdfMeshIrradiance.PeakPrefixBytes, value: prefixBytes);
         var nodeWords = content.NodeCount * SdfMeshProbeTrace.NodeWords;
         var entryWords = content.EntryCount * SdfMeshProbeTrace.EntryWords;
         var instanceWords = content.InstanceCount * SdfMeshProbeTrace.InstanceWords;

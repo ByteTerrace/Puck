@@ -67,17 +67,34 @@ public sealed class WorkCounterSet : IWorkCounterSource {
     public ReadOnlySpan<WorkKind> WorkKinds =>
         m_kinds;
 
-    /// <summary>Adds a non-negative amount of one kind, from any thread.</summary>
-    /// <param name="kind">One of this set's kinds.</param>
+    /// <summary>Adds a non-negative amount of one total kind, from any thread.</summary>
+    /// <param name="kind">One of this set's kinds, a total.</param>
     /// <param name="amount">The amount of work, in the kind's unit; zero leaves the count unchanged.</param>
-    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds.</exception>
+    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds, or is a peak.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is negative.</exception>
     /// <exception cref="OverflowException">The total would exceed <see cref="long.MaxValue"/>; the count is unchanged.</exception>
     public void Add(WorkKind kind, long amount) =>
-        m_counts[IndexOf(kind: kind)].AddShared(amount: amount);
-    /// <summary>Adds one of a kind, from any thread.</summary>
-    /// <param name="kind">One of this set's kinds.</param>
-    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds.</exception>
+        m_counts[IndexOf(kind: kind, peak: false)].AddShared(amount: amount);
+    /// <summary>Raises one peak kind to <paramref name="value"/> when it is larger than the peak held since the set's
+    /// peaks were last cleared, from any thread.</summary>
+    /// <param name="kind">One of this set's kinds, a peak.</param>
+    /// <param name="value">The value one step of the owner's work published, in the kind's unit.</param>
+    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds, or is a total.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
+    public void Raise(WorkKind kind, long value) =>
+        m_counts[IndexOf(kind: kind, peak: true)].RaiseShared(value: value);
+    /// <inheritdoc/>
+    /// <remarks>Returns every peak kind of the set to zero; a total is left as it is.</remarks>
+    public void ClearPeaks() {
+        for (var index = 0; (index < m_kinds.Length); index++) {
+            if (m_kinds[index].IsPeak) {
+                m_counts[index].ClearPeak();
+            }
+        }
+    }
+    /// <summary>Adds one of a total kind, from any thread.</summary>
+    /// <param name="kind">One of this set's kinds, a total.</param>
+    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds, or is a peak.</exception>
     /// <exception cref="OverflowException">The count is already <see cref="long.MaxValue"/>; it is unchanged.</exception>
     public void Count(WorkKind kind) =>
         Add(
@@ -124,6 +141,19 @@ public sealed class WorkCounterSet : IWorkCounterSource {
         if (index < 0) {
             throw new ArgumentException(
                 message: $"Work kind '{kind?.Name}' is not a {Name} kind.",
+                paramName: nameof(kind)
+            );
+        }
+
+        return index;
+    }
+    // A total only adds and a peak only raises, so a write of the wrong form is refused rather than misread.
+    private int IndexOf(WorkKind kind, bool peak) {
+        var index = IndexOf(kind: kind);
+
+        if (m_kinds[index].IsPeak != peak) {
+            throw new ArgumentException(
+                message: $"Work kind '{kind.Name}' is a {(peak ? "total, which only adds" : "peak, which only raises")}.",
                 paramName: nameof(kind)
             );
         }

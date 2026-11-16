@@ -25,10 +25,10 @@ float3 sdfShadeDiagnostic(int material, int mode) {
     return float3(work, work * work, 0.0);
 }
 SdfShadeStamp sdfShadeStamp(SdfMaterialData material, float3 position, float3 layerPosition, float3 normal,
-    float3 ray, float curvature, float footprint, float4 lanes, float contact, float thickness, float4 rotation, int frameSlot, uint draw) {
+    float3 ray, float curvature, float footprint, float4 lanes, float contact, float thickness, float4 rotation, int frameSlot, SdfMeshHit hit) {
     SdfShadeStamp stamp = (SdfShadeStamp)0;
     stamp.layerRotation = rotation;
-    uint record = sdfMeshRecord(draw);
+    uint record = hit.record;
     stamp.drawDirection = frameSlot != SDF_TRANSFORM_SLOT_NONE ? float3x3(1,0,0,0,1,0,0,0,1) : transpose(float3x3(
         sdfMeshCarryDirection(record, sdfMeshWorldDirection(record, float3(1,0,0))),
         sdfMeshCarryDirection(record, sdfMeshWorldDirection(record, float3(0,1,0))),

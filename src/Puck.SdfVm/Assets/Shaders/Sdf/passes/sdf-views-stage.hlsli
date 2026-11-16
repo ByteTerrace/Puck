@@ -34,6 +34,12 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     }
 
     SdfSurfaceSample s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
+    // The record's hit (every hit the surface pass writes is a mesh's), resolved through the mesh hit door; a hit the door
+    // rejects shades as a miss.
+    SdfMeshHit meshHit = (SdfMeshHit)0;
+    if (s.hit) {
+        s.hit = sdfMeshResolveHit(s.meshDraw, s.meshTriangle, meshHit);
+    }
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool curvatureShading = worldCurvatureShadingEnabled();
     precise float3 rayTravel = p.rayDirection * s.t;
@@ -55,7 +61,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         s.shadows = (shadowFilter ? shadows : s.shadows);
     }
 
-    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
+    float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
     if (!sdfDebugComposesFinal((uint)p.viewMode) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {
