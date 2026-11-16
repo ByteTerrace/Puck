@@ -17,6 +17,8 @@ import "valley-form"
 import "water-site"
 
 let valleyRock = 0
+// The stones the wall carries in the lake's bowl (water-site.puck).
+let valleyStones = lakeStones
 let valleyDeck = 1
 
 // The overlook: a deck at deckHeight on the south-west sector's inner face, standing out over the floor. The face's
@@ -106,13 +108,10 @@ prototypes {
       document {
         name: $"valley-{sector.name}"
         schema: "puck.creation.v1"
-        palette [
-          {
-            color: "#7D7366"
-            roughness: 0.95
-            specular: 0.02
-          }
-        ]
+        palette: concat(
+          [{ color: "#7D7366", roughness: 0.95, specular: 0.02 }],
+          sector.name == "north-west" ? valleyStonePalette : []
+        )
         terrainRelief(seed: sector.seed)
         terrainMass(
           label: "main",
@@ -145,6 +144,15 @@ prototypes {
         )
         for basin in filter(valleyBasins, b => b.sector == sector.name) {
           terrainBasin(label: basin.label, lateral: basin.lateral, radial: basin.radial, y: basin.y, radii: basin.radii)
+        }
+        for stone in filter(valleyStones, s => s.sector == sector.name) {
+          shape Box $"{stone.label}" {
+            material: stone.material
+            rounding: 0.3
+            position [stone.lateral, stone.y, stone.radial]
+            scale: stone.radii
+            rotation [0, sine(stone.yaw * 0.008726646259971648), 0, cosine(stone.yaw * 0.008726646259971648)]
+          }
         }
         terrainFloorCut(top: (sector.peak + 10))
       }

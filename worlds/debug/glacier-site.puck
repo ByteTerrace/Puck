@@ -1,0 +1,145 @@
+// Where the debug world's glacier lies and what it is made of: a tongue of ice on the north-west wall's face below the
+// crest, beside the falls, in a cradle of moraine that the ice leaves bare when it has melted. A library: it emits no
+// document. Every piece is computed from the wall's own face (valley-form.puck), so each lies on it however the face leans:
+// a point `lift` metres off the face at height y and `x` along the ring, a tilt that follows the face's slope there.
+import "valley-form"
+import "water-site"
+
+// The face's slope at height y and along the ring x, its length as a climb of one metre, and the cosine its climb makes with
+// the wall's outward axis: what a piece resting on the face takes its tilt from.
+function faceClimb(y, x) = squareRoot(1 + sectorFaceSlopeAt(wallSector, y, x) * sectorFaceSlopeAt(wallSector, y, x))
+function faceCosine(y, x) = sectorFaceSlopeAt(wallSector, y, x) / faceClimb(y, x)
+// A point on the face at height y and ring position x, `lift` metres off it along the face's normal (author frame: [ring,
+// height, out from the centre]).
+function facePoint(y, x, lift) = [
+  x,
+  y + lift * sectorFaceSlopeAt(wallSector, y, x) / faceClimb(y, x),
+  sectorFaceAt(wallSector, y, x) - lift / faceClimb(y, x)
+]
+
+// The tongue is one tube swept down the face, `glacierRing` along the ring from the falls (the face is clear of the wall's
+// shoulders only a few tens of metres either side of the falls): a head at `glacierHead`, a toe at `glacierToe`, tapering from
+// `radiusHead` to `radiusToe` and sunk so that it stands `humpHead` and `humpToe` proud of the face. The ice shrinks about
+// the head's centre, so its toe retreats up the cradle.
+let glacierRing = 19
+let glacierHead = 322
+let glacierToe = 274
+let radiusHead = 16
+let radiusToe = 4
+let humpHead = 6
+let humpToe = 3
+// The tube's radius and its height over the face at height y, and the half width it shows there.
+function tongueRadius(y) = radiusToe + (radiusHead - radiusToe) * (y - glacierToe) / (glacierHead - glacierToe)
+function tongueHump(y) = humpToe + (humpHead - humpToe) * (y - glacierToe) / (glacierHead - glacierToe)
+function tongueWidth(y) = squareRoot(tongueHump(y) * (2 * tongueRadius(y) - tongueHump(y)))
+// The tube's centre line at height y: the face lowered by the radius less the hump.
+function tongueAxis(y) = facePoint(y, glacierRing, tongueHump(y) - tongueRadius(y))
+let glacierOrigin = facePoint(glacierHead, glacierRing, 0)
+
+// A quadratic Bezier through the axis at the head, the middle and the toe: its control point makes the middle pass through.
+function tongueCurveAt(ring, head, toe, rHead, rToe, humpHeadAt, humpToeAt, material) = {
+  a: facePoint(head, ring, humpHeadAt - rHead)
+  b [
+    2 * facePoint((head + toe) / 2, ring, (humpHeadAt + humpToeAt) / 2 - (rHead + rToe) / 2)[0] -
+      (facePoint(head, ring, humpHeadAt - rHead)[0] + facePoint(toe, ring, humpToeAt - rToe)[0]) / 2,
+    2 * facePoint((head + toe) / 2, ring, (humpHeadAt + humpToeAt) / 2 - (rHead + rToe) / 2)[1] -
+      (facePoint(head, ring, humpHeadAt - rHead)[1] + facePoint(toe, ring, humpToeAt - rToe)[1]) / 2,
+    2 * facePoint((head + toe) / 2, ring, (humpHeadAt + humpToeAt) / 2 - (rHead + rToe) / 2)[2] -
+      (facePoint(head, ring, humpHeadAt - rHead)[2] + facePoint(toe, ring, humpToeAt - rToe)[2]) / 2
+  ]
+  c: facePoint(toe, ring, humpToeAt - rToe)
+  radiusStart: rHead
+  radiusEnd: rToe
+  material: material
+}
+function tongueCurve(ring, head, toe, rHead, rToe, material) = tongueCurveAt(
+  ring,
+  head,
+  toe,
+  rHead,
+  rToe,
+  tongueHump(head),
+  tongueHump(toe),
+  material
+)
+let glacierTongues = [
+  tongueCurve(glacierRing, glacierHead, glacierToe, radiusHead, radiusToe, 0)
+  tongueCurve(glacierRing - 9, glacierHead - 2, 296, 9, 4, 1)
+  tongueCurve(glacierRing + 9, glacierHead - 6, 290, 8, 3, 1)
+]
+
+// Calved blocks lying at the toe and along its flanks, whiter than the tongue and tilted off the face.
+let glacierRidges = map(range(0, 9), k => {
+  position: facePoint(
+    glacierToe - 3 + 14 * siteScatter(k, 0.569840),
+    glacierRing + (k % 2 * 2 - 1) * (3 + 4 * siteScatter(k, 0.381966)),
+    0.6 * (1.2 + 1.6 * siteScatter(k, 0.754878))
+  )
+  half [
+    1.6 + 2.2 * siteScatter(k, 0.754878)
+    1.2 + 1.6 * siteScatter(k, 0.754878)
+    1.6 + 2.2 * siteScatter(k, 0.618034)
+  ]
+  cosine: faceCosine(glacierToe, glacierRing) + 0.25 * (siteScatter(k, 0.430159) - 0.5)
+  yaw: 360 * siteScatter(k, 0.896491)
+  rounding: 0.9
+  material: k % 2
+})
+
+// Crevasses across the tongue, narrow gashes cut skewed from square through most of its hump at five heights, and two melt
+// channels down its back, grooves that meander a few degrees about the flow in a segment between each pair of crevasses.
+let crevasseHeights = [314, 305, 296, 287, 279]
+let glacierCuts = concat(
+  map(range(0, length(crevasseHeights)), i => {
+    position: facePoint(
+      crevasseHeights[i],
+      glacierRing + 1.5 * (siteScatter(i, 0.618034) - 0.5),
+      tongueHump(crevasseHeights[i]) - 0.9
+    )
+    half [
+      tongueWidth(crevasseHeights[i]) * (0.65 + 0.2 * siteScatter(i, 0.754878))
+      2.2
+      0.55 + 0.25 * siteScatter(i, 0.381966)
+    ]
+    cosine: faceCosine(crevasseHeights[i], glacierRing)
+    yaw: (i % 2 * 2 - 1) * (8 + 12 * siteScatter(i, 0.569840))
+    material: 2
+  }),
+  flatMap(
+    range(0, 2),
+    c => map(range(0, length(crevasseHeights) - 1), i => {
+      position: facePoint(
+        (crevasseHeights[i] + crevasseHeights[i + 1]) / 2,
+        glacierRing + (c * 2 - 1) * tongueWidth((crevasseHeights[i] + crevasseHeights[i + 1]) / 2) * 0.35,
+        tongueHump((crevasseHeights[i] + crevasseHeights[i + 1]) / 2) + 0.1
+      )
+      half [0.45, 0.8, 3.6 * faceClimb(crevasseHeights[i], glacierRing)]
+      cosine: faceCosine(crevasseHeights[i], glacierRing)
+      yaw: (c * 2 - 1) * 4 + (i % 2 * 2 - 1) * 5
+      material: 2
+    })
+  )
+)
+
+// The cradle: the moraine round the ice, boulders heaped along both flanks and at the toe that the ice leaves bare, each half
+// sunk in the face, scattered by `siteScatter`.
+let cradlePalette = [
+  { color: "#8C8376", roughness: 0.95, specular: 0.02 }
+  { color: "#B58A60", roughness: 0.93, specular: 0.02 }
+  { color: "#4E463E", roughness: 0.95, specular: 0.02 }
+]
+let moraineStones = map(range(0, 30), k => {
+  position: facePoint(
+    glacierToe + (glacierHead - glacierToe) * siteScatter(k, 0.569840) - 4,
+    glacierRing +
+      (k % 2 * 2 - 1) *
+        (tongueWidth(glacierToe + (glacierHead - glacierToe) * siteScatter(k, 0.569840)) +
+          7 +
+          7 * siteScatter(k, 0.381966)),
+    0.4
+  )
+  radii [1 + 1.4 * siteScatter(k, 0.618034), 1 + 0.6 * siteScatter(k, 0.896491), 1 + 1.3 * siteScatter(k, 0.430159)]
+  cosine: faceCosine(glacierToe + (glacierHead - glacierToe) * siteScatter(k, 0.569840), glacierRing)
+  yaw: 360 * siteScatter(k, 0.569840)
+  material: k % 5 < 3 ? 0 : (k % 5 == 3 ? 1 : 2)
+})

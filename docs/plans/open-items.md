@@ -53,7 +53,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 5. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
 6. [high] [The visual bar](#the-visual-bar): the caldera water as its first
-   proof, built by [Water](#water)'s lanes A2 to A5.
+   proof, built by [Water](#water)'s lanes A3 to A5.
 7. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
 8. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
@@ -1445,8 +1445,8 @@ intent is in its guide.
 
 - [high] The caldera water fails its reference
   ([caldera pack](../game/art/caldera-water-pack/README.md), intent in
-  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is a row of
-  smooth ellipsoid lumps in two flat colours; the falls are a flat translucent
+  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is one swept
+  tongue and calved blocks that read as a plain white sausage from the rim; the falls are a flat translucent
   slab with visible tile seams and an opaque white impact disc; the pool is
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
@@ -1532,7 +1532,7 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: [the plan](water.md#the-lanes)'s lanes A2 to A5, then R3,
+ordinary · Next: [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3,
 with P1 last. The plan owns the feature end to end; these are the defects it
 does not.
 
@@ -1569,6 +1569,24 @@ does not.
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
+- [medium] A creation that shrinks cannot carry relief: `sizeBy` makes it
+  animated and the `noise` facet is refused on an animated creation ("a
+  static-stamp facet"), so the glacier's ice cannot take the fBm relief that
+  breaks a smooth tongue into hummocks and cracked planes; its look rests on a
+  flow layer's pattern. Admit noise on a creation whose only motion is
+  `sizeBy`, or shrink another way.
+- [medium] A glacier's bare cradle at T has no scoured region: the moraine is
+  stones on the wall's own rock, so melted ice leaves two rows of stones on
+  unchanged rock. The wall needs a material region (a paint or weathering on its
+  one rock slot, placed by the glacier's course) the ice's cradle shows.
+- [medium] Small stones in a wall sector bake at the sector's coarse cell
+  (the lake's bank boulders read as flat wedges, a stone under a metre is
+  lost): `valleyStones` (`worlds/debug/valley.puck`) rides the sector's relief
+  for free but not its detail.
+- [low] `world.reload` of the debug world refuses once a lane's edit passes 16 MiB
+  as a whole rebuild ("Rebuild payload is 19239407 bytes; cap is 16777216");
+  the delta path reloads an edit of a few rows but a wall-sector edit that
+  moves many prototypes falls back to the rebuild.
 - [low] `water.speed 60` also runs the day clock, so stage captures come out
   at night; the tour's rows must pin the day.
 - [low] A stage checkpoint: a verb that saves and restores a live arena with

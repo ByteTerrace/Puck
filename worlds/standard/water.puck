@@ -160,12 +160,29 @@ let lakeFlowLayer = {
   surface: waterFoam
   seed: 5
 }
-// A lake disc is a slab over its bowl, so it scatters more per metre, and its contact reaches less than its thickness.
-let lakeGlass = waterGlass with { scattering: 3, contact { reach: 0.2, coverage: 0.7 } }
-// Glacier ice: a pale blue body and a whiter weathered face.
+// A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
+// the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
+let lakeGlass = waterGlass with { scatter: "#2CB0B4", scattering: 0.12, contact { reach: 0.3, coverage: 0.7 } }
+// Glacier ice creeps: a slow world-space drift whose pattern is the broken, streaked surface of old ice, white where it is
+// weathered and blue where the ice shows through, with a strong tilt so the surface reads as ridged and cracked planes.
+let iceFlowLayer = {
+  frame: World
+  velocity [0.01, -0.02, 0.01]
+  scale: 0.07
+  stretch: 1.6
+  cycle: 4
+  tilt: 0.35
+  coverage: 0.38
+  softness: 0.45
+  surface { color: "#F2FAFE", roughness: 0.55, metal: 0 }
+  seed: 31
+}
+// Glacier ice: a pale blue body and a whiter weathered face, each broken by the creep's pattern, and the cobalt of a
+// crevasse's or a channel's walls.
 let icePalette = [
-  { color: "#CFE8F2", roughness: 0.3, specular: 0.4, wrap: 0.3 }
-  { color: "#EEF6FA", roughness: 0.5, specular: 0.2, wrap: 0.4 }
+  flowed({ color: "#7DB6DC", roughness: 0.22, specular: 0.55, wrap: 0.1 }, iceFlowLayer)
+  flowed({ color: "#C4E0F0", roughness: 0.4, specular: 0.3, wrap: 0.15 }, iceFlowLayer)
+  { color: "#1F5FA3", roughness: 0.2, specular: 0.5, wrap: 0.1 }
 ]
 // Stone for a bridge and its banks.
 let stonePalette = [
@@ -279,9 +296,24 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
     }
   }
 }
-// Ice shrinks uniformly about the authored origin; its driver reads the same linear fraction that sets melt volume.
-// Zero parks the creation through the ordinary presentation path, leaving no crowns above the cradle.
-template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
+// The orientation, as a quaternion [x, y, z, w], of a piece lying on a slope whose climb makes an angle with +Z of cosine
+// `c`, then turned `yaw` degrees about the slope's own normal: the falls' sheets' tilt, so a piece's +Z runs up the slope and
+// its +Y stands off it.
+function onSlope(c, yaw) = [
+  0 - halfTurnSine(c) * cosine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * sine(yaw * 0.008726646259971648),
+  0 - halfTurnSine(c) * sine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
+]
+
+// A glacier is a tongue of ice lying on a wall's face: swept tongues (a tapering tube along a curve, sunk in the face) and
+// ridges (rounded blocks), carved by crevasses and melt channels (`cuts`, subtractions), all one group, so the ice is one
+// carved mass. A tongue is { a, b, c, radiusStart, radiusEnd, material } (a quadratic Bezier's control points), a ridge
+// { position, half, cosine, yaw, rounding, material } and a cut { position, half, cosine, yaw, material }. Positions are in
+// the wall frame, `cosine` and `yaw` as `onSlope` reads them, and a cut's `material` is its cut face's. Ice shrinks uniformly
+// about the authored `origin`, so the toe retreats toward it; its driver reads the same linear fraction that sets melt
+// volume. Zero parks the creation through the ordinary presentation path.
+template glacierMass(id, tongues, ridges, cuts, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -291,12 +323,44 @@ template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], pal
       drivers [
         { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
-      for (lump, i) in lumps {
-        shape Superellipsoid $"ice-{i}" {
-          material: i % 2
-          exponent: 2.4
-          position [lump.position[0] - origin[0], lump.position[1] - origin[1], lump.position[2] - origin[2]]
-          scale: lump.radii
+      for (tongue, i) in tongues {
+        shape Sweep $"tongue-{i}" {
+          material: tongue.material
+          group: 1
+          curve {
+            a [tongue.a[0] - origin[0], tongue.a[1] - origin[1], tongue.a[2] - origin[2]]
+            b [tongue.b[0] - origin[0], tongue.b[1] - origin[1], tongue.b[2] - origin[2]]
+            c [tongue.c[0] - origin[0], tongue.c[1] - origin[1], tongue.c[2] - origin[2]]
+            radiusStart: tongue.radiusStart
+            radiusEnd: tongue.radiusEnd
+          }
+        }
+      }
+      for (ridge, i) in ridges {
+        shape Box $"ridge-{i}" {
+          material: ridge.material
+          rounding: ridge.rounding
+          position [
+            ridge.position[0] - origin[0],
+            ridge.position[1] - origin[1],
+            ridge.position[2] - origin[2]
+          ]
+          scale: ridge.half
+          rotation: onSlope(ridge.cosine, ridge.yaw)
+          group: 1
+        }
+      }
+      for (cut, i) in cuts {
+        shape Box $"cut-{i}" {
+          blend: Subtraction
+          material: cut.material
+          position [
+            cut.position[0] - origin[0],
+            cut.position[1] - origin[1],
+            cut.position[2] - origin[2]
+          ]
+          scale: cut.half
+          rotation: onSlope(cut.cosine, cut.yaw)
           group: 1
         }
       }
@@ -304,9 +368,34 @@ template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], pal
   }
 }
 
-// A lake's surface: a flat turquoise disc of `radius` that rises and falls with the gauge `state.<gauge>` by `rise` metres
-// a unit above `rest`, the gauge's value at the lake's outlet, its shading rippled by `flow`.
-template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
+// A glacier's cradle: the moraine round the ice, stones that the ice leaves bare when it has melted. A `stone` { position,
+// radii, cosine, yaw, material } is a rounded box lying on the wall's face, in the wall frame; the cradle never shrinks.
+template glacierCradle(id, stones, palette, origin = [0, 0, 0]) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: palette
+      for (stone, i) in stones {
+        shape Box $"stone-{i}" {
+          material: stone.material
+          rounding: 0.9
+          position [stone.position[0] - origin[0], stone.position[1] - origin[1], stone.position[2] - origin[2]]
+          scale: stone.radii
+          rotation: onSlope(stone.cosine, stone.yaw)
+        }
+      }
+    }
+  }
+}
+
+// A lake's water: the bowl it fills, cut off flat at the surface, so the shore is where the bowl's own rock meets the
+// level and the bowl's floor and stones read through the water by its depth. `bowl` is the cut the water fills, [centre
+// height above the surface at rest, radii x/y/z], and `grow` metres more on every radius bury the water's rim in the rock
+// where the bowl's relief runs deeper than its ellipse. The surface rises and falls with the gauge `state.<gauge>` by
+// `rise` metres a unit above `rest`, the gauge's value at the lake's outlet; the whole body rides one slide, so no seam
+// stretches.
+template lakeSurface(id, radius, depth, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -315,10 +404,10 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]
-      shape Cylinder "surface" {
+      shape Cylinder "water" {
         material: 0
-        position [0, 0, 0]
-        scale [radius, 0.12, radius]
+        position [0, 0 - depth / 2, 0]
+        scale [radius, depth / 2, radius]
         slides [
           { driver: "level", axis [0, 1, 0], amplitude: rise, phase: 0 - rest, wave: "linear" }
         ]

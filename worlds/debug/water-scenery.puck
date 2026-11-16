@@ -8,6 +8,7 @@ import "../standard/water"
 import "../standard/foliage"
 import "valley-form"
 import "water-site"
+import "glacier-site"
 
 let compassRadians = 3.141592653589793 / 180
 
@@ -21,19 +22,21 @@ render {
 // The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
 let wallYaw = wallSector.compass + 180
 
-// The glacier contracts about its cradle's centre, following the authored linear melt fraction.
-let glacierOrigin = [0, 300, sectorFace(wallSector, 300)]
-let glacierLateral = [-30, -16, -2, 12, 26, 40]
-let glacierHeights = [300, 309, 316, 308, 298, 292]
-let glacierLumps = map(range(0, 6), i => {
-  position [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) - 6]
-  radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
-})
+// The world's X/Z of a point `radial` out from the ring's centre and `lateral` along the wall (the author frame's +X is
+// the placement yaw's own turn of world (cos compass, -sin compass)).
+function wallWorld(radial, lateral) = [
+  radial * sine(wallSector.compass * compassRadians) + lateral * cosine(wallSector.compass * compassRadians),
+  radial * cosine(wallSector.compass * compassRadians) - lateral * sine(wallSector.compass * compassRadians)
+]
 
 // The river runs from the plunge basin's east wall to the pool's north bank (water-site.puck's course) in a channel cut in
 // the ground (`riverChannel`). Its water is one lattice body over the cut ground that the chain's `riverDepth` raises and
 // lowers, flowing along the course's mean heading at the stream's pace.
-let riverSurface = flowed(streamMaterial, streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] }, glass: 1)
+let riverSurface = flowed(
+  streamMaterial,
+  streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] },
+  glass: 1
+)
 
 // A point `along` leg k of the course and `across` it (positive to its right), at height y: a stone's place.
 function riverPlace(leg, along, across, y) = [
@@ -89,10 +92,12 @@ prototypes {
     profile: fallsProfile,
     width: 8,
     standoff: 8,
-    flow: fallsFlowLayer with { coverageLane: fallsLane }, coverageLane: fallsLane
+    flow: fallsFlowLayer with { coverageLane: fallsLane },
+    coverageLane: fallsLane
   )
-  glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
-  lakeSurface(id: "lake", radius: lakeSite.radius)
+  glacierMass(id: "glacier", tongues: glacierTongues, ridges: glacierRidges, cuts: glacierCuts, origin: glacierOrigin)
+  glacierCradle(id: "glacier-cradle", stones: moraineStones, palette: cradlePalette, origin: glacierOrigin)
+  lakeSurface(id: "lake", radius: lakeSite.radius, depth: lakeSite.depth)
   riverChannel(
     id: "river-channel",
     region: riverHole,
@@ -143,12 +148,22 @@ placements {
     position [0, 0, 0]
     yawDegrees: wallYaw
   }
+  // The ice and its cradle share one origin and turn: the ice shrinks about it and the cradle stays.
   placement "glacier" {
     prototype: "glacier"
     position [
-      glacierOrigin[2] * sine(wallSector.compass * compassRadians),
+      wallWorld(glacierOrigin[2], glacierOrigin[0])[0]
+      glacierOrigin[1]
+      wallWorld(glacierOrigin[2], glacierOrigin[0])[1]
+    ]
+    yawDegrees: wallYaw
+  }
+  placement "glacier-cradle" {
+    prototype: "glacier-cradle"
+    position [
+      wallWorld(glacierOrigin[2], glacierOrigin[0])[0],
       glacierOrigin[1],
-      glacierOrigin[2] * cosine(wallSector.compass * compassRadians)
+      wallWorld(glacierOrigin[2], glacierOrigin[0])[1]
     ]
     yawDegrees: wallYaw
   }
