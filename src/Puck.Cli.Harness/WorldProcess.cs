@@ -19,7 +19,7 @@ public sealed class WorldProcess : IDisposable {
 
     private readonly object m_gate = new();
     private readonly List<WorldOutputLine> m_lines = [];
-    private readonly List<Thread> m_pumps = [];
+    private readonly CancellationTokenSource m_release = new();
 
     private readonly Process m_process;
     private readonly StreamWriter m_stderr;
@@ -28,6 +28,8 @@ public sealed class WorldProcess : IDisposable {
     private readonly WorldReadiness m_readiness;
 
     private IDisposable? m_gpu;
+    private Task[] m_pumps = [];
+    private Task? m_drained;
 
     private WorldProcess(Process process, StreamWriter stdout, StreamWriter stderr, IDisposable? gpu, WorldReadiness readiness) {
         m_gpu = gpu;
@@ -74,9 +76,11 @@ public sealed class WorldProcess : IDisposable {
             throw;
         }
 
-        world.Pump(reader: process.StandardOutput, stream: CliProcessOutputStream.Stdout);
-        world.Pump(reader: process.StandardError, stream: CliProcessOutputStream.Stderr);
+        // Both readers open before either pump starts, so each is the sole reader of its pipe from the first byte.
+        var output = Puck.Abstractions.ChildProcess.OpenOutputReader(reader: process.StandardOutput, release: world.m_release.Token);
+        var errors = Puck.Abstractions.ChildProcess.OpenOutputReader(reader: process.StandardError, release: world.m_release.Token);
 
+        world.m_pumps = [world.PumpAsync(reader: output, stream: CliProcessOutputStream.Stdout), world.PumpAsync(reader: errors, stream: CliProcessOutputStream.Stderr)];
         return world;
     }
     /// <summary>Kills a process's whole tree and waits for it to exit; a process that already exited is left as it is.</summary>
@@ -178,16 +182,23 @@ public sealed class WorldProcess : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() {
-        Kill();
-        m_process.Dispose();
-        m_stderr.Dispose();
-        m_stdout.Dispose();
+        try {
+            Kill();
+        } finally {
+            // Every pump has settled once Kill returns, so no read races the disposal of its reader, log or process.
+            m_process.Dispose();
+            m_stderr.Dispose();
+            m_stdout.Dispose();
+            m_release.Dispose();
+        }
     }
 
     private void ReleaseGpu() => Interlocked.Exchange(location1: ref m_gpu, value: null)?.Dispose();
-    private void Pump(StreamReader reader, CliProcessOutputStream stream) {
-        var thread = new Thread(start: () => {
-            while (reader.ReadLine() is { } text) {
+    private async Task PumpAsync(StreamReader reader, CliProcessOutputStream stream) {
+        using var source = reader;
+
+        try {
+            while (await source.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } text) {
                 lock (m_gate) {
                     m_lines.Add(item: new WorldOutputLine(Index: m_lines.Count, Stream: stream, Text: text));
 
@@ -199,18 +210,20 @@ public sealed class WorldProcess : IDisposable {
                     Monitor.PulseAll(obj: m_gate);
                 }
             }
-
+        } finally {
             lock (m_gate) {
                 Monitor.PulseAll(obj: m_gate);
             }
-        }) { IsBackground = true };
-
-        m_pumps.Add(item: thread);
-        thread.Start();
-    }
-    private void JoinPumps() {
-        foreach (var pump in m_pumps) {
-            _ = pump.Join(timeout: TimeSpan.FromSeconds(value: 5));
         }
+    }
+    // The process has exited when this runs. Every caller shares one drain, which ends both pumps within
+    // ChildProcess.ExitDrainGrace even when a process the World started still holds a pipe.
+    private void JoinPumps() {
+        Task drained;
+
+        lock (m_gate) {
+            drained = (m_drained ??= Puck.Abstractions.ChildProcess.DrainAfterExitAsync(clock: TimeProvider.System, pumps: m_pumps, release: m_release));
+        }
+        drained.GetAwaiter().GetResult();
     }
 }

@@ -44,7 +44,7 @@ public static class CountersPipelineCache {
         var copied = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var source in Directory.EnumerateFiles(path: from, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-            if (source.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".tmp")) { continue; }
+            if (AtomicFile.IsTemporary(path: source)) { continue; }
             var relative = Path.GetRelativePath(path: source, relativeTo: from);
             var destination = Path.Combine(path1: to, path2: relative);
 

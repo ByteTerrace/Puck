@@ -307,7 +307,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var begun = clock.GetTimestamp();
         var started = new Started(build: start.Build!, checkout: checkout, document: path, lease: start.Lease, leased: windowed, process: process, runDirectory: runDirectory);
 
-        started.Exited = WatchAsync(observe: start.Observe, started: started);
+        started.Exited = WatchAsync(clock: clock, observe: start.Observe, started: started);
         m_started[process.Id] = started;
 
         progress.StderrLog = started.StderrLog;
@@ -505,28 +505,34 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
     }
     // Copies both streams to the run's log files line by line, showing each line to the launch's readiness, and releases
-    // the lease once the World has exited.
-    private static async Task WatchAsync(Started started, Action<string, bool>? observe) {
+    // the lease once the World has exited and both copies have settled through the shared post-exit drain.
+    private static async Task WatchAsync(Started started, Action<string, bool>? observe, TimeProvider clock) {
         async Task CopyAsync(StreamReader source, string path, bool stdout) {
-            await using var file = new FileStream(access: FileAccess.Write, bufferSize: 0, mode: FileMode.Create, path: path, share: FileShare.ReadWrite | FileShare.Delete);
-            await using var writer = new StreamWriter(stream: file, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
+            using var reader = source;
 
             try {
-                while (await source.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+                await using var file = new FileStream(access: FileAccess.Write, bufferSize: 0, mode: FileMode.Create, path: path, share: FileShare.ReadWrite | FileShare.Delete);
+                await using var writer = new StreamWriter(stream: file, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
+
+                while (await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
                     await writer.WriteLineAsync(value: line).ConfigureAwait(continueOnCapturedContext: false);
                     observe?.Invoke(arg1: line, arg2: stdout);
                 }
-            } catch (IOException) { }
+            } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
         }
 
-        var pumps = Task.WhenAll(
-            CopyAsync(path: started.StdoutLog, source: started.Process.StandardOutput, stdout: true),
-            CopyAsync(path: started.StderrLog, source: started.Process.StandardError, stdout: false)
-        );
+        using var release = new CancellationTokenSource();
+        // Both readers open before either copy starts, so each is the sole reader of its pipe from the first byte.
+        var output = ChildProcess.OpenOutputReader(reader: started.Process.StandardOutput, release: release.Token);
+        var errors = ChildProcess.OpenOutputReader(reader: started.Process.StandardError, release: release.Token);
+        Task[] pumps = [
+            CopyAsync(path: started.StdoutLog, source: output, stdout: true),
+            CopyAsync(path: started.StderrLog, source: errors, stdout: false),
+        ];
 
         try {
             await started.Process.WaitForExitAsync().ConfigureAwait(continueOnCapturedContext: false);
-            _ = await Task.WhenAny(task1: pumps, task2: Task.Delay(delay: ChildProcess.ExitDrainGrace)).ConfigureAwait(continueOnCapturedContext: false);
+            await ChildProcess.DrainAfterExitAsync(clock: clock, pumps: pumps, release: release).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             Interlocked.Exchange(location1: ref started.Lease, value: null)?.Dispose();
         }

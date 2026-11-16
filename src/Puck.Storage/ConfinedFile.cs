@@ -27,10 +27,6 @@ public static class ConfinedFile {
             ?? throw new FileNotFoundException(message: "Host configuration directory does not exist."));
         using var stream = (directory.OpenFile(name) ?? throw new FileNotFoundException(message: "Host configuration file does not exist."));
 
-        if (stream.Length > maximumBytes) { throw new IOException(message: "Host configuration exceeds its byte budget."); }
-        var bytes = new byte[checked((int)stream.Length)];
-
-        stream.ReadExactly(buffer: bytes);
-        return bytes;
+        return (FileContent.ReadAtMost(maximumBytes: maximumBytes, stream: stream) ?? throw new IOException(message: "Host configuration exceeds its byte budget."));
     }
 }

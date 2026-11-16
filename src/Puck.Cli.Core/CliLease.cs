@@ -475,7 +475,7 @@ public sealed class CliLease : IDisposable {
         try {
             if (File.Exists(path: path)) { return; }
             Directory.CreateDirectory(path: rotation);
-            var serial = Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max();
+            var serial = Directory.EnumerateFiles(path: rotation).Where(predicate: static file => !AtomicFile.IsTemporary(path: file)).Select(selector: Served).DefaultIfEmpty().Max();
 
             using var pending = AtomicFile.StageAllText(path: path, contents: serial.ToString(provider: CultureInfo.InvariantCulture));
 
@@ -488,7 +488,7 @@ public sealed class CliLease : IDisposable {
     private static void Serve(string rotation, string lane) {
         try {
             Directory.CreateDirectory(path: rotation);
-            var next = (Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max() + 1);
+            var next = (Directory.EnumerateFiles(path: rotation).Where(predicate: static file => !AtomicFile.IsTemporary(path: file)).Select(selector: Served).DefaultIfEmpty().Max() + 1);
             var path = LanePath(lane: lane, rotation: rotation);
 
             // Replaced whole, so a waiter reading the serial never sees it half written.

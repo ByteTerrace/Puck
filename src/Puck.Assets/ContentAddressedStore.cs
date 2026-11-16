@@ -13,15 +13,14 @@ namespace Puck.Assets;
 /// <remarks>
 /// Layout under <see cref="Root"/>: <c>objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c> holds immutable object
 /// bytes (a two-character fan-out directory keeps any one directory from accumulating too many entries);
-/// <c>refs/&lt;category&gt;/&lt;name&gt;</c> holds a one-line text pointer (<c>sha256/&lt;hex64&gt;</c>); <c>tmp/</c>
-/// is write staging. <see cref="ObjectPath(string, ContentPin)"/> and <see cref="ObjectRelativePath"/> state the object
-/// layout once; a reader that shares the tree without opening a store addresses objects through them. Every write
-/// lands in <c>tmp/</c> first and is promoted with <see cref="File.Move(string, string, bool)"/>, so a reader never
-/// observes a partially-written object or ref. Staging outside <c>objects/</c> and <c>refs/</c>, rather than beside the
-/// destination as <see cref="AtomicFile"/> does, keeps a temporary file out of <see cref="ListRefs"/>. Saving bytes
-/// already present preserves a verified object; a corrupt object is replaced from the supplied bytes. A promotion
-/// that fails discards its temp file, so <c>tmp/</c> never
-/// accumulates an entry a failed write left behind.
+/// <c>refs/&lt;category&gt;/&lt;name&gt;</c> holds a one-line text pointer (<c>sha256/&lt;hex64&gt;</c>).
+/// <see cref="ObjectPath(string, ContentPin)"/> and <see cref="ObjectRelativePath"/> state the object layout once; a
+/// reader that shares the tree without opening a store addresses objects through them. Every write is a complete-file
+/// replacement through <see cref="AtomicFile"/>: the bytes are staged in a flushed temporary beside the destination and
+/// renamed over it, so a reader never observes a partially-written object or ref, and a write that fails at any step
+/// deletes its temporary. A temporary's name ends in <see cref="AtomicFile.TemporarySuffix"/>, which no ref may, so
+/// <see cref="ListRefs"/> and retention skip a write in progress. Saving bytes already present preserves a verified
+/// object; a corrupt object is replaced from the supplied bytes.
 /// <para>A store opened with a <see cref="Retention"/> is a cache: a read that finds an object or a ref stamps it as
 /// used, and a write keeps the objects within the bound and the refs within its entry count, least recently used out
 /// (<see cref="CacheRetention"/>). A ref whose object was evicted resolves to a pin <see cref="TryGet"/> no longer finds,
@@ -29,7 +28,6 @@ namespace Puck.Assets;
 /// </remarks>
 public sealed class ContentAddressedStore {
     private readonly string m_refsDirectory;
-    private readonly string m_tmpDirectory;
 
     /// <summary>Gets the store's root directory.</summary>
     public string Root { get; }
@@ -37,8 +35,8 @@ public sealed class ContentAddressedStore {
     /// everything.</summary>
     public CacheBound? Retention { get; }
 
-    /// <summary>Initializes a store rooted at <paramref name="root"/>, creating its <c>objects/</c>, <c>refs/</c>,
-    /// and <c>tmp/</c> subdirectories if they do not already exist.</summary>
+    /// <summary>Initializes a store rooted at <paramref name="root"/>, creating its <c>objects/</c> and <c>refs/</c>
+    /// subdirectories if they do not already exist.</summary>
     /// <param name="root">The store's root directory (created if missing).</param>
     /// <param name="retention">The bound that makes the store a cache, or <see langword="null"/> to keep
     /// everything.</param>
@@ -52,18 +50,12 @@ public sealed class ContentAddressedStore {
             path1: Root,
             path2: "refs"
         );
-        m_tmpDirectory = Path.Combine(
-            path1: Root,
-            path2: "tmp"
-        );
-
         _ = Directory.CreateDirectory(path: Path.Combine(
             path1: Root,
             path2: "objects",
             path3: "sha256"
         ));
         _ = Directory.CreateDirectory(path: m_refsDirectory);
-        _ = Directory.CreateDirectory(path: m_tmpDirectory);
     }
 
     private string ObjectPath(ContentPin pin) =>
@@ -92,10 +84,13 @@ public sealed class ContentAddressedStore {
             bound: (isRef ? CacheBound.Entries(maxEntries: bound.MaxEntries) : bound),
             directory: (isRef ? m_refsDirectory : Path.Combine(path1: Root, path2: "objects")),
             inUse: written,
-            isEntry: static _ => true,
+            isEntry: static file => !AtomicFile.IsTemporary(path: file.Name),
             search: SearchOption.AllDirectories
         );
     }
+    // Whether the object at a pin's path exists and hashes to that pin; a corrupt object does not count.
+    private static bool Holds(string objectPath, ContentPin pin) =>
+        (File.Exists(path: objectPath) && (ContentPin.Compute(content: File.ReadAllBytes(path: objectPath)) == pin));
 
     /// <summary>Returns the path of <paramref name="pin"/>'s object under a store rooted at <paramref name="root"/>:
     /// <c>&lt;root&gt;/objects/sha256/&lt;hex[0..2]&gt;/&lt;hex64&gt;</c>.</summary>
@@ -144,7 +139,9 @@ public sealed class ContentAddressedStore {
         var names = new List<string>();
 
         foreach (var path in Directory.EnumerateFiles(path: categoryDirectory)) {
-            names.Add(item: Path.GetFileName(path: path));
+            var name = Path.GetFileName(path: path);
+
+            if (!AtomicFile.IsTemporary(path: name)) { names.Add(item: name); }
         }
 
         names.Sort(comparer: StringComparer.Ordinal);
@@ -158,36 +155,15 @@ public sealed class ContentAddressedStore {
         var pin = ContentPin.Compute(content: content);
         var objectPath = ObjectPath(pin: pin);
 
-        if (!File.Exists(path: objectPath) || ContentPin.Compute(content: File.ReadAllBytes(path: objectPath)) != pin) {
-            var tmpPath = Path.Combine(
-                path1: m_tmpDirectory,
-                path2: $"{Guid.NewGuid():n}.tmp"
-            );
-
-            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: objectPath)!);
-            File.WriteAllBytes(
-                bytes: content,
-                path: tmpPath
-            );
+        if (!Holds(objectPath: objectPath, pin: pin)) {
+            // A missing or corrupt object is replaced, so the publication overwrites; the staged write deletes its
+            // temporary on every path that does not publish it.
+            using var pending = AtomicFile.StageAllBytes(bytes: content, path: objectPath);
 
             try {
-                File.Move(
-                    destFileName: objectPath,
-                    overwrite: true,
-                    sourceFileName: tmpPath
-                );
-            } catch (IOException) when (File.Exists(path: objectPath) && ContentPin.Compute(content: File.ReadAllBytes(path: objectPath)) == pin) {
+                pending.Commit();
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException) && Holds(objectPath: objectPath, pin: pin)) {
                 // An identical concurrent writer already published the object.
-                File.Delete(path: tmpPath);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                // The object never landed, so the temp copy left in tmp/ is discarded rather than orphaned there.
-                try {
-                    File.Delete(path: tmpPath);
-                } catch (Exception cleanup) when ((cleanup is IOException or UnauthorizedAccessException)) {
-                    // The original failure is the one worth reporting.
-                }
-
-                throw;
             }
 
             Retain(isRef: false, written: objectPath);
@@ -215,42 +191,21 @@ public sealed class ContentAddressedStore {
     /// <param name="category">The ref category (a single path segment, e.g. <c>worlds</c>, <c>tunes</c>, <c>derived/bake</c>).</param>
     /// <param name="name">The ref name within the category.</param>
     /// <param name="hash">The target object's pin.</param>
+    /// <exception cref="ArgumentException"><paramref name="category"/> or <paramref name="name"/> is <see langword="null"/>,
+    /// empty or whitespace, or <paramref name="name"/> ends in <see cref="AtomicFile.TemporarySuffix"/>.</exception>
     public void SetRef(string category, string name, ContentPin hash) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+        if (AtomicFile.IsTemporary(path: name)) {
+            throw new ArgumentException(message: $"A ref name may not end in '{AtomicFile.TemporarySuffix}', which names a write in progress.", paramName: nameof(name));
+        }
 
         var refPath = RefPath(
             category: category,
             name: name
         );
-        var tmpPath = Path.Combine(
-            path1: m_tmpDirectory,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
 
-        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: refPath)!);
-        File.WriteAllText(
-            contents: hash.ToString(),
-            path: tmpPath
-        );
-
-        try {
-            File.Move(
-                destFileName: refPath,
-                overwrite: true,
-                sourceFileName: tmpPath
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // The ref never landed, so the temp copy left in tmp/ is discarded rather than orphaned there.
-            try {
-                File.Delete(path: tmpPath);
-            } catch (Exception cleanup) when ((cleanup is IOException or UnauthorizedAccessException)) {
-                // The original failure is the one worth reporting.
-            }
-
-            throw;
-        }
-
+        AtomicFile.WriteAllText(contents: hash.ToString(), path: refPath);
         Retain(isRef: true, written: refPath);
     }
     /// <summary>Attempts to read and verify the object bytes for <paramref name="pin"/>.</summary>

@@ -311,11 +311,8 @@ public static class InstallPruner {
         using var stream = directory.OpenFile(name: name);
 
         if (stream is null) { return null; }
-        if (stream.Length > ReleaseSourceReader.MaximumManifestBytes) { throw new IOException(message: $"'{name}' exceeds {ReleaseSourceReader.MaximumManifestBytes} bytes."); }
-        var bytes = new byte[checked((int)stream.Length)];
-
-        stream.ReadExactly(buffer: bytes);
-        return bytes;
+        return (FileContent.ReadAtMost(maximumBytes: ReleaseSourceReader.MaximumManifestBytes, stream: stream)
+            ?? throw new IOException(message: $"'{name}' exceeds {ReleaseSourceReader.MaximumManifestBytes} bytes."));
     }
     private static IEnumerable<string> PinHexes(IEnumerable<string> pins) {
         foreach (var text in pins) {

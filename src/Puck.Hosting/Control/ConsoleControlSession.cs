@@ -147,7 +147,7 @@ public sealed class ConsoleControlSession : IControlSession {
                 share: FileShare.Read
             );
 
-            if (file.Length is <= 0 or > ControlLimits.ImageBytes) {
+            if (await Puck.Confinement.FileContent.ReadAtMostAsync(cancellationToken: token, maximumBytes: ControlLimits.ImageBytes, stream: file).ConfigureAwait(continueOnCapturedContext: false) is not { Length: > 0 } png) {
                 return new(
                 id,
                 "refused",
@@ -155,12 +155,6 @@ public sealed class ConsoleControlSession : IControlSession {
                 true
             );
             }
-            var png = new byte[((int)file.Length)];
-
-            await file.ReadExactlyAsync(
-                buffer: png,
-                cancellationToken: token
-            ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
                 id,
                 "completed",

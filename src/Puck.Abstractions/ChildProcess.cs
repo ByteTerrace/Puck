@@ -14,7 +14,9 @@ namespace Puck.Abstractions;
 /// server outlives the child by many minutes. So once the child has exited, <see cref="DrainAfterExitAsync{T}"/> gives
 /// the reads <see cref="ExitDrainGrace"/> to finish, and every run ends through it.</para>
 /// <para><see cref="StartRedirected"/> starts a companion that the caller drives over its own lifetime. The caller
-/// then owns every redirected stream and must drain each one it does not close.</para>
+/// then owns every redirected stream and must drain each one it does not close, reading it through
+/// <see cref="OpenOutputReader"/> and ending the reads through <see cref="DrainAfterExitAsync(Task[], CancellationTokenSource, TimeProvider, CancellationToken)"/>
+/// once the child has exited.</para>
 /// </summary>
 public static class ChildProcess {
     /// <summary>Resolves an executable through an explicit location, PATH, then installed toolchain locations.</summary>
@@ -201,7 +203,26 @@ public static class ChildProcess {
     /// <param name="clock">The clock the grace runs on.</param>
     /// <param name="cancellationToken">Ends the grace early; pumps still settle before this method returns.</param>
     /// <returns>Each pump's result, in the order of <paramref name="pumps"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pumps"/> or <paramref name="release"/> is <see langword="null"/>.</exception>
     public static async Task<T[]> DrainAfterExitAsync<T>(Task<T>[] pumps, CancellationTokenSource release, TimeProvider clock, CancellationToken cancellationToken = default) {
+        await DrainAfterExitAsync(cancellationToken: cancellationToken, clock: clock, pumps: (Task[])pumps, release: release).ConfigureAwait(continueOnCapturedContext: false);
+        return await Task.WhenAll(tasks: pumps).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    /// <summary>Finishes reading the streams of a child that has exited, for pumps that return no result: a log copy, a
+    /// forwarder or a line observer. Waits for every pump to reach end of stream for at most
+    /// <see cref="ExitDrainGrace"/> on <paramref name="clock"/>, then cancels <paramref name="release"/>, so a pump using
+    /// <see cref="OpenOutputReader"/> consumes the remaining buffered bytes and ends. Every pump has settled when this
+    /// returns, so the caller may then dispose the readers, the process and anything the pumps write to.</summary>
+    /// <param name="pumps">The reads of the child's output streams, using <see cref="OpenOutputReader"/> with
+    /// <paramref name="release"/>'s token.</param>
+    /// <param name="release">The source of the token every pump reads with.</param>
+    /// <param name="clock">The clock the grace runs on.</param>
+    /// <param name="cancellationToken">Ends the grace early; pumps still settle before this method returns.</param>
+    /// <returns>A task that completes once every pump has; a faulted pump faults it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pumps"/> or <paramref name="release"/> is <see langword="null"/>.</exception>
+    public static async Task DrainAfterExitAsync(Task[] pumps, CancellationTokenSource release, TimeProvider clock, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(argument: pumps);
+        ArgumentNullException.ThrowIfNull(argument: release);
         var drained = Task.WhenAll(tasks: pumps);
         using var grace = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
         var expired = Task.Delay(delay: ExitDrainGrace, timeProvider: clock, cancellationToken: grace.Token);
@@ -215,7 +236,7 @@ public static class ChildProcess {
                     await drained.ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
-            return await drained.ConfigureAwait(continueOnCapturedContext: false);
+            await drained.ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             await grace.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
         }

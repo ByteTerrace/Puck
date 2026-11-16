@@ -67,34 +67,7 @@ public static class QualificationPackage {
     /// <param name="package">The package directory.</param>
     /// <param name="install">The empty or missing directory the copy goes into.</param>
     /// <returns>The number of files copied.</returns>
-    public static int Install(string package, string install) {
-        var source = Path.GetFullPath(path: package);
-        var files = 0;
-
-        foreach (var file in Directory.EnumerateFiles(
-            path: source,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: "*"
-        )) {
-            var target = Path.Combine(
-                path1: install,
-                path2: Path.GetRelativePath(
-                    path: file,
-                    relativeTo: source
-                )
-            );
-
-            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.Copy(
-                destFileName: target,
-                overwrite: false,
-                sourceFileName: file
-            );
-            files++;
-        }
-
-        return files;
-    }
+    public static int Install(string package, string install) => CliFiles.CopyDirectory(destination: install, source: Path.GetFullPath(path: package));
     /// <summary>Returns the arguments that give a World on <paramref name="backend"/> the validation layer the profile
     /// asks for: <c>--debug-layers</c> when the profile lists the backend under <c>debugLayers</c>, and nothing
     /// otherwise.</summary>
