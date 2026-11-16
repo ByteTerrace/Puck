@@ -113,6 +113,17 @@ public sealed partial class SdfProgram {
     private readonly SdfAppearanceOutline m_outline;
     private readonly uint[] m_words;
 
+    /// <summary>Gets the content identity of the pixels the program's <see cref="SdfShapeType.Glyph"/> shapes sample: the
+    /// value of the one atlas image's hash their builder laid them out against
+    /// (<see cref="Puck.Text.FontAtlasImageData.ContentHash"/>, computed from the pixels), or zero when no glyph names an
+    /// atlas that carries pixels. It is a bare value so the mesh bake's code identity, which reads it, takes in no hash
+    /// type's printing. A glyph's
+    /// instruction holds only its cell's UVs, so the pixels under them are a field input the instructions do not hold: a
+    /// mesh bake group of glyphs keys its geometry by this identity (<c>SdfMeshGeometryBuilder</c>), so new pixels under
+    /// the same UVs bake again. One texture binds for every glyph of a program (<c>SdfWorldTables.SetGlyphAtlas</c>), so
+    /// the builder refuses glyphs of two atlas images in one program.</summary>
+    public ulong GlyphAtlas { get; }
+
     /// <summary>Initializes a new instance of the <see cref="SdfProgram"/> class: the field derivation, from the field's
     /// own inputs and its appearance's <see cref="SdfAppearanceOutline"/> alone. It is the root of the mesh bake's
     /// identity (<c>SdfMeshBakeClosure.BakeRoots</c>), so it takes no appearance value and the program's appearance is
@@ -128,9 +139,12 @@ public sealed partial class SdfProgram {
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
-    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings) {
+    /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>).</param>
+    private SdfProgram(IReadOnlyList<SdfInstruction> instructions, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
+
+        GlyphAtlas = glyphAtlas;
 
         // EVERY input is snapshotted before anything reads it, and every later read goes through the snapshot. The
         // parameters are IReadOnlyList, so a caller's list can answer two reads differently (a mutation between them,

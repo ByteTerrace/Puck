@@ -3,7 +3,10 @@ namespace Puck.SignedDistance;
 public sealed partial class SdfProgram {
     /// <summary>Returns a program of some of this program's instructions, in the order given, each rewritten into the
     /// instructions <paramref name="rewrite"/> answers for it: the field one part of the program draws, such as the
-    /// instances a mesh bake group samples, evaluated alone. The excerpt keeps every material and screen surface, and the
+    /// instances a mesh bake group samples, evaluated alone on the CPU. The excerpt is a field and nothing more: it is
+    /// derived by the field constructor from this program's <see cref="SdfAppearanceOutline"/> and
+    /// <see cref="GlyphAtlas"/>, carries no appearance (reading its <see cref="Appearance"/> throws) and leaves its packed
+    /// appearance section unwritten, so evaluating it reaches no appearance code and it is never uploaded. It keeps the
     /// side-table entry (a convex polygon's vertices, a sweep's curve, a path's edges) of each shape it keeps, which
     /// follows the last instruction its source's rewrite answers; it declares no instance, so nothing culls its
     /// field.</summary>
@@ -53,11 +56,14 @@ public sealed partial class SdfProgram {
             }
         }
 
-        return Of(
-            appearance: Appearance,
+        return new SdfProgram(
+            appearance: m_outline,
             convexPolygonProfiles: polygons,
+            glyphAtlas: GlyphAtlas,
+            instances: null,
             instructions: instructions,
             paths: paths,
+            reservedPathWords: 0,
             sampledBindings: samples,
             sweepCurves: sweeps
         );
