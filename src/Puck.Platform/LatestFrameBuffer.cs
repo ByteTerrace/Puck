@@ -15,13 +15,7 @@ public sealed class LatestFrameBuffer {
     /// <summary>Gets the <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent <see cref="Publish"/>,
     /// stamped at the publish site (the grabber thread), so it shares the render pacer's clock domain; the genlock
     /// arrival signal. Zero before the first frame.</summary>
-    public long LastTimestamp {
-        get {
-            using var frame = m_frames.Read();
-
-            return frame.Value.Timestamp;
-        }
-    }
+    public long LastTimestamp => m_frames.Read(read: static (in Frame frame, long version, int state) => frame.Timestamp, state: 0);
     /// <summary>Gets a monotonically increasing counter bumped on every <see cref="Publish"/>, which lets a puller detect
     /// whether a new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
     public long Version => m_frames.Version;
@@ -52,27 +46,17 @@ public sealed class LatestFrameBuffer {
     /// <returns><see langword="true"/> if a frame was copied out; <see langword="false"/> until the first frame has
     /// arrived.</returns>
     public bool TryGetLatest(ref byte[] destination, out int width, out int height) {
-        using var lease = m_frames.Read();
-        var frame = lease.Value;
+        var result = m_frames.Read(state: destination, read: static (in Frame frame, long version, byte[] pixels) => {
+            if (version == 0L) { return (Success: false, Pixels: pixels, Width: 0, Height: 0); }
+            if (pixels.Length != frame.Pixels.Length) { pixels = new byte[frame.Pixels.Length]; }
+            frame.Pixels.CopyTo(array: pixels, index: 0);
+            return (Success: true, Pixels: pixels, Width: frame.Width, Height: frame.Height);
+        });
 
-        if (lease.Version == 0L) {
-            height = 0;
-            width = 0;
-
-            return false;
-        }
-        if (destination.Length != frame.Pixels.Length) {
-            destination = new byte[frame.Pixels.Length];
-        }
-
-        frame.Pixels.CopyTo(
-            array: destination,
-            index: 0
-        );
-        height = frame.Height;
-        width = frame.Width;
-
-        return true;
+        destination = result.Pixels;
+        width = result.Width;
+        height = result.Height;
+        return result.Success;
     }
 
     private sealed class Frame {
