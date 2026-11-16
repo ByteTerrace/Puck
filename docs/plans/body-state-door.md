@@ -538,11 +538,24 @@ when only the partner stepped **[opened]**
             }
 ```
 
+By this memo's reading no unprepared rigid owner reaches that line today: the
+contact set leaves out carried bodies, a sleeper is woken before its hit is
+recorded, and the roster prepares every awake rigid body that has a collider
+(`WorldPopulation.ResolveDynamicContacts`, `WorldPopulation.SolveRigidContacts`)
+**[inference]**. A write to a contact whose owner is not stepping does happen
+today by another path: a body that teleports or leaves its slot releases the
+contacts other bodies own with it (`WorldPopulation.ForgetRigidContacts`), and
+a restore writes slots through the same objects
+(`WorldPopulation.ApplyRigidContactImages`).
+
 So a contact's state is written from outside its owner, for an owner that may
 not be stepping, through an object graph `ref readonly` does not reach. A slot
 also mixes two kinds of field: nine that persist and a checkpoint carries
 (`FixedPairManifoldSlot.IsPersistentStateEqual` names them), and sixteen the
-solver derives again each step.
+solver derives again each step. Whether a contact was touched this step is a
+third kind: a flag on the object that only a stepping owner's release pass
+clears (`WorldPopulation.ReleaseUntouchedRigidContacts`) and that no
+checkpoint carries.
 
 **Options.**
 
@@ -599,8 +612,10 @@ body. **Where it stops.** The solver's scratch is a copy, so a store that is
 skipped loses that step's impulses for the next warm start: a visible change
 in the solve, and a law compares the stored state with the solved scratch for
 every associated contact (step D6). **The failing sequence** the review
-gave, an unprepared owner whose pair is hit, now ends in a store through the
-owner's method, which moves the owner's Contacts version and notes its slot.
+gave, an unprepared owner whose pair is hit, ends in a store through the
+owner's method, which moves the owner's Contacts version and notes its slot;
+the release of another owner's contact, which is reachable today, ends the
+same way.
 
 ### The analyzer
 
@@ -989,11 +1004,12 @@ continuation folds them.
 
 ## Determinism
 
-The simulation's values do not change in steps D1 to D11, with two named
-exceptions: a restored body carries its medium flags (D1), and a contact's
-touched flag, if it outlives its step today
-([an open question](#open-questions-and-their-owners)), stops doing so (D6).
-The hash's
+The simulation's values do not change in steps D1 to D11, with one named
+exception: a restored body carries its medium flags (D1). A contact's touched
+flag becomes the step's scratch at D6; it could outlive its step only for an
+owner that is associated and not solved, which
+[the contacts](#the-contacts) reads as unreachable today, and D6's counter of
+stores by whether the owner stepped confirms it. The hash's
 composition changes twice, each a deliberate correction under rule 4: at D1
 (the slot's bytes become section digests; the registers leave; both yaws and
 the medium flags join; the observation and the profile fold beside the
@@ -1113,8 +1129,7 @@ payoff does not need.
 
 | Question | Owner | What decides it |
 |---|---|---|
-| Which unprepared owner reaches a pair hit today (a carried rigid body is the candidate) | D6's lane | The contact-store counter split by whether the owner stepped, over the rigid scenes |
-| Whether a contact's touched flag outlives its step for such an owner today, so that a later step solves a manifold nothing associated and a restore diverges | D6's lane, before it deletes the flag | A rigid scene with a carried owner under `puck test --reproduce` on the tree before D6 |
+| Whether any owner is associated without being solved today, which this memo reads as unreachable (a carried body is not in the contact set) | D6's lane | The contact-store counter split by whether the owner stepped, over the rigid scenes: it reads zero for owners that did not step, or it names the case |
 | Whether the entry's producer, steering and cadence state is written every advanced tick | D7's lane | The filtered-compare counter for those sections |
 | How many filtered compares remain after D7, and which writers own them | D12's lane | The counter, by section |
 | Which key table and rule set changes must drop the latch's cache | D10's lane | The recompute over the rule-faults tests and a `world.reload` |
