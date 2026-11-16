@@ -43,4 +43,11 @@ public interface IRenderGraphPackageReadback {
     /// since the node then releases its recorders without waiting. The default has nothing to retire.</summary>
     /// <param name="slot">The frame slot whose previous submission completed.</param>
     void Completed(int slot) { }
+    /// <summary>Reports that the slot's previous submission never reached the queue (its fence reported
+    /// <see cref="GpuSubmissionAbandonedException"/>): nothing it recorded ran, so a result it carried never arrives and is
+    /// dropped, never read, and an object whose retirement waited on its completion keeps waiting for the slot's next
+    /// completion. The node calls it instead of <see cref="Completed"/> for every readback pass, then settles its other
+    /// slots before it records into this one again.</summary>
+    /// <param name="slot">The frame slot whose previous submission was abandoned.</param>
+    void Abandoned(int slot);
 }

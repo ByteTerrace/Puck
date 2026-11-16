@@ -27,11 +27,21 @@ internal sealed class GpuWorkCountingFence(IGpuSubmissionFence inner, GpuWorkLed
         ledger.Detach(fence: this);
     }
     /// <inheritdoc/>
+    /// <remarks>An abandoned submission (<see cref="GpuSubmissionAbandonedException"/>) never ran, so its record is dropped
+    /// rather than published, and the drained fence completes nothing at its next wait.</remarks>
     public void Wait() {
-        inner.Wait();
-
         var submission = ArmedSubmission;
         var transfers = ArmedTransfers;
+
+        try {
+            inner.Wait();
+        } catch (GpuSubmissionAbandonedException) {
+            ArmedSubmission = 0L;
+            ArmedTransfers = default;
+            ledger.Abandon(submission: submission);
+
+            throw;
+        }
 
         ArmedSubmission = 0L;
         ArmedTransfers = default;

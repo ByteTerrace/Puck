@@ -4,10 +4,11 @@ namespace Puck.Shaders;
 /// submission carrying it completed. A result is captured with its recording (<see cref="Record"/>), goes in flight when
 /// the node reports the slot submitted (<see cref="Submitted"/>), and is delivered only when the node reports that slot's
 /// submission complete (<see cref="Completed"/>), which the node does after waiting the slot and never for a submission a
-/// device loss interrupted. A capture that never reached a submission is discarded at the slot's next completion, since
-/// the node completes a slot before recording into it again. No fence is read here, and a package never receives one
-/// (<see cref="IRenderGraphPackageReadback"/>): a reusable slot fence reads signaled after an abandoned submission and
-/// after a loss's teardown drain alike. Single-threaded, on the frame thread.</summary>
+/// device loss interrupted. A submission that never reached the queue is reported abandoned instead
+/// (<see cref="Abandoned"/>), and its result is dropped. A capture that never reached a submission is discarded at the
+/// slot's next completion, since the node completes a slot before recording into it again. No fence is read here, and a
+/// package never receives one (<see cref="IRenderGraphPackageReadback"/>): only the node proves a slot, since a reusable
+/// slot fence reads signaled after a loss's teardown drain. Single-threaded, on the frame thread.</summary>
 /// <typeparam name="T">The captured result: a readback's destination and request, a publication, a submission's
 /// identities.</typeparam>
 public sealed class RenderGraphSlotResults<T> {
@@ -16,15 +17,18 @@ public sealed class RenderGraphSlotResults<T> {
     private readonly Action<T> m_complete;
     private readonly Action<T>? m_submit;
     private readonly Action<T>? m_discard;
+    private readonly Action<T>? m_abandon;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphSlotResults{T}"/> class.</summary>
     /// <param name="slots">The frames the recorder's graph keeps in flight; positive.</param>
     /// <param name="complete">Receives a result once its submission is proven complete.</param>
     /// <param name="submit">Receives a result as its recording is submitted, or null.</param>
     /// <param name="discard">Receives a capture that never reached a submission, or null.</param>
+    /// <param name="abandon">Receives a submitted result whose submission was abandoned (<see cref="Abandoned"/>), or null
+    /// for <paramref name="discard"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slots"/> is not positive.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="complete"/> is null.</exception>
-    public RenderGraphSlotResults(int slots, Action<T> complete, Action<T>? submit = null, Action<T>? discard = null) {
+    public RenderGraphSlotResults(int slots, Action<T> complete, Action<T>? submit = null, Action<T>? discard = null, Action<T>? abandon = null) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(slots);
         ArgumentNullException.ThrowIfNull(complete);
         m_recorded = new Entry[slots];
@@ -32,6 +36,7 @@ public sealed class RenderGraphSlotResults<T> {
         m_complete = complete;
         m_submit = submit;
         m_discard = discard;
+        m_abandon = abandon;
     }
 
     /// <summary>Captures a result with the slot's recording, discarding any earlier capture of the slot that never reached
@@ -71,6 +76,18 @@ public sealed class RenderGraphSlotResults<T> {
     public void Completed(int slot) {
         Withdraw(slot: slot);
         Deliver(slot: slot);
+    }
+    /// <summary>Reports the slot's previous submission abandoned: it never reached the queue, so a result it carried is
+    /// handed to the abandon callback (the discard callback when none was given), never to completion, and a capture that
+    /// never reached a submission is discarded.</summary>
+    /// <param name="slot">The frame slot whose previous submission was abandoned.</param>
+    public void Abandoned(int slot) {
+        Withdraw(slot: slot);
+        if (!m_submitted[slot].Has) { return; }
+        var submitted = m_submitted[slot].Value;
+
+        m_submitted[slot] = default;
+        (m_abandon ?? m_discard)?.Invoke(submitted);
     }
     /// <summary>Gives up every slot as the recorder is released: captures are discarded and every result still in flight
     /// goes to <paramref name="unproven"/>, never to completion.</summary>

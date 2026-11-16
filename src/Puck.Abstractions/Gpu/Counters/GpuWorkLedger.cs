@@ -224,7 +224,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
             foreach (var record in m_records) {
                 if ((record.State == RecordState.Sealed) && (record.Fence is { } fence) &&
-                    (fence.ArmedSubmission == record.Submission) && fence.IsSignaled &&
+                    (fence.ArmedSubmission == record.Submission) && ReadsSignaled(fence: fence) &&
                     ((next is null) || (record.Submission < next.Submission))) { next = record; }
             }
             if (next is null) { return; }
@@ -315,6 +315,24 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
     }
 
+    // A submission whose fence reports it abandoned is not ready: its node's wait drops its record (Abandon).
+    private static bool ReadsSignaled(GpuWorkCountingFence fence) {
+        try {
+            return fence.IsSignaled;
+        } catch (GpuSubmissionAbandonedException) {
+            return false;
+        }
+    }
+    // Drops a sealed submission that never reached the queue: its counts were never written and are never published.
+    internal void Abandon(long submission) {
+        if (submission == 0L) { return; }
+
+        foreach (var record in m_records) {
+            if ((record.State == RecordState.Sealed) && (record.Submission == submission)) {
+                record.Free();
+            }
+        }
+    }
     internal void Complete(long submission, GpuTransferCounts? transferPrefix = null) {
         Record? completed = null;
 

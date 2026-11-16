@@ -2844,17 +2844,7 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   latest submission (`RetiredGraph.ArmAfterConsumers`, through
   `HoldUntilLatestSubmission`). The change first gives those two their own
   completion (the consumer node's lease already is one), then queues the rest.
-- [low · unconfirmed] A render node that survives an abandoned slot proves it on
-  the next wait. A batch hand-off can fail without a device loss (a refused
-  `vkQueueSubmit`, a refused `ID3D12CommandQueue::Wait` ahead of the execute),
-  and its fences now report `GpuSubmissionAbandonedException` from `IsSignaled`
-  and `Wait` (`GpuBatchedSubmissionFence`). The wait that reports it drains the
-  fence, so `ShaderPipelineRenderNode.WaitSlot` throws once and retires nothing;
-  if the node is kept and waits that slot again, the drained fence returns and
-  `CompletePackageReadbacks` retires readbacks whose copies never ran. Whether a
-  frame failure keeps the node was not traced; the fix is for `WaitSlot` to
-  catch the abandonment and abandon the slot's readbacks rather than complete
-  them (`GpuSurfaceUpload.Settle` is the pattern).
+
 
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead

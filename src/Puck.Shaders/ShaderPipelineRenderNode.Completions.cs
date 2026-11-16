@@ -47,7 +47,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void FoldCompletions() {
         foreach (var render in m_pendingRenders) {
-            if ((render.Fence is { } fence) && fence.IsSignaled) {
+            if ((render.Fence is { } fence) && Signaled(fence: fence)) {
                 CompleteRenders(submission: render.Submission);
             }
         }

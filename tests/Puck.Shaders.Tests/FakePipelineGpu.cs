@@ -114,6 +114,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool RefuseNextSubmission { get; set; }
     /// <summary>Gets or sets whether the next submission reports device loss before any commands reach the queue.</summary>
     public bool LoseNextSubmission { get; set; }
+    /// <summary>Gets or sets whether the next fenced submission is abandoned, as a batch whose hand-off failed before the
+    /// queue leaves it: nothing reaches the queue, and its fence reports <see cref="GpuSubmissionAbandonedException"/>
+    /// until a wait drains it.</summary>
+    public bool AbandonNextSubmission { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
@@ -696,6 +700,12 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         if (LoseNextSubmission) { LoseNextSubmission = false; throw new DeviceLostException(message: "Injected loss before submission."); }
         if (RefuseNextSubmission) { RefuseNextSubmission = false; throw new InvalidOperationException(message: "Injected pre-submit failure."); }
+        if (AbandonNextSubmission && (fence is FakeFence abandoned)) {
+            AbandonNextSubmission = false;
+            abandoned.Abandoned = true;
+
+            return;
+        }
         Submissions++;
 
         var number = Submitted(commandBufferHandles: commandBufferHandles);
@@ -861,11 +871,19 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         // The submission the fence was last armed with, in queue order.
         public long Number;
 
+        // Whether the fence's submission never reached the queue.
+        public bool Abandoned;
+
         // The fake queue finishes every submission as it is made, unless the law holds it or stops it at a submission.
-        public bool IsSignaled => (!gpu.QueueHeld && (Number <= gpu.CompletedThrough));
+        public bool IsSignaled => (Abandoned ? throw new GpuSubmissionAbandonedException() : (!gpu.QueueHeld && (Number <= gpu.CompletedThrough)));
 
         public void Dispose() => created.Dispose();
         public void Wait() {
+            if (Abandoned) {
+                Abandoned = false;
+
+                throw new GpuSubmissionAbandonedException();
+            }
             created.Wait();
             gpu.Complete(through: Number);
         }
