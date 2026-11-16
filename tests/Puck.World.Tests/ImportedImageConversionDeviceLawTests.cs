@@ -293,7 +293,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
         );
         var pipelines = new GpuPassPipelineCache();
         var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(
-            bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
+            target: ShaderTargets.Of(hostsOnDirectX: hostsOnDirectX),
             pipelines: pipelines
         ));
 

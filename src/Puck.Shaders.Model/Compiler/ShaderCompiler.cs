@@ -435,7 +435,7 @@ public sealed partial class ShaderCompiler {
                 var target = targets[index];
                 var output = Path.Combine(
                     path1: buildRoot,
-                    path2: $"{StageName(stage: stage.Stage)}.{ExtensionOf(target: target)}.tmp"
+                    path2: $"{StageName(stage: stage.Stage)}{target.FileExtension()}.tmp"
                 );
                 var started = Stopwatch.GetTimestamp();
                 var run = await RunStepAsync(
@@ -589,7 +589,7 @@ public sealed partial class ShaderCompiler {
     private string KeyOf(string inputs) => ShaderSourceClosure.HashOf(text: ((((inputs + "|") + m_toolchain.Identity) + "|") + CacheEntryLayout));
     private string EntryPath(string key, ShaderTarget target) => Path.Combine(
         path1: m_cacheDirectory,
-        path2: $"{key}.{ExtensionOf(target: target)}"
+        path2: $"{key}{target.FileExtension()}"
     );
     // A step's measured duration is named by the stage source's file name and the step's options, not by its content, so
     // the next build of an edited kernel still knows it is long.
@@ -758,7 +758,6 @@ public sealed partial class ShaderCompiler {
             values: descriptor.Stages.Select(selector: static stage => $"{stage.Stage}|{stage.Path}|{stage.EntryPoint}|{stage.Source}")
         );
     private static string FirstPath(ShaderCompilationRequest descriptor) => descriptor.Stages[0].Path;
-    private static string ExtensionOf(ShaderTarget target) => ((target == ShaderTarget.Spirv) ? "spv" : "dxil");
     private static string StageName(ShaderStage stage) => stage switch { ShaderStage.Vertex => "vert", ShaderStage.Fragment => "frag", _ => "comp" };
     private static void AddToolFailure(List<ShaderDiagnostic> diagnostics, string tool, int exitCode, string output) {
         var detail = string.Join(

@@ -5,9 +5,9 @@ using Puck.Maths;
 namespace Puck.Shaders;
 
 /// <summary>
-/// Generates the include that carries <see cref="LowDiscrepancy"/>'s 32-bit R2 increments to the engine package's
-/// kernels, so a kernel that dithers by the R2 sequence adds the identical pattern the CPU reference computes. The text
-/// is a pure function of those two constants, with LF line endings.
+/// Generates the include that carries <see cref="LowDiscrepancy"/>'s 32-bit R2 increments, and the dither they make, to
+/// every kernel, so a kernel that dithers by the R2 sequence adds the identical pattern the CPU reference computes. The
+/// text is a pure function of those two constants, with LF line endings.
 /// </summary>
 public static class ShaderLowDiscrepancyHlsl {
     /// <summary>The generated include's repository-relative path, with forward slashes.</summary>
@@ -15,7 +15,7 @@ public static class ShaderLowDiscrepancyHlsl {
 
     /// <summary>Generates the include.</summary>
     /// <returns>The HLSL text: <c>PuckR2AlphaX</c> and <c>PuckR2AlphaY</c>, <see cref="LowDiscrepancy.R2AlphaXQ32"/> and
-    /// <see cref="LowDiscrepancy.R2AlphaYQ32"/> as <c>uint</c> constants.</returns>
+    /// <see cref="LowDiscrepancy.R2AlphaYQ32"/> as <c>uint</c> constants, and <c>puckR2Dither</c>, the sample they make.</returns>
     public static string Generate() {
         var text = new StringBuilder();
 
@@ -30,6 +30,14 @@ public static class ShaderLowDiscrepancyHlsl {
         Line(line: "// index * alpha product per axis is the sequence's fixed-point point.");
         Constant(name: "PuckR2AlphaX", value: LowDiscrepancy.R2AlphaXQ32);
         Constant(name: "PuckR2AlphaY", value: LowDiscrepancy.R2AlphaYQ32);
+        Line();
+        Line(line: "// One R2 dither sample in [0, 1] from integer pixel coordinates, in fixed point so both backends add the identical");
+        Line(line: "// pattern: the unsigned product wraps mod 2^32, which is the fractional part of the additive recurrence.");
+        Line(line: "precise float puckR2Dither(uint2 pixel) {");
+        Line(line: "    uint h = ((pixel.x * PuckR2AlphaX) + (pixel.y * PuckR2AlphaY));");
+        Line();
+        Line(line: "    return ((float)h * (1.0 / 4294967296.0));");
+        Line(line: "}");
         Line();
         Line(line: "#endif");
 

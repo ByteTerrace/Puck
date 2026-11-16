@@ -1,4 +1,4 @@
-using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -26,7 +26,7 @@ public static class SdfWorldRenderBuilder {
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
             // The views built over the same cache read this same deployed set, so a boot reads the kernels once.
-            kernels: pipelines.LoadDeployed(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
+            kernels: pipelines.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: spec.HostsOnDirectX)),
             name: spec.Name,
             pipelines: pipelines,
             programWordCapacity: spec.ProgramWordCapacity,
@@ -35,8 +35,4 @@ public static class SdfWorldRenderBuilder {
             width: spec.Width
         );
     }
-    /// <summary>Returns the kernel bytecode extension for a resolved host backend.</summary>
-    /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
-    /// <returns>The extension of the backend's kernel bytecode files, with its leading dot.</returns>
-    public static string BytecodeExtension(bool hostsOnDirectX) => ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
 }

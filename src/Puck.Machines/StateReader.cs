@@ -52,10 +52,10 @@ public sealed class StateReader {
     }
 
     /// <summary>Bulk-reads raw bytes into a span of unmanaged values — the memcpy counterpart of
-    /// <see cref="StateWriter.WriteBlock{T}"/>, filling <paramref name="destination"/> completely.</summary>
+    /// <see cref="Puck.Assets.LittleEndianWriter.WriteRaw{T}"/>, filling <paramref name="destination"/> completely.</summary>
     /// <typeparam name="T">The unmanaged element type.</typeparam>
     /// <param name="destination">The span to fill.</param>
-    public void ReadBlock<T>(Span<T> destination) where T : unmanaged => ReadBytes(destination: MemoryMarshal.AsBytes(span: destination));
+    public void ReadRaw<T>(Span<T> destination) where T : unmanaged => ReadBytes(destination: MemoryMarshal.AsBytes(span: destination));
     /// <summary>Reads a boolean written as one byte.</summary>
     /// <returns>The boolean value.</returns>
     public bool ReadBoolean() => (ReadByte() != 0);

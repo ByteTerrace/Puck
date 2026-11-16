@@ -18,6 +18,9 @@ internal static unsafe class SdfMeshStoreCodec {
     internal const int HeaderBytes = 28;
 
     private const int ChecksumBytes = 16;
+    // The width of each coordinate of a stored octahedral normal (SdfOctahedral.PackSigned): the format's own, not the
+    // renderer's visibility record's, so a change to either leaves the other's bytes alone.
+    private const int OctahedralBits = 16;
 
     internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
@@ -170,8 +173,7 @@ internal static unsafe class SdfMeshStoreCodec {
             for (var index = 0; (index < words.Length); index++) {
                 var normal = mesh.Normals.Span[index];
 
-                var (x, y) = SdfOctahedral.Encode(direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
-                words[index] = ((uint)((ushort)((short)Math.Round(a: (x * 32767))))) | (((uint)((ushort)((short)Math.Round(a: (y * 32767))))) << 16);
+                words[index] = SdfOctahedral.PackSigned(bits: OctahedralBits, direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
             }
             WritePlane(width: 4, words: words, writer: writer);
         } else {
@@ -332,7 +334,7 @@ internal static unsafe class SdfMeshStoreCodec {
 
         for (var index = 0; (index < plane.Count); index++) {
             var word = previous = Add4(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous);
-            var normal = SdfOctahedral.Decode(x: (((short)(word & 65535)) / 32767.0), y: (((short)(word >> 16)) / 32767.0));
+            var normal = SdfOctahedral.UnpackSigned(bits: OctahedralBits, word: word);
 
             destination[index] = new Vector3(x: ((float)normal.X), y: ((float)normal.Y), z: ((float)normal.Z));
         }

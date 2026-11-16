@@ -17,10 +17,10 @@ public sealed partial class SdfFieldEvaluator {
             case SdfOp.Shear: {
                     // The target moves by the cubic of the driver, taken over the driver's interval.
                     var target = (int)instruction.Shape;
-                    var t = Component(axis: (int)instruction.Blend, box: local);
+                    var t = local[((int)instruction.Blend)];
                     var offset = ((((Point(value: instruction.Data0Z) * t) + Point(value: instruction.Data0Y)) * t) + Point(value: instruction.Data0X)) * t;
 
-                    return WithComponent(axis: target, box: local, value: (Component(axis: target, box: local) + offset));
+                    return local.With(axis: target, value: (local[target] + offset));
                 }
             case SdfOp.GaussianPush: {
                     // The weight lies in [0, 1], so each component moves by at most its push.
@@ -36,9 +36,9 @@ public sealed partial class SdfFieldEvaluator {
                     // A turn and a reflection in the fold plane keep the radius: both folded coordinates lie within the
                     // largest radius the box's (u, v) rectangle reaches.
                     var (u, v) = PolarAxes(axis: instruction.Shape);
-                    var turned = Spread(magnitude: FixedInterval.Magnitude(x: Component(axis: u, box: local), y: Component(axis: v, box: local)));
+                    var turned = Spread(magnitude: FixedInterval.Magnitude(x: local[u], y: local[v]));
 
-                    return WithComponents(box: local, u: u, uValue: turned, v: v, vValue: turned);
+                    return local.With(axis: u, value: turned).With(axis: v, value: turned);
                 }
             case SdfOp.WallpaperFold: {
                     return WallpaperBounds(instruction: in instruction, local: local);
@@ -75,8 +75,8 @@ public sealed partial class SdfFieldEvaluator {
     private static IntervalVector3 WallpaperBounds(in CompiledInstruction instruction, IntervalVector3 local) {
         var group = (SdfWallpaperGroup)instruction.Shape;
         var (axisA, axisB) = (((instruction.Blend == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((instruction.Blend == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
-        var qa = Component(axis: axisA, box: local);
-        var qb = Component(axis: axisB, box: local);
+        var qa = local[axisA];
+        var qb = local[axisB];
         FixedInterval folded;
 
         if (group >= SdfWallpaperGroup.P3) {
@@ -94,7 +94,7 @@ public sealed partial class SdfFieldEvaluator {
             folded = (Spread(magnitude: FixedInterval.Magnitude(x: ra, y: rb)) + new FixedInterval(lower: -shift, upper: shift));
         }
 
-        return WithComponents(box: local, u: axisA, uValue: folded, v: axisB, vValue: folded);
+        return local.With(axis: axisA, value: folded).With(axis: axisB, value: folded);
     }
     // The radius folded to its shell: the shell index runs between the shells of the box's least and greatest radius,
     // the folded point lies within the prototype shell's outer radius, and the candidate scale runs over those shells.
@@ -159,15 +159,5 @@ public sealed partial class SdfFieldEvaluator {
         X: (box.X + new FixedInterval(lower: -reach.X, upper: reach.X)),
         Y: (box.Y + new FixedInterval(lower: -reach.Y, upper: reach.Y)),
         Z: (box.Z + new FixedInterval(lower: -reach.Z, upper: reach.Z))
-    );
-    private static IntervalVector3 WithComponent(IntervalVector3 box, int axis, FixedInterval value) => new(
-        X: ((axis == 0) ? value : box.X),
-        Y: ((axis == 1) ? value : box.Y),
-        Z: ((axis == 2) ? value : box.Z)
-    );
-    private static IntervalVector3 WithComponents(IntervalVector3 box, int u, FixedInterval uValue, int v, FixedInterval vValue) => new(
-        X: ((u == 0) ? uValue : ((v == 0) ? vValue : box.X)),
-        Y: ((u == 1) ? uValue : ((v == 1) ? vValue : box.Y)),
-        Z: ((u == 2) ? uValue : ((v == 2) ? vValue : box.Z))
     );
 }

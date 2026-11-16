@@ -111,7 +111,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             }
             path = args[2];
             next = 3;
-            offset = Component(axis: axis, value: position);
+            offset = position[((int)axis)];
             if ((args.Count > (next + 1)) && string.Equals(a: args[next], b: "offset", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 if (!TryNumber(token: args[(next + 1)], value: out var shift)) {
                     refusal = CommandResult.Error(output: $"[{Verb}: offset expects a finite number of metres, got '{args[(next + 1)]}']");
@@ -283,11 +283,6 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     }
     private static bool TryNumber(string token, out float value) =>
         (float.TryParse(s: token, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) && float.IsFinite(f: value));
-    private static float Component(SdfAxis axis, Vector3 value) => axis switch {
-        SdfAxis.X => value.X,
-        SdfAxis.Y => value.Y,
-        _ => value.Z,
-    };
     // A point's (u, v) on a plane normal to the axis (SdfFieldSlice's convention).
     private static Vector2 Plane(SdfAxis axis, Vector3 value) => axis switch {
         SdfAxis.X => new Vector2(x: value.Z, y: value.Y),

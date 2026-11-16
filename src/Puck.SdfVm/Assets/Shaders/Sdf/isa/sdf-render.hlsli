@@ -68,10 +68,6 @@
 #define SDF_LIGHT_MINIMUM_DISTANCE       0.05
 #define SDF_LUMINANCE_CEILING            65000.0
 #define SDF_WINDOW_ADAPTATION            0.75
-#define SDF_LUMINANCE_RED                0.2126
-#define SDF_LUMINANCE_GREEN              0.7152
-#define SDF_LUMINANCE_BLUE               0.0722
-#define SDF_LUMINANCE                    float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)
 #define SDF_LOCAL_ADAPTATION_RANGE       6.0
 #define SDF_LOCAL_REFLECTANCE            0.4
 #define SDF_REFERENCE_WHITE              0.26041666

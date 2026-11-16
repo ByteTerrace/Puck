@@ -1,6 +1,7 @@
 using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Assets;
 using Puck.Storage;
 using Puck.World.Protocol;
 
@@ -348,6 +349,9 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     }
 
                     owner.m_embeddingConnections.Add(item: new EmbeddingConnectionState {
+                        Cache = ((embedding.CacheEntries > 0)
+                            ? new ContentAddressedLruCache<string, StateVector>(capacity: embedding.CacheEntries)
+                            : null),
                         Client = client,
                         Settings = embedding,
                         Source = source,

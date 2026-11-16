@@ -67,7 +67,7 @@ public sealed class SdfShadeKernelsSourceLawTests {
     [Fact]
     public void TheDeployedKernelsCarryTheSourcesASpecializationPlansFrom() {
         using var scratch = new TemporaryDirectory(prefix: "puck-shade-provenance-");
-        var deployed = SdfKernelSet.Load(bytecodeExtension: ".spv");
+        var deployed = SdfKernelSet.Load(target: ShaderTarget.Spirv);
         var sources = SdfShadeKernels.Specialized.Select(selector: kernel => deployed.SourceOf(kernel: kernel)).ToArray();
 
         Assert.All(collection: sources, action: source => Assert.NotNull(source));

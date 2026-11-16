@@ -15,7 +15,7 @@ public readonly struct StateLoadTransfer : IStateTransfer {
     }
 
     /// <inheritdoc/>
-    public void Block<T>(Span<T> values) where T : unmanaged => m_reader.ReadBlock<T>(destination: values);
+    public void Block<T>(Span<T> values) where T : unmanaged => m_reader.ReadRaw<T>(destination: values);
     /// <inheritdoc/>
     public void Boolean(ref bool value) => value = m_reader.ReadBoolean();
     /// <inheritdoc/>

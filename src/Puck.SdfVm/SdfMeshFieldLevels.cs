@@ -827,11 +827,11 @@ public sealed class SdfMeshFieldLevels {
     // box itself where none is.
     private static (Vector3 Low, Vector3 High) PieceBox(ISdfMeshLevelField field, Vector3 low, Vector3 high, float cell) {
         var extent = (high - low);
-        var dims = (X: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.X / cell)) + 1)), Y: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.Y / cell)) + 1)), Z: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.Z / cell)) + 1)));
+        var dims = SdfMeshLattice.Dims(cell: cell, extent: extent);
         var points = new Vector3[((dims.X * dims.Y) * dims.Z)];
 
         for (var index = 0; (index < points.Length); index++) {
-            points[index] = (low + (new Vector3(x: (index % dims.X), y: ((index / dims.X) % dims.Y), z: (index / (dims.X * dims.Y))) * cell));
+            points[index] = SdfMeshLattice.PointOf(cell: cell, dims: dims, index: index, origin: low);
         }
 
         var values = new float[points.Length];

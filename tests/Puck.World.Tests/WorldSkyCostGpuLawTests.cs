@@ -20,21 +20,21 @@ public sealed class WorldSkyCostGpuLawTests {
     public void VulkanSkyCostPixelsLoseTheirEvaluationWhenTheGradientIsMuted() {
         using var device = HeadlessVulkanDevice.Create(nameof(WorldSkyCostGpuLawTests));
 
-        Verify(device: device, extension: ".spv");
+        Verify(device: device, target: ShaderTarget.Spirv);
     }
     [Fact]
     public void DirectXSkyCostPixelsLoseTheirEvaluationWhenTheGradientIsMuted() {
         using var device = DirectXTestDevices.Hardware();
 
-        Verify(device: device, extension: ".dxil");
+        Verify(device: device, target: ShaderTarget.Dxil);
     }
 
-    private static void Verify(IGpuDeviceContext device, string extension) {
+    private static void Verify(IGpuDeviceContext device, ShaderTarget target) {
         using var files = new TemporaryDirectory();
         var source = new Source();
         var cache = new GpuPassPipelineCache();
-        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: cache), new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: cache));
-        using var view = new SdfTestView(new SdfWorldResidency(pipelines, source, pipelines.LoadDeployed(bytecodeExtension: extension), SdfTestView.Instance, 32, 32), pipelines, device, 32, hostsOnDirectX: (extension == ".dxil"));
+        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(target: target, pipelines: cache), new SdfMeshRasterPass(target: target, pipelines: cache));
+        using var view = new SdfTestView(new SdfWorldResidency(pipelines, source, pipelines.LoadDeployed(target: target), SdfTestView.Instance, 32, 32), pipelines, device, 32, hostsOnDirectX: (target == ShaderTarget.Dxil));
 
         view.Residency.DebugMode = DebugViewModes.SkyCost;
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,

@@ -105,8 +105,8 @@ public static class SdfDomainOps {
     private static SdfProgramBuilder ApplyPolar(SdfProgramBuilder chain, SdfDomainOp.Polar polar) {
         var (u, v) = SdfDomainOp.Polar.PlaneOf(axis: polar.Axis);
         var relative = (polar.Subject - polar.Origin);
-        var planeU = Component(vector: relative, index: u);
-        var planeV = Component(vector: relative, index: v);
+        var planeU = relative[u];
+        var planeV = relative[v];
         var angle = (((planeU != 0f) || (planeV != 0f))
             ? (MathF.Atan2(y: planeV, x: planeU) * ((polar.Axis is SdfAxis.X or SdfAxis.Z) ? 1f : -1f))
             : 0f);
@@ -132,12 +132,6 @@ public static class SdfDomainOps {
         }
 
         return chain.Translate(offset: -polar.Origin);
-
-        static float Component(Vector3 vector, int index) => index switch {
-            0 => vector.X,
-            1 => vector.Y,
-            _ => vector.Z,
-        };
     }
     private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, SdfDomainOp op) {
         return op switch {

@@ -25,7 +25,7 @@ checked, which does not establish the surrounding claims.
 6. **Do the steps measure before committing?**
    - **No (Finding 10).** Step 1 deletes `applyWeathering` before Step 2 measures Tier 1; Step 2 measures Tier 1 on `weathered` alone while the other 4 fixed-function layers (`paint`, `inset`, `flow`, `cel`) remain compiled in `sdf-light-stage.hlsli`, biasing both the register count and runtime delta; and Step 5 adds `SdfShadeDispatch` (`MaxWork`) *after* Step 4 may have declined binning.
 7. **What did the memo miss that would cost a rewrite later?**
-   - **Glass pass flow & contact reveal** ([`sdf-glass-stage.hlsli:260-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L260-L388)), **static-copy object-space flow velocity transform** ([`shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101)), and **analytic gradient noise `sdfLatticeNoiseGradient3`** ([`sdf-noise.hlsli:160-188`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L160-L188)) (Finding 2).
+   - **Glass pass flow & contact reveal** ([`sdf-glass-stage.hlsli:260-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L260-L388)), **static-copy object-space flow velocity transform** ([`shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101)), and **analytic gradient noise `sdfLatticeNoiseGradient3`** ([`sdf-noise.hlsli:150-178`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L150-L178)) (Finding 2).
    - **Cel shading (`SdfToon`) is per-light + post-light**, not a pre-light surface layer, plus `row 25.w` holds glass `ShadowDensity` and `passGroup` holds live `world.toon` (Finding 3).
    - **`wrap` and `normal` outputs in `views` break `sdfSurfaceStage`'s shadow-cascade unqueried gate (`SDF_SHADOW_UNQUERIED = 255`)**, leaking 100 klx sunlight indoors (Finding 4).
    - **GI probe relight (`SdfMeshIrradiance.Shade` / `sdfProbeShade`)** reads only scalar base material fields (`Albedo`, `Metal`, `Bleed`, `Wrap`, `Emissive`), so procedural materials whose base color or emission lives in `shade` bounce black or wrong in indirect lighting (Finding 9).
@@ -39,7 +39,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Blocker
 - **Memo section:** `§3.3` ([`docs/plans/author-shaders.md:471-473`](../../../docs/plans/author-shaders.md)), `§3.4` ([`docs/plans/author-shaders.md:503-526`](../../../docs/plans/author-shaders.md)), `§4` Door 2 ([`docs/plans/author-shaders.md:679-681`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`.claude/skills/rendering/SKILL.md:859`](../../../.claude/skills/rendering/SKILL.md):
+  - [`.claude/skills/rendering/SKILL.md:866`](../../../.claude/skills/rendering/SKILL.md):
     ```markdown
     - **Index local arrays by constants only.** NVIDIA's Vulkan compiler keeps a dynamically indexed local array, a `static const` table included, in per-thread local memory. Unroll the loop to the array's length and guard the body (`if (i < count)`), or pick the element by comparison; DXC's SPIR-V unroller leaves a loop with a `break` rolled. RenderDoc's pipeline-executable statistics show the spill as "Local Memory Size" (the low 32 bits).
     ```
@@ -67,7 +67,7 @@ checked, which does not establish the surrounding claims.
     // alike.
     ```
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli:260-274`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L260-L274), [`298`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L298), [`320`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L320), [`385-388`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-glass-stage.hlsli#L385-L388):
-  - [`src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli:160-188`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L160-L188):
+  - [`src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli:150-178`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-noise.hlsli#L150-L178):
   - [`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli:95-101`](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/shade-flow.hlsli#L95-L101):
 - **Failing case:**
   1. **Glass pass (`sdf-glass.comp.hlsl`) breaks when `SdfFlow` and rows 27–30 are deleted:** Memo §3.1 states that `shade` runs only in `views` (`sdfLightStage`) and *"does not run in ... the glass raster"*, overlooking `sdf-glass.comp.hlsl` (`glass-shade` compute pass), which calls `sdfShadeFlow` on up to two glass interfaces (`near` and `far`) per pixel, passes `sdfGlassContact(material, (opaque - t))` as the `contact` argument, restores `material.roughness = roughness` prior to computing glass frost while keeping the flow-revealed `material.metal` and `material.roughness` for the foam/reveal lobe, and reads `material.flowColor.rgb` (row 29) for `cover`! Deleting `SdfFlow`, rows 27–30, and `shade-flow.hlsli` in Step 6 breaks glass water/flow and glass contact foam (`SdfGlass.HasContact` in [`SdfMaterial.cs:71-73`](../../../src/Puck.SignedDistance/SdfMaterial.cs#L71-L73)).

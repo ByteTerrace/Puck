@@ -107,8 +107,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 ? ".comp.dxil"
                 : ".comp.spv"))
         ));
-        var lease = context.Pipelines.Acquire(
-            device: context.Device,
+
+        return await PassPipelineBuild.AcquireAsync(
+            cancellationToken: cancellationToken,
+            context: context,
             key: GpuPassPipelineKey.OfCompute(
                 bytecode: bytecode,
                 description: new GpuComputePipelineDescription(
@@ -117,18 +119,9 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                     Name: m_package,
                     PushConstantBinding: null
                 )
-            )
-        );
-
-        try {
-            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        } catch {
-            lease.Release();
-
-            throw;
-        }
-
-        return new Built(lease: lease);
+            ),
+            package: m_package
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -138,14 +131,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        if (built is not Built objects) {
-            built?.Dispose();
-
-            throw new ArgumentException(
-                message: $"Package '{m_package}' was handed another package's build.",
-                paramName: nameof(built)
-            );
-        }
+        var objects = PassPipelineBuild.Of(
+            built: built,
+            package: m_package
+        );
 
         return new Recorder(
             built: objects,
@@ -156,18 +145,11 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         );
     }
 
-    // The module and pipeline one pass's build creates, which its recorder owns once created.
-    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
-        public IGpuComputePipeline Pipeline { get; } = lease.Current!.Compute!;
-
-        public void Dispose() =>
-            lease.Release();
-    }
     // Records one conversion. The pass set is per frame slot, since the instance waits only that slot's previous
     // submission before recording into it, and the region's buffer is the slot's own; an imported image is bound again
     // every frame, since its producer hands out another slot's image as it publishes.
     private sealed class Recorder : IRenderGraphPackageRecorder {
-        private readonly Built m_built;
+        private readonly PassPipelineBuild m_built;
         private readonly uint m_image;
         private readonly bool m_imported;
         private readonly uint m_input;
@@ -179,7 +161,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
 
         private bool m_disposed;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, bool image, float paperWhiteNits) {
+        public Recorder(RenderGraphPackageRecorderContext context, PassPipelineBuild built, RenderGraphPackageGroups groups, bool image, float paperWhiteNits) {
             m_built = built;
             m_imported = image;
             m_paperWhiteNits = paperWhiteNits;

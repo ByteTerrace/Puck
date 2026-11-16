@@ -2,9 +2,10 @@ using Puck.Abstractions.Machines;
 
 namespace Puck.HumbleGamingDeck;
 
-/// <summary>Folds a neutral <see cref="MachinePadState"/> to a standard controller's buttons, with the same positional
-/// mapping the bricks use: the bottom face button is A, the right one B, Back is Select, and the d-pad or the left stick
-/// past <see cref="MachineInputThresholds.StickDirection"/> is the control pad.</summary>
+/// <summary>Folds a neutral <see cref="MachinePadState"/> to a standard controller's buttons through the same
+/// <see cref="MachineActionButtons"/> and <see cref="MachineDirections"/> the bricks use: the bottom face button is A,
+/// the right one B, Back is Select, and the d-pad or the left stick past
+/// <see cref="MachineInputThresholds.StickDirection"/> is the control pad.</summary>
 public static class HgdPad {
     /// <summary>Returns the buttons a pad image holds.</summary>
     /// <param name="pad">The neutral pad image.</param>
@@ -26,16 +27,19 @@ public static class HgdPad {
         if (directions.Right) {
             buttons |= HgdButtons.Right;
         }
-        if (pad.Buttons.HasFlag(flag: MachineButtons.South)) {
+
+        var actions = MachineActionButtons.From(pad: in pad);
+
+        if (actions.A) {
             buttons |= HgdButtons.A;
         }
-        if (pad.Buttons.HasFlag(flag: MachineButtons.East)) {
+        if (actions.B) {
             buttons |= HgdButtons.B;
         }
-        if (pad.Buttons.HasFlag(flag: MachineButtons.Start)) {
+        if (actions.Start) {
             buttons |= HgdButtons.Start;
         }
-        if (pad.Buttons.HasFlag(flag: MachineButtons.Back)) {
+        if (actions.Select) {
             buttons |= HgdButtons.Select;
         }
 
