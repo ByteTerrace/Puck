@@ -284,58 +284,31 @@ verbs:
 
 ## Cel shading
 
-Cel shading is a style per material since step 1
-([the handbook](../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)):
-a palette row's `toon` (`ToonStyleDocument`, `SdfMaterial.Toon`) shades its
-material, every other material inherits the world's default `render.toon`, and
-`world.toon` is the live lever over that default. A style holds a band
-threshold and softness, a `shadowTint` that recolours indirect light and sky
-ambient, distance-faded outlines, a bounded toon specular, an exposure
-shoulder and its band shape; the standard authors `celStyle`, `celHardStyle`
-and `continuousStyle` in `worlds/standard/styles.puck`, and the gallery's
-level 3 STYLES row shows them beside continuous materials. Before step 1 it was
-one per-world setting that banded `saturate(cosine) × saturate(visibility)` in
-one `smoothstep`, collapsing the penumbra into the band's edge, and dropped rim
-light, the environment reflection and point-light ambient occlusion; the
-research round's shadows and stylized-lighting reports both flagged it. Four decisions place cel shading in
-this plan:
+Cel shading is parked (the owner's ruling,
+[recorded in the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
+it stays off in the debug world, and no step here turns it on or judges a place
+under it until the owner raises it again. The mechanism this plan built stays:
+a style per material with the world's default, `band(cosine) × visibility` with
+the penumbra kept, and rim light, reflections and ambient occlusion surviving
+the band
+([the handbook](../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)).
 
-1. **Banding preserves visibility.** The band shapes the lighting response
-   and the shadow stays a separate factor: `band(cosine) × visibility`, so the
-   penumbra's softness and the visibility's colour survive under the band, and
-   `band(cosine × visibility)` remains available as a second authored shape
-   for a harder look. Rim light, the environment reflection and ambient
-   occlusion stay in the toon response as terms a style may scale, never as
-   terms the mode discards. This is part of step 1, direct-light correctness,
-   because the same contract (query where the response is positive, filter
-   what was queried) decides both.
-2. **Cel shading is an authored style layer, not a world toggle.** The
-   mechanism is one lighting path (decisions 1 to 5) with a style response
-   applied per material or per style: a material's palette row or an authored
-   style in `worlds/standard/` opts into banding, its threshold and softness,
-   its shadow tint, its outline and its specular shape, and the world document
-   supplies the default style a material inherits (the owner's ruling: a style per material, not one look per world). One scene can then mix
-   painterly foliage, cel-shaded characters and continuous screens, as the
-   Wind Waker direction asks. `render.toon` and `world.toon` become the
-   world's default style and the live lever that overrides it, with the same
-   fields, so a document that sets `render.toon` today keeps its look. The
-   pass-block tuning joins the lighting cadence signature as it does now and
-   never enters the bake closure.
-3. **GI feeds the style.** The band reads the lit surface after the volume,
-   the bent-normal AO and the sky-light cube have supplied their light: the
-   shadow band's colour comes from the probes' indirect bounce and the sky
-   tint along the bent normal, multiplied by the style's tint, rather than from
-   a flat `ShadowTint` alone. A room's shadow band warms from its walls and a
-   lawn's cools from the sky because the volume says so, which is the look
-   the art direction describes (coloured shadows, never black) and which flat
-   bands cannot give. This lands with step 2, when the relight makes that
-   light live under a moving sun, and is the authored `bleed`, `receive` and
-   indirect-tint path reading through the style, not a second lighting model.
-4. **Outlines are checked against the meadow and the portals.** The depth and
-   normal edge test runs before temporal resolve, so thousands of animated
-   blades are the stress case for ink shimmer and portal pictures for ink
-   bleeding onto a picture the style must leave alone. The meadow's blades and
-   the painting wing's portals are step 4's outline check, beside the AO's.
+The cel-specific work that waits with it, kept here so it is not lost:
+
+- **The band under indirect light.** Indoors a banded material is lit mostly
+  by the traced bounce, which a style tints as its shadow band, so it reads as
+  its shadow tone. The designed answer is that the band's colour comes from the
+  probes' bounce and the sky tint along the bent normal, multiplied by the
+  style's tint, through the authored `bleed`, `receive` and indirect-tint path
+  and not a second lighting model. Whether the hall's band should warm under
+  its white lamps is the style's authoring.
+- **Outlines against the meadow and the portals.** The depth and normal edge
+  test runs before the temporal resolve, so thousands of animated blades are
+  the stress case for ink shimmer, and portal pictures for ink bleeding onto a
+  picture the style must leave alone.
+- **A dawn leg.** With the sun near the horizon the standard style's threshold
+  puts every horizontal surface in the shadow band, so a penumbra check under a
+  cel style needs a style whose threshold sits below the low sun's cosine.
 
 ## The gaps the round named
 

@@ -31,10 +31,14 @@ texture reads costs about the same, but loses the scene's materials and breaks
 the avatar's composite. The frame-rate bar is read on a quiet machine
 ([below](#limits-price-the-mesh-pipeline-not-the-interpreter)). Interpreter
 tuning stops; the specialization plan is withdrawn.
-Curvature shading, the field's partial silhouette coverage and per-pixel
-material blending at smooth seams do not survive the bake: the mesh carries no
-curvature, a rasterized pixel is covered or not, and the bake point-samples a
-quad's winning material.
+The field's partial silhouette coverage and per-pixel material blending at
+smooth seams do not survive the bake: a rasterized pixel is covered or not, and
+the bake point-samples a quad's winning material. Curvature survives as an
+estimate: the surface pass derives mean curvature from the baked vertex normals
+(`sdfMeshMeanCurvature`) into the visibility record, where curvature shading,
+edge weathering and an authored program's `surface.curvature` read it. It
+describes the baked normal field, so a feature finer than the bake's cell
+contributes none.
 
 ## Limits price the mesh pipeline, not the interpreter
 
@@ -70,11 +74,9 @@ price what the mesh pipeline costs instead:
 - **Machine budgets are bytes.** Mesh residency and the geometry cache are
   sized from the machine and evicted by size and age, never cleared
   wholesale and never refused on a miss.
-- **Performance is read, not ledgered.** The targets at the highest quality:
-  the RTX 2060 and RTX 4070 at 60 FPS, every frame under 16.7 ms, and the Steam
-  Deck at 45 FPS, every frame under 22.2 ms. Read the worst frame on a quiet machine,
-  with GPU counts beside it. A lower tier, a coarser snap or a frame of latency
-  is never the fix for a missed bar.
+- **Performance is read, not ledgered.** [The frame-rate
+  bar](#the-pipeline-foundation) is the worst frame at the highest quality,
+  read on a quiet machine with GPU counts beside it.
 
 ## Bloom is a camera's scatter, applied once before tonemapping
 
@@ -115,8 +117,16 @@ price what the mesh pipeline costs instead:
 
 ## A light is shadowed wherever it lights, and cel shading is a style per material
 
-The [illumination plan](../plans/illumination.md#cel-shading) settled both; the
-owner ruled the second (a style per material, not one look per world).
+The illumination research round settled both; the owner ruled the second (a
+style per material, not one look per world).
+
+**Cel shading is parked (the owner's ruling).** It stays off in the debug
+world: no further attempt at the treatment and no step that turns it on and
+judges every place under it, until the owner raises it again. The mechanism
+below stays built and stays an author's to use, and the one piece of work that
+lands on its own is the fix to `world.toon off`. The cel-specific work the
+[illumination plan](../plans/illumination.md#cel-shading) had scheduled waits
+with it.
 
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side
@@ -170,6 +180,165 @@ owner ruled the second (a style per material, not one look per world).
   in the standard package (`worlds/standard/styles.puck`), never an engine
   default, and the style rows live in the material record beside `wrap`,
   `fill` and `receive`, the material system there already is.
+- **A style can follow state.** A palette row's `toonSelect` binds its style to
+  a state cell, so a command that writes the cell swaps the look with no
+  rebake. The Moth supports both cel and plain styles this way, swappable live
+  for playtesting as binding layouts are (the owner's ruling).
+- **The style becomes an authored program.** Under
+  [authored shading](#authored-shading) the banding is the standard's `cel`
+  program, the world default is `render.shade` with `world.shade default` as
+  its live lever, and the fixed toon rows, `render.toon`, `world.toon` and
+  `toonSelect` are deleted when the layers migrate
+  ([the plan's step 6](../plans/author-shaders.md#the-remaining-steps), which
+  names the state-bound successor). The outline stays engine code with its
+  style row. This entry is rewritten when that step lands.
+
+
+## Authored shading
+
+Authors bring their own shading as **authored shading programs**, never as
+shader source (the owner's ruling puts author shaders in scope: AGENTS.md,
+"Authors rule"). An author writes a `shade` program on a palette slot in
+`.puck` against a fixed surface interface. `SdfShadeProgram.Compile` lowers it
+to one canonical op stream, which the shading kernels interpret at once and
+the engine specializes in the background into a kernel of its own, a derived
+product identified from its inputs.
+[The authored-shading reference](../../.claude/skills/rendering/references/authored-shading.md)
+owns the implemented contract and [the plan](../plans/author-shaders.md) the
+remaining steps; the research round's sources and its two citation checks are
+[beside the plan](../plans/author-shaders/README.md) while it is open.
+
+**A program, not source.** Every surveyed engine takes shader source somewhere
+(Unreal's custom node, Unity's custom function node, Godot's shading language,
+Bevy's per-material WGSL); a few lower a program of their own (Destiny's TFX
+expressions, MaterialX) or expose parameters alone (Dreams). Puck takes the
+program, for reasons that are its own rulings:
+
+- *Cost is attributed before the GPU sees it.* A program the engine lowers has
+  a static cost the compiler counts and `world.budget` prints. Raw source has
+  none, and the spelling-equivalence guarantee cannot extend over text an
+  external compiler sees.
+- *Termination and memory safety come from the language, not the driver.* No
+  runtime protects the frame: an operating system resets a hung adapter after
+  seconds, and the bar is 16.7 ms. So the bound is static. Every loop unrolls
+  at compile time, every call inlines, every operand is relative to the
+  program's own slice, and a program whose worst case exceeds
+  `SdfShadeProgram.MaxWork` is refused by name.
+- *One lowering owns both backends' gaps*, which raw source would hand to
+  every author.
+- *No simulation state, by construction.* A program reads only the stamp
+  (`SdfShadeOps.Inputs`). There is no spelling for a buffer, a descriptor, a
+  neighbour pixel, a world cell or another world, so a program is a
+  presentation-only float path outside the determinism contract.
+
+What a program cannot do follows from those bounds: bring a resource, add a
+pass, loop a count the compiler cannot see, or read another pixel. Expression
+grows by adding ops to the one table (`SdfShadeOps.Table`), each with a
+declared cost, never by opening the bounds.
+
+**A surface function the engine lights, in three phases.** A program has a
+`surface` phase before the light walk (the material's final response and
+shading normal), a `light` phase once per light and a `compose` phase after
+the fold. A phase it omits takes the standard's default. The engine keeps what
+a per-pixel program cannot express: the shadow filter, the irradiance gather,
+the cel outline (it reads neighbour depth and normal), local adaptation and the
+atmosphere. One generated invocation serves opaque and glass shading. The
+surface pass, the bake, the cascades and the irradiance trace never run a
+program.
+
+**The probes and the meter see the base response.** A palette slot's base
+`color`, `metal`, `emissive` and `bleed` are the lighting-representative values
+the irradiance relight and the exposure meter read; a colour or an emission a
+program computes does not bounce and does not meter. The standard's templates
+derive their look from those base values, and `world.budget` names a program
+whose emission is computed.
+
+**Parameters are data, and structure is identity.** A template's parameters
+are runtime slots in the material's rows unless the lowering finds one in a
+structural position (a loop range, a shape's type), where it must be a
+compile-time constant marked `structural`. A program's identity is its
+canonical stream, its parameter layout and the op table's fingerprint, never
+its parameter values, so two materials that differ by a seed or a colour share
+one program, one kernel and one bin, and sweeping a colour compiles nothing.
+Every spelling that lowers to the same stream costs the same.
+
+**Interpret first, specialize behind.** The interpreter shows an edit on its
+next frame, because a program edit is a table upload, and it renders a program
+the cache has never seen. A specialized kernel replaces it at a frame boundary
+when its background compile arrives. The interpreter renders the correct image,
+so nothing is traded while compiling: a skipped draw or a default material in
+its place is rejected, as the bar forbids. Compiling a views-sized kernel takes
+seconds per target, which is why specialization is never on the edit path. A
+world's programs are declared in its documents, so `world prepare` compiles
+them for a player build and the interpreter covers only edits and misses. Both
+tiers are generated from the one op table under one stated semantics (32-bit
+values, `precise` results, folding only of exactly rounded operations,
+sanitized outputs), and equivalence is claimed only for the program classes a
+threshold-sensitive corpus holds on both backends.
+
+**Specialization is by program set, with no interpreter arm.** A specialized
+kernel holds every program the frame's set names and selects a pixel's arm
+once. An interpreter default arm was set aside: registers are allocated for
+the whole kernel, so it would keep the interpreter's register count in every
+specialized kernel. A frame whose active programs the published set does not
+hold records with the interpreter kernel while the new set compiles. A frame
+with no program records plain kernels that hold no program state.
+
+**Pixels shade in bins by whole tiles.** A frame that runs programs classifies
+8×8 tiles after the tile-coherent filter and shades the tiles with no program
+on a plain kernel, so a pixel that runs no program does not pay a program
+kernel's registers. A pixel-granular list was set aside: it loses the 2D
+locality the probe gather and the cascade reads depend on. The filtered
+occlusion and shadows go to a record of their own, because a group writing
+them into the visibility record would race a neighbouring group's gather.
+
+**Pipeline state stays engine-owned.** A program changes compute bytecode and
+nothing else: no authored blend, depth, format, binding or workgroup size. The
+pipelines a world's shading needs are therefore its declared program sets,
+listed by `world.budget` and compiled by `world prepare`, and nothing an author
+writes makes a driver specialize a pipeline the engine did not enumerate.
+
+**The invariant.** Every instruction the GPU executes on an authored program's
+behalf is either the interpreter kernel, whose per-pixel work is bounded by the
+program's static cost and which reads only the program's own slice, or a
+kernel the engine emitted from the same canonical stream through the same op
+table; every shading dispatch that may run a program is a job sized to at most
+`SdfShadeProgram.MaxWork` of predicted work; and no shadow slot a program's
+response can reach is left unqueried. Five doors enforce it, and no caller has
+a way around one:
+
+1. *The compiler is the only writer of program words.* `SdfShadeProgram` has a
+   private constructor and `Compile` is its only admission door; a program
+   reaches the appearance words only through `SdfAppearance.Pack`.
+2. *One op table, one generator, one semantics* (`SdfShadeOps.Table`,
+   `SdfShadeHlsl`). `puck shaders generate --check` fails on drift, and the
+   table's fingerprint joins the kernel stamp and every specialization's
+   identity, so a kernel built against another table is refused.
+3. *One slice reader.* Both tiers and the shape helpers read program words
+   through the reader that takes the slice from the material row.
+4. *One planner.* `SdfShadeDispatch` turns every shading extent or bin into
+   bounded jobs and records their program identities; its `Record` and
+   `RecordBin` are the only shading dispatch calls.
+5. *One surface-pass decision.* The surface pass queries shadow slots by the
+   material's packed demand (`sdfMaterialShadowDemand`), which only the
+   lowering writes from the program's proven wrap and tilt bounds, and an
+   authored light phase reads zero visibility on a slot that was not queried.
+
+Where the guarantee stops: the static cost bounds work, not time, so the bound
+is a measured margin and not a proof against a driver timeout, and a submission
+of many jobs is not bounded. The interpreter's register allocation is bounded
+by the op table, not by any one program. The emitted kernel's correctness
+rests on the shader compiler and the driver, as every kernel's does.
+
+**The owner's rulings.**
+
+- The **light hook** ships: an author may change how a material responds to
+  each light. The standard package keeps consistent lighting by default; a
+  world that replaces it does so as its author's choice.
+- **Image data** a program samples comes after specialization, so a texture's
+  cost is charged in `world.budget` like every other op.
+- The **screen effect hook** (a program over the composite's output) is
+  deferred.
 
 ## A raster pass draws only what it can show
 
@@ -662,6 +831,16 @@ KERNEL-class probe kind's kernel therefore compiles at build, as do the camera
 frame converter's kernels and the display encode every swapchain compositor draws, and a pipeline
 package loads from its binaries.
 
+The rule is about interfaces and layouts, and [authored shading](#authored-shading)
+stays inside it. An authored `shade` program is runtime data too: its op stream
+and parameters are words in the appearance tables, read through the same
+engine-declared interface by a fixed interpreter kernel, so a world with
+programs needs no compile to draw correctly. A kernel specialized to a set of
+programs is an optional derived product keyed by its inputs, compiled in the
+background or prewarmed by `world prepare`; a device with no compiler or a
+cache miss interprets, and no layout, binding or interface ever differs by
+world. A world-derived layout stays rejected.
+
 **A world names its pipelines by source, and its package's compile stores their
 packages by key.** `puck compile --tree` packages every source a package's
 pipeline row names into a package store beside the package's root document
@@ -797,8 +976,11 @@ generator got wrong fails the package on a real driver before a world binds to
 it. Compiler reflection over both binaries is a second, cheaper build-time check
 for hosts with no GPU.
 
-**The SDF VM is the one GPU interpreter.** A world's signed-distance program runs
-in `Puck.SdfVm`'s kernels, and any other GPU effect is a pipeline pass compiled
+**The SDF VM holds the GPU interpreters.** A world's signed-distance program runs
+in `Puck.SdfVm`'s kernels, as does a material's authored shading program
+([authored shading](#authored-shading)), admitted under the rule this entry
+ends with: its consumer is the views and glass passes, and one op table
+generates both of its tiers. Any other GPU effect is a pipeline pass compiled
 from HLSL. A second, general-purpose bytecode interpreter, the removed
 the shader VM project, is rejected. It had no consumer but its own tests, no kernel
 included its GPU half, and nothing compared its host and GPU interpreters. It

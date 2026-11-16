@@ -502,7 +502,7 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   leaves all three counts as they were (255; 168 and 128 bytes; 128 and 176
   bytes), so less live probe state is not the cure; keeping the interpreter out
   of the pixels that run no program is
-  ([author shaders](../../../../docs/plans/author-shaders.md#6-implementation-steps),
+  ([author shaders](../../../../docs/plans/author-shaders.md#the-remaining-steps),
   [frame bar](../../../../docs/plans/open-items.md#next)). `world.indirect off`
   still removes a third of views on Vulkan: that share is the gather's work.
 - **The main mesh pass shades several fragments a pixel,** with no

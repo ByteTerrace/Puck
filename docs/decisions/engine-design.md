@@ -440,9 +440,14 @@ element word enters an engine contract.
   cadence follow displayed size; nothing disappears by recursion depth.
 - **Coatings** project retained regional state onto materials before lighting:
   wetness, deposits, roughness and normals, with puddles from fields and
-  authored basin masks. Coatings drive the terrain material layer masks, so
-  regional wetness and deposits share the terrain pass's layer mechanism.
-  Baked meshes carry no curvature, so noise and derived normals only decorate.
+  authored basin masks. A coating is an input to a material's authored shading
+  program, never a fixed layer table: regional state reaches the program
+  through its lanes and parameters, so a region's wetness and deposits and a
+  terrain's slope and altitude bands are one mechanism, the program
+  ([authored shading](rendering.md#authored-shading)). A program reads the
+  surface's mean curvature, which the surface pass derives from the baked
+  normals; it describes the baked normal field, so a ridge or gully finer than
+  the bake's cell contributes none.
 
 ## A collider follows the drawn solid
 

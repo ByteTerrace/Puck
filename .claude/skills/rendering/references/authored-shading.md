@@ -48,7 +48,7 @@ temporary is reused. Excess held operands or work are refused, never spilled int
 an interpreter array. The generated stamp,
 registers and outputs are named fields selected by constant-index helpers; every
 decoded register field is masked. CPU compilation does not prove zero driver
-spill, which still needs step 2's measurements.
+spill; a driver's pipeline statistics do, read per device.
 
 `SdfShadeOps.Table` owns the op names, arities, helper-closed work and HLSL
 templates. `SdfShadeHlsl` derives both the interpreter switch and straight-line
@@ -104,7 +104,7 @@ plan, only a pass that drew is armed (`ShaderPipelineRenderNode.SubmitPackageRea
 and the node's wait of the slot (`IRenderGraphPackageReadback.Completed`) or a
 released recorder's next package frame (`SdfShadeReleases`) completes it. A device
 loss before either proof marks the submission lost, and it stays reported for the
-quarantine. Quarantine and specialization belong to the remaining
+quarantine. The quarantine and the calibration of `MaxWork` belong to the remaining
 [shader plan](../../../../docs/plans/author-shaders.md).
 
 Read flags come only from live input ops. `SdfAppearance.ResolveShadeReads`
@@ -189,6 +189,110 @@ closure looks generated includes up by `Path.GetFullPath`'s spelling (derived
 from the stage's path, `passes/../isa/`), and a key spelled otherwise silently
 compiles the interpreter under the specialization's name.
 
+## The GPU-lifetime invariants
+
+Each names what enforces it and where that stops. A change to the shading
+kernels' lifetime, publication or binning keeps all nine.
+
+**Publication and specialization.**
+
+1. *A specialized kernel replaces the interpreter only at a frame boundary, and
+   only for a frame whose active programs its set holds.* The one publication
+   door is `SdfWorldResidency.PrepareShade`, which runs once a produced frame
+   after the frame is packed and before any pass records, with the frame the
+   passes record. A frame whose active set leaves the published set, or whose
+   kernels a reload replaced, retires it there before any recording; an arrival
+   publishes only while its identity (the sorted program identities, the op
+   fingerprint and `SdfShadeKernels.InterpreterOf`: the kernel set's
+   `SdfKernelSet.ContentKey` and the key of each specialized kernel's
+   `SdfKernelSource`) is still the request and it covers the active set
+   (`SdfShadeKernels.Covers`). Every views
+   and glass recording takes its kernel from `SdfShadeSlots.RecordPipeline`
+   alone, which reads that selection, so the passes of one frame record one
+   selection.
+2. *A kernel is freed only after the last submission that recorded it.*
+   `RecordPipeline` pins the set before a native handle reaches the recorder; the
+   pin moves to the slot's submission and drops only on that submission's
+   completion proof (the node's wait of the slot, or a released recorder's next
+   package frame), on abandonment before submission, or on a device loss. A
+   retired set is disposed by `PrepareShade` only at zero pins; device teardown
+   and the residency's final release (after `TryWaitIdle`) dispose every set.
+3. *Nothing on the frame thread waits for a compile or a driver.* Compilation
+   (on the shared `ShaderCompileTurns`), reflection and pipeline creation run in
+   `SdfShadePipelines.BuildAsync` on the thread pool; `PrepareShade` only polls
+   it. A build an edit overtook, and one still running at the residency's final
+   release, is detached into the catalog's `RetiredShadeBuilds`
+   (`RetiredBuilds`), which disposes its result on the pool as it finishes; the
+   sets a final release disposes are built, so their leases wait for nothing.
+   The catalog outlives every residency, so the device's end drains it: a
+   residency's device loss (`RetiredBuilds.Drain`) before recovery, and the World
+   root's teardown (its last `Holdings` entry) while the device is alive. Where
+   it stops: a device loss that reaches no live residency drains nothing (the
+   World root holds its world residency for its whole life), and the residency's
+   own pipeline set and a reload still in flight still wait on release
+   (`SdfWorldPipelineSource.Release`, `CancelShaderReload`; the
+   [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign) holds that).
+4. *Publication changes no scene revision and no render history.* Only the
+   comparison levers `world.shaders.tier` and `world.shaders.bins` invalidate
+   the shading passes, from the frame `PrepareShade` takes them on.
+5. *A set compiles exactly the source its interpreter was compiled from.* A
+   kernel set carries, beside the views and glass bytecode, the `SdfKernelSource`
+   it was compiled from (`SdfKernelSet.SourceOf`): the stage and every include's
+   text, read once when the bytecode was taken (the deployed tree's at load, a
+   reload's compile plan) and replaced only with that bytecode
+   (`SdfKernelSet.With`). `SdfShadeKernels.Plan` reads nothing else: every
+   include comes from the source (`ShaderCompiler.Plan`'s `readInclude`), so one
+   it does not hold refuses the plan, and a tree edited since cannot enter the
+   set. Bytecode installed without its source refuses the specialization, which
+   stays interpreted. Views and glass each specialize their own interpreter's
+   source, so a reload that has installed one and not yet the other specializes
+   the mixed state the interpreter runs. Where it stops: the deployed tree's
+   sources are taken as its bytecode's because the build publishes them
+   together; a process whose output directory is rebuilt between those two reads
+   is outside it.
+
+**Binning.**
+
+6. *Every pass of a frame records one shading selection and one bins
+   decision.* `SdfWorldResidency.PrepareShade` takes both once a produced frame
+   (`ShadeSelection`, `ShadesInBins`), after publication and before any pass
+   records; `world.shaders.tier` and `world.shaders.bins` only set the levers,
+   which take effect there, and a lever change, never a publication,
+   invalidates the shading passes. A views recording takes every bin's kernel
+   from one capture (`SdfShadeSlots.RecordSelection`), which pins the set for
+   the whole recording, so no bin can record with a set another bin did not.
+7. *A tile in the plain bin holds no pixel with a program.* The filter
+   classifies a pixel through the generated `sdfShadeBinding`, the function
+   the shading kernels bind a pixel's program through, so the plain kernel only
+   ever shades pixels whose binding is none, which it shades as the full
+   kernel does. A tile whose pixels part between bins takes bin one, whose
+   kernel shades every program the frame runs. The bins depend on the bindings
+   and the visibility record alone, which the views signature (the lighting
+   signature) and the visibility input's generation cover, so a views pass that
+   re-records while its filter stands (a screen changed) reads bins that are
+   still the frame's.
+8. *Every job the views pass records reads arguments the bins pass wrote for
+   it this frame, and covers its own tiles.* The three passes of one view share
+   one plan a frame (`SdfWorldPasses.ShadePlanOf`, cached by its inputs), so the
+   widths the bins pass reads from its pass block (`SdfFrameBlock.WriteShadeBins`)
+   are the widths the views pass's jobs advance by; the argument record of bin
+   `b`'s job `k` is `b × tiles + k` on both sides (`SdfShadeDispatch.RecordBin`,
+   `sdfShadeArgumentWord`), and the buffer holds a record a tile a bin, so no
+   plan can name a record past it. The graph orders the arguments' write before
+   their indirect read (the views pass's `Dispatch`); the recorder orders its
+   own clear before the filter's atomics and the offsets before the scatter.
+9. *The binned storages and kernels live only while a binned graph does.* The
+   filter record, the bins and the arguments are the binned fragment's graph
+   storages, allocated with that graph and retired with it; the binned kernels
+   are on-demand slots of the residency's pipeline set (`BuildOnDemandAsync`
+   before a binned pass's recorder exists, `RequestOnDemand` when a view
+   follows another residency), owned and released with the set.
+
+Where these stop: the bins plan's widths are a pure function of the frame and
+the passes' common extent, which every pass of one view shares; a recorder
+that recorded a binned pass at another extent than its siblings would break
+invariant 8, and no type prevents it beyond the one door all three passes call.
+
 Check changes with the `shade-*` spelling pairs and `ShadeLoweringTests` in
 `Puck.World.Transpiler.Tests`, plus `puck test` of those authored admission worlds.
 The pairs compare canonical documents, program words, identities and costs.
@@ -207,8 +311,8 @@ the graph a still came from before it (`world.counters gpu pass <label>` names
 a binned pass only while the binned graph is installed). Check backfaces
 under wrap and animated normals, contact foam and static transformed flow, and
 clock/world-lane/no-read cadence separately. `puck mesh identity --against`
-checks that presentation changes leave the bake identity alone. Timing belongs
-to step 2's measurement round.
+checks that presentation changes leave the bake identity alone. Timing is read
+by the [shader plan](../../../../docs/plans/author-shaders.md#the-decision-matrix)'s matrix.
 
 `worlds/debug/shade-surface-checks.puck` isolates the shadow and glass cases:
 its `shadeWrap` and `shadeTilt` state cells drive the panel's world lanes, a
