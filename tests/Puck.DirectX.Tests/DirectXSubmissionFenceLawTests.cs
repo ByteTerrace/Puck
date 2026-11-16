@@ -16,16 +16,42 @@ public sealed unsafe class DirectXSubmissionFenceLawTests {
         using var fence = new DirectXGpuSubmissionFence((ID3D12Device*)native.Device);
         typeof(DirectXGpuSubmissionFence).GetField("m_nextValue", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(fence, ulong.MaxValue - 1);
-        fence.Arm((ID3D12CommandQueue*)native.Queue);
+        fence.Arm((ID3D12CommandQueue*)native.Queue, drainQueue: static () => { });
         Assert.True(fence.IsSignaled);
         fence.Wait();
-        fence.Arm((ID3D12CommandQueue*)native.Queue);
+        fence.Arm((ID3D12CommandQueue*)native.Queue, drainQueue: static () => { });
         Assert.True(fence.IsSignaled);
         Assert.Equal(1UL, native.Queue->LastSignal);
         Assert.Equal(2, native.Device->Created);
         Assert.Equal(1, native.Device->Fences[0].Releases);
         fence.Wait();
     }
+
+    // A signal the queue refuses without a removal follows lists already executed: the fence drains the queue behind them
+    // and is left proven, never armed on a value nobody signals, so the next wait returns and the next arm signals.
+    [Fact]
+    public void ASignalRefusedWithoutARemovalDrainsTheQueueAndLeavesTheFenceProvenAndReusable() {
+        using var native = new NativeFences();
+        using var fence = new DirectXGpuSubmissionFence((ID3D12Device*)native.Device);
+        var drains = 0;
+
+        SignalResult = unchecked((int)0x8007000E);
+        try {
+            _ = Assert.ThrowsAny<Exception>(() => fence.Arm((ID3D12CommandQueue*)native.Queue, drainQueue: () => drains++));
+        } finally {
+            SignalResult = 0;
+        }
+
+        Assert.Equal(1, drains);
+        Assert.True(fence.IsSignaled);
+        fence.Wait();
+        fence.Arm((ID3D12CommandQueue*)native.Queue, drainQueue: static () => { });
+        Assert.Equal(1UL, native.Queue->LastSignal);
+        Assert.True(fence.IsSignaled);
+        fence.Wait();
+    }
+
+    private static int SignalResult;
 
     private struct DeviceObject { public void** Vtable; public FenceObject* Fences; public int Created; }
     private struct FenceObject { public void** Vtable; public ulong Completed; public int Releases; }
@@ -80,6 +106,7 @@ public sealed unsafe class DirectXSubmissionFenceLawTests {
     private static ulong Completed(FenceObject* fence) => fence->Completed;
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static int Signal(QueueObject* queue, FenceObject* fence, ulong value) {
+        if (SignalResult != 0) { return SignalResult; }
         queue->LastSignal = value;
         fence->Completed = value;
         return 0;

@@ -126,6 +126,11 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
                 waitSemaphores: (commandBufferHandles.IsEmpty ? [] : WaitSemaphores),
                 waitValues: (commandBufferHandles.IsEmpty ? [] : WaitValues)
             );
+        } catch {
+            // A failed vkQueueSubmit leaves the queue as it was, so nothing of this submission ran.
+            vkFence.Abandon();
+
+            throw;
         } finally {
             ClearWaitsAfter(commandBufferHandles: commandBufferHandles);
         }
@@ -183,6 +188,10 @@ internal sealed class VulkanGpuSubmissionFence : GpuBatchedSubmissionFence {
     /// one its batch deferred.</summary>
     /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>
     internal void Arm() => MarkArmed();
+    /// <summary>Marks the submission abandoned once the submit carrying <see cref="Handle"/> failed, which leaves the
+    /// queue as it was (<see cref="GpuBatchedSubmissionFence.MarkAbandoned"/>).</summary>
+    /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>
+    internal void Abandon() => MarkAbandoned();
 
     /// <inheritdoc/>
     /// <remarks>Reads <c>vkGetFenceStatus</c>; <c>VK_ERROR_DEVICE_LOST</c> surfaces as <see cref="DeviceLostException"/>.</remarks>

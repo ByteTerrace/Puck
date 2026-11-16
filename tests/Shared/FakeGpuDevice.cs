@@ -184,6 +184,9 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>Gets the number of submissions made, fenced or not.</summary>
     public int Submissions { get; private set; }
+    /// <summary>Gets or sets whether the next fenced submission is abandoned, as a batch whose hand-off failed before it
+    /// reached the queue leaves its fences: the fence's next wait reports <see cref="GpuSubmissionAbandonedException"/>.</summary>
+    public bool AbandonNextFencedSubmission { get; set; }
 
     /// <summary>Returns how many times a member was called.</summary>
     /// <param name="key">The member, keyed <c>Interface.Member</c>.</param>
@@ -487,6 +490,12 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuQueueSubmitter.Submit(fence)");
         LastSubmittedFence = fence;
         // A backend accepts only its own fence type; a counting fence reaching here is a missed unwrap.
+        if (AbandonNextFencedSubmission) {
+            AbandonNextFencedSubmission = false;
+            ((Fence)fence).Abandoned = true;
+
+            return;
+        }
         ((Fence)fence).Arm();
         _ = SubmittedFences.Add(item: ((Fence)fence));
         Submissions++;
@@ -734,9 +743,13 @@ internal sealed class FakeGpuDevice :
         public bool Armed { get; private set; }
         /// <summary>Gets or sets whether a held fence's outstanding submission has completed.</summary>
         public bool Completed { get; set; }
+        /// <summary>Gets or sets whether the fence's submission never reached the queue.</summary>
+        public bool Abandoned { get; set; }
         public bool IsSignaled {
             get {
                 gpu.Hit(key: "IGpuSubmissionFence.IsSignaled");
+
+                if (Abandoned) { throw new GpuSubmissionAbandonedException(); }
 
                 return (!gpu.m_holdFences || !Armed || Completed || (m_order <= gpu.m_waitedThrough));
             }
@@ -749,6 +762,11 @@ internal sealed class FakeGpuDevice :
         public void Wait() {
             gpu.Hit(key: "IGpuSubmissionFence.Wait");
 
+            if (Abandoned) {
+                Abandoned = false;
+
+                throw new GpuSubmissionAbandonedException();
+            }
             if (Armed) {
                 gpu.m_waitedThrough = Math.Max(val1: gpu.m_waitedThrough, val2: m_order);
             }
@@ -861,6 +879,7 @@ internal sealed class FakeGpuDevice :
     private sealed class Readback : IGpuSurfaceReadback {
         private byte[] m_pixels = [];
 
+        public ulong OwnedBytes => ((ulong)m_pixels.Length);
         public void Dispose() { }
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout) {
             var length = checked((int)GpuPixelFormats.ImageByteLength(format: format, height: height, width: width));

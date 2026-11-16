@@ -85,11 +85,11 @@ public sealed class SurfaceEncoder : IDisposable {
         Layout: DisplayEncodeLayout.Layout
     );
 
-    /// <summary>Gets the bytes the encoder owns on the device: its target and the readback's staging buffer, each
-    /// four bytes a pixel, once a read has created them.</summary>
-    public ulong OwnedBytes => ((m_target is { } target)
-        ? checked(((((ulong)target.Width) * target.Height) * 8UL))
-        : 0UL);
+    /// <summary>Gets the bytes the encoder owns on the device: its target and the readback's staging buffer
+    /// (<see cref="IGpuSurfaceReadback.OwnedBytes"/>), once a read has created them.</summary>
+    public ulong OwnedBytes => (((m_target is { } target)
+        ? GpuPixelFormats.ImageByteLength(format: target.Format, height: target.Height, width: target.Width)
+        : 0UL) + (m_readback?.OwnedBytes ?? 0UL));
     /// <summary>Gets whether the encode's pipeline is built, so a read records at once.</summary>
     public bool IsReady => (m_lease.Poll() is not null);
 

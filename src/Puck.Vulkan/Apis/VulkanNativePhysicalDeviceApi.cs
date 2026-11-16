@@ -32,6 +32,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     // maxPerStageResources(92).
     private const int PhysicalDeviceLimitsOffset = 296;
     private const int LimitsMaxBoundDescriptorSetsOffset = (PhysicalDeviceLimitsOffset + 64);
+    // maxImageDimension2D is the limits' second uint, after maxImageDimension1D.
+    private const int LimitsMaxImageDimension2DOffset = (PhysicalDeviceLimitsOffset + 4);
     private const int LimitsMaxPerStageResourcesOffset = (PhysicalDeviceLimitsOffset + 92);
     private const int LimitsMaxPerStageSampledImagesOffset = (PhysicalDeviceLimitsOffset + 80);
     private const int LimitsMaxPerStageSamplersOffset = (PhysicalDeviceLimitsOffset + 68);
@@ -55,6 +57,26 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         m_allocator = allocator;
     }
 
+    /// <summary>Reads a physical device's name and its largest two-dimensional image side
+    /// (<c>VkPhysicalDeviceLimits::maxImageDimension2D</c>), from <c>vkGetPhysicalDeviceProperties</c>.</summary>
+    /// <param name="instance">The instance's command table.</param>
+    /// <param name="physicalDeviceHandle">The native physical-device handle.</param>
+    /// <returns>The device's name and its largest image side, in texels.</returns>
+    public static unsafe (string Name, uint MaxImageDimension2D) ImageLimitsOf(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var properties = stackalloc byte[PhysicalDevicePropertiesBufferSize];
+
+        instance.GetPhysicalDeviceProperties(physicalDeviceHandle, ((nint)properties));
+
+        return (
+            (Marshal.PtrToStringUTF8(ptr: ((nint)(properties + PhysicalDeviceNameOffset))) ?? "(unknown device)"),
+            *((uint*)(properties + LimitsMaxImageDimension2DOffset))
+        );
+    }
     private static unsafe void ValidatePhysicalDeviceInputs(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 

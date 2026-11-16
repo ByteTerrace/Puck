@@ -25,6 +25,8 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     private readonly DirectXDeviceContext m_deviceContext;
     private readonly List<GpuExternalWait> m_externalWaits = [];
     private readonly Batch m_batch;
+    // The drain a fence whose signal was refused runs behind the lists already executed (DirectXGpuSubmissionFence.Arm).
+    private readonly Action m_drainQueue;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXGpuQueueSubmitter"/> class, submitting to the
     /// context's direct command queue.</summary>
@@ -32,6 +34,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     public DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) {
         m_deviceContext = deviceContext;
         m_batch = new Batch(submitter: this);
+        m_drainQueue = deviceContext.WaitIdle;
     }
 
     /// <inheritdoc/>
@@ -67,8 +70,16 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
         // An empty fenced submission still completes all work submitted before it.
         if (commandBufferHandles.IsEmpty) { m_batch.Split(cause: GpuQueueCause.EmptyFence); }
         native.RequireDrained();
-        Execute(cause: GpuQueueCause.Unbatched, commandBufferHandles: commandBufferHandles);
-        native.Arm(commandQueue: ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle));
+        try {
+            Execute(cause: GpuQueueCause.Unbatched, commandBufferHandles: commandBufferHandles);
+        } catch {
+            // A refused external wait comes before ExecuteCommandLists, the one call that cannot fail, so nothing of this
+            // submission reached the queue.
+            native.Abandon();
+
+            throw;
+        }
+        native.Arm(commandQueue: ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle), drainQueue: m_drainQueue);
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
@@ -136,7 +147,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     private sealed class Batch(DirectXGpuQueueSubmitter submitter) : GpuSubmissionBatch<nint> {
         protected override void Submit(ReadOnlySpan<nint> entries, GpuBatchedSubmissionFence? owner) {
             submitter.Execute(cause: null, commandBufferHandles: entries);
-            ((DirectXGpuSubmissionFence?)owner)?.Arm(commandQueue: ((ID3D12CommandQueue*)submitter.m_deviceContext.SubmissionQueueHandle));
+            ((DirectXGpuSubmissionFence?)owner)?.Arm(commandQueue: ((ID3D12CommandQueue*)submitter.m_deviceContext.SubmissionQueueHandle), drainQueue: submitter.m_drainQueue);
         }
     }
 }
@@ -180,23 +191,39 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
         }
     }
 
-    /// <summary>Queues a signal for the just-executed submission; the caller must have drained any prior one first, or
-    /// the submission is the one its batch deferred.</summary>
+    /// <summary>Queues a signal for the just-executed submission, and arms the fence only once the signal is on the queue;
+    /// the caller must have drained any prior one first, or the submission is the one its batch deferred. The lists are
+    /// already executed, so a refused signal cannot leave the fence reading drained: the queue is drained behind them and
+    /// the fence marked run, or, when that drain fails too, marked faulted with the drain's failure. The signal's failure
+    /// is rethrown either way.</summary>
     /// <param name="commandQueue">The queue the submission was executed on.</param>
+    /// <param name="drainQueue">Blocks until the queue has finished everything executed on it (the device context's
+    /// <see cref="IGpuDeviceContext.WaitIdle"/>).</param>
     /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>
-    public void Arm(ID3D12CommandQueue* commandQueue) {
-        MarkArmed();
+    public void Arm(ID3D12CommandQueue* commandQueue, Action drainQueue) =>
+        ArmBehind(
+            drainQueue: drainQueue,
+            queueSignal: static signal => signal.Fence.Signal(commandQueue: ((ID3D12CommandQueue*)signal.Queue)),
+            state: (Fence: this, Queue: ((nint)commandQueue))
+        );
+
+    // Queues the next value's signal; the value becomes the pending one only once the call returned.
+    private void Signal(ID3D12CommandQueue* commandQueue) {
         // Also retries a renewal that failed after the preceding Wait drained the old native fence.
         if (m_nextValue == ulong.MaxValue) { Renew(); }
-
-        m_pendingValue = m_nextValue++;
         DirectXCommandCalls.Signal(
             calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
             fence: ((ID3D12Fence*)m_fence),
             queue: commandQueue,
-            value: m_pendingValue
+            value: m_nextValue
         );
+        m_pendingValue = m_nextValue++;
     }
+
+    /// <summary>Marks the submission abandoned once its execute failed before reaching the queue
+    /// (<see cref="GpuBatchedSubmissionFence.MarkAbandoned"/>).</summary>
+    /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>
+    internal void Abandon() => MarkAbandoned();
 
     /// <inheritdoc/>
     /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, a value this
