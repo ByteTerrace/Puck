@@ -9,7 +9,6 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
-
     private readonly VkQueue m_graphicsQueue;
     private readonly VkQueue m_presentQueue;
 
@@ -28,17 +27,22 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     }
     /// <summary>Gets the queue family index of <see cref="GraphicsQueue"/>, without handing the batch over.</summary>
     public uint GraphicsQueueFamilyIndex => m_graphicsQueue.FamilyIndex;
+
     /// <summary>Gets the submissions the device defers while a batch is open, which every read of
     /// <see cref="GraphicsQueue"/> or <see cref="PresentQueue"/> and the device's wait for idle hand to the queue
     /// first.</summary>
     internal VulkanSubmissionBatch Batch { get; }
+
     /// <summary>Gets what the device is, as its physical device reported it when the device was created; recorded
     /// for diagnostics and naming the device's pipeline-cache file, never branched on. <see langword="null"/> for a
     /// device created without one.</summary>
     public GpuDeviceIdentity? Identity { get; init; }
     /// <summary>Gets what the device can bind, as its physical device reported it when the device was created;
-    /// recorded, never branched on. <see langword="null"/> for a device created without one.</summary>
+    /// its uniform-buffer view limit also bounds admission. <see langword="null"/> for a device created without one.</summary>
     public GpuDeviceCapabilities? Capabilities { get; init; }
+    /// <summary>Gets the physical device's uniform-buffer view limit, refusing a device whose limit was never read.</summary>
+    public ulong MaxConstantBufferBytes => (Capabilities?.MaxConstantBufferBytes
+        ?? throw new InvalidOperationException(message: "The Vulkan device has no reported uniform-buffer view limit."));
     /// <summary>Gets what the device's memory is, as its physical device reported it when the device was created;
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>

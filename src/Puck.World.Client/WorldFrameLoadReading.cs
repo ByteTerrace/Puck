@@ -4,7 +4,7 @@ namespace Puck.World.Client;
 /// since the previous reading of the same signal, summed.</summary>
 /// <param name="Renders">The number of view renders the reading sums; zero for a reading with nothing new, which no
 /// sample is taken from.</param>
-/// <param name="Load">The renders' summed load, in the signal's unit: seconds of GPU time, or march steps.</param>
+/// <param name="Load">The renders' summed GPU time, or a present interval, in seconds.</param>
 /// <param name="Grid">The render grid every summed render recorded its passes at, as a fraction of the output on each
 /// axis, or zero when they recorded different grids or one recorded none.</param>
 public readonly record struct WorldFrameLoadReading(int Renders, double Load, double Grid) {

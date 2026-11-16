@@ -239,25 +239,17 @@ whole answer to "does the copy see the pre-write or post-write value", and it is
 the same answer on every run. A rule's EFFECTS are a different question: they
 act as `Principal.World` (see [authority.md](authority.md)).
 
-A `setState`/`addState` effect is submitted only when it could MOVE the
-destination: the resolved value already
-matching the cell has always skipped, and so does a value the destination row's
-declared envelope (`min`/`max`) pins where the cell already sits, under its
-authored `overflow` policy (`Refuse`, the default, or `Saturate`) —
-`StateRow.TryAdmitWrite` is the one door every write path decides
-through, and answers both the admission and the no-op test. That is what keeps
-a `Level` rule pointed at a floored row from composing a candidate the
-whole-document validator refuses once per TICK for the life of the session (a
-`min: 0` row draining by `-5` reached its floor and then emitted 2679
-`[world.mutation rejected: …]` lines over the remaining 2679 ticks of a
-12-second boot). Under `Refuse` it never changes what is submitted: a write
-that genuinely tries to CROSS a bound (a cell at 3 taking `-5`) is still
-submitted and still refused BY NAME. Under `Saturate` the same write is
-submitted and still admitted — the row stores the clamped result while the
-mutation still carries the rule's own unclamped operand, so replay reproduces
-it, and a saturating write never triggers a transaction's `onFailure`. Bounds
-and overflow are legitimate only on `Int`/`Fixed` rows; a row with no declared
-bounds still refuses a genuine 64-bit arithmetic overflow rather than wrapping.
+A `setState`/`addState` effect resolves its address and operand, then applies
+`Mutation.Written` through the rule host (`RuleEvaluator.FireWrite`). It does
+not prefilter writes by whether they could move the destination. Admission and
+the resulting change are decided by the state write path; an admitted write
+can leave the cell unchanged. The row's declared `min`/`max` envelope uses its
+authored `overflow` policy: `Refuse` rejects an out-of-bounds result, including
+a repeated level-triggered write at the bound, while `Saturate` stores the
+clamped result. The mutation carries the original operand, so replay applies
+the same policy. Bounds and overflow are legitimate only on `Int`/`Fixed`
+rows; a row with no declared bounds still refuses a genuine 64-bit arithmetic
+overflow rather than wrapping.
 
 `setState`/`addState` carry the SAME value/comparand duality on the WRITE side:
 EITHER a literal `value` OR a live copy `(fromState, fromKey)` — another row or

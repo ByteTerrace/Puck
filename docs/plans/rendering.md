@@ -224,11 +224,9 @@ fallback colour or a front-image mirror. The
 Reconstruction and dynamic resolution are implemented. P15-8's floor-tier
 tuning is removed; the Steam Deck observation below runs at `high`.
 The [temporal packet](open-items.md#temporal-shimmer-and-cadence-flicker) owns
-remaining image work. Delete the obsolete march-step load signal
-(`WorldDynamicResolutionSignal.Steps` and `StepBudgetPerPixel`), which the code
-still carries: counting bake steps cannot measure the baked frame's load, and
-dynamic resolution's signal is the frame's own timing. Check: the two symbols
-are gone, and `world.render-scale` still follows a loaded frame.
+remaining image work. Dynamic resolution follows GPU frame timing, with present
+timing as its fallback; without timing or a display period it holds its grid
+([frame handbook](../rendering/sdf/handbook/frame-rendering.md)).
 
 ### P18 — Sky and atmosphere
 
