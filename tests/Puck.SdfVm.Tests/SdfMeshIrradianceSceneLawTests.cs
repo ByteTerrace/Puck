@@ -106,6 +106,43 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         _ = SdfMeshRegion.Plan(sheets, placements);
         Assert.Equal(expected: kept.ExportGpu(placements: placements), actual: trimmed.ExportGpu(placements: placements));
     }
+    // The export writes each word when a reader asks for it (the upload reads it in chunks that start anywhere): read in
+    // runs of any width it gives the words one whole read gives, past the release of a scene whose trimmed copy still
+    // shares its arrays, and an empty scene exports one zero prefix word.
+    [Fact]
+    public void TheExportReadInRunsOfAnyWidthGivesTheWholeReadsWordsWhileAnySceneSharingItHoldsAClaim() {
+        const BindingFlags Hidden = (BindingFlags.Instance | BindingFlags.NonPublic);
+        var sheet = Sheet(quads: 8, materials: 3);
+        var draws = Draws(sheet: sheet, cube: Cube());
+        var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
+
+        _ = SdfMeshRegion.Plan(draws, placements);
+
+        using var first = SdfMeshIrradianceScene.Build(draws: draws);
+        var kept = SdfMeshIrradianceScene.Build(draws: draws.Take(count: 2).ToArray(), previous: first);
+        using var trimmed = (SdfMeshIrradianceScene)typeof(SdfMeshIrradianceScene).GetMethod(name: "WithoutRetained", bindingAttr: Hidden)!.Invoke(obj: kept, parameters: null)!;
+        var whole = kept.ExportGpu(placements: placements);
+
+        kept.Dispose();
+        foreach (var scene in new[] { first, trimmed }) {
+            var expected = scene.ExportGpu(placements: placements);
+            var export = typeof(SdfMeshIrradianceScene).GetMethod(name: "CreateGpuExport", bindingAttr: Hidden)!.Invoke(obj: scene, parameters: [placements, null])!;
+            var read = (WordReader)Delegate.CreateDelegate(type: typeof(WordReader), target: export, method: "Read");
+
+            foreach (var width in new[] { 1, 2, 3, 5, 7, 31, 33 }) {
+                var words = new uint[expected.Length];
+
+                for (var start = 0; (start < words.Length); start += width) { read(word: start, destination: words.AsSpan(start: start, length: Math.Min(val1: width, val2: (words.Length - start)))); }
+                Assert.Equal(expected: expected, actual: words);
+            }
+        }
+        Assert.Equal(expected: whole, actual: trimmed.ExportGpu(placements: placements));
+
+        using var empty = SdfMeshIrradianceScene.Build(draws: []);
+
+        Assert.Equal(expected: [0u, 0u], actual: empty.ExportGpu(placements: placements));
+    }
+    private delegate void WordReader(int word, Span<uint> destination);
     // A rippled sheet of quads, wide enough that its hierarchy and preparation run in parallel.
     private static SdfMesh Sheet(int quads, uint materials) {
         var positions = new Vector3[(quads + 1) * (quads + 1)];

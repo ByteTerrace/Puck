@@ -185,15 +185,20 @@ and `SdfWorldTables.PackDynamicTransforms`) **[opened]**.
 ### The trace scene and its export
 
 `SdfMeshIrradianceScene.Build` reuses each geometry's hierarchy from the scene
-it replaces and builds the rest new **[opened]**: a list of every static
-instance sized to the whole draw list, the top level's entries and their
-bounds, a binned hierarchy over them, and the claims of every static draw.
-`SdfMeshIrradiance.StartSceneBuild` first copies the frame's whole draw list on
-the frame thread and claims every mesh it names, and `SdfMeshIrradiance.ChangedBoxes`
-counts both lists into a dictionary. `SdfMeshIrradianceScene.CreateGpuExport`
-keeps each geometry's words where the arena placed them and packs the whole
-prefix (top nodes, entries and one record per instance) into a new array that
-the upload sends whole **[opened]**. One door publishes
+it replaces and builds the rest new **[opened]**: its draws, the top level's
+entries and a binned hierarchy over them, and the claims of every static draw.
+The arrays the scene keeps are rented at the static draws' and entries' counts
+and go back to the pool at the scene's last claim
+(`SdfMeshIrradianceScene.Content`, step S1), and the build's workspace is rented
+and returned within it. `SdfMeshIrradiance.StartSceneBuild` copies only the frame's
+static draws, on the frame thread, into a spare rented array it swaps with the
+installed scene's draws, and moves its mesh claims to them;
+`SdfMeshIrradiance.ChangedBoxes` counts both static lists in workspace kept
+across builds. `SdfMeshIrradianceScene.CreateGpuExport` keeps each geometry's
+words where the arena placed them and writes the prefix (top nodes, entries and
+one record per instance) from the scene's arrays as the upload reads it, so the
+prefix has no host copy; the upload still sends the whole prefix **[opened]**.
+One door publishes
 (`SdfMeshProbeGpuWork.TryTake`): no query is admitted while a replacement
 uploads, the root is written last, and an abandoned upload frees only its
 prefix.
@@ -1030,7 +1035,7 @@ verification request to the lead.
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
 | R0. Count | Small | The causes, the totals and peaks, the peak raise and its clearing form, the scene's counts | None | [R0's own check](#r0-the-counts-and-the-rule); the lead reads the windows and applies the rule |
-| S1. A scene build keeps what it allocates | Small | Pooled scene arrays returned at the last claim; a static-only snapshot; the prefix exported on demand | The export still has one publisher | The exported words equal the old export's for one scene (a change that claims to change nothing); the allocation trace |
+| S1. A scene build keeps what it allocates | Small | Landed: the scene's draws, entries and top nodes rented and returned at the last claim (`SdfMeshIrradianceScene.Content`), a trimmed scene sharing them; the build's workspace rented; a static-only snapshot in two swapped rented arrays, its mesh claims moved rather than taken again; the change boxes counted in kept workspace; the prefix written as the upload reads it. Its readings are [below the table](#s1s-readings) | The export still has one publisher | The exported tree equal to the old export's (`puck mesh scene`'s `tree-hash`, which also needed the top level's braid order made independent of the parallel build's node numbering); the allocation trace, a windowed verification request |
 | D1. Decode into the mesh's storage | Medium | The storage parameter, material ids applied on read, the restore's plane filter, piece counts in the entry | One decoder | The codec's round trip for both storages; a warm boot loads every group; a relocation restores |
 | R1h. The hit door | Small to medium | The resolver and the resolved hit, every reader taking one, the rejection count, the stale-target count, the lever that forces rejections | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation; a boot's captures unchanged |
 | R1a. The staged table is the producer's | Medium to large | The absent bit and its kernel branch; the staging function's two branches and the per-row retire; rows by mesh and a landing staging them; the journal taken while meshes are owed; the reader and the one cursor in every consumer; the tables' glass row set; the queue precondition; the pack, ledger, seed and device comparisons; the levers for refusal, relocation, trim, a skipping consumer and new tables | The tables' one staging function; the cursor | The cross-check over a cold boot with its forcing counts; the law's part without a row table; a boot's captures fill in as before; `world.wait residency` still names what is owed |
@@ -1043,6 +1048,34 @@ No step is a stopgap for a later one: R1h's resolver is what R1a's absent
 record is rejected by, R1a's absent record, row-for-row staging and rows by
 mesh are what R1b's free rows and R2's piece rows stand on, and S1's pooled
 arrays are what a cluster keeps.
+
+### S1's readings
+
+`puck mesh scene --world worlds/debug` over the store's static meshes (356
+draws, 19865656 triangles, identity transforms, one draw per group), base and
+S1 builds of the CLI run alternately **[reading]**:
+
+| Count | Before S1 | After S1 |
+|---|---|---|
+| Bytes a rebuild that builds no geometry allocates (`move`, `back`) | 3696424 | 100552 |
+| Bytes an export allocates beyond its words | 2496944 | 201392 |
+| `tree-hash` of the first and the restored scene | 3e25d24632584122 | 3e25d24632584122 |
+| Prefix words of one scene | 559289 | 559289 |
+
+A scratch probe of `SdfMeshIrradiance.StartSceneBuild` over 4000 draws (2000
+static, 50 meshes) measured 677040 bytes on the frame thread per scene start
+before S1, and 320 after its first two starts filled the two arrays
+**[reading]**.
+
+What they decide for S2, by [R0's rule](#r0-the-counts-and-the-rule): one
+scene's prefix is 559289 words, 2.2 MB, under
+`SdfGpuWork.MostUploadJobBytes` (8 MiB), and an arrival that rebuilds the scene
+once per `SdfMeshIrradiance.PendingSceneInterval` (4 s) sends about 25 MB of
+prefix in 45 s, under one second of `SdfGpuWork.UploadBytesPerSecond`
+(240 MiB) **[inference]**. Neither clause holds, so S2 is dropped unless the
+frame's own static draws, which add rigid copies that this reading leaves out,
+show more: the `[sdf.mesh-gi] scene` line now prints `prefix-words`, and the
+lead's windowed meadow arrival reads it **[unconfirmed]**.
 
 ## Systems considered
 

@@ -35,18 +35,20 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             count = observed;
         }
     }
-    /// <summary>Releases one scene claim; the last reader releases the scene's mesh claims.</summary>
+    /// <summary>Releases one scene claim; the last reader releases the scene's mesh claims and its share of the scene's
+    /// arrays, which go back to the pool once no scene shares them.</summary>
     public void Dispose() {
         var count = Interlocked.Decrement(location: ref m_claimCount);
 
-        if (count == 0) { m_meshClaims.Dispose(); m_cachedMeshClaims.Dispose(); } else if (count < 0) { throw new InvalidOperationException(message: "A scene claim was released twice."); }
+        if (count == 0) { m_meshClaims.Dispose(); m_cachedMeshClaims.Dispose(); m_content.Release(); } else if (count < 0) { throw new InvalidOperationException(message: "A scene claim was released twice."); }
     }
 
     internal SdfMeshIrradianceScene WithoutRetained() => ((m_retained.Count == 0) ? Acquire() : new(source: this));
 
-    // The identity of what a GPU export of the scene holds (its draws, hierarchy and geometries): a new object for each
-    // built scene, and shared by a scene trimmed of its retained geometry (WithoutRetained), which exports the same words.
-    private readonly object m_gpuContent = new();
+    // What a GPU export of the scene holds (its draws, hierarchy and geometries): one for each built scene, and shared by a
+    // scene trimmed of its retained geometry (WithoutRetained), which exports the same words. Its identity is the GPU
+    // content's identity.
+    private readonly Content m_content;
 
     /// <summary>Returns whether two scenes export the same GPU words: one is the other, or one is the other trimmed of the
     /// geometry it retained for a later build, so a scene uploaded for one serves the other without another upload.</summary>
@@ -54,13 +56,48 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="second">Another scene, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when both are non-null and share their GPU content.</returns>
     internal static bool SameGpuContent(SdfMeshIrradianceScene? first, SdfMeshIrradianceScene? second) =>
-        ((first is not null) && (second is not null) && ReferenceEquals(objA: first.m_gpuContent, objB: second.m_gpuContent));
+        ((first is not null) && (second is not null) && ReferenceEquals(objA: first.m_content, objB: second.m_content));
+
+    // The arrays a built scene keeps (its draws, the top level's entries and its nodes), rented and counted, each array
+    // possibly longer than its count. The one constructor fills them and nothing writes them after. Each scene sharing the
+    // content holds one claim on it, taken in its constructor and released by its last scene claim; the last release
+    // returns the arrays to the pool and leaves the content empty, so a reader that outlived every claim reads no scene
+    // rather than another renter's words. Every reader of a scene therefore holds a scene claim (Acquire), as its mesh
+    // claims already require.
+    private sealed class Content {
+        private int m_claims = 1;
+
+        public Instance[] Instances = [];
+        public int InstanceCount;
+        public Entry[] Entries = [];
+        public int EntryCount;
+        public Node[] Nodes = [];
+        public int NodeCount;
+
+        public Content Acquire() {
+            var count = Interlocked.Increment(location: ref m_claims);
+
+            if (count <= 1) { throw new InvalidOperationException(message: "A scene's arrays were shared after their last release."); }
+            return this;
+        }
+        public void Release() {
+            var count = Interlocked.Decrement(location: ref m_claims);
+
+            if (count < 0) { throw new InvalidOperationException(message: "A scene's arrays were released twice."); }
+            if (count > 0) { return; }
+
+            var (instances, entries, nodes) = (Instances, Entries, Nodes);
+
+            (Instances, Entries, Nodes) = ([], [], []);
+            (InstanceCount, EntryCount, NodeCount) = (0, 0, 0);
+            RentedArrays.Return(array: instances);
+            RentedArrays.Return(array: entries);
+            RentedArrays.Return(array: nodes);
+        }
+    }
 
     private SdfMeshIrradianceScene(SdfMeshIrradianceScene source) {
-        m_gpuContent = source.m_gpuContent;
-        m_instances = source.m_instances;
-        m_entries = source.m_entries;
-        m_nodes = source.m_nodes;
+        m_content = source.m_content.Acquire();
         m_geometries = source.m_geometries;
         m_retained = [];
         TriangleCount = source.TriangleCount;
@@ -90,16 +127,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // The widest subtree of a geometry the top level indexes on its own (Geometry.Braids).
     private const int BraidTriangles = 1024;
 
-    private readonly Instance[] m_instances;
-    private readonly Entry[] m_entries;
-    private readonly Node[] m_nodes;
     private readonly Dictionary<GeometryKey, Geometry> m_geometries;
     private readonly List<KeyValuePair<GeometryKey, Geometry>> m_retained;
 
     /// <summary>Gets the triangles the scene's draws hold, a geometry drawn twice counted twice.</summary>
     public long TriangleCount { get; }
     /// <summary>Gets the static draws the scene holds.</summary>
-    public int DrawCount => m_instances.Length;
+    public int DrawCount => m_content.InstanceCount;
     /// <summary>Gets the distinct geometries the scene's draws hold.</summary>
     public int GeometryCount => m_geometries.Count;
     /// <summary>Gets the geometries the build of the scene built: those no previous scene held.</summary>
@@ -119,11 +153,12 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <summary>Traversal assertion counters, shared with the owning volume when built for presentation.</summary>
     public WorkCounterSet Counters { get; private init; } = null!;
 
-    /// <summary>Gets the managed array payload of this scene's hierarchy, including retained geometry hierarchies.
-    /// Excludes object headers, dictionaries, mesh arrays shared with the bake, and temporary build workspace.</summary>
-    public long HierarchyBytes => m_nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
-        m_entries.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Entry>() +
-        m_instances.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Instance>() + Materials.LongLength * sizeof(int) +
+    /// <summary>Gets the managed array bytes this scene's hierarchy holds, including retained geometry hierarchies and the
+    /// whole of each array rented for the top level, its unused tail included. Excludes object headers, dictionaries,
+    /// mesh arrays shared with the bake, and temporary build workspace.</summary>
+    public long HierarchyBytes => m_content.Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Node>() +
+        m_content.Entries.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Entry>() +
+        m_content.Instances.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<Instance>() + Materials.LongLength * sizeof(int) +
         m_geometries.Values.Sum(static geometry => geometry.HierarchyBytes) + m_retained.Sum(static entry => entry.Value.HierarchyBytes);
 
     // 28 bytes: the bounds, then one word holding the first index above the count's CountBits.
@@ -159,9 +194,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
         var pending = new List<(GeometryKey Key, SdfMesh Mesh)>();
+        var statics = 0;
 
-        foreach (var draw in draws) {
+        // Indexed: an interface list's enumerator is an allocation.
+        for (var index = 0; (index < draws.Count); index++) {
+            var draw = draws[index];
+
             if (!IsStatic(draw: in draw)) { continue; }
+            statics++;
 
             var key = GeometryKey.Of(mesh: draw.Mesh);
 
@@ -187,31 +227,40 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             trianglesBuilt += built[index].Count;
         }
 
-        var instances = new List<Instance>(capacity: draws.Count);
-        var materials = new HashSet<int>();
-        var materialRuns = new HashSet<(ReadOnlyMemory<uint> Triangles, int Base)>();
+        // The scene's draws go straight into the array it keeps, rented at the static draws' count.
+        var content = new Content { Instances = RentedArrays.Rent<Instance>(minimumLength: statics) };
 
-        foreach (var draw in draws) {
-            if (!IsStatic(draw: in draw)) { continue; }
-            if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
-                instances.Add(item: instance);
-                if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
-                    AddMaterials(draw: in draw, materials: materials);
+        try {
+            var materials = new HashSet<int>();
+            var materialRuns = new HashSet<(ReadOnlyMemory<uint> Triangles, int Base)>();
+
+            for (var index = 0; (index < draws.Count); index++) {
+                var draw = draws[index];
+
+                if (!IsStatic(draw: in draw)) { continue; }
+                if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
+                    content.Instances[content.InstanceCount++] = instance;
+                    if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
+                        AddMaterials(draw: in draw, materials: materials);
+                    }
                 }
             }
+            var order = materials.ToArray();
+
+            Array.Sort(array: order);
+
+            return new SdfMeshIrradianceScene(
+                content: content,
+                geometries: geometries,
+                draws: draws,
+                geometriesBuilt: pending.Count,
+                retained: Retain(geometries: geometries, previous: previous),
+                trianglesBuilt: trianglesBuilt
+            ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.TraversalFaults]) };
+        } catch {
+            content.Release();
+            throw;
         }
-        var order = materials.ToArray();
-
-        Array.Sort(array: order);
-
-        return new SdfMeshIrradianceScene(
-            geometries: geometries,
-            draws: draws,
-            geometriesBuilt: pending.Count,
-            instances: instances,
-            retained: Retain(geometries: geometries, previous: previous),
-            trianglesBuilt: trianglesBuilt
-        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.TraversalFaults]) };
     }
 
     /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
@@ -242,41 +291,54 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <returns><see langword="true"/> for a static, opaque mesh draw.</returns>
     public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
-    private SdfMeshIrradianceScene(Dictionary<GeometryKey, Geometry> geometries, IReadOnlyList<SdfMeshDraw> draws, List<Instance> instances, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
+    // Takes the content, whose draws Build filled, and fills its entries and nodes; Build releases it if this throws.
+    private SdfMeshIrradianceScene(Content content, Dictionary<GeometryKey, Geometry> geometries, IReadOnlyList<SdfMeshDraw> draws, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
+        var instances = content.Instances.AsSpan(start: 0, length: content.InstanceCount);
         var count = 0;
         var triangles = 0L;
+        var depth = 0;
+        var medians = 0;
 
-        foreach (var instance in instances) { count += instance.Geometry.Braids.Length; }
+        foreach (ref readonly var instance in instances) { count += instance.Geometry.Braids.Length; }
 
-        var entries = new Entry[count];
-        var lows = new Vector3[count];
-        var highs = new Vector3[count];
-        var at = 0;
+        // Build workspace only, rented: the scene keeps none of these past its build.
+        var entries = RentedArrays.Rent<Entry>(minimumLength: count);
+        var lows = RentedArrays.Rent<Vector3>(minimumLength: count);
+        var highs = RentedArrays.Rent<Vector3>(minimumLength: count);
+        var order = Array.Empty<int>();
 
-        // The top level indexes each draw's braid subtrees, not its root, so overlapping draws separate as one hierarchy
-        // over all their triangles would.
-        for (var index = 0; (index < instances.Count); index++) {
-            var instance = instances[index];
+        try {
+            var at = 0;
 
-            triangles += instance.Geometry.Count;
-            foreach (var braid in instance.Geometry.Braids) {
-                ref readonly var node = ref instance.Geometry.Nodes[braid];
+            // The top level indexes each draw's braid subtrees, not its root, so overlapping draws separate as one
+            // hierarchy over all their triangles would.
+            for (var index = 0; (index < instances.Length); index++) {
+                ref readonly var instance = ref instances[index];
 
-                (lows[at], highs[at]) = (instance.Identity ? (node.Low, node.High) : Bounds(high: node.High, low: node.Low, matrix: instance.ObjectToWorld));
-                entries[at++] = new Entry(Instance: index, Node: braid);
+                triangles += instance.Geometry.Count;
+                foreach (var braid in instance.Geometry.Braids) {
+                    ref readonly var node = ref instance.Geometry.Nodes[braid];
+
+                    (lows[at], highs[at]) = (instance.Identity ? (node.Low, node.High) : Bounds(high: node.High, low: node.Low, matrix: instance.ObjectToWorld));
+                    entries[at++] = new Entry(Instance: index, Node: braid);
+                }
             }
+            if (count > 0) {
+                (content.Nodes, content.NodeCount, order, _, depth, medians) = Hierarchy.Build(braid: 0, count: count, highs: highs, leaf: 1, lows: lows, name: "mesh GI static scene", rent: true);
+            }
+            content.Entries = RentedArrays.Rent<Entry>(minimumLength: count);
+            for (var index = 0; (index < count); index++) {
+                content.Entries[index] = entries[order[index]];
+            }
+            content.EntryCount = count;
+        } finally {
+            RentedArrays.Return(array: entries);
+            RentedArrays.Return(array: lows);
+            RentedArrays.Return(array: highs);
+            RentedArrays.Return(array: order);
         }
 
-        var (nodes, order, _, depth, medians) = ((count == 0)
-            ? (Array.Empty<Node>(), Array.Empty<int>(), Array.Empty<int>(), 0, 0)
-            : Hierarchy.Build(braid: 0, count: count, highs: highs, leaf: 1, lows: lows, name: "mesh GI static scene"));
-
-        m_instances = [.. instances];
-        m_entries = new Entry[count];
-        for (var index = 0; (index < count); index++) {
-            m_entries[index] = entries[order[index]];
-        }
-        m_nodes = nodes;
+        m_content = content;
         TopDepth = depth;
         GeometryDepth = geometries.Values.Select(static geometry => geometry.Depth).DefaultIfEmpty().Max();
         MedianSplits = medians + geometries.Values.Sum(static geometry => geometry.MedianSplits);
@@ -344,23 +406,24 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
     /// <summary>Finds the nearest hit, also returning its scene instance and original mesh triangle ordinal, or -1 for a miss.</summary>
     public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal, out int instance, out int triangle) {
+        var content = m_content;
         var inverse = Reciprocal(direction: direction);
-        var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin, counters: Counters);
+        var nearest = new DrawLeaves(any: false, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters);
 
         distance = maximum;
         bakeHalfDiagonal = 0;
-        if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0, counters: Counters);
+        if ((content.NodeCount > 0) && Slab(low: content.Nodes[0].Low, high: content.Nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
+            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: content.Nodes, origin: origin, start: 0, counters: Counters);
         }
         instance = nearest.Instance;
-        triangle = instance < 0 ? -1 : m_instances[instance].Geometry.Triangles[nearest.Triangle];
+        triangle = instance < 0 ? -1 : content.Instances[instance].Geometry.Triangles[nearest.Triangle];
         if (nearest.Instance < 0) {
             normal = default;
             material = 0;
             return false;
         }
 
-        ref readonly var hit = ref m_instances[nearest.Instance];
+        ref readonly var hit = ref content.Instances[nearest.Instance];
 
         normal = hit.NormalOf(triangle: nearest.Triangle);
         material = hit.MaterialOf(triangle: nearest.Triangle);
@@ -373,12 +436,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="maximum">The distance it must reach, in metres.</param>
     /// <returns><see langword="true"/> when nothing blocks the ray.</returns>
     public bool Unblocked(Vector3 origin, Vector3 direction, float maximum) {
+        var content = m_content;
         var inverse = Reciprocal(direction: direction);
-        var any = new DrawLeaves(any: true, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin, counters: Counters);
+        var any = new DrawLeaves(any: true, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters);
         var distance = maximum;
 
-        if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: m_nodes, origin: origin, start: 0, counters: Counters);
+        if ((content.NodeCount > 0) && Slab(low: content.Nodes[0].Low, high: content.Nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
+            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: content.Nodes, origin: origin, start: 0, counters: Counters);
         }
         return (any.Instance < 0);
     }
@@ -649,9 +713,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             var total = pieces.Sum(selector: static piece => piece.Count);
             // Build workspace only, rented: the hierarchy keeps none of these past its build.
-            var lows = ArrayPool<Vector3>.Shared.Rent(minimumLength: total);
-            var highs = ArrayPool<Vector3>.Shared.Rent(minimumLength: total);
-            var owners = ArrayPool<int>.Shared.Rent(minimumLength: total);
+            var lows = RentedArrays.Rent<Vector3>(minimumLength: total);
+            var highs = RentedArrays.Rent<Vector3>(minimumLength: total);
+            var owners = RentedArrays.Rent<int>(minimumLength: total);
 
             try {
                 var at = 0;
@@ -661,18 +725,23 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                     at += piece.Count;
                 }
 
-                var (nodes, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, count: total, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)");
-                var triangles = new int[order.Length];
+                var (nodes, _, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, count: total, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)", rent: false);
 
-                for (var index = 0; (index < order.Length); index++) {
-                    triangles[index] = owners[order[index]];
+                try {
+                    var triangles = new int[total];
+
+                    for (var index = 0; (index < total); index++) {
+                        triangles[index] = owners[order[index]];
+                    }
+
+                    return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
+                } finally {
+                    RentedArrays.Return(array: order);
                 }
-
-                return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
             } finally {
-                ArrayPool<Vector3>.Shared.Return(array: lows);
-                ArrayPool<Vector3>.Shared.Return(array: highs);
-                ArrayPool<int>.Shared.Return(array: owners);
+                RentedArrays.Return(array: lows);
+                RentedArrays.Return(array: highs);
+                RentedArrays.Return(array: owners);
             }
         }
 
@@ -784,8 +853,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             m_highs = highs;
             m_leaf = leaf;
             m_braid = braid;
-            m_centroids = ArrayPool<Vector3>.Shared.Rent(minimumLength: count);
-            m_order = new int[count];
+            m_centroids = RentedArrays.Rent<Vector3>(minimumLength: count);
+            m_order = RentedArrays.Rent<int>(minimumLength: count);
             m_capacity = Math.Max(val1: 1, val2: ((2 * count) - 1));
             m_chunks = new Node[]?[(((m_capacity - 1) >> ChunkShift) + 1)];
             for (var index = 0; (index < count); index++) {
@@ -794,13 +863,16 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             }
         }
 
-        // The nodes, root first, the primitive each leaf position holds, and with a braid width the widest nodes at most
-        // that many primitives wide, over the first count primitives of the bounds.
-        public static (Node[] Nodes, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name) {
+        // The nodes, root first, and how many there are; the primitive each of the first count leaf positions holds, in an
+        // array rented for the caller to return; and with a braid width the widest nodes at most that many primitives
+        // wide, over the first count primitives of the bounds. The nodes are rented for the caller to return when rent
+        // says so, and exactly as long as their count otherwise.
+        public static (Node[] Nodes, int NodeCount, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int count, int leaf, int braid, string name, bool rent) {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: leaf, other: Node.MaxCount);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: count, other: Math.Min(val1: lows.Length, val2: highs.Length));
 
             var hierarchy = new Hierarchy(braid: braid, count: count, highs: highs, leaf: leaf, lows: lows) { m_name = name };
+            var handed = false;
 
             try {
                 var depth = hierarchy.BuildNode(count: count, first: 0, node: 0, wide: true, depth: 0);
@@ -808,9 +880,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
                 hierarchy.m_braids.Sort();
                 for (var index = 0; (index < braids.Length); index++) { braids[index] = hierarchy.m_braids[index].Node; }
-                return (hierarchy.CopyNodes(), hierarchy.m_order, braids, depth, hierarchy.m_medianSplits);
+
+                var nodes = hierarchy.CopyNodes(rent: rent);
+
+                handed = true;
+                return (nodes, hierarchy.m_nodeCount, hierarchy.m_order, braids, depth, hierarchy.m_medianSplits);
             } finally {
                 hierarchy.ReturnWorkspace();
+                if (!handed) { RentedArrays.Return(array: hierarchy.m_order); }
             }
         }
 
@@ -833,8 +910,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
         // Every node below the count was written by the build before it ends, so a rented chunk's earlier contents are
         // never read.
-        private Node[] CopyNodes() {
-            var nodes = new Node[m_nodeCount];
+        private Node[] CopyNodes(bool rent) {
+            var nodes = (rent ? RentedArrays.Rent<Node>(minimumLength: m_nodeCount) : new Node[m_nodeCount]);
 
             for (var start = 0; (start < m_nodeCount); start += (1 << ChunkShift)) {
                 m_chunks[(start >> ChunkShift)].AsSpan(length: Math.Min(val1: (1 << ChunkShift), val2: (m_nodeCount - start)), start: 0).CopyTo(destination: nodes.AsSpan(start: start));
@@ -843,7 +920,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             return nodes;
         }
         private void ReturnWorkspace() {
-            ArrayPool<Vector3>.Shared.Return(array: m_centroids);
+            RentedArrays.Return(array: m_centroids);
             for (var index = 0; (index < m_chunks.Length); index++) {
                 if (m_chunks[index] is { } chunk) { ArrayPool<Node>.Shared.Return(array: chunk); }
                 m_chunks[index] = null;

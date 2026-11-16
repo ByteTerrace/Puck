@@ -13,8 +13,9 @@ namespace Puck.Cli.Mesh;
 /// <c>puck mesh scene --world &lt;path&gt;</c>: times the irradiance volume's trace scene (<see cref="SdfMeshIrradianceScene"/>)
 /// over the static meshes a World stored for a world, with no device: a build from nothing, a trace of probe rays about one
 /// draw, then the scene updated for a change of that draw alone (its mesh replaced by new geometry, then the draw moved,
-/// then the original draws back) and traced again. Exit codes: 0 timed; 1 loading failed, or no static group had a stored
-/// mesh; 2 a usage error.
+/// then the original draws back, then moved again) and traced again. Each build prints the bytes it allocated, and the
+/// first and the restored scene print their GPU export's size and the hash of the tree it holds. Exit codes: 0 timed;
+/// 1 loading failed, or no static group had a stored mesh; 2 a usage error.
 /// </summary>
 public static class MeshSceneCommand {
     private const string Verb = "mesh scene";
@@ -32,7 +33,7 @@ public static class MeshSceneCommand {
         var identityOption = new Option<string?>(name: "--identity") { Description = "The bake identity the meshes are stored under (32 hex digits), in place of --build." };
         var backendOption = new Option<string>(name: "--backend") { DefaultValueFactory = static _ => "directx", Description = "The backend the World baked on: directx or vulkan." };
         var command = new Command(
-            description: "Times the irradiance volume's CPU trace scene over a world's stored static meshes: a full build, a trace of probe rays, and the update for a change of one draw (new geometry, a move, the original back), with the geometries each update built and reused. Reads the store; never writes it.",
+            description: "Times the irradiance volume's CPU trace scene over a world's stored static meshes: a full build, a trace of probe rays, and the update for a change of one draw (new geometry, a move, the original back, a move again), with the geometries each update built and reused, the bytes each build allocated, and the GPU export's words and tree hash. Reads the store; never writes it.",
             name: "scene"
         ) { worldOption, changeOption, cacheOption, buildOption, identityOption, backendOption };
 
@@ -113,15 +114,27 @@ public static class MeshSceneCommand {
         Export(draws: draws, output: output, scene: full);
         Trace(center: center, label: "trace", output: output, scene: full);
 
+        // Each scene is released once the next is built from it, as the volume releases the scene it replaces, so a later
+        // build rents the arrays an earlier one returned.
         var swapped = Timed(label: "new geometry", build: () => SdfMeshIrradianceScene.Build(draws: replaced, previous: full), output: output);
 
+        full.Dispose();
         Trace(center: center, label: "trace", output: output, scene: swapped);
 
         var shifted = Timed(label: "move", build: () => SdfMeshIrradianceScene.Build(draws: moved, previous: swapped), output: output);
+
+        swapped.Dispose();
+
         var back = Timed(label: "back", build: () => SdfMeshIrradianceScene.Build(draws: draws, previous: shifted), output: output);
 
+        shifted.Dispose();
         Export(draws: draws, output: output, scene: back);
         Trace(center: center, label: "trace", output: output, scene: back);
+
+        var again = Timed(label: "move again", build: () => SdfMeshIrradianceScene.Build(draws: moved, previous: back), output: output);
+
+        back.Dispose();
+        again.Dispose();
         output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  working set: {(Environment.WorkingSet / (1 << 20))} MiB, peak {(Process.GetCurrentProcess().PeakWorkingSet64 / (1 << 20))} MiB"));
         return 0;
     }
