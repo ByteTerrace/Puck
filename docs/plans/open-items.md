@@ -1006,8 +1006,7 @@ The custom no-GC runtime port stays later work, on the
 Owner: specialist (rendering) · high · Next: the bake samples through the
 residency's background GPU work
 ([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
-the frame-pacing floor is gone and the cold bake is CPU-bound; narrow
-`SdfMeshBakeClosure` to the code that decides mesh contents and key one
+the frame-pacing floor is gone and the cold bake is CPU-bound; key one
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from
@@ -3504,11 +3503,9 @@ Grounded causes and leads, largest first:
   variants read the materials. Next cuts: dynamic and glass meshes, which the
   scene leaves out, can let positions and level-0 indices go through the same
   door; the static ones follow once placement and classification move to the
-  GPU trace. A restore decodes the whole store entry (`SdfMeshStoreCodec.TryDecode`)
-  when it needs only the normals and level-index planes; a codec read of
-  those planes alone would cut a rebuilt region's restore work, and
-  [the arrival memo](arrival-proportional.md#decision-4-the-store-decode)'s
-  step D1 is that read. Owner: rendering/bake.
+  GPU trace. A restore reads only the normals and level-index planes of the
+  entry (`SdfMeshStoreCodec.TryDecode` with the restore's storage, `SdfMesh.Restore.cs`).
+  Owner: rendering/bake.
 - [medium] A replacement that changes a group's piece or copy count still
   rebuilds the dresser's whole draw list and stages every record once, as
   does a group's first mesh; a draw waiting for its mesh is filtered out of
@@ -3603,9 +3600,7 @@ Grounded causes and leads, largest first:
   payloads and bake group workspaces, never the managed heap,
   `GpuRegion` host copies, device or staging heaps, so on a unified-memory Deck
   it pays no regard to the GPU's share of the same memory.
-- A warm load decodes the whole loaded set into managed arrays once before the
-  native copy (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`).
-  A player's build also keeps the composed-document store
+- A player's build also keeps the composed-document store
   (`WorldDefinitionFileSource.cs`, `ForgetComposedDocuments` after boot; the
   heap walk finds composed bytes and compiled source still held) and may keep
   the authoring document tree after compiling; confirm and release what a
@@ -3661,13 +3656,9 @@ Grounded causes and leads, largest first:
 Bake and probe residency lifecycle lows (each read at the cited lines; a
 failing case is argued from source, not run):
 
-- [low] A probe-scene export that throws after allocating its prefix leaks the
-  prefix: `SdfMeshIrradianceScene.CreateGpuExport`
-  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:47`) allocates it from the
-  arena before the geometry loop and frees nothing on a throw, and the scene
-  upload's `Dispose` swallows the faulted work
-  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:112-120`). Free the allocation
-  where the export throws, and count faulted work on cancel.
+- [low] The scene upload's `Dispose` swallows faulted export work
+  (`SdfMeshProbeGpuWork.SceneUpload.Dispose`), so a probe-scene export that
+  throws during teardown is never counted. Count faulted work on cancel.
 - [low · plausible] A probe job cancelled by the admission timeout never reads
   as stale-scene evidence: `SdfMeshProbeGpuWork.cs:155-162` dequeues the head
   after `AdmissionWait`, counts `GpuCancelled` and answers cancelled, while

@@ -1070,9 +1070,11 @@ wrong. The contracts that bite most often:
 - **Baked meshes persist across runs** (`SdfMeshStore`), keyed by geometry and
   the bake's identity: the bake kernels' bytecode and the IL of every method
   the bake's code reaches, across the `Puck` assemblies, read from the build
-  (`SdfMeshBakeClosure`). No list names the bake's files: code it calls is
+  (`SdfMeshBakeClosure`), and the entry format's version. No list names the bake's files: code it calls is
   covered, code it does not call is not, a checkout's path is not, and a miss
-  logs the part that changed (`[sdf.mesh-bake] miss …`). A hot-reload update to
+  logs the part that changed (`[sdf.mesh-bake] miss …`). Reading a stored mesh
+  back is not covered: a decode edit that changes what an entry's bytes mean
+  changes `SdfMeshStoreCodec.Magic`. A hot-reload update to
   a type the closure declares members of folds into the code identity
   (`SdfMeshBakeClosure.Reads`, `CodeRevision.AppliedTo`), and the residency
   follows it before each plan and stage; an update anywhere else keeps the

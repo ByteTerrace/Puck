@@ -5,19 +5,22 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshIrradianceScene {
+    // The draws the scene keeps, as many as it counts of its rented array.
+    private ReadOnlySpan<Instance> Draws => m_content.Instances.AsSpan(start: 0, length: m_content.InstanceCount);
+
     internal bool HasGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, IReadOnlySet<SdfMesh> owed) {
-        foreach (var instance in m_instances) {
+        foreach (ref readonly var instance in Draws) {
             if (!placements.ContainsKey(instance.Mesh) || owed.Contains(instance.Mesh)) { return false; }
         }
         return true;
     }
     internal Dictionary<SdfMesh, SdfMeshRegionMesh> CaptureGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements) {
         var captured = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
-        foreach (var instance in m_instances) { captured.TryAdd(instance.Mesh, placements[instance.Mesh]); }
+        foreach (ref readonly var instance in Draws) { captured.TryAdd(instance.Mesh, placements[instance.Mesh]); }
         return captured;
     }
     internal bool MatchesGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> current, IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> captured) {
-        foreach (var instance in m_instances) {
+        foreach (ref readonly var instance in Draws) {
             if (!captured.TryGetValue(instance.Mesh, out var prior)) { return false; }
             var placed = current[instance.Mesh];
             if (placed.VertexWord != prior.VertexWord || placed.IndexWord != prior.IndexWord ||
@@ -25,6 +28,10 @@ public sealed partial class SdfMeshIrradianceScene {
         }
         return true;
     }
+    /// <summary>Gets the words a GPU export's prefix holds (the top level's nodes, its entries and one record per draw):
+    /// what each scene change uploads whatever geometry it shares with the scene before it.</summary>
+    public int PrefixWords => checked(m_content.NodeCount * SdfMeshProbeTrace.NodeWords + m_content.EntryCount * SdfMeshProbeTrace.EntryWords + m_content.InstanceCount * SdfMeshProbeTrace.InstanceWords);
+
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
     /// region. Word zero is the top root's address, or zero for an empty scene. No triangles or hierarchy are rebuilt.
     /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>
@@ -37,17 +44,16 @@ public sealed partial class SdfMeshIrradianceScene {
         return words;
     }
 
-    // The runtime stages directly from the scene's existing arrays. Only the small instance/top-level prefix is
-    // packed on the host; geometry nodes and leaf ordinals never gain a second full host copy.
+    // The runtime stages directly from the scene's existing arrays: geometry nodes and leaf ordinals, and the prefix (the
+    // top level's nodes, entries and instance records), each word written when a reader asks for it, so no part of the
+    // export gains a second host copy. A reader holds a scene claim and the captured placements for as long as it reads,
+    // as SdfMeshProbeGpuWork's upload does.
     internal GpuExport CreateGpuExport(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, GpuArena? arena = null) {
         ArgumentNullException.ThrowIfNull(placements);
         arena ??= new GpuArena();
-        var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>();
-        var prefixWords = checked(m_nodes.Length * SdfMeshProbeTrace.NodeWords + m_entries.Length * SdfMeshProbeTrace.EntryWords + m_instances.Length * SdfMeshProbeTrace.InstanceWords);
-        var prefix = arena.Allocate(Math.Max(1, prefixWords));
-        var entries = checked(prefix + m_nodes.Length * SdfMeshProbeTrace.NodeWords);
-        var instances = checked(entries + m_entries.Length * SdfMeshProbeTrace.EntryWords);
-        var segments = new List<GpuSegment>();
+        var content = m_content;
+        var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>(capacity: m_geometries.Count);
+        var segments = new List<GpuSegment>(capacity: ((2 * m_geometries.Count) + 2));
         var changed = new List<(int Word, int Count)>();
         foreach (var geometry in m_geometries.Values) {
             var count = checked(geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords + geometry.Triangles.Length);
@@ -61,40 +67,25 @@ public sealed partial class SdfMeshIrradianceScene {
             if (written < count) { changed.Add((nodes + written, count - written)); }
             var triangles = checked(nodes + geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords);
             geometries.Add(geometry, (nodes, triangles));
-            segments.Add(new(nodes, geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords, null, geometry.Nodes, null, triangles));
-            segments.Add(new(triangles, geometry.Triangles.Length, null, null, geometry.Triangles, 0));
+            segments.Add(new(nodes, geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords, GpuSegmentKind.Nodes, geometry, triangles));
+            segments.Add(new(triangles, geometry.Triangles.Length, GpuSegmentKind.Triangles, geometry, 0));
         }
-        var result = new uint[Math.Max(1, prefixWords)];
-        var root = m_nodes.Length == 0 ? 0u : (uint)prefix;
-        WriteNodes(m_nodes, result, prefix, entries, SdfMeshProbeTrace.EntryWords);
-        segments.Add(new(prefix, result.Length, result, null, null, 0));
-        changed.Add((prefix, result.Length));
-        segments.Add(new(0, 1, [root], null, null, 0));
+        // The prefix is allocated last, so a geometry that cannot be placed throws before anything only this export
+        // would free; a geometry placed meanwhile stays in the arena, which frees it at the next publication that does
+        // not name it. An empty scene still exports one zero prefix word, so a prefix allocation always exists to free.
+        var prefixCount = Math.Max(1, PrefixWords);
+        var prefix = arena.Allocate(prefixCount);
+        var nodeWords = content.NodeCount * SdfMeshProbeTrace.NodeWords;
+        var entryWords = content.EntryCount * SdfMeshProbeTrace.EntryWords;
+        var instanceWords = content.InstanceCount * SdfMeshProbeTrace.InstanceWords;
+        var entries = checked(prefix + nodeWords);
+        var instances = checked(entries + entryWords);
+        var root = content.NodeCount == 0 ? 0u : (uint)prefix;
+        segments.Add(new(prefix, prefixCount, GpuSegmentKind.Prefix, null, 0));
+        changed.Add((prefix, prefixCount));
+        segments.Add(new(0, 1, GpuSegmentKind.Root, null, 0));
         segments.Sort(static (a, b) => a.Word.CompareTo(b.Word));
-        for (var index = 0; index < m_entries.Length; index++) {
-            var entry = m_entries[index];
-            result[entries - prefix + index * SdfMeshProbeTrace.EntryWords] = checked((uint)(instances + entry.Instance * SdfMeshProbeTrace.InstanceWords));
-            result[entries - prefix + index * SdfMeshProbeTrace.EntryWords + 1] = checked((uint)(geometries[m_instances[entry.Instance].Geometry].Nodes + entry.Node * SdfMeshProbeTrace.NodeWords));
-        }
-        for (var index = 0; index < m_instances.Length; index++) {
-            var instance = m_instances[index];
-            var placement = placements[instance.Mesh];
-            var record = result.AsSpan(instances - prefix + index * SdfMeshProbeTrace.InstanceWords, SdfMeshProbeTrace.InstanceWords);
-            var inverse = instance.WorldToObject;
-            MemoryMarshal.Cast<Matrix4x4, uint>(new ReadOnlySpan<Matrix4x4>(in inverse)).CopyTo(record);
-            var normal = instance.NormalToWorld;
-            var matrix = MemoryMarshal.Cast<uint, float>(record.Slice(SdfMeshProbeTrace.NormalWord, 9));
-            matrix[0] = normal.M11; matrix[1] = normal.M12; matrix[2] = normal.M13;
-            matrix[3] = normal.M21; matrix[4] = normal.M22; matrix[5] = normal.M23;
-            matrix[6] = normal.M31; matrix[7] = normal.M32; matrix[8] = normal.M33;
-            record[SdfMeshProbeTrace.GeometryWord] = (uint)placement.IndexWord;
-            record[SdfMeshProbeTrace.GeometryWord + 1] = (uint)placement.VertexWord;
-            record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)placement.MaterialWord;
-            record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
-            record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
-            record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;
-        }
-        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Prefix = prefix, Geometries = geometries.Keys.ToHashSet() };
+        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Prefix = prefix, Geometries = geometries };
 
         void Read(int word, Span<uint> destination) {
             var low = 0;
@@ -104,7 +95,8 @@ public sealed partial class SdfMeshIrradianceScene {
                 if (segments[middle].Word + segments[middle].Count <= word) { low = middle + 1; }
                 else { high = middle; }
             }
-            Span<uint> nodeWords = stackalloc uint[SdfMeshProbeTrace.NodeWords];
+            // One record of any kind the export holds, the widest an instance's.
+            Span<uint> record = stackalloc uint[SdfMeshProbeTrace.InstanceWords];
             while (!destination.IsEmpty) {
                 if (low == segments.Count) { destination.Clear(); break; }
                 if (word < segments[low].Word) {
@@ -118,23 +110,73 @@ public sealed partial class SdfMeshIrradianceScene {
                 var offset = word - segment.Word;
                 var take = Math.Min(destination.Length, segment.Count - offset);
                 var target = destination[..take];
-                if (segment.Words is { } packed) { packed.AsSpan(offset, take).CopyTo(target); }
-                else if (segment.Triangles is { } triangles) { MemoryMarshal.Cast<int, uint>(triangles.AsSpan(offset, take)).CopyTo(target); }
-                else {
-                    while (!target.IsEmpty) {
-                        var index = offset / SdfMeshProbeTrace.NodeWords;
-                        var within = offset % SdfMeshProbeTrace.NodeWords;
-                        WriteNodes(segment.Nodes!.AsSpan(index, 1), nodeWords, segment.Word, segment.Leaves, 1);
-                        var length = Math.Min(target.Length, SdfMeshProbeTrace.NodeWords - within);
-                        nodeWords.Slice(within, length).CopyTo(target);
-                        offset += length;
-                        target = target[length..];
-                    }
+                switch (segment.Kind) {
+                    case GpuSegmentKind.Root: target.Fill(root); break;
+                    case GpuSegmentKind.Triangles: MemoryMarshal.Cast<int, uint>(segment.Geometry!.Triangles.AsSpan(offset, take)).CopyTo(target); break;
+                    default:
+                        // Fixed-size records: each one the run reaches is written whole and the part it covers copied.
+                        while (!target.IsEmpty) {
+                            var (part, start, stride) = (segment.Kind == GpuSegmentKind.Nodes) ? (PrefixPart.None, 0, SdfMeshProbeTrace.NodeWords) : PrefixRecord(offset);
+                            if (stride == 0) { target.Clear(); break; }
+                            var index = (offset - start) / stride;
+                            var within = (offset - start) % stride;
+                            var words = record[..stride];
+                            if (segment.Kind == GpuSegmentKind.Nodes) { WriteNodes(segment.Geometry!.Nodes.AsSpan(index, 1), words, segment.Word, segment.Leaves, 1); }
+                            else { WritePrefixRecord(part, index, words); }
+                            var length = Math.Min(target.Length, stride - within);
+                            words.Slice(within, length).CopyTo(target);
+                            offset += length;
+                            target = target[length..];
+                        }
+                        break;
                 }
                 word += take;
                 destination = destination[take..];
             }
         }
+        // Which part of the prefix holds an offset (nodes, then entries, then instance records), where that part starts,
+        // and how wide its records are; zero wide past them, in an empty scene's one zero word.
+        (PrefixPart Part, int Start, int Stride) PrefixRecord(int offset) =>
+            (offset < nodeWords) ? (PrefixPart.Node, 0, SdfMeshProbeTrace.NodeWords) :
+            (offset < (nodeWords + entryWords)) ? (PrefixPart.Entry, nodeWords, SdfMeshProbeTrace.EntryWords) :
+            (offset < (nodeWords + entryWords + instanceWords)) ? (PrefixPart.Instance, (nodeWords + entryWords), SdfMeshProbeTrace.InstanceWords) : (PrefixPart.None, 0, 0);
+        void WritePrefixRecord(PrefixPart part, int index, Span<uint> words) {
+            switch (part) {
+                case PrefixPart.Node:
+                    WriteNodes(content.Nodes.AsSpan(index, 1), words, prefix, entries, SdfMeshProbeTrace.EntryWords);
+                    break;
+                case PrefixPart.Entry:
+                    var entry = content.Entries[index];
+                    words[0] = checked((uint)(instances + entry.Instance * SdfMeshProbeTrace.InstanceWords));
+                    words[1] = checked((uint)(geometries[content.Instances[entry.Instance].Geometry].Nodes + entry.Node * SdfMeshProbeTrace.NodeWords));
+                    break;
+                default:
+                    ref readonly var instance = ref content.Instances[index];
+                    words.Clear();
+                    WriteInstance(instance: in instance, index: index, placement: placements[instance.Mesh], record: words);
+                    break;
+            }
+        }
+    }
+
+    private enum PrefixPart : byte { None, Node, Entry, Instance }
+
+    // One instance record: its inverse transform, its winding-aware normal matrix, its mesh's placement and material base,
+    // whether its transform is identity, and its ordinal. The words it leaves unwritten stay as the caller cleared them.
+    private static void WriteInstance(in Instance instance, int index, SdfMeshRegionMesh placement, Span<uint> record) {
+        var inverse = instance.WorldToObject;
+        MemoryMarshal.Cast<Matrix4x4, uint>(new ReadOnlySpan<Matrix4x4>(in inverse)).CopyTo(record);
+        var normal = instance.NormalToWorld;
+        var matrix = MemoryMarshal.Cast<uint, float>(record.Slice(SdfMeshProbeTrace.NormalWord, 9));
+        matrix[0] = normal.M11; matrix[1] = normal.M12; matrix[2] = normal.M13;
+        matrix[3] = normal.M21; matrix[4] = normal.M22; matrix[5] = normal.M23;
+        matrix[6] = normal.M31; matrix[7] = normal.M32; matrix[8] = normal.M33;
+        record[SdfMeshProbeTrace.GeometryWord] = (uint)placement.IndexWord;
+        record[SdfMeshProbeTrace.GeometryWord + 1] = (uint)placement.VertexWord;
+        record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)placement.MaterialWord;
+        record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
+        record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
+        record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;
     }
 
     // Allocations still read by the published root are freed only after the replacement root's fence.
@@ -156,7 +198,7 @@ public sealed partial class SdfMeshIrradianceScene {
         }
         internal void Publish(GpuExport export) {
             if (m_prefix != 0) { _ = m_ranges.Free(start: (ulong)m_prefix); }
-            foreach (var geometry in Geometries.Keys.Where(geometry => !export.Geometries.Contains(geometry)).ToArray()) {
+            foreach (var geometry in Geometries.Keys.Where(geometry => !export.Geometries.ContainsKey(geometry)).ToArray()) {
                 _ = m_ranges.Free(start: (ulong)Geometries[geometry].Word);
                 Geometries.Remove(geometry);
             }
@@ -168,7 +210,7 @@ public sealed partial class SdfMeshIrradianceScene {
             _ = m_ranges.Free(start: (ulong)export.Prefix);
         }
         internal void Complete(GpuExport export, int word, int count) {
-            foreach (var geometry in export.Geometries) {
+            foreach (var geometry in export.Geometries.Keys) {
                 var placement = Geometries[geometry];
                 var start = Math.Max(word, placement.Word);
                 var end = Math.Min(word + count, placement.Word + geometry.Nodes.Length * SdfMeshProbeTrace.NodeWords + geometry.Triangles.Length);
@@ -184,14 +226,18 @@ public sealed partial class SdfMeshIrradianceScene {
         internal int WrittenWords => Written.Count != 0 && Written.Start(0) == 0 ? Written.Length(0) : 0;
     }
 
-    private sealed record GpuSegment(int Word, int Count, uint[]? Words, Node[]? Nodes, int[]? Triangles, int Leaves);
+    private enum GpuSegmentKind : byte { Root, Prefix, Nodes, Triangles }
+    // A run of the export's words: word zero's root, the prefix, or one geometry's nodes (whose leaves start at Leaves)
+    // or triangle ordinals.
+    private readonly record struct GpuSegment(int Word, int Count, GpuSegmentKind Kind, Geometry? Geometry, int Leaves);
     internal delegate void GpuWordWriter(int word, Span<uint> destination);
     internal sealed class GpuExport(int words, GpuWordWriter read) {
         public int Words { get; } = words;
         internal required List<(int Word, int Count)> Changed { get; init; }
         internal required uint Root { get; init; }
         internal required int Prefix { get; init; }
-        internal HashSet<Geometry> Geometries { get; init; } = [];
+        // Each geometry the export names, with its node and triangle words' addresses.
+        internal required IReadOnlyDictionary<Geometry, (int Nodes, int Triangles)> Geometries { get; init; }
         public void Read(int word, Span<uint> destination) => read(word, destination);
     }
 
