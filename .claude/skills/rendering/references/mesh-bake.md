@@ -970,8 +970,20 @@ laws exercise that boundary.
   baked mesh, which keeps its parts.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
-  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
-  and the code the bake runs (`SdfMeshBakeClosure`). The kernels' source
+  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode,
+  the code the bake runs (`SdfMeshBakeClosure`) and the entry format's version
+  (`SdfMeshStore.EntryVersion`, the codec's `SdfMeshStoreCodec.Magic`, folded by
+  `SdfMeshStore.BuildIdentityOf`). The identity covers what decides a stored
+  mesh's content and nothing that reads or copies one back: code that runs again
+  on every load (the decode, `SdfMesh.NativeCopy`, renumbering, a mesh's claims)
+  can never serve a stale product, so it stays out, and what an entry's bytes
+  mean belongs to the format. A decode edit that keeps that meaning moves no
+  identity; one that changes it changes `SdfMeshStoreCodec.Magic`, which starts a
+  new set, and `TryDecode` refuses any entry of another tag. The encoder stays in,
+  because its quantization (`PositionWidth`, the octahedral normals) decides what
+  every later run draws: a cold bake publishes the mesh the store reads back. The
+  encoder's fit check and the decode share one expansion (`SdfMeshStoreCodec.Expand`),
+  so the encoder's budget holds for what the decode writes. The kernels' source
   closure is `passes/sdf-bake-world.hlsli`: their own interface
   (`isa/sdf-mesh-bake.interface.hlsli`, `SdfWorldInterfaces.MeshBakeParameters`:
   a pass block of `SdfWorldPackage.BakeValues` alone, the masks, samples and
@@ -987,9 +999,9 @@ laws exercise that boundary.
   `SdfMeshBakeClosure` supplies the bake's roots and transport boundaries, while
   compiled-world chunks and generated machine images use the same walker with their own roots.
   Positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
-  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`) and the point table's
-  layout (`SdfMeshBakeBatch.PointRuns`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`, persisted-product normalization
-  (`SdfMesh.NativeCopy`) and the store codec. Their graph reaches group/geometry planning, lattice refinement,
+  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`), the point and sampled
+  tables' layout (`SdfMeshBakeBatch.PointRuns`, `WriteSampled`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`
+  and the store's encoder (`SdfMeshStoreCodec.Encode`). Their graph reaches group/geometry planning, lattice refinement,
   contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
   and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
@@ -1003,7 +1015,9 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, and at `GpuRegion` and `GpuUploadRuns`, and at the runtime. It also
+  which hold meshes, at a mesh's claims and restorable parts (the stop types `SdfMesh/Payload` and
+  `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and
+  `GpuUploadRuns`, and at the runtime. It also
   stops at `SdfMeshBakeReport`, which words, counts and writes every `[sdf.mesh-bake]` line and owns the counters
   they report (`Accounts`): the bake hands it values (a group's selector, counts, outcomes) and never builds or
   writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or
