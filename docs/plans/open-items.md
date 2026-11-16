@@ -37,54 +37,63 @@ built on the engine's systems stresses them, and what it surfaces is fixed at
 the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high] [Residency and streaming](#residency-and-streaming): the
+1. [high, before any push to `main`] [Security review](#security-review):
+   the write door still tells a withheld row from an absent one at fields
+   and paths a per-field enumeration missed (an adversarial review of the
+   read-door fix found five high leaks); the structural write door
+   ([the disclosure plan](disclosure.md)) is in design.
+2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, step 2, and step 7's prototype with a GPU grant; then step 3.
-2. [high] [Bake detail](#bake-detail): a contour that holds a crease at any
-   lattice alignment (the tour's mesh-audit reds, the Moth's shin groups),
+   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
+   grant; then step 3.
+3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
+   by every lattice fact and are still turned from the field (vertices the
+   planes put off the surface, slivers beside a crease, a face narrower than
+   a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-3. [high] [Engine job system](#engine-job-system): the memo's next step,
-   which after the scheduling stage's remainder is the control plane's phase
-   and bounded waits, then the pool's design.
-4. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
+4. [high] [Engine job system](#engine-job-system): the memo's next step:
+   the scheduling stage's windowed reading, another family's review of the
+   control plane's phase and bounded waits and its first step, then the
+   pool's design.
+5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
-5. [high] [Refactoring campaign](#refactoring-campaign): the duplication
+6. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-6. [high] [The visual bar](#the-visual-bar): the caldera water as its first
+7. [high] [The visual bar](#the-visual-bar): the caldera water as its first
    proof, built by [Water](#water)'s lanes A3 to A5.
-7. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
+8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-8. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
+9. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
    under a moving sun, then a cold area lit the moment a view arrives.
-9. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
    one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
    V1a, with `lane/g5` landed beside them.
-10. [high] [Transmission](transmission.md): its implementation lanes in order;
+11. [high] [Transmission](transmission.md): its implementation lanes in order;
     the defects it closes are in [Lighting and GI](#lighting-and-gi).
-11. [high] [Bake proportional to change](#bake-proportional-to-change): one
+12. [high] [Bake proportional to change](#bake-proportional-to-change): one
     store for both backends, then the collapse's acceptance search.
-12. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
+13. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
     and 6, with step 0's fuzzer and step 0b's principals.
-13. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
+14. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-14. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
+15. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
     release's three causes and the production deploy, which a push to `main`
     needs.
-15. [high] [Transfers, federation and server](#transfers-federation-and-server):
+16. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
-16. [high] [Test runner and replay](#test-runner-and-replay): the body's write
+17. [high] [Test runner and replay](#test-runner-and-replay): the body's write
     door from step D5.
-17. [medium] [Certified field contact](#certified-field-contact): box and
+18. [medium] [Certified field contact](#certified-field-contact): box and
     ellipsoid bodies, then clearance close to a slope.
-18. [medium] [Language and authoring](#language-and-authoring) and
+19. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the spelling pairs, the overlay text advance.
-19. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
+20. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
-20. Then, by ordinary priority:
+21. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
@@ -302,8 +311,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's remainder, the control plane's phase and
-bounded waits (C0), then the pool's design (J1). The garbage-collection cuts
+order once: the scheduling stage's windowed reading, another family's review
+of [the control plane's design](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
+and then its step C0.1, then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -314,6 +324,20 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
+- [medium · unconfirmed] A tick-cadence screen source asked for at the tick's
+  own rate (a 30 Hz floor under a 30 Hz tick) has a new image only on a
+  step's frame, so its floor releases it there and no lead can move it
+  (`RenderGraphScheduler`'s `SourceDue`): it would upload beside every tick.
+  Read it with the scheduler's phase law at 30 Hz, then decide whether such a
+  source uploads on the frame after the step.
+- [low] A rated item's phase is chosen against its own latest update
+  (`PresentationPhases`), so items that take a tier on different frames are
+  not balanced against each other, and nothing weighs a view's cost against a
+  screen's. The frame plan J1 gives the `Frame` class is where a placement by
+  cost belongs.
+- [low] `WorldViewPaneMappingLawTests.APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldArrives`
+  fails its arriving case on the integration tip: a session whose world's
+  meshes still arrive behind the camera is not scheduled. Owner: rendering.
 - [medium · unconfirmed] `WorldDocument.AttachSink` delivers an attach primer
   that reaches `WorldDisclosureImages.Current` without taking
   `WorldServer.AuthorityGate`, while in-tick delivery and ordered-domain
@@ -639,6 +663,12 @@ Stalls and hitches to attribute:
 - [low] Pacing on a high-refresh, variable-rate display under Windows'
   Dynamic Refresh Rate: confirm the bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the top rate.
+- [low] Dynamic resolution adapts on GPU timing only when a display period is
+  known (`WorldDynamicResolution`'s update, `displayHertz > 0`), so a view with
+  GPU timestamps but no display Hertz (an offscreen render, a frame streamed to
+  a thin client; unverified that those pass zero) holds its grid. Give the
+  controller a target period from the view's own cadence (its refresh divisor or
+  the session's frame rate).
 
 ### Bake proportional to change
 
@@ -760,26 +790,50 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: a contour that holds a crease at any lattice alignment, which the tour's
-reds and the Moth's shin groups share, then
+Next: the three kinds of triangle the lattice's facing does not judge, which
+the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
-- [high] The walkthrough tour is red on its mesh audits alone, on both
-  backends: `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds
-  flipped triangles on twelve of the fourteen blend exhibits and three
-  primitives, `shape-groove-union` worst. Which exhibits fold follows where
-  the narrowed box puts the lattice, not the shape: contouring across a crease
-  that falls between samples. A per-axis narrowing was worse over the whole
-  world. The thresholds (`folds > 0` amber, `flipped > 0` red) are right and
-  are not loosened.
+- [high] The walkthrough tour is still red on its mesh audits:
+  `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
+  triangles on six of the fourteen blend exhibits (`shape-groove-union` and
+  `shape-blend-subtraction` worst) and on none of the primitives. Every quad
+  of those contours faces out as its lattice edge says
+  ([the contour's facing](../../.claude/skills/rendering/references/mesh-bake.md#contouring)),
+  so what remains is geometry the lattice's facts do not judge, in three
+  kinds, each a step of its own:
+  - A vertex its crossings' planes put millimetres off the surface where the
+    field check refuses to move it (`SdfMeshPathBake.ProjectCrease`: a kinked
+    gradient, or one turned from its triangles): the fins where
+    `shape-groove-union`'s groove ends against the ball. Along that exhibit's
+    rims a cell's crossings within a gradient tap of the crease read a blend
+    of the two faces, and the cell's point is drawn off its own surface;
+    whether the fins are the same planes is not traced. A crossing whose
+    gradient is a blend should give the cell no plane, and a vertex the check
+    cannot move should return to its crossings' mean. Check: the exhibit's
+    `off surface` and `turned` counts.
+  - A sliver between two rows of vertices a few hundredths of a cell apart
+    along a crease, and a web across the junction of two creases (a carve's
+    rim meeting a box edge): triangles a degree or two past edge-on whose
+    facing is their vertices' rounding. A row the lattice puts that near a
+    crease should take the crease's own vertices (one row, no strip). Check:
+    `flipped` on `shape-blend-subtraction` and `shape-smooth-subtraction`.
+  - A face narrower than the cell between two creases, below.
+  The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
+  loosened. A per-axis narrowing was worse over the whole world, and moving
+  the lattice off a face only moves which exhibit is red.
 - [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) contour badly at their
-  declared detail: `puck mesh audit --world worlds/debug/debug.puck
-  --prototype moth --cpu` prints folds, flipped and turned faces and
-  non-manifold edges on each shin, a tenth of her triangles in two groups; the
-  helmet and the nozzle lips are next. Read the carve and blends against the
-  lattice's sheet and crease handling; the one detail rule exposes the defect
-  and does not cause it.
+  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
+  her flipped triangles in two groups, nearly all under a square millimetre
+  and strung along the blades' edges: each blade tapers to a rim thinner than
+  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
+  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and
+  `range-window` and the Humble Brick's face are the worst of a wider sample;
+  none of those four is examined. The contour needs a rule for a face it cannot
+  resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
+  sheet, or refine it), and the non-manifold edges on the shins' soles sit on
+  the same edges. The one detail rule exposes the defect and does not cause
+  it.
 - [high] The material cut's lists are outside the memory account:
   `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
   that does not end takes the process. Give the lists a bound the account
@@ -833,12 +887,18 @@ reds and the Moth's shin groups share, then
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
-`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), step 2
-and step 7's prototype under a GPU grant, then step 3. The plan owns the decisions, the build order
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
+and 2's windowed readings and step 7's prototype under a GPU grant, then step
+3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [low] A test schedule admits no authored command (`WorldScheduleCommands`,
+  `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
+  (`world.state.cell.set liftCall`) where a player presses the car's buttons.
+  Admit authored commands in schedules under the step's own principal, then
+  drive the lift through its button reach boxes.
 - [medium] The seam walk's window counts its opening tick and each burst's
   tick from the route program's first line (`opens` and `captures[].at` in
   `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
@@ -863,6 +923,14 @@ and every memory owner are its steps. This packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
+- [medium] Step 2's heap walk on a headless debug world names two large-object
+  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
+  table bounds by no step: `FieldCellDelta[]` arrays held by
+  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
+  need an owner and a bound, or a reason they stay named only.
+- [low] Step 2 names the trace scene's current hierarchy only: a scene a job
+  still borrows after a rebuild sits in the managed row's residual until its
+  last claim ends (`SdfMeshIrradiance`'s sampled owners).
 - A hand-over's draw-list rebuild is
   [arrival work proportional to change](arrival-proportional.md)'s, filed
   under [frame-time findings](#other-frame-time-findings); the capture feed's
@@ -1681,6 +1749,10 @@ Federation and transfers:
   [valley and moons](valley-and-moons.md#phases)' phase 6 says held input
   carries exactly once. Carry it through the seat's existing command path,
   never a second input route.
+  The seam walk's routes (`worlds/debug/walkthrough-tests.puck`) press the
+  stick again every 15 ticks to get across, so the instrument cannot show
+  this defect or a regression after it is fixed: when it lands, a hold-once
+  leg per crossing replaces the re-press.
 - [medium] Sound does not carry across a crossing: `WorldAudioDirector`
   re-enters an emitter from silence when its identity changes, and no plan
   owns continuity; the [audio reference](../reference/audio.md) is the
@@ -1817,15 +1889,47 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
-and 6; then the researcher brief's priorities
+Owner: an independent reviewer · high · Next: Claude review of disclosure
+decision 3a, then its single build table alongside disclosure steps 5 and 6;
+then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high] No principal but the host's console can declare a state row, moderate
+  a hosted world or operate a world it owns: the write door refuses every
+  recipient declaration, and the operator is a principal kind.
+  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is the design (an operator grant, a host audience, contribution scopes with a
+  restricted preparation door and a reserved quota) and answers the write door's
+  first four review findings and the later structural-footprint findings.
+  Next: the lead's Claude design review, then its steps D0a–D0d and D1–D7 as
+  build briefs; a change to a trust boundary, so each step takes an adversarial
+  review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
   learns that a withheld declaration sits in a write's footprint (never its
-  name). [The disclosure plan's open items](disclosure.md#open-items) hold the
-  two candidates.
+  name). [The structural write footprint](disclosure.md#the-structural-write-footprint)
+  chooses declaration entitlement for general writes and closed scopes for
+  lower-tier writes; D0c/D6 implements that choice with the authored input and
+  addon migration. Nothing enforces it yet.
+- [high, before any push to `main`] The write door's footprint is
+  enumerated per field, and an Antigravity adversarial review of the read-door
+  fix found five high and three medium leaks it missed: state-row references
+  in mutation and placement values outside `CollectReferencedRows`; transform
+  indirections (`$cell:`, `$zone:`, `$expr:`, `[key]`) with
+  `WorldRecipientView.AdmitsTransform` admitting when it cannot resolve the
+  rows; `AdmitsDeclaration` skipping knowledge, witness and per-cell readers;
+  `Admits`' reverse footprint skipping dependents other than keyed rows; an
+  empty `ExpectedStateRows` passing `AdmitsDefinition` while the fingerprint
+  hashes state-dependent placements and fields; console write verbs reading
+  the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
+  definition; `world.parked` and `world.hud.template`.
+  [Decision 3a's structural write footprint](disclosure.md#the-structural-write-footprint)
+  records the reopened evidence, options, restricted transaction, derived
+  validation dependencies, cost counters and a finding-by-finding harness
+  witness. The review's one-versus-two `Placeholder` example is permitted
+  disclosure to its named seat; D0a recasts the actual guard-ceiling attack at
+  a lower tier and verifies every claimed reproduction. The design is complete,
+  not implemented; its one build table follows the Claude design review.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
@@ -1892,7 +1996,10 @@ and 6; then the researcher brief's priorities
   to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
-  rows if the grant vocabulary allows.
+  rows if the grant vocabulary allows. The `contribution:` subject of
+  [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is that vocabulary where the rows can sit in a scope, which no rule may
+  read.
 
 ### Test runner and replay
 
@@ -2351,6 +2458,13 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
+- [high] `puck test` takes the heavy lease and then waits up to 120 minutes for
+  host capacity while holding it ("gate: waiting for host capacity before test
+  worker"), so every other lane's heavy run queues behind a run that is itself
+  waiting: a lead `puck test` held the heavy lease 18 minutes behind a
+  windowed World's admission while a lane's scenario run waited 8 minutes for
+  it. Admit before acquiring an exclusive lease, or release the lease while
+  waiting on admission and requeue at the same ticket.
 - [medium] `puck integrate`: the lead's integration steps as one verb under
   one report: the build, each generator's `--check`, `puck docs links`, a
   headless boot of the debug world, windowed Direct3D 12 and Vulkan boots, and
@@ -2738,6 +2852,14 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [medium] `host.memory heap` (`ManagedHeapWalk`) brings
+  `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
+  players run, for one diagnostic verb. Read the runtime's heap-dump events
+  in process without the package (an `EventListener` on the runtime provider
+  with the GC heap-dump keyword is the lead to check, unverified), or move
+  the walk to a `puck` verb attached over the diagnostics port, and drop the
+  reference. The verb also blocks the World for the walk (671 to 926 ms on a
+  headless debug world), since commands have no asynchronous form.
 - [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
   beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
   stack, but body predicates keep a separate dispatch over recency clocks,
@@ -3219,6 +3341,10 @@ screen and see the change hot reload.
   need no compiler.
 - Development only: editing C# runs arbitrary code, so it needs the SDK and an
   explicit grant to the owner's seat; published builds do not hot reload.
+- A seat that edits the world's own document is its operator:
+  [decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  designs that as an `Operate` grant the world gives, in place of the console's
+  principal kind.
 
 ### Media and capture
 

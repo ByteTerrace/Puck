@@ -172,18 +172,22 @@ public static class SdfUpdateRateTiers {
     /// every paced frame.</param>
     /// <param name="elapsedSeconds">The presentation time from the frame the item last updated on to this frame.</param>
     /// <param name="frameSeconds">The latest frame's span.</param>
+    /// <param name="leadSeconds">The item's lead within its tier's period (<see cref="PresentationRate.Holds"/>), or zero
+    /// for none.</param>
     /// <returns><see langword="true"/> when the item holds this frame; never on a host not paced to a display.</returns>
-    public static bool Holds(PresentationRate rate, int hertz, double elapsedSeconds, double frameSeconds) => ((hertz == HeldHertz)
+    public static bool Holds(PresentationRate rate, int hertz, double elapsedSeconds, double frameSeconds, double leadSeconds = 0d) => ((hertz == HeldHertz)
         ? rate.IsPaced
-        : ((hertz < EveryFrameHertz) && rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: hertz)));
+        : ((hertz < EveryFrameHertz) && rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: hertz, leadSeconds: leadSeconds)));
 }
 /// <summary>
 /// The longest interval between updates each <see cref="SdfUpdateRates"/> lever achieved at each reduced tier over a
 /// recent window of presentation time, which <c>world.rates</c> prints against the tier's period
 /// (<see cref="PresentationRate.PeriodSeconds"/>). Counting held frames cannot show a rate on a display whose frames
 /// come unevenly; the interval can. An interval counts only where the item updated or was held on every frame between
-/// its two updates, so a view out of sight or a frame that rendered nothing is not read as a slow rate. Any thread
-/// records and reads; presentation only.
+/// its two updates, so a view out of sight or a frame that rendered nothing is not read as a slow rate. Beside the
+/// intervals it keeps each lever's largest burst over the same window: the most items rated at a reduced tier that one
+/// frame updated together, which shows whether the items of a tier share one frame of its period or spread over it
+/// (<see cref="PresentationPhases"/>). Any thread records and reads; presentation only.
 /// </summary>
 public sealed class SdfUpdateRateIntervals {
     /// <summary>The presentation time each half of the window spans, in seconds: a reading covers between one and two of
@@ -197,6 +201,8 @@ public sealed class SdfUpdateRateIntervals {
     private readonly Lock m_gate = new();
     private readonly double[] m_current = new double[(Levers.Length * Tiers.Length)];
     private readonly double[] m_previous = new double[(Levers.Length * Tiers.Length)];
+    private readonly int[] m_currentBurst = new int[Levers.Length];
+    private readonly int[] m_previousBurst = new int[Levers.Length];
     private double m_elapsed;
     private PresentationRate m_rate;
 
@@ -229,6 +235,8 @@ public sealed class SdfUpdateRateIntervals {
                 m_elapsed = 0d;
                 Array.Copy(sourceArray: m_current, destinationArray: m_previous, length: m_current.Length);
                 Array.Clear(array: m_current);
+                Array.Copy(sourceArray: m_currentBurst, destinationArray: m_previousBurst, length: m_currentBurst.Length);
+                Array.Clear(array: m_currentBurst);
             }
         }
     }
@@ -246,6 +254,35 @@ public sealed class SdfUpdateRateIntervals {
 
         lock (m_gate) {
             m_current[slot] = Math.Max(val1: m_current[slot], val2: seconds);
+        }
+    }
+    /// <summary>Records how many of a lever's items rated at a reduced tier one frame updated; a lever outside
+    /// <see cref="Levers"/> records nothing.</summary>
+    /// <param name="lever">The lever that rated the items.</param>
+    /// <param name="count">The items the frame updated.</param>
+    public void RecordBurst(SdfUpdateRates lever, int count) {
+        var slot = Array.IndexOf(array: Levers, value: lever);
+
+        if (slot < 0) {
+            return;
+        }
+
+        lock (m_gate) {
+            m_currentBurst[slot] = Math.Max(val1: m_currentBurst[slot], val2: count);
+        }
+    }
+    /// <summary>Returns the largest burst recorded under a lever over the window.</summary>
+    /// <param name="lever">The lever.</param>
+    /// <returns>The most items one frame updated, zero when none was recorded.</returns>
+    public int LargestBurst(SdfUpdateRates lever) {
+        var slot = Array.IndexOf(array: Levers, value: lever);
+
+        if (slot < 0) {
+            return 0;
+        }
+
+        lock (m_gate) {
+            return Math.Max(val1: m_currentBurst[slot], val2: m_previousBurst[slot]);
         }
     }
     /// <summary>Returns the longest interval recorded under a lever and tier over the window.</summary>

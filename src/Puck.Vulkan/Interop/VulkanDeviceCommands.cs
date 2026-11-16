@@ -660,12 +660,15 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
     /// <param name="role">What the allocation is for.</param>
     /// <param name="memoryTypeIndex">The memory type it allocated from, as <c>VkMemoryAllocateInfo.memoryTypeIndex</c>.</param>
+    /// <param name="family">The family that names the whole allocation, for memory one resource holds; <see langword="null"/>
+    /// for an arena block, whose placements name their parts (<see cref="GpuDeviceMemoryWork.CountAllocated"/>).</param>
     /// <exception cref="InvalidOperationException">The device registered no segments with <see cref="Memory"/>.</exception>
-    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role, uint memoryTypeIndex) =>
+    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role, uint memoryTypeIndex, string? family) =>
         Memory?.CountAllocated(
             allocation: memoryHandle,
             bytes: checked((long)allocationSize),
             device: Handle,
+            family: family,
             role: role,
             segment: Memory.SegmentsOf(device: Handle).OfMemoryType(memoryTypeIndex: memoryTypeIndex)
         );

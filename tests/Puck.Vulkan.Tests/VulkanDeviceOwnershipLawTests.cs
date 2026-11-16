@@ -75,8 +75,8 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
 
         memory.BeginDevice(device: FirstDeviceHandle, segments: OneHeap);
         memory.BeginDevice(device: SecondDeviceHandle, segments: OneHeap);
-        lost.Commands.CountAllocated(allocationSize: 4096UL, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
-        replacement.Commands.CountAllocated(allocationSize: 256UL, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
+        lost.Commands.CountAllocated(allocationSize: 4096UL, family: null, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
+        replacement.Commands.CountAllocated(allocationSize: 256UL, family: null, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: lost.Dispose);
 

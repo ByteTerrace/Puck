@@ -342,7 +342,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_shadowHandoffRegion = scope.Own(created: new GpuRegion(
             destination: m_shadowHandoffBuffer, byteCount: RecordBytes(records: m_shadowHandoffs), slotCount: FrameRingSize,
             buffers: gpu.BufferFactory, bindings: gpu.Bindings, recorder: gpu.Recorder, copyPipeline: m_regionCopyPipeline,
-            name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex)));
+            name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex), hostCopies: m_regionHostCopies));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
         ShadowMeshRecords();
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(

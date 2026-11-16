@@ -71,6 +71,8 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
     // The presentation rate each frame begins at; the world.rates levers rate footprints only on a paced one.
     private PresentationRate m_rate;
+    // Whether every even frame runs a simulation step, as a 30 Hz tick does on a 60 Hz display.
+    private bool m_stepsOnEvenFrames;
 
     public WorldViewPaneMappingLawTests() {
         m_host = new WorldViewGraphHost(
@@ -165,6 +167,8 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 FrameTicks = FrameTicks,
                 GridHertz = 60d,
                 PresentedTicks = (((ulong)m_frame) * FrameTicks),
+                Steps = (m_stepsOnEvenFrames && ((m_frame % 2L) == 0L)),
+                StepsNext = (m_stepsOnEvenFrames && ((m_frame % 2L) != 0L)),
             },
             history: m_history,
             schedule: schedule,

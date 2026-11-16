@@ -2,11 +2,14 @@ using System.Buffers;
 
 namespace Puck.Abstractions.Memory;
 
-/// <summary>Receives allocation deltas from an explicit storage owner, including allocate/copy overlap.</summary>
+/// <summary>Receives allocation deltas from an explicit storage owner, including allocate/copy overlap, each naming the
+/// physical row its storage lies in.</summary>
 public interface IAllocationObserver {
     /// <summary>Accounts bytes acquired (positive) or released (negative).</summary>
     /// <param name="bytes">The signed allocation delta, in bytes, including growth overlap.</param>
-    void Change(long bytes);
+    /// <param name="backing">The physical row the storage lies in, which the storage making the charge states; a release
+    /// names the row its acquisition named.</param>
+    void Change(long bytes, MemoryBacking backing);
 }
 /// <summary>Optional physical allocator readings; these include allocator slack and are not payload counts.</summary>
 public interface IAllocatorStatistics {
@@ -30,6 +33,9 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     private int m_capacity;
     private int m_length;
     private bool m_disposed;
+
+    // The row this buffer's charges name: an allocator's storage is native, a standalone owner's is managed.
+    private MemoryBacking Backing => ((allocator is null) ? MemoryBacking.Managed : MemoryBacking.NativeAllocator);
 
     /// <summary>Gets the logical element count.</summary>
     public int Length => m_length;
@@ -71,12 +77,12 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
                 var replacement = new T[length];
 
                 GetSpan().CopyTo(destination: replacement);
-                observer?.Change(bytes: bytes);
+                observer?.Change(backing: Backing, bytes: bytes);
                 var oldManagedBytes = checked((((long)m_capacity) * sizeof(T)));
 
                 m_managed = replacement;
                 m_capacity = m_length = length;
-                observer?.Change(bytes: -oldManagedBytes);
+                observer?.Change(backing: Backing, bytes: -oldManagedBytes);
                 return;
             }
             var candidate = ((T*)allocator.Allocate(checked((nuint)bytes)));
@@ -85,7 +91,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
             try {
                 new ReadOnlySpan<T>(length: m_length, pointer: m_pointer).CopyTo(destination: new Span<T>(length: length, pointer: candidate));
                 if (clear) { new Span<T>(length: (length - m_length), pointer: (candidate + m_length)).Clear(); }
-                observer?.Change(bytes: bytes);
+                observer?.Change(backing: Backing, bytes: bytes);
             } catch {
                 allocator.Free(ptr: candidate);
                 throw;
@@ -97,7 +103,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
             m_capacity = length;
             m_length = length;
             allocator.Free(ptr: old);
-            observer?.Change(bytes: -oldBytes);
+            observer?.Change(backing: Backing, bytes: -oldBytes);
         } else {
             if (clear && (length > m_length)) {
                 if (allocator is null) { m_managed.AsSpan(length: (length - m_length), start: m_length).Clear(); } else { new Span<T>(length: (length - m_length), pointer: (m_pointer + m_length)).Clear(); }
@@ -121,7 +127,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
         m_managed = null;
         m_pointer = null;
         m_capacity = m_length = 0;
-        observer?.Change(bytes: -bytes);
+        observer?.Change(backing: Backing, bytes: -bytes);
     }
     /// <summary>Replaces the logical contents after earlier borrows have ended.</summary>
     /// <param name="source">The source elements, borrowed through the copy.</param>

@@ -118,6 +118,7 @@ public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) :
     private DirectXGpuImage Named(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, float clearDepth, in GpuObjectName name) {
         var image = new DirectXGpuImage(
             clearDepth: clearDepth,
+            family: name.MemoryFamily(),
             format: format,
             request: DirectXGpuImageRequest.From(
                 deviceContext: deviceContext,

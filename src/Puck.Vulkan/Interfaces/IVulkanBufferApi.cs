@@ -13,8 +13,10 @@ public interface IVulkanBufferApi {
     /// <param name="usage">A bitmask of <see cref="VulkanBufferUsageFlags"/>.</param>
     /// <param name="memory">The memory the buffer is allocated from.</param>
     /// <param name="sizeBytes">The size, in bytes, of the buffer; must be non-zero.</param>
+    /// <param name="family">The family the buffer's memory is attributed to in the device's counts
+    /// (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The buffer and its memory, owned by the caller and released with <see cref="Destroy"/>.</returns>
-    VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes);
+    VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes, string family);
     /// <summary>Destroys a buffer and frees its memory; a zero handle is skipped.</summary>
     /// <param name="handles">The buffer and memory to release.</param>
     void Destroy(VulkanBufferHandles handles);
