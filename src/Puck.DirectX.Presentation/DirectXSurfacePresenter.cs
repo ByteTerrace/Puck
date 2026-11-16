@@ -1,9 +1,7 @@
 using System.Runtime.Versioning;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.DirectX.Interop;
-using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.DirectX.Presentation;
@@ -19,12 +17,8 @@ namespace Puck.DirectX.Presentation;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, ISwapChainPacing, IDeviceLostRecoverable {
     private readonly DirectXSurfaceCompositor m_compositor;
+    private readonly PresentationCapture m_capture;
     private readonly DirectXDeviceContext m_deviceContext;
-    private readonly GpuPassPipelineCache m_pipelines;
-
-    private SurfaceEncoder? m_captureEncoder;
-    private IGpuSurfaceImport? m_captureImport;
-    private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfacePresenter"/> class.</summary>
     /// <param name="deviceContext">The shared device and command queue, whose services create the lazily armed capture
@@ -38,18 +32,13 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(pipelines);
 
+        m_capture = new PresentationCapture(
+            device: deviceContext,
+            directX: true,
+            pipelines: pipelines
+        );
         m_compositor = compositor;
         m_deviceContext = deviceContext;
-        m_pipelines = pipelines;
-    }
-
-    private void ReleaseCaptureResources() {
-        m_captureEncoder?.Dispose();
-        m_captureEncoder = null;
-        m_captureReadback?.Dispose();
-        m_captureReadback = null;
-        m_captureImport?.Dispose();
-        m_captureImport = null;
     }
 
     /// <inheritdoc/>
@@ -73,7 +62,7 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
             m_deviceContext.WaitIdle();
         }
 
-        ReleaseCaptureResources();
+        m_capture.Release();
         m_compositor.Dispose();
     }
     /// <inheritdoc/>
@@ -96,40 +85,14 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
     /// <see cref="PresentMode.Vsync"/> swap chain paces, at a sync interval of <paramref name="refreshesPerPresent"/>.</remarks>
     public bool TryWaitForFrame(uint refreshesPerPresent) => m_compositor.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent);
     /// <inheritdoc/>
-    public Surface ReadSurface(Surface surface) {
-        if (
-            surface.IsEmpty ||
-            (surface.IsCpuPixels && Surface.IsSurfaceFormat(format: surface.Format))
-        ) {
-            return surface;
-        }
-        // A working image no capture sink reads is captured through the display encode's SDR.
-        if (
-            (surface.IsSameDeviceImage || surface.IsCpuPixels) &&
-            !Surface.IsSurfaceFormat(format: surface.Format)
-        ) {
-            return (m_captureEncoder ??= new SurfaceEncoder(
-                device: m_deviceContext,
-                directX: true,
-                owner: "presentation-capture",
-                pipelines: m_pipelines
-            )).ReadSurface(surface: surface);
-        }
-
-        return SurfaceReadbackCapture.ReadSurface(
-            captureImport: ref m_captureImport,
-            captureReadback: ref m_captureReadback,
-            deviceContext: m_deviceContext,
-            surface: surface
-        );
-    }
+    public Surface ReadSurface(Surface surface) => m_capture.ReadSurface(surface: surface);
     /// <inheritdoc/>
     public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
         // Release the compositor's swap chain / heaps / encode resources on the OLD (removed) device — COM Release is safe
         // on a removed device's objects, and these are not recreated by the device context. Then recreate the device IN
         // PLACE (preserving the shared capability's identity so the compute node resolving it stays valid), and
         // re-initialize the compositor against the new device. The render root rebuilds its own resources next frame.
-        ReleaseCaptureResources();
+        m_capture.Release();
         m_compositor.Dispose();
 
         // A swap chain the returning adapter cannot back yet is the same wait as an absent adapter: Recreate's one retry

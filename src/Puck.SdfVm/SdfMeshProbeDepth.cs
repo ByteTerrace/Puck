@@ -113,12 +113,7 @@ public static class SdfMeshProbeDepth {
     }
     // A unit normal's two signed octahedral bytes, in a surface word's high sixteen bits.
     private static uint PackNormal(Vector3 normal) {
-        var uv = SdfOctahedral.Encode(direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
-        var scale = SdfMeshIrradianceProbe.DepthNormalScale;
-        var x = ((int)Math.Round(a: (uv.X * scale)));
-        var y = ((int)Math.Round(a: (uv.Y * scale)));
-
-        return (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
+        return (SdfOctahedral.PackSigned(bits: SdfMeshIrradianceProbe.DepthNormalBits, direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z)) << 16);
     }
     /// <summary>Derives the surface map views test receivers against from a probe's hit buffer: each texel's hit within
     /// the receiver support radius as an FP16 ray distance beside its two signed octahedral normal bytes, a negative
@@ -193,8 +188,7 @@ public static class SdfMeshProbeDepth {
     }
 
     private static Vector3 Normal(uint word) {
-        var normal = SdfOctahedral.Decode(x: (((sbyte)((byte)(word >> 16))) / ((double)SdfMeshIrradianceProbe.DepthNormalScale)),
-            y: (((sbyte)((byte)(word >> 24))) / ((double)SdfMeshIrradianceProbe.DepthNormalScale)));
+        var normal = SdfOctahedral.UnpackSigned(bits: SdfMeshIrradianceProbe.DepthNormalBits, word: (word >> 16));
 
         return new Vector3(x: ((float)normal.X), y: ((float)normal.Y), z: ((float)normal.Z));
     }

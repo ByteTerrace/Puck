@@ -31,10 +31,10 @@ public sealed partial class SdfFieldEvaluator {
         switch (instruction.Op) {
             case SdfOp.Shear: {
                     var target = (int)instruction.Shape;
-                    var t = Component(axis: (int)instruction.Blend, point: localPosition);
+                    var t = localPosition[((int)instruction.Blend)];
                     var offset = ((((instruction.Data0Z * t) + instruction.Data0Y) * t) + instruction.Data0X) * t;
 
-                    return WithComponent(axis: target, point: localPosition, value: (Component(axis: target, point: localPosition) + offset));
+                    return localPosition.With(axis: target, value: (localPosition[target] + offset));
                 }
             case SdfOp.GaussianPush: {
                     var push = new FixedVector3(X: instruction.Data0W, Y: instruction.Data1W, Z: instruction.Aux);
@@ -67,8 +67,8 @@ public sealed partial class SdfFieldEvaluator {
     // base one and, when mirrored, reflected across its bisector; the sector index strides the material.
     private static FixedVector3 RepeatPolar(in CompiledInstruction instruction, FixedVector3 localPosition, ref int materialDelta) {
         var (u, v) = PolarAxes(axis: instruction.Shape);
-        var pu = Component(axis: u, point: localPosition);
-        var pv = Component(axis: v, point: localPosition);
+        var pu = localPosition[u];
+        var pv = localPosition[v];
         var sectorAngle = instruction.Data0X;
         var halfSector = (sectorAngle * Half);
         var a = (FixedQ4816.Atan2(x: pu, y: pv) + halfSector);
@@ -88,7 +88,7 @@ public sealed partial class SdfFieldEvaluator {
             materialDelta = (((int)(wrapped.Value >> FixedQ4816.FractionBitCount)) * instruction.Material);
         }
 
-        return WithComponents(point: localPosition, u: u, uValue: (cos * r), v: v, vValue: (sin * r));
+        return localPosition.With(axis: u, value: (cos * r)).With(axis: v, value: (sin * r));
     }
     // The fold plane (u, v) of a polar axis, as mapCore picks it: (y, z) about X, (x, y) about Z, (x, z) about Y.
     private static (int U, int V) PolarAxes(uint axis) => axis switch {
@@ -101,7 +101,7 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedVector3 WallpaperFold(in CompiledInstruction instruction, FixedVector3 localPosition, ref int materialDelta) {
         var group = (SdfWallpaperGroup)instruction.Shape;
         var (axisA, axisB) = (((instruction.Blend == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((instruction.Blend == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
-        var point = new FixedVector2(X: Component(axis: axisA, point: localPosition), Y: Component(axis: axisB, point: localPosition));
+        var point = new FixedVector2(X: localPosition[axisA], Y: localPosition[axisB]);
         var cell = new FixedVector2(X: instruction.Data0X, Y: instruction.Data0Y);
         var inverseCell = new FixedVector2(X: instruction.Data0Z, Y: instruction.Data0W);
         var limit = new FixedVector2(X: instruction.Data1X, Y: instruction.Data1Y);
@@ -117,7 +117,7 @@ public sealed partial class SdfFieldEvaluator {
             materialDelta = (((int)((key + Half).Value >> FixedQ4816.FractionBitCount)) * instruction.Material);
         }
 
-        return WithComponents(point: localPosition, u: axisA, uValue: folded.X, v: axisB, vValue: folded.Y);
+        return localPosition.With(axis: axisA, value: folded.X).With(axis: axisB, value: folded.Y);
     }
     private static FixedVector2 FoldSquareCell(FixedVector2 q, SdfWallpaperGroup group, FixedVector2 cell, FixedVector2 inverseCell, FixedVector2 limit, out FixedVector2 cellIndex) {
         cellIndex = new FixedVector2(
@@ -347,9 +347,4 @@ public sealed partial class SdfFieldEvaluator {
 
         return (ragged * instruction.Data1X);
     }
-    private static FixedVector3 WithComponent(FixedVector3 point, int axis, FixedQ4816 value) => new(
-        X: ((axis == 0) ? value : point.X),
-        Y: ((axis == 1) ? value : point.Y),
-        Z: ((axis == 2) ? value : point.Z)
-    );
 }

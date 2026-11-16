@@ -133,7 +133,7 @@ public sealed class SdfPassBindingLawTests {
         );
     [Fact]
     public void EachDeployedKernelBindsALightOrSkyTableOnlyWhenItsPassReadsIt() {
-        var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv");
+        var kernels = SdfKernelSet.Load(target: ShaderTarget.Spirv);
 
         foreach (var kernel in SdfKernelSet.Kernels) {
             var reflected = SpirvInterfaceReader.Read(module: kernels[kernel].Span);

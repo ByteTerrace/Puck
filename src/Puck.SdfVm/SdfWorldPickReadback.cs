@@ -114,7 +114,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         };
     }
 
-    // The visibility record's normal word (SdfVisibility.NormalScale): two signed-normalized 16-bit octahedral
+    // The visibility record's normal word (SdfVisibility.NormalBits): two signed-normalized octahedral
     // coordinates unpacked and decoded through SdfOctahedral, the C# statement of the kernels' sdfOctDecode. The reserved
     // pair (SdfVisibility.ZeroNormal) means no normal and decodes as zero.
     private static (double X, double Y, double Z) DecodeNormal(uint packed) {
@@ -122,9 +122,9 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             return (0.0, 0.0, 0.0);
         }
 
-        var normal = SdfOctahedral.Decode(
-            x: (((short)packed) / ((double)SdfVisibility.NormalScale)),
-            y: (((short)(packed >> 16)) / ((double)SdfVisibility.NormalScale))
+        var normal = SdfOctahedral.UnpackSigned(
+            bits: SdfVisibility.NormalBits,
+            word: packed
         );
 
         return (normal.X, normal.Y, normal.Z);

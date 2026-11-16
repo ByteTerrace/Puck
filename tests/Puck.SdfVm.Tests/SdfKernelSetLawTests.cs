@@ -50,7 +50,7 @@ public sealed class SdfKernelSetLawTests {
 
         var work = Work();
         var kernels = SdfKernelSet.Load(
-            bytecodeExtension: ".spv",
+            target: ShaderTarget.Spirv,
             directory: directory,
             work: work
         );
@@ -62,7 +62,7 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: Enumerable.Repeat(count: 5, element: ((byte)4)), actual: kernels[SdfKernel.Views].ToArray());
 
         _ = SdfKernelSet.Load(
-            bytecodeExtension: ".spv",
+            target: ShaderTarget.Spirv,
             directory: directory,
             work: work
         );
@@ -78,7 +78,7 @@ public sealed class SdfKernelSetLawTests {
         var work = Work();
 
         _ = Assert.ThrowsAny<IOException>(testCode: () => SdfKernelSet.Load(
-            bytecodeExtension: ".spv",
+            target: ShaderTarget.Spirv,
             directory: directory,
             work: work
         ));

@@ -36,14 +36,6 @@ static const float3x3 Bt709ToBt2020 = {
     0.0163916, 0.0880132, 0.8955950,
 };
 
-// One R2 dither sample in [0, 1] from integer pixel coordinates, in fixed point so both backends add the identical
-// pattern (the SDF kernels' sdfR2Dither, which dithers their volumes, is the same sequence).
-float displayDither(uint2 pixel) {
-    uint h = ((pixel.x * PuckR2AlphaX) + (pixel.y * PuckR2AlphaY));
-
-    return ((float)h * (1.0 / 4294967296.0));
-}
-
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint width;
     uint height;
@@ -53,7 +45,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     float3 color = sourceTexture.Sample(sourceSampler, (fragCoord.xy / float2(width, height))).rgb;
     // Half a code of dither either side of the value the target quantizes, which breaks gradient banding into noise the
     // eye barely sees: a code of an 8-bit target, a code of a 10-bit one, nothing on a float target.
-    float dither = ((displayDither(uint2(fragCoord.xy)) - 0.5) * encode.ditherStep);
+    float dither = ((puckR2Dither(uint2(fragCoord.xy)) - 0.5) * encode.ditherStep);
 
     if (encode.colorSpace == DisplayHdr10) {
         float3 display = (mul(Bt709ToBt2020, puckSrgbToLinearExtended(color)) * encode.whiteScale);

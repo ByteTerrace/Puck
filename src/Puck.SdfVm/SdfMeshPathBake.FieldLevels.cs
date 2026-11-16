@@ -86,10 +86,7 @@ public sealed partial class SdfMeshPathBake {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: cell);
         ArgumentOutOfRangeException.ThrowIfNegative(value: offset);
 
-        var margin = new Vector3(value: (offset + (2f * cell)));
-        var origin = (low - margin);
-        var extent = ((high + margin) - origin);
-        var dims = (X: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.X / cell)) + 1)), Y: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.Y / cell)) + 1)), Z: Math.Max(val1: 2, val2: ((int)MathF.Ceiling(x: (extent.Z / cell)) + 1)));
+        var (origin, dims) = SdfMeshLattice.Over(cell: cell, high: high, low: low, offset: offset);
         var count = (((long)dims.X * dims.Y) * dims.Z);
 
         samples = null;
@@ -101,7 +98,7 @@ public sealed partial class SdfMeshPathBake {
         var scale = field.StepScale;
 
         for (var index = 0; (index < count); index++) {
-            var at = PointOf(dims: dims, index: index, origin: origin, cell: cell);
+            var at = SdfMeshLattice.PointOf(dims: dims, index: index, origin: origin, cell: cell);
 
             // The offset any aim can put in field units at a sample is at most AimSpread times the median slope, which is no
             // steeper than the Lipschitz bound.
@@ -115,7 +112,7 @@ public sealed partial class SdfMeshPathBake {
         var answered = new int[asked.Count];
 
         for (var index = 0; (index < points.Length); index++) {
-            points[index] = PointOf(dims: dims, index: asked[index], origin: origin, cell: cell);
+            points[index] = SdfMeshLattice.PointOf(dims: dims, index: asked[index], origin: origin, cell: cell);
         }
         field.Values(materials: answered, points: points, values: answers, work: SdfMeshLevelWork.Contour);
         for (var index = 0; (index < points.Length); index++) {
@@ -256,8 +253,6 @@ public sealed partial class SdfMeshPathBake {
 
         return float.Lerp(float.Lerp(c00, c10, fy), float.Lerp(c01, c11, fy), fz);
     }
-    private static Vector3 PointOf((int X, int Y, int Z) dims, int index, Vector3 origin, float cell) =>
-        (origin + (new Vector3(x: (index % dims.X), y: ((index / dims.X) % dims.Y), z: (index / (dims.X * dims.Y))) * cell));
     // A sample's raw value and material from the coarser level's nearest sample, when the field's Lipschitz bound puts the
     // sample on that sample's side of the offset surface: outside it by more than the offset, or inside the surface.
     private static bool TryCertified(Vector3 at, SdfMeshLevelSamples coarser, float offset, float scale, out float value, out int material) {

@@ -45,6 +45,38 @@ public static class WorldWireLeaves {
 
         return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
     }
+    /// <summary>Writes one face frame: origin, right, up and normal, then the half-width, half-height and half-depth.
+    /// <see cref="ReadFaceFrame"/> reads them back in this order by name, so the record's own parameter order never
+    /// decides the bytes.</summary>
+    public static void WriteFaceFrame(WireWriter writer, WorldFaceFrame frame) {
+        writer.WriteFixedVector(value: frame.Origin);
+        writer.WriteFixedVector(value: frame.Right);
+        writer.WriteFixedVector(value: frame.Up);
+        writer.WriteFixedVector(value: frame.Normal);
+        writer.WriteFixed(value: frame.HalfWidth);
+        writer.WriteFixed(value: frame.HalfHeight);
+        writer.WriteFixed(value: frame.HalfDepth);
+    }
+    /// <summary>Reads one face frame written by <see cref="WriteFaceFrame"/>.</summary>
+    public static WorldFaceFrame ReadFaceFrame(ref WireReader reader) {
+        var origin = reader.ReadFixedVector();
+        var right = reader.ReadFixedVector();
+        var up = reader.ReadFixedVector();
+        var normal = reader.ReadFixedVector();
+        var halfWidth = reader.ReadFixed();
+        var halfHeight = reader.ReadFixed();
+        var halfDepth = reader.ReadFixed();
+
+        return new WorldFaceFrame(
+            HalfDepth: halfDepth,
+            HalfHeight: halfHeight,
+            HalfWidth: halfWidth,
+            Normal: normal,
+            Origin: origin,
+            Right: right,
+            Up: up
+        );
+    }
     /// <summary>Writes the authentication provenance retained by an admission.</summary>
     public static void WriteAdmissionTrust(WireWriter writer, WorldAdmissionTrustIdentity? trust) {
         writer.WriteBoolean(value: (trust is not null));

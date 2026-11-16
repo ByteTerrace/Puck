@@ -999,8 +999,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private int Split(int first, int count, Vector3 centroidLow, Vector3 centroidHigh) {
             var extent = (centroidHigh - centroidLow);
             var axis = LongestAxis(extent);
-            var axisLow = Component(axis: axis, value: centroidLow);
-            var axisExtent = Component(axis: axis, value: extent);
+            var axisLow = centroidLow[axis];
+            var axisExtent = extent[axis];
             var mid = (first + (count / 2));
 
             if (axisExtent <= 0f) { return mid; }
@@ -1013,7 +1013,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             binHighs.Fill(value: new Vector3(value: float.NegativeInfinity));
             for (var index = first; (index < (first + count)); index++) {
                 var primitive = m_order[index];
-                var bin = BinOf(value: Component(value: m_centroids[primitive], axis: axis), low: axisLow, extent: axisExtent);
+                var bin = BinOf(value: m_centroids[primitive][axis], low: axisLow, extent: axisExtent);
 
                 binCounts[bin]++;
                 binLows[bin] = Vector3.Min(value1: binLows[bin], value2: m_lows[primitive]);
@@ -1058,7 +1058,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             var right = ((first + count) - 1);
 
             while (left <= right) {
-                if (BinOf(value: Component(value: m_centroids[m_order[left]], axis: axis), low: axisLow, extent: axisExtent) < bestSplit) {
+                if (BinOf(value: m_centroids[m_order[left]][axis], low: axisLow, extent: axisExtent) < bestSplit) {
                     left++;
                 } else {
                     (m_order[left], m_order[right]) = (m_order[right], m_order[left]);
@@ -1073,7 +1073,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // compiler merges a branch's closure scope into the method's.
         private readonly record struct CentroidOrder(Vector3[] Centroids, int Axis) : IComparer<int> {
             public int Compare(int x, int y) {
-                var order = Component(axis: Axis, value: Centroids[x]).CompareTo(value: Component(axis: Axis, value: Centroids[y]));
+                var order = Centroids[x][Axis].CompareTo(value: Centroids[y][Axis]);
 
                 return ((order != 0) ? order : x.CompareTo(value: y));
             }
@@ -1086,7 +1086,5 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             return (((d.X * d.Y) + (d.Y * d.Z)) + (d.Z * d.X));
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float Component(Vector3 value, int axis) => ((axis == 0) ? value.X : ((axis == 1) ? value.Y : value.Z));
     }
 }

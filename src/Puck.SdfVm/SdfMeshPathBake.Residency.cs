@@ -311,11 +311,8 @@ public sealed partial class SdfMeshPathBake {
     // the world-axis box about the turned one.
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
         if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
-        var transform = m_demandTransforms[group.Slot];
-        var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
-        var orientation = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
-        var matrix = ((Matrix4x4.CreateScale(units) * Matrix4x4.CreateFromQuaternion(orientation)) * Matrix4x4.CreateTranslation(transform.Position));
-        return TransformDemandBox(group, matrix);
+        var box = SdfMeshBox.Carried(center: group.DemandCenter, half: group.DemandHalf, transform: m_demandTransforms[group.Slot]);
+        return (box.Center, box.AxisHalf);
     }
     private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) => TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
     // The world-axis box about a box carried through a matrix.

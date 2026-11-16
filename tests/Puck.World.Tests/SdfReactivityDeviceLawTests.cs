@@ -24,18 +24,18 @@ public sealed class SdfReactivityDeviceLawTests {
     public void VulkanKeepsHistoryForSteadyDetailEmission() {
         using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfReactivityDeviceLawTests));
 
-        Verify(device: device, extension: ".spv");
+        Verify(device: device, target: ShaderTarget.Spirv);
     }
     [Fact]
     public void DirectXKeepsHistoryForSteadyDetailEmission() {
         using var device = DirectXTestDevices.Hardware();
 
-        Verify(device: device, extension: ".dxil");
+        Verify(device: device, target: ShaderTarget.Dxil);
     }
 
-    private static void Verify(IGpuDeviceContext device, string extension) {
-        Assert.InRange(actual: Reactivity(device: device, emissive: false, extension: extension), low: 0f, high: 0.001f);
-        Assert.InRange(actual: Reactivity(device: device, emissive: true, extension: extension), low: 0f, high: 0.001f);
+    private static void Verify(IGpuDeviceContext device, ShaderTarget target) {
+        Assert.InRange(actual: Reactivity(device: device, emissive: false, target: target), low: 0f, high: 0.001f);
+        Assert.InRange(actual: Reactivity(device: device, emissive: true, target: target), low: 0f, high: 0.001f);
     }
     // The default lights at zero strength: the room is unlit, so the emission alone decides the pixel's color.
     private static SdfLights Dark() {
@@ -53,7 +53,7 @@ public sealed class SdfReactivityDeviceLawTests {
 
         return lights;
     }
-    private static float Reactivity(IGpuDeviceContext device, string extension, bool emissive) {
+    private static float Reactivity(IGpuDeviceContext device, ShaderTarget target, bool emissive) {
         SdfInstruction Sphere(float radius, uint material, bool detail) => new(
             Op: SdfOp.ShapeBlend, Shape: ((uint)SdfShapeType.Sphere), Blend: ((uint)SdfBlendOp.Union), Material: material,
             Data0: new Vector4(w: 0f, x: radius, y: 0f, z: 0f), Data1: Vector4.Zero, Detail: detail);
@@ -69,10 +69,10 @@ public sealed class SdfReactivityDeviceLawTests {
             }]) { Lights = Dark() };
         var pipelines = new GpuPassPipelineCache();
         var catalog = new SdfWorldPipelineCatalog(
-            regionCopy: new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: pipelines),
-            meshRaster: new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: pipelines));
+            regionCopy: new GpuRegionCopyPass(target: target, pipelines: pipelines),
+            meshRaster: new SdfMeshRasterPass(target: target, pipelines: pipelines));
         using var residency = new SdfWorldResidency(pipelines: catalog, frameSource: new Source(frame: frame),
-            kernels: catalog.LoadDeployed(bytecodeExtension: extension), name: "world", width: Extent, height: Extent);
+            kernels: catalog.LoadDeployed(target: target), name: "world", width: Extent, height: Extent);
         var passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
         var probe = new ProbeFactory(inner: passes);
         var packages = new RenderGraphPackageRecorders(regionCopy: catalog.RegionCopy);
@@ -82,7 +82,7 @@ public sealed class SdfReactivityDeviceLawTests {
             ExternalPackage: RenderGraphPackageCatalog.SdfWorld, Name: "world", Passes: SdfWorldPackage.TemporalFragment.Passes.Count,
             Reads: [], Refresh: RenderGraphRefresh.EveryFrame)], set: out var set, refusal: out var setRefusal), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(deviceContext: device, graphs: new RenderGraphRuntimeGraph?[1],
-            hostsOnDirectX: (extension == ".dxil"), packages: packages, pipelines: pipelines, root: "world", set: set,
+            hostsOnDirectX: (target == ShaderTarget.Dxil), packages: packages, pipelines: pipelines, root: "world", set: set,
             runtime: out var runtime, refusal: out var refusal), userMessage: refusal?.Message);
         using var running = runtime!;
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0, StepTicks: 0,

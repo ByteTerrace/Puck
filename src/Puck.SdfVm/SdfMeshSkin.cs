@@ -250,8 +250,8 @@ public static class SdfMeshSkin {
         var cell = finest;
 
         for (var round = 0; (round < 64); round++) {
-            var extent = ((high - low) + new Vector3(value: (4f * cell)));
-            var count = ((((double)(MathF.Ceiling(x: (extent.X / cell)) + 1f)) * (MathF.Ceiling(x: (extent.Y / cell)) + 1f)) * (MathF.Ceiling(x: (extent.Z / cell)) + 1f));
+            var dims = SdfMeshLattice.Over(cell: cell, high: high, low: low, offset: 0f).Dims;
+            var count = (((double)dims.X * dims.Y) * dims.Z);
 
             if (count <= SplitSamples) { break; }
             cell *= MathF.Cbrt(x: (float)(count / SplitSamples)) * 1.01f;

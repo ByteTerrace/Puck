@@ -214,7 +214,7 @@ public static class MeshPreviewCommand {
         if (!group.Dynamic || (anchor is null) || (anchor.Slot >= scene.Transforms.Count)) { return static point => new Vector3(x: -point.X, y: point.Y, z: -point.Z); }
 
         var root = scene.Transforms[anchor.Slot];
-        var back = Quaternion.Inverse(value: ((root.Orientation == default) ? Quaternion.Identity : root.Orientation));
+        var back = Quaternion.Inverse(value: SdfMeshGeometryBuilder.PoseOf(transform: root).Orientation);
 
         return point => {
             var local = (Vector3.Transform(value: (toWorld(point) - root.Position), rotation: back) / root.Scale);

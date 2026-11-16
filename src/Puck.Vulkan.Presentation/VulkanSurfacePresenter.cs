@@ -1,7 +1,5 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
-using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.Vulkan.Presentation;
@@ -13,13 +11,9 @@ namespace Puck.Vulkan.Presentation;
 /// without referencing either concrete type.
 /// </summary>
 public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, ISwapChainPacing, IDeviceLostRecoverable {
+    private readonly PresentationCapture m_capture;
     private readonly SurfaceCompositor m_compositor;
-    private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanRenderer m_renderer;
-
-    private SurfaceEncoder? m_captureEncoder;
-    private IGpuSurfaceImport? m_captureImport;
-    private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSurfacePresenter"/> class.</summary>
     /// <param name="renderer">The window and swapchain owner, whose device services create the lazily armed capture
@@ -33,18 +27,13 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(renderer);
 
+        m_capture = new PresentationCapture(
+            device: renderer,
+            directX: false,
+            pipelines: pipelines
+        );
         m_compositor = compositor;
-        m_pipelines = pipelines;
         m_renderer = renderer;
-    }
-
-    private void ReleaseCaptureResources() {
-        m_captureEncoder?.Dispose();
-        m_captureEncoder = null;
-        m_captureReadback?.Dispose();
-        m_captureReadback = null;
-        m_captureImport?.Dispose();
-        m_captureImport = null;
     }
 
     /// <inheritdoc/>
@@ -82,7 +71,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
     /// is torn down once, by the renderer's own container-owned disposal at host shutdown (mirroring the Direct3D 12
     /// presenter, whose Deactivate has always left its device-context singleton alive).</remarks>
     public void Deactivate() {
-        ReleaseCaptureResources();
+        m_capture.Release();
         m_compositor.Dispose();
         m_renderer.ReleasePresentation();
     }
@@ -112,40 +101,14 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         );
     }
     /// <inheritdoc/>
-    public Surface ReadSurface(Surface surface) {
-        if (
-            surface.IsEmpty ||
-            (surface.IsCpuPixels && Surface.IsSurfaceFormat(format: surface.Format))
-        ) {
-            return surface;
-        }
-        // A working image no capture sink reads is captured through the display encode's SDR.
-        if (
-            (surface.IsSameDeviceImage || surface.IsCpuPixels) &&
-            !Surface.IsSurfaceFormat(format: surface.Format)
-        ) {
-            return (m_captureEncoder ??= new SurfaceEncoder(
-                device: m_renderer,
-                directX: false,
-                owner: "presentation-capture",
-                pipelines: m_pipelines
-            )).ReadSurface(surface: surface);
-        }
-
-        return SurfaceReadbackCapture.ReadSurface(
-            captureImport: ref m_captureImport,
-            captureReadback: ref m_captureReadback,
-            deviceContext: m_renderer,
-            surface: surface
-        );
-    }
+    public Surface ReadSurface(Surface surface) => m_capture.ReadSurface(surface: surface);
     /// <inheritdoc/>
     public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
         // Release the compositor's device-level encode resources on the OLD device BEFORE it is destroyed — they are not
         // swapchain resources, so RecreateDevice would otherwise leave them dangling on the device it destroys (a
         // validation error + crash). The compositor stays subscribed and rebuilds them on the new device at the next
         // BeginFrame's PresentationResourcesRecreated.
-        ReleaseCaptureResources();
+        m_capture.Release();
         m_compositor.ReleaseForDeviceLoss();
 
         // Recreate the lost device IN PLACE on the renderer (keeping object identity so the device-context capability and

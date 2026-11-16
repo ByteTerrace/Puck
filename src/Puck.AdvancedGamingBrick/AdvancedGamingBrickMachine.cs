@@ -151,22 +151,11 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public void Restore(AgbMachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
-        if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM / hardware options) does not match this machine; refusing to restore a mismatched image.");
-        }
-
-        var reader = snapshot.OpenReader();
-
-        // The scheduler restores the master clock and empties the live event queue first, so each peripheral's
-        // LoadState re-arms its own scheduled event onto a clean slate (a callback is never serialized).
-        RestoreState(reader: reader);
-
-        // A correctly-ordered snapshot leaves the reader exactly at the end; a shortfall or overrun means a
-        // SaveState/LoadState field-order drift that would otherwise be read as silently-wrong state — fault
-        // deterministically so a byte difference stays a genuine divergence, never a misread.
-        if (!reader.AtEnd) {
-            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
-        }
+        snapshot.RestoreInto(
+            expected: m_identity,
+            identityFields: "format version / BIOS / ROM / hardware options",
+            machine: this
+        );
     }
     /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
     /// image, repositioning the master clock (scheduler first, so peripherals re-arm onto a clean event queue) and every
@@ -257,39 +246,22 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public AgbMachineSnapshot Snapshot() {
         var order = EnsureSnapshotables();
 
-        m_stateWriter.Reset();
-
-        // The section table records each component's byte range as it is written — metadata riding alongside the
-        // identical serialized bytes, so a divergence localizer can map a raw byte offset back to the component (and,
-        // for a fixed-layout component, a sub-region within it) that owns it.
-        var sections = new SnapshotSection[(order.Length + 1)];
-        var offset = 0;
+        var capture = new SnapshotCapture(
+            sectionCount: (order.Length + 1),
+            writer: m_stateWriter
+        );
 
         m_scheduler.SaveState(writer: m_stateWriter);
-        sections[0] = new SnapshotSection(
-            Name: "scheduler",
-            Offset: offset,
-            Length: (m_stateWriter.Length - offset)
+        capture.EndSection(name: "scheduler");
+        capture.Save(
+            components: order,
+            names: SnapshotableNames
         );
-        offset = m_stateWriter.Length;
-
-        for (var index = 0; (index < order.Length); ++index) {
-            order[index].SaveState(writer: m_stateWriter);
-            sections[(index + 1)] = new SnapshotSection(
-                Name: SnapshotableNames[index],
-                Offset: offset,
-                Length: (m_stateWriter.Length - offset)
-            );
-            offset = m_stateWriter.Length;
-        }
 
         return new AgbMachineSnapshot(
             identity: m_identity,
             takenAt: m_scheduler.Now,
-            image: new SnapshotImage(
-                data: m_stateWriter.ToArray(),
-                sections: sections
-            )
+            image: capture.Finish()
         );
     }
     /// <summary>Executes one instruction or exception entry, or advances a halted idle cycle and pending DMA.</summary>

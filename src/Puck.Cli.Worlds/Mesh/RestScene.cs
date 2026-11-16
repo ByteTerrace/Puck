@@ -226,7 +226,7 @@ public sealed class RestScene {
 
         var rigid = m_rigidTemplates.GetValueOrDefault(group.Slot);
         var transform = Transforms[(rigid?.RootSlot ?? group.Slot)];
-        var turn = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
+        var turn = SdfMeshGeometryBuilder.PoseOf(transform: transform).Orientation;
 
         return point => (transform.Position + Vector3.Transform(value: (point * (rigid?.Scale ?? transform.Scale)), rotation: turn));
     }

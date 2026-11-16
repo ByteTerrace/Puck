@@ -1191,41 +1191,14 @@ public sealed partial class WorldReplaySnapshot {
     }
     private static WorldReplayEntry ReadCrossingEntry(ref WireReader reader) {
         var slot = reader.ReadInt32();
-        var source = ReadFaceFrame(reader: ref reader);
-        var destination = ReadFaceFrame(reader: ref reader);
+        var source = WorldWireLeaves.ReadFaceFrame(reader: ref reader);
+        var destination = WorldWireLeaves.ReadFaceFrame(reader: ref reader);
 
         return new WorldReplayEntry.Crossing(Value: new WorldInPlaceCrossing(
             Destination: destination,
             Slot: slot,
             Source: source
         ));
-    }
-    private static WorldFaceFrame ReadFaceFrame(ref WireReader reader) {
-        var origin = reader.ReadFixedVector();
-        var right = reader.ReadFixedVector();
-        var up = reader.ReadFixedVector();
-        var normal = reader.ReadFixedVector();
-        var halfWidth = reader.ReadFixed();
-        var halfHeight = reader.ReadFixed();
-
-        return new WorldFaceFrame(
-            HalfDepth: reader.ReadFixed(),
-            HalfHeight: halfHeight,
-            HalfWidth: halfWidth,
-            Normal: normal,
-            Origin: origin,
-            Right: right,
-            Up: up
-        );
-    }
-    private static void WriteFaceFrame(WireWriter writer, in WorldFaceFrame frame) {
-        writer.WriteFixedVector(value: frame.Origin);
-        writer.WriteFixedVector(value: frame.Right);
-        writer.WriteFixedVector(value: frame.Up);
-        writer.WriteFixedVector(value: frame.Normal);
-        writer.WriteFixed(value: frame.HalfWidth);
-        writer.WriteFixed(value: frame.HalfHeight);
-        writer.WriteFixed(value: frame.HalfDepth);
     }
     private static WorldReplayEntry ReadDepartureEntry(ref WireReader reader) {
         var transferId = reader.ReadUInt64();
@@ -1684,11 +1657,11 @@ public sealed partial class WorldReplaySnapshot {
             case WorldReplayEntry.Crossing crossing:
                 writer.WriteByte(value: 23);
                 writer.WriteInt32(value: crossing.Value.Slot);
-                WriteFaceFrame(
+                WorldWireLeaves.WriteFaceFrame(
                     frame: crossing.Value.Source,
                     writer: writer
                 );
-                WriteFaceFrame(
+                WorldWireLeaves.WriteFaceFrame(
                     frame: crossing.Value.Destination,
                     writer: writer
                 );

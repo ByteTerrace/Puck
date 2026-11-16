@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -38,6 +39,41 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         HalfY: Vector3.Transform(value: new Vector3(x: 0f, y: half.Y, z: 0f), rotation: turn),
         HalfZ: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: half.Z), rotation: turn)
     );
+
+    /// <summary>Returns the box a part declares, in its group's frame, through the pose the group's geometry holds for the
+    /// part's slot (<see cref="SdfMeshGeometryBuilder.Poses"/>), read as the bake reads a pose
+    /// (<see cref="SdfMeshGeometryBuilder.PoseOf"/>).</summary>
+    /// <param name="part">The part, whose corners lie in its own slot's frame.</param>
+    /// <param name="pose">The geometry's pose for <paramref name="part"/>'s slot.</param>
+    /// <returns>The part's box in the group's frame.</returns>
+    public static SdfMeshBox OfPart(SdfInstancePart part, DynamicTransform pose) {
+        var (position, orientation) = SdfMeshGeometryBuilder.PoseOf(transform: pose);
+
+        return Turned(
+            center: (0.5f * (part.Low + part.High)),
+            half: (0.5f * (part.High - part.Low)),
+            offset: position,
+            turn: orientation
+        );
+    }
+    /// <summary>Returns the box a box in a slot's own frame becomes where the slot's transform puts it: scaled by the slot's
+    /// units (<see cref="SdfMeshGeometryBuilder.UnitsOf"/>), then posed as the bake reads a pose
+    /// (<see cref="SdfMeshGeometryBuilder.PoseOf"/>).</summary>
+    /// <param name="center">The box's center, in the slot's frame.</param>
+    /// <param name="half">The box's half extents along the slot's axes, none negative.</param>
+    /// <param name="transform">The slot's transform.</param>
+    /// <returns>The box in the frame the transform places its slot in.</returns>
+    public static SdfMeshBox Carried(Vector3 center, Vector3 half, DynamicTransform transform) {
+        var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
+        var (position, orientation) = SdfMeshGeometryBuilder.PoseOf(transform: transform);
+
+        return Turned(
+            center: (center * units),
+            half: (half * units),
+            offset: position,
+            turn: orientation
+        );
+    }
 
     /// <summary>Returns the fraction a view's frustum sides are widened by: <see cref="ViewMargin"/>, or
     /// <see cref="ViewMarginPixels"/> of the view's shorter side where that is more, as it is for a small nested

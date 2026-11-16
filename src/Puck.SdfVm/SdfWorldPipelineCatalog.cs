@@ -15,7 +15,7 @@ namespace Puck.SdfVm;
 /// <param name="meshRaster">The composition's mesh pass, whose pipeline every residency leases for its device.</param>
 /// <param name="compiler">The composition's counted compiler, or a default compiler for a directly constructed harness.</param>
 public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster, ShaderCompiler? compiler = null) {
-    private readonly Dictionary<string, SdfKernelSet> m_deployed = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<ShaderTarget, SdfKernelSet> m_deployed = [];
     private readonly Lock m_deployedGate = new();
 
     /// <summary>Gets the composition's region copy, one pipeline a device in the pass pipelines, which a residency's table
@@ -43,21 +43,18 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
     /// <summary>Returns the deployed kernel set for a backend, reading it from <see cref="SdfKernelSet.DefaultDirectory"/>
     /// on the first call for that backend and returning the same set on every later call. Safe on any thread; the first
     /// call reads files, so a holder on the frame thread calls it from its own background work.</summary>
-    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
+    /// <param name="target">The backend's shader target.</param>
     /// <returns>The deployed kernel set.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> is empty.</exception>
     /// <exception cref="IOException">A kernel file is missing or cannot be read.</exception>
-    public SdfKernelSet LoadDeployed(string bytecodeExtension) {
-        ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
-
+    public SdfKernelSet LoadDeployed(ShaderTarget target) {
         lock (m_deployedGate) {
             if (!m_deployed.TryGetValue(
-                key: bytecodeExtension,
+                key: target,
                 value: out var kernels
             )) {
-                kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
+                kernels = SdfKernelSet.Load(target: target);
                 m_deployed.Add(
-                    key: bytecodeExtension,
+                    key: target,
                     value: kernels
                 );
             }
