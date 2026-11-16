@@ -289,12 +289,14 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         memory.BeginDevice(device: device.Handle, segments: OneHeap);
         device.CountAllocated(
             allocationSize: 65536UL,
+            family: null,
             memoryHandle: DeviceLocalMemory,
             memoryTypeIndex: 0U,
             role: GpuMemoryRole.DeviceLocal
         );
         device.CountAllocated(
             allocationSize: 4096UL,
+            family: null,
             memoryHandle: HostMemory,
             memoryTypeIndex: 1U,
             role: GpuMemoryRole.HostVisible
@@ -342,6 +344,7 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             Assert.Equal(expected: DeviceLocalBit, actual: unified.MemoryTypePropertyFlags(memoryTypeIndex: ((int)index)) & DeviceLocalBit);
             device.CountAllocated(
                 allocationSize: 1024UL,
+                family: null,
                 memoryHandle: handle,
                 memoryTypeIndex: index,
                 role: role

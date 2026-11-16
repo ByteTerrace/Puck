@@ -40,7 +40,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 1. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, step 2, and step 7's prototype with a GPU grant; then step 3.
+   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
+   grant; then step 3.
 2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -865,8 +866,9 @@ the tour's remaining reds and the Moth's shin groups share, then
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
-`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), step 2
-and step 7's prototype under a GPU grant, then step 3. The plan owns the decisions, the build order
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
+and 2's windowed readings and step 7's prototype under a GPU grant, then step
+3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
@@ -900,6 +902,14 @@ and every memory owner are its steps. This packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
+- [medium] Step 2's heap walk on a headless debug world names two large-object
+  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
+  table bounds by no step: `FieldCellDelta[]` arrays held by
+  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
+  need an owner and a bound, or a reason they stay named only.
+- [low] Step 2 names the trace scene's current hierarchy only: a scene a job
+  still borrows after a rebuild sits in the managed row's residual until its
+  last claim ends (`SdfMeshIrradiance`'s sampled owners).
 - A hand-over's draw-list rebuild is
   [arrival work proportional to change](arrival-proportional.md)'s, filed
   under [frame-time findings](#other-frame-time-findings); the capture feed's

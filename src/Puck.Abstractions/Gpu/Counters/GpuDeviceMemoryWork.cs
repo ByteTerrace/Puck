@@ -25,6 +25,17 @@ namespace Puck.Abstractions.Gpu;
 /// that memory and any allocation made without counting.
 /// </para>
 /// <para>
+/// Each counted byte is also named by at most one owner family (<see cref="GpuObjectName.MemoryFamily"/>): a dedicated
+/// allocation, which one resource holds, by the family <see cref="CountAllocated"/> takes with it; a shared block by the
+/// families of the resources placed in it (<see cref="CountPlaced"/>), each placement at its own size. A name adds
+/// nothing: it is a part of its allocation's segment row, refused where it would name a byte twice (a placement in a
+/// dedicated allocation, or placements past the block's size) or a byte never counted, so per segment the families'
+/// held bytes never pass the row, and the rest of the row (room inside shared blocks, an emptied block kept for reuse)
+/// is its residual (<see cref="GpuSegmentLedger.Residual"/>). Each family row reports its held bytes to the family's
+/// observer (<see cref="IGpuMemoryOwners.OfFamily"/>), and keeps its allocated and released bytes, so a family that
+/// churns is read apart from one that holds.
+/// </para>
+/// <para>
 /// Each allocation is keyed by the device that made it and the native object whose release frees it, so a driver that
 /// reuses a handle value on a recreated device never collides with an entry leaked from the old one. A device's
 /// teardown ends its entries (<see cref="EndDevice"/>), and one still held there is refused by name: the leak is a
@@ -38,12 +49,18 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly Lock m_gate = new();
-    private readonly Dictionary<(nint Device, nint Allocation), (long Bytes, GpuMemoryRole Role, SegmentRow Row)> m_live = [];
+    private readonly Dictionary<(nint Device, nint Allocation), Allocation> m_live = [];
     private readonly Dictionary<nint, GpuMemorySegments> m_devices = [];
     // A row per segment index and pool, kept across devices so a recreated device's segments count into the rows (and
     // the observers) its predecessor's did.
     private readonly Dictionary<(int Index, PhysicalMemory Pool), SegmentRow> m_rows = [];
-    private readonly Func<GpuMemorySegment, IAllocationObserver>? m_observerOf;
+    // A family's row per segment, kept across devices like the segment rows.
+    private readonly Dictionary<(string Family, int Index, PhysicalMemory Pool), FamilyRow> m_families = [];
+    // Every placement a family names inside a shared allocation, by the token CountPlaced handed out.
+    private readonly Dictionary<long, Placement> m_placements = [];
+    private readonly IGpuMemoryOwners? m_owners;
+
+    private long m_tokens;
 
     private readonly WorkCounterSet m_counts;
 
@@ -81,17 +98,23 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// device-local role placed in a segment of host memory, or a host-visible role placed in the adapter's own.</summary>
     public static WorkKind PlacementDisagreements { get; } = new(name: "gpu.memory.placement-disagreements", unit: "count", workClass: WorkClass.Pacing);
 
+    /// <summary>The family of a backend's descriptor heaps, which no caller names.</summary>
+    public const string DescriptorHeapFamily = "backend/descriptor-heaps";
+    /// <summary>The family of memory a device opens from another device or process (an imported surface).</summary>
+    public const string ImportedFamily = "backend/imported";
+    /// <summary>The family of images a device creates for another API or process to open (an exported surface).</summary>
+    public const string ExportedFamily = "backend/exported";
+
     /// <summary>Initializes a new instance of the <see cref="GpuDeviceMemoryWork"/> class.</summary>
     /// <param name="backend">The backend's name, as a report labels it (<c>vulkan</c>, <c>directx</c>).</param>
-    /// <param name="observerOf">Returns the observer a segment's held bytes are reported to, called once for each
-    /// segment row as a device first registers it, under this ledger's lock; <see langword="null"/> reports to
-    /// none.</param>
+    /// <param name="owners">The observers each segment row and each family row report their held bytes to, asked for
+    /// under this ledger's lock; <see langword="null"/> reports to none.</param>
     /// <exception cref="ArgumentException"><paramref name="backend"/> is empty, or the composed name
     /// <c>memory.&lt;backend&gt;</c> is not a dotted work name.</exception>
-    public GpuDeviceMemoryWork(string backend, Func<GpuMemorySegment, IAllocationObserver>? observerOf = null) {
+    public GpuDeviceMemoryWork(string backend, IGpuMemoryOwners? owners = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: backend);
 
-        m_observerOf = observerOf;
+        m_owners = owners;
         Backend = backend;
         m_counts = new WorkCounterSet(
             kinds: Counts.Kinds,
@@ -171,8 +194,8 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             return SegmentsOfLocked(device: device);
         }
     }
-    /// <summary>Reads every segment row: its held, peak, allocated and released bytes and its placement
-    /// disagreements, under the ledger's lock.</summary>
+    /// <summary>Reads every segment row: its held, peak, allocated and released bytes, the part of its held bytes the
+    /// families name, and its placement disagreements, under the ledger's lock.</summary>
     /// <returns>The rows, by segment index then pool.</returns>
     public IReadOnlyList<GpuSegmentLedger> ReadSegments() {
         lock (m_gate) {
@@ -182,6 +205,26 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 .Select(selector: static row => new GpuSegmentLedger(
                     Allocated: row.Allocated,
                     Disagreements: row.Disagreements,
+                    Held: row.Held,
+                    Named: row.Named,
+                    Peak: row.Peak,
+                    Released: row.Released,
+                    Segment: row.Segment
+                ))];
+        }
+    }
+    /// <summary>Reads every family row: the bytes the family's resources hold in a segment now, the most they held at
+    /// once, and the bytes they were allocated and released, under the ledger's lock.</summary>
+    /// <returns>The rows, by family then segment index and pool.</returns>
+    public IReadOnlyList<GpuFamilyLedger> ReadFamilies() {
+        lock (m_gate) {
+            return [.. m_families.Values
+                .OrderBy(keySelector: static row => row.Family, comparer: StringComparer.Ordinal)
+                .ThenBy(keySelector: static row => row.Segment.Index)
+                .ThenBy(keySelector: static row => row.Segment.Pool)
+                .Select(selector: static row => new GpuFamilyLedger(
+                    Allocated: row.Allocated,
+                    Family: row.Family,
                     Held: row.Held,
                     Peak: row.Peak,
                     Released: row.Released,
@@ -202,12 +245,15 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <param name="segment">The index of the segment the device placed it in: the heap of the Vulkan memory type it
     /// allocated from (<see cref="GpuMemorySegments.OfMemoryType"/>), or the segment group of its Direct3D 12 heap's
     /// memory pool on the device's adapter.</param>
-    /// <exception cref="ArgumentException"><paramref name="device"/> or <paramref name="allocation"/> is zero, or the
-    /// allocation is already counted on the device.</exception>
+    /// <param name="family">The family that names the whole allocation, for one a single resource holds (a committed
+    /// resource, a resource's own memory, a descriptor heap); <see langword="null"/> for a block shared by placements,
+    /// which each name their own part (<see cref="CountPlaced"/>).</param>
+    /// <exception cref="ArgumentException"><paramref name="device"/> or <paramref name="allocation"/> is zero, the
+    /// allocation is already counted on the device, or <paramref name="family"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative, <paramref name="role"/> is
     /// not a defined value, or the device has no segment <paramref name="segment"/>.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="device"/> is not registered.</exception>
-    public void CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role, int segment) {
+    public void CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role, int segment, string? family) {
         if (0 == device) {
             throw new ArgumentException(
                 message: "A counted allocation needs the device that made it.",
@@ -222,6 +268,9 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
+        if (family is { Length: 0 }) {
+            throw new ArgumentException(message: "A family is absent or non-empty.", paramName: nameof(family));
+        }
 
         var deviceLocal = IsDeviceLocal(role: role);
 
@@ -229,10 +278,11 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             var segments = SegmentsOfLocked(device: device);
             var placed = segments[segment];
             var row = RowOf(segment: placed);
+            var named = ((family is null) ? null : FamilyOf(family: family, segment: placed));
 
             if (!m_live.TryAdd(
                 key: (device, allocation),
-                value: (bytes, role, row)
+                value: new Allocation(bytes: bytes, family: named, role: role, row: row)
             )) {
                 throw new ArgumentException(
                     message: $"The allocation 0x{allocation:X} is already counted on device 0x{device:X}.",
@@ -245,6 +295,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 kind: Allocations
             );
             row.Allocate(bytes: bytes);
+            named?.Allocate(bytes: bytes);
 
             if (!segments.UnifiedMemory && (deviceLocal != (placed.Pool == PhysicalMemory.Device))) {
                 row.Disagreements++;
@@ -318,6 +369,17 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             }
 
             entry.Row.Release(bytes: entry.Bytes);
+            entry.Family?.Release(bytes: entry.Bytes);
+            // A block freed with placements still in it (a device's teardown frees every block whatever a loss left
+            // bound) takes their names with it, so no family names a byte its row no longer holds.
+            if (entry.Placed != 0) {
+                foreach (var (token, placement) in m_placements) {
+                    if (ReferenceEquals(objA: placement.Allocation, objB: entry)) {
+                        _ = m_placements.Remove(key: token);
+                        placement.Family.Release(bytes: placement.Bytes);
+                    }
+                }
+            }
 
             if (!IsDeviceLocal(role: entry.Role)) {
                 m_hostVisibleHeld -= entry.Bytes;
@@ -342,6 +404,59 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                     kind: ApertureReleased
                 );
             }
+
+            return true;
+        }
+    }
+    /// <summary>Names the part of a shared block one placed resource holds to the resource's family, in the segment the
+    /// block was placed in. The name adds nothing to the counts: it is a part of the block's segment row.</summary>
+    /// <param name="device">The native device that counted the block.</param>
+    /// <param name="allocation">The block's native object, counted with no family (<see cref="CountAllocated"/>).</param>
+    /// <param name="bytes">The bytes the resource holds in the block: its placement's size.</param>
+    /// <param name="family">The resource's family (<see cref="GpuObjectName.MemoryFamily"/>).</param>
+    /// <returns>The placement's token, which its release hands <see cref="CountUnplaced"/>; never zero.</returns>
+    /// <exception cref="ArgumentException"><paramref name="family"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="family"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">The block is not counted on the device, a family names it whole, or
+    /// its placements would name more bytes than it holds.</exception>
+    public long CountPlaced(nint device, nint allocation, long bytes, string family) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: family);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
+
+        lock (m_gate) {
+            if (!m_live.TryGetValue(key: (device, allocation), value: out var entry)) {
+                throw new InvalidOperationException(message: $"{Name}: a placement names block 0x{allocation:X}, which device 0x{device:X} never counted.");
+            }
+            if (entry.Family is not null) {
+                throw new InvalidOperationException(message: $"{Name}: block 0x{allocation:X} is named whole by {entry.Family.Family}; a dedicated allocation holds no placements.");
+            }
+            if ((entry.Placed + bytes) > entry.Bytes) {
+                throw new InvalidOperationException(message: $"{Name}: placements in block 0x{allocation:X} would name {(entry.Placed + bytes)} of its {entry.Bytes} bytes.");
+            }
+
+            var named = FamilyOf(family: family, segment: entry.Row.Segment);
+            var token = ++m_tokens;
+
+            entry.Placed += bytes;
+            named.Allocate(bytes: bytes);
+            m_placements.Add(key: token, value: new Placement(Allocation: entry, Bytes: bytes, Family: named));
+
+            return token;
+        }
+    }
+    /// <summary>Ends the name a placement's <see cref="CountPlaced"/> made, as its resource is released. A placement
+    /// whose block was freed first (a device's teardown) ended with the block, and counts nothing here.</summary>
+    /// <param name="token">The token <see cref="CountPlaced"/> returned.</param>
+    /// <returns>Whether the placement still named its bytes.</returns>
+    public bool CountUnplaced(long token) {
+        lock (m_gate) {
+            if (!m_placements.Remove(key: token, value: out var placement)) {
+                return false;
+            }
+
+            placement.Allocation.Placed -= placement.Bytes;
+            placement.Family.Release(bytes: placement.Bytes);
 
             return true;
         }
@@ -397,11 +512,20 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     // Under m_gate: the segment's row, created with its observer the first time any device registers the segment.
     private SegmentRow RowOf(GpuMemorySegment segment) {
         if (!m_rows.TryGetValue(key: (segment.Index, segment.Pool), value: out var row)) {
-            row = new SegmentRow(observer: m_observerOf?.Invoke(arg: segment), segment: segment);
+            row = new SegmentRow(observer: m_owners?.OfSegment(segment: segment), segment: segment);
             m_rows.Add(key: (segment.Index, segment.Pool), value: row);
         }
 
         row.Segment = segment;
+
+        return row;
+    }
+    // Under m_gate: a family's row in a segment, created with its observer the first time the family is placed there.
+    private FamilyRow FamilyOf(string family, GpuMemorySegment segment) {
+        if (!m_families.TryGetValue(key: (family, segment.Index, segment.Pool), value: out var row)) {
+            row = new FamilyRow(family: family, observer: m_owners?.OfFamily(family: family, segment: segment), segment: RowOf(segment: segment));
+            m_families.Add(key: (family, segment.Index, segment.Pool), value: row);
+        }
 
         return row;
     }
@@ -411,11 +535,24 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations, PlacementDisagreements];
     }
 
-    // One segment's bytes, written only under the ledger's lock, which is also where its observer is called.
-    private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) {
-        public GpuMemorySegment Segment = segment;
+    // One counted allocation: its size, role and segment row, the family that names it whole, or else the bytes its
+    // placements name. Written only under the ledger's lock.
+    private sealed class Allocation(long bytes, GpuMemoryRole role, SegmentRow row, FamilyRow? family) {
+        public long Bytes { get; } = bytes;
+        public FamilyRow? Family { get; } = family;
+        public GpuMemoryRole Role { get; } = role;
+        public SegmentRow Row { get; } = row;
+
+        public long Placed;
+    }
+    // One resource's placement in a shared block, named to its family.
+    private readonly record struct Placement(Allocation Allocation, long Bytes, FamilyRow Family);
+
+    // One row's device bytes: held now, the most held at once, and allocated and released over the process's life,
+    // written only under the ledger's lock, which is also where its observer is called. A row named inside another
+    // (a family's inside its segment's) adds what it holds to that row's Named.
+    private abstract class HeldRow(IAllocationObserver? observer, SegmentRow? namedIn) {
         public long Allocated;
-        public long Disagreements;
         public long Held;
         public long Peak;
         public long Released;
@@ -424,22 +561,50 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             Allocated += bytes;
             Held += bytes;
             Peak = Math.Max(val1: Peak, val2: Held);
-            observer?.Change(bytes: bytes);
+            if (namedIn is not null) { namedIn.Named += bytes; }
+            observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: bytes);
         }
         public void Release(long bytes) {
             Released += bytes;
             Held -= bytes;
-            observer?.Change(bytes: -bytes);
+            if (namedIn is not null) { namedIn.Named -= bytes; }
+            observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: -bytes);
         }
+    }
+    // One segment's row: the physical row of its device blocks.
+    private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) : HeldRow(namedIn: null, observer: observer) {
+        public GpuMemorySegment Segment = segment;
+        public long Disagreements;
+        public long Named;
+    }
+    // One family's row in one segment, a part of that segment's row.
+    private sealed class FamilyRow(string family, SegmentRow segment, IAllocationObserver? observer) : HeldRow(namedIn: segment, observer: observer) {
+        public string Family { get; } = family;
+        public SegmentRow Parent { get; } = segment;
+        public GpuMemorySegment Segment => Parent.Segment;
     }
 }
 
 /// <summary>One segment's row of a backend's device memory ledger, in bytes.</summary>
 /// <param name="Segment">The segment, with the pool its bytes are charged to.</param>
 /// <param name="Held">The bytes counted allocations placed in the segment hold now.</param>
+/// <param name="Named">The part of <paramref name="Held"/> the families name (<see cref="GpuFamilyLedger"/>), never more
+/// than it.</param>
 /// <param name="Peak">The most bytes they held at once.</param>
 /// <param name="Allocated">The bytes allocated in the segment over the process's life.</param>
 /// <param name="Released">The bytes released from the segment over the process's life.</param>
 /// <param name="Disagreements">The allocations placed in the segment whose role names the other pool, on a discrete
 /// adapter.</param>
-public readonly record struct GpuSegmentLedger(GpuMemorySegment Segment, long Held, long Peak, long Allocated, long Released, long Disagreements);
+public readonly record struct GpuSegmentLedger(GpuMemorySegment Segment, long Held, long Named, long Peak, long Allocated, long Released, long Disagreements) {
+    /// <summary>Gets the held bytes no family names: room inside shared blocks and emptied blocks kept for reuse.</summary>
+    public long Residual => (Held - Named);
+}
+/// <summary>One family's row of a backend's device memory ledger in one segment, in bytes: a part of that segment's
+/// row.</summary>
+/// <param name="Family">The family (<see cref="GpuObjectName.MemoryFamily"/>).</param>
+/// <param name="Segment">The segment its resources were placed in.</param>
+/// <param name="Held">The bytes its resources hold there now.</param>
+/// <param name="Peak">The most they held at once.</param>
+/// <param name="Allocated">The bytes its resources were given there over the process's life.</param>
+/// <param name="Released">The bytes its resources gave back there over the process's life.</param>
+public readonly record struct GpuFamilyLedger(string Family, GpuMemorySegment Segment, long Held, long Peak, long Allocated, long Released);

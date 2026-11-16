@@ -12,8 +12,9 @@ namespace Puck.DirectX;
 /// render-target or depth textures, other textures, kept apart as resource heap tier 1 asks; a render target or depth
 /// stencil stays committed, see <see cref="DirectXTextures.Create"/>) and role, each resource placed at an offset aligned
 /// as the device reports for it. The pool's policy decides which heap a resource takes and when a heap goes. The device's
-/// memory counts (<see cref="GpuDeviceMemoryWork"/>) count heaps, the memory the device actually holds, and a placed
-/// resource's release (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range (<see cref="Release"/>), found
+/// memory counts (<see cref="GpuDeviceMemoryWork"/>) count heaps, the memory the device actually holds, and name each
+/// placed resource's range to its family (<see cref="GpuDeviceMemoryWork.CountPlaced"/>); a placed
+/// resource's release (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range and its name (<see cref="Release"/>), found
 /// through a token the resource itself carries (private data under <see cref="TokenKey"/>), never through its address,
 /// which a later resource may reuse. A placed resource holds its heap, so releasing the arena's reference never frees
 /// memory a resource still sits in: <see cref="FreeAll"/> releases every heap once as the device is torn down, whatever
@@ -30,8 +31,8 @@ public sealed unsafe class DirectXHeapArena {
     public static readonly Guid TokenKey = new(g: "4f6b1c2e-8a0d-4e57-9b3f-2d7c6a1e5b90");
 
     // Every placed resource of every arena, by the token it carries, so a release that names only the resource finds its
-    // range.
-    private static readonly ConcurrentDictionary<long, (DirectXHeapArena Arena, GpuMemoryPlacement<nint> Placement)> Placed = [];
+    // range and the name its family holds in the counts.
+    private static readonly ConcurrentDictionary<long, (DirectXHeapArena Arena, GpuMemoryPlacement<nint> Placement, long Name)> Placed = [];
 
     private static long Tokens;
 
@@ -63,11 +64,12 @@ public sealed unsafe class DirectXHeapArena {
     /// <param name="initialState">The state it is created in.</param>
     /// <param name="clearValue">Its optimized clear value, or <see langword="null"/>.</param>
     /// <param name="role">What its memory is for, which decides whether its heap is counted.</param>
+    /// <param name="family">The family its placement is named to in the counts (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The resource, owned by the caller, who reports its release (<see cref="DirectXDeviceMemory.CountReleased"/>).</returns>
     /// <exception cref="DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">A creation failed for another reason.</exception>
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
-    public ID3D12Resource* Create(in D3D12_RESOURCE_DESC description, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue, GpuMemoryRole role) {
+    public ID3D12Resource* Create(in D3D12_RESOURCE_DESC description, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue, GpuMemoryRole role, string family) {
         var resourceDescription = description;
         var sized = description;
         var info = m_calls.AllocationInfo(description: &sized);
@@ -102,7 +104,7 @@ public sealed unsafe class DirectXHeapArena {
                 m_calls.ReleaseResource(resource: resource);
                 tagged.ThrowIfFailed(calls: m_calls, operation: "ID3D12Object::SetPrivateData");
             }
-            Placed[token] = (this, placement);
+            Placed[token] = (this, placement, (m_memory?.CountPlaced(allocation: placement.Native, bytes: checked((long)placement.Size), device: m_device, family: family) ?? 0L));
 
             return ((nint)resource);
         }));
@@ -118,6 +120,7 @@ public sealed unsafe class DirectXHeapArena {
         if (!(calls ?? new DirectXDeviceCommandCalls(device: null)).TryReadTag(key: TokenKey, resource: ((ID3D12Resource*)resource), value: out var token) || !Placed.TryRemove(key: token, value: out var placed)) {
             return false;
         }
+        if (placed.Name != 0) { _ = placed.Arena.m_memory?.CountUnplaced(token: placed.Name); }
         placed.Arena.m_pool.Return(placement: placed.Placement);
 
         return true;
@@ -147,6 +150,7 @@ public sealed unsafe class DirectXHeapArena {
             allocation: ((nint)heap),
             bytes: checked((long)bytes),
             device: m_device,
+            family: null,
             role: key.Role,
             segment: DirectXDeviceMemory.SegmentOf(calls: m_calls, heap: in description.Properties, segments: m_memory.SegmentsOf(device: m_device))
         );

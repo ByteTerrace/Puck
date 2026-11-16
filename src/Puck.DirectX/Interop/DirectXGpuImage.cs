@@ -29,7 +29,8 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <param name="clearDepth">The depth a depth attachment is cleared to (its attachment's
     /// <see cref="GpuDepthAttachment.ClearDepth"/>, which the factory validated), which it is created with as its optimized
     /// clear value; unused for any other usage.</param>
-    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage, float clearDepth) {
+    /// <param name="family">The family its memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>).</param>
+    public DirectXGpuImage(DirectXGpuImageRequest request, GpuPixelFormat format, GpuImageUsage usage, float clearDepth, string family) {
         var (deviceContext, dxgiFormat, width, height) = request;
 
         ArgumentNullException.ThrowIfNull(deviceContext);
@@ -74,6 +75,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             arena: (deviceContext as DirectXDeviceContext)?.HeapArena,
             clearValue: clearValue,
             device: device,
+            family: family,
             flags: flags,
             format: resourceFormat,
             height: height,

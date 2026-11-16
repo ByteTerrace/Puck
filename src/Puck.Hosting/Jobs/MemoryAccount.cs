@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 
@@ -26,28 +27,48 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// its next job regardless (<see cref="Owner.Reserve"/>), so a reading never holds work back forever.
 /// <para>
 /// The account carries pools (<see cref="PhysicalMemory"/>: host and device memory on a discrete adapter, the host's
-/// alone on unified memory) as ledgers (<see cref="ReadPools"/>). Every owner charges one pool. An admitted owner
-/// (<see cref="CreateOwner"/>) charges host memory and is what <see cref="Owner.TryReserve"/> subtracts from the
-/// budget. An observed owner (<see cref="CreateObservedOwner"/>), such as a device memory segment's, is charged and
-/// printed in its pool and stays outside that sum, on a discrete adapter and on unified memory alike, so admission
-/// answers exactly as it would without it. <see cref="Record"/> takes a device's memory reading and records each
-/// segment's budget and spend limit; it fires no trim and changes no admission.
+/// alone on unified memory), each read as its physical rows (<see cref="ReadPools"/>): the device blocks the backends'
+/// ledgers placed in it, and in host memory the native allocator's committed bytes, native storage outside the
+/// allocator, the collector's committed bytes, and the runtime's and driver's private memory, which a page walk of the
+/// process leaves once the other rows are taken away. The rows are disjoint and are the only figures that add. Every
+/// charge names the row its storage lies in (<see cref="MemoryBacking"/>), so an owner names a part of exactly one row,
+/// and each row prints its residual, what it holds beyond the parts its owners name. The device blocks are charged by
+/// the ledgers' segment observers (<see cref="DeviceOwners"/>), and the measured rows are recorded samples
+/// (<see cref="Measure"/>), each with its age; nothing here calls the collector, the allocator or the driver.
+/// </para>
+/// <para>
+/// An admitted owner (<see cref="CreateOwner"/>) charges host memory and is what <see cref="Owner.TryReserve"/>
+/// subtracts from the budget. An observed owner (<see cref="CreateObservedOwner"/>, <see cref="CreateSampledOwner"/>,
+/// and the device families of <see cref="DeviceOwners"/>) names part of its row and stays outside that sum, on a
+/// discrete adapter and on unified memory alike, so admission answers exactly as it would without it.
+/// <see cref="Record"/> takes a device's memory reading and records each segment's budget and spend limit; it fires no
+/// trim and changes no admission.
 /// </para>
 /// </summary>
 public sealed class MemoryAccount {
     /// <summary>Gets the process account shared by mesh libraries, residencies and jobs.</summary>
     public static MemoryAccount Shared { get; } = new();
 
+    private const int Backings = 4;
+
     private readonly Lock m_gate = new();
     private readonly long[] m_bytes = new long[4];
-    // Observed owners' bytes by pool, outside m_bytes and so outside what TryReserve subtracts.
-    private readonly long[] m_observed = new long[2];
+    // The device blocks the ledgers' segment observers charge, by pool: the physical rows of device memory.
+    private readonly long[] m_deviceBlocks = new long[2];
+    // What admitted and observed owners name, by pool and row (pool * Backings + backing).
+    private readonly long[] m_named = new long[2 * Backings];
     private readonly HashSet<Owner> m_owners = [];
+    // Serializes Measure, so each sampled owner's delta is taken from the value it last recorded.
+    private readonly Lock m_sampleGate = new();
+    private readonly List<SampledOwner> m_sampled = [];
 
     private long m_reserved;
     private long? m_budget;
+    private long m_negativeResiduals;
     private GpuMemoryReading m_device = GpuMemoryReading.Absent;
     private MemorySegmentLimit[] m_segmentLimits = [];
+    private HostMemorySample? m_sample;
+    private long m_sampledAt;
 
     /// <summary>Requests that cache owners detach idle claims. Active consumer claims are unaffected.</summary>
     public event Action? TrimRequested;
@@ -115,21 +136,43 @@ public sealed class MemoryAccount {
     /// <param name="name">The owner's name, for diagnostics.</param>
     /// <param name="category">The category its charges count in until it is reclassified.</param>
     /// <returns>The owner.</returns>
-    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live) => new(account: this, category: category, name: name, observed: false, pool: PhysicalMemory.Host);
-    /// <summary>Creates an observed owner: charged in its pool and printed, outside the sum
-    /// <see cref="Owner.TryReserve"/> subtracts, and unable to reserve. It must outlive every allocation that reports to
+    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live) => new(account: this, category: category, kind: OwnerKind.Admitted, name: name, pool: PhysicalMemory.Host);
+    /// <summary>Creates an observed owner of host storage: it names part of the row each of its charges names, outside the
+    /// sum <see cref="Owner.TryReserve"/> subtracts, and cannot reserve. It must outlive every allocation that reports to
     /// it.</summary>
     /// <param name="name">The owner's name, for diagnostics.</param>
-    /// <param name="pool">The physical memory its storage occupies.</param>
     /// <returns>The owner.</returns>
-    public Owner CreateObservedOwner(string name, PhysicalMemory pool) => new(account: this, category: MemoryCategory.Live, name: name, observed: true, pool: pool);
-    /// <summary>Returns what a backend's device memory ledger hands each of its segments
-    /// (<see cref="GpuDeviceMemoryWork"/>): an observed owner per segment, named <c>gpu.&lt;backend&gt;.&lt;segment&gt;</c>,
-    /// charging the segment's pool.</summary>
+    public Owner CreateObservedOwner(string name) => new(account: this, category: MemoryCategory.Live, kind: OwnerKind.Observed, name: name, pool: PhysicalMemory.Host);
+    /// <summary>Creates a sampled owner: an observed owner whose bytes are a figure its subsystem derives, such as the
+    /// payload of a structure that never reports its growth, read each time the account is measured
+    /// (<see cref="Measure"/>) and named in <paramref name="backing"/> from then until the next measure.</summary>
+    /// <param name="name">The owner's name, for diagnostics.</param>
+    /// <param name="backing">The host row its bytes lie in; not <see cref="MemoryBacking.DeviceBlocks"/>.</param>
+    /// <param name="read">Returns the bytes the subsystem holds now, at least zero; called outside the account's lock on
+    /// the thread that measures, so it must be safe to call from any thread.</param>
+    /// <returns>The registration; disposing it releases its bytes and stops the reads.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="read"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="backing"/> is
+    /// <see cref="MemoryBacking.DeviceBlocks"/> or not a defined value.</exception>
+    public IDisposable CreateSampledOwner(string name, MemoryBacking backing, Func<long> read) {
+        ArgumentNullException.ThrowIfNull(argument: read);
+        if (backing is not (MemoryBacking.NativeAllocator or MemoryBacking.NativeDirect or MemoryBacking.Managed)) {
+            throw new ArgumentOutOfRangeException(actualValue: backing, message: "A sampled owner names a host row.", paramName: nameof(backing));
+        }
+
+        var sampled = new SampledOwner(account: this, backing: backing, owner: CreateObservedOwner(name: name), read: read);
+
+        lock (m_sampleGate) { m_sampled.Add(item: sampled); }
+
+        return sampled;
+    }
+    /// <summary>Returns what a backend's device memory ledger (<see cref="GpuDeviceMemoryWork"/>) reports to: for each
+    /// segment the owner that is its physical row of device blocks, named <c>gpu.&lt;backend&gt;.&lt;segment&gt;</c>, and
+    /// for each family and segment an observed owner that names the family's part of that row, named
+    /// <c>gpu.&lt;backend&gt;.&lt;segment&gt;:&lt;family&gt;</c>, both in the segment's pool.</summary>
     /// <param name="backend">The backend's name, as its ledger is keyed (<c>vulkan</c>, <c>directx</c>).</param>
-    /// <returns>The function that creates a segment's owner.</returns>
-    public Func<GpuMemorySegment, IAllocationObserver> SegmentOwners(string backend) =>
-        segment => CreateObservedOwner(name: $"gpu.{backend}.{segment.Name}", pool: segment.Pool);
+    /// <returns>The owners.</returns>
+    public IGpuMemoryOwners DeviceOwners(string backend) => new LedgerOwners(account: this, backend: backend);
     /// <summary>Records a device's memory reading: the reading itself and each segment's budget and spend limit, the
     /// budget less the larger of a tenth of it and <see cref="Headroom"/>. It fires no trim and changes no admission.
     /// Recording the reading already held does nothing.</summary>
@@ -151,43 +194,102 @@ public sealed class MemoryAccount {
             m_segmentLimits = limits;
         }
     }
-    /// <summary>Reads the pools, the recorded device reading and its segments' limits under the account's lock.</summary>
+    /// <summary>Records a sample of the measured host rows and reads every sampled owner
+    /// (<see cref="CreateSampledOwner"/>), so the rows and the parts named in them are read together. The sampled owners'
+    /// reads run outside the account's lock; the sample and their bytes are recorded under it.</summary>
+    /// <param name="sample">The sample, taken by the caller (<see cref="HostMemorySample.Take"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="sample"/> is <see langword="null"/>.</exception>
+    public void Measure(HostMemorySample sample) {
+        ArgumentNullException.ThrowIfNull(argument: sample);
+        lock (m_sampleGate) {
+            foreach (var sampled in m_sampled) { sampled.Sample(); }
+            lock (m_gate) {
+                m_sample = sample;
+                m_sampledAt = Stopwatch.GetTimestamp();
+            }
+        }
+    }
+    /// <summary>Reads the pools, their physical rows with the parts their owners name, the recorded device reading and
+    /// its segments' limits under the account's lock. A residual that sampling skew makes negative reads as nothing and is
+    /// counted (<see cref="MemoryPoolsReading.NegativeResiduals"/>).</summary>
     /// <returns>The pools' reading. The device pool is present when a recorded reading of a discrete adapter names a
-    /// segment in it or an observed owner charges it.</returns>
+    /// segment in it or the ledgers placed a block in it.</returns>
     public MemoryPoolsReading ReadPools() {
         lock (m_gate) {
             var budget = (m_budget ?? DefaultBudget);
-            var admitted = m_bytes.Sum();
             var deviceLimits = m_segmentLimits.Where(predicate: static limit => (limit.Segment.Pool == PhysicalMemory.Device)).ToArray();
-            var deviceObserved = m_observed[((int)PhysicalMemory.Device)];
+            var sample = m_sample;
+            var age = ((sample is null) ? (TimeSpan?)null : Stopwatch.GetElapsedTime(startingTimestamp: m_sampledAt));
+            var direct = Named(pool: PhysicalMemory.Host, backing: MemoryBacking.NativeDirect);
+            var hostRows = new List<MemoryRowReading> {
+                Row(backing: MemoryBacking.DeviceBlocks, bytes: m_deviceBlocks[((int)PhysicalMemory.Host)], measured: false, name: "device-blocks", pool: PhysicalMemory.Host),
+                Row(backing: MemoryBacking.NativeAllocator, bytes: sample?.AllocatorCommitted, measured: true, name: "native-allocator", pool: PhysicalMemory.Host),
+                Row(backing: MemoryBacking.NativeDirect, bytes: direct, measured: false, name: "native-direct", pool: PhysicalMemory.Host),
+                Row(backing: MemoryBacking.Managed, bytes: sample?.ManagedCommitted, measured: true, name: "managed", pool: PhysicalMemory.Host),
+            };
+            // What the walk's private bytes hold beyond the rows that lie in them: the runtime's code and loader heaps,
+            // stacks and the driver's private memory. Device blocks are left in it: whether a driver maps them into the
+            // process's private bytes is the driver's, which the walk cannot tell.
+            long? runtime = ((sample?.Walk is { } walk) && (sample.AllocatorCommitted is { } allocator))
+                ? (walk.PrivateBytes - ((allocator + direct) + sample.ManagedCommitted))
+                : null;
+
+            if (runtime is < 0) { m_negativeResiduals++; runtime = 0; }
+            hostRows.Add(item: new MemoryRowReading(Backing: null, Bytes: runtime, Measured: true, Name: "runtime-and-driver", Named: 0, Pool: PhysicalMemory.Host));
+
+            var deviceBlocks = m_deviceBlocks[((int)PhysicalMemory.Device)];
             var host = new MemoryPoolReading(
-                Admitted: admitted,
+                Admitted: m_bytes.Sum(),
                 Budget: budget,
-                Observed: m_observed[((int)PhysicalMemory.Host)],
                 Pool: PhysicalMemory.Host,
                 Present: true,
                 Reserved: m_reserved,
+                Rows: hostRows,
                 SpendLimit: Math.Max(val1: 0L, val2: (budget - Headroom))
             );
             var device = new MemoryPoolReading(
                 Admitted: 0L,
                 Budget: ((deviceLimits.Length == 0) ? null : deviceLimits.Sum(selector: static limit => limit.Budget)),
-                Observed: deviceObserved,
                 Pool: PhysicalMemory.Device,
-                Present: ((deviceLimits.Length != 0) || (deviceObserved != 0)),
+                Present: ((deviceLimits.Length != 0) || (deviceBlocks != 0)),
                 Reserved: 0L,
+                Rows: [Row(backing: MemoryBacking.DeviceBlocks, bytes: deviceBlocks, measured: false, name: "device-blocks", pool: PhysicalMemory.Device)],
                 SpendLimit: ((deviceLimits.Length == 0) ? null : deviceLimits.Sum(selector: static limit => limit.SpendLimit))
             );
 
-            return new(Device: device, DeviceReading: m_device, Host: host, SegmentLimits: m_segmentLimits);
+            return new(Device: device, DeviceReading: m_device, Host: host, NegativeResiduals: m_negativeResiduals, Sample: sample, SampleAge: age, SegmentLimits: m_segmentLimits);
         }
     }
+    // Under m_gate.
+    private long Named(PhysicalMemory pool, MemoryBacking backing) => m_named[((((int)pool) * Backings) + ((int)backing))];
+    // Under m_gate: a row and what its owners name in it; a residual skew makes negative is counted.
+    private MemoryRowReading Row(string name, PhysicalMemory pool, MemoryBacking backing, long? bytes, bool measured) {
+        var named = Named(pool: pool, backing: backing);
 
-    /// <summary>One lifecycle's allocation totals and simultaneous-peak reservation, with no buffer registry.</summary>
+        if ((bytes is { } held) && (held < named)) { m_negativeResiduals++; }
+
+        return new(Backing: backing, Bytes: bytes, Measured: measured, Name: name, Named: named, Pool: pool);
+    }
+
+    internal enum OwnerKind {
+        // Charges host memory, counted by TryReserve.
+        Admitted,
+        // Names part of a row, outside admission.
+        Observed,
+        // A ledger segment's physical row of device blocks.
+        Segment,
+    }
+
+    /// <summary>One lifecycle's allocation totals and simultaneous-peak reservation, with no buffer registry. Each charge
+    /// names the row its storage lies in: an admitted owner's and a host observed owner's lie in host rows
+    /// (<see cref="MemoryBacking.NativeAllocator"/>, <see cref="MemoryBacking.NativeDirect"/>,
+    /// <see cref="MemoryBacking.Managed"/>), or a host segment's device blocks for an observed one; a device pool's owner
+    /// charges only <see cref="MemoryBacking.DeviceBlocks"/>.</summary>
     public sealed class Owner : IAllocationObserver, IDisposable {
         private readonly MemoryAccount m_account;
         private readonly PhysicalMemory m_pool;
-        private readonly bool m_observed;
+        private readonly OwnerKind m_kind;
+        private readonly long[] m_rows = new long[Backings];
 
         private MemoryCategory m_category;
         private long m_bytes;
@@ -205,7 +307,7 @@ public sealed class MemoryAccount {
             }
         }
 
-        internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, bool observed) { m_account = account; Name = name; m_category = category; m_pool = pool; m_observed = observed; }
+        internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, OwnerKind kind) { m_account = account; Name = name; m_category = category; m_pool = pool; m_kind = kind; }
 
         private long Promise => Math.Max(val1: 0, val2: (m_reservationPeak - m_bytes));
 
@@ -221,7 +323,7 @@ public sealed class MemoryAccount {
 
         internal MemoryOwnerReading Read() {
             lock (m_account.m_gate) {
-                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed, m_pool, m_observed);
+                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed, m_pool, (m_kind != OwnerKind.Admitted), (m_kind == OwnerKind.Segment), new MemoryRowBytes(DeviceBlocks: m_rows[((int)MemoryBacking.DeviceBlocks)], Managed: m_rows[((int)MemoryBacking.Managed)], NativeAllocator: m_rows[((int)MemoryBacking.NativeAllocator)], NativeDirect: m_rows[((int)MemoryBacking.NativeDirect)]));
             }
         }
 
@@ -234,7 +336,7 @@ public sealed class MemoryAccount {
         /// <returns><see langword="true"/> when the reservation is held.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The owner is observed (<see cref="CreateObservedOwner"/>).</exception>
+        /// <exception cref="InvalidOperationException">The owner is not admitted (<see cref="CreateObservedOwner"/>).</exception>
         public bool TryReserve(long peak, long? available = null) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             lock (m_account.m_gate) {
@@ -256,7 +358,7 @@ public sealed class MemoryAccount {
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
-        /// <exception cref="InvalidOperationException">The owner is observed (<see cref="CreateObservedOwner"/>).</exception>
+        /// <exception cref="InvalidOperationException">The owner is not admitted (<see cref="CreateObservedOwner"/>).</exception>
         public void Reserve(long peak) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             lock (m_account.m_gate) {
@@ -272,16 +374,46 @@ public sealed class MemoryAccount {
             lock (m_account.m_gate) { m_account.m_reserved -= Promise; m_reservationPeak = 0; Track(); }
         }
         /// <inheritdoc/>
-        public void Change(long bytes) {
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="backing"/> is a row this owner's pool and kind
+        /// cannot hold: device blocks charged to an admitted owner, or a host row charged to a device pool's owner or a
+        /// segment's.</exception>
+        /// <exception cref="InvalidOperationException">The change would release more bytes than the owner holds, overall
+        /// or in <paramref name="backing"/>.</exception>
+        /// <exception cref="ObjectDisposedException">The owner is disposed and the change acquires bytes.</exception>
+        public void Change(long bytes, MemoryBacking backing) {
+            var deviceBlocks = (backing == MemoryBacking.DeviceBlocks);
+            var holds = m_kind switch {
+                OwnerKind.Segment => deviceBlocks,
+                OwnerKind.Admitted => !deviceBlocks,
+                _ => (deviceBlocks || (m_pool == PhysicalMemory.Host)),
+            };
+
+            if (!Enum.IsDefined(value: backing) || !holds) {
+                throw new ArgumentOutOfRangeException(actualValue: backing, message: $"Memory owner {Name} cannot hold {backing} storage.", paramName: nameof(backing));
+            }
+
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: (m_closed && (bytes > 0)), instance: this);
                 var next = checked((m_bytes + bytes));
+                var row = checked((m_rows[((int)backing)] + bytes));
 
-                if (next < 0) { throw new InvalidOperationException(message: $"Memory owner {Name} released more bytes than it owns."); }
+                if ((next < 0) || (row < 0)) { throw new InvalidOperationException(message: $"Memory owner {Name} released more {backing} bytes than it owns."); }
                 m_account.m_reserved -= Promise;
                 m_bytes = next;
+                m_rows[((int)backing)] = row;
                 m_ownedPeak = Math.Max(val1: m_ownedPeak, val2: next);
-                if (m_observed) { m_account.m_observed[((int)m_pool)] += bytes; } else { m_account.m_bytes[((int)m_category)] += bytes; }
+                switch (m_kind) {
+                    case OwnerKind.Segment:
+                        m_account.m_deviceBlocks[((int)m_pool)] += bytes;
+                        break;
+                    case OwnerKind.Admitted:
+                        m_account.m_bytes[((int)m_category)] += bytes;
+                        m_account.m_named[((((int)m_pool) * Backings) + ((int)backing))] += bytes;
+                        break;
+                    default:
+                        m_account.m_named[((((int)m_pool) * Backings) + ((int)backing))] += bytes;
+                        break;
+                }
                 m_account.m_reserved += Promise;
                 Track();
             }
@@ -291,7 +423,7 @@ public sealed class MemoryAccount {
         public void Classify(MemoryCategory category) {
             lock (m_account.m_gate) {
                 if (category == m_category) { return; }
-                if (m_observed) { m_category = category; return; }
+                if (m_kind != OwnerKind.Admitted) { m_category = category; return; }
                 m_account.m_bytes[((int)m_category)] -= m_bytes;
                 m_category = category;
                 m_account.m_bytes[((int)m_category)] += m_bytes;
@@ -299,7 +431,7 @@ public sealed class MemoryAccount {
         }
         // An observed owner stands outside admission, so it neither reserves nor is reserved for.
         private void ThrowIfObserved() {
-            if (m_observed) { throw new InvalidOperationException(message: $"Memory owner {Name} is observed: it is charged in its pool outside admission and reserves nothing."); }
+            if (m_kind != OwnerKind.Admitted) { throw new InvalidOperationException(message: $"Memory owner {Name} is observed: it names part of a row outside admission and reserves nothing."); }
         }
         /// <inheritdoc/>
         public void Dispose() {
@@ -309,5 +441,37 @@ public sealed class MemoryAccount {
                 // Charges are released by the storage's actual disposer, never inferred from an owner's shutdown.
             }
         }
+    }
+
+    // A sampled owner's registration: its owner, the row it names and the figure last recorded.
+    private sealed class SampledOwner(MemoryAccount account, Owner owner, MemoryBacking backing, Func<long> read) : IDisposable {
+        private long m_recorded;
+        private bool m_disposed;
+
+        // Under the account's sample gate.
+        public void Sample() {
+            var bytes = Math.Max(val1: 0L, val2: read());
+
+            owner.Change(backing: backing, bytes: (bytes - m_recorded));
+            m_recorded = bytes;
+        }
+        public void Dispose() {
+            lock (account.m_sampleGate) {
+                if (m_disposed) { return; }
+                m_disposed = true;
+                _ = account.m_sampled.Remove(item: this);
+                owner.Change(backing: backing, bytes: -m_recorded);
+                m_recorded = 0;
+                owner.Dispose();
+            }
+        }
+    }
+
+    // The owners a backend's ledger reports to: a segment owner per segment, an observed owner per family and segment.
+    private sealed class LedgerOwners(MemoryAccount account, string backend) : IGpuMemoryOwners {
+        public IAllocationObserver OfSegment(GpuMemorySegment segment) =>
+            new Owner(account: account, category: MemoryCategory.Live, kind: OwnerKind.Segment, name: $"gpu.{backend}.{segment.Name}", pool: segment.Pool);
+        public IAllocationObserver OfFamily(GpuMemorySegment segment, string family) =>
+            new Owner(account: account, category: MemoryCategory.Live, kind: OwnerKind.Observed, name: $"gpu.{backend}.{segment.Name}:{family}", pool: segment.Pool);
     }
 }

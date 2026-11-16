@@ -145,7 +145,7 @@ public static class VulkanPresenterServiceRegistration {
     public static IServiceCollection AddVulkanFactories(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
         services.AddGpuQueueWork();
-        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend, observerOf: MemoryAccount.Shared.SegmentOwners(backend: PipelineCacheBackend));
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend, owners: MemoryAccount.Shared.DeviceOwners(backend: PipelineCacheBackend));
         AddProcedures(services: services);
         services.TryAddSingleton<IVulkanInstanceFactory>(implementationFactory: static sp => new VulkanInstanceFactory(instanceApi: sp.GetRequiredService<IVulkanInstanceApi>()));
         services.TryAddSingleton<IVulkanSurfaceFactory>(implementationFactory: static sp => new VulkanSurfaceFactory(surfaceApi: sp.GetRequiredService<IVulkanSurfaceApi>()));
@@ -204,7 +204,7 @@ public static class VulkanPresenterServiceRegistration {
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
         AddProcedures(services: services);
         services.AddGpuQueueWork();
-        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend, observerOf: MemoryAccount.Shared.SegmentOwners(backend: PipelineCacheBackend));
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend, owners: MemoryAccount.Shared.DeviceOwners(backend: PipelineCacheBackend));
         services.TryAddSingleton<IVulkanBufferApi>(implementationFactory: static _ => new VulkanNativeBufferApi());
         services.TryAddSingleton<IVulkanCommandBufferRecordingApi>(implementationFactory: static sp => new VulkanNativeCommandBufferRecordingApi(allocator: sp.GetRequiredService<IAllocator>()));
         services.TryAddSingleton<IVulkanCommandResourcesApi>(implementationFactory: static _ => new VulkanNativeCommandResourcesApi());

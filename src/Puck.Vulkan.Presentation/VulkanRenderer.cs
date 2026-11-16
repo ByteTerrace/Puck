@@ -89,21 +89,21 @@ public sealed class VulkanRenderer(
     // Published by RefreshMemoryReading on the frame thread; any thread may read it.
     GpuMemoryReading IGpuDeviceContext.MemoryReading => ((m_device is not null)
         ? Volatile.Read(location: ref m_memoryReading)
-        : (m_memoryReadingSerial == 0UL)
+        : (m_memoryRefresh.Serial == 0UL)
             ? GpuMemoryReading.Absent
-            : GpuMemoryReading.Lost(serial: m_memoryReadingSerial));
+            : GpuMemoryReading.Lost(serial: m_memoryRefresh.Serial));
 
-    // Vulkan's budget has no change signal, so the frame thread reads it at this fixed interval, in Stopwatch ticks.
-    private static readonly long MemoryReadingInterval = Stopwatch.Frequency;
+    // Vulkan's budget has no change signal, so the frame thread reads it at the backends' fixed interval; one rule across
+    // devices, so a recreated device's serial keeps moving forward.
+    private readonly GpuMemoryReadingRefresh m_memoryRefresh = new(serial: 0UL);
 
     private GpuMemoryReading m_memoryReading = GpuMemoryReading.Absent;
-    private ulong m_memoryReadingSerial;
-    private long m_memoryReadAt;
     private VulkanLogicalDevice? m_memoryReadDevice;
 
-    /// <summary>Reads the device's budget and usage per heap when a second has passed since the last read, or the device
-    /// changed, publishing a new reading whose serial moves when a budget differs from the last; otherwise makes no
-    /// driver call. A renderer with no device publishes nothing and brings none up.</summary>
+    /// <summary>Reads the device's budget and usage per heap under the backends' one refresh rule
+    /// (<see cref="GpuMemoryReadingRefresh"/>): when a second has passed since the last read, or the device changed,
+    /// publishing a new reading whose serial moves when a budget differs from the last; otherwise makes no driver call. A
+    /// renderer with no device publishes nothing and brings none up.</summary>
     public void RefreshMemoryReading() {
         var device = m_device;
 
@@ -113,7 +113,7 @@ public sealed class VulkanRenderer(
 
         var now = Stopwatch.GetTimestamp();
 
-        if (ReferenceEquals(objA: device, objB: m_memoryReadDevice) && ((now - m_memoryReadAt) < MemoryReadingInterval)) {
+        if (!m_memoryRefresh.Due(signalled: !ReferenceEquals(objA: device, objB: m_memoryReadDevice), timestamp: now)) {
             return;
         }
 
@@ -124,20 +124,13 @@ public sealed class VulkanRenderer(
             physicalDeviceHandle: m_physicalDevice.Handle,
             segments: segments
         );
-        var last = Volatile.Read(location: ref m_memoryReading);
-        var changed = (!ReferenceEquals(objA: device, objB: m_memoryReadDevice) || (last.State != GpuMemoryReadingState.Read) || (last.Segments.Count != readings.Length));
-
-        for (var index = 0; (!changed && (index < readings.Length)); index++) {
-            changed = (last.Segments[index].Budget != readings[index].Budget);
-        }
-
-        m_memoryReadAt = now;
         m_memoryReadDevice = device;
-        Volatile.Write(location: ref m_memoryReading, value: GpuMemoryReading.Read(
+        Volatile.Write(location: ref m_memoryReading, value: m_memoryRefresh.Publish(
             estimated: estimated,
+            last: Volatile.Read(location: ref m_memoryReading),
             readings: readings,
             segments: segments,
-            serial: (changed ? ++m_memoryReadingSerial : m_memoryReadingSerial)
+            timestamp: now
         ));
     }
 

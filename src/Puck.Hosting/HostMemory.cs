@@ -95,4 +95,94 @@ public static partial class HostMemory {
 
         return null;
     }
+
+    [StructLayout(layoutKind: LayoutKind.Sequential)]
+    private struct MemoryBasicInformation {
+        public nint BaseAddress;
+        public nint AllocationBase;
+        public uint AllocationProtect;
+        public ushort PartitionId;
+        public nuint RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+    }
+
+    private const uint MemCommit = 0x1000;
+    private const uint MemImage = 0x1000000;
+    private const uint MemMapped = 0x40000;
+    private const uint MemPrivate = 0x20000;
+
+    [LibraryImport(libraryName: "kernel32.dll")]
+    private static partial nuint VirtualQuery(nint address, out MemoryBasicInformation buffer, nuint length);
+
+    /// <summary>Walks this process's address space and sums its memory by kind: on Windows every committed region's bytes
+    /// by its type (private, a mapped section, an image), read with <c>VirtualQuery</c> over the whole address space; on
+    /// Linux <c>/proc/self/smaps_rollup</c>'s resident anonymous memory and swap as the private bytes and its other resident
+    /// bytes as the mapped ones, since Linux commits anonymous memory as it is touched. The walk reads the address space
+    /// as each region is reached while the process runs on, so regions that change during it are read at different
+    /// instants. It costs a system call per region (thousands), so it is taken on request, never per frame.</summary>
+    /// <returns>The walk, or <see langword="null"/> when this platform cannot be walked.</returns>
+    public static ProcessMemoryWalk? WalkProcess() {
+        if (OperatingSystem.IsWindows()) {
+            long privateBytes = 0, mappedBytes = 0, imageBytes = 0;
+            var regions = 0;
+            var address = ((nint)0);
+            var size = ((nuint)Marshal.SizeOf<MemoryBasicInformation>());
+
+            while (VirtualQuery(address: address, buffer: out var region, length: size) != 0) {
+                regions++;
+                if (region.State == MemCommit) {
+                    var bytes = ((long)region.RegionSize);
+
+                    switch (region.Type) {
+                        case MemPrivate: privateBytes += bytes; break;
+                        case MemMapped: mappedBytes += bytes; break;
+                        case MemImage: imageBytes += bytes; break;
+                    }
+                }
+
+                var next = (region.BaseAddress + ((nint)region.RegionSize));
+
+                if (next <= address) { break; }
+                address = next;
+            }
+
+            return new(ImageBytes: imageBytes, MappedBytes: mappedBytes, PrivateBytes: privateBytes, PrivateCommitted: true, Regions: regions);
+        }
+        if (OperatingSystem.IsLinux()) {
+            try {
+                long rss = 0, anonymous = 0, swap = 0;
+
+                foreach (var line in File.ReadLines(path: "/proc/self/smaps_rollup")) {
+                    var parts = line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
+
+                    if ((parts.Length < 2) || !long.TryParse(provider: CultureInfo.InvariantCulture, result: out var kilobytes, s: parts[1], style: NumberStyles.None)) { continue; }
+                    switch (parts[0]) {
+                        case "Rss:": rss = (kilobytes * 1024); break;
+                        case "Anonymous:": anonymous = (kilobytes * 1024); break;
+                        case "Swap:": swap = (kilobytes * 1024); break;
+                    }
+                }
+
+                return new(ImageBytes: 0, MappedBytes: Math.Max(val1: 0, val2: (rss - anonymous)), PrivateBytes: (anonymous + swap), PrivateCommitted: false, Regions: 0);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                return null;
+            }
+        }
+
+        return null;
+    }
 }
+/// <summary>One walk of a process's address space (<see cref="HostMemory.WalkProcess"/>), in bytes.</summary>
+/// <param name="PrivateBytes">The process's private memory: on Windows its committed private regions (the managed heap,
+/// every native heap, stacks, the runtime's code and loader heaps, and the driver's private allocations); on Linux its
+/// resident anonymous memory and swap.</param>
+/// <param name="MappedBytes">Committed mapped sections on Windows; resident file-backed and shared memory on
+/// Linux.</param>
+/// <param name="ImageBytes">Committed image regions (loaded modules) on Windows; zero on Linux, whose images are part of
+/// <paramref name="MappedBytes"/>.</param>
+/// <param name="PrivateCommitted">Whether <paramref name="PrivateBytes"/> is committed memory (Windows) rather than
+/// resident memory (Linux).</param>
+/// <param name="Regions">The regions the walk read; zero on Linux, whose kernel sums them.</param>
+public sealed record ProcessMemoryWalk(long PrivateBytes, long MappedBytes, long ImageBytes, bool PrivateCommitted, int Regions);

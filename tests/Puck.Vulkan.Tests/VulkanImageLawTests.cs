@@ -26,6 +26,7 @@ public sealed class VulkanImageLawTests {
         var views = new RecordingFramebufferSetApi(result: VkResult.Success);
 
         using var image = VulkanGpuImage.Create(
+            family: GpuObjectName.UnnamedFamily,
             device: null!,
             format: format,
             framebufferSetApi: views,
@@ -52,6 +53,7 @@ public sealed class VulkanImageLawTests {
         var views = new RecordingFramebufferSetApi(result: VkResult.ErrorOutOfDeviceMemory);
 
         var failure = Assert.Throws<VulkanException>(testCode: () => VulkanGpuImage.Create(
+            family: GpuObjectName.UnnamedFamily,
             device: null!,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             framebufferSetApi: views,
@@ -78,6 +80,7 @@ public sealed class VulkanImageLawTests {
         var views = new RecordingFramebufferSetApi(result: VkResult.Success);
 
         _ = Assert.Throws<ArgumentException>(testCode: () => VulkanGpuImage.Create(
+            family: GpuObjectName.UnnamedFamily,
             device: null!,
             format: GpuPixelFormat.D32Float,
             framebufferSetApi: views,
@@ -89,6 +92,7 @@ public sealed class VulkanImageLawTests {
             width: 8
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => VulkanGpuImage.Create(
+            family: GpuObjectName.UnnamedFamily,
             device: null!,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             framebufferSetApi: views,
