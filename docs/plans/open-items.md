@@ -2833,7 +2833,13 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   `GpuSurfaceUpload`) and the per-slot proof (`WaitSlot` to
   `IRenderGraphPackageReadback.Completed`, `LeaseRetireList`) are the two
   shapes left; key `RetiredGraph` on the node's submission count through the
-  queue, completed by `WaitSlot`, with the next lifetime change.
+  queue, completed by `WaitSlot`, with the next lifetime change. Two retirements
+  do not fit one non-decreasing key as they stand: a borrowed publication is
+  re-keyed after it is queued (`RetiredGraph.ReleasePublication` moves
+  `AfterSubmission` on), and one awaiting consumers completes on another node's
+  latest submission (`RetiredGraph.ArmAfterConsumers`, through
+  `HoldUntilLatestSubmission`). The change first gives those two their own
+  completion (the consumer node's lease already is one), then queues the rest.
 - [medium · unconfirmed] A submission its batch never queued reads complete:
   `GpuSubmissionBatch.Split`'s failure path aliases every deferred fence to an
   owner that `AbandonIfDeferred` retires, so both `IsSignaled` and `Wait`
