@@ -1,4 +1,5 @@
 using System.Net;
+using Puck.Abstractions;
 using Puck.Assets;
 
 namespace Puck.Launcher.Release;
@@ -19,15 +20,11 @@ public sealed class HttpReleaseSource(HttpClient httpClient, Uri baseUri) : IRel
     private readonly HttpClient m_httpClient = httpClient;
 
     // ResponseHeadersRead stops HttpClient's timeout at the headers; keep the same deadline over the streamed body.
-    private CancellationTokenSource RequestDeadline(CancellationToken cancellationToken) {
-        var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        if (m_httpClient.Timeout != Timeout.InfiniteTimeSpan) {
-            deadline.CancelAfter(delay: m_httpClient.Timeout);
-        }
-
-        return deadline;
-    }
+    private OperationDeadline RequestDeadline(CancellationToken cancellationToken) => new(
+        caller: cancellationToken,
+        timeout: m_httpClient.Timeout,
+        timeProvider: TimeProvider.System
+    );
 
     /// <inheritdoc/>
     public async Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, long length, CancellationToken cancellationToken) {

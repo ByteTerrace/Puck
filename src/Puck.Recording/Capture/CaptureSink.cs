@@ -1,6 +1,7 @@
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Sources;
 using Puck.Assets;
 namespace Puck.Recording.Capture;
 
@@ -35,13 +36,10 @@ public sealed class CaptureSink : ICaptureSink {
                 pixels.CopyTo(destination: rgba);
                 break;
             case GpuPixelFormat.B8G8R8A8Unorm:
-                for (var index = 0; (index < rgba.Length); index += 4) {
-                    rgba[(index + 0)] = pixels[(index + 2)];
-                    rgba[(index + 1)] = pixels[(index + 1)];
-                    rgba[(index + 2)] = pixels[(index + 0)];
-                    rgba[(index + 3)] = pixels[(index + 3)];
-                }
-
+                ImageSourceConversion.BgraToRgba(
+                    bgra: pixels,
+                    rgba: rgba
+                );
                 break;
             default:
                 throw new ArgumentOutOfRangeException(

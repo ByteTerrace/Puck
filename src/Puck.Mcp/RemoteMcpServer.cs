@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Collections.Frozen;
 using System.Globalization;
 using System.Net;
@@ -343,13 +344,12 @@ public static partial class RemoteMcpServer {
                 if (remaining < maximum) { maximum = remaining; }
             }
             if (maximum <= TimeSpan.Zero) { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return; }
-            using var lifetime = new CancellationTokenSource(
-                delay: maximum,
+            using var revocation = new CancellationTokenSource();
+            using var deadline = new OperationDeadline(
+                caller: context.RequestAborted,
+                lifetime: revocation.Token,
+                timeout: maximum,
                 timeProvider: clock
-            );
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-                token1: context.RequestAborted,
-                token2: lifetime.Token
             );
             var original = context.RequestAborted;
 
@@ -365,7 +365,7 @@ public static partial class RemoteMcpServer {
                 if (
                 (subject is not null) &&
                 !access.Allows(subject: subject)
-            ) { _ = deadline.CancelAsync(); }
+            ) { _ = revocation.CancelAsync(); }
             }
             access.Changed += Revoke;
             try {

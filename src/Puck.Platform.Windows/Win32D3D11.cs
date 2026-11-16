@@ -52,6 +52,37 @@ internal static unsafe class Win32D3D11 {
         context = createdContext;
         device = createdDevice;
     }
+    // Creates a compute shader from precompiled bytecode on the device. The caller owns the returned shader and Releases it;
+    // `kernel` names the kernel in the failure message when the device returns no shader.
+    public static ID3D11ComputeShader* CreateComputeShader(ID3D11Device* device, string kernel, ReadOnlySpan<byte> bytecode) {
+        ID3D11ComputeShader* shader = null;
+
+        fixed (byte* code = bytecode) {
+            device->CreateComputeShader(
+                pShaderBytecode: code,
+                BytecodeLength: ((nuint)bytecode.Length),
+                pClassLinkage: null,
+                ppComputeShader: &shader
+            );
+        }
+
+        return ((shader is null)
+            ? throw new InvalidOperationException(message: $"D3D11 {kernel} creation returned no shader")
+            : shader
+        );
+    }
+    // Null-safe release of one COM pointer: each call drops exactly one reference, so the caller still owns when and in what
+    // order its pointers are released.
+    public static void Release<T>(T* value) where T : unmanaged {
+        if (value is not null) {
+            _ = ((IUnknown*)value)->Release();
+        }
+    }
+    public static void Release<T>(T*[] values) where T : unmanaged {
+        foreach (var value in values) {
+            Release(value: value);
+        }
+    }
     public static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
             throw new COMException(

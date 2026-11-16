@@ -195,7 +195,7 @@ internal sealed class MemberGroupsRewriter : CSharpSyntaxRewriter {
         IEnumerable<Entry> ordered = group switch {
             Group.Coupled => entries.OrderBy(keySelector: static entry => entry.Index),
             Group.Field => entries
-                .OrderBy(keySelector: static entry => Rank(field: ((FieldDeclarationSyntax)entry.Member)))
+                .OrderBy(keySelector: static entry => RewriteShaping.StorageOf(field: ((FieldDeclarationSyntax)entry.Member)))
                 .ThenBy(
             keySelector: static entry => RewriteShaping.AccessibilityScope(member: entry.Member),
             comparer: StringComparer.Ordinal
@@ -233,28 +233,6 @@ internal sealed class MemberGroupsRewriter : CSharpSyntaxRewriter {
         };
 
         return ordered.Select(selector: static entry => entry.Member).ToList();
-    }
-    private static int Rank(FieldDeclarationSyntax field) {
-        var isConst = false;
-        var isStatic = false;
-        var isReadonly = false;
-
-        foreach (var modifier in field.Modifiers) {
-            isConst |= modifier.IsKind(kind: SyntaxKind.ConstKeyword);
-            isStatic |= modifier.IsKind(kind: SyntaxKind.StaticKeyword);
-            isReadonly |= modifier.IsKind(kind: SyntaxKind.ReadOnlyKeyword);
-        }
-
-        return (isConst
-            ? 0
-            : (isStatic
-                ? (isReadonly
-                    ? 1
-                    : 2)
-                : (isReadonly
-                    ? 3
-                    : 4
-        )));
     }
 
     public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitClassDeclaration(node: node)!));
