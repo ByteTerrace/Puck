@@ -66,6 +66,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public Vector3 DetailLow { get; private set; }
     /// <summary>Gets the high corner of the box the group's detailed instances' bounds cover, in the group's frame.</summary>
     public Vector3 DetailHigh { get; private set; }
+    /// <summary>Gets the box the group's static instances' glyph cells span (<see cref="SdfInstanceRange.GlyphBox"/>), in
+    /// the group's frame, whose field is a bound its lattice refines cell by cell; <see langword="null"/> for none.</summary>
+    public (Vector3 Low, Vector3 High)? GlyphBox { get; private set; }
 
     /// <summary>Gets the geometry the group bakes while its instances are appended: a world group's names its segments'
     /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
@@ -274,6 +277,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         replanned.Detail = group.Detail;
         replanned.DetailLow = group.DetailLow;
         replanned.DetailHigh = group.DetailHigh;
+        replanned.GlyphBox = group.GlyphBox;
         replanned.Members.AddRange(collection: group.Members);
 
         foreach (var index in group.m_instances) {
@@ -394,6 +398,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     high = Vector3.Max(value1: low, value2: Vector3.Min(value1: high, value2: box.High));
                 }
                 group.Members.Add(item: (instance.Center, radius, instance.Detail, low, high));
+                if (instance.GlyphBox is { } glyphs) {
+                    group.GlyphBox = ((group.GlyphBox is { } held) ? (Vector3.Min(value1: held.Low, value2: glyphs.Low), Vector3.Max(value1: held.High, value2: glyphs.High)) : glyphs);
+                }
             }
             if (instance.Detail > 0f) {
                 var low = (center - new Vector3(value: radius));

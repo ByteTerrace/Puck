@@ -49,10 +49,8 @@ let deviceLabel = { color: "#F2EEE4", roughness: 0.6 }
 let devicePlinthKick = { color: "#25292F", roughness: 0.7 }
 
 // The stands' names, at a size their bake keeps. An embossed run bakes as a group of its own, refined toward its
-// declared detail (the thinner of its relief and a tenth of its em, about its stroke) but no finer than an eighth of a
-// 15 mm cell along the run: 1.875 mm. At a 40 mm em a stroke is about 4 mm, two of those cells, and a 2 mm relief
-// declares a detail that reaches them; a stroke near one cell wide, as at an 18 mm em, drops out where it falls
-// between samples (an "I" lost from the deck's label).
+// declared detail, the thinner of its relief and half its stroke (a stroke is about a tenth of its em), so each stroke
+// spans two cells. At a 40 mm em a stroke is about 4 mm and the 2 mm relief declares the same 2 mm detail.
 let labelEm = 0.04
 let labelDepth = 0.002
 

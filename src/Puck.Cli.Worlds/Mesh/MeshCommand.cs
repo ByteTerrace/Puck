@@ -255,9 +255,14 @@ public static class MeshCommand {
         var toWorld = scene.ToWorld(group: group);
 
         if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program, poses: poses), refusal: out var why)) {
-            var held = ((baked is null) && store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out _, refusal: out _));
+            SdfMesh? stored = null;
+            var held = ((baked is null) && store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out stored, refusal: out _));
+            // A group no evaluator reads (text) is still described by its stored mesh's size and cell.
+            var size = (stored is { } peeked)
+                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; stored mesh {peeked.TriangleCount} triangles, {peeked.Positions.Length} vertices, cell {(1000f * MathF.Max(x: peeked.BakeCell.X, y: MathF.Max(x: peeked.BakeCell.Y, y: peeked.BakeCell.Z))):0.0} mm")
+                : string.Empty;
 
-            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: ((held || (baked is not null)) ? $"field {why}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
+            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: ((held || (baked is not null)) ? $"field {why}{size}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
         }
 
         // A shape whose own field no evaluator reads cannot be named nearest; the group's field still holds it.
