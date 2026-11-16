@@ -2407,6 +2407,18 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [medium · unconfirmed · glyph atlas swap] `SdfWorldResidency.ReconcileGlyphAtlas`
+  swaps the bound atlas texture apart from the program that names its new
+  identity (`SdfProgram.GlyphAtlas`); a bake taken between the two could store
+  old pixels under the new key. Confirm whether the order inside
+  `SdfWorldResidency.PrepareOnce` rules it out; if not, bind the texture and
+  the program's identity in one step. `WorldTextCatalog.Reconcile` also copies
+  the whole packed image into `SdfGlyphAtlas` (`RgbaPixels.ToArray()`).
+- [low · bake identity width] The bake closure still reaches reporting and
+  demand code that decides no content: `WorkCounterSet`, `WorkCount` and
+  `WorkKind`, `CameraSnapshot` and `SweptBox` (the tier is already a geometry
+  fact), and `CodeDerivedTable`. Make them stop types, or route the bake past
+  them, with a scratch-edit check that each no longer moves the identity.
 - [low · whole walks on ordinary frames] Walks over every row or copy each
   frame that the arrival memo's row table does not absorb: the bake's copy
   layout (`SdfMeshPathBake` copy layout walk) and two walks over the frame's
