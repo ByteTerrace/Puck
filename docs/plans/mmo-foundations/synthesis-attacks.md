@@ -81,7 +81,7 @@ memo is wrong at this tree.
 
 Two facts the memo does not state, both load-bearing below **[opened]**. The
 source of a durable-slot submission is the submitting world's own authored
-document id (`src/Puck.World.Server/WorldTick.Step.cs:484`):
+document id (`src/Puck.World.Server/WorldTick.Step.cs:463`):
 
 ```csharp
                     SourceDocumentId: (Host.Document.Definition.DocumentId ?? string.Empty),
