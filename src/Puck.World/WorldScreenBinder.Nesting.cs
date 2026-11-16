@@ -372,7 +372,7 @@ public sealed partial class WorldScreenBinder {
     }    /// <inheritdoc/>
     /// <remarks>Reads the residency the session already renders, the World's own, its endpoint scene's or its own, and
     /// creates none.</remarks>
-    public object? BakingWorld(string view, string consumer) {
+    public object? ArrivingWorld(string view, string consumer) {
         if (!m_feedsByName.TryGetValue(
             key: view,
             value: out var feed
@@ -386,8 +386,8 @@ public sealed partial class WorldScreenBinder {
                 ? m_routedResidencies.GetValueOrDefault(key: window.Scene)
                 : m_viewResidencies.GetValueOrDefault(key: feed.RegistrationName)?.Residency));
 
-        if ((residency is null) || !residency.MeshPathBake.Pending) { return null; }
-        // The consumer's own render dispatches the bake of the world it renders.
+        if ((residency is null) || !residency.MeshesArriving) { return null; }
+        // The consumer's own render brings the meshes of the world it renders.
         if ((ViewHost is { } host) && ReferenceEquals(objA: ResolveInstanceView(name: consumer, world: host)?.Residency, objB: residency)) { return null; }
 
         return residency;

@@ -73,8 +73,15 @@ public sealed class SdfMeshBakeClosureLawTests {
         Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMesh/NativeStorage", comparisonType: StringComparison.Ordinal));
 
         // Neither the background GPU work nor the bake's client of it, which only carry a batch's rows and samples to
-        // the device and back, may enter derivation.
-        foreach (var transport in new[] { typeof(SdfGpuWork), typeof(SdfGpuWork).Assembly.GetType(name: "Puck.SdfVm.SdfMeshBakeGpuWork", throwOnError: true)! }) {
+        // the device and back, may enter derivation; nor may memory accounting and storage, which pace admission and hold
+        // the words the bake's own code writes.
+        Type[] transports = [
+            typeof(SdfGpuWork), typeof(SdfGpuWork).Assembly.GetType(name: "Puck.SdfVm.SdfMeshBakeGpuWork", throwOnError: true)!,
+            typeof(Puck.Hosting.Jobs.MemoryAccount), typeof(Puck.Hosting.Jobs.MemoryAccount.Owner), typeof(Puck.Hosting.HostMemory),
+            typeof(Puck.Abstractions.Memory.OwnedBuffer<>), typeof(Puck.Abstractions.Memory.GuardedAllocator),
+        ];
+
+        foreach (var transport in transports) {
             var transportPrefix = $"{transport.Assembly.GetName().Name}!{transport.FullName}";
             Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => member.StartsWith(value: transportPrefix, comparisonType: StringComparison.Ordinal));
             Assert.False(condition: closure.Reads(type: transport));
