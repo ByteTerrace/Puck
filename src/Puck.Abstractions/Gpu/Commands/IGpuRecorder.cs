@@ -145,6 +145,42 @@ public interface IGpuRecorder {
     /// <param name="width">The width, in pixels, of both images.</param>
     /// <param name="height">The height, in pixels, of both images.</param>
     void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height);
+    /// <summary>Gets the alignment, in bytes, a buffer row takes in a buffer-image copy on this device, which
+    /// <see cref="GpuCopyFootprint.Of"/> rounds every row up to: Direct3D 12's <c>D3D12_TEXTURE_DATA_PITCH_ALIGNMENT</c>
+    /// (256); one on Vulkan, which addresses rows in whole texels (<c>bufferRowLength</c>) and admits any. A positive
+    /// power of two.</summary>
+    uint CopyRowAlignment { get; }
+    /// <summary>Records a copy of a buffer's rows into the whole of a single-level color image: a Vulkan
+    /// <c>vkCmdCopyBufferToImage</c> whose <c>bufferRowLength</c> is the footprint's pitch in texels, a Direct3D 12
+    /// <c>CopyTextureRegion</c> from a placed footprint at the buffer's first byte. The caller moves the image into
+    /// <see cref="GpuImageLayout.TransferDestination"/> first and out of it after, and orders the buffer's host or GPU
+    /// writes before the copy.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="bufferHandle">The buffer read: a host-visible buffer (<see cref="IGpuBufferFactory.CreateHostVisible(ulong, GpuBufferUsage, in GpuObjectName)"/>)
+    /// or a storage buffer in <see cref="GpuAccess.TransferRead"/>, at least <see cref="GpuCopyFootprint.ByteLength"/>
+    /// long.</param>
+    /// <param name="imageHandle">The image written, of the footprint's format and extent, in
+    /// <see cref="GpuImageLayout.TransferDestination"/>.</param>
+    /// <param name="footprint">How the image's rows lie in the buffer.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A handle is zero, or the footprint's pitch is not a multiple of
+    /// <see cref="CopyRowAlignment"/>.</exception>
+    void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint);
+    /// <summary>Records a copy of the whole of a single-level color image into a buffer's rows: a Vulkan
+    /// <c>vkCmdCopyImageToBuffer</c> whose <c>bufferRowLength</c> is the footprint's pitch in texels, a Direct3D 12
+    /// <c>CopyTextureRegion</c> into a placed footprint at the buffer's first byte. The caller moves the image into
+    /// <see cref="GpuImageLayout.TransferSource"/> first and out of it after, and makes the copy's write visible to the
+    /// buffer's next reader (a barrier into <see cref="GpuAccess.HostRead"/> at <see cref="GpuStage.Host"/> for a host
+    /// reading a readback buffer).</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="imageHandle">The image read, of the footprint's format and extent, in
+    /// <see cref="GpuImageLayout.TransferSource"/>.</param>
+    /// <param name="bufferHandle">The buffer written: a readback buffer (<see cref="IGpuBufferFactory.CreateReadback"/>)
+    /// or a storage buffer in <see cref="GpuAccess.CopyWrite"/>, at least <see cref="GpuCopyFootprint.ByteLength"/>
+    /// long.</param>
+    /// <param name="footprint">How the image's rows lie in the buffer.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A handle is zero, or the footprint's pitch is not a multiple of
+    /// <see cref="CopyRowAlignment"/>.</exception>
+    void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint);
     /// <summary>Records a byte-range copy of one buffer into a range of another: a Vulkan
     /// <c>vkCmdCopyBuffer</c>, a Direct3D 12 <c>CopyBufferRegion</c>. A barrier into <see cref="GpuAccess.TransferRead"/>
     /// at <see cref="GpuStage.Transfer"/> readies the source (<see cref="TransitionBuffer"/>); the destination is a

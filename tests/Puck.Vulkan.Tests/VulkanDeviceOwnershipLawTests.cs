@@ -11,7 +11,7 @@ using Xunit;
 namespace Puck.Vulkan.Tests;
 
 /// <summary>Pins, without a device, the lifetime rules of a Vulkan logical device and what is made on it: a surface
-/// upload or shared-surface import (<see cref="VulkanDeviceOwnership"/>) refuses a device other than the one its
+/// upload or shared-surface import (<see cref="GpuDeviceOwnership"/>) refuses a device other than the one its
 /// resources are on and refuses its release after that device is destroyed, and a device whose memory counts still hold
 /// an allocation refuses its teardown by naming the leak. Every teardown reaches the native destroy exactly once, for its
 /// own device, before the leak is named. The command tables resolve every entry point to a trap that no law reaches, and
@@ -26,10 +26,10 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
         var first = LogicalDevice(api: api, handle: FirstDeviceHandle);
         var second = LogicalDevice(api: api, handle: SecondDeviceHandle);
 
-        VulkanDeviceOwnership.ThrowIfOtherDevice(held: null, holder: nameof(VulkanSurfaceImport), offered: first);
-        VulkanDeviceOwnership.ThrowIfOtherDevice(held: first, holder: nameof(VulkanSurfaceImport), offered: first);
+        GpuDeviceOwnership.ThrowIfOtherDevice(held: null, holder: nameof(VulkanSurfaceImport), offered: first);
+        GpuDeviceOwnership.ThrowIfOtherDevice(held: first, holder: nameof(VulkanSurfaceImport), offered: first);
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => VulkanDeviceOwnership.ThrowIfOtherDevice(
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => GpuDeviceOwnership.ThrowIfOtherDevice(
             held: first,
             holder: nameof(VulkanSurfaceImport),
             offered: second
@@ -43,7 +43,7 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
         var api = new DestroyRecordingDeviceApi();
         var device = LogicalDevice(api: api, handle: FirstDeviceHandle);
 
-        VulkanDeviceOwnership.ThrowIfDestroyed(held: device, holder: nameof(VulkanSurfaceImport));
+        GpuDeviceOwnership.ThrowIfDestroyed(held: device, holder: nameof(VulkanSurfaceImport));
         Assert.Empty(collection: api.Destroyed);
         device.Dispose();
         device.Dispose();
@@ -56,7 +56,7 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
         _ = Assert.Throws<ObjectDisposedException>(testCode: device.WaitIdle);
         device.TryWaitIdle();
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => VulkanDeviceOwnership.ThrowIfDestroyed(
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => GpuDeviceOwnership.ThrowIfDestroyed(
             held: device,
             holder: nameof(VulkanSurfaceImport)
         ));

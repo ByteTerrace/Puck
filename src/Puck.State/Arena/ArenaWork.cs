@@ -25,6 +25,16 @@ public static class ArenaWork {
     /// cleared before it is handed out.</summary>
     public static WorkKind ScratchLeasedElements { get; } = Registry.Declare(name: "state.arena.scratch-leased-elements", unit: "elements", workClass: WorkClass.Deterministic);
 
+    /// <summary>Gets the kind counting row version moves: one each time a row's version moves, and one for a wholesale
+    /// reset (<see cref="StateArena.MoveSequence"/>). Beside the rows a reader is handed, it shows how many moves
+    /// landed on rows that had already moved.</summary>
+    public static WorkKind RowVersionMoves { get; } = Registry.Declare(name: "state.arena.row-version-moves", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the reads of the row version moves that answered "every row": a reader that
+    /// had read nothing yet, or one whose place a wholesale reset (an adoption, a rebuild) passed
+    /// (<see cref="StateArena.TryReadMoves"/>). A reader in step with the arena never adds to it, however many moves
+    /// fall between its reads. Which readers ask, and when, follows delivery pacing.</summary>
+    public static WorkKind MoveReadsWhole { get; } = Registry.Declare(name: "state.arena.move-reads-whole", unit: "count", workClass: WorkClass.Pacing);
+
     /// <summary>Gets the arena's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
         Registry.Kinds;

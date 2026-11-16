@@ -283,45 +283,45 @@ public interface IVulkanCommandBufferRecordingApi {
         uint width,
         uint height
     );
-    /// <summary>Records a copy of a width × height region of a 2D, single-layer color image into a tightly packed buffer.</summary>
+    /// <summary>Records a copy of the whole of a 2D, single-level, single-layer color image into a buffer's rows, from the
+    /// buffer's first byte.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to copy from.</param>
     /// <param name="imageLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to copy into.</param>
-    /// <param name="width">The width, in texels, of the region to copy.</param>
-    /// <param name="height">The height, in texels, of the region to copy.</param>
+    /// <param name="bufferRowLength">The texels from one buffer row's start to the next's (<c>bufferRowLength</c>); at
+    /// least <paramref name="width"/>.</param>
+    /// <param name="width">The width, in texels, of the image.</param>
+    /// <param name="height">The height, in texels, of the image.</param>
     void CopyImageToBuffer(
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint imageHandle,
         uint imageLayout,
         nint bufferHandle,
+        uint bufferRowLength,
         uint width,
         uint height
     );
-    /// <summary>Records a copy from tightly packed buffer bytes into a width × height region of a 2D, single-level,
-    /// single-layer color image at the given offset.</summary>
+    /// <summary>Records a copy of a buffer's rows, from its first byte, into the whole of a 2D, single-level,
+    /// single-layer color image.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to copy from.</param>
-    /// <param name="bufferOffset">The offset, in bytes, of the region's first texel in the buffer; a multiple of the
-    /// format's texel size.</param>
+    /// <param name="bufferRowLength">The texels from one buffer row's start to the next's (<c>bufferRowLength</c>); at
+    /// least <paramref name="width"/>.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to copy to.</param>
     /// <param name="imageLayout">The current layout of the image, as a <c>VkImageLayout</c> value.</param>
-    /// <param name="imageOffsetX">The x texel offset of the destination region.</param>
-    /// <param name="imageOffsetY">The y texel offset of the destination region.</param>
-    /// <param name="width">The width, in texels, of the region to copy.</param>
-    /// <param name="height">The height, in texels, of the region to copy.</param>
+    /// <param name="width">The width, in texels, of the image.</param>
+    /// <param name="height">The height, in texels, of the image.</param>
     void CopyBufferToImage(
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
-        ulong bufferOffset,
+        uint bufferRowLength,
         nint imageHandle,
         uint imageLayout,
-        int imageOffsetX,
-        int imageOffsetY,
         uint width,
         uint height
     );

@@ -255,7 +255,7 @@ public sealed partial class SdfCompositeAtmosphereDeviceLawTests {
             Half[] color = [];
 
             if (coverageProbe is not null) {
-                var pixels = readback.Read(bytesPerPixel: 8, format: RenderGraphPackageCatalog.WorkingFormat, height: Height, width: Width,
+                var pixels = readback.Read(format: RenderGraphPackageCatalog.WorkingFormat, height: Height, width: Width,
                     sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
 
                 color = MemoryMarshal.Cast<byte, Half>(span: pixels.Span).ToArray();
