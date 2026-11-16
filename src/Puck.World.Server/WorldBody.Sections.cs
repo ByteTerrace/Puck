@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Puck.Maths;
 using Puck.Networking;
@@ -20,7 +21,6 @@ public sealed partial class WorldBody {
     private WorldTapeSegmentImage[]? m_viewTape;
     private WorldRigidContactSlotImage[]? m_viewContacts;
     private WorldRegisterWriteImage[]? m_viewRegisterWrites;
-    private WorldDurableInputImage[]? m_viewDurableInput;
 
     /// <summary>Captures this body's sections, read live. A capture owns every table it holds. A view's tables are
     /// the body's own live storage, or scratch the body reuses for the ones that need assembling, so a view allocates
@@ -122,41 +122,23 @@ public sealed partial class WorldBody {
             RelativeRemainders: ((m_relativeRemainders.Length == 0) ? NoRelativeRemainders : Table(alias: alias, live: m_relativeRemainders))
         );
 
-        var recencyCount = 0;
-
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            recencyCount += (m_laneRecency[lane]?.Length ?? 0);
-        }
-
-        var laneRecency = Assembled(alias: alias, length: recencyCount, scratch: ref m_viewLaneRecency);
-        var recencyStart = 0;
-
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            if (m_laneRecency[lane] is { } recency) {
-                recency.CopyTo(array: laneRecency, index: recencyStart);
-                recencyStart += recency.Length;
-            }
-        }
-
-        // The Action section lives behind its holder, which digests it for a fold; a fold's view leaves it out.
+        // The Action section, the lanes' clocks and the staged register writes live behind holders, which digest them
+        // for a fold; a fold's view leaves them out. The two record sections are their holders' values as they stand.
         if (held) {
             Unsafe.SkipInit(value: out sections.Action);
+            sections.LaneRecency = default;
+            sections.RegisterWrites = default;
         } else {
+            var laneRecency = Assembled(alias: alias, length: m_laneRecency.Count, scratch: ref m_viewLaneRecency);
+            var registerWrites = Assembled(alias: alias, length: m_registerWrites.Count, scratch: ref m_viewRegisterWrites);
+
+            m_laneRecency.Read.CopyTo(destination: laneRecency);
+            m_registerWrites.Read.CopyTo(destination: registerWrites);
             sections.Action = Action;
+            sections.LaneRecency = new(Clocks: laneRecency);
+            sections.RegisterWrites = new(Rows: registerWrites);
         }
-        sections.LaneRecency = new(Clocks: laneRecency);
-
-        var registerWrites = Assembled(alias: alias, length: m_actionStateDirty.Length, scratch: ref m_viewRegisterWrites);
-        var durableInput = Assembled(alias: alias, length: m_durableInputPresent.Length, scratch: ref m_viewDurableInput);
-
-        for (var slot = 0; (slot < registerWrites.Length); slot++) {
-            registerWrites[slot] = new(Dirty: m_actionStateDirty[slot], Kind: m_actionStateDirtyKind[slot], Operand: m_actionStateDirtyOperand[slot]);
-        }
-        for (var slot = 0; (slot < durableInput.Length); slot++) {
-            durableInput[slot] = new(Present: m_durableInputPresent[slot], Timer: m_durableInputTimers[slot], Value: m_durableInputValues[slot], Writer: m_durableInputWriters[slot]);
-        }
-        sections.RegisterWrites = new(Rows: registerWrites);
-        sections.DurableInput = new(Rows: durableInput, Tick: m_durableInputTick);
+        sections.DurableInput = DurableInput;
         sections.ScriptActors = ScriptActors;
 
         var tape = Grown(alias: alias, count: m_tapeCount, scratch: ref m_viewTape);
@@ -200,7 +182,41 @@ public sealed partial class WorldBody {
             work: ref work[((int)WorldContinuationSectionKind.ScriptActors)],
             writer: writer
         );
-        return ((1U << ((int)WorldContinuationSectionKind.Action)) | (1U << ((int)WorldContinuationSectionKind.ScriptActors)));
+        digests[((int)WorldContinuationSectionKind.LaneRecency)] = m_laneRecency.Digest<ContinuationTableCodec<BodyLaneRecencySection, ulong>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.LaneRecency)],
+            writer: writer
+        );
+        digests[((int)WorldContinuationSectionKind.RegisterWrites)] = m_registerWrites.Digest<ContinuationTableCodec<BodyRegisterWritesSection, WorldRegisterWriteImage>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.RegisterWrites)],
+            writer: writer
+        );
+        digests[((int)WorldContinuationSectionKind.DurableInput)] = m_durableInput.Digest<ContinuationSectionCodec<BodyDurableInputSection>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.DurableInput)],
+            writer: writer
+        );
+        return (
+            (1U << ((int)WorldContinuationSectionKind.Action)) |
+            (1U << ((int)WorldContinuationSectionKind.LaneRecency)) |
+            (1U << ((int)WorldContinuationSectionKind.RegisterWrites)) |
+            (1U << ((int)WorldContinuationSectionKind.DurableInput)) |
+            (1U << ((int)WorldContinuationSectionKind.ScriptActors))
+        );
+    }
+    // Overwrites the staged incoming write from a captured one: the tick, and as many rows as both tables hold. The
+    // table is replaced only when a row or the tick differs.
+    private void RestoreDurableInput(ulong tick, ReadOnlySpan<WorldDurableInputImage> rows) {
+        var current = DurableInput.Rows.AsSpan();
+        var count = Math.Min(val1: current.Length, val2: rows.Length);
+
+        if (current[..count].SequenceEqual(other: rows[..count])) {
+            if (DurableInput.Tick != tick) { m_durableInput.Write = (DurableInput with { Tick = tick }); }
+            return;
+        }
+
+        var restored = current.ToArray();
+
+        rows[..count].CopyTo(destination: restored);
+        m_durableInput.Write = new(Rows: ImmutableArray.Create(items: restored), Tick: tick);
     }
     // A table as a section holds it: the live array for a view, a copy for a capture.
     private static ReadOnlyMemory<T> Table<T>(bool alias, T[] live) => ((alias || (live.Length == 0))
@@ -365,37 +381,15 @@ public sealed partial class WorldBody {
 
         ActionEdit = sections.Action;
 
-        var laneRecency = sections.LaneRecency.Clocks.Span;
-        var recencyStart = 0;
-
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            // The clocks are laid out by this body's own lanes: a lane takes as many as its compiled binding
-            // declares, in lane order, from what the capture carried.
-            if (m_laneRecency[lane] is { } recency) {
-                var available = Math.Max(val1: 0, val2: Math.Min(val1: recency.Length, val2: (laneRecency.Length - recencyStart)));
-
-                laneRecency.Slice(length: available, start: recencyStart).CopyTo(destination: recency);
-                recencyStart += recency.Length;
-            }
-        }
-
+        // The clocks are laid out by this body's own lanes, in lane order: the table takes as many as it holds from
+        // what the capture carried.
+        RestoreTable(holder: m_laneRecency, source: sections.LaneRecency.Clocks.Span);
         RestoreActionState(image: registers);
-
-        var registerWrites = sections.RegisterWrites.Rows.Span;
-        var durableInput = sections.DurableInput.Rows.Span;
-
-        for (var slot = 0; (slot < Math.Min(val1: registerWrites.Length, val2: m_actionStateDirty.Length)); slot++) {
-            m_actionStateDirty[slot] = registerWrites[slot].Dirty;
-            m_actionStateDirtyKind[slot] = registerWrites[slot].Kind;
-            m_actionStateDirtyOperand[slot] = registerWrites[slot].Operand;
-        }
-        for (var slot = 0; (slot < Math.Min(val1: durableInput.Length, val2: m_durableInputPresent.Length)); slot++) {
-            m_durableInputPresent[slot] = durableInput[slot].Present;
-            m_durableInputValues[slot] = durableInput[slot].Value;
-            m_durableInputTimers[slot] = durableInput[slot].Timer;
-            m_durableInputWriters[slot] = durableInput[slot].Writer;
-        }
-        m_durableInputTick = sections.DurableInput.Tick;
+        RestoreTable(holder: m_registerWrites, source: sections.RegisterWrites.Rows.Span);
+        RestoreDurableInput(
+            rows: (sections.DurableInput.Rows.IsDefault ? default : sections.DurableInput.Rows.AsSpan()),
+            tick: sections.DurableInput.Tick
+        );
         SetScriptActors(
             pending: (sections.ScriptActors.Pending.IsDefault ? default : sections.ScriptActors.Pending.AsSpan()),
             timers: (sections.ScriptActors.Timers.IsDefault ? default : sections.ScriptActors.Timers.AsSpan())

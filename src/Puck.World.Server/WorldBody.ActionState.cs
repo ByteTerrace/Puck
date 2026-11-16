@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -38,12 +39,11 @@ public sealed partial class WorldBody {
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             hash.Add(value: Action.LaneLatch[lane]);
             hash.Add(value: Action.LaneFactHeld[lane]);
-            hash.Add(value: ((uint)(m_laneRecency[lane]?.Length ?? 0)));
+            var recency = LaneRecency(lane: lane);
 
-            if (m_laneRecency[lane] is { } recency) {
-                for (var index = 0; (index < recency.Length); index++) {
-                    hash.Add(value: recency[index]);
-                }
+            hash.Add(value: ((uint)recency.Length));
+            for (var index = 0; (index < recency.Length); index++) {
+                hash.Add(value: recency[index]);
             }
         }
     }
@@ -98,11 +98,10 @@ public sealed partial class WorldBody {
                 m_actionStateRequested[slot] = InitialRaw(definition: in m_actionStateDefinitions[slot]);
                 m_actionStateLastWriter[slot] = "author";
                 m_actionStateLastReason[slot] = "identity reset";
-                m_actionStateDirty[slot] = false;
+                ClearRegisterWrite(slot: slot);
             }
         }
-        Array.Clear(array: m_durableInputPresent);
-        m_durableInputTick = 0;
+        ClearDurableInput();
     }
     internal void RestoreSubmittedInput(in WorldSubmittedInput input) {
         if (input.HasIntent) {
@@ -115,13 +114,15 @@ public sealed partial class WorldBody {
     }
     internal void TakeDurableStateOutputs(ulong tick, int entityIndex, List<DurableStateOutput> outputs) {
         if (Profile is null) {
-            Array.Clear(array: m_actionStateDirty);
+            for (var slot = 0; (slot < m_registerWrites.Count); slot++) { ClearRegisterWrite(slot: slot); }
             return;
         }
 
         for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+            var staged = m_registerWrites.Read[slot];
+
             if (
-                !m_actionStateDirty[slot] ||
+                !staged.Dirty ||
                 (m_actionStateDefinitions[slot].Lifetime != ActionStateLifetime.Durable)
             ) {
                 continue;
@@ -133,15 +134,15 @@ public sealed partial class WorldBody {
                 EntityIndex: entityIndex,
                 Value: new DurableStateValue(
                     Name: m_actionStateDefinitions[slot].Name,
-                    Value: ((m_actionStateDirtyKind[slot] == WorldDocumentWriteKind.Add)
-                ? m_actionStateDirtyOperand[slot]
+                    Value: ((staged.Kind == WorldDocumentWriteKind.Add)
+                ? staged.Operand
                 : StateCounter(slot: slot)),
                     TimerTicks: StateTimer(slot: slot)
                 ),
-                Kind: m_actionStateDirtyKind[slot],
+                Kind: staged.Kind,
                 StorageKind: m_actionStateDefinitions[slot].Kind
             ));
-            m_actionStateDirty[slot] = false;
+            ClearRegisterWrite(slot: slot);
         }
     }
 
@@ -221,22 +222,20 @@ public sealed partial class WorldBody {
             }
         }
 
+        // The table is immutable behind its door: the staged rows are rebuilt and written once.
+        var rows = DurableInput.Rows.AsSpan().ToArray();
+
         if (
-            (m_durableInputTick != 0) &&
-            (m_durableInputTick != tick)
+            (DurableInput.Tick != 0) &&
+            (DurableInput.Tick != tick)
         ) {
-            Array.Clear(array: m_durableInputPresent);
+            for (var slot = 0; (slot < rows.Length); slot++) { rows[slot] = (rows[slot] with { Present = false }); }
         }
-        m_durableInputTick = tick;
 
         foreach (var value in values) {
-            var slot = FindActionState(name: value.Name);
-
-            m_durableInputPresent[slot] = true;
-            m_durableInputValues[slot] = value.Value;
-            m_durableInputTimers[slot] = value.TimerTicks;
-            m_durableInputWriters[slot] = writer;
+            rows[FindActionState(name: value.Name)] = new(Present: true, Timer: value.TimerTicks, Value: value.Value, Writer: writer);
         }
+        m_durableInput.Write = new(Rows: ImmutableArray.Create(items: rows), Tick: tick);
 
         reason = string.Empty;
         return true;
@@ -287,37 +286,61 @@ public sealed partial class WorldBody {
         }
     }
     private void ApplyDurableInput(ulong tick) {
-        if (m_durableInputTick == 0) {
+        if (DurableInput.Tick == 0) {
             return;
         }
-        if (m_durableInputTick != tick) {
-            if (m_durableInputTick < tick) {
-                Array.Clear(array: m_durableInputPresent);
-                m_durableInputTick = 0;
+        if (DurableInput.Tick != tick) {
+            if (DurableInput.Tick < tick) {
+                ClearDurableInput();
             }
             return;
         }
 
+        // The staged table is immutable, so the rows read here are the staged ones whatever a register write does.
+        var rows = DurableInput.Rows;
+
         for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
-            if (!m_durableInputPresent[slot]) {
+            if (!rows[slot].Present) {
                 continue;
             }
             var definition = m_actionStateDefinitions[slot];
             var requested = ((definition.Kind == ActionStateKind.Counter)
-                ? m_durableInputValues[slot].Value
-                : checked((long)m_durableInputTimers[slot])
+                ? rows[slot].Value.Value
+                : checked((long)rows[slot].Timer)
             );
 
             ApplyRawState(
                 slot: slot,
                 requested: requested,
-                writer: m_durableInputWriters[slot],
+                writer: rows[slot].Writer,
                 reason: "tick-stamped durable input"
             );
         }
-        Array.Clear(array: m_durableInputPresent);
-        m_durableInputTick = 0;
+        ClearDurableInput();
     }
+    // Drops the staged incoming write: no row is present and no tick is targeted. A row keeps the value, timer and
+    // writer it was staged with, which the section carries.
+    private void ClearDurableInput() {
+        var rows = DurableInput.Rows.AsSpan();
+        var present = false;
+
+        for (var slot = 0; (slot < rows.Length); slot++) { present |= rows[slot].Present; }
+        if (!present) {
+            if (DurableInput.Tick != 0) { m_durableInput.Write = (DurableInput with { Tick = 0UL }); }
+            return;
+        }
+
+        var cleared = rows.ToArray();
+
+        for (var slot = 0; (slot < cleared.Length); slot++) { cleared[slot] = (cleared[slot] with { Present = false }); }
+        m_durableInput.Write = new(Rows: ImmutableArray.Create(items: cleared), Tick: 0UL);
+    }
+    // Drops a register's staged durable write. The staged kind and operand stay as they were: the section carries them.
+    private void ClearRegisterWrite(int slot) {
+        if (m_registerWrites.Read[slot].Dirty) { m_registerWrites.Write[slot] = (m_registerWrites.Read[slot] with { Dirty = false }); }
+    }
+
+    private ref readonly BodyDurableInputSection DurableInput => ref m_durableInput.Read;
 
     /// <summary>Writes one register a world rule's <c>setBodyState</c> addresses, settled through the register's
     /// envelope as a kit action's write is. The lane write joins the firing's journal scope, so a rewound firing
@@ -450,14 +473,8 @@ public sealed partial class WorldBody {
         m_actionStateRequested = new long[m_actionStateDefinitions.Length];
         m_actionStateLastWriter = new string[m_actionStateDefinitions.Length];
         m_actionStateLastReason = new string[m_actionStateDefinitions.Length];
-        m_actionStateDirty = new bool[m_actionStateDefinitions.Length];
-        m_actionStateDirtyKind = new WorldDocumentWriteKind[m_actionStateDefinitions.Length];
-        m_actionStateDirtyOperand = new FixedQ4816[m_actionStateDefinitions.Length];
-        m_durableInputPresent = new bool[m_actionStateDefinitions.Length];
-        m_durableInputValues = new FixedQ4816[m_actionStateDefinitions.Length];
-        m_durableInputTimers = new ulong[m_actionStateDefinitions.Length];
-        m_durableInputWriters = new string[m_actionStateDefinitions.Length];
-        m_durableInputTick = 0;
+        m_registerWrites.Resize(count: m_actionStateDefinitions.Length).Clear();
+        m_durableInput.Write = BodyDurableInputSection.Empty(registers: m_actionStateDefinitions.Length);
 
         for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
             var definition = m_actionStateDefinitions[slot];
@@ -546,7 +563,7 @@ public sealed partial class WorldBody {
     }
     // The one postfix evaluator every body gate takes: an action trigger's gate reads its lane's recency clocks, a
     // shaping row's the motion clocks. The validator decides which predicates each gate may name.
-    private bool GateOpen(CompiledPredicate[] gate, ulong[]? recency, in PlayerIntent intent) {
+    private bool GateOpen(CompiledPredicate[] gate, ReadOnlySpan<ulong> recency, in PlayerIntent intent) {
         if (gate.Length == 0) {
             return true;
         }
@@ -574,7 +591,7 @@ public sealed partial class WorldBody {
 
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
-                CompiledPredicateKind.Recently => (recency![predicate.RecencySlot] > 0),
+                CompiledPredicateKind.Recently => (recency[predicate.RecencySlot] > 0),
                 CompiledPredicateKind.CompareState => predicate.Comparison.Holds(
                 value: StateCounter(slot: predicate.StateSlot),
                 expected: predicate.Value
@@ -617,20 +634,23 @@ public sealed partial class WorldBody {
             (slot >= 0) &&
             (m_actionStateDefinitions[slot].Lifetime == ActionStateLifetime.Durable)
         ) {
+            var staged = m_registerWrites.Read[slot];
+
             if (
-                m_actionStateDirty[slot] &&
-                (m_actionStateDirtyKind[slot] != WorldDocumentWriteKind.Add)
+                staged.Dirty &&
+                (staged.Kind != WorldDocumentWriteKind.Add)
             ) {
                 kind = WorldDocumentWriteKind.Set;
             } else if (
-                m_actionStateDirty[slot] &&
+                staged.Dirty &&
                 (kind == WorldDocumentWriteKind.Add)
             ) {
-                operand += m_actionStateDirtyOperand[slot];
+                operand += staged.Operand;
             }
-            m_actionStateDirty[slot] = true;
-            m_actionStateDirtyKind[slot] = kind;
-            m_actionStateDirtyOperand[slot] = operand;
+
+            var marked = new WorldRegisterWriteImage(Dirty: true, Kind: kind, Operand: operand);
+
+            if (marked != staged) { m_registerWrites.Write[slot] = marked; }
         }
     }
     // Resolve argument-less channel taps at the only boundary that knows the host's actual fixed-step period. A
@@ -705,7 +725,7 @@ public sealed partial class WorldBody {
                 continue;
             }
 
-            var recency = m_laneRecency[ordinal];
+            var recencyStart = m_laneRecencyStart[ordinal];
             var logicalChannel = (((m_stateLane?.Input is { } inputRuntime) && m_channels.IsDeclared(ordinal: ordinal) &&
                 inputRuntime.Catalog.TryGetLogicalId(m_channels.Name(ordinal: ordinal)!, out var channel)) ? channel : -1);
             var bit = (scratch.Intent[ordinal] >= m_channelThresholds[ordinal]);
@@ -713,13 +733,15 @@ public sealed partial class WorldBody {
             var released = (!bit && Action.PreviousBit[ordinal]);
 
             for (var slot = 0; (slot < binding.RecencyFacts.Length); slot++) {
-                recency![slot] = (FactHolds(fact: binding.RecencyFacts[slot])
+                var clock = (FactHolds(fact: binding.RecencyFacts[slot])
                     ? binding.RecencyWindows[slot]
                     : SubtractSaturating(
-                        value: recency[slot],
+                        value: m_laneRecency.Read[(recencyStart + slot)],
                         amount: scratch.StepTicks
                     )
                 );
+
+                if (clock != m_laneRecency.Read[(recencyStart + slot)]) { m_laneRecency.Write[(recencyStart + slot)] = clock; }
             }
 
             if (binding.OnPress is { } press) {
@@ -740,7 +762,7 @@ public sealed partial class WorldBody {
                     GateOpen(
                     gate: press.Gate,
                     intent: in scratch.Intent,
-                    recency: recency
+                    recency: LaneRecency(lane: ordinal)
                 )
                 ) {
                     if (ApplyEffects(
@@ -760,7 +782,7 @@ public sealed partial class WorldBody {
                 GateOpen(
                 gate: release.Gate,
                 intent: in scratch.Intent,
-                recency: recency
+                recency: LaneRecency(lane: ordinal)
             )
             ) {
                 ApplyEffects(
@@ -776,7 +798,7 @@ public sealed partial class WorldBody {
                 var holds = (FactHolds(fact: trigger.Fact) && GateOpen(
                     gate: trigger.Gate,
                     intent: in scratch.Intent,
-                    recency: recency
+                    recency: LaneRecency(lane: ordinal)
                 ));
                 var wasHeld = ((Action.LaneFactHeld[ordinal] & (1UL << rule)) != 0UL);
 

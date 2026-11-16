@@ -500,13 +500,15 @@ public struct BodyActionSection : IContinuationSection<BodyActionSection>, IEqua
 /// <summary>The action lanes' Recently-gate clocks, every lane's in lane order. Which lane owns which clocks is the
 /// kit's compiled bindings to say, so the table carries the clocks alone.</summary>
 /// <param name="Clocks">The clocks, lane by lane.</param>
-public readonly record struct BodyLaneRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationSection<BodyLaneRecencySection> {
+public readonly record struct BodyLaneRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationTableSection<BodyLaneRecencySection, ulong> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.LaneRecency;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in BodyLaneRecencySection section) =>
-        WorldAuthorityCheckpointCodec.WriteULongs(values: section.Clocks.Span, writer: writer);
+    public static void Write(WireWriter writer, in BodyLaneRecencySection section) => WriteTable(elements: section.Clocks.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<ulong> elements) =>
+        WorldAuthorityCheckpointCodec.WriteULongs(values: elements, writer: writer);
     /// <inheritdoc/>
     public static BodyLaneRecencySection Read(ref WireReader reader) =>
         new(Clocks: WorldAuthorityCheckpointCodec.ReadULongArray(field: "lane recency", reader: ref reader));
@@ -519,19 +521,19 @@ public readonly record struct WorldRegisterWriteImage(bool Dirty, WorldDocumentW
 /// <summary>The durable register writes staged for the profile and not yet drained, one row per register of the kit's
 /// register file.</summary>
 /// <param name="Rows">The rows, in register order.</param>
-public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegisterWriteImage> Rows) : IContinuationSection<BodyRegisterWritesSection> {
+public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegisterWriteImage> Rows) : IContinuationTableSection<BodyRegisterWritesSection, WorldRegisterWriteImage> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.RegisterWrites;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in BodyRegisterWritesSection section) {
-        var rows = section.Rows.Span;
-
-        writer.WriteArrayCount(count: rows.Length);
-        for (var row = 0; (row < rows.Length); row++) {
-            writer.WriteBoolean(value: rows[row].Dirty);
-            writer.WriteByte(value: ((byte)rows[row].Kind));
-            writer.WriteFixed(value: rows[row].Operand);
+    public static void Write(WireWriter writer, in BodyRegisterWritesSection section) => WriteTable(elements: section.Rows.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<WorldRegisterWriteImage> elements) {
+        writer.WriteArrayCount(count: elements.Length);
+        for (var row = 0; (row < elements.Length); row++) {
+            writer.WriteBoolean(value: elements[row].Dirty);
+            writer.WriteByte(value: ((byte)elements[row].Kind));
+            writer.WriteFixed(value: elements[row].Operand);
         }
     }
     /// <inheritdoc/>
@@ -560,16 +562,25 @@ public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegi
 /// <param name="Writer">The staged writer id.</param>
 public readonly record struct WorldDurableInputImage(bool Present, FixedQ4816 Value, ulong Timer, string Writer);
 /// <summary>An incoming durable register write staged for a tick and not yet applied, one row per register of the
-/// kit's register file.</summary>
+/// kit's register file. A row names its writer, so the table is immutable and a change replaces it: a body keeps the
+/// section behind a <see cref="VersionedRecord{T}"/>.</summary>
 /// <param name="Tick">The simulation tick the staged input targets.</param>
 /// <param name="Rows">The rows, in register order.</param>
-public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory<WorldDurableInputImage> Rows) : IContinuationSection<BodyDurableInputSection> {
+public readonly record struct BodyDurableInputSection(ulong Tick, ImmutableArray<WorldDurableInputImage> Rows) : IContinuationSection<BodyDurableInputSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.DurableInput;
 
+    /// <summary>Returns the section of a body with the given number of registers and nothing staged.</summary>
+    /// <param name="registers">The number of registers.</param>
+    /// <returns>The section.</returns>
+    public static BodyDurableInputSection Empty(int registers) => new(
+        Rows: ((registers == 0) ? [] : ImmutableArray.Create(items: new WorldDurableInputImage[registers])),
+        Tick: 0UL
+    );
+
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyDurableInputSection section) {
-        var rows = section.Rows.Span;
+        var rows = (section.Rows.IsDefault ? default : section.Rows.AsSpan());
 
         writer.WriteUInt64(value: section.Tick);
         writer.WriteArrayCount(count: rows.Length);
@@ -583,7 +594,7 @@ public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory
     /// <inheritdoc/>
     public static BodyDurableInputSection Read(ref WireReader reader) => new(
         Tick: reader.ReadUInt64(),
-        Rows: reader.ReadArray(
+        Rows: ImmutableArray.Create(items: reader.ReadArray(
             field: "durable input",
             maximum: WorldAuthorityCheckpointCodec.MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldDurableInputImage(
@@ -592,7 +603,7 @@ public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory
                 Timer: r.ReadUInt64(),
                 Writer: r.ReadString(field: "durable input writer")
             )
-        )
+        ))
     );
 }
 /// <summary>Who authorized each channel's scripted input: the actor of its timed press and of its pending tap, one

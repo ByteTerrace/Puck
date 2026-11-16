@@ -29,6 +29,45 @@ public sealed partial class WorldBody {
             m_roleChannels[ordinal] = ((roleMask is { } roles) && (ordinal < roles.Length) && roles[ordinal]);
         }
     }
+    // Lays the recency clocks out by the lanes' present bindings: a lane holds one clock per recency fact its binding
+    // declares. A lane takes the clocks of the lane sources names for it under the layout being replaced, as many as
+    // both hold; a lane with no source (a negative entry, or no table at all) starts with every clock at zero.
+    private void LayoutLaneRecency(ReadOnlySpan<int> sources) {
+        Span<int> starts = stackalloc int[(ActionLaneCount + 1)];
+        var total = 0;
+
+        for (var lane = 0; (lane < ActionLaneCount); lane++) {
+            starts[lane] = total;
+            total += (m_laneBindings[lane]?.RecencyFacts.Length ?? 0);
+        }
+        starts[ActionLaneCount] = total;
+        if (m_laneRecencyScratch.Length < total) { m_laneRecencyScratch = new ulong[total]; }
+
+        var laid = m_laneRecencyScratch.AsSpan(length: total, start: 0);
+        var previous = m_laneRecency.Read;
+
+        laid.Clear();
+        for (var lane = 0; (lane < sources.Length); lane++) {
+            if (sources[lane] is >= 0 and var source) {
+                CopyClamped(
+                    destination: laid[starts[lane]..starts[(lane + 1)]],
+                    source: previous[m_laneRecencyStart[source]..m_laneRecencyStart[(source + 1)]]
+                );
+            }
+        }
+        if (starts.SequenceEqual(other: m_laneRecencyStart) && previous.SequenceEqual(other: laid)) { return; }
+        starts.CopyTo(destination: m_laneRecencyStart);
+        laid.CopyTo(destination: m_laneRecency.Resize(count: total));
+    }
+    // One lane's recency clocks.
+    private ReadOnlySpan<ulong> LaneRecency(int lane) => m_laneRecency.Read[m_laneRecencyStart[lane]..m_laneRecencyStart[(lane + 1)]];
+    // Overwrites the first elements of a table holder from a captured table, as many as both hold, and only when they
+    // differ: a restore that changes nothing moves no version.
+    private static void RestoreTable<T>(VersionedArray<T> holder, ReadOnlySpan<T> source) where T : unmanaged, IEquatable<T> {
+        var count = Math.Min(val1: holder.Count, val2: source.Length);
+
+        if (!holder.Read[..count].SequenceEqual(other: source[..count])) { source[..count].CopyTo(destination: holder.Write); }
+    }
     // The clamped copy every restored table uses: it never trusts the captured table's length to match the restored
     // body's own. The same kit produces the same lengths; a decoded checkpoint is untrusted input.
     private static void CopyClamped<T>(ReadOnlySpan<T> source, Span<T> destination) =>
@@ -592,11 +631,8 @@ public sealed partial class WorldBody {
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             ActionEdit.LaneLatch[lane] = 0UL;
             ActionEdit.LaneFactHeld[lane] = 0UL;
-            m_laneRecency[lane] = ((m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding)
-                ? new ulong[binding.RecencyFacts.Length]
-                : null
-            );
         }
+        LayoutLaneRecency(sources: default);
 
         // The response recency clocks are bound to the OLD table shape (a new table may have a different Recently count),
         // so they reset on a recompile — but m_planarVelocity SURVIVES, because a live retune must not jerk the crowd.

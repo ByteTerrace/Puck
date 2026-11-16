@@ -27,10 +27,34 @@ public sealed partial class WorldBody {
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = Action.LaneLatch[lane];
             laneFactHeld[lane] = Action.LaneFactHeld[lane];
-            laneRecency[lane] = ((m_laneRecency[lane] is { } recency)
-                ? CopyInto(buffers: buffers, source: recency)
-                : null
+            laneRecency[lane] = ((m_laneRecencyStart[lane] == m_laneRecencyStart[(lane + 1)])
+                ? null
+                : CopyInto(buffers: buffers, source: LaneRecency(lane: lane))
             );
+        }
+
+        var registerWrites = m_registerWrites.Read;
+        var registerWriteDirty = Take<bool>(buffers: buffers, length: registerWrites.Length);
+        var registerWriteKinds = Take<WorldDocumentWriteKind>(buffers: buffers, length: registerWrites.Length);
+        var registerWriteOperands = Take<FixedQ4816>(buffers: buffers, length: registerWrites.Length);
+
+        for (var slot = 0; (slot < registerWrites.Length); slot++) {
+            registerWriteDirty[slot] = registerWrites[slot].Dirty;
+            registerWriteKinds[slot] = registerWrites[slot].Kind;
+            registerWriteOperands[slot] = registerWrites[slot].Operand;
+        }
+
+        var durableInput = DurableInput.Rows.AsSpan();
+        var durableInputPresent = Take<bool>(buffers: buffers, length: durableInput.Length);
+        var durableInputValues = Take<FixedQ4816>(buffers: buffers, length: durableInput.Length);
+        var durableInputTimers = Take<ulong>(buffers: buffers, length: durableInput.Length);
+        var durableInputWriters = Take<string>(buffers: buffers, length: durableInput.Length);
+
+        for (var slot = 0; (slot < durableInput.Length); slot++) {
+            durableInputPresent[slot] = durableInput[slot].Present;
+            durableInputValues[slot] = durableInput[slot].Value;
+            durableInputTimers[slot] = durableInput[slot].Timer;
+            durableInputWriters[slot] = durableInput[slot].Writer;
         }
 
         var actionState = Take<long>(buffers: buffers, length: m_actionStateDefinitions.Length);
@@ -91,14 +115,14 @@ public sealed partial class WorldBody {
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
             ActionState: actionState,
-            ActionStateDirty: CopyInto(buffers: buffers, source: m_actionStateDirty),
-            ActionStateDirtyKind: CopyInto(buffers: buffers, source: m_actionStateDirtyKind),
-            ActionStateDirtyOperand: CopyInto(buffers: buffers, source: m_actionStateDirtyOperand),
-            DurableInputPresent: CopyInto(buffers: buffers, source: m_durableInputPresent),
-            DurableInputValues: CopyInto(buffers: buffers, source: m_durableInputValues),
-            DurableInputTimers: CopyInto(buffers: buffers, source: m_durableInputTimers),
-            DurableInputWriters: CopyInto(buffers: buffers, source: m_durableInputWriters),
-            DurableInputTick: m_durableInputTick,
+            ActionStateDirty: registerWriteDirty,
+            ActionStateDirtyKind: registerWriteKinds,
+            ActionStateDirtyOperand: registerWriteOperands,
+            DurableInputPresent: durableInputPresent,
+            DurableInputValues: durableInputValues,
+            DurableInputTimers: durableInputTimers,
+            DurableInputWriters: durableInputWriters,
+            DurableInputTick: DurableInput.Tick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             PendingContinuum: m_pendingContinuum
@@ -422,13 +446,13 @@ public sealed partial class WorldBody {
 
             if (
                 (lane < state.LaneRecency.Length) &&
-                (state.LaneRecency[lane] is { } capturedRecency) &&
-                (m_laneRecency[lane] is { } targetRecency)
+                (state.LaneRecency[lane] is { } capturedRecency)
             ) {
-                CopyClamped(
-                    destination: targetRecency,
-                    source: capturedRecency
-                );
+                var kept = capturedRecency.AsSpan(length: Math.Min(val1: capturedRecency.Length, val2: LaneRecency(lane: lane).Length), start: 0);
+
+                if (!LaneRecency(lane: lane)[..kept.Length].SequenceEqual(other: kept)) {
+                    kept.CopyTo(destination: m_laneRecency.Write[m_laneRecencyStart[lane]..]);
+                }
             }
         }
 
@@ -446,9 +470,9 @@ public sealed partial class WorldBody {
         );
 
         for (var slot = 0; (slot < dirtyCount); slot++) {
-            m_actionStateDirty[slot] = state.ActionStateDirty[slot];
-            m_actionStateDirtyKind[slot] = state.ActionStateDirtyKind[slot];
-            m_actionStateDirtyOperand[slot] = state.ActionStateDirtyOperand[slot];
+            var staged = new WorldRegisterWriteImage(Dirty: state.ActionStateDirty[slot], Kind: state.ActionStateDirtyKind[slot], Operand: state.ActionStateDirtyOperand[slot]);
+
+            if (m_registerWrites.Read[slot] != staged) { m_registerWrites.Write[slot] = staged; }
         }
 
         var durableCount = Math.Min(
@@ -461,18 +485,25 @@ public sealed partial class WorldBody {
                     val1: state.DurableInputTimers.Length,
                     val2: state.DurableInputWriters.Length
                 ),
-                val2: m_durableInputPresent.Length
+                val2: DurableInput.Rows.Length
             )
         );
+        var durableDiffers = false;
 
         for (var slot = 0; (slot < durableCount); slot++) {
-            m_durableInputPresent[slot] = state.DurableInputPresent[slot];
-            m_durableInputValues[slot] = state.DurableInputValues[slot];
-            m_durableInputTimers[slot] = state.DurableInputTimers[slot];
-            m_durableInputWriters[slot] = state.DurableInputWriters[slot];
+            durableDiffers |= (DurableInput.Rows[slot] != new WorldDurableInputImage(Present: state.DurableInputPresent[slot], Timer: state.DurableInputTimers[slot], Value: state.DurableInputValues[slot], Writer: state.DurableInputWriters[slot]));
         }
+        // The table is immutable behind its door, so it is rebuilt only when a captured row differs from the staged one.
+        if (durableDiffers) {
+            var durableInput = new WorldDurableInputImage[durableCount];
 
-        m_durableInputTick = state.DurableInputTick;
+            for (var slot = 0; (slot < durableCount); slot++) {
+                durableInput[slot] = new(Present: state.DurableInputPresent[slot], Timer: state.DurableInputTimers[slot], Value: state.DurableInputValues[slot], Writer: state.DurableInputWriters[slot]);
+            }
+            RestoreDurableInput(rows: durableInput, tick: state.DurableInputTick);
+        } else if (DurableInput.Tick != state.DurableInputTick) {
+            m_durableInput.Write = (DurableInput with { Tick = state.DurableInputTick });
+        }
 
         ResetTape(count: Math.Min(val1: state.TapeIntents.Count, val2: state.TapeRemainingTicks.Count));
         for (var index = 0; (index < m_tapeCount); index++) {

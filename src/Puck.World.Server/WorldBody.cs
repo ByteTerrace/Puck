@@ -95,7 +95,6 @@ public sealed partial class WorldBody {
     private FixedQuaternion m_frame = FixedQuaternion.Identity;
 
     private ulong? m_continuumConsumedThroughEngineTick;
-    private ulong m_durableInputTick;
     // The screen-engagement route latch (disengaged by default). Set by body.engage/disengage. While engaged the
     // resolved intent is DIVERTED to the bound screen's machine instead of the avatar: Advance captures it into
     // m_engagedIntent and holds the avatar idle (no pose integration). ORTHOGONAL to m_source — engagement decides
@@ -279,7 +278,12 @@ public sealed partial class WorldBody {
     // the Action section), and one recency clock per Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
     // A role ordinal never has a binding, so it is naturally inert here.
     private readonly CompiledActionSpec?[] m_laneBindings = new CompiledActionSpec?[ActionLaneCount];
-    private readonly ulong[]?[] m_laneRecency = new ulong[]?[ActionLaneCount];
+    // The lanes' Recently-gate clocks behind their write door, every lane's in lane order: a lane's clocks start at
+    // m_laneRecencyStart[lane] and number its binding's recency facts. The layout is configuration, laid whenever the
+    // bindings are set (LayoutLaneRecency).
+    private readonly VersionedArray<ulong> m_laneRecency;
+    private readonly int[] m_laneRecencyStart = new int[(ActionLaneCount + 1)];
+    private ulong[] m_laneRecencyScratch = [];
     private CompiledActionStateSlot[] m_actionStateDefinitions = [];
 
     // Named counters and timers are stored in the arena's slot lanes, addressed by this body's own entity index —
@@ -290,13 +294,11 @@ public sealed partial class WorldBody {
     private long[] m_actionStateRequested = [];
     private string[] m_actionStateLastWriter = [];
     private string[] m_actionStateLastReason = [];
-    private bool[] m_actionStateDirty = [];
-    private WorldDocumentWriteKind[] m_actionStateDirtyKind = [];
-    private FixedQ4816[] m_actionStateDirtyOperand = [];
-    private bool[] m_durableInputPresent = [];
-    private FixedQ4816[] m_durableInputValues = [];
-    private ulong[] m_durableInputTimers = [];
-    private string[] m_durableInputWriters = [];
+    // The durable register writes staged for the profile, one row per register, behind their write door.
+    private readonly VersionedArray<WorldRegisterWriteImage> m_registerWrites;
+    // The incoming durable write staged for a tick, one row per register, behind its write door. A row names its
+    // writer, so the table is immutable and a write replaces it.
+    private readonly VersionedRecord<BodyDurableInputSection> m_durableInput;
     private int m_affectingSubject = -1;
     // The world's declared binary crossing threshold per ordinal, bound or not — resolved once from the world's
     // channel table at construction/recompile; the engage-channel probe and the previous-bit image read unbound
@@ -365,6 +367,9 @@ public sealed partial class WorldBody {
         var slot = new SlotBinding();
 
         m_action = new Versioned<BodyActionSection>(binding: slot);
+        m_laneRecency = new VersionedArray<ulong>(binding: slot);
+        m_registerWrites = new VersionedArray<WorldRegisterWriteImage>(binding: slot);
+        m_durableInput = new VersionedRecord<BodyDurableInputSection>(binding: slot, value: BodyDurableInputSection.Empty(registers: 0));
         m_scriptActors = new VersionedRecord<BodyScriptActorsSection>(binding: slot, value: BodyScriptActorsSection.Empty);
         SetTuning(
             holds: holds,
@@ -389,11 +394,7 @@ public sealed partial class WorldBody {
         m_tetherFacet = tether;
         m_maxSmoothError = maxSmoothError;
 
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
-                m_laneRecency[lane] = new ulong[binding.RecencyFacts.Length];
-            }
-        }
+        LayoutLaneRecency(sources: default);
 
         if (m_tuning.RecencySlots > 0) {
             m_motionRecency = new ulong[m_tuning.RecencySlots];

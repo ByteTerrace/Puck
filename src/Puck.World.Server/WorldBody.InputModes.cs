@@ -9,14 +9,12 @@ public sealed partial class WorldBody {
         ClearTransientInput();
         ClearTape();
         ActionEdit = default;
-        Array.Clear(array: m_laneRecency);
+        if (m_laneRecency.Read.IndexOfAnyExcept(value: 0UL) >= 0) { m_laneRecency.Write.Clear(); }
         m_channelReadHeld = default;
         m_channelReadComposed = default;
         m_channelReadScalar = default;
         m_engagedIntent = default;
     }
-
-    private readonly ulong[]?[] m_inputRecencyScratch = new ulong[]?[ActionLaneCount];
 
     /// <summary>The input tuple currently installed on this body's folded intent.</summary>
     public ushort InputMappingId { get; private set; }
@@ -30,6 +28,7 @@ public sealed partial class WorldBody {
         Span<FixedQ4816> timerValues = stackalloc FixedQ4816[ActionLaneCount];
         Span<bool> previousBits = stackalloc bool[ActionLaneCount];
         Span<bool> continuing = stackalloc bool[ActionLaneCount];
+        Span<int> recencySources = stackalloc int[ActionLaneCount];
 
         // The whole section is rebuilt for the new mapping and written through the door once: a channel that keeps
         // its logical identity carries its timer, bit, latch and fact memory to its new ordinal, every other ordinal
@@ -38,7 +37,7 @@ public sealed partial class WorldBody {
 
         timers.Clear(); timerValues.Clear(); previousBits.Clear();
         continuing.Clear();
-        Array.Clear(array: m_inputRecencyScratch);
+        recencySources.Fill(value: -1);
         Array.Clear(array: m_inputScriptActorScratch);
         foreach (var logical in next.Live) {
             var destination = next.Address(logicalId: logical);
@@ -58,14 +57,13 @@ public sealed partial class WorldBody {
             previousBits[destination] = (Action.PreviousBit[source] || (accepted[destination] != FixedQ4816.Zero));
             action.LaneLatch[destination] = Action.LaneLatch[source];
             action.LaneFactHeld[destination] = Action.LaneFactHeld[source];
-            m_inputRecencyScratch[destination] = m_laneRecency[source];
+            recencySources[destination] = source;
         }
         timers.CopyTo(destination: action.TimerTicks);
         timerValues.CopyTo(destination: action.TimerValues);
         SetScriptActors(pending: ScriptActors.Pending.AsSpan(), timers: m_inputScriptActorScratch);
         previousBits.CopyTo(destination: action.PreviousBit);
         ActionEdit = action;
-        m_inputRecencyScratch.CopyTo(array: m_laneRecency, index: 0);
         var submitted = default(PlayerIntent);
         var held = default(PlayerIntent);
 
@@ -99,12 +97,22 @@ public sealed partial class WorldBody {
             }
             segment.Intent = image;
         }
-        RestoreInputMapping(epoch: epoch, kit: kit, next: next);
+        BindInputMapping(epoch: epoch, kit: kit, next: next, recencySources: recencySources);
     }
     /// <summary>Rebinds a restored bank without altering checkpointed levels, timers or edge latches.</summary>
     public void RestoreInputMapping(WorldInputMapping next, FixedWorldKit kit, ulong epoch) {
+        Span<int> recencySources = stackalloc int[ActionLaneCount];
+
+        for (var lane = 0; (lane < ActionLaneCount); lane++) { recencySources[lane] = lane; }
+        BindInputMapping(epoch: epoch, kit: kit, next: next, recencySources: recencySources);
+    }
+    // Binds the bank's channels and lanes. A lane's recency clocks come from the lane recencySources names for it
+    // under the bindings being replaced: the lane itself for a restored bank, the lane a channel kept its logical
+    // identity from for an installed one.
+    private void BindInputMapping(WorldInputMapping next, FixedWorldKit kit, ulong epoch, ReadOnlySpan<int> recencySources) {
         SetChannelTable(channels: next.Channels);
         CopyChannelBindings(kit.Actions, kit.ActionThresholds, kit.ActionShapes, kit.RoleMask);
+        LayoutLaneRecency(sources: recencySources);
         m_roleOrdinals = kit.RoleOrdinals;
         InputMappingId = next.Id;
         InputEpoch = epoch;
