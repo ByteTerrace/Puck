@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
@@ -96,43 +98,25 @@ public static class SdfContourFacing {
     /// <summary>Returns whether a quad faces out when split along its first diagonal, its first corner to its third,
     /// and when split along its second: a quad whose last two corners are one vertex is a triangle and answers for
     /// itself twice.</summary>
+    /// <typeparam name="T">The contour's coordinate type: a finished contour's floats, or the doubles of one still
+    /// being extracted.</typeparam>
     /// <param name="axis">The quad's signed axis (<see cref="Axis"/>).</param>
     /// <param name="quad">The quad's four vertex indices in order.</param>
     /// <param name="positions">Three coordinates per vertex.</param>
     /// <param name="patches">Three components per vertex, its patch's facing (<see cref="Patch"/>); empty where none is
     /// known.</param>
     /// <returns>Whether each split's triangles all face out (<see cref="FacesOut"/>).</returns>
-    public static (bool First, bool Second) Splits(sbyte axis, ReadOnlySpan<int> quad, ReadOnlySpan<float> positions, ReadOnlySpan<float> patches) {
+    public static (bool First, bool Second) Splits<T>(sbyte axis, ReadOnlySpan<int> quad, ReadOnlySpan<T> positions, ReadOnlySpan<T> patches) where T : IBinaryFloatingPointIeee754<T> {
         Span<(double X, double Y, double Z)> corners = stackalloc (double X, double Y, double Z)[4];
         Span<(double X, double Y, double Z)> facings = stackalloc (double X, double Y, double Z)[4];
 
         for (var corner = 0; (corner < 4); corner++) {
             var at = (3 * quad[corner]);
 
-            corners[corner] = (positions[at], positions[(at + 1)], positions[(at + 2)]);
-            facings[corner] = (((at + 2) < patches.Length) ? (patches[at], patches[(at + 1)], patches[(at + 2)]) : (0.0, 0.0, 0.0));
+            corners[corner] = (double.CreateChecked(value: positions[at]), double.CreateChecked(value: positions[(at + 1)]), double.CreateChecked(value: positions[(at + 2)]));
+            facings[corner] = (((at + 2) < patches.Length) ? (double.CreateChecked(value: patches[at]), double.CreateChecked(value: patches[(at + 1)]), double.CreateChecked(value: patches[(at + 2)])) : (0.0, 0.0, 0.0));
         }
-
-        return Splits(axis: axis, corners: corners, facings: facings, triangle: (quad[2] == quad[3]));
-    }
-
-    // Splits over a contour still being extracted, whose positions and patch facings are doubles.
-    internal static (bool First, bool Second) Splits(sbyte axis, ReadOnlySpan<int> quad, ReadOnlySpan<double> positions, ReadOnlySpan<double> patches) {
-        Span<(double X, double Y, double Z)> corners = stackalloc (double X, double Y, double Z)[4];
-        Span<(double X, double Y, double Z)> facings = stackalloc (double X, double Y, double Z)[4];
-
-        for (var corner = 0; (corner < 4); corner++) {
-            var at = (3 * quad[corner]);
-
-            corners[corner] = (positions[at], positions[(at + 1)], positions[(at + 2)]);
-            facings[corner] = (patches[at], patches[(at + 1)], patches[(at + 2)]);
-        }
-
-        return Splits(axis: axis, corners: corners, facings: facings, triangle: (quad[2] == quad[3]));
-    }
-
-    private static (bool First, bool Second) Splits(sbyte axis, ReadOnlySpan<(double X, double Y, double Z)> corners, ReadOnlySpan<(double X, double Y, double Z)> facings, bool triangle) {
-        if (triangle) {
+        if (quad[2] == quad[3]) {
             var faces = Faces(a: 0, axis: axis, b: 1, c: 2, corners: corners, facings: facings);
 
             return (faces, faces);

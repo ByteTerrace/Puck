@@ -2391,21 +2391,25 @@ public sealed partial class SdfMeshPathBake {
             c: ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C))));
         // The triangle's area normal along its quad's lattice edge with `vertex` at `point` (SdfContourFacing.Along).
         private static double Along(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
-            var a = ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A));
-            var b = ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B));
-            var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
+            var (a, b, c) = Corners(contour: contour, point: point, triangle: triangle, vertex: vertex);
 
-            return SdfContourFacing.Along(a: (a.X, a.Y, a.Z), axis: triangle.Axis, b: (b.X, b.Y, b.Z), c: (c.X, c.Y, c.Z));
+            return SdfContourFacing.Along(a: a, axis: triangle.Axis, b: b, c: c);
         }
         // Whether the triangle faces out as the lattice fixed its quad's facing with `vertex` at `point`
         // (SdfContourFacing.FacesOut): the analytic clip keeps it facing out along its edge, and this also refuses a move
         // that leaves it edge-on to that edge and turned against its corners' patches.
         private static bool FacesOut(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
+            var (a, b, c) = Corners(contour: contour, point: point, triangle: triangle, vertex: vertex);
+
+            return SdfContourFacing.FacesOut(a: a, axis: triangle.Axis, b: b, c: c, patches: triangle.Patches);
+        }
+        // The triangle's corners with `vertex` at `point`.
+        private static ((double X, double Y, double Z) A, (double X, double Y, double Z) B, (double X, double Y, double Z) C) Corners(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
             var a = ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A));
             var b = ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B));
             var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
 
-            return SdfContourFacing.FacesOut(a: (a.X, a.Y, a.Z), axis: triangle.Axis, b: (b.X, b.Y, b.Z), c: (c.X, c.Y, c.Z), patches: triangle.Patches);
+            return ((a.X, a.Y, a.Z), (b.X, b.Y, b.Z), (c.X, c.Y, c.Z));
         }
         private static (double X, double Y, double Z) Area(Vector3 a, Vector3 b, Vector3 c) {
             var (ux, uy, uz) = ((((double)b.X) - a.X), (((double)b.Y) - a.Y), (((double)b.Z) - a.Z));
