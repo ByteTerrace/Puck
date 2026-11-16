@@ -622,7 +622,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   meter's reading, target and band state, and its camera sample's source. An
   automatic exposure meters the view's own composite output a few frames late
   (`SdfExposure.Meter`), so a debug view meters nothing and holds; pin the
-  exposure for any before/after comparison.
+  exposure for any before/after comparison. A view with no camera sample reads the
+  open sky, so a closed room meters as daylight and a display in it reads black:
+  `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
 - **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
   gather supplies indirect light, reflections and traced static-light visibility.
   Each probe publishes its own measured cubes, without neighbour filtering.

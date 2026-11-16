@@ -2407,6 +2407,18 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · exposure at a cut] At a camera cut the exposure snaps to the first
+  image rendered after it, which is shaded with the previous place's held
+  `airLight`, then follows for about 0.75 s, so walking from outdoors into a
+  room gives a short dim transient. Snap only after a fresh camera sample
+  (`SdfViewExposures.Meter`), bounded so a missing sample cannot hold it.
+- [medium · trace scene size] The irradiance trace scene is about 450 MB on the
+  device and 522 MB of CPU arrays for about 20 M full-detail triangles
+  (`trace-scene-written-bytes`, `trace-scene-cpu-array-bytes`), which also sets
+  how long a boot waits for the device meter. Tracing against coarser mesh
+  levels where their error fits the probe spacing would cut memory and the boot
+  upload; measure indirect light against the full-detail scene before and
+  after.
 - [medium · unconfirmed · glyph atlas swap] `SdfWorldResidency.ReconcileGlyphAtlas`
   swaps the bound atlas texture apart from the program that names its new
   identity (`SdfProgram.GlyphAtlas`); a bake taken between the two could store
@@ -3022,12 +3034,13 @@ the fixed poses and the approaches already rejected.
   relight alone, but the relight reads a lane-driven emissive as zero
   (`SdfMeshIrradiance.Shade`: a static draw has no frame slot); read the lane's
   value in the relight, then author the switch as a lane.
-- [medium] A camera sample is relit on the frame thread, under the volume's
-  gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
-  from `TrySampleCamera`), outside the relight budget: the debug world's forty-odd
-  screen-camera views read camera samples, so each lighting capture relights
-  them on the frame thread (`camera-relights` counts them). Move them into the
-  worker's batches.
+- [medium] A camera sample is traced and relit on the frame thread, under the
+  volume's gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
+  from `TrySampleCamera`, through `TryTraceCamera`), outside the relight budget:
+  with no device trace always, and on a device until its first meter answers
+  (seconds into a boot, while the scene uploads). Every staged view reads a camera
+  sample, so each lighting capture in that span relights them on the frame thread
+  (`camera-relights` counts them). Move them into the worker's batches.
 - [medium · duplicate] Each lighting capture renders a 64×64 sky map on the
   frame thread with `SdfSkyEnvironment.Render`, the CPU reference of a GPU
   kernel, about nine times a second while the sky moves. Read the GPU kernel's

@@ -449,9 +449,13 @@ relights it from that origin when the lighting changes or the volume settles;
 movement within the cell reuses it only across an unblocked segment from its
 actual origin, and never at a cut, whose sample is taken where the camera
 stands. The `camera-traces` counter under `world.counters sdf.mesh-gi` stays
-constant on steady reads, and `camera-relights` counts the relights. An
+constant on steady reads, and `camera-relights` counts the relights. On a device
+the sample is the device meter's answer, and until the device first answers (it
+needs the volume's scene uploaded, seconds into a boot) the camera's own trace on
+the built scene, so a view's open sky is known from the scene's build on. An
 unavailable scene or a camera inside opaque geometry supplies no sample, and
-the sky visibility and the sample's light hold their previous values.
+the sky visibility and the sample's light hold their previous values; before any
+sample a view reads the open sky, which lights a closed room as daylight.
 An automatic exposure's `local` share then adapts each
 surface on its own in the views stage (`sdfLightStage`): the illumination
 arriving at the surface, the lights' diffuse terms and the volume's indirect
@@ -470,7 +474,8 @@ leaves its sky to the viewer. The pass block carries the meter's reading
 meter reading, the `EV100` it aims for, whether the band is `holding` or
 `following`, its `source` (`image`, `held` with no new reading, `cut` awaiting
 one rendered after a cut, `initial` before any) and its camera sample's source
-(`camera=probes`, `camera-trace`, `held` or `none`). A view onto another world through a window, or a sky layer's
+(`camera=probes`, `camera-trace`, `held` or `none`, with `wait=` naming what a
+`held` or `none` sample waits for). A view onto another world through a window, or a sky layer's
 view, publishes its luminance raised by its own exposure to the window share
 (`SdfViewSnapshot.Unexposed`, the pass block's `exposeShare`,
 `SdfPhotometry.WindowAdaptation`), and the view looking through it applies the

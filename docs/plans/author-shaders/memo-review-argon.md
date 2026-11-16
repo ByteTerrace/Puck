@@ -202,7 +202,7 @@ checked, which does not establish the surrounding claims.
 - **Severity:** Medium
 - **Memo section:** `§3.1` ([`docs/plans/author-shaders.md:382-385`](../../../docs/plans/author-shaders.md)), `§3.8` ([`docs/plans/author-shaders.md:613-625`](../../../docs/plans/author-shaders.md))
 - **Code citations:**
-  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2296-2298`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2296-L2298):
+  - [`src/Puck.SdfVm/SdfMeshIrradiance.cs:2315-2317`](../../../src/Puck.SdfVm/SdfMeshIrradiance.cs#L2315-L2317):
     ```csharp
     private (Vector3 Varying, Vector3 Local) Shade(Lighting lighting, Vector3 point, Vector3 normal, int material, bool feedback, bool local, Layout layout, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene) {
         var surface = lighting.MaterialAt(index: material);
