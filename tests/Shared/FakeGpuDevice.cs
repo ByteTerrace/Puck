@@ -237,6 +237,7 @@ internal sealed class FakeGpuDevice :
                 allocation: creation.Handle,
                 bytes: ((long)deviceLocalBytes),
                 device: DeviceHandle,
+                family: GpuObjectName.UnnamedFamily,
                 role: GpuMemoryRole.DeviceLocal,
                 segment: GpuMemorySegments.DirectXLocal
             );

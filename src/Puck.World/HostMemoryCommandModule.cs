@@ -16,7 +16,10 @@ namespace Puck.World;
 /// the managed heap the last garbage collection left (its size, committed and fragmented bytes, and each generation's
 /// size: gen0, gen1, gen2, the large and the pinned object heaps) and the bytes every thread has allocated so far, so the managed share of a large working set is read
 /// apart from native, mapped and driver memory, then the process uptime and what the JIT has compiled so far (methods,
-/// IL bytes, compilation time), which read at boot give its first-use JIT cost. <c>host.memory collect</c> first runs a
+/// IL bytes, compilation time), which read at boot give its first-use JIT cost. Between them it measures the process
+/// account and prints each pool's physical rows, which alone add, with the parts their owners name and their residuals
+/// (<see cref="MemoryAccount.ReadPools"/>), and the device memory the owner families hold. <c>host.memory heap</c> names
+/// the large object heap's tenants from a suspended walk (<see cref="ManagedHeapWalk"/>). <c>host.memory collect</c> first runs a
 /// full blocking collection that compacts the large object heap, so the heap it reports is what is still reachable.
 /// Presentation-independent; it reads the process, never the simulation.
 /// </summary>
@@ -35,7 +38,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         for (var index = 0; (index < shown); index++) {
             var owner = owners[index];
 
-            text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} pool={PoolName(pool: owner.Pool)} admitted={(owner.Observed ? "no" : "yes")} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
+            text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} pool={PoolName(pool: owner.Pool)} admitted={(owner.Observed ? "no" : "yes")} {(owner.Row ? "row=device-blocks" : $"names native-allocator={owner.Rows.NativeAllocator} native-direct={owner.Rows.NativeDirect} managed={owner.Rows.Managed} device-blocks={owner.Rows.DeviceBlocks}")} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
         }
         var omittedOwned = 0L;
         var omittedReserved = 0L;
@@ -46,7 +49,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         }
         text.Append(CultureInfo.InvariantCulture, $"omitted owners={(owners.Length - shown)} owned={omittedOwned} reserved={omittedReserved}\n");
         foreach (var source in m_memorySources) { WorkCounterReport.AppendSection(builder: text, source: source); }
-        text.Append(value: "Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes, and host-visible bytes are disjoint from both. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
+        text.Append(value: "Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes, and host-visible bytes are disjoint from both. An owner names part of the rows it lists; a row=device-blocks owner is a segment's physical row. The pools' physical rows, which alone add, are in host.memory.]");
         return text.ToString();
     }
     private static string Mebibytes(long bytes) =>
@@ -54,22 +57,50 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
     private static string PoolName(PhysicalMemory pool) => ((pool == PhysicalMemory.Device) ? "device" : "host");
     private static string Bytes(long? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
     private static string Bytes(ulong? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
-    // The pools, the device reading the account last recorded, and each segment's API figures beside the bytes the
-    // backend's ledger placed in it; a segment's usage past its ledger row is driver, swapchain and uncounted memory.
+    // The most family rows a reading prints; the rest are summed on one line.
+    private const int FamilyRows = 16;
+
+    // One pool and its physical rows: each row's bytes, the part its owners name and its residual.
+    private static void AppendPool(StringBuilder text, MemoryPoolReading pool, string note) {
+        text.Append(CultureInfo.InvariantCulture, $" | pool {PoolName(pool: pool.Pool)} physical={pool.Physical} complete={(pool.Complete ? "yes" : "no")} budget={Bytes(pool.Budget)} spend-limit={Bytes(pool.SpendLimit)} admitted={pool.Admitted} reserved={pool.Reserved}{note}");
+        foreach (var row in pool.Rows) {
+            text.Append(CultureInfo.InvariantCulture, $" | row {PoolName(pool: row.Pool)}.{row.Name} bytes={Bytes(row.Bytes)} named={row.Named} residual={Bytes(row.Residual)} ({ResidualName(row: row)})");
+        }
+    }
+    // What a row's residual is.
+    private static string ResidualName(MemoryRowReading row) => row.Backing switch {
+        MemoryBacking.DeviceBlocks => "residual: room inside shared blocks and emptied blocks kept for reuse",
+        MemoryBacking.NativeAllocator => "residual: allocator slack, metadata and unnamed native payloads",
+        MemoryBacking.NativeDirect => "the owners' charges are the row",
+        MemoryBacking.Managed => "residual: unnamed managed tenants, kept pool arrays and fragmentation",
+        _ => "the walk's private bytes less the allocator, native-direct and managed rows: code and loader heaps, stacks, driver memory",
+    };
+    // The pools, their physical rows and residuals, the host sample, the device reading the account last recorded, and
+    // each segment's API figures beside the bytes the backend's ledger placed in it; a segment's usage past its ledger row
+    // is driver, swapchain and uncounted memory.
     private string DescribePools() {
+        MemoryAccount.Shared.Measure(sample: HostMemorySample.Take(allocator: allocator, walk: true));
         var pools = MemoryAccount.Shared.ReadPools();
         var reading = pools.DeviceReading;
         var unified = (reading.Layout?.UnifiedMemory ?? false);
-        var ledgers = m_memorySources.OfType<GpuDeviceMemoryWork>()
-            .SelectMany(selector: static work => work.ReadSegments().Select(selector: row => (work.Backend, Row: row))).ToArray();
+        var works = m_memorySources.OfType<GpuDeviceMemoryWork>().ToArray();
+        var ledgers = works.SelectMany(selector: static work => work.ReadSegments().Select(selector: row => (work.Backend, Row: row))).ToArray();
+        var families = works.SelectMany(selector: static work => work.ReadFamilies().Select(selector: row => (work.Backend, Row: row)))
+            .OrderByDescending(keySelector: static entry => entry.Row.Held).ThenBy(keySelector: static entry => entry.Row.Family, comparer: StringComparer.Ordinal).ToArray();
         var text = new StringBuilder();
-        var host = pools.Host;
+        var sample = pools.Sample;
 
-        text.Append(CultureInfo.InvariantCulture, $" | pool host budget={Bytes(host.Budget)} spend-limit={Bytes(host.SpendLimit)} owned={host.Owned} admitted={host.Admitted} observed={host.Observed} reserved={host.Reserved}{(unified ? " unified=yes (the device's segments lie in this pool and are counted once)" : string.Empty)}");
+        AppendPool(note: (unified ? " unified=yes (the device's segments lie in this pool and are counted once)" : string.Empty), pool: pools.Host, text: text);
         if (pools.Device is { Present: true } device) {
-            text.Append(CultureInfo.InvariantCulture, $" | pool device budget={Bytes(device.Budget)} spend-limit={Bytes(device.SpendLimit)} owned={device.Owned} observed={device.Observed}");
+            AppendPool(note: string.Empty, pool: device, text: text);
         } else {
             text.Append(CultureInfo.InvariantCulture, $" | pool device absent ({(unified ? "unified memory: one pool" : $"device reading {reading.State.ToString().ToLowerInvariant()}")})");
+        }
+        text.Append(CultureInfo.InvariantCulture, $" | sample age={((long?)pools.SampleAge?.TotalMilliseconds)?.ToString(provider: CultureInfo.InvariantCulture) ?? "none"}ms managed-collection={(sample?.ManagedCollection.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} negative-residuals={pools.NegativeResiduals}");
+        if (sample?.Walk is { } walk) {
+            text.Append(CultureInfo.InvariantCulture, $" | walk private={walk.PrivateBytes} ({(walk.PrivateCommitted ? "committed" : "resident anonymous and swap")}) mapped={walk.MappedBytes} image={walk.ImageBytes} regions={walk.Regions}; host rows in it: native-allocator, native-direct, managed and runtime-and-driver; the driver may also map device blocks into it");
+        } else {
+            text.Append(value: " | walk none (this platform cannot be walked)");
         }
         text.Append(CultureInfo.InvariantCulture, $" | device reading={reading.State.ToString().ToLowerInvariant()} serial={reading.Serial} estimated={(reading.Estimated ? "yes" : "no")}");
         for (var index = 0; (index < reading.Segments.Count); index++) {
@@ -81,8 +112,36 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
             text.Append(CultureInfo.InvariantCulture, $" | segment {segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} budget={segment.Budget} spend-limit={Bytes(limit)} usage={Bytes(segment.Usage)} available-for-reservation={Bytes(segment.AvailableForReservation)} reservation={Bytes(segment.CurrentReservation)} ledger-held={ledger.Held} usage-beyond-ledger={Bytes(beyond)}");
         }
         foreach (var (backend, row) in ledgers) {
-            text.Append(CultureInfo.InvariantCulture, $" | ledger {backend}.{row.Segment.Name} pool={PoolName(pool: row.Segment.Pool)} held={row.Held} peak={row.Peak} allocated={row.Allocated} released={row.Released} placement-disagreements={row.Disagreements}");
+            text.Append(CultureInfo.InvariantCulture, $" | ledger {backend}.{row.Segment.Name} pool={PoolName(pool: row.Segment.Pool)} held={row.Held} named={row.Named} residual={row.Residual} peak={row.Peak} allocated={row.Allocated} released={row.Released} placement-disagreements={row.Disagreements}");
         }
+        for (var index = 0; (index < Math.Min(val1: FamilyRows, val2: families.Length)); index++) {
+            var (backend, row) = families[index];
+
+            text.Append(CultureInfo.InvariantCulture, $" | family {backend}.{row.Segment.Name} {row.Family} held={row.Held} peak={row.Peak} allocated={row.Allocated} released={row.Released}");
+        }
+        if (families.Length > FamilyRows) {
+            var rest = families.AsSpan(start: FamilyRows);
+            long held = 0, allocated = 0, released = 0;
+
+            foreach (var (_, row) in rest) { held += row.Held; allocated += row.Allocated; released += row.Released; }
+            text.Append(CultureInfo.InvariantCulture, $" | families omitted={rest.Length} held={held} allocated={allocated} released={released}");
+        }
+
+        return text.ToString();
+    }
+    // The large object heap's tenants of at least minimumMebibytes, from a suspended walk of the managed heap.
+    private static string DescribeHeap(int minimumMebibytes) {
+        var minimum = (((long)minimumMebibytes) << 20);
+        var clock = Stopwatch.StartNew();
+        var walk = ManagedHeapWalk.Run(minimumBytes: minimum);
+        var text = new StringBuilder();
+        var named = walk.Tenants.Sum(selector: static tenant => tenant.Bytes);
+
+        text.Append(CultureInfo.InvariantCulture, $"[host.memory heap: collection={walk.Collection} live-objects={walk.Nodes} | large objects (at least {ManagedHeapWalk.LargeObjectBytes} bytes) objects={walk.Objects} bytes={walk.Bytes} | tenants of at least {minimumMebibytes} MiB: {walk.Tenants.Count} holding {named} bytes | walk-ms={clock.ElapsedMilliseconds}\n");
+        foreach (var tenant in walk.Tenants) {
+            text.Append(CultureInfo.InvariantCulture, $"tenant {JsonSerializer.Serialize(tenant.Type)} held-by={JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes}\n");
+        }
+        text.Append(value: "The runtime wrote the heap during one blocking full collection with every managed thread suspended; the holder is the type of the first referrer found, or the kind of root.]");
 
         return text.ToString();
     }
@@ -110,16 +169,26 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         );
     }
 
-    private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "collect", "budget <bytes|auto>");
+    private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "heap [min-mib]", "collect", "budget <bytes|auto>");
+    // The size, in MiB, past which a large-object-heap tenant is named when host.memory heap is not given one.
+    private const int HeapTenantMebibytes = 4;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the pools by physical memory (host always; a discrete adapter's device memory, named absent on unified memory or without a device) with budget, spend limit and admitted and observed bytes, which change no admission, the device memory reading the account last recorded (state, serial, whether estimated) and for each segment its API budget, usage and reservation figures beside the bytes the backend ledger placed in it, then each ledger segment row with its held, peak, allocated and released bytes and placement disagreements, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
+            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then measures the account (the allocator's committed bytes, the collector's and a page walk of the process, which also reads every sampled owner) and prints each pool by physical memory (host always; a discrete adapter's device memory, named absent on unified memory or without a device) with its physical total, budget, spend limit and admitted and reserved bytes, which change no admission, and its physical rows, which alone add: device-blocks (the ledgers' blocks placed in the pool), and in host memory native-allocator, native-direct (native storage outside the allocator, such as region host copies), managed, and runtime-and-driver (the walk's private bytes less the other host rows), each with the bytes its owners name and its residual; then the sample's age, the collection the managed figure describes and the residuals sampling skew made negative, then the walk's private, mapped and image bytes, the device memory reading the account last recorded (state, serial, whether estimated) and for each segment its API budget, usage and reservation figures beside the bytes the backend ledger placed in it, then each ledger segment row with its held bytes, the part the owner families name and the residual, its peak, allocated and released bytes and placement disagreements, then the {FamilyRows} families holding most device memory (owner without its instance, then the part) per segment with their held, peak, allocated and released bytes and the rest summed, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, the rows each owner names, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes. heap pauses the process while the operating system snapshots it, then walks the snapshot's managed heap and lists the large object heap's totals and its tenants of at least min-mib MiB (default {HeapTenantMebibytes}) by type and first holder (the referring type and field, or the root kind); it reads every reference on the heap, so it takes seconds on a large heap and the World waits for it. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
             forms: HostMemoryForms,
             handler: (_, args) => {
+                if ((args.Count is 1 or 2) && args.Is(index: 0, value: "heap")) {
+                    var minimum = HeapTenantMebibytes;
+
+                    if ((args.Count == 2) && (!args.TryInt(index: 1, value: out minimum) || (minimum < 0))) {
+                        return CommandResult.Error(output: "[host.memory: heap expects an optional nonnegative tenant size in MiB]");
+                    }
+                    return new CommandResult(Output: DescribeHeap(minimumMebibytes: minimum));
+                }
                 if ((args.Count is 1 or 2) && args.Is(index: 0, value: "owners")) {
                     var limit = 20;
 

@@ -11,7 +11,8 @@ namespace Puck.Abstractions.Gpu;
 /// a bare handle.
 /// <para>
 /// A name holds references to strings its creator already owns and an integer, so building one costs nothing; the text
-/// is formatted only by <see cref="ToString"/>, the one place a name becomes a string, and only when naming is on. A
+/// is formatted only by <see cref="ToString"/>, the one place a name becomes a string, and only when naming is on;
+/// <see cref="MemoryFamily"/> formats the coarser family its device memory is attributed to, once per creation. A
 /// name has no clock, counter or handle in it, so the same creator names the same object alike on every run. The
 /// default value names nothing and is never applied.
 /// </para>
@@ -146,6 +147,28 @@ public readonly struct GpuObjectName : IEquatable<GpuObjectName> {
             )
         );
     }
+
+    /// <summary>Returns the owner family the object's device memory is attributed to (<see cref="GpuDeviceMemoryWork"/>):
+    /// the owner without its instance suffixes (the text from its first <c>$</c>, so every session view's graph instance
+    /// shares one family), then <c>/</c> and the part, or <see cref="UnnamedFamily"/> for the default value. A family has
+    /// no index, detail or instance in it, so the families stay as few as the kinds of creator and part.</summary>
+    /// <returns>The family's text.</returns>
+    public string MemoryFamily() {
+        if (IsEmpty) {
+            return UnnamedFamily;
+        }
+
+        var instance = Owner!.IndexOf(value: '$');
+
+        return string.Concat(
+            str0: ((instance < 0) ? Owner : Owner[..instance]),
+            str1: "/",
+            str2: Part
+        );
+    }
+
+    /// <summary>The family of an object created with the default name (<see cref="MemoryFamily"/>).</summary>
+    public const string UnnamedFamily = "unnamed";
 
     /// <summary>Compares two names ordinally.</summary>
     /// <param name="left">The first name.</param>

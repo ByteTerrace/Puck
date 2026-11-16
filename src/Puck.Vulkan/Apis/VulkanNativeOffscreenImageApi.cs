@@ -128,6 +128,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                     requireProperties: false,
                     resourceDescription: "an offscreen color image"
                 ),
+                family: request.Family,
                 requirements: in memoryRequirements,
                 resource: imageHandle,
                 role: GpuMemoryRole.DeviceLocal

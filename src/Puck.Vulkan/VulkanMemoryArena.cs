@@ -27,9 +27,10 @@ public sealed unsafe class VulkanMemoryArena {
     // own lock and write m_blocks, so a pool call made outside this gate would race Owns.
     private readonly Lock m_gate = new();
     private readonly GpuMemoryPool<(uint Type, GpuMemoryRole Role, bool Image), (nint Memory, nint Mapped)> m_pool;
-    // Each bound resource's placement, by its handle and whether it is an image: a buffer and an image may share a handle
-    // value, as a layer that wraps handles (RenderDoc) hands them out.
-    private readonly Dictionary<(nint Resource, bool Image), GpuMemoryPlacement<(nint Memory, nint Mapped)>> m_slices = [];
+    // Each bound resource's placement and the name its family holds in the device's counts, by its handle and whether it
+    // is an image: a buffer and an image may share a handle value, as a layer that wraps handles (RenderDoc) hands them
+    // out.
+    private readonly Dictionary<(nint Resource, bool Image), (GpuMemoryPlacement<(nint Memory, nint Mapped)> Placement, long Name)> m_slices = [];
     // The memory of every block the arena holds, and once retired of every block it freed as it retired: no other
     // allocation reuses a retired arena's handles, since its device is being destroyed.
     private readonly HashSet<nint> m_blocks = [];
@@ -50,11 +51,13 @@ public sealed unsafe class VulkanMemoryArena {
     /// <param name="requirements">Its memory requirements.</param>
     /// <param name="memoryTypeIndex">The memory type it binds to.</param>
     /// <param name="role">What its memory is for, which decides whether the block is counted and mapped.</param>
+    /// <param name="family">The family its placement is named to in the device's counts
+    /// (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The block's memory, which the resource's handles name.</returns>
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     /// <exception cref="VulkanException">The block's allocation, mapping or the resource's binding failed.</exception>
     /// <exception cref="InvalidOperationException">The arena holds a binding of this handle already.</exception>
-    public nint Bind(nint resource, bool image, in VkMemoryRequirements requirements, uint memoryTypeIndex, GpuMemoryRole role) {
+    public nint Bind(nint resource, bool image, in VkMemoryRequirements requirements, uint memoryTypeIndex, GpuMemoryRole role, string family) {
         var alignment = requirements.Alignment;
         var size = requirements.Size;
 
@@ -72,7 +75,7 @@ public sealed unsafe class VulkanMemoryArena {
                     placement.Native.Memory,
                     placement.Offset
                 ).ThrowIfFailed(device: m_device, operation: (image ? "vkBindImageMemory" : "vkBindBufferMemory"));
-                m_slices.Add(key: (resource, image), value: placement);
+                m_slices.Add(key: (resource, image), value: (placement, (m_device.Memory?.CountPlaced(allocation: placement.Native.Memory, bytes: checked((long)placement.Size), device: m_device.Handle, family: family) ?? 0L)));
 
                 return placement.Native.Memory;
             });
@@ -84,11 +87,12 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound it; one it did not still owns its memory.</returns>
     public bool Release(nint resource, bool image) {
         lock (m_gate) {
-            if (!m_slices.Remove(key: (resource, image), value: out var placement)) {
+            if (!m_slices.Remove(key: (resource, image), value: out var slice)) {
                 return false;
             }
 
-            m_pool.Return(placement: placement);
+            if (slice.Name != 0) { _ = m_device.Memory?.CountUnplaced(token: slice.Name); }
+            m_pool.Return(placement: slice.Placement);
 
             return true;
         }
@@ -99,8 +103,8 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound the resource to mapped memory.</returns>
     public bool TryMapped(nint resource, out nint pointer) {
         lock (m_gate) {
-            if (!m_pool.IsRetired && m_slices.TryGetValue(key: (resource, false), value: out var placement) && (placement.Native.Mapped != 0)) {
-                pointer = (placement.Native.Mapped + ((nint)placement.Offset));
+            if (!m_pool.IsRetired && m_slices.TryGetValue(key: (resource, false), value: out var slice) && (slice.Placement.Native.Mapped != 0)) {
+                pointer = (slice.Placement.Native.Mapped + ((nint)slice.Placement.Offset));
                 return true;
             }
         }
@@ -140,7 +144,7 @@ public sealed unsafe class VulkanMemoryArena {
             0,
             out var memory
         ).ThrowIfFailed(device: m_device, operation: "vkAllocateMemory");
-        m_device.CountAllocated(allocationSize: bytes, memoryHandle: memory, memoryTypeIndex: key.Type, role: role);
+        m_device.CountAllocated(allocationSize: bytes, family: null, memoryHandle: memory, memoryTypeIndex: key.Type, role: role);
 
         var mapped = ((nint)0);
 

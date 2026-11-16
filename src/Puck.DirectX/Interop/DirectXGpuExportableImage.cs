@@ -93,6 +93,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         var resource = DirectXTextures.Create(
             clearValue: null,
             device: device,
+            family: GpuDeviceMemoryWork.ExportedFamily,
             flags: flags,
             format: dxgiFormat,
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_SHARED,

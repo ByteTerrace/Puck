@@ -27,8 +27,8 @@ public readonly record struct GpuSegmentReading(GpuMemorySegment Segment, ulong 
 /// <summary>
 /// A device's memory budget reading: for each segment the device budgets, what the API says the process may use and
 /// is using. A device that is absent, lost or being recreated reads as such (<see cref="State"/>), never as zeros. A
-/// reading is immutable; its device publishes a new one when its API signals a change or its refresh finds one, and
-/// <see cref="Serial"/> moves with each.
+/// reading is immutable; its device publishes a new one at each refresh (<see cref="GpuMemoryReadingRefresh"/>), and
+/// <see cref="Serial"/> moves when a budget changes.
 /// </summary>
 public sealed class GpuMemoryReading {
     private GpuMemoryReading(GpuMemoryReadingState state, ulong serial, bool estimated, GpuMemorySegments? segments, GpuSegmentReading[] readings) {
@@ -44,8 +44,8 @@ public sealed class GpuMemoryReading {
 
     /// <summary>Gets whether the reading holds figures, or why it holds none.</summary>
     public GpuMemoryReadingState State { get; }
-    /// <summary>Gets the count of readings the device has published, which moves each time its API signals a change or
-    /// a refresh finds a budget changed; zero when nothing was read.</summary>
+    /// <summary>Gets the count of budget changes the device has published (<see cref="GpuMemoryReadingRefresh"/>): it
+    /// moves when a budget, the segments or the estimate change, not for usage; zero when nothing was read.</summary>
     public ulong Serial { get; }
     /// <summary>Gets whether the figures are estimates: Vulkan without <c>VK_EXT_memory_budget</c>, where each budget is
     /// the heap's size and no usage is reported.</summary>
@@ -82,5 +82,61 @@ public sealed class GpuMemoryReading {
         }
 
         return new(estimated: estimated, readings: readings.ToArray(), segments: segments, serial: serial, state: GpuMemoryReadingState.Read);
+    }
+}
+
+/// <summary>
+/// The one rule by which a device refreshes its memory reading, for every backend: it reads when its API signals a
+/// change (Direct3D 12's budget-change event), when it has not read yet, and otherwise at most once every
+/// <see cref="Interval"/>, since usage moves with every allocation and no API signals it; and a published reading's
+/// <see cref="GpuMemoryReading.Serial"/> moves only when a budget, the segments or the estimate differ from the last
+/// reading, never for usage alone. The serial is what a reader that derives something from the budgets (the account's
+/// spend limits) watches, and usage is fresh in every reading whatever the serial. Called on one thread, the one that
+/// refreshes.
+/// </summary>
+/// <param name="serial">The serial of the last reading the device's predecessor published, so a recreated device's
+/// serial keeps moving forward; zero for none.</param>
+public sealed class GpuMemoryReadingRefresh(ulong serial) {
+    private long m_readAt;
+    private bool m_read;
+
+    /// <summary>Gets the longest a reading goes unrefreshed without a signal, in <see cref="System.Diagnostics.Stopwatch"/> ticks: one
+    /// second.</summary>
+    public static long Interval { get; } = System.Diagnostics.Stopwatch.Frequency;
+
+    /// <summary>Gets the serial of the last reading published, or the predecessor's before the first.</summary>
+    public ulong Serial { get; private set; } = serial;
+
+    /// <summary>Returns whether a read is due.</summary>
+    /// <param name="timestamp">The time now, in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
+    /// <param name="signalled">Whether the API signalled a change since the last read, or the device changed.</param>
+    /// <returns>Whether to read.</returns>
+    public bool Due(long timestamp, bool signalled) => (signalled || !m_read || ((timestamp - m_readAt) >= Interval));
+    /// <summary>Records a read and returns the reading to publish, its serial moved when its budgets, segments or estimate
+    /// differ from <paramref name="last"/>'s.</summary>
+    /// <param name="last">The reading published before.</param>
+    /// <param name="segments">The device's segments.</param>
+    /// <param name="readings">One reading for each of <paramref name="segments"/>, in its order.</param>
+    /// <param name="estimated">Whether the figures are estimates.</param>
+    /// <param name="timestamp">The time of the read, in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
+    /// <returns>The reading.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="last"/> or <paramref name="segments"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="readings"/> does not hold one reading per segment, in order.</exception>
+    public GpuMemoryReading Publish(GpuMemoryReading last, GpuMemorySegments segments, ReadOnlySpan<GpuSegmentReading> readings, bool estimated, long timestamp) {
+        ArgumentNullException.ThrowIfNull(argument: last);
+        var changed = ((last.State != GpuMemoryReadingState.Read) || !ReferenceEquals(objA: last.Layout, objB: segments) || (last.Estimated != estimated) || (last.Segments.Count != readings.Length));
+
+        for (var index = 0; (!changed && (index < readings.Length)); index++) {
+            changed = (last.Segments[index].Budget != readings[index].Budget);
+        }
+
+        var reading = GpuMemoryReading.Read(estimated: estimated, readings: readings, segments: segments, serial: (changed ? (Serial + 1UL) : Serial));
+
+        Serial = reading.Serial;
+        m_readAt = timestamp;
+        m_read = true;
+
+        return reading;
     }
 }

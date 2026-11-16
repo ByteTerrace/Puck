@@ -16,10 +16,19 @@ disjoint backend rows: device-local bytes (aperture storage is already inside th
 and host-visible bytes (upload, staging and readback heaps). `host.memory owners 0`
 appends both; neither includes driver internals or swapchain images. Device-local
 plus host-visible is what the backend's counted allocations hold, and on the Deck's
-unified memory both come out of the same physical pool. Account,
-allocator, managed-heap, resource and process readings overlap; their sum is not a
-physical total. Read full GPU node counters when ownership matters: summary
-submission counters omit the node's owned-byte gauge.
+unified memory both come out of the same physical pool. Those readings overlap
+the account's; what adds is `host.memory`'s physical rows per pool (device
+blocks, native allocator, native direct, managed, runtime and driver), each with
+the part its owners name and its residual. Device memory is named by owner
+family (`GpuObjectName.MemoryFamily`: the creator's owner without its `$`
+instance, then the part), counted at placement by the ledger
+(`GpuDeviceMemoryWork.CountPlaced`, or `CountAllocated` for a dedicated
+allocation), so `host.memory`'s `family` lines name who holds a segment and who
+churns it (allocated against released), and a segment's `residual` is the room
+inside shared blocks. A creating member's `GpuObjectName` is therefore what its
+memory is attributed to: a default name lands in the `unnamed` family. Read full
+GPU node counters when per-node ownership matters: summary submission counters
+omit the node's owned-byte gauge.
 
 Keep driver residency/budget observations separate from resource allocations.
 [DXGI reports process usage and an OS budget](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info),
