@@ -1,6 +1,6 @@
 # Author shaders lane: SDF-native and user-content systems, safety, languages, and Dolphin
 
-Research lane for the author-shaders round (`mandates.md`). Every source below
+Research lane for the author-shaders round. Every source below
 was opened in the research round unless marked **unverified**. Large
 documents (the Dreams slides, the WGSL spec, the GLSL ES 1.00 spec, the Dolphin
 posts, the Dolphin source) were downloaded and read as text; quotations come from

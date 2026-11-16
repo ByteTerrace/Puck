@@ -1348,7 +1348,14 @@ rows; every row below names its prerequisite or states what exists.
 How the hub steps, the custody protocol's steps 6 to 10, disclosure and
 federation reorder under the favoured options. Each step names what it needs,
 what it unblocks and the check in [section 5](#5-how-the-debug-world-proves-each-favoured-option)
-that shows it worked. Steps marked "new" are not in any plan today.
+that shows it worked.
+
+This list is the round's record of the order, kept because the register and the
+plans cite its step numbers. It is not a queue: every step is filed in the plan
+or packet the register's
+[building it](../../decisions/worlds-and-federation.md#building-it) names,
+which is where its current state and its owner are, and a step's state is not
+maintained here.
 
 1. **Disclosure step 1** (landed): `WorldRecipientView` and
    `WorldDeliveryCursor`, with step 0's noninterference harness as the check.

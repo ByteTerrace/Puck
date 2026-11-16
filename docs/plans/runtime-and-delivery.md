@@ -316,12 +316,17 @@ delta is computed apart from live state, applied only as admitted changes
 through validation and authority, retained by stable row and entity identity,
 refusing removed or retyped state and conflicting live edits; rollback reverses
 the admitted delta with the same checks and never installs the old definition
-wholesale. A pair carrying machines qualifies through checkpoints that restore
-only against the same firmware, cartridge and core format identity
+wholesale. A pair carrying machines qualifies by boot-anchored reproduction of
+the state a checkpoint does not capture
+([the decision](../decisions/runtime-and-delivery.md#releases)):
+applied screen operations, live coupled machine links and enabled machine
+rewind history stay live in the qualification workload and are reproduced from
+boot under each binary, never cut from the fixture and never a reason to demand
+capture for them. A machine checkpoint that is captured restores only against
+the same firmware, cartridge and core format identity
 ([the server README](../../src/Puck.World.Server/README.md#hosted-release-records)).
-Pumped addon guest state, applied screen operations, live coupled machine links
-and enabled machine rewind history refuse capture by name; release pairs decide,
-state by state, whether each gains capture or stays refused.
+A running addon guest is captured with the world, so it takes part in the pair
+as checkpointed state.
 
 **Check:** A-to-B deployment, play under B, B-to-A rollback, and continuation
 under A preserve inventory, identity, population, clocks, random state,

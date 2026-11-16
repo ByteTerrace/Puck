@@ -756,10 +756,18 @@ Store roots, by scope kind:
   images directory with the document (H7a).
 - `ephemeral`: no store.
 
-Each directory holds `image`, written to a sibling and moved into place whole
-(`File.Move` with overwrite, as the first build did; a crash mid-write leaves
-the previous image), and at most one `image.refused`, the last image a
-restore set aside, kept as evidence and overwritten by the next set-aside.
+Each directory holds `image`, published through the one durable-publication
+primitive, `AtomicFile.WriteAllBytesDurably` in `Puck.Confinement`: the bytes
+are staged beside the destination, flushed to stable storage and renamed over
+it with a durable rename, and a directory the write created is flushed too. A
+crash at any point leaves the previous image or the new one, never a torn one,
+and an image the host has acknowledged is on the disk. A bare `File.Move` is
+not that: it omits the write-through the rename needs
+([the launcher's durable publication](updater-policy.md#durable-publication-u04-u05)
+gives the ordering and the reason), so the image store builds no second file
+publication. Each directory also holds at most one `image.refused`, the last
+image a restore set aside, kept as evidence and overwritten by the next
+set-aside through the same primitive.
 `world.instance.status` echoes a row's identity, hash and path, and
 `world.image.discard <instance>` sets a row's image aside by hand, so an
 author who wants a clean start has a door that is not deleting files.

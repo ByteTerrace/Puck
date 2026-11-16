@@ -1,7 +1,7 @@
 # Rendering
 
-The frame rasterizes baked SDF meshes with shadow cascades and a CPU-traced
-irradiance volume. This plan holds the remaining sky vocabulary, wallpaper
+The frame rasterizes baked SDF meshes with shadow cascades and an irradiance
+volume traced on the GPU. This plan holds the remaining sky vocabulary, wallpaper
 bounds, rendering follow-ups and hardware observations. The debug world
 (`worlds/debug`) proves the work on both backends; features from experimental
 worlds are ported into it rather than reviving those worlds.
@@ -12,27 +12,25 @@ owns pipeline authoring, and the [frame handbook](../rendering/sdf/handbook/fram
 and [rendering skill](../../.claude/skills/rendering/SKILL.md) own the implemented
 contracts. Delivered package history belongs in git.
 
-## Where each package stands
+## What is open
 
-A landed package can still have a hardware observation owed below. The
+Each package below still owes something; a package with only a hardware
+observation left is listed under [deferred checks](#deferred-to-the-end). The
 [shared queue](open-items.md#next) ranks work across programmes.
 
-| Package | State | Open remainder |
-|---|---|---|
-| P1a, durable functional fixtures | open; software landed | [No-driver boot](#deferred-to-the-end) |
-| P1b, foundation qualification | open | [Reference devices and driver removal](#p1b--foundation-qualification) |
-| P4, shared opaque visibility | landed; field-marching path retired | [Baked frame](#p4--shared-opaque-visibility) |
-| P6, representation experiments | withdrawn except GI | [Lighting and GI](#p6--representation-experiments) |
-| P10, bound rows and tiers | open; software landed | [Hardware qualification at high](#deferred-to-the-end) |
-| P12, image sources | open; software landed | [Real camera](#deferred-to-the-end) |
-| P13, hit-to-source mapping and input | open; software landed | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
-| P14, SDF pass package | landed | [Rendering follow-ups](#p14--the-sdf-engine-as-a-pass-package) |
-| P15, temporal reconstruction | open; software landed, march seeding withdrawn | [Steam Deck observation](#p15--temporal-reconstruction) |
-| P16, display output | open; software landed | [HDR display](#deferred-to-the-end) |
-| P17, assets derived from SDFs | withdrawn | [Bake ownership](#p17--assets-derived-from-sdfs) |
-| P18, sky and atmosphere | open | [Celestial bodies and infinity-view admission](#p18--sky-and-atmosphere) |
-| P19, wallpaper-fold bounds | open | [CPU certification and bake lattice](#p19--neighbour-content-bounds-for-wallpaper-folds) |
-| P20, visibility and residency | open; P20-1, P20-2, P20-3, planar merge, quadric collapse, static-union chunks and near-first demand landed | [Residency and observations](#p20--visibility-areas-and-residency) |
+| Package | Open remainder |
+|---|---|
+| P1a, durable functional fixtures | [No-driver boot](#deferred-to-the-end) |
+| P1b, foundation qualification | [Reference devices and driver removal](#p1b--foundation-qualification) |
+| P10, bound rows and tiers | [Hardware qualification at high](#deferred-to-the-end) |
+| P12, image sources | [Real camera](#deferred-to-the-end) |
+| P13, hit-to-source mapping and input | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
+| P14, SDF pass package | [Bake quality, glass, submission and routed worlds](#p14--the-sdf-engine-as-a-pass-package) |
+| P15, temporal reconstruction | [The march-step signal and the Steam Deck observation](#p15--temporal-reconstruction) |
+| P16, display output | [HDR display](#deferred-to-the-end) |
+| P18, sky and atmosphere | [Celestial bodies and infinity-view admission](#p18--sky-and-atmosphere) |
+| P19, wallpaper-fold bounds | [CPU certification and bake lattice](#p19--neighbour-content-bounds-for-wallpaper-folds) |
+| P20, visibility and residency | [Observations](#p20--visibility-areas-and-residency) |
 
 ## The forcing artifact
 
@@ -41,11 +39,10 @@ screens and portals, sky and valley. Captures and live counters show what a
 change does; `host.frames` and `world.gpu-timing` on a quiet machine show its
 cost. Canaries under `experimental/tests/Puck.World.Canaries` are quarantined.
 
-The bar is the worst frame at `world.quality high`: under 16.7 ms on the
-RTX 2060 and RTX 4070 (60 FPS), under 22.2 ms on the Steam Deck (45 FPS).
-Read counted work beside that timing as diagnostic evidence. Lower tiers,
-coarser shadow snapping, reduced contact detail and a frame of latency never
-repair a missed bar. The [engine job system](open-items.md#engine-job-system)
+[The frame bar](../decisions/rendering.md#the-pipeline-foundation) is the
+worst frame at the highest quality on every bar device, read by
+[one recipe](streaming-and-memory.md#how-the-bars-are-read) with counted work
+beside it. The [engine job system](open-items.md#engine-job-system)
 owns scheduling, parallel tick execution and view recording; the
 [bake work](open-items.md#bake-proportional-to-change) owns bake speed and identity.
 
@@ -58,29 +55,15 @@ under [deferred checks](#deferred-to-the-end). Qualify the debug world at
 `high` and retain the actual memory and timing readings. No recorded work-count
 ceiling substitutes for a device observation.
 
-### P4 — Shared opaque visibility
+### Global illumination
 
-The frame rasterizes baked meshes. The shared visibility record and projection
-rules belong to the [frame handbook](../rendering/sdf/handbook/frame-rendering.md#surface-transport)
-and [frame-graph decision](../decisions/rendering.md#the-frame-graph-and-nesting).
-
-### P6 — Representation experiments
-
-The experiments tied to the per-pixel field march are retired with that path.
-Glass is part of the baked frame; its remaining work is [below](#glass).
-
-#### P6-GI, global illumination
-
-The [illumination plan](illumination.md) holds the decisions from the
-illumination research round and their build order: the probe volume splits
-into cached hits and a budgeted GPU relight, direct light is made correct at
-author scale, the geometry trace moves to the GPU behind one trace-hits
-interface, bitmask AO steers the gather, and light lists and area lights bound
-the light loop. The [Lighting and GI packet](open-items.md#lighting-and-gi)
+The [illumination plan](illumination.md) holds the lighting decisions and their
+build order. The [Lighting and GI packet](open-items.md#lighting-and-gi)
 owns the remaining coverage, visibility, exposure and bounce findings. The
 [engine job system](open-items.md#engine-job-system) owns its execution budget,
-and [residency](open-items.md#residency-and-streaming) owns demand-point
-windowing. No second scheduler is built for GI.
+and the streaming plan's
+[decision 9](streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)
+owns what the lighting demands and keeps. No second scheduler is built for GI.
 
 ### P13 — Hit-to-source mapping and input destinations
 
@@ -108,12 +91,25 @@ The remaining bake investigations are:
 - Finish an in-flight group that a later plan drops and retain it in the library
   and store. Read back a boot's second, different `start` plan so churn cannot
   silently rebake discarded work on every boot.
-- Lower the remaining nonuniform `Scale` fallbacks to native anisotropic
-  shapes: a torus; capsule, cylinder or cone with unequal X and Z scales;
-  prism profiles; and `SdfProgramBuilder.Path`. A multi-shape capsule lowering
-  needs scope and emitter accounting for its elliptic cylinder and ellipsoid
-  caps. Its bake samples must represent the intended surface rather than
-  inheriting a loose distance bound.
+- Give every primitive under a non-uniform scale a true distance, keeping the
+  authored surface
+  ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)).
+  What still rides the generic `Scale` bound, which `puck creation shape`
+  reports as a gain: a capsule, cone or torus scaled apart in X and Z, and a
+  round cone scaled apart at all; an ellipsoid or sphere scaled apart is the
+  exponent-2 superellipsoid gauge, which contact admits; a `Path` profile and a
+  sweep certify no gain. Regular polygons already lower their scaled vertices
+  to the exact convex polygon. Each gets a closed-form lowering where one
+  exists (a multi-shape capsule lowering needs scope and emitter accounting for
+  its elliptic cylinder and ellipsoid caps) and otherwise a bounded
+  closest-point solve certified by an enclosing interval and a residual bound;
+  no such solver exists yet, and its design is the step's first part. Check:
+  read every stretched gallery primitive through `puck creation shape`; audit
+  each field against closest-surface distances on both sides and at the
+  degeneracies; audit a subtraction and a smooth blend using each as a cutter;
+  report distance error, certification, field work and mesh defects, with the
+  CPU and GPU fields agreeing; then settled captures in the gallery and the
+  bake's added work in a quiet window before choosing which solves to admit.
 - Inspect the Moth's hood opening, shin knife edges, left pauldron underside,
   lower eyelid, scalp, pod bands and greave rim. Touching mesh groups expose
   seams at back-pod plates and nozzle discs; contour a touching pair together
@@ -166,35 +162,17 @@ owns the implemented path. Remaining slices are:
 The [engine job system](open-items.md#engine-job-system) owns frame scheduling
 and recording. The remaining GPU and routed-world investigations are:
 
-R2 extends `SdfMeshOcclusion`'s existing indirect mechanism to opaque, every
-shadow cascade and glass. Its compute kernel selects bounds and mesh levels
-from the shared retained mesh records; a pass uploads constant-sized controls
-and bounded portal sight queries. Each pass retains visibility, level and mesh identity per draw on
-the GPU, preserving the 1/1.1 display-pixel band and resetting level history
-when the mesh changes or a settled capture holds the frame. Buffer growth
-copies that history. Opaque occlusion keeps its early/late phases; glass uses
-one. Cascades reserve early/late entry, solid-exit, thin-exit and optional optical
-argument phases. The far cascade's receiver mask and two-phase light-space depth
-share this selector; exit and optical lists never use entry-depth visibility
+Every raster pass selects its draws on the GPU through `SdfMeshOcclusion`
 ([contract](../../.claude/skills/rendering/SKILL.md#far-cascade-caster-selection)).
-CPU `Choose` and per-draw recording
-are removed. Vulkan's native-count fallback reads the same initialized
-argument slots through `vkCmdDrawIndirect`; `DrawIndex` reads their identities
-without the optional first-instance feature. Hardware observations are
-recorded in the memo's R2 row.
-
-Shared geometry instancing remains a separate extension: the meadow has
-4,215 draws for 288 geometries (14.6 draws per geometry). Sparse visibility,
-per-draw level choice and stable depth-tie ordering require an instance map
-and per-geometry/per-level ranges, rather than changing `instanceCount`
-alone. Preserve draw identity, materials, transforms, carry and clip planes
-through that map, and measure it through this same indirect mechanism. The
-lead's [visibility plan](visibility.md#the-build-order) owns ordered
-compaction and these instance buckets after R2.
+Shared geometry instancing is a separate extension the
+[visibility plan](visibility.md#the-build-order) owns (ordered compaction and
+instance buckets): the meadow draws many copies of few geometries, and sparse
+visibility, per-draw level choice and stable depth-tie ordering need an
+instance map and per-geometry, per-level ranges, never `instanceCount` alone.
 
 - Re-measure RTX 2060 pixel passes at matched clocks before attributing a
   Vulkan/Direct3D 12 gap. Inspect surface and resolve register pressure and
-  occupancy; measure geometry instancing in R2's indirect records rather
+  occupancy; measure geometry instancing in the indirect records rather
   than repeating the slower one-draw vertex-search experiment.
 - Reopen either unattributed Vulkan device-loss case on recurrence: the
   first-frame fault whose last checkpoint is `glass-clear`, or the fault as
@@ -218,6 +196,24 @@ compaction and these instance buckets after R2.
   the measured budget calls for it.
 - A package pass takes its extent from its first image port. Resolve the
   output-extent contract for a pass whose only image is a fixed-size atlas.
+- Account a graph's storage by lifetime before reusing any of it. The plan
+  forbids unrelated storage aliasing today, and no allocator proves a handoff.
+  First, from the plan's first and last uses and the actual dimensions and
+  formats, compute the unaliased bytes and a conservative estimate of what
+  compatible, non-overlapping transients could share, by lifetime class
+  (external, published, history or retained, frame-slot, transient, retired,
+  background), with flight-slot multiplicity and graph-replacement overlap
+  counted and no reference summed twice
+  ([how memory is read](streaming-and-memory.md#what-adds-and-what-only-names)).
+  Only if that estimate is large: assign physical allocations to eligible
+  transient chains in the compiler's immutable plan, within one node and queue
+  first. The invariant is that reuse is legal only after every GPU access to
+  the old allocation and every external lease has ended, which the compiler
+  can prove locally and the allocator's retirement door must enforce; history,
+  held portal images, capture inputs, standing pass contents and background
+  bindings are never eligible. Check: planned against actual peak allocation
+  across resize, graph replacement, held views, capture and background work on
+  both backends, kept only for a measured byte dividend.
 
 The back of a portal's glass still needs a presentation choice: no image,
 fallback colour or a front-image mirror. The
@@ -229,14 +225,10 @@ Reconstruction and dynamic resolution are implemented. P15-8's floor-tier
 tuning is removed; the Steam Deck observation below runs at `high`.
 The [temporal packet](open-items.md#temporal-shimmer-and-cadence-flicker) owns
 remaining image work. Delete the obsolete march-step load signal
-(`WorldDynamicResolutionSignal.Steps` and `StepBudgetPerPixel`) through the
-[editor's cost work](editor.md#e9--cost-per-object-and-gpu-pass-timing);
-counting bake steps cannot measure the baked frame's load.
-
-### P17 — Assets derived from SDFs
-
-Withdrawn as a separate package. Every frame already draws baked meshes;
-[bake work](open-items.md#bake-proportional-to-change) owns their derivation.
+(`WorldDynamicResolutionSignal.Steps` and `StepBudgetPerPixel`), which the code
+still carries: counting bake steps cannot measure the baked frame's load, and
+dynamic resolution's signal is the frame's own timing. Check: the two symbols
+are gone, and `world.render-scale` still follows a loaded frame.
 
 ### P18 — Sky and atmosphere
 
@@ -299,8 +291,9 @@ seams. Exercise them in the debug gallery on both backends.
 Per-pass box culling, depth occlusion, rated presentation, planar merging,
 quadric collapse, static-union chunks, per-view light range selection and
 near-first mesh demand are implemented. The
-[residency packet](open-items.md#residency-and-streaming) owns demand-point GI,
-mapped portal demand, byte-bounded eviction, authored areas and terrain units.
+[streaming plan](streaming-and-memory.md) owns lighting on the same demand (its
+decision 9), mapped portal demand, byte-bounded eviction, authored areas and
+terrain tiles.
 The [engine job system](open-items.md#engine-job-system) owns execution and
 memory ownership; the [rendering decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)
 owns the one-display-pixel detail rule. How the frame decides what to draw
@@ -318,8 +311,11 @@ Remaining observations specific to visibility are:
 - On a display presenting at least 60 Hz, compare `world.rates on`/`off`, the
   far cascade averaged over held and rendered frames, nested views and pose
   work. The VRR play observation uses `world.target vrr`, `world.rates` and
-  `debug.go range`; judge held bodies, screens and windows for stepping and
-  whether the discrete 30/15 Hz rates should be continuous.
+  `debug.go range`; judge held bodies, screens and windows for stepping under
+  the 30 and 15 Hz tiers. The tiers themselves are settled
+  ([presentation rates stay tiers](../decisions/residency.md#only-presentation-follows-the-observer)):
+  a continuous rate is reopened only by an observation the tiers cannot
+  explain, named with it.
 - Camera views filmed onto in-world screens still render at the consumer's
   rate: the screen lever rates source instances, and `WorldViewGraphHost.Rates`
   does not look up a camera view's glass as it does a session's.
@@ -327,8 +323,11 @@ Remaining observations specific to visibility are:
   frame time while retaining the highest quality. Qualify the Deck's Vulkan
   path on the device at 45 FPS.
 
-The cached far-cascade proposal is removed. Coarser snapping sacrifices shadow
-resolution and cannot repair a missed frame bar.
+The far cascade's snap is never coarsened to save frame time: a coarser snap
+gives up shadow resolution and cannot repair a missed frame bar. A cascade
+held between changes is a different thing and is still planned, for terrain
+alone: the [terrain pass](terrain-pass.md#distance)'s far-shadow step is its
+one home.
 
 ## Deferred to the end
 

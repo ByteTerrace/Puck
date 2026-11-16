@@ -134,7 +134,7 @@ For a hot edit, keeping the previous material until the replacement is ready is 
 
 Shader-relative paths in the table are under `src/Puck.SdfVm/Assets/Shaders/Sdf/`. Source structure supports the ubershader/material-table description; it does **not** prove every decoded field survives optimization or every listed load executes. There is already useful lifetime discipline and cache infrastructure to extend rather than duplicate.
 
-The **~4.3 ms at worst stops on RTX 4070** and earlier high-register report are supplied by the brief and the round's mandates file (`mandates.md` beside this file). A search of available scratch/planning documents found no underlying capture or counter export establishing those exact readings. I did not remeasure them. In particular, no native register count, spill size, active-lane ratio or current shader identity was confirmed.
+The **~4.3 ms at worst stops on RTX 4070** and earlier high-register report are supplied by the brief and the round's brief, which is not kept. A search of available scratch/planning documents found no underlying capture or counter export establishing those exact readings. I did not remeasure them. In particular, no native register count, spill size, active-lane ratio or current shader identity was confirmed.
 
 ### Savings: an accounting model, not a promise
 

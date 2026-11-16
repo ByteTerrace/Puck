@@ -694,6 +694,73 @@ defect was found; the weaknesses are structural and economic.
   where declared, and disclosure policy is evaluated per recipient while its
   future-affecting inputs stay authoritative state.
 
+## Rule evaluation is proportional to change
+
+Authored rules run in document order, and the order is the semantics: a
+committed firing is visible to the next rule's gate. The engine makes that
+order cheap without changing it: a rule's schedule names what its judgement
+depends on, the host versions what it owns, and a change pushes the rules that
+read it onto a due list, so a tick visits the rules something moved for and
+not every rule ([the state reference](../reference/state/analysis.md#skip-rules-whose-inputs-havent-changed)
+describes each part as it runs).
+
+**The invariant.** An evaluation the scheduler elides is one the in-place
+evaluation would reproduce bit for bit. One door enforces it,
+`RuleEvaluator.VersionsMatch`: a verdict is kept only when the schedule is not
+volatile, the tick is before the verdict's deadline, and every dependency the
+schedule names reports the version captured with the verdict. A dependency a
+schedule cannot name keeps it volatile, and a volatile rule is judged every
+tick. Nothing the scheduler keeps enters the state hash
+(`RuleLatch.AppendStateHash` folds only the edge bits), so every cache can be
+dropped at any time without moving a hash.
+
+**Where the guarantee rests.**
+
+- A judgement is the locals, live rows and gate, never the effects
+  (`RuleDataflow.CollectJudgement`), so a schedule's completeness rests on that
+  walk reaching every operand a judgement reads, nested programs included. A
+  new operand that evaluates a program of its own needs the walk extended
+  (`RuleDataflow.CollectOperandFacts`).
+- Every row version moves through one door, `StateArena.BumpRowVersion`, which
+  feeds the due list; adoption marks every row moved.
+- A host fact's version is derived from the value its read answers, never
+  recorded by a writer: `WorldRuleHost.RefreshFacts` marks the facts stale, and
+  the next read compares each body's pose, facts and liveness with the last
+  derivation, so no door that moves a body can forget a version. The evaluator
+  refreshes before each family's walk and after any firing that delivered an
+  arm, the only rule-time work that changes host state. The placement table's
+  version moves at its one writer (`WorldPopulation.RebuildPlacementOrdinalTable`).
+- A replaced arena, or a latch whose scheduler caches were forgotten
+  (`RuleLatch.SchedulerEpoch`), marks every rule due.
+- A deadline is a gate conjunct whose falsehood alone closes the gate
+  (`RuleDeadline.Find`); its wake is checked against the live tick read at
+  capture, and any doubt gives tick 0, which no skip trusts.
+
+**Considered, and set aside.**
+
+- *A Rete network over cells* is a second evaluator beside
+  `RuleEvaluation.Decide`, stores partial matches for gates that are a few
+  comparisons, and has no answer for effects with refusal and rewind. Rows are
+  already the join keys, and row versions give the delta without the memories.
+- *Rules as a dataflow (differential) program*: effects are imperative writes
+  under a journal with refusal, transforms and irreversible arms, and
+  expressing them as operators over difference collections changes what an
+  author writes.
+- *Declared-access parallelism with reordering* (Bevy, Unity) changes
+  rule-read semantics and needs a per-partition journal, key minting and pool
+  claims. It is the later path once the kit-transaction redesign lands, with
+  the hazard analysis (`RuleHazards`) as its conflict graph.
+- *Wall-clock budgets per rule*: a timing is not deterministic and not
+  comparable across machines; the sheet prices in work units.
+- *Speculating the due list's gates on the pool*, committing in order, costs a
+  fork's dispatch and join, a partition-owned evaluation context and
+  version-validated reuse. On the debug world most evaluations that still run
+  belong to volatile rules or fire, so only a few tens of non-firing versioned
+  gates a tick remain, which is less than the fork. It is revisited when
+  `world.budget.rules --spent` shows hundreds of non-firing versioned
+  evaluations a tick in a world that needs them; any speculation reuses
+  `RuleSchedule` and `VersionsMatch`, never a second dependency map.
+
 ## Costing
 
 The compiled semantic operations share one deterministic allowance. Compose

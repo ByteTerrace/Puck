@@ -726,7 +726,7 @@ deployment group (section 3) **[opened]**; it gates connection, not a world's
 ### Which build-plan steps are in the code
 
 The plan says steps 1 to 5 are built **[opened]**
-(`docs/plans/companion-redesign.md:553-556`):
+(`docs/plans/companion-redesign.md:567-570`):
 
 ```text
 Steps 1 to 5 are built. Durable record kinds for later steps already exist in

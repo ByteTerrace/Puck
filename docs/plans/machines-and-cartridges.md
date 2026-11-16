@@ -19,9 +19,10 @@ The machine host is described by [its README](../../src/Puck.World.Machines/READ
 Open across the packages below: screens are index-addressed
 (`WorldScreen.Index`), and a cable group lists screen indices; no rule effect
 invokes a machine operation, no execution or content receipt exists, and a tape
-arms only before any cabinet has stepped; checkpoints still refuse pumped addon
-guests, applied screen operations, live coupled links and enabled rewind
-history; addon memory watches are keyed by screen; no reusable cabinet module
+arms only before any cabinet has stepped; checkpoints still refuse applied
+screen operations, live coupled links and enabled rewind history (a running
+addon guest is captured with the world); addon memory watches are keyed by
+screen; no reusable cabinet module
 exists; `Puck.World` references both bricks and the three forges directly; the
 `puck.cartridge.v1` content-admission preset (`GamingBrickContentPolicies`) has
 no production consumer; the cartridge document declares no procedure, typed
@@ -107,9 +108,9 @@ hardware observations, addon watches, the execution and content receipt,
    refuses by name before advancement. External operations are recorded once;
    deterministic rule and binding work is re-executed once. The world checkpoint
    carries named handheld cores, held input, pacing, instance generations and
-   binding memos; its refusal stays, by name, for a pumped addon guest, an
-   applied screen operation, a live coupled link and enabled rewind history until
-   full restoration round-trips for them. Until the receipt exists and those
+   binding memos; its refusal stays, by name, for an applied screen operation,
+   a live coupled link and enabled rewind history until full restoration
+   round-trips for them. Until the receipt exists and those
    round-trip, a tape can only arm before any cabinet has stepped, which is why
    recorded tapes arm at tick 0.
 4. **Cabinets are priced, and the price is an input to the job-system memo.** A
@@ -123,7 +124,10 @@ hardware observations, addon watches, the execution and content receipt,
    decides how cabinets are stepped, parked and resumed. "Observed" there means
    authoritative state only: a seat, a binding read this tick, or an engagement.
    A viewer, a render or residency is never an observation, because who looks
-   must not change simulation state (the determinism rule).
+   must not change simulation state (the determinism rule). The work itself is
+   one item, in the
+   [machines as authored logic packet](open-items.md#machines-as-authored-logic);
+   this entry states the rule that item builds to.
 
 **Check:** two aliased cabinets with independent controls and state; a passive
 monitor grants no control; slot reuse cannot retarget a command; a coupled
@@ -344,7 +348,7 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts a
 ```
 
 ```bash
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
 ```
 
 ```bash

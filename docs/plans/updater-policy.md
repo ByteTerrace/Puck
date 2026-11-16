@@ -19,13 +19,18 @@ The contract sits in `Puck.Confinement`, the base-class-library leaf already
 shared by `Puck.Launcher` and `Puck.Launcher.Stub`, and names no deployment or
 identity provider type ([AGENTS.md](../../AGENTS.md)).
 
-This revision answers the design review's eleven findings (U01 to U11, listed
-under [the review's findings](#the-reviews-findings-answered)). Against the
-first revision it moves every piece of selection state (the current pointer,
-the startup-attempt counts and the proofs of health) into the one record, so
-each transition is one durable replacement of one file, deletes the `last-good`,
-`state/health.json` and `versions/<v>/state-generation` files, and makes process
-registration the launch-policy door every installed entry point already passes.
+The mechanism is built (`InstallTransaction`, `InstallRecord` and
+`AtomicFile.WriteAllBytesDurably` in `Puck.Confinement`; the updater, the stub,
+registration and the pruner call it), and the laws in
+`tests/Puck.Launcher.Tests/Release` exercise the failure schedules below. This
+page is its specification until the launcher's reference takes it over. Every
+piece of selection state (the current pointer, the startup-attempt counts and
+the proofs of health) lives in the one record, so each transition is one
+durable replacement of one file, and process registration is the launch-policy
+door every installed entry point passes. The ids U01 to U11 and R01 to R10 in the text
+name the two reviews' findings each passage closes. One thing is open: the
+power-cut qualification of the durable publication on NTFS, which
+[the security packet](open-items.md#security-review) holds.
 
 ## The two confirmed findings this design closes
 
@@ -368,7 +373,7 @@ Under the stub's transaction:
    version and why).
 
 The stub then holds the version directory, checks the executable, releases the
-lock and starts the process, which registers ([U03](#u03--revocation-racing-process-creation)).
+lock and starts the process, which registers ([where the launched process is checked](#where-the-launched-process-is-checked-u03-u11)).
 The stub's decision table, its launch-anyway branch, its pointer revert and its
 health-file writer are deleted.
 
@@ -446,142 +451,6 @@ revoked version:
 A full history is reported by name; the remedy is a reinstall. At these bounds
 the file stays under a megabyte, and the reader refuses a larger one.
 
-## The review's findings answered
-
-### U01 — CheckAsync as an unlocked writer
-
-Closed by I0. Every record mutation is a method of `InstallTransaction`, which
-exists only while `update.lock` is held; `CheckAsync` begins one around
-verification; the verifier and applier receive their caller's transaction
-instead of acquiring one. The law: a check started while another holder has the
-lock and commits a rejection waits, then merges its revocation into the record
-that holds that rejection.
-
-### U02 — the current launch path ignored the floor
-
-Closed by I4. `Refusal` includes `stateGeneration < floor` and is called by
-admission (so a signed higher version declaring a lower generation is refused
-before it becomes current), by the stub for current and for every candidate,
-and by registration. The law applies a generation-1 manifest after a
-generation-2 launch and sees it refused before `current` moves.
-
-### U02's companion — the floor follows the final choice
-
-The lead's U03 ruling: `SelectLaunch` raises the floor from whichever version
-it chose, current or a rollback candidate, in the same commit that counts the
-attempt, before the stub starts the process. On the rollback branch the raise
-never moves the floor: `RecordHealthy` raises the floor to every install it
-proves, and a candidate must meet the floor, so a proven candidate's generation
-equals it. The raise matters on the current branch, the first launch of a
-newly applied higher generation; the law
-(`TheFloorFollowsTheLaunchChoiceBeforeTheProcessStarts`) reads the raised floor
-from the committed record when selection returns, then sees the older proven
-install refused as below it and a lower-generation update refused.
-
-### U03 — revocation racing process creation
-
-Decision: the launched process re-checks under the lock, at registration,
-rather than the stub holding the lock through process creation. Registration is
-the first statement of every installed entry point, already waits for
-`update.lock`, and already holds the version directory; checking the record
-there makes the registration the linearization point. A revocation or
-rejection committed before the child registers refuses its start; one committed
-after it reaches only later starts. Holding the lock through `Process.Start`
-alone would not cover U11's direct launches, and would still leave the window
-between `Process.Start` returning and the child's application code; the
-registration check covers both, so it is the one door. The stub keeps releasing
-the lock before starting the child (the child's registration needs it). An
-attempt counted for a child that registration then refuses is a failed attempt
-of a version that is revoked anyway.
-
-### U04 — flush before rename is not durable
-
-Closed by [durable publication](#durable-publication-u04-u05): one primitive
-with a post-rename directory `fsync` on Linux and `MOVEFILE_WRITE_THROUGH` on
-Windows, payload files and directories flushed before the commit that selects
-them, and every selection fact in one file so no two independently persisted
-facts can disagree. Not verified by a power cut; recorded as open.
-
-### U05 — ReplaceFile recovery depended on a finally block
-
-Closed: the durable primitive never uses `ReplaceFile`, so no state exists in
-which the record is displaced to a backup name.
-
-### U06 — an update erased exhausted startup history
-
-Closed by keying attempts by payload pin inside the record. Applying B.1 with
-B's payload leaves B's count in `launchAttempts`; the next stub launch finds it
-at `MaxAttempts`, rejects the pin and rolls back. A different payload has its
-own count, and the old one stays until proven or rejected. The law replays the
-review's schedule.
-
-### U07 — proof committed, attempts not cleared
-
-Closed by I5: `RecordHealthy` adds the proof and removes the attempt entry in
-one replacement, so no state holds both a proof and the attempts it cleared.
-
-### U08 — unbounded growth
-
-Closed by [the bounds](#bounds-u08).
-
-### U09 — a valid manifest could write an unreadable record
-
-Closed: `MergeRevocations` drops entries that are not version directory names
-before writing (they can name no install, so dropping loses nothing), and the
-record's own writer validates its whole new state before the temporary is
-written, so a record that would not read back is never published.
-
-### U10 — a recreated directory inherited an old proof
-
-Closed by I5 and `lastSequence`: a proof is `(version, sequence, pin)`, a
-sequence is never reused, and a candidate counts only while its on-disk record
-matches all three. A restaged directory has no record until its apply writes
-one with a new sequence, so neither a partial nor a completed restaging matches
-an old proof.
-
-### U11 — installed entry points bypassed the launch policy
-
-Closed by registration's `AdmitProcess`: the CLI, `Puck.Cli.Worlds` (the parity
-verb's sibling), `Puck.World`, `Puck.World.Silo` and `Puck.Actors` all call
-`InstallRegistration.TryRegisterProcess` first, so a start from a revoked,
-rejected or incompatible version refuses whether the stub or anything else
-started it. Startup attempts are counted only for stub launches: a direct
-launch is not health-gated, so it cannot exhaust a payload's budget or prove it
-unless `current` names it.
-
-## The implementation review's findings answered
-
-- **R01** (uncommitted or policy-less admission): `ReadRecord` returns only
-  committed records; `AdmitProcess` requires the current install or a proven
-  one; an absent record with a committed install fails closed
-  ([reading the record](#reading-the-record)). Laws:
-  `AnUncommittedOrNeverProvenInstallRunsNothingAndRaisesNoFloor`,
-  `AMissingReleaseRecordWithCommittedInstallsFailsClosed`.
-- **R02** (retirement dropped needed revocations): anchors are committed installs
-  only, nothing retires before the first commit, equal precedence and unordered
-  names are kept ([bounds](#bounds-u08)). Law: `RetirementKeepsEveryRevocationThatCouldStillMatter`.
-- **R03** (history past its bound): proven launches are uncounted, so the bound
-  holds by construction; proofs past their bound drop the oldest. Law:
-  `RollbacksNearTheHistoryBoundNeverPassIt`.
-- **R04** (directory entries not durable): created directories' parents,
-  `versions/` and the root are flushed, and intent unlinks are flushed
-  ([durable publication](#durable-publication-u04-u05)).
-- **R05** (update lease held across downloads): the apply holds the publication
-  lease and takes the update lease only for short decisions, judging everything
-  again before it commits ([the transaction](#the-transaction-u01)). Law:
-  `SeparateServices_CannotWriteOneInstallRootConcurrently` (the stub begins a
-  transaction while a download is in progress).
-- **R06** (proven installs rejected by attempts): a proven install's launches are
-  not counted ([the record](#the-record)). Law: `AProvenInstallsUnobservedLaunchesNeverRejectIt`.
-- **R07** (`Puck.World` reported the record's version): it reports its
-  registration's version; a check also refuses a release that does not follow
-  the record's current version.
-- **R08** (case comparison): one `InstallLayout.NameComparison`.
-- **R09** (write-access reopen of staged files): the stager flushes as it
-  writes; the applier only reads.
-- **R10** (stale references): swept, and the dashboard's generated schema
-  regenerated.
-
 ## Failure schedules
 
 ### Schedule 1: signed release, failed startup, rollout progression, changed payload
@@ -592,8 +461,8 @@ unless `current` names it.
 3. Three stub launches count `launchAttempts[Pbad]` to 3; each child exits
    before `ApplicationStarted`.
 4. The fourth launch's `SelectLaunch` rejects `Pbad`, selects `1.0.0` (proof
-   matches its record, unrevoked, generation 1 ≥ 1), counts one attempt under
-   `P100`, sets `current = 1.0.0`, commits once and launches it.
+   matches its record, unrevoked, generation 1 ≥ 1), counts no attempt because
+   the install is proven, sets `current = 1.0.0`, commits once and launches it.
 5. `M2` (`1.1.0`, sequence 11, rollout 50%) and `M3` (`1.1.1`, sequence 12,
    rollout 100%, new notes, the same files) both compute `Pbad` and are refused
    by admission (`ReleasePolicy.Refusal`), in `CheckAsync` and `ApplyAsync`.
@@ -663,27 +532,3 @@ interruption anywhere leaves either the old record or the new one:
 | The stub holds `update.lock` through `Process.Start` | U03 for stub launches | Not U11; the child must not need the lock to register, so the window after `Process.Start` remains a design constraint. |
 | **Registration re-checks under the lock (chosen)** | U03 and U11 at one door every installed entry point already passes | Every installed start reads the record once under a lock it already takes. |
 
-## Build order
-
-1. **`Puck.Confinement`**: `InstallLayout` names; `InstallRecord`; the record
-   type and its source-generated JSON context; `InstallTransaction` with
-   `SelectLaunch`, `CommitApply`, `MergeRevocations`, `RollbackTarget`, `Compact`,
-   `RecordHealthy`, `AdmitProcess`, `RollbackCandidates`; `ReleasePolicy.Refusal` and `ReadUnlocked`;
-   `AtomicFile.WriteAllBytesDurably`; `ConfinedDirectory.Flush`; registration's
-   `AdmitProcess` call. Check: the project builds with no project references and
-   zero warnings (its AOT analysis included).
-2. **`Puck.Launcher`**: `ReleasePayloadIdentity`; the verifier and applier take
-   the transaction; `UpdateService` begins it for check and apply;
-   `HealthGateFile`, `InstallPruner`, the sequence store and the intent use the
-   record and the durable writer. Check: no `File` write of `current`,
-   `last-good`, `state/health.json` or `state-generation` remains
-   (`puck search`).
-3. **`Puck.Launcher.Stub`**: `Program` calls `SelectLaunch` only. Check:
-   the stub's decision table and its launch-anyway branch no longer exist, so
-   a caller bypassing the transaction does not compile.
-4. **Laws** in `tests/Puck.Launcher.Tests/Release`: schedules 1 and 2, the U01
-   race, U02's lower-generation update, the higher-generation rollback's floor,
-   U06's same-payload update, U07's single-commit proof, U10's restaged
-   directory, U11's refused registration, and interruption at each write
-   boundary (an injected failure in the durable writer between the immutable
-   writes and the commit). Then `puck canary` over its stub legs.

@@ -98,86 +98,79 @@ in the tree.
 - **Frame times read under load rank nothing.** Contention from other lanes'
   builds and Worlds multiplies produce time several-fold
   ([packet](open-items.md#engine-job-system)). The quiet readings that rank the
-  steps are [M1 and M2's](#what-m1-and-m2-showed).
+  steps are [M1 and M2's](#what-the-measurements-showed).
 
-## Measure first
+## What the measurements showed
 
-Two measurements order the work. The lead runs both in a settle window
-([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)),
-with every other lane's builds, suites and Worlds drained.
+Two measurements ordered the work. M1 read where the meadow's frame goes on a
+quiet RTX 4070 at the highest quality, on both backends: as authored, with
+poses held, and under a thread-time trace of the frame thread.
 
-**M1, where the meadow's frame goes.** `debug.go meadow`, Direct3D 12 and a
-windowed Vulkan leg, `world.cadence off`, `world.gpu-timing on`. Three legs
-read `host.frames` (begin, produce, wait; avg, p50, p99) and
-`world.gpu-timing timeline` for the whole queue:
-
-1. as authored;
-2. poses held: `world.state.cell.set meadowWindSpeed $value 0` and
-   `world.state.cell.set meadowFlutterSpeed $value 0` ([the meadow page](../../worlds/debug/meadow.md)),
-   so no slot moves and `Dress` returns its cached list;
-3. leg 1 with a `dotnet-trace` thread-time sample of the frame thread.
-
-If leg 1 minus leg 2 is most of the meadow's increase, per-slot motion and its
-CPU record churn dominate, and V2's first steps land before V1. Otherwise
-per-draw cost dominates and V1 leads. If the queue's GPU time approaches
-produce, neither helps much until V3 and V4. Holding the wind also changes
-which blades a box keeps, so the legs are read beside their draw counts.
-
-**M2, whether the meadow is geometry-bound off the 4070.** On the RTX 2060
-and at the Deck's resolution on a 4070 (the Deck itself when one is
-reachable), at the same view: GPU time of the mesh pass and each cascade
-beside `world.counters gpu pass sdf.world$mesh` (draws, vertices), and
-triangles per blade part at `world.detail 0`, `1` and `2`
-(`puck mesh audit --world worlds/debug --group stem-`, then `--group tip-`).
-Hundreds of triangles a part, or the mesh pass and cascades taking a large
-share of the Deck's 22.2 ms, put V3 and V4 ahead of V2 on that device.
-
-### What M1 and M2 showed
-
-M1 ran on a quiet RTX 4070 at the highest quality with the day cycle running,
-cadence off and GPU timing on, once the bakes had settled. Direct3D 12 and Vulkan
-agree closely.
-
-A thread-time trace finds the frame thread busy all the time. Within produce,
-the largest costs are CPU field queries: the creation effectors' surface probes
+**M1's verdict.** The frame thread is busy all the time. Within produce the
+largest costs are CPU field queries: the creation effectors' surface probes
 (`WorldCreationInstances.ApplyEffectors` into `WorldSurfaceQuery.March`) and
-the chase camera's clearance march (`WorldCameraClearance.Clear`), which together
-take roughly a third of the frame. The presenter's `Dress` label is mostly that
-clearance march, not draw work. Mesh dressing and changed-draw staging, residency
-preparation, table packing, command recording and GC polling are each a small
-share, and the tick is a large one.
+the chase camera's clearance march (`WorldCameraClearance.Clear`), together
+roughly a third of the frame; the tick is a large share too. Holding the poses
+removes only a small part of the meadow's extra frame time over the hero
+studio, so per-slot motion is not most of the increase, and recording, V1's
+CPU target, costs less than motion and record churn, V2's target. So **V2's
+first steps (V2a, V2b) run ahead of V1a**, and both behind a cost no V-step
+names: CPU field queries on the frame thread, then the tick
+([open items](open-items.md#other-frame-time-findings)). The root queue's GPU
+time is well under produce, so V3 and V4 do not lead on the 4070; its largest
+pass is `views`.
 
-**M1's verdict.** Holding the poses removes only a small part of the meadow's
-extra frame time over the hero studio, so per-slot motion is not most of the
-increase. The plan's rule would then send V1 first, but the trace refutes its
-premise that the rest is per-draw cost: recording, V1's CPU target, is a few
-milliseconds, while motion and record churn, V2's target, is somewhat more. The
-evidence supports **V2's first steps (V2a, V2b) ahead of V1a**, and both behind a
-cost no V-step names: CPU field queries on the frame thread, then the tick. The
-root queue's GPU time is well under produce, so V3 and V4 do not lead on the
-4070; its largest pass is `views`. Holding the sun saves little, so the day
-cycle's continuous relight is not the cause.
+**M2, still owed on the bar devices.** Whether the meadow is geometry-bound off
+the 4070 was read only on a 4070 at the Deck's resolution: a meadow draw
+averages a few hundred triangles at `world.detail auto`, raising detail to 0
+more than doubles the cascades' cost, and levels 1 and 2 cut the mesh pass's
+vertices by half or more. On the RTX 2060 and the Steam Deck, at
+`debug.go meadow`: GPU time of the mesh pass and each cascade beside
+`world.counters gpu pass sdf.world$mesh` (draws, vertices). The mesh pass and
+cascades taking a large share of the Deck's frame puts V3 and V4 ahead of V2
+on that device. `puck mesh audit --group stem-` selects no group, because the
+audit's rest scene labels a body's group by slot and does not name the
+meadow's placement blades; a per-part triangle count needs that fixed first.
 
-**M2.** No RTX 2060 or Steam Deck was reachable, so the 4070 ran at the Deck's
-resolution on both backends. A meadow draw averages a few hundred triangles at
-`world.detail auto`, so blade parts are in the hundreds, the threshold M2 names.
-Raising detail to 0 more than doubles the cascades' cost, and levels 1 and 2 cut
-the mesh pass's vertices by half or more. On the 4070 the mesh pass and cascades
-take a small share of the frame; whether that is a large share of the Deck's
-22.2 ms waits on the Deck or the 2060. `puck mesh audit --group stem-` (M2's
-per-part count) selects no group: the audit's rest scene labels a body's group by
-slot and does not name the meadow's placement blades.
+The same quiet window owes four more readings, each of which names something a
+V-step would otherwise assume:
 
-## R2 is the foundation
+- **Session and nested nodes.** One screen or portal session node and one
+  nested-view node per pass (`world.counters gpu node`: candidates, selection
+  dispatches, pixel passes), whether session nodes draw cascades under
+  `ReducedQuality`, and which sessions are residencies of their own. Each
+  session is a separate residency, so V5's shared classification reaches only
+  the nested views, while V1a's compaction and the job system's burst spreading
+  reach the sessions.
+- **Where held poses save GPU time.** Holding poses dropped root GPU time at
+  the meadow, and nothing names where: re-staged records, motion-history
+  copies, the far cascade's refresh and the clipped temporal resolve are the
+  candidates. Take `world.gpu-timing` per pass with poses as authored and held
+  before V2a or V2b claims a GPU saving.
+- **Two unexplained readings** from when selection moved to the GPU: a
+  Direct3D 12 lobby produce well above its CPU-selection controls, and a stripe
+  difference beyond the pinned noise on the lobby's static striped monitor
+  face. Neither is attributed to the selection or to machine load until it is
+  read with no other load.
+- **A draw-count variance.** The meadow's validation reads once differed by an
+  order of magnitude between Vulkan and Direct3D 12 at the highest quality and
+  native scale; a later leg did not reproduce it and its cause is unconfirmed.
+- **What changes thousands of draw records in a still frame.** About 2,600
+  records were re-staged a frame at the spawn with nothing moving, cause
+  unattributed. Read `world.counters` and a frame-thread trace there with the
+  sun held before V2b claims its saving.
+- **Buried draws.** Whether the bake's distance bounds (`TryDistanceBounds`)
+  find draws wholly inside other solids, worth culling at load, is one
+  load-time count on the debug world; it stays a count until it finds some.
 
-R2 merges once its Vulkan and validation legs pass. It is not a frame-time
-win, and this plan does not count it as one: selection moved from the CPU to
-the GPU, the command count stayed the same, and the empty-command walk is new
-GPU work. What it gives is the one path every later step extends: retained
-records on the GPU, selection in a kernel, counted indirect draws on both
-backends, and no CPU work per draw at record time. No step below builds a
-second indirect path; each extends `SdfMeshOcclusion` and the selection
-kernel.
+## GPU selection is the foundation
+
+Selection runs in a kernel for every raster pass (`SdfMeshOcclusion`), with
+retained records on the GPU, counted indirect draws on both backends and no CPU
+work per draw at record time. It is not a frame-time win by itself: the command
+count is the draw count and the empty-command walk is GPU work. No step below
+builds a second indirect path; each extends `SdfMeshOcclusion` and the
+selection kernel.
 
 ## The five decisions
 
@@ -296,14 +289,19 @@ the raster decision's sentence on draw order change with V1.
    (the swept box of its amplitudes about its pivots, compared against an
    interval bound updated on the GPU where the swept box is too loose). The
    previous pose stays on the GPU for reprojection. Picking evaluates the slot
-   on the CPU on demand. Nothing in simulation reads these poses.
+   on the CPU on demand. Nothing in simulation reads these poses. The
+   derivation of a bound from a motion program has one home, shared with
+   [readable interaction](readable-interaction.md#the-idea)'s predicted sweep:
+   that plan's sweep is simulation (fixed-point, on the tick), and this step
+   reads the same derivation's conservative box for culling, never the
+   reverse.
 
 This is a generic mechanism for any author's presentation program, never a
 grass path in C#: it accelerates the authored program (AGENTS.md, "Puck code
 over engine code"), and its eligibility test is structural, read from the
 program, not a list of features.
 
-**Why:** it ranks second, behind V1 only until M1 says otherwise. It removes per-slot CPU posing, the `Dress` rebuild and the record
+**Why:** M1 ranked its first steps ahead of V1a. It removes per-slot CPU posing, the `Dress` rebuild and the record
 re-staging together, and V1 alone leaves all three. Ghost of Tsushima animates
 its grass on the GPU per blade from parameters (Wohllaib, "Procedural Grass in
 Ghost of Tsushima", GDC 2021,
@@ -338,13 +336,15 @@ limit.
    the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
    `puck mesh audit` scores.
-3. **Field-derived coarse levels** are decided and ordered in
-   [the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail): an
-   unbounded chain contoured from the field for closed groups first, each level
-   offset outward by its budget so joints never open and thin parts survive,
-   skinned groups contoured per member, and a field-contoured parent above a
-   chunked union in place of transition cells at its seams. Its G1 and G2
-   replace this plan's V3c.
+3. **Field-derived coarse levels** were measured offline and not adopted
+   ([the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail)):
+   `SdfMeshCollapse` stays the level source, and item 2's simplifier is one of
+   the candidates for a level source past its floor. A field-contoured parent
+   above a chunked union or a stand of copies is that plan's D3, measured
+   against the same clauses before it is built. How source tiles meet across
+   tiers is the streaming plan's
+   [seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule); a
+   chunk's locked seams hold inside one tier only.
 
 **Why:** fewer triangles cut bake time and GPU geometry together, and the
 coarsest level already keeps 6 % of the stored triangles
@@ -404,21 +404,18 @@ receiver and light-space occlusion to other cascades when measured worthwhile; a
 cascade caching only where a measurement shows static redraw dominating with
 unchanged projections.
 
-Session views take part too. Their schedule decides by frustum and size alone
-(`WorldViewGraphHost.PortalSightOf`): a glass behind walls but inside the
-consumer's frustum still renders. From the debug world's forest pose (47.80,
-0.02, -116.84) facing the hall, all six hall portals (screens 20 to 25, 1.4 to
-14.6 degrees off axis, 140 to 150 m away) pass the frustum and are about 26
-display pixels tall at 1440 lines, far above the size hold; only an occlusion
-test of the glass against the consumer's depth (the same two-phase pyramid) would
-skip them, at about 1 ms of GPU each. A boot world's own session view is also
+Session views take part too. Their schedule decides by frustum, size and the
+glass's occlusion against the consumer's depth (`WorldViewGraphHost.PortalSightOf`
+through `SdfWorldPasses.PortalOccluded`), so a glass behind walls is hidden
+once the occlusion evidence completes. Two things remain. The observation: from
+the debug world's forest pose facing the hall, `world.budget`'s live frame line
+shows no hall session rendered, and turning toward a painting in the hall shows
+it fresh on its first visible frame. And a boot world's own session view is
 filmed into the World's frame every frame whether or not its instance renders
-(`WorldScreenBinder.FilmHomeViews`), paying that view's CPU frame building; skipping
-it needs per-view residency state keyed by the view rather than its index
-(`SdfViewExposures`, the occlusion's previous visible set), or a skipped view
-shifts every later view's state. Done when: from the forest facing the hall,
-`world.budget`'s live frame line shows no hall session rendered, and turning
-toward a painting in the hall shows it fresh on its first visible frame.
+(`WorldScreenBinder.FilmHomeViews`), paying that view's CPU frame building;
+skipping it needs per-view residency state keyed by the view rather than its
+index (`SdfViewExposures`, the occlusion's previous visible set), or a skipped
+view shifts every later view's state.
 
 Each pass still classifies the whole draw list behind its own barrier; sharing
 that read across views remains V5 work. The far cascade now uses the existing
@@ -561,8 +558,7 @@ times are taken in the lead's settle windows, never by a lane under load.
 
 | Step | Lane | Lands | Check on `worlds/debug` |
 |---|---|---|---|
-| M. Measure | the lead, in a settle window | M1 and M2 as above; the result orders V1 against V2 and V3/V4 against V2 | `host.frames` and `world.gpu-timing timeline` at `debug.go meadow`, three legs, both backends; mesh and cascade time with counts on the 2060 and at the Deck's resolution |
-| R2. GPU selection | rendering (the R2 lane) | Its Vulkan and validation legs | GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan; stills at the lobby, the rim, the gallery and the meadow compared tolerantly with the CPU `Choose` build |
+| M2. The bar devices' leg | the lead, in a settle window | Whether the meadow is geometry-bound on the RTX 2060 and the Deck; the result orders V3/V4 against V2 there | Mesh and cascade GPU time with `world.counters gpu pass sdf.world$mesh` counts at `debug.go meadow` on each device |
 | V2a. Rate holds on placements | rendering | Placement roots in the rate mechanism | `world.debug-view rates` tints far meadow blades by tier; `host.frames` at `debug.go meadow` against M1's leg 1; a presented burst of eight frames shows gusts continuous and roots planted |
 | V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's; stills compared tolerantly |
 | V1b. Buckets and stable identity | rendering, principal-grade review | The instance/geometry split, buckets, the vertex ABI on both backends, history by instance identity, every consumer in V1's table moved, the budget counters | At `debug.go meadow`: commands near the visible (geometry, level) count; `world.view.pick` on a blade names that blade; `world.debug-view motion` still on held blades; a presented burst shows no tie flicker in `world.debug-view material-id`; a body straddling the garden portal at `debug.go portals` clipped on both sides; `world.debug-view report colliders --json` still compares against the baked mesh (its `coverage.comparisons` counts mesh witnesses after bakes settle); a teleport and back shows no missing draws |
@@ -570,15 +566,13 @@ times are taken in the lead's settle windows, never by a lane under load.
 | V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
 | V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
 | V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
-| V3c. Field-derived levels | replaced by [virtual geometry](virtual-geometry.md#the-build-order) G1 and G2 | The field-levels audit mode, then field levels for closed groups | G1's success line on the Moth and one hall union; G2's vertex counts and captures |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
 | V5. Views and shadows | rendering | Classification shared across views; extend far-cascade culling to other cascades if measured; static caching only with receiver coverage preserved | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
 
-V2a, V3a and V4a share no files with V1 and run beside it once M1 and M2 are
-read. V1b waits on V1a; V2b on V1b, since retained updates write the instance
-table; V2c on V2b; V5 on V1b. If M1 shows motion dominating, V2a and V2b move
-ahead of V1a, and V2b then builds the instance table V1b consumes.
+V2a and V2b run ahead of V1a (M1's verdict), so V2b builds the instance table
+V1b consumes. V3a and V4a share no files with V1 and run beside it. V1b waits
+on V1a; V2c on V2b; V5 on V1b.
 
 ---
 
