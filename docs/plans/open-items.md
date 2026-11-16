@@ -2420,7 +2420,20 @@ certified-contact packet and step 8 closes. The measured state is in the
   carries something, and all four read zero. The cause is not established;
   the likely one is that the fixture's rates now divide the step exactly.
   Give the fixture a rate that leaves a remainder, or assert the remainder
-  the law needs on a tick that has one.
+  the law needs on a tick that has one.- [low · server laws red on the integration tip] Beside the laws filed here
+  and the blob-store fixture's, the server suite fails these, each the same
+  way with and without the body state door's D3:
+  `GpuFaultsCommandModuleLawTests` (two cases: the
+  verb's answers gained `record` and a `recordings` count that the expected
+  strings lack); `WorldRuleMixedDocumentTransactionLawTests` (three cases: the
+  rule's `removePlacement camera-seat-0` is refused, no placement has that
+  id); `ShapingRowLawTests.TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges`
+  (one value of its recorded trace differs in its last digit);
+  `InhabitCountLawTests.AnUnchangedCellAllocatesNothingOnTheQuietSweep` (24
+  bytes in every window); and `StorageDeadlineLawTests`,
+  `WorldValidatedLoadLawTests` and `WorldAuthorityRecoveryLawTests` (one case
+  each, built over the same undersized directory target as the blob-store
+  fixture). Each is updated to the behaviour it now meets, or deleted.
 - [low · exposure at a cut] At a camera cut the exposure snaps to the first
   image rendered after it, which is shaded with the previous place's held
   `airLight`, then follows for about 0.75 s, so walking from outdoors into a
