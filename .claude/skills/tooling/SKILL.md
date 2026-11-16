@@ -19,7 +19,7 @@ File publication, paths, Git inventories, project ownership and Markdown parsing
 | Traverse assemblies for derivation identity | `AssemblyReach.Of` | The default follows `Puck.*`; `WorldCompileCache` includes all non-framework compiler dependencies and records missing trimmed modules. `WorldCodeWarmer` uses the same walk. Keep identity folds with their derivations. |
 | Splice generated document sections | `CliGeneratedSection.TryReplace` | Packages and the architecture map preserve delimiters and surrounding text, then use `CliGeneratedFile.WriteOrCheck`, including index agreement. |
 | Install an isolated CLI candidate | `CandidateCliInstall` in `build/CandidateCliInstall.cs` | Compiled into `Puck.Cli.Release` and run as a file-based bootstrap by `setup-puck`, before a CLI exists. One exclusive feed, private package cache, fresh tool path and version check. The CLI supplies `CliProcess`; bootstrap `Main` supplies process I/O only. |
-| Acquire and admit leased work | `LeasedAdmission.AcquireAsync` in `Puck.Cli.Core` | `LeaseCommand` and `WorldLaunch` share GPU preflight, unreserved before acquisition, then bounded reservation under the hold and release before retry. Heavy work admits with its lease held. The total caller deadline includes acquisition and admission. |
+| Acquire and admit leased work | `LeasedAdmission.AcquireAsync` and `CliLease` in `Puck.Cli.Core` | Heavy work and device Worlds park their ticket during unleased admission, then reserve with a zero wait under the grant guard. Lost headroom parks the same ticket without serving the lane. `WorldLaunch` owns live worker holds, shared through `WorldWorkHold`. The total caller deadline includes acquisition and admission. |
 | Bound a measurement window | `OperationDeadline` in `Puck.Abstractions`, owned by `MeasureCommand` | One clock and cancellation lifetime covers acquisition, settling and draining. `MeasureCommand.DrainAsync` checks it before each request and sample, and incomplete requests remain pending. `CliProcess.RunCapturedAsync` stops and reaps the active child tree before the quiet hold is disposed. |
 | Recover abandoned lease metadata | `CliLease.PruneReleased` in `Puck.Cli.Core` | Inspection and quiet-priority checks share cleanup under the resource's exclusive guard. Acquisition already replaces metadata once it owns that same guard; process identity and metadata age never override a free guard. |
 | Pause a suite budget while waiting for another run | `SuiteBudget` in `Puck.Cli.Core` | Sweep, motion, frame benchmarks and offscreen legs share remaining-time calculation, cancellation and scoped pauses. Offscreen callers lend their existing suite stopwatch. Canary's concurrent leg context already uses `CliProcess.RemainingBudget`; it does not pause a shared clock while other legs run. |
@@ -32,8 +32,10 @@ reference to the runtime CLI would create a bootstrap dependency and target the
 wrong runtime. Shared source is intentional. Add a new shared build source to
 the task's compiler inputs and its assembly-cache identity together.
 
-Admission's guarantee stops at a lease share: releasing one `WorldGpuHold`
-share does not release another live start's share. Cross-process growth
+An admission beneath an executing lease (this process or an ancestor) is
+nonwaiting: a failed reading refuses the new start without disturbing live
+work. `WorldWorkHold` admits each joining start this way; one share cannot
+release another live start's hold. Cross-process growth
 reservations also remain process-local; machine leases serialize device and
 heavy starts. Do not describe those reservations as machine-wide exclusion.
 

@@ -51,8 +51,8 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     public IReadOnlyDictionary<string, string?>? Environment { get; init; }
     /// <summary>Gets the directory the World runs in, or <see langword="null"/> for this process's own.</summary>
     public string? WorkingDirectory { get; init; }
-    /// <summary>Gets whether the start is part of a run that holds the heavy lease, so its admission also waits while
-    /// another process runs a heavy test suite.</summary>
+    /// <summary>Gets whether this worker takes or shares the heavy execution lease after admission, which also
+    /// checks for other heavy test suites.</summary>
     public bool HeavySuite { get; init; }
     /// <summary>Gets the GPU lease holder's name, or <see langword="null"/> for <see cref="Step"/>.</summary>
     public string? Holder { get; init; }
@@ -101,9 +101,9 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
 }
 /// <summary>
 /// The one door every <c>Puck.World</c> process this CLI starts passes through. <see cref="Admit"/> takes the machine's
-/// <c>gpu</c> lease for a World that opens a device (shared by this process's other device Worlds of the same holder and
+/// <c>gpu</c> lease for a World that opens a device, or <c>heavy</c> for a heavy worker, after host admission (shared by this process's other Worlds of the same resource, holder and
 /// lane, and nested under an ancestor that already holds it, so a verb under <c>puck lease gpu</c> or a sweep never
-/// waits on itself), then the host admission; the admitted launch then starts the World once, as a captured run
+/// waits on itself); the admitted launch then starts the World once, as a captured run
 /// (<see cref="Run"/>), a driven process (<see cref="Start"/>) or a raw redirected process
 /// (<see cref="StartRedirected"/>). Every process it starts joins a job that the operating system ends with this
 /// process, so a killed CLI leaves no World running. A headless World takes no GPU lease.
@@ -188,8 +188,8 @@ public sealed class WorldLaunch : IDisposable {
         },
         Description = description,
     };
-    /// <summary>Admits one World start: takes the GPU lease when the World opens a device, then waits for the host
-    /// admission. The lease and admission waits are other runs' time; <paramref name="queue"/> lets a caller stop its own
+    /// <summary>Admits one World start without retaining an exclusive lease during the host capacity wait, then
+    /// holds GPU or heavy execution as needed. The lease and admission waits are other runs' time; <paramref name="queue"/> lets a caller stop its own
     /// budget's clock for them.</summary>
     /// <param name="request">The World to start.</param>
     /// <param name="cancellationToken">Stops the waits.</param>
@@ -216,7 +216,7 @@ public sealed class WorldLaunch : IDisposable {
     public static async Task<WorldLaunch> AdmitAsync(WorldLaunchRequest request, CancellationToken cancellationToken = default, Func<IDisposable>? queue = null, Action<string>? stage = null) {
         using var waiting = queue?.Invoke();
 
-        if (!request.OpensDevice) {
+        if (!request.OpensDevice && !request.HeavySuite) {
             stage?.Invoke(obj: "host-admission");
             await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, request: request, reserve: true, stage: stage, refuse: true).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -225,16 +225,20 @@ public sealed class WorldLaunch : IDisposable {
 
         var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
 
-        var gpu = await LeasedAdmission.AcquireAsync(
-            acquire: async (_, token) => await WorldGpuHold.AcquireAsync(cancellationToken: token, checkout: checkout, holder: (request.Holder ?? request.Step), lane: (request.Lane ?? CliLease.LaneOf(checkout: checkout))).ConfigureAwait(false),
-            admit: (place, step, device, heavy, kind, bound, reserve, progress, phase, token) => WorldAdmission.TryAdmitAsync(step: step, device: device, heavySuite: heavy, kind: kind, bound: bound, reserve: reserve, stage: phase, cancellationToken: token),
-            checkout: checkout, step: request.Step, device: true, heavySuite: request.HeavySuite, kind: request.Kind,
-            clock: TimeProvider.System, bound: null, progress: Console.Error, stage: stage, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var name = request.OpensDevice ? "gpu" : "heavy";
+        var holder = request.Holder ?? request.Step;
+        var lane = request.Lane ?? CliLease.LaneOf(checkout);
+        var gpu = await WorldWorkHold.AcquireAsync(checkout, name, holder, lane,
+            (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
+                (place, step, device, heavy, kind, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(step, device, heavy, kind, bound, reserve, phase, cancel, place),
+                checkout, request.Step, request.OpensDevice, request.HeavySuite, request.Kind, TimeProvider.System,
+                CliLease.DefaultWait, Console.Error, stage, token),
+            token => AdmitHostAsync(request, TimeSpan.Zero, true, false, stage, token), cancellationToken).ConfigureAwait(false);
         return new WorldLaunch(gpu: gpu, request: request);
     }
 
     private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
-        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, reserve: reserve, stage: stage, step: request.Step).ConfigureAwait(continueOnCapturedContext: false);
+        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, reserve: reserve, stage: stage, step: request.Step, checkout: request.Checkout).ConfigureAwait(continueOnCapturedContext: false);
 
         if (!admitted && refuse) { throw new HostAdmissionRefusedException(step: request.Step); }
 
