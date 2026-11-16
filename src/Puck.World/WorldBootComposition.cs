@@ -1266,11 +1266,11 @@ public static class WorldBootComposition {
     private static void AddWorldPipelineCache(IServiceCollection services) {
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuRegionCopyPass(
-            bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
+            bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new SdfMeshRasterPass(
-            bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
+            bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new SdfWorldPipelineCatalog(
@@ -1279,7 +1279,7 @@ public static class WorldBootComposition {
             regionCopy: sp.GetRequiredService<GpuRegionCopyPass>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
-            contentKey: sp.GetRequiredService<SdfWorldPipelineCatalog>().LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
+            contentKey: sp.GetRequiredService<SdfWorldPipelineCatalog>().LoadDeployed(bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
             directory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipeline-cache")
         ));
     }
@@ -1848,7 +1848,7 @@ public static class WorldBootComposition {
             OverlayPackage? overlay = null;
 
             if (sp.GetRequiredService<WorldOverlayGlyphs>().Pack is { } glyphs) {
-                var bytecodeExtension = SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: hostSettings.HostsOnDirectX);
+                var bytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostSettings.HostsOnDirectX);
                 var client = sp.GetRequiredService<WorldClient>();
                 var themeResolve = sp.GetRequiredService<WorldThemeResolve>();
 

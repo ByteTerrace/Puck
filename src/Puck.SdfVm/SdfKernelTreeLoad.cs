@@ -17,13 +17,10 @@ public sealed class SdfKernelTreeLoad : IDisposable {
     private readonly ConcurrentQueue<string> m_errors = new();
     private readonly Task m_completion;
 
-    private SdfKernelTreeLoad(string bytecodeExtension, string directory, ShaderCompiler compiler, CancellationToken cancellationToken) {
+    private SdfKernelTreeLoad(ShaderTarget target, string directory, ShaderCompiler compiler, CancellationToken cancellationToken) {
         m_cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
 
-        var target = ((bytecodeExtension == ".dxil")
-            ? ShaderTarget.Dxil
-            : ShaderTarget.Spirv
-        );
+        var bytecodeExtension = target.FileExtension();
         var sources = new List<(SdfKernel Kernel, string Path)>();
 
         foreach (var kernel in SdfKernelSet.Kernels) {
@@ -76,20 +73,18 @@ public sealed class SdfKernelTreeLoad : IDisposable {
     public Task Completion => m_completion;
 
     /// <summary>Starts reading a kernel tree's passes directory.</summary>
-    /// <param name="bytecodeExtension">The running backend's compiled-kernel extension (<c>".spv"</c> for Vulkan,
-    /// <c>".dxil"</c> for Direct3D 12), which also selects the one target a carried source compiles to.</param>
+    /// <param name="target">The running backend's target: its compiled-kernel extension names the bytecode a carried kernel
+    /// is read from, and a carried source compiles to it alone.</param>
     /// <param name="directory">The directory holding the kernels it replaces.</param>
     /// <param name="compiler">The compiler a carried source compiles with.</param>
     /// <param name="cancellationToken">The token that cancels the compiles.</param>
     /// <returns>The load, whose kernels arrive through <see cref="TakeReady"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> or <paramref name="directory"/> is
-    /// empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is empty.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="compiler"/> is <see langword="null"/>.</exception>
     /// <exception cref="DirectoryNotFoundException"><paramref name="directory"/> does not exist.</exception>
     /// <exception cref="IOException"><paramref name="directory"/> carries no kernel, or a kernel file cannot be
     /// read.</exception>
-    public static SdfKernelTreeLoad Start(string bytecodeExtension, string directory, ShaderCompiler compiler, CancellationToken cancellationToken = default) {
-        ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
+    public static SdfKernelTreeLoad Start(ShaderTarget target, string directory, ShaderCompiler compiler, CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(compiler);
 
@@ -98,10 +93,10 @@ public sealed class SdfKernelTreeLoad : IDisposable {
         }
 
         return new SdfKernelTreeLoad(
-            bytecodeExtension: bytecodeExtension,
             cancellationToken: cancellationToken,
             compiler: compiler,
-            directory: directory
+            directory: directory,
+            target: target
         );
     }
 
