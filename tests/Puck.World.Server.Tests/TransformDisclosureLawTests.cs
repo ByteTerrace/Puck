@@ -80,7 +80,7 @@ public sealed class TransformDisclosureLawTests {
         var batch = new WorldMutation.Batch(actor, [new WorldMutation.RemoveStateCell(actor, "absent", "key")],
             ExpectedSpatialReads: [new WorldSpatialReadDependency(-65536, -65536, 65536, 65536, new string('0', 64))]);
         Assert.False(view.Admits(batch, out var withheld));
-        Assert.Equal("hidden", withheld);
+        Assert.Equal("placements", withheld);
 
         var publicRow = row with { CellVisibility = false, Cells = [Cell("secret", 7)] };
         var restrictedRow = reserveColumn ? publicRow with { CellVisibility = true } : publicRow with {

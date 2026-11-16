@@ -160,6 +160,20 @@ public sealed partial class ConsoleDisclosureLawTests {
             expected: "[world.state score nothing: no such cell]"
         );
     }
+    // The admission door's table names live population membership, other connections' endpoints and identities and
+    // the door's refusal counts: the host's, never a recipient's.
+    [Fact]
+    public void ThePeerTableAnswersTheOperatorAlone() {
+        using var host = new DisclosureHost(definition: Document());
+
+        Assert.StartsWith(actualString: host.Console(line: "world.peers").Output, comparisonType: StringComparison.Ordinal, expectedStartString: "[world.peers:");
+        foreach (var slot in new[] { 0, 1 }) {
+            var refused = host.Seat(line: "world.peers", slot: slot);
+
+            Assert.True(condition: refused.IsError);
+            Assert.DoesNotContain(expectedSubstring: "listening", actualString: refused.Output, comparisonType: StringComparison.Ordinal);
+        }
+    }
     [Fact]
     public void TheRowReadBackShowsTheDisclosedRow() {
         using var host = new DisclosureHost(definition: Document());

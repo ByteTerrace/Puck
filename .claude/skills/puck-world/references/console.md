@@ -752,7 +752,11 @@ reads only while its state-observation query would be answered
 (`WorldServer.AllowsSessionQuery`): at `Frames`, after its observation ends or its
 epoch retires, and while it lacks `observe all`, `WorldServer.ReadView` throws
 `InvalidOperationException` with the query door's refusal, and the verb faults.
-Write admission asks policy alone through `WorldServer.RecipientView`.
+Write admission asks policy alone through `WorldServer.WriteView`, whatever the writer's ceiling
+or observation. A verb's server query names its caller: `IServerLink.Query` takes the principal
+(handlers pass `context.Principal`), so `body.where`, `body.state`, `world.players` and their
+siblings answer through the query door a peer crosses; `WorldServer.Answer`, the composer that
+answers no one in particular, is internal to the server.
 `WorldStateReadView` is the console adapter over this capability until the final
 cleanup in the disclosure plan. It never reads authority state separately.
 What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the

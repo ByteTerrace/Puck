@@ -98,6 +98,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     private const int CopyBlockBase = (CopyHeaderWords + (MaxCopyRuns * 2));
     // The most separate owed ranges a host-written buffer holds before neighbours pair up.
     private const int HostRunCapacity = 8;
+
     /// <summary>The largest gap of unchanged words a staged region's owed runs join across: a run-table entry costs two
     /// words, so copying a gap of up to two costs no more than another run.</summary>
     public const int StagedMergeGapWords = 2;
@@ -106,8 +107,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// (<c>maxStorageBufferRange</c>) in a uint32, so it is the whole uints below 4 GiB less that reserve. Every word
     /// then fits the copy kernel's uint indices and the region's own int word counts.</summary>
     public const long MaxByteCount = ((((long)(uint.MaxValue / sizeof(uint))) * sizeof(uint)) - (((long)CopyBlockBase) * sizeof(uint)));
+
     // The most bytes one host write moves: a span's length is an int, so a longer run is written in pieces.
     private const int WriteChunkBytes = (1 << 30);
+
     /// <summary>The staging bytes a staged slot keeps however little it owes: 16 MiB, or the whole region's reserve when
     /// smaller. A slot's staging buffer holding more than four times what a flush stages and more than this is replaced
     /// by one of twice the flush, at least this, so one flush of a whole large region holds its host memory only until
@@ -121,11 +124,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     // Told of every change to the host copy's storage, outside the native allocator (MemoryBacking.NativeDirect).
     private readonly IAllocationObserver? m_hostCopies;
     private IGpuRegionSource? m_source;
+
     private readonly IGpuComputePipeline? m_copyPipeline;
 
     // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
     // policies. MoveCopySets hands a reserved region another share.
     private GpuRegionCopySets? m_copySets;
+
     // The share its owner reserved, whatever policy the region holds now, which a selecting region stages through once
     // it grows past a ring's share (Restage); null when the owner reserved none.
     private readonly GpuRegionCopySets? m_reservedCopySets;
@@ -133,32 +138,37 @@ public sealed unsafe class GpuRegion : IDisposable {
     // reader is in flight while the host writes it; null for a region created under a fixed policy.
     private readonly GpuMemoryProfile? m_profile;
     private readonly bool m_readersInFlight;
-
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBufferFactory m_buffers;
     private readonly GpuObjectName m_name;
     private readonly GpuBufferUsage m_usage;
+
     // The destination a staged region's copies write; replaced when the region grows.
     private IGpuBuffer? m_destination;
     // The destination a grown region's next copy recording carries its bytes from, and how many; null when none is owed.
     private IGpuBuffer? m_carrySource;
     private long m_carryBytes;
+
     private readonly bool m_external;
+
     // The copy pool the region created for itself, which it destroys with it; null when its owner reserved its sets.
     // The policy-dependent state below is replaced together, only by the constructor and Restage.
     private GpuRegionCopyPool? m_ownedCopyPool;
+
     private readonly List<IGpuBuffer> m_ownedBuffers = [];
+
     // The ranges each host-visible buffer still owes: one list under InPlace and Staged, one per slot under Ring.
     private GpuUploadRuns[] m_owed;
     // Under Ring, the ranges written since the slots last took them (OwedOf): a write owes into this one list, in the
     // order it writes, rather than into every slot's, where it would land among the older frames' runs. Every read of a
     // slot's list folds it first.
     private GpuUploadRuns? m_fresh;
+
     private readonly IGpuRecorder m_recorder;
+
     // The header and run table a staged flush writes at the front of the slot's staging buffer.
     private uint[] m_header;
     private IGpuStorageBuffer[] m_hostBuffers;
-
     private int m_destinationWord;
     private bool m_disposed;
     // The leading words the destination is known to hold as Contents once every owed word has reached it: the whole
@@ -379,13 +389,7 @@ public sealed unsafe class GpuRegion : IDisposable {
                     paramName: nameof(policy)
                 );
             }
-            if ((((ulong)byteCount) % IGpuBindings.ConstantBufferAlignment) != 0) {
-                throw new ArgumentOutOfRangeException(
-                    actualValue: byteCount,
-                    message: $"A uniform region holds a multiple of {IGpuBindings.ConstantBufferAlignment} bytes, the constant-buffer view it is bound as.",
-                    paramName: nameof(byteCount)
-                );
-            }
+            IGpuBindings.RequireConstantBufferSize(bufferSize: ((ulong)byteCount), maximumBytes: bindings.MaxConstantBufferBytes);
         }
         if (
             (policy == GpuResidencyPolicy.Staged) &&
@@ -463,6 +467,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             throw;
         }
     }
+
     // The header and run table a flush under the policy writes: the staged copy's, and none under the others.
     private static uint[] HeaderOf(GpuResidencyPolicy policy) => new uint[((policy == GpuResidencyPolicy.Staged)
         ? CopyBlockBase
@@ -675,9 +680,10 @@ public sealed unsafe class GpuRegion : IDisposable {
                 throw new InvalidOperationException(message: $"The region's {m_shadowBytes} host bytes are past what one span reaches; read it through ContentsAt.");
             }
 
-            return new ReadOnlySpan<byte>(pointer: m_contents, length: ((int)m_shadowBytes));
+            return new ReadOnlySpan<byte>(length: ((int)m_shadowBytes), pointer: m_contents);
         }
     }
+
     /// <summary>Returns <paramref name="length"/> bytes of the host's copy of the region from <paramref name="offset"/>,
     /// as <see cref="Contents"/> holds them. The span reads native memory the region frees when disposed or moves when it
     /// grows, so it is read before either.</summary>
@@ -698,6 +704,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             offset: offset
         );
     }
+
     /// <summary>Gets the retained CPU shadow payload bytes: the native host copy's size, <see cref="ShadowBytes"/>.</summary>
     public ulong CpuShadowBytes => ((ulong)m_shadowBytes);
     /// <summary>Gets the bytes of the region, from its start, that the host copy holds: <see cref="ByteCount"/> until a
@@ -804,7 +811,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <exception cref="InvalidOperationException">The region's destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not larger than
     /// <see cref="ByteCount"/>, not a whole number of uints, past <see cref="MaxByteCount"/>, or for a uniform region
-    /// not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/>.</exception>
+    /// not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> or past the device's view limit.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public IDisposable Grow(long byteCount) {
         ObjectDisposedException.ThrowIf(
@@ -826,15 +833,8 @@ public sealed unsafe class GpuRegion : IDisposable {
                 paramName: nameof(byteCount)
             );
         }
-        if (
-            (m_usage == GpuBufferUsage.Uniform) &&
-            ((((ulong)byteCount) % IGpuBindings.ConstantBufferAlignment) != 0)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: byteCount,
-                message: $"A uniform region holds a multiple of {IGpuBindings.ConstantBufferAlignment} bytes, the constant-buffer view it is bound as.",
-                paramName: nameof(byteCount)
-            );
+        if (m_usage == GpuBufferUsage.Uniform) {
+            IGpuBindings.RequireConstantBufferSize(bufferSize: ((ulong)byteCount), maximumBytes: m_bindings.MaxConstantBufferBytes);
         }
 
         if (Policy == GpuResidencyPolicy.Staged) {
@@ -855,6 +855,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return GrowHostBuffers(byteCount: byteCount);
     }
+
     // Moves a ring or in-place region to the staged policy at byteCount bytes: creates its staging buffers, its
     // device-local destination and, unless its owner reserved its sets, its copy pool, all before anything changes, then
     // grows the host copy and owes every word, since the new destination holds nothing. Nothing is carried on the GPU: the
@@ -1023,6 +1024,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return replaced;
     }
+
     /// <summary>Shrinks a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
     /// for any submission: it creates a destination of the new size, keeps the first <paramref name="byteCount"/> bytes
     /// of <see cref="Contents"/> and frees the rest, drops any carry a grow still owed, and owes every word of the new
@@ -1333,6 +1335,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         owed.Clear();
         m_stagedSlot = -1;
     }
+
     // The one dispatch door for packed-region uploads and generic strided buffer copies.
     internal static void RecordCopyDispatch(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set, uint words, bool pipelineBound = false) {
         if (!pipelineBound) {
@@ -1358,6 +1361,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             groupCountZ: 1
         );
     }
+
     /// <summary>Moves a staged region whose owner reserved its copy sets to another share, one the owner reserved since,
     /// such as the pool of a graph that replaced the one the region was created with. The region writes a slot's set of
     /// the new share before it records that slot's next copy, and never touches its old share again, so the owner may
@@ -1501,7 +1505,6 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return owed;
     }
-
     /// <summary>Copies the runs of <paramref name="words"/> that <paramref name="runs"/> names into <see cref="Contents"/>
     /// at the same words and owes each in every buffer, comparing nothing: the caller has found every word of
     /// <paramref name="words"/> outside the runs equal to <see cref="Contents"/>, as a diff against the words it last
@@ -1561,6 +1564,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         return true;
     }
+
     // Writes the slot's staging buffer as the source and the destination as the destination into the slot's copy set.
     private void WriteCopySet(int slot) {
         var set = m_copySets!.SetOf(slot: slot);
@@ -1742,7 +1746,6 @@ public sealed unsafe class GpuRegion : IDisposable {
             remaining -= piece;
         }
     }
-
     // Stages every owed run packed one after another at the slot's staging buffer's block, growing the buffer when it is
     // too small (the slot's last submission has retired, so its buffer is free), then the header and run table in front
     // of it: the copy's thread count, run count, block base and destination word, then per run its region word and first

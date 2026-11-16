@@ -26,10 +26,12 @@ public static partial class FrameBenchmarks {
         public readonly Option<string?> Cache = new("--cache-dir");
         public readonly Option<Puck.World.WorldBackendPreference?> Backend = WorldLaunch.BackendOption("Windowed graphics backend: auto, directx or vulkan.");
         public readonly Option<bool> Json = new("--json");
+        public readonly Option<bool> Window = new("--window") { Description = "Read each selected stop's own timeline as a player takes it: display-paced, nothing settled first, from the stop's window-opening tick to its end. Reports the slowest frame, the counters' change across the window and its presented bursts; a reading with no source today is named absent. Requires --plan; one stop per process reads the first crossing after boot." };
+        public readonly Option<bool> Headless = new("--headless") { Description = "Boot without a window or renderer; readings that need one are reported absent. Requires --window." };
         public Command Command { get; }
 
         public Options() => Command = new Command("frames", "Measure windowed boot or sweep-tour frames and named GPU passes.") {
-            World, Artifact, Output, Plan, Stops, Passes, Ticks, Samples, Timeout, Width, Height, Cache, Backend, Json,
+            World, Artifact, Output, Plan, Stops, Passes, Ticks, Samples, Timeout, Width, Height, Cache, Backend, Window, Headless, Json,
         };
 
         public (SweepTour Tour, SweepStop[] Stops, string[] Passes) Selection(ParseResult parse) {
@@ -39,6 +41,8 @@ public static partial class FrameBenchmarks {
             if (passes.Any(string.IsNullOrWhiteSpace) || passes.Distinct(StringComparer.Ordinal).Count() != passes.Length) {
                 throw new ArgumentException("--gpu-pass names must be nonempty and distinct.");
             }
+            if (parse.GetValue(Headless) && !parse.GetValue(Window)) { throw new ArgumentException("--headless requires --window."); }
+            if (parse.GetValue(Window) && (plan is null)) { throw new ArgumentException("--window requires --plan."); }
             if (plan is null) {
                 if (stops.Length > 0) { throw new ArgumentException("--stop requires --plan."); }
                 return (SweepTour.Empty, [new SweepStop("boot", null, null, [])], passes);
@@ -62,9 +66,10 @@ public static partial class FrameBenchmarks {
         var parse = options.Command.Parse(arguments);
         if (parse.Errors.Count > 0) { throw new ArgumentException(string.Join("; ", parse.Errors.Select(error => error.Message))); }
         var (_, stops, passes) = options.Selection(parse);
-        return stops.SelectMany(stop => FrameFields.Select(field => $"{stop.Name}.frames.{field}")
+        var window = parse.GetValue(options.Window);
+        return stops.SelectMany(stop => (window ? WindowMetricNames(stop.Name) : FrameFields.Select(field => $"{stop.Name}.frames.{field}"))
             .Concat(passes.Select(pass => $"{stop.Name}.gpu.{pass}")))
-            .ToDictionary(name => name, _ => BenchMetric.Of("ms", new double[parse.GetValue(options.Samples)]), StringComparer.Ordinal);
+            .ToDictionary(name => name, name => BenchMetric.Of(WindowUnit(name), new double[parse.GetValue(options.Samples)]), StringComparer.Ordinal);
     }
 
     private static int Run(Options options, ParseResult parse, BenchHostSample? sampleHost, CancellationToken token) {
@@ -73,7 +78,9 @@ public static partial class FrameBenchmarks {
         var directory = Path.GetFullPath(Path.Combine(parse.GetValue(options.Output) ?? "artifacts/frames", Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(directory);
         var backend = parse.GetValue(options.Backend);
-        if (!WorldLaunch.TryResolve("bench frames", root, directory, parse.GetValue(options.Artifact), WorldLaunch.NeedsSpirv(WorldShape.Windowed, backend), out var build, out var error)) {
+        var window = parse.GetValue(options.Window);
+        var shape = (parse.GetValue(options.Headless) ? WorldShape.Headless : WorldShape.Windowed);
+        if (!WorldLaunch.TryResolve("bench frames", root, directory, parse.GetValue(options.Artifact), WorldLaunch.NeedsSpirv(shape, backend), out var build, out var error)) {
             return CliExit.Refuse("bench frames", "build", error);
         }
         using var held = build;
@@ -88,27 +95,44 @@ public static partial class FrameBenchmarks {
             ["plan"] = parse.GetValue(options.Plan) ?? "(boot)", ["stops"] = string.Join(",", stops.Select(stop => stop.Name)),
             ["ticks"] = ticks.ToString(CultureInfo.InvariantCulture), ["gpuPasses"] = string.Join(",", passes),
             ["size"] = $"{parse.GetValue(options.Width)}x{parse.GetValue(options.Height)}", ["backend"] = backend?.ToString() ?? "document",
+            ["window"] = (window ? (shape == WorldShape.Headless ? "headless" : "windowed") : "off"),
         });
         var complete = false;
         try {
-            for (var sample = 0; sample < samples; sample++) {
-                using var budget = new SuiteBudget(TimeSpan.FromSeconds(parse.GetValue(options.Timeout)), token);
-                var log = Path.Combine(directory, $"sample-{sample:D3}");
+            SweepWorld BootWorld(string log, SuiteBudget budget) {
                 Directory.CreateDirectory(log);
                 var request = new WorldLaunchRequest("bench frames", build.Path) {
-                    Shape = WorldShape.Windowed, Backend = backend, World = Path.GetFullPath(parse.GetValue(options.World)!),
+                    Shape = shape, Backend = backend, World = Path.GetFullPath(parse.GetValue(options.World)!),
                     StateDirectory = Path.Combine(log, "state"), ExitAfterSeconds = 0,
                     Arguments = ["--width", parse.GetValue(options.Width).ToString(CultureInfo.InvariantCulture), "--height", parse.GetValue(options.Height).ToString(CultureInfo.InvariantCulture),
                         .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : [])],
                 };
-                if (!SweepWorld.TryBoot(request, log, TimeSpan.FromSeconds(120), budget, out var session, out error)) { throw new InvalidOperationException(error); }
-                using var world = session!;
-                string Ask(string line, bool authored = false) {
-                    var answer = authored ? SweepRun.RunTourLine(world, line) : world.Run(line, 300);
-                    rows.Add(new($"{sample}: {line}", answer.Output));
-                    if (!answer.Ok) { throw new InvalidOperationException(string.Join("; ", answer.Refusals)); }
-                    return answer.Output;
+                if (!SweepWorld.TryBoot(request, log, TimeSpan.FromSeconds(120), budget, out var session, out var bootError)) { throw new InvalidOperationException(bootError); }
+                return session!;
+            }
+            string AskOf(SweepWorld world, string label, string line, bool authored) {
+                var answer = authored ? SweepRun.RunTourLine(world, line) : world.Run(line, 300);
+                rows.Add(new($"{label}: {line}", answer.Output));
+                if (!answer.Ok) { throw new InvalidOperationException(string.Join("; ", answer.Refusals)); }
+                return answer.Output;
+            }
+            // A window reads the first crossing after boot, so each stop of each sample is a fresh process.
+            for (var sample = 0; window && (sample < samples); sample++) {
+                foreach (var stop in stops) {
+                    using var budget = new SuiteBudget(TimeSpan.FromSeconds(parse.GetValue(options.Timeout)), token);
+                    var log = Path.Combine(directory, $"sample-{sample:D3}-{stop.Name}");
+                    using var world = BootWorld(log, budget);
+                    var print = (parse.GetValue(options.Json) ? Console.Error : Console.Out);
+                    var run = new WindowRun(world, tour, root, log, parse.GetValue(options.Headless), passes, (line, authored) => AskOf(world, $"{sample}: {stop.Name}", line, authored), Add, rows, print.Write);
+                    BeginWindow(run);
+                    RunWindowStop(run, stop);
                 }
+            }
+            for (var sample = 0; !window && (sample < samples); sample++) {
+                using var budget = new SuiteBudget(TimeSpan.FromSeconds(parse.GetValue(options.Timeout)), token);
+                var log = Path.Combine(directory, $"sample-{sample:D3}");
+                using var world = BootWorld(log, budget);
+                string Ask(string line, bool authored = false) => AskOf(world, sample.ToString(CultureInfo.InvariantCulture), line, authored);
                 if (!boot) {
                     Ask("world.lockstep off\nworld.rate resume");
                     // A frozen artifact can boot against an empty mesh store. Settle its cold bake before
@@ -169,7 +193,7 @@ public static partial class FrameBenchmarks {
             Console.Error.WriteLine($"bench frames: {exception.Message}; evidence {PuckPaths.Normalize(directory)}");
         } finally {
             report = report with { Complete = complete, HostLoad = host.Finish(), Rows = rows,
-                Metrics = readings.ToDictionary(pair => pair.Key, pair => BenchMetric.Of("ms", pair.Value), StringComparer.Ordinal) };
+                Metrics = readings.ToDictionary(pair => pair.Key, pair => BenchMetric.Of(WindowUnit(pair.Key), pair.Value), StringComparer.Ordinal) };
             report.Write(directory);
         }
         if (parse.GetValue(options.Json)) { Console.WriteLine(report.ToJson()); }

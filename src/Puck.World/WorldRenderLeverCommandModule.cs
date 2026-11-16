@@ -47,6 +47,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldResidencyForms = CommandForms.Of(verb: "world.residency", "[radius]");
     private static readonly CommandForms WorldProbeForms = CommandForms.Of(verb: "world.probe", "<x> <y> <z> [<nx> <ny> <nz>]");
     private static readonly CommandForms WorldSkyFieldScaleForms = WorldSessionLevers.SkyFieldScaleForms;
+
     // The world.quality echo: the current individual settings the preset (or a later override) left in place.
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTierName(tier: settings.Shadows)} ao={(settings.AmbientOcclusion
@@ -160,7 +161,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         var signal = (enabled ? controller.Signal : WorldDynamicResolutionSignal.Off);
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} budget={controller.StepBudget} signal={signal.ToString().ToLowerInvariant()}]");
+            $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} signal={signal.ToString().ToLowerInvariant()}]");
     }
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
@@ -323,7 +324,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             description: $"Auditions the sky rows printed by world.lighting: {WorldSkyLayerForms.Spelling}. Session-only; mute takes precedence over solo.",
             forms: WorldSkyLayerForms,
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.ReadView(context).Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={((settings.SkyLayers.Solo < 0) ? "off" : settings.SkyLayers.Solo.ToString(provider: CultureInfo.InvariantCulture))} | {string.Join(separator: " | ", values: Enumerable.Range(0, (server.ReadView(context: context).Definition.Render.Sky?.Layers?.Count ?? 0)).Select(selector: index => $"sky[{index}] muted={settings.SkyLayers.Muted(index: index)} included={settings.SkyLayers.Includes(index: index)}"))}]");
                 if (args.Count == 0) { return Echo(); }
                 var solo = args.Is(index: 0, value: "solo");
                 var index = -1;
@@ -331,7 +332,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 var mute = ((args.Count == 3) ? ParseOnOff(token: args[2]) : null);
 
                 if ((!solo && !args.Is(index: 0, value: "mute")) || (args.Count != (solo ? 2 : 3)) || (!solo && (mute is null)) ||
-                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.ReadView(context).Definition.Render.Sky?.Layers?.Count ?? 0))))) {
+                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || (index < 0) || (index >= (server.ReadView(context: context).Definition.Render.Sky?.Layers?.Count ?? 0))))) {
                     return WorldSkyLayerForms.Refuse();
                 }
                 return SubmitLever(link, context.Principal, (solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute), index, Echo, ((mute == true) ? 1d : 0d));
@@ -426,17 +427,19 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.shade: {(settings.ShadePrograms ? "programs" : "layers")}]");
                 if (args.Count == 0) { return Echo(); }
-                if (args.Count == 2 && args.Is(0, "default")) {
+                if ((args.Count == 2) && args.Is(index: 0, value: "default")) {
                     var name = args[1].ToString();
-                    var program = settings.NamedShade(name);
-                    if (name != "document" && program is null) { return CommandResult.Error(output: $"[world.shade: no admitted program named '{name}' in this scene]"); }
-                    var payload = program is null ? null : System.Text.Json.JsonSerializer.Serialize(program.Definition, WorldJsonContext.Default.SdfShadeDefinition);
-                    link.SubmitSessionLever(new WorldSessionLever(WorldSection.Render, WorldSessionLevers.ShadeDefault, 0, View: payload), context.Principal);
+                    var program = settings.NamedShade(name: name);
+
+                    if ((name != "document") && (program is null)) { return CommandResult.Error(output: $"[world.shade: no admitted program named '{name}' in this scene]"); }
+                    var payload = ((program is null) ? null : System.Text.Json.JsonSerializer.Serialize(program.Definition, WorldJsonContext.Default.SdfShadeDefinition));
+
+                    link.SubmitSessionLever(lever: new WorldSessionLever(WorldSection.Render, WorldSessionLevers.ShadeDefault, 0, View: payload), principal: context.Principal);
                     return new(Output: $"[world.shade default: {name}]");
                 }
-                if (args.Count != 1 || (!args.Is(0, "programs") && !args.Is(0, "layers"))) { return WorldShadeForms.Refuse(); }
+                if ((args.Count != 1) || (!args.Is(index: 0, value: "programs") && !args.Is(index: 0, value: "layers"))) { return WorldShadeForms.Refuse(); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadePrograms,
-                    a: args.Is(0, "programs") ? 1d : 0d, formatEcho: Echo);
+                    a: (args.Is(index: 0, value: "programs") ? 1d : 0d), formatEcho: Echo);
             });
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
@@ -605,8 +608,9 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             description: $"Reads or pins the camera exposure: {WorldExposureForms.Spelling}. No argument echoes the world's render.exposure (mode, ev100, bounds, compensation, adaptation, local adaptation), the session's pin and, for each view of the world's latest frame, the EV100 it renders at, its multiplier per nit and the luminance its meter read about the camera (none while the irradiance volume has no probe there, or the exposure is manual). 'pin <ev100>' holds every view the session presents, nested worlds included, manual at that EV100 with no local adaptation, as render.exposure.hold does; 'pin' alone holds the first view's current EV100; 'pin off' releases it. Presentation only: the pin never reaches the document or simulation state.",
             forms: WorldExposureForms,
             handler: (context, args) => {
-                var exposure = WorldRenderExposure.Resolve(exposure: server.ReadView(context).Definition.Render.Exposure);
+                var exposure = WorldRenderExposure.Resolve(exposure: server.ReadView(context: context).Definition.Render.Exposure);
                 var authored = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, $"mode={exposure.Mode.ToString().ToLowerInvariant()} ev100={exposure.Ev100:0.##} minimum={exposure.Minimum:0.##} maximum={exposure.Maximum:0.##} compensation={exposure.Compensation:0.##} adaptation={exposure.Adaptation:0.##}s local={exposure.Local:0.##} band={exposure.Band:0.##} low={exposure.Low:0.##} high={exposure.High:0.##} center={exposure.Center:0.##}");
+
                 string Pin() => ((settings.ExposurePin is { } pinned) ? pinned.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "off");
                 // The lever lands through the server, after this answer: echo what was asked.
                 static Func<CommandResult> PinEcho(string pin) => () => new(Output: $"[world.exposure: pin={pin}]");
@@ -661,8 +665,9 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return new CommandResult(Output: "[world.residency: renderer not built yet]");
                 }
 
-                var reports = renderProbe.Views?.DescribeResidencies(radius, node, renderProbe.Composition)
-                    ?? node.DescribeResidency(composition: renderProbe.Composition, radius: radius);
+                var reports = (renderProbe.Views?.DescribeResidencies(radius, node, renderProbe.Composition)
+                    ?? node.DescribeResidency(composition: renderProbe.Composition, radius: radius));
+
                 return new CommandResult(Output: $"[world.residency: {string.Join(separator: Environment.NewLine, values: reports)}]");
             }
         );
@@ -697,7 +702,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             forms: WorldRenderScaleForms,
             description: $"Controls view resolution: {WorldRenderScaleForms.Spelling}. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
             handler: (context, args) => {
-                settings.ReadQuality(definition: server.ReadView(context).Definition);
+                settings.ReadQuality(definition: server.ReadView(context: context).Definition);
                 if (!WorldRenderScaleCommand.TryParse(args: in args, command: out var command, refusal: out var refusal)) {
                     return ((refusal is null) ? WorldRenderScaleForms.Refuse(args: in args, got: args.Tail(start: 0).ToString()) : CommandResult.Error(output: $"[{refusal}]"));
                 }
@@ -848,7 +853,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return WorldQualityForms.Refuse(args: in args, got: args[0].ToString());
                 }
 
-                if (server.ReadView(context).Definition.Render.Preset(tier: tier) is not { } preset) {
+                if (server.ReadView(context: context).Definition.Render.Preset(tier: tier) is not { } preset) {
                     return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 

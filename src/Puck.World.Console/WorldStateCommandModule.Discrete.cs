@@ -27,18 +27,11 @@ public sealed partial class WorldStateCommandModule {
                 if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.state.observe")) {
                     return error;
                 }
-                if (link is IPrincipalServerLink stamped) {
-                    stamped.Query(
-                        new WorldQuery.StateObservations(),
-                        context.Principal,
-                        Complete
-                    );
-                } else {
-                    link.Query(
-                        new WorldQuery.StateObservations(),
-                        Complete
-                    );
-                }
+                link.Query(
+                    new WorldQuery.StateObservations(),
+                    context.Principal,
+                    Complete
+                );
                 return result;
             }
         );

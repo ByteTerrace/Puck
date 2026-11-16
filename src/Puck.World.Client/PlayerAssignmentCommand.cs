@@ -39,6 +39,7 @@ public static class PlayerAssignmentCommand {
         var targetSlot = PlayerRoster.SlotFromDisplay(number: slot);
 
         return Describe(
+            caller: context.Principal,
             roster: roster,
             verb: PlayerCommandNames.AssignCommand,
             outcome: roster.AssignDevice(
@@ -74,13 +75,14 @@ public static class PlayerAssignmentCommand {
     /// <param name="verb">The command name responsible for the assignment.</param>
     /// <param name="outcome">The roster outcome to narrate.</param>
     /// <param name="slot">The zero-based destination slot.</param>
+    /// <param name="caller">The principal the echoed roster is composed for.</param>
     /// <returns>The command result, marked as an error for every refusal.</returns>
-    public static CommandResult Describe(PlayerRoster roster, string verb, AssignOutcome outcome, int slot) {
+    public static CommandResult Describe(PlayerRoster roster, string verb, AssignOutcome outcome, int slot, Principal caller) {
         ArgumentNullException.ThrowIfNull(roster);
 
         return (outcome switch {
-            AssignOutcome.CreatedPending => new CommandResult(Output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {roster.Describe()}"),
-            AssignOutcome.JoinedTeam => new CommandResult(Output: $"[{verb}: device moved to player {PlayerRoster.DisplayNumber(slot: slot)}] {roster.Describe()}"),
+            AssignOutcome.CreatedPending => new CommandResult(Output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {roster.Describe(caller: caller)}"),
+            AssignOutcome.JoinedTeam => new CommandResult(Output: $"[{verb}: device moved to player {PlayerRoster.DisplayNumber(slot: slot)}] {roster.Describe(caller: caller)}"),
             AssignOutcome.NoOp => new CommandResult(Output: $"[{verb}: device already on player {PlayerRoster.DisplayNumber(slot: slot)}]"),
             AssignOutcome.DeviceClaimed => CommandResult.Error(output: $"[{verb}: this device is exclusively claimed and cannot be reassigned]"),
             AssignOutcome.TargetClaimed => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} is exclusively claimed — a device cannot move onto it]"),

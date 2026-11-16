@@ -62,7 +62,7 @@ internal static class ClientFixtures {
 /// everything.</summary>
 internal sealed class SilentLink : IServerLink {
     /// <inheritdoc/>
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) {
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
     }
     /// <inheritdoc/>
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => 0L;

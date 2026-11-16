@@ -13,6 +13,9 @@ namespace Puck.Vulkan;
 /// <param name="allocator">The Vulkan descriptor allocator.</param>
 /// <param name="naming">The naming every created pool and set is handed to.</param>
 public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, VulkanDescriptorAllocator allocator, GpuObjectNaming naming) : IGpuBindings {
+    /// <inheritdoc/>
+    public ulong MaxConstantBufferBytes => deviceContext.LogicalDevice.MaxConstantBufferBytes;
+
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
 
     // One pool size per descriptor type the pool holds any of.
@@ -165,14 +168,13 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
     }
     /// <inheritdoc/>
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
-        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);
         allocator.WriteUniformBuffer(
             arrayElement: arrayElement,
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
-            device: Device
+            device: deviceContext.LogicalDevice
         );
     }
     /// <inheritdoc/>

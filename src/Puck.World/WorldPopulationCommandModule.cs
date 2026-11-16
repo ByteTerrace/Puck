@@ -427,8 +427,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     }
     // The world.players readout: the roster's four slots plus the population line spliced in as a trailing segment.
     // roster.Describe() ends with ']', so drop it (the [..^1] slice) and re-close after the population segment.
-    private string DescribePlayers() {
-        var players = roster.Describe();
+    private string DescribePlayers(Principal caller) {
+        var players = roster.Describe(caller: caller);
         var local = roster.Count;
         var simulated = population.SimulatedCount;
 
@@ -683,7 +683,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             name: "world.players",
             description: "Lists the roster's four slots — joined/empty, each joined slot's profile, state (active/PENDING), owned devices (or origin), and pose (p<N> name state(devices) pos=(x, z) yaw=d°) — plus the population line (local seats + simulated stand-ins). Every player is a networked player; a local pad or the keyboard is just one at zero latency.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => new CommandResult(Output: DescribePlayers())
+            handler: context => new CommandResult(Output: DescribePlayers(caller: context.Principal))
         );
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
@@ -698,6 +698,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 var result = default(CommandResult);
 
                 link.Query(
+                    principal: context.Principal,
                     query: new WorldQuery.InputHolds(),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) {

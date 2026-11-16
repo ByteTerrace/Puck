@@ -227,6 +227,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 if (
                     (index <= WorldBodiesLimits.LocalSeatCount) &&
                     seatRouter.TryRouteQuery(
+                    caller: context.Principal,
                     factory: static authorityIndex => new WorldQuery.Contacts(Index: authorityIndex),
                     result: out var routed,
                     slot: (index - 1),
@@ -241,6 +242,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var result = default(CommandResult);
 
                 link.Query(
+                    principal: context.Principal,
                     query: new WorldQuery.Contacts(Index: index),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };

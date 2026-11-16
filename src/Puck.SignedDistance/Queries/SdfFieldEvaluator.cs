@@ -917,9 +917,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return (inside + outside);
     }
-    // KEEP IN SYNC with sdfSuperellipsoid in field/sdf-shapes.hlsli. Exactly 1-Lipschitz for every radius and exponent (see
-    // SdfProgramBuilder.Superellipsoid's remarks) — no step-scale correction needed here beyond m_stepScale, which
-    // this program's own Data1.y lane bakes to 1.0 already for a scope carrying nothing else non-1-Lipschitz.
+    // The real-valued scaled gauge is 1-Lipschitz (see SdfProgramBuilder.Superellipsoid's remarks). That proof does not
+    // make this quantized Q48.16 evaluation exact or identical to sdfSuperellipsoid in field/sdf-shapes.hlsli at small
+    // radii; docs/development/hazards.md tracks that CPU/GPU disagreement. The program's Data1.y remains 1.0 for a
+    // scope carrying nothing else non-1-Lipschitz; no additional rounding-error bound is claimed here.
     // The l_e gauge in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every Pow argument stays in
     // [0, 1] (the sum in [1, 3]), so a far query never saturates the Q48.16 carrier — the plain sum(q_i^e) saturates at
     // |p|/r ~ 60 for e = 8 (FixedQ4816.Pow clamps to MaxValue), collapsing a far field to a few radii and starving

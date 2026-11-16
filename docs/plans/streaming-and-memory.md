@@ -1240,10 +1240,32 @@ bench gains a window that spans a route stop's timeline display-paced with
 nothing settled first, reporting the slowest frame, the counters' change
 across the window and a presented burst.
 
+The route segments are the `seam walk:` tests of
+[`walkthrough-tests.puck`](../../worlds/debug/walkthrough-tests.puck) and their
+stops are [`seam-walk.sweep.json`](../../worlds/debug/seam-walk.sweep.json):
+`puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop <stop> --window`
+([the verb](../reference/cli.md#puck-bench-frames)). The three speeds are the
+walk (5 m/s), the run (10 m/s, Left Shift held) and the run with the dash on each
+cooldown (0.48 m a tick); the lift crossing is entered at each, and its car is
+called through the `liftCall` mailbox, the `gallery.lift` command's own write,
+because a test's schedule admits no authored command. Free flight is not walked
+yet: the fastest leg is the dash. A crossing between authorities drops the seat's
+held controls, so a leg re-presses the stick on a fixed cadence, as a player
+does.
+
 **Check.** The report carries every reading of
 [what a window reads](#what-a-window-reads) that exists today, and names each
-one that does not exist yet as absent, never as nothing. The baseline legs on
-both backends are in the landing commit: where today's seams are.
+one that does not exist yet as absent, never as nothing. Today's absences and
+the step that supplies each: floor shown, pending and failed (5); a fallback
+shown (3 and 5); reach drawn in (10); lighting owed (9); evictions and
+re-requests (5 and 8); the latency of each stage from demand to first drawn (10);
+each physical row's owners and residual (2); and the transfer's reserve and commit ticks, the seat's commands per tick and the voices
+the mixer started and released, which wait on the
+[transfers packet](open-items.md#transfers-federation-and-server). The window
+carries the body's pose and `audio.state`'s device counts for the cross-world
+row, and the recording of the mixed sound stays `capture.start`'s, not yet driven
+by the window. The baseline legs on both backends are in the landing commit:
+where today's seams are.
 
 ### Step 1 as a brief
 
