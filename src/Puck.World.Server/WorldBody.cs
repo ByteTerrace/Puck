@@ -95,7 +95,6 @@ public sealed partial class WorldBody {
     private FixedQuaternion m_frame = FixedQuaternion.Identity;
 
     private ulong? m_continuumConsumedThroughEngineTick;
-    private ulong m_durableInputTick;
     // The screen-engagement route latch (disengaged by default). Set by body.engage/disengage. While engaged the
     // resolved intent is DIVERTED to the bound screen's machine instead of the avatar: Advance captures it into
     // m_engagedIntent and holds the avatar idle (no pose integration). ORTHOGONAL to m_source — engagement decides
@@ -245,11 +244,13 @@ public sealed partial class WorldBody {
     // grows the ring by doubling (never dropping) when the live count would exceed capacity, so steady-state enqueue+drain
     // allocates nothing. m_tapeHead is the front index, m_tapeCount the live length; the tail wraps at m_tape.Length.
     private TapeSegment[] m_tape = new TapeSegment[InitialTapeCapacity];
-    private readonly bool[] m_pendingDefaultChannelPress = new bool[ActionLaneCount];
-    private readonly FixedQ4816[] m_pendingDefaultChannelValue = new FixedQ4816[ActionLaneCount];
-    private readonly bool[] m_previousChannelBit = new bool[ActionLaneCount];
-    private readonly ulong[] m_laneTimers = new ulong[ActionLaneCount];
-    private readonly FixedQ4816[] m_channelTimerValues = new FixedQ4816[ActionLaneCount];
+    // The action track's per-channel state and the lanes' latches, behind their write door: Action reads, ActionEdit
+    // moves the section's version and notes the body's slot, and nothing else reaches the section. A write-side
+    // reference is used within one statement or handed to one call (DOOR005).
+    private readonly Versioned<BodyActionSection> m_action;
+
+    private ref readonly BodyActionSection Action => ref m_action.Read;
+    private ref BodyActionSection ActionEdit => ref m_action.Write;
     // Whether the last contact solve found support. Only a body with a collider runs one, so this is false for a
     // colliderless body at every write: construction, teleport (ResetVertical) and kit recompile each take CanBeGrounded.
     private bool m_grounded;
@@ -273,11 +274,16 @@ public sealed partial class WorldBody {
     private FixedQ4816 ObstructionLatchIdleThreshold => m_tuning.Obstruction.IdleThreshold;
     private ulong ObstructionLatchGraceTicks => m_tuning.Obstruction.GraceTicks;
 
-    // The per-channel action runtime: the compiled binding (null = unbound), its press latch, and one recency clock per
-    // Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
+    // The per-channel action runtime: the compiled binding (null = unbound), its press latch and fact-edge memory (in
+    // the Action section), and one recency clock per Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
     // A role ordinal never has a binding, so it is naturally inert here.
     private readonly CompiledActionSpec?[] m_laneBindings = new CompiledActionSpec?[ActionLaneCount];
-    private readonly LaneActionRuntime[] m_laneActions = new LaneActionRuntime[ActionLaneCount];
+    // The lanes' Recently-gate clocks behind their write door, every lane's in lane order: a lane's clocks start at
+    // m_laneRecencyStart[lane] and number its binding's recency facts. The layout is configuration, laid whenever the
+    // bindings are set (LayoutLaneRecency).
+    private readonly VersionedArray<ulong> m_laneRecency;
+    private readonly int[] m_laneRecencyStart = new int[(ActionLaneCount + 1)];
+    private ulong[] m_laneRecencyScratch = [];
     private CompiledActionStateSlot[] m_actionStateDefinitions = [];
 
     // Named counters and timers are stored in the arena's slot lanes, addressed by this body's own entity index —
@@ -288,13 +294,11 @@ public sealed partial class WorldBody {
     private long[] m_actionStateRequested = [];
     private string[] m_actionStateLastWriter = [];
     private string[] m_actionStateLastReason = [];
-    private bool[] m_actionStateDirty = [];
-    private WorldDocumentWriteKind[] m_actionStateDirtyKind = [];
-    private FixedQ4816[] m_actionStateDirtyOperand = [];
-    private bool[] m_durableInputPresent = [];
-    private FixedQ4816[] m_durableInputValues = [];
-    private ulong[] m_durableInputTimers = [];
-    private string[] m_durableInputWriters = [];
+    // The durable register writes staged for the profile, one row per register, behind their write door.
+    private readonly VersionedArray<WorldRegisterWriteImage> m_registerWrites;
+    // The incoming durable write staged for a tick, one row per register, behind its write door. A row names its
+    // writer, so the table is immutable and a write replaces it.
+    private readonly VersionedRecord<BodyDurableInputSection> m_durableInput;
     private int m_affectingSubject = -1;
     // The world's declared binary crossing threshold per ordinal, bound or not — resolved once from the world's
     // channel table at construction/recompile; the engage-channel probe and the previous-bit image read unbound
@@ -359,6 +363,14 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
     public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
+        // One binding for every holder of this body: a write to any of them notes the body's slot once.
+        var slot = new SlotBinding();
+
+        m_action = new Versioned<BodyActionSection>(binding: slot);
+        m_laneRecency = new VersionedArray<ulong>(binding: slot);
+        m_registerWrites = new VersionedArray<WorldRegisterWriteImage>(binding: slot);
+        m_durableInput = new VersionedRecord<BodyDurableInputSection>(binding: slot, value: BodyDurableInputSection.Empty(registers: 0));
+        m_scriptActors = new VersionedRecord<BodyScriptActorsSection>(binding: slot, value: BodyScriptActorsSection.Empty);
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -382,11 +394,7 @@ public sealed partial class WorldBody {
         m_tetherFacet = tether;
         m_maxSmoothError = maxSmoothError;
 
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
-                m_laneActions[lane].Recency = new ulong[binding.RecencyFacts.Length];
-            }
-        }
+        LayoutLaneRecency(sources: default);
 
         if (m_tuning.RecencySlots > 0) {
             m_motionRecency = new ulong[m_tuning.RecencySlots];

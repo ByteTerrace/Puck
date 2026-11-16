@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
@@ -419,59 +420,95 @@ public readonly record struct BodyInputReadbacksSection(
         RelativeRemainders: WorldSectionWire.ReadFixedInt64s(count: ChannelLimits.MaxAxes, reader: ref reader)
     );
 }
+/// <summary>One value per channel ordinal, stored inline: a table of <see cref="ChannelLimits.MaxChannels"/> elements
+/// that is part of the value that holds it, so a section made of them holds no reference.</summary>
+/// <typeparam name="T">The element type.</typeparam>
+[System.Runtime.CompilerServices.InlineArray(length: ChannelLimits.MaxChannels)]
+public struct PerChannel<T> : IEquatable<PerChannel<T>> where T : unmanaged {
+    private T m_element;
+
+    /// <inheritdoc/>
+    public readonly bool Equals(PerChannel<T> other) =>
+        System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: ((ReadOnlySpan<T>)this)).SequenceEqual(other: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: ((ReadOnlySpan<T>)other)));
+    /// <inheritdoc/>
+    public override readonly bool Equals(object? obj) => ((obj is PerChannel<T> other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override readonly int GetHashCode() {
+        var hash = default(HashCode);
+
+        hash.AddBytes(value: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: ((ReadOnlySpan<T>)this)));
+        return hash.ToHashCode();
+    }
+}
 /// <summary>The action track: per channel, a timed press and its value, the previous threshold-crossing bit and a
 /// pending tap; per lane, the press latch and the fact-edge memory. Every table holds one element per channel
-/// ordinal.</summary>
-/// <param name="TimerTicks">The ticks left on each channel's timed press.</param>
-/// <param name="TimerValues">The value each timed press holds while live.</param>
-/// <param name="PreviousBit">Each channel's previous threshold-crossing bit.</param>
-/// <param name="PendingPress">Whether a tap is staged on each channel and not yet a timer.</param>
-/// <param name="PendingValue">The value each staged tap holds.</param>
-/// <param name="LaneLatch">Each lane's press latch.</param>
-/// <param name="LaneFactHeld">Each lane's previous-evaluation fact bits.</param>
-public readonly record struct BodyActionSection(
-    ReadOnlyMemory<ulong> TimerTicks,
-    ReadOnlyMemory<FixedQ4816> TimerValues,
-    ReadOnlyMemory<bool> PreviousBit,
-    ReadOnlyMemory<bool> PendingPress,
-    ReadOnlyMemory<FixedQ4816> PendingValue,
-    ReadOnlyMemory<ulong> LaneLatch,
-    ReadOnlyMemory<ulong> LaneFactHeld
-) : IContinuationSection<BodyActionSection> {
+/// ordinal, inline, so the section holds no reference and a body keeps it behind a <see cref="Versioned{T}"/>.</summary>
+public struct BodyActionSection : IContinuationSection<BodyActionSection>, IEquatable<BodyActionSection> {
+    /// <summary>The ticks left on each channel's timed press.</summary>
+    public PerChannel<ulong> TimerTicks;
+    /// <summary>The value each timed press holds while live.</summary>
+    public PerChannel<FixedQ4816> TimerValues;
+    /// <summary>Each channel's previous threshold-crossing bit.</summary>
+    public PerChannel<bool> PreviousBit;
+    /// <summary>Whether a tap is staged on each channel and not yet a timer.</summary>
+    public PerChannel<bool> PendingPress;
+    /// <summary>The value each staged tap holds.</summary>
+    public PerChannel<FixedQ4816> PendingValue;
+    /// <summary>Each lane's press latch.</summary>
+    public PerChannel<ulong> LaneLatch;
+    /// <summary>Each lane's previous-evaluation fact bits.</summary>
+    public PerChannel<ulong> LaneFactHeld;
+
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Action;
 
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyActionSection section) {
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.TimerTicks.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.TimerValues.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PreviousBit.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PendingPress.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PendingValue.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.LaneLatch.Span, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.LaneFactHeld.Span, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.TimerTicks, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.TimerValues, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PreviousBit, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PendingPress, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.PendingValue, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.LaneLatch, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxChannels, values: section.LaneFactHeld, writer: writer);
     }
     /// <inheritdoc/>
-    public static BodyActionSection Read(ref WireReader reader) => new(
-        TimerTicks: WorldSectionWire.ReadFixedUInt64s(count: ChannelLimits.MaxChannels, reader: ref reader),
-        TimerValues: WorldSectionWire.ReadFixedFixeds(count: ChannelLimits.MaxChannels, reader: ref reader),
-        PreviousBit: WorldSectionWire.ReadFixedBooleans(count: ChannelLimits.MaxChannels, reader: ref reader),
-        PendingPress: WorldSectionWire.ReadFixedBooleans(count: ChannelLimits.MaxChannels, reader: ref reader),
-        PendingValue: WorldSectionWire.ReadFixedFixeds(count: ChannelLimits.MaxChannels, reader: ref reader),
-        LaneLatch: WorldSectionWire.ReadFixedUInt64s(count: ChannelLimits.MaxChannels, reader: ref reader),
-        LaneFactHeld: WorldSectionWire.ReadFixedUInt64s(count: ChannelLimits.MaxChannels, reader: ref reader)
+    public static BodyActionSection Read(ref WireReader reader) {
+        var section = default(BodyActionSection);
+
+        foreach (ref var ticks in ((Span<ulong>)section.TimerTicks)) { ticks = reader.ReadUInt64(); }
+        foreach (ref var value in ((Span<FixedQ4816>)section.TimerValues)) { value = reader.ReadFixed(); }
+        foreach (ref var bit in ((Span<bool>)section.PreviousBit)) { bit = reader.ReadBoolean(); }
+        foreach (ref var pending in ((Span<bool>)section.PendingPress)) { pending = reader.ReadBoolean(); }
+        foreach (ref var value in ((Span<FixedQ4816>)section.PendingValue)) { value = reader.ReadFixed(); }
+        foreach (ref var latch in ((Span<ulong>)section.LaneLatch)) { latch = reader.ReadUInt64(); }
+        foreach (ref var held in ((Span<ulong>)section.LaneFactHeld)) { held = reader.ReadUInt64(); }
+        return section;
+    }
+
+    /// <inheritdoc/>
+    public readonly bool Equals(BodyActionSection other) => (
+        TimerTicks.Equals(other: other.TimerTicks) && TimerValues.Equals(other: other.TimerValues) && PreviousBit.Equals(other: other.PreviousBit) &&
+        PendingPress.Equals(other: other.PendingPress) && PendingValue.Equals(other: other.PendingValue) &&
+        LaneLatch.Equals(other: other.LaneLatch) && LaneFactHeld.Equals(other: other.LaneFactHeld)
     );
+    /// <inheritdoc/>
+    public override readonly bool Equals(object? obj) => ((obj is BodyActionSection other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override readonly int GetHashCode() => HashCode.Combine(TimerTicks, TimerValues, PreviousBit, PendingPress, PendingValue, LaneLatch, LaneFactHeld);
 }
 /// <summary>The action lanes' Recently-gate clocks, every lane's in lane order. Which lane owns which clocks is the
 /// kit's compiled bindings to say, so the table carries the clocks alone.</summary>
 /// <param name="Clocks">The clocks, lane by lane.</param>
-public readonly record struct BodyLaneRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationSection<BodyLaneRecencySection> {
+public readonly record struct BodyLaneRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationTableSection<BodyLaneRecencySection, ulong> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.LaneRecency;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in BodyLaneRecencySection section) =>
-        WorldAuthorityCheckpointCodec.WriteULongs(values: section.Clocks.Span, writer: writer);
+    public static void Write(WireWriter writer, in BodyLaneRecencySection section) => WriteTable(elements: section.Clocks.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<ulong> elements) =>
+        WorldAuthorityCheckpointCodec.WriteULongs(values: elements, writer: writer);
     /// <inheritdoc/>
     public static BodyLaneRecencySection Read(ref WireReader reader) =>
         new(Clocks: WorldAuthorityCheckpointCodec.ReadULongArray(field: "lane recency", reader: ref reader));
@@ -484,19 +521,19 @@ public readonly record struct WorldRegisterWriteImage(bool Dirty, WorldDocumentW
 /// <summary>The durable register writes staged for the profile and not yet drained, one row per register of the kit's
 /// register file.</summary>
 /// <param name="Rows">The rows, in register order.</param>
-public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegisterWriteImage> Rows) : IContinuationSection<BodyRegisterWritesSection> {
+public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegisterWriteImage> Rows) : IContinuationTableSection<BodyRegisterWritesSection, WorldRegisterWriteImage> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.RegisterWrites;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in BodyRegisterWritesSection section) {
-        var rows = section.Rows.Span;
-
-        writer.WriteArrayCount(count: rows.Length);
-        for (var row = 0; (row < rows.Length); row++) {
-            writer.WriteBoolean(value: rows[row].Dirty);
-            writer.WriteByte(value: ((byte)rows[row].Kind));
-            writer.WriteFixed(value: rows[row].Operand);
+    public static void Write(WireWriter writer, in BodyRegisterWritesSection section) => WriteTable(elements: section.Rows.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<WorldRegisterWriteImage> elements) {
+        writer.WriteArrayCount(count: elements.Length);
+        for (var row = 0; (row < elements.Length); row++) {
+            writer.WriteBoolean(value: elements[row].Dirty);
+            writer.WriteByte(value: ((byte)elements[row].Kind));
+            writer.WriteFixed(value: elements[row].Operand);
         }
     }
     /// <inheritdoc/>
@@ -525,16 +562,25 @@ public readonly record struct BodyRegisterWritesSection(ReadOnlyMemory<WorldRegi
 /// <param name="Writer">The staged writer id.</param>
 public readonly record struct WorldDurableInputImage(bool Present, FixedQ4816 Value, ulong Timer, string Writer);
 /// <summary>An incoming durable register write staged for a tick and not yet applied, one row per register of the
-/// kit's register file.</summary>
+/// kit's register file. A row names its writer, so the table is immutable and a change replaces it: a body keeps the
+/// section behind a <see cref="VersionedRecord{T}"/>.</summary>
 /// <param name="Tick">The simulation tick the staged input targets.</param>
 /// <param name="Rows">The rows, in register order.</param>
-public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory<WorldDurableInputImage> Rows) : IContinuationSection<BodyDurableInputSection> {
+public readonly record struct BodyDurableInputSection(ulong Tick, ImmutableArray<WorldDurableInputImage> Rows) : IContinuationSection<BodyDurableInputSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.DurableInput;
 
+    /// <summary>Returns the section of a body with the given number of registers and nothing staged.</summary>
+    /// <param name="registers">The number of registers.</param>
+    /// <returns>The section.</returns>
+    public static BodyDurableInputSection Empty(int registers) => new(
+        Rows: ((registers == 0) ? [] : ImmutableArray.Create(items: new WorldDurableInputImage[registers])),
+        Tick: 0UL
+    );
+
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyDurableInputSection section) {
-        var rows = section.Rows.Span;
+        var rows = (section.Rows.IsDefault ? default : section.Rows.AsSpan());
 
         writer.WriteUInt64(value: section.Tick);
         writer.WriteArrayCount(count: rows.Length);
@@ -548,7 +594,7 @@ public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory
     /// <inheritdoc/>
     public static BodyDurableInputSection Read(ref WireReader reader) => new(
         Tick: reader.ReadUInt64(),
-        Rows: reader.ReadArray(
+        Rows: ImmutableArray.Create(items: reader.ReadArray(
             field: "durable input",
             maximum: WorldAuthorityCheckpointCodec.MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldDurableInputImage(
@@ -557,47 +603,73 @@ public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory
                 Timer: r.ReadUInt64(),
                 Writer: r.ReadString(field: "durable input writer")
             )
-        )
+        ))
     );
 }
 /// <summary>Who authorized each channel's scripted input: the actor of its timed press and of its pending tap, one
-/// per channel ordinal. The tape's actors travel with its segments (<see cref="BodyTapeSection"/>).</summary>
+/// per channel ordinal. The tape's actors travel with its segments (<see cref="BodyTapeSection"/>). The tables are
+/// immutable: a change replaces a table, so a body keeps the section behind a <see cref="VersionedRecord{T}"/>.</summary>
 /// <param name="Timers">The actor of each channel's timed press.</param>
 /// <param name="Pending">The actor of each channel's pending tap.</param>
 public readonly record struct BodyScriptActorsSection(
-    ReadOnlyMemory<Principal> Timers,
-    ReadOnlyMemory<Principal> Pending
+    ImmutableArray<Principal> Timers,
+    ImmutableArray<Principal> Pending
 ) : IContinuationSection<BodyScriptActorsSection> {
+    /// <summary>Gets the section of a body with no scripted input: one unset actor per channel in both tables.</summary>
+    public static BodyScriptActorsSection Empty { get; } = new(
+        Pending: ImmutableArray.Create(items: new Principal[ChannelLimits.MaxChannels]),
+        Timers: ImmutableArray.Create(items: new Principal[ChannelLimits.MaxChannels])
+    );
+
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.ScriptActors;
 
-    private static void WriteActors(WireWriter writer, ReadOnlySpan<Principal> actors) {
-        if (actors.Length > ChannelLimits.MaxChannels) {
-            throw new InvalidOperationException(message: $"a script-actors table holds {actors.Length} actors for {ChannelLimits.MaxChannels} channels.");
+    private static void WriteActors(WireWriter writer, ImmutableArray<Principal> actors) {
+        var table = (actors.IsDefault ? default : actors.AsSpan());
+
+        if (table.Length > ChannelLimits.MaxChannels) {
+            throw new InvalidOperationException(message: $"a script-actors table holds {table.Length} actors for {ChannelLimits.MaxChannels} channels.");
         }
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            WorldAuthorityCheckpointCodec.WriteScriptActor(actor: ((ordinal < actors.Length) ? actors[ordinal] : default), writer: writer);
+            WorldAuthorityCheckpointCodec.WriteScriptActor(actor: ((ordinal < table.Length) ? table[ordinal] : default), writer: writer);
         }
     }
-    private static Principal[] ReadActors(ref WireReader reader) {
+    private static ImmutableArray<Principal> ReadActors(ref WireReader reader) {
         var actors = new Principal[ChannelLimits.MaxChannels];
 
         for (var ordinal = 0; (ordinal < actors.Length); ordinal++) { actors[ordinal] = WorldAuthorityCheckpointCodec.ReadScriptActor(reader: ref reader); }
-        return actors;
+        return ImmutableArray.Create(items: actors);
     }
 
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyScriptActorsSection section) {
-        WriteActors(actors: section.Timers.Span, writer: writer);
-        WriteActors(actors: section.Pending.Span, writer: writer);
+        WriteActors(actors: section.Timers, writer: writer);
+        WriteActors(actors: section.Pending, writer: writer);
     }
     /// <inheritdoc/>
     public static BodyScriptActorsSection Read(ref WireReader reader) => new(
         Timers: ReadActors(reader: ref reader),
         Pending: ReadActors(reader: ref reader)
     );
-}
-/// <summary>One segment of a body's scripted tape.</summary>
+    /// <summary>Returns a table holding the given actors in its first ordinals and unset actors after them: the
+    /// present table when it already does, so a write that changes nothing replaces nothing.</summary>
+    /// <param name="current">The present table.</param>
+    /// <param name="actors">The actors, by channel ordinal; ordinals past the channel count are dropped.</param>
+    /// <returns>The table.</returns>
+    public static ImmutableArray<Principal> Table(ImmutableArray<Principal> current, ReadOnlySpan<Principal> actors) {
+        var count = Math.Min(val1: actors.Length, val2: ChannelLimits.MaxChannels);
+        var table = (current.IsDefault ? default : current.AsSpan());
+
+        if ((table.Length == ChannelLimits.MaxChannels) && table[..count].SequenceEqual(other: actors[..count]) && (table[count..].IndexOfAnyExcept(value: default(Principal)) < 0)) {
+            return current;
+        }
+
+        var replaced = new Principal[ChannelLimits.MaxChannels];
+
+        actors[..count].CopyTo(destination: replaced);
+        return ImmutableArray.Create(items: replaced);
+    }
+}/// <summary>One segment of a body's scripted tape.</summary>
 /// <param name="Intent">The intent the segment holds while live.</param>
 /// <param name="RemainingTicks">The engine ticks the segment has left.</param>
 /// <param name="Actor">The actor who authorized the segment.</param>

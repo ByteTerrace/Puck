@@ -1117,6 +1117,23 @@ fold takes each named body's slot digest and the digest of its whole tail.
 `world.counters world.tick` counts each section's encodes and bytes
 (`WorldTickWork.SectionEncodes`, `WorldTickWork.SectionBytes`).
 
+A body keeps some sections behind state holders (`Puck.State`'s `Versioned<T>`,
+`VersionedArray<T>` and `VersionedRecord<T>`), which is the only place their
+state is stored: the Action section, the lanes' recency clocks, the staged
+register writes, the staged durable input and the script actors. A write goes
+through the holder's write side, which moves the section's version and notes
+the body's slot in the population's `SlotNotes`. A fold asks each holder for
+its digest (`WorldBody.HeldDigests`) and folds that in the section's place, so
+a section that did not change is neither captured nor encoded: the holder
+answers from its cache while the version stands, and after a write that left
+the content as it was. `WorldTickWork.SectionFilteredCompares`,
+`WorldTickWork.SectionComparedBytes` and `WorldTickWork.SectionUnchangedEncodes`
+count what those reads did. A full recompute
+(`WorldPopulation.AppendContinuationHash` with `recompute`) captures and encodes
+every section and reads no cache; `WorldStateHashComposition.DescribeStaleDigest`
+compares the two and, when they differ, names the slot and section whose
+holder handed out a stale digest.
+
 Body-frame policy is compiled separately from that provider seam. Every body
 uses opposed solved gravity (or the contact field's ambient up fallback) as its
 ambient frame. Authoring `GradientDerivedUp` additionally selects

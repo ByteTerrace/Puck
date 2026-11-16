@@ -58,7 +58,7 @@ namespace Puck.World.Server;
 /// teleport" reason as the ramp accumulators above; live only under such a kit, zero (and inert) otherwise.
 /// <see cref="LaneLatch"/>/<see cref="LaneFactHeld"/>/<see cref="LaneRecency"/> — the per-lane action runtime's
 /// own OnPress pending-latch bit, OnFact previous-evaluation edge bit, and Recently-gate clocks
-/// (<see cref="WorldBody.LaneActionRuntime"/>) — a buffered press awaiting its gate, an OnFact trigger's own edge memory,
+/// (<see cref="BodyActionSection"/> and the lanes' recency tables) — a buffered press awaiting its gate, an OnFact trigger's own edge memory,
 /// and a double-tap window all live here.
 /// <see cref="ActionState"/> — the arena slot lanes' image of the named register file (ammo counters, cooldown
 /// timers) — read by <see cref="WorldBody.GateOpen"/>'s CompareState/Timer predicates, so this is genuinely

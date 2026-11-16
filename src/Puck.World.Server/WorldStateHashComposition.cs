@@ -302,7 +302,7 @@ public static partial class WorldStateHashComposition {
     /// <param name="tick">The simulation tick.</param>
     /// <param name="hash">The incremental digest the caller already took at this state.</param>
     /// <returns>An empty string when the recomputed digest is <paramref name="hash"/>; otherwise the stale components
-    /// with both digests.</returns>
+    /// with both digests, and the first body section whose holder handed out a stale digest, by slot and section.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
     public static string DescribeStaleDigest(WorldServer server, ulong tick, ulong hash) {
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -315,7 +315,22 @@ public static partial class WorldStateHashComposition {
             right: AuthoritativeComponents(recompute: true, server: server, tick: tick)
         );
 
-        return $"incremental state hash {hash:x16} at tick {tick} differs from its full recompute {recomputed:x16} in {((stale.Count == 0) ? "no single component" : string.Join(separator: ", ", values: stale))}";
+        // The holders name the slot and the section: under the notes' checked mode each one compares the digest it
+        // hands out with a fresh encoding of what it holds.
+        var notes = server.Population.SlotNotes;
+
+        notes.ClearStaleDigest();
+        notes.Checked = true;
+        try {
+            _ = HashAuthoritative(server: server, tick: tick);
+        } finally {
+            notes.Checked = false;
+        }
+
+        var held = notes.StaleDigest;
+
+        notes.ClearStaleDigest();
+        return $"incremental state hash {hash:x16} at tick {tick} differs from its full recompute {recomputed:x16} in {((stale.Count == 0) ? "no single component" : string.Join(separator: ", ", values: stale))}{((held is null) ? string.Empty : $"; {held}")}";
     }
     /// <summary>Folds the store's own contents, the rows its host owns, and the topologies they are declared
     /// over.</summary>

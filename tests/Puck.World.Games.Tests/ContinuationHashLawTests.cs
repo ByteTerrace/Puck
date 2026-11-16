@@ -9,7 +9,7 @@ namespace Puck.World.Games.Tests;
 
 /// <summary>
 /// The authoritative hash folds every body's simulation continuation from views of the live slots
-/// (<see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/>), and the views fold exactly what the checkpoint's own
+/// (<see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash, bool)"/>), and the views fold exactly what the checkpoint's own
 /// entries fold, section by section, slot by slot and segment by segment (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
 /// <see cref="WorldPopulation.Capture"/>): over a carried body sweeping against a wall behind a walking carrier, and
 /// over a rigid ball that comes to rest, tick by tick, and over a seat driven by an owned identity carrying facts and
@@ -114,10 +114,15 @@ public sealed class ContinuationHashLawTests {
         );
 
         var population = fixture.Server.Population;
-        var warm = Fnv1aHash.Create();
 
-        fixture.Step();
-        population.AppendContinuationHash(hash: ref warm);
+        // Warm: a holder keeps the bytes its digest was taken from only from its second encode on, so the fold is
+        // steady once each body's held sections have been digested, moved and digested again.
+        for (var warming = 0; (warming < 3); warming++) {
+            var warm = Fnv1aHash.Create();
+
+            fixture.Step();
+            population.AppendContinuationHash(hash: ref warm);
+        }
 
         var allocated = 0L;
 

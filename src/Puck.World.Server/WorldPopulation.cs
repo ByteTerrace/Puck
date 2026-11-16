@@ -357,6 +357,7 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
+        m_slotNotes = new SlotNotes(count: m_entries.Length, partitionSlots: HashSegmentSlots);
         m_awakeBodies = new BodyWorkSet(capacity: m_entries.Length);
         m_sleepingBodies = new BodyWorkSet(capacity: m_entries.Length);
         m_eventBodies = new BodyWorkSet(capacity: m_entries.Length);

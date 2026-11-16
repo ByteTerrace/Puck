@@ -22,7 +22,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
 
     /// <summary>Folds the simulation continuation of captured population entries: the value
-    /// <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/> folds from the live slots the entries were
+    /// <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash, bool)"/> folds from the live slots the entries were
     /// captured from. Each slot's digest folds its sections' digests, the slots fold into segments, and what no slot
     /// digest holds (the resting bodies' contact-field observations and the profiles) folds beside the segments.</summary>
     /// <param name="hash">The hash to fold into.</param>
@@ -43,7 +43,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: capacity, value: entry.Index);
             present[entry.Index] = true;
-            digests[entry.Index] = ContinuationSlotDigest(entry: ref entry, work: null, writer: writer);
+            digests[entry.Index] = ContinuationSlotDigest(entry: ref entry, held: 0U, heldDigests: default, work: null, writer: writer);
             beside.Add(entry: in entry, work: null, writer: writer);
         }
         FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
@@ -64,9 +64,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
 
     // One slot's continuation digest: the digests of its folded sections, in the continuation's order, and nothing
-    // else. Nothing a section does not hold can reach it.
-    internal static ulong ContinuationSlotDigest(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, WorldContinuationFoldWork? work) {
-        var digester = new SectionDigester(hash: Fnv1aHash.Create(), work: work, writer: writer);
+    // else. Nothing a section does not hold can reach it. A section a holder keeps (one bit of held per
+    // WorldContinuationSectionKind) is folded by the digest its holder handed out, never encoded here; the entry's
+    // value for it is not read.
+    internal static ulong ContinuationSlotDigest(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, WorldContinuationFoldWork? work, uint held, ReadOnlySpan<ulong> heldDigests) {
+        var digester = new SectionDigester(hash: Fnv1aHash.Create(), held: held, heldDigests: heldDigests, work: work, writer: writer);
 
         WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref digester);
         return digester.Hash.Value;
@@ -143,11 +145,17 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
     }
 
-    private struct SectionDigester(WireWriter writer, Fnv1aHash hash, WorldContinuationFoldWork? work) : IContinuationSectionVisitor {
+    private ref struct SectionDigester(WireWriter writer, Fnv1aHash hash, WorldContinuationFoldWork? work, uint held, ReadOnlySpan<ulong> heldDigests) : IContinuationSectionVisitor {
+        private readonly ReadOnlySpan<ulong> m_heldDigests = heldDigests;
+
         internal Fnv1aHash Hash = hash;
 
         public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> {
             if (!TSection.Folded) { return; }
+            if ((held & (1U << ((int)TSection.Section))) != 0U) {
+                Hash.Add(value: m_heldDigests[((int)TSection.Section)]);
+                return;
+            }
             Hash.Add(value: SectionDigest(section: in section, writer: writer));
             if (work is not null) {
                 work.SectionEncodes[((int)TSection.Section)]++;
@@ -200,10 +208,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         // What is consistent only across sections: every live scripted duration names the actor who authorized it.
-        var timerTicks = entry.Body.Action.TimerTicks.Span;
-        var pendingPress = entry.Body.Action.PendingPress.Span;
-        var timerActors = entry.Body.ScriptActors.Timers.Span;
-        var pendingActors = entry.Body.ScriptActors.Pending.Span;
+        ReadOnlySpan<ulong> timerTicks = entry.Body.Action.TimerTicks;
+        ReadOnlySpan<bool> pendingPress = entry.Body.Action.PendingPress;
+        var timerActors = entry.Body.ScriptActors.Timers.AsSpan();
+        var pendingActors = entry.Body.ScriptActors.Pending.AsSpan();
 
         for (var ordinal = 0; (ordinal < timerTicks.Length); ordinal++) {
             if ((timerTicks[ordinal] > 0UL) && (timerActors[ordinal] == default(Principal))) {

@@ -29,6 +29,45 @@ public sealed partial class WorldBody {
             m_roleChannels[ordinal] = ((roleMask is { } roles) && (ordinal < roles.Length) && roles[ordinal]);
         }
     }
+    // Lays the recency clocks out by the lanes' present bindings: a lane holds one clock per recency fact its binding
+    // declares. A lane takes the clocks of the lane sources names for it under the layout being replaced, as many as
+    // both hold; a lane with no source (a negative entry, or no table at all) starts with every clock at zero.
+    private void LayoutLaneRecency(ReadOnlySpan<int> sources) {
+        Span<int> starts = stackalloc int[(ActionLaneCount + 1)];
+        var total = 0;
+
+        for (var lane = 0; (lane < ActionLaneCount); lane++) {
+            starts[lane] = total;
+            total += (m_laneBindings[lane]?.RecencyFacts.Length ?? 0);
+        }
+        starts[ActionLaneCount] = total;
+        if (m_laneRecencyScratch.Length < total) { m_laneRecencyScratch = new ulong[total]; }
+
+        var laid = m_laneRecencyScratch.AsSpan(length: total, start: 0);
+        var previous = m_laneRecency.Read;
+
+        laid.Clear();
+        for (var lane = 0; (lane < sources.Length); lane++) {
+            if (sources[lane] is >= 0 and var source) {
+                CopyClamped(
+                    destination: laid[starts[lane]..starts[(lane + 1)]],
+                    source: previous[m_laneRecencyStart[source]..m_laneRecencyStart[(source + 1)]]
+                );
+            }
+        }
+        if (starts.SequenceEqual(other: m_laneRecencyStart) && previous.SequenceEqual(other: laid)) { return; }
+        starts.CopyTo(destination: m_laneRecencyStart);
+        laid.CopyTo(destination: m_laneRecency.Resize(count: total));
+    }
+    // One lane's recency clocks.
+    private ReadOnlySpan<ulong> LaneRecency(int lane) => m_laneRecency.Read[m_laneRecencyStart[lane]..m_laneRecencyStart[(lane + 1)]];
+    // Overwrites the first elements of a table holder from a captured table, as many as both hold, and only when they
+    // differ: a restore that changes nothing moves no version.
+    private static void RestoreTable<T>(VersionedArray<T> holder, ReadOnlySpan<T> source) where T : unmanaged, IEquatable<T> {
+        var count = Math.Min(val1: holder.Count, val2: source.Length);
+
+        if (!holder.Read[..count].SequenceEqual(other: source[..count])) { source[..count].CopyTo(destination: holder.Write); }
+    }
     // The clamped copy every restored table uses: it never trusts the captured table's length to match the restored
     // body's own. The same kit produces the same lengths; a decoded checkpoint is untrusted input.
     private static void CopyClamped<T>(ReadOnlySpan<T> source, Span<T> destination) =>
@@ -344,9 +383,9 @@ public sealed partial class WorldBody {
 
         // A press is input: the body's program must run to read it, so a sleeping body wakes.
         WakeIfResting();
-        m_pendingDefaultChannelPress[ordinal] = true;
-        m_pendingDefaultChannelValue[ordinal] = value;
-        m_pendingScriptActors[ordinal] = actor;
+        ActionEdit.PendingPress[ordinal] = true;
+        ActionEdit.PendingValue[ordinal] = value;
+        SetScriptActor(actor: actor, ordinal: ordinal, pending: true);
     }
     /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
     /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
@@ -590,12 +629,10 @@ public sealed partial class WorldBody {
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            m_laneActions[lane] = default;
-
-            if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
-                m_laneActions[lane].Recency = new ulong[binding.RecencyFacts.Length];
-            }
+            ActionEdit.LaneLatch[lane] = 0UL;
+            ActionEdit.LaneFactHeld[lane] = 0UL;
         }
+        LayoutLaneRecency(sources: default);
 
         // The response recency clocks are bound to the OLD table shape (a new table may have a different Recently count),
         // so they reset on a recompile — but m_planarVelocity SURVIVES, because a live retune must not jerk the crowd.
@@ -841,19 +878,19 @@ public sealed partial class WorldBody {
         var clearedTimedPresses = 0;
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            if (m_laneTimers[ordinal] > 0) {
+            if (Action.TimerTicks[ordinal] > 0) {
                 clearedTimedPresses++;
-                m_laneTimers[ordinal] = 0;
-                m_channelTimerValues[ordinal] = default;
+                ActionEdit.TimerTicks[ordinal] = 0;
+                ActionEdit.TimerValues[ordinal] = default;
             }
 
             // A body.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
             // only runs at the next Advance) — panic-verb totality means this pending tap is cleared too, and counted
             // the same as an already-materialized one.
-            if (m_pendingDefaultChannelPress[ordinal]) {
+            if (Action.PendingPress[ordinal]) {
                 clearedTimedPresses++;
-                m_pendingDefaultChannelPress[ordinal] = false;
-                m_pendingDefaultChannelValue[ordinal] = default;
+                ActionEdit.PendingPress[ordinal] = false;
+                ActionEdit.PendingValue[ordinal] = default;
             }
         }
 
@@ -914,10 +951,10 @@ public sealed partial class WorldBody {
                 return true;
             }
 
-            for (var ordinal = 0; (ordinal < m_pendingDefaultChannelPress.Length); ordinal++) {
+            for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
                 if (
-                    m_pendingDefaultChannelPress[ordinal] ||
-                    (m_laneTimers[ordinal] > 0UL)
+                    Action.PendingPress[ordinal] ||
+                    (Action.TimerTicks[ordinal] > 0UL)
                 ) {
                     return true;
                 }
