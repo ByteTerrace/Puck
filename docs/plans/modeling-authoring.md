@@ -20,23 +20,21 @@ reasoning, not yet checked by running anything.
 
 ## Summary
 
-Every modeling defect the Moth and swallow lanes reported this round is one of
-two kinds. The first kind is an engine limit the author cannot see from the
-document: the bake's 15 mm floor and the way a part declares its own detail,
-blends that tear between parts that move apart, a crease whose material cut
-left T-junctions, a `twist` the static emitter silently drops, a Convex prism
-that refuses `rounding` without saying why, a paint outline capped at eight
-vertices behind a message that names every cause but the count. Section 1
-lists them in the order of the defects they caused, with what the code says,
-which running lane owns each, and a step with a mechanical check for the rest.
-The second kind is the author's own arithmetic: a mirrored limb is a hand-
+Every modeling defect the Moth and swallow lanes reported is one of two kinds.
+The first kind is an engine limit the author cannot see from the document.
+Most of those are fixed at the cause; section 1 lists what remains and who owns
+each. The second kind is the author's own arithmetic: a mirrored limb is a hand-
 applied sign rule per field (three lanes wrote three helper libraries for it,
 none landed), a rotation is a raw quaternion the author cannot read back, and a
 part is placed by an absolute coordinate that every descendant repeats.
 Section 2 designs the construct for each (a `mirror` block, rotation builtins
 that fold to the one canonical quaternion, `relativeTo` placement lowered to
 absolutes) so that each lowers to the plain rows the compiler already writes at
-no cost, and says what the live World adds. Section 3 weighs an outside
+no cost, and says what the live World adds. The language constructs wait for
+the owner's review of this plan
+([awaiting the owner's review](open-items.md#awaiting-the-owners-review)); the
+`mirror` block in particular replaces a choice the owner already made, as
+decision 1 says. Section 3 weighs an outside
 editor's interaction ideas against the SDF document model. Section 4 names
 each design's invariant and what enforces it. Section 5 gives the first three
 implementation slices, each with a headless finish line, and section 6 turns
@@ -45,197 +43,20 @@ fix to one part breaking another) into a check.
 
 ## 1. The engine limits authors met
 
-Ordered by how many modeling defects each caused this round, from the open
-items, the lanes' commits and the look critic's findings. "Owner" names the
-running lane or plan that already holds the fix; a limit with none gets a step
-and a check here.
+Most of what the modeling lanes reported as defects were engine limits an
+author cannot see from the document, and most are fixed at the cause: one
+detail rule bounded by each view's demand, a fold that declares its base
+shape's detail, `twist` and `bend` on a static placement, rounding on a
+`Convex` prism, paint outlines up to the packed profile's vertex count, and a
+material cut that leaves no T-junction at a crease. What remains, each with its
+owner:
 
-| # | Limit | What the code says | Defects it caused | Owner |
-|---|---|---|---|---|
-| 1 | Small and thin parts bake on 8 to 15 mm cells: faceting, stair-steps, a thin part shattering into shards | The final lattice's spacing is floored at `SdfMeshPathBake.MinimumCell` (15 mm), and a group refines below it only where a member declares detail; a dynamic group merges every member's detail into one box | Most look-critic failures on the Moth and the swallow ([bake detail](open-items.md#bake-detail)) | Landed: one detail rule (`WorldShapeDetail.Of`) bounded by each view's demand ([bake detail bounded by demand](bake-demand-tiers.md)) |
-| 2 | Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
-| 3 | A smooth blend between parts that move apart tears | A blend inside its admitted envelope skins; one past it creases, and PUCK122 names it | Every rigged creation with a blended head or limb ([moving blends](moving-blends.md)) | Steps 1 to 3 landed; the gallery's moving-blend exhibits (`motion-smooth-blend`, `motion-carve`, `motion-nod`, `motion-three`, `motion-seam-paint`) keep them checked; step 4 is next |
-| 4 | `twist` and `bend` are dropped on a static placement, silently | The static emitter's transform chain applies flare, shear, bumps, warp and elongation and never `TwistY` or `BendZ`; the pooled emitter applies both | A static folded wing cannot twist; the author sees an untwisted part and blames the sculpt | Delivered by w1-limits; section 1.3 |
-| 5 | A material crease left T-junctions | The material cut's quartered edges | The swallow's painted feathers | Landed on the integration tip (two material-cut commits); closed pending the look lanes' captures |
-| 6 | A `Convex` prism refuses any `rounding` | `MaxRounding` returns 0 for Convex and Path, so the door says "no room to round" | A rounded convex blade faked with superellipsoids ([language and authoring](open-items.md#language-and-authoring)) | Delivered by w1-limits; section 1.4 |
-| 7 | A paint outline holds at most eight vertices, behind a message that names every cause but the count | `SdfPaint.IsValid` admits a side table of 16 floats | Painted markings redrawn as proud shapes | Delivered by w1-limits; section 1.5 |
-| 8 | A folded shape declares no detail of its own | `ShapeDetail` reads no `Domain`, so a fold's member cell is its whole repeat extent over 64 samples, floored at 15 mm | Folded ribs and plates baked coarse ([bake detail](open-items.md#bake-detail), the lanes' 12 to 14.5 mm reading) | Step 1.8, beside limit 1 |
-| 9 | A tip thinner than about 1.5 cells does not bake | A needle point stops short of its authored end | The swallow's streamers ([bake detail](open-items.md#bake-detail), low) | Limit 1's owner |
-| 10 | A primitive under a non-uniform scale is a distance bound, not a distance | `puck creation shape` prints `bound gain` for it; a cutter so scaled frays the surface it cuts | Stretched ellipsoid cutters | [The editor plan's open decision](editor.md#open-items) |
-
-### 1.1 The bake cell (limits 1, 8 and 9)
-
-**[opened]** `src/Puck.SdfVm/SdfMeshPathBake.cs:257` holds the floor:
-
-```csharp
-    public const float MinimumCell = 0.015f;
-```
-
-and the lattice applies it to every final lattice (`:1349-1355`): "A final
-lattice's spacing is never finer than MinimumCell, so a small part meshes at
-the detail a view resolves rather than at its own scale", with
-`if (gradients) { target = MathF.Max(x: target, y: MinimumCell); }`. A part
-refines below the floor only where its instance declares detail: a static
-shape through `WorldShapeDetail.Of`
-(`src/Puck.World.Client/WorldPlacementStamper.cs:588-638`), which reads
-cellular relief, a sweep's radius, an onion, a rounded profile, a warp's
-smallest extent and `PlateDetail`'s half thickness, floored at
-`FinestDetail = 0.002f` (`:95`); a body's shape through `BodyDetail` and a pooled
-part through `PartDetail` (`src/Puck.World.Client/WorldCreationInstances.Emit.cs:39-66`),
-whose `SectionDetail` is a round section's radius over `CellsPerRadius`,
-"zero for none, or for one no finer than the bake's own lattice already is".
-A dynamic group then merges every member's detail into one box
-(`src/Puck.SdfVm/SdfMeshBakeGroup.cs:410-412`):
-
-```csharp
-                group.DetailLow = (first ? low : Vector3.Min(value1: group.DetailLow, value2: low));
-                group.DetailHigh = (first ? high : Vector3.Max(value1: group.DetailHigh, value2: high));
-                group.Detail = (first ? instance.Detail : MathF.Min(x: group.Detail, y: instance.Detail));
-```
-
-so one fine member refines its neighbours' boxes too, which is why a thin
-member cannot declare its own cell without taxing the plates beside it
-([bake detail](open-items.md#bake-detail)'s first item).
-
-**[opened]** `ShapeDetail` never reads `shape.Domain`: a folded shape's bound is
-its whole repeat extent, so its final lattice is that extent over 64 samples
-(`Lattice`, `longest - 1` with `FinalSamples = 65`) floored at 15 mm, and the
-base primitive's thinness is not consulted unless `PlateDetail` catches it.
-**[inference]** This is limit 8's mechanism; the 12 to 14.5 mm figure is the
-lanes' reading, not this memo's measurement.
-
-What this memo settles: these three are one limit with one owner, the lane the
-brief names. The step it hands that lane beyond its brief:
-
-- **Step 1.8 (a fold declares its base shape's detail).** `ShapeDetail` and
-  `PartDetail` read the shape's unfolded primitive (`PlateDetail`,
-  `SectionDetail`) whatever its `Domain`, so a folded 4 mm plate asks for a
-  2 mm cell over its own box. Check: a fixture world with one static placement
-  of a `repeat`-folded 4 mm plate, `puck mesh audit --cpu --prototype <id>`
-  prints a cell at or under 2 mm where today it prints the floor; the same
-  fixture with the fold removed prints the same cell.
-
-### 1.2 Moving blends and the material cut (limits 3 and 5)
-
-**[record]** [Moving blends](moving-blends.md) holds the design (an admitted
-motion envelope, dual-quaternion skinning of two owners a vertex, the settle
-rebake retired); its steps 1 to 3 have landed on the integration branch, and
-step 4 (paints and lanes across a blended seam) is next.
-The material cut has landed on the integration tip in two commits ("the
-material cut shares each quartered edge's middle, so a crease leaves no
-T-junction" and "the material cut finds a quartered edge's whole holders by
-position"), so limit 5 is closed pending the look lanes' captures. Neither
-limit needs a step from this memo.
-
-### 1.3 Twist and bend on a static placement (limit 4)
-
-Delivered by w1-limits. Static and pooled emission share
-`ShapePointOps.Apply`: twist (`TwistY`), bend (`BendY`), flare, shear,
-bumps, warp, elongation. The stamp prefix already puts points in creation
-units; pooled callers provide their length conversion, with inverse-length
-rates converted reciprocally. The previous static chain omitted both rotations.
-The fixed contact emitter shares the twist/bend chain too. Such a solid selects
-the composed field collider, with a rotation-invariant reach and no exact
-straight-primitive partition shortcut. `ShapePointOps` derives scope admission
-from the same operation mask emission reads; static and pooled emission, bake
-partitioning, bounds and detail share that decision.
-
-Check: a static Box blade with `twist: 1`, `bend: 0.3` reports
-`lowered=RotatePlane·RotatePlane·Box` through `creation shape`.
-Its CPU mesh preview shows both deformations and zero open edges. The emission
-closure changes, so derived bake identities change. The shared method enforces
-the deformation order for both emitters; their placement prefixes remain distinct.
-
-### 1.4 Convex rounding (limit 6)
-
-Delivered by w1-limits. `SdfSolidGeometry.MaxRounding` now admits the room
-remaining after the profile corner fillet, bounded by the scaled profile
-inradius and, on an extrude, its half-depth. `ConvexProfile` already added
-separate rounding to corner rounding, and `SdfProgramBuilder.ConvexPolygon`
-already inset the polygon and lift before emitting the fillet; those existing
-mechanisms are reused. A radius past the ceiling refuses with its value.
-Scaled vertices and their inradius come from `SdfSolidGeometry.ScaledConvexProfile`
-for emission, admission and detail; a rounding-only Convex prism requests fillet detail.
-
-Check: a Convex blade at scale [0.2, 0.6, 0.04], `cornerRadius: 0.1`,
-`rounding: 0.002` passes compile validation, reports `distance=exact`,
-and its CPU mesh audit reports zero open/non-manifold edges and zero uncovered
-crossings. `rounding: 1` refuses naming the 0.019999998 ceiling for that shape.
-
-### 1.5 Paint outlines (limit 7)
-
-Delivered by w1-limits. Eight vertices was an arbitrary packing restriction:
-`SdfAppearance` reserved four inline side-table vectors per paint, while the
-primitive's packed vertex count supports 32. Fixed paint entries now occupy
-nine vectors, with individually sized side tables after all entries and before
-shade programs. `VectorsOf` and `Pack` use the same side-table size function;
-`SdfPaintShape.Data0At` relocates each reference into that table region. The
-shader reads the generated stride and its existing absolute table references.
-There is no extra paint-specific vertex cap.
-`SdfPaintShape.HasValidTable` ties the table's float count to the packed vertex
-count at paint admission, including directly constructed descriptors.
-
-`CreationCanonicalizer.ValidatePaletteLayers` already resolves paints through
-`ToPaint`, the same primitive emission stats uses. Its `ResolvePaint` now
-names both the count and 32-vertex packed-profile cap before primitive emission.
-Profiles default to sharp corners (`cornerRadius: 0`), including paints;
-rounding is authored explicitly. Compile validation and stats admit 8, 9 and
-32 vertices and refuse 33 by the canonicalizer's named refusal.
-
-### 1.6 Plaque layout
-
-`Puck.Text.TextLayout` wraps at breakable whitespace before placing a word,
-using the atlas's glyph bounds, advances, tracking and kerning. Enriched text
-and plain strings share that path. Only a word wider than the entire available
-line falls back to glyph breaks. Nonbreaking spaces stay within their word;
-soft-wrapped lines omit leading breakable spaces; hard newlines retain indentation.
-U+2007, like U+00A0 and U+202F, does not break a word. Word and fallback glyph
-wraps use one alignment-aware width measure. Unwrapped text keeps its original
-scalar layout. Creation `maxWidth` uses this shared layout in both static and
-pooled text emission, rather than a gallery-specific text implementation.
-
-Headless check: `TextContractTests.LayoutKeepsWordsInsideTheAuthoredFace` uses
-the gallery's Inter font and both subtraction/union note strings at em 0.03,
-width 1.12, spacing 1.15 and baseline 0.085. It verifies each word stays on one
-baseline, no glyph is lost, X stays within [-0.56, 0.56], and Y stays within
-[0, 0.15] of the plinth. The 14 focused layout cases pass. The short MCP
-windowed request expired waiting for another holder's GPU; no World launched.
-
-### 1.7 Non-uniform scale (limit 10): recommendation for the lead
-
-**Recommendation, not a settled product decision:** preserve the author's
-scaled zero set and replace distance bounds with exact primitive-distance
-lowerings, using a bounded closest-point solve where a direct lowering is not
-available. Keep the current conservative bound as a broad-phase/pruning answer;
-use the distance answer where offsets, blends and cutter quality depend on it.
-Do not silently change the zero set, and do not remove non-uniform scale from
-the authoring language. Those alternatives respectively change the requested
-shape or force authors back to shape assemblies.
-
-The mechanisms considered are `SdfSolidGeometry.AppendScaledPrimitive`
-(native box extents, an elliptical cylinder, and a torus with equal X/Z scale),
-`AppendProfile` (every regular polygon scales its vertices into the exact
-ConvexPolygon), the superellipsoid gauge, the generic Scale fallback, and
-`CreationShapeLaws`' gain/certification readback. In particular, the
-editor plan's Polygon12 example was stale: running
-`creation shape --world worlds/debug/debug.puck --prototype shape-polygon-12-xy`
-reports `lowered=ConvexPolygon distance=exact` and admitted contact.
-
-The invariant for that follow-up is the authored zero set plus a certified
-signed distance within an explicit solver tolerance, with deterministic contact
-using the same lowering. Enforcement belongs in the primitive builder and its
-shared evaluator contract, not a gallery exception. A fixed iteration count
-alone does not certify convergence: the solve needs an enclosing interval and
-a residual/error bound, including interior points and axis/centre degeneracies.
-No such solver is claimed to exist here. The lead owns that design slice and
-its CPU/GPU agreement check; no limit-10 engine code changes in this lane.
-
-Mechanical check for that slice: read all stretched gallery primitives through
-`creation shape`; audit their actual fields against closest-surface distances
-on both sides and at degeneracies, then audit a subtraction and smooth blend
-using each as a cutter. Report distance error, certification, field work and
-mesh defects; take settled captures in the debug gallery. The lead measures
-the added bake cost in a quiet window before choosing which solves to admit.
+| Limit | What the code says | Defects it caused | Owner |
+|---|---|---|---|
+| Orientation and mirroring errors: a limb mirrored by hand twice, a rotation nobody can read | The document carries a raw `[x, y, z, w]` per shape, pivot and axis; mirroring is the author's sign rule per field | The Moth's pods built mirrored per pod twice; three mirror and rotation helpers written on three branches | This memo, [section 2](#2-authoring-ergonomics) |
+| Paints and lanes do not follow a blended seam between parts that move | A blend inside its admitted envelope skins and one past it creases, but material coordinates across the seam are not blended yet | Painted markings on a rigged creation's blended head or limb | [Moving blends](moving-blends.md), step 4 |
+| A tip thinner than about 1.5 cells does not bake | A needle point stops short of its authored end | The swallow's streamers | [Bake detail](open-items.md#bake-detail) |
+| A primitive under a non-uniform scale is a distance bound, not a distance | `puck creation shape` prints `bound gain` for it; a cutter so scaled frays the surface it cuts | Stretched ellipsoid cutters | Decided: the authored surface is kept and the distance made true ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)); the work is [the rendering plan's bake-quality item](rendering.md#bake-quality) |
 
 ## 2. Authoring ergonomics
 
@@ -404,6 +225,23 @@ an author would have typed, at the same cost); the Puck standard is authored
 sides' design values stay the author's); vigilance against duplication (three
 helper libraries become none).
 
+**It replaces a recorded owner choice, and only if the owner accepts it.** The
+language programme's G16
+([state and language](state-and-language.md#designs-chosen)) records
+that the owner chose option (a): write each of the Moth's limbs once as a
+template over `side`, with nothing new in the language, after choosing which of
+her halves is right where they do not mirror
+([owner decisions](open-items.md#owner-decisions)). That is option 1 above,
+which this decision rejects. The two cannot both be built: if the owner accepts
+the `mirror` block in the review this plan waits on, it supersedes G16 and the
+Moth's right half is authored through the block; until then G16 stands, S1 is
+not dispatched, and no lane mirrors a creation by either route. Which half of
+the Moth is right is the owner's question under both.
+
+**The same goes for decision 2's builtins and the language programme's S9**,
+whose fourth wave lists "creation axes and rotations": that item is this
+plan's S2, and S9 points here.
+
 ### Decision 2: orientation by intent
 
 **The question.** How does an author write "this blade points along the body
@@ -527,12 +365,20 @@ descendant's absolute coordinate?
    document carries no `relativeTo`; `WorldDocumentMembers` refuses an
    unconsumed member by name, so a lowering that misses one cannot compile.
    A chain composes (`relativeTo` a shape that was itself relative). Favoured.
-4. *Named anchors.* A shape declares points in its own local frame
-   (`anchors { elbow [0, -0.21, 0] }`) and another says
-   `relativeTo: "upperArm.elbow"`. This is option 3 with a named origin and
-   is the step after it; it is also what the outside editor's "move anchors
-   that stay on their chosen face" and "dimensions attached to geometry"
-   become in a document that has no vertices ([section 3](#3-what-an-edge-and-face-editor-teaches)).
+4. *Named frames.* A shape, or a creation as a whole, declares named frames
+   in its own local frame, each a position and an optional rotation
+   (`anchors { elbow [0, -0.21, 0] }`), and another row names one
+   (`relativeTo: "upperArm.elbow"`). This is option 3 with a named origin and
+   is the step after it (S5). It is one mechanism with several users, and no
+   second design of it exists: a shape placed at another's frame; a placement
+   attached to a family's frame, so "put the lantern on the post's hook"
+   follows the hook when the post's parameters change, lowering to the offset
+   `WorldPlacementAttach` carries today; a `parent` on an embedded part; a
+   template argument; and what the outside editor's "move anchors that stay on
+   their chosen face" and "dimensions attached to geometry" become in a
+   document that has no vertices
+   ([section 3](#3-what-an-edge-and-face-editor-teaches)), as the snap targets
+   and measure endpoints of the editor plan's E3 and E7.
 
 **Migration.** A registered migration `relative-placement` rewrites a chosen
 creation's children to `relativeTo` their `parent` with the composed inverse,
@@ -720,15 +566,18 @@ relative offset.
 ### Next, after S1 to S3
 
 - **S4, the preview compare** ([section 6](#6-process-evidence-into-checks)).
-- **S5, named anchors** (decision 3, option 4): `anchors { }` on a shape,
-  `relativeTo: "shape.anchor"`, and the anchors as the snap targets and
-  measure endpoints the editor plan's E3 and E7 take.
+- **S5, named frames** (decision 3, option 4), the one home of the mechanism:
+  `anchors { }` on a shape and on a creation, `relativeTo: "shape.anchor"`, a
+  placement's attach naming a creation's frame, and the frames as the snap
+  targets and measure endpoints the editor plan's E3 and E7 take. Check: a
+  placement attached to a family's named frame follows the frame when the
+  family's height argument changes, and the lowered offset equals the
+  hand-typed one; a child placed at a named frame compiles to the document its
+  absolute placement compiled to.
 - **Editor steps handed to [the editor plan](editor.md):** `world.row.set`
   and `world.row.step` taking a `.puck` expression with units; `world.flip`
   through `CreationFrame`'s `Mirror`; E2, E7 and E8 with a creation's shape as a
   second selection target.
-- **Section 1's steps 1.4, 1.6, 1.7 and 1.8**, each one small lane or a
-  batch for one, independent of S1 to S3.
 
 ## 6. Process evidence into checks
 
@@ -800,9 +649,7 @@ builder's, headless and mechanical, so the critic sees fewer regressions.
 
 ## Open questions
 
-None unowned. The brief's lead that the swallow's right wing renders edge-on is
-settled by S1's finish line (the mirror construct's output against the hand
-copy, with preview sheets); the lanes' 12 to 14.5 mm folded-cell reading is
-settled by step 1.8's audit; the compile-against-stats paint gap is reproduced
-and closed by step 1.7; the owner of limit 1 is the lead's to confirm, since
-the brief names a lane this tree has no branch for.
+None unowned. Whether the `mirror` block replaces G16's `side` template is the
+owner's, with this plan's review. The lead that the swallow's right wing
+renders edge-on is settled by S1's finish line (the mirror construct's output
+against the hand copy, with preview sheets), once S1 is dispatched.

@@ -23,8 +23,9 @@ The forcing artifact is a place in the debug world laid out, lit and
 debugged in build mode without typing a coordinate: every placement put down,
 lined up and duplicated by pointer and grid, a dark corner diagnosed with
 `world.explain` and fixed, the slowest object found with `world.cost`, and the
-session saved back into the place's `.puck` source. Highest-quality frame targets are 60 FPS on the RTX
-2060 and RTX 4070, and 45 FPS (every frame under 22.2 ms) on Steam Deck.
+session saved back into the place's `.puck` source, with
+[the frame bar](../decisions/rendering.md#the-pipeline-foundation) held while
+build mode is on.
 
 ## What the packages build on
 
@@ -251,9 +252,9 @@ only in the main world residency.
 
 **Delivers:**
 
-1. **Bindable views.** `world.debug-view` becomes bindable: a constant value
-   selects a mode by index, and two reserved values step to the next and
-   previous mode, following `view.override`'s convention.
+1. **Stepping.** `world.debug-view` is bindable and selects a mode; what it
+   lacks is two reserved values that step to the next and previous mode,
+   following `view.override`'s convention.
 2. **Every residency.** The mode reaches the main world residency (whose
    camera views already show it) and every session and routed residency the
    screen binder creates (`WorldScreenBinder.Device.Views.cs`, `WorldScreenBinder.Device.Routed.cs`),
@@ -295,27 +296,10 @@ the canary.
 
 ### E5 — The inspector
 
-**Problem:** to learn anything about what they are looking at, a builder types a
-read-back verb and reads its output in a terminal.
-
-**Delivers:** an inspector panel drawn on the `Editor` overlay channel, toggled
-by the bindable `world.inspect on|off|toggle`. It shows the placement under the
-pointer (id, prototype, material and its name, world position, normal, distance
-from the camera), a summary of the selection, the camera's pose and field of
-view, the simulation and presentation ticks, the render scale, the active debug
-view and shading levers, the frame's counted work from `world.counters`
-(dispatches, uploads, created objects), the `world.budget` headline (words,
-instances, headroom), and the GPU pass times while
-[E9](#e9--cost-per-object-and-gpu-pass-timing)'s readout is on. `world.inspect`
-with no argument prints the same text; the panel and the verb share one
-formatter, so the read-back and the drawing cannot disagree.
-
-**Touches:** `Puck.Overlays` (an inspector writer), `Puck.World.Client`, the
-editor command module.
-
-**Check:** `WorldInspectorLawTests` (the formatter's text for a fixture hit
-names the placement and material and equals the verb's echo; a steady frame
-allocates nothing; red leg: the pointer on the sky prints `hit=none`).
+Built ([World guide](../../src/Puck.World/README.md)): the inspector panel on
+the `Editor` overlay channel, toggled by the bindable `world.inspect`, sharing
+one formatter with the verb's echo. The two rules below are its contract and
+belong in the World guide; they stay here until it carries them.
 
 **Storage rule:** composition sums every overlay writer's declared text-word
 reservation and rounds the sum up to a power of two. The current four-seat
@@ -343,15 +327,9 @@ come from the same visibility record. A passthrough pane supplies its own render
 residency and quality to the inspector, cost report and pass timings. Pass timing
 and FPS appear only while `world.gpu-timing` is enabled.
 
-**Depends on:** the shared GPU picking mechanism, which is in place.
-
-**Status:** built ([World guide](../../src/Puck.World/README.md)). The panel's
-text fits a fixed reservation on the overlay lease table, long diagnostics with
-their file and location first, and a steady frame allocates nothing; that is
-the storage rule overlay writers follow. The summary of the selection reads the
-placement the seat last put down or moved, so it is `selection=none` on a fresh
-seat; [E2](#e2--selection-picking-and-highlight) owns feeding it a real
-selection.
+What remains is E2's: the summary of the selection reads the placement the seat
+last put down or moved, so it is `selection=none` on a fresh seat until
+[E2](#e2--selection-picking-and-highlight) feeds it a real selection.
 
 ### E6 — Why is this dark or invisible
 
@@ -456,43 +434,12 @@ every field required and validated by name); the camera that reads it is open.
 
 ### E9 — Cost per object and GPU pass timing
 
-**Problem:** a builder cannot tell which object makes the frame slow.
-
-**Delivers:**
-
-1. **`world.cost [<placement>]`** echoes one placement's counted cost: shapes,
-   program words, instances (one for a scoped creation, one per shape for a
-   scope-free one, `CreationStampEmitter.PerCopyInstanceCount`), scope clamps,
-   its bound radius and blend halo, whether it has unmaskable influence (which
-   costs every tile), stamp-pool slots, and whether it draws as a bake. Its
-   share of `world.budget`'s totals is printed beside it. `world.cost top [<n>]`
-   lists the heaviest placements. Every number is a deterministic count.
-2. **GPU pass timing, as a readout.** Timestamp queries around each pass a
-   render node records, at the sites that already enter and leave passes for
-   the work ledger, on both backends; read back after the slot's fence and
-   averaged over a window of frames. `world.gpu-timing on|off` (bindable, off
-   by default) turns it on, `world.gpu-timing` prints each node's passes in
-   milliseconds, and the inspector shows them. A query pool is a creating member
-   of `GpuDeviceServices`: named, counted under `gpu.created`, wrapped by the
-   creation faults, and released on device loss. The frame rate readout in the
-   inspector follows the same rule. The readout never judges: see
-   [Decisions](#decisions).
-3. **Cost at the pointer.** The inspector reads the visibility record's step
-   and query counts at the pointer's pixel, from the one-pixel readback that
-   GPU picking supplies.
-
-**Touches:** `Puck.World.Client` and `src/Puck.World` (`world.cost`),
-`Puck.Abstractions` (the timing query service), `Puck.Vulkan` and
-`Puck.DirectX` (query pools and heaps, timestamp periods),
-`Puck.Shaders` (`ShaderPipelineRenderNode`), `Puck.SdfVm` (`SdfWorldTables`).
-
-**Check:** `WorldCostLawTests` (fixture placements' counts equal their emitter's;
-red leg: a scoped creation counted per shape fails); `ShaderPipelineRenderNodeLawTests` over
-the fake device (on: two queries per pass, named and fault-wrapped, released on
-device loss; off: zero queries; red leg: a node that forgets `LeavePass` fails
-the pair count; a faulted pool or readback refuses timing by name while frames
-keep rendering, and a later frame tries nothing). The laws assert the mechanism
-and never a time.
+Built ([World guide](../../src/Puck.World/README.md)): `world.cost` per
+placement and at the pointer, and the optional `world.gpu-timing` readout,
+which never judges ([Decisions](#decisions)).
+[E13](#e13--carving-and-its-sampled-bake) extends `world.cost` with a
+placement's carves. The two rules below are its contract and belong in the
+World guide; they stay here until it carries them.
 
 **Accounting rule:** placement program words are the words owned by its live
 instance rows, instruction headers/data/bounds, segments, rigid leaves, shape
@@ -519,41 +466,17 @@ query/readback ownership. GPU timestamp readback and retained CPU sample payload
 are reported separately. Times and FPS never become correctness assertions;
 dynamic resolution is the one quality input that reads the timing.
 
-**Depends on:** nothing.
-
-**Status:** built ([World guide](../../src/Puck.World/README.md)): `world.cost`
-for step 1, the optional `world.gpu-timing` readout for step 2, and the
-`pixel=` line of `world.cost` with the inspector's `steps=` and `queries=` for
-step 3. [E13](#e13--carving-and-its-sampled-bake) extends `world.cost` with a
-placement's carves.
 
 ### E11 — Save edits back to source
 
-**Status:** source-preserving save is in place for authored rows. The printer
-rewrites changed source spans, retains untouched text and a UTF-8 byte-order
-mark, and proves the recomposed document before writing atomically. Template,
-loop and module-generated rows refuse by name. The generated-name refusal is
-also in place; E3 supplies the live duplicate and rename workflow.
-
-**Delivers:** `world.save` to a `.puck` source writes the rows the session
-changed back into that source through the transpiler's printer, keeping `let`s,
-templates, comments and formatting outside those rows byte for byte. A row a
-template or a compile-time `for` generated is refused by name, naming the
-construct that made it, and the refusal offers a JSON delta with the source as
-its basis instead (the delta save `world.save` already makes). A row whose id
-was minted through `GeneratedName` is refused by name until `world.rename`
-gives it an authored id, since a `.puck` source cannot spell a generated name.
-
-**Touches:** `Puck.World.Transpiler` (printer and decompiler),
-`Puck.Transpiler`, the mutation command module (`world.save`).
-
-**Check:** `SourceSaveLawTests` covers exact unrelated text, basis composition,
-row removal and insertion, byte-order marks, and named refusals for generated
-rows. `WorldSourceSaveIntegrationLawTests` nudges a live placement, saves and
-reloads it, and compares the resulting document while preserving the source's
-unrelated heading and tail. The laws fail when the source rewrite is bypassed.
-
-**Depends on:** E3.
+Source-preserving save is built for authored rows: `world.save` rewrites the
+changed source spans through the transpiler's printer, keeps everything else
+byte for byte, and refuses a template, loop, module-generated or
+generated-name row by name. What remains is [E3](#e3--undo-redo-duplicate-delete-and-measure)'s
+live duplicate and rename workflow, which gives a generated row an authored id
+so it can be saved, and the per-field inverses the
+[modeling authoring plan](modeling-authoring.md#decision-4-what-the-running-world-contributes)'s
+lowerings declare.
 
 ### E12 — The shape gallery as a world
 
@@ -688,21 +611,17 @@ assertion, a ceiling or any law's asserted value, and performance is still
 judged by code and counts. [The rendering decisions](../decisions/rendering.md#the-pipeline-foundation)
 record this exception.
 
-**SdfDebug is deleted, not hosted.** Hosting it would add a second
-presentation path beside the `sdf.world` views: a takeover that emits C#-built
-scenes the document never sees, with an orbit camera whose rates are baked
-constants. Everything it shows is expressible as a world document plus the
-editor's own tools. The directory is deleted only once E12's parity table
-holds, so no capability is lost on the way.
+**A C#-built debug scene is never hosted.** The old SDF debug takeover, which
+survives only in git history, emitted scenes the document never saw, with an
+orbit camera whose rates were baked constants: a second presentation path
+beside the `sdf.world` views. Everything it showed is expressible as a world
+document plus the editor's own tools, which is what the debug gallery is.
 
 ## Open items
 
-- Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring. The [w1-limits recommendation](modeling-authoring.md#17-non-uniform-scale-limit-10-recommendation-for-the-lead) preserves the authored surface and supplies bounded exact-distance lowerings; it is a recommendation, not a settled decision.
-
 What the plan still owes. A line is deleted when its work lands, never ticked;
-the [open items](open-items.md#next) rank the work packets drawn from it. E1,
-E5, E9, E10, and E14's recording and scrubbing are in; E8's feel values and
-bindings are authored in `worlds/standard/editor.puck`.
+the [open items](open-items.md#next) rank the work packets drawn from it. E8's
+feel values and bindings are authored in `worlds/standard/editor.puck`.
 
 - [E2](#e2--selection-picking-and-highlight): the identity map and GPU hover
   picking are in place through P13; the line primitive, `world.select`,
@@ -739,17 +658,12 @@ bindings are authored in `worlds/standard/editor.puck`.
     textured quad the mesh pass draws, or the views pass reading the slice's
     samples where a ray crosses the plane) would show it live in place. No pixel
     kernel may walk the field for it.
-  - Primitives that still lower to a bound or worse, which `creation.shape`
-    reports and the gallery shows: a capsule, cone or torus scaled apart in X
-    and Z, and a round cone scaled apart at all ride the generic `Scale` (gain min/max,
-    refused by the fixed-point evaluator and so by solid contact; the gallery's
-    `shape-*-xz` and `shape-round-cone-xyz` read 0.5 to
-    0.33); regular polygons, including `shape-polygon-12-xy`, now lower their
-    scaled vertices to the exact ConvexPolygon field; an ellipsoid or sphere scaled apart is the exponent-2 superellipsoid
-    gauge (gain about the smallest radius over the largest, contact admits it);
-    a `Path` profile and a sweep certify no gain. Whether to iterate an exact
-    distance, change the zero set or refuse such scales at authoring is the
-    owner's call.
+  - Primitives that still lower to a distance bound under a non-uniform scale,
+    which `creation.shape` reports and the gallery's `shape-*-xz` exhibits
+    show, keep their authored surface and get a true distance
+    ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance));
+    the [rendering plan](rendering.md#bake-quality) holds the work, and the
+    gallery is where it is read.
 - [E13](#e13--carving-and-its-sampled-bake): a carve brush whose dabs are document
   rows, one authored edit per stroke, using shared field/bake invalidation and
   the engine job system for bake work.

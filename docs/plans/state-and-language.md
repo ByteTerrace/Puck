@@ -145,10 +145,14 @@ distinct instantiation. What remains:
 - Every reusable module in the debug world ships tests, green on the server
   host and reproducing under `--reproduce`, and the C# laws that pinned a shipped
   game's behaviour are deleted with the tests that replace them.
-- The `given`/`when` vocabulary for standing at a place, walking, pressing a
-  channel and reading a body's own position waits on the operands a rule can
-  read those through: an expectation reads what a rule reads, a state row, never
-  a body's own pose or position.
+- A higher-level `given`/`when` vocabulary for standing at a place, walking and
+  pressing a channel. The operands exist: an expectation reads a body's
+  position and facts as a rule does (`bodyPosition(body, 0, x)`,
+  `fact(body, 0, Grounded)`), which is how
+  [the walkthrough](walkthrough.md)'s routes state arrival
+  (`worlds/debug/walkthrough-tests.puck`). What is missing is the shorter
+  spelling over them (a step that says "at this stop" or "walk to" in place of
+  six comparisons), a surface gap and not an engine one.
 - The browser host cannot run a leg (no command ingress, no acting principal,
   no authoritative server), so `--host browser` is refused by name and
   server-versus-browser determinism is unproven.
@@ -192,9 +196,9 @@ what it replaces.
 | Wave | Items |
 |---|---|
 | 1 | Compound assignment, one expression language and the locals' order, then one bracket rule. Beside it: `sql { }` deleted, a wrapping printer, and saving through the source tree. |
-| 2 | Every condition as an expression (HUD, placement responses, element text); no JSON showing through; `function`. |
+| 2 | Every condition as an expression (HUD, placement responses, element text); no JSON showing through. (`function` is built.) |
 | 3 | Names for bodies and identities with dot reads; one composition construct; then typed test steps with `eventually`. |
-| 4 | Complete state sugar; one rule grammar for cartridges; one authorization declaration; creation axes and rotations. |
+| 4 | Complete state sugar; one rule grammar for cartridges; one authorization declaration; creation axes and rotations, which are the [modeling authoring plan](modeling-authoring.md#decision-2-orientation-by-intent)'s S2 and are designed there once. |
 
 **Check:** each item's before and after compiles every shipped source to the
 same documents where the meaning is unchanged, `puck test worlds/debug
@@ -211,7 +215,7 @@ in order; the language work of S9 continues beside it.
 | 1 | Addon reads and change deliveries checked against per-recipient disclosure (a correctness repair, first and independent). |
 | 2 ✓ | Charge what is used: the provenance column gone, trait columns reserved only where declared, growth charged, no Cartesian relationship universe, `MoveCell` never materializing an absent column, ordered and evicting rows without whole-row shifts. |
 | 3 ✓ | One live store and one write door: journal-driven publication, one arena reader, grant-checked atomic batches for runtime writers, live disclosure, arena checkpoints, and responses, deals and contribution tenure as projections. |
-| 4 | Hash and checkpoint everything that steers the future, a running addon's continuation included. |
+| 4 | Hash and checkpoint everything that steers the future. A running addon's continuation is in: it is captured with the world, and recording takes the same capture. What remains is what capture still refuses by name: a stepped machine whose host cannot checkpoint, and the machine state the [machines plan](machines-and-cartridges.md) lists (applied screen operations, live coupled links, enabled rewind history). |
 | 5 | Rewind as a complete continuation bundle, extending scoped capture and restore in `WorldScopedReplayRuntime`, the plain-row column image in `ArenaScopeSnapshot`, and checkpointed scoped replays and undo in `WorldPersistence.Checkpoint.cs`. Scoped capture currently refuses timed, vector, and pool rows; the complete bundle must include their continuation too. |
 | 6 | Entities as records in pools, with references, seats as entities and the chess pieces migrated. |
 | 7 | Edges as values, versioned facets and explicit rule order; key-name reclamation; rare traits as facets; one deterministic semantic allowance with measured reports, the reference-cycle model deleted. |
@@ -502,6 +506,12 @@ Decided: (a). The irregular offsets are history, not design; once the
 ids are regular the existing template expresses the side, and the language
 needs (b) only if several creatures (the pond's spider and hound) want it.
 
+The [modeling authoring plan](modeling-authoring.md#decision-1-symmetry-is-a-construct)
+has since proposed (b) as a `mirror` block, on the evidence that three lanes
+mirrored three creatures by hand and each wrote its own helper. It replaces
+this choice only if the owner accepts it in that plan's review; until then (a)
+stands and neither is built.
+
 Measured, not yet done: the compiled Moth pairs 125 left and right shapes at
 eleven id offsets (100: 43, 68: 35, 16: 15, 20: 8, 7: 7, 1: 5, 8: 5, 6: 3,
 2: 2, 48 and 69). Beyond the mirror (x negated in positions, a rotation
@@ -633,8 +643,9 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   describes).
 - S10 the state review ([S10](#s10--the-state-review)):
   - State/jobs ownership and ordering from the memo, before pools and parallel evaluation.
-  - Everything that steers the future hashed and checkpointed, running addons
-    included.
+  - Everything that steers the future hashed and checkpointed; a running
+    addon's continuation is done, and the machine states capture still refuses
+    remain.
   - Rewind as a complete continuation. Chess allows undo (the owner's ruling): a
     player takes back a move through gameplay rewind over the complete
     continuation, the first consumer of this step.
@@ -645,11 +656,12 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   - Wave 2: every condition as an expression (HUD visibility, placement
     responses, element text); the noise fields that remain (`mode: Level`
     written in rule bodies where it is the default, and one hash spelling for
-    `hash: "auto"`, `"sha256-64/…"` and a bare digest); `function`.
+    `hash: "auto"`, `"sha256-64/…"` and a bare digest).
   - Wave 3: names for bodies and identities, one composition construct, typed
     test steps with `eventually`.
   - Wave 4: complete state sugar, one rule grammar for cartridges, one
-    authorization declaration, creation axes and rotations.
+    authorization declaration; creation axes and rotations are the modeling
+    authoring plan's S2.
 - A decision cannot sweep `$bodies` (refused by name); its `forEach` names a
   keyed row. The browser rule host serves no bodies, so it refuses a `$bodies`
   rule at admission as `ILiveBodies`.

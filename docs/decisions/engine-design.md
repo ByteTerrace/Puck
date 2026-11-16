@@ -497,6 +497,71 @@ the standard is authored, never baked into a primitive
 ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). A box an author wants soft
 takes `rounding`; touching boxes meet as one solid.
 
+## A scaled primitive keeps its authored surface, at a true distance
+
+A primitive under a non-uniform scale keeps the zero set its author wrote, and
+the engine owes it a true distance. Three answers were weighed for a primitive
+whose scaled field is only a distance bound: iterate to an exact distance,
+change the zero set to one whose distance is easy, or refuse such scales at
+authoring. The second changes the shape the author asked for and the third
+forces authors back to assemblies of shapes, so both are rejected (the lead's
+ruling under "the proper fix is always preferred"; it is engineering, not a
+look).
+
+- **Exact where a closed form exists.** Box extents, an elliptical cylinder, a
+  torus scaled equally in X and Z, and every regular polygon as its scaled
+  convex polygon already lower to exact fields (`SdfSolidGeometry`).
+- **A bounded closest-point solve elsewhere**, with its answer certified: an
+  enclosing interval and a residual bound, interior points and axis and centre
+  degeneracies included. A fixed iteration count alone certifies nothing.
+- **The conservative bound stays only as a broad-phase and pruning answer.**
+  Where offsets, blends and a cutter's quality depend on distance, they read
+  the distance.
+- **Contact reads the same lowering** in fixed point, so a scaled solid
+  collides as it draws
+  ([a collider follows the drawn solid](#a-collider-follows-the-drawn-solid)).
+
+The enforcement is the primitive builder and the evaluator contract it shares
+with the kernels, never a gallery exception. Until a primitive has its solve,
+`puck creation shape` reports its gain as a bound, the fixed-point evaluator
+refuses it for solid contact, and a cutter so scaled can fray the surface it
+cuts. The [rendering plan](../plans/rendering.md#bake-quality) holds the work
+and its check.
+
+## The creation library is this repository
+
+The owner asked whether open 3D libraries could inspire Puck, ruled "Research,
+no copying", and answered the research: "An open library is the goal ONLY in
+the sense that our entire repo is open source and we plan to share with
+everyone." So the library is the standard package (`worlds/standard/`) and the
+worlds beside it, which any author imports, overrides by id or replaces. No
+library service, hosted index, library world or federated catalogue is a goal.
+
+What follows from it is ordinary standard-package work, proved in the debug
+world: families with declared controls, presets and measured extents, a shared
+role table for restyling, named frames for composition, and the compiler
+recording which template and arguments produced a creation
+([author leaks to the standard](../plans/open-items.md#author-leaks-to-the-standard)).
+Two facts the research established hold whatever is built: two worlds that
+expand one standard template with the same arguments embed byte-identical
+pins, and an unknown member written inside a creation document enters its pin,
+so anything an author writes about a creation travels in its identified bytes.
+
+Licensing, attribution, sale, AI-use marks and likenesses are the author's
+business and never an engine vocabulary, check or credits derivation
+(AGENTS.md, "Authors rule"); a value that is scarce and sold settles at the
+settlement door like any other
+([worlds and federation](worlds-and-federation.md#scarce-value-settles-at-one-door-per-domain)).
+
+What would reopen the question is creations crossing between parties: a second
+package authored outside this repository that imports the standard, or a world
+that discloses prototypes to a recipient it does not run. The mechanisms that
+case needs are named so the step is short when it arrives, and none is
+scheduled: `import` by identity as well as by path, content addressed
+independently of its host, a library served under "a content pin grants no
+access", and an arriving creation priced against the receiving world's budget
+by the receiver's own measurement, never a shipped number.
+
 ## A derived product is a cache, never the truth
 
 A baked mesh, an irradiance volume, a compiled shader or any other product

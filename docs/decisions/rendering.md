@@ -1275,8 +1275,8 @@ expect, so one could still be added later as an alternative pass.
 
 ## Global illumination
 
-These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination),
-the global illumination slices of P6.
+These decisions shape the [illumination plan](../plans/illumination.md),
+which holds their build order.
 
 **Indirect light is an irradiance volume traced on the GPU against the baked
 meshes.** The frame walks no field, and worlds are mostly static, so bounce
