@@ -2264,20 +2264,26 @@ public sealed partial class SdfMeshPathBake {
     // The contour's initial triangle facings and vertex-to-triangle rows, retained only during field projection.
     // A triangle's area normal is affine in one moving vertex, so its dot with this fixed reference clips a proposed
     // displacement exactly before the triangle reverses. Fixed references preserve orientation across all sequential
-    // vertex moves; comparing only against each step's new normal would permit a cumulative reversal.
+    // vertex moves; comparing only against each step's new normal would permit a cumulative reversal. A triangle is held
+    // the same way to the lattice edge its quad crosses (SdfContour.QuadAxes, SdfContourFacing), which the contour's
+    // settle left it facing out along: its own facing can turn edge-on to that direction and past it without reversing
+    // against where it began.
     private sealed class ContourProjection {
         private readonly int[] m_starts;
         private readonly int[] m_incident;
         private readonly Triangle[] m_triangles;
 
-        private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference);
+        // `Axis` is zero where the contour records no lattice edge; `Patches` is the sum of the corners' patch facings
+        // (SdfContour.Patches), zero where it records none.
+        private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis, (double X, double Y, double Z) Patches);
 
         public ContourProjection(SdfContour contour) {
             var triangles = new List<Triangle>(capacity: (2 * contour.QuadCount));
 
             m_starts = new int[(contour.VertexCount + 1)];
 
-            void Add(int a, int b, int c) {
+            double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
+            void Add(int a, int b, int c, sbyte axis) {
                 if ((a == b) || (a == c) || (b == c)) { return; }
                 var pa = At(contour: contour, vertex: a);
                 var pb = At(contour: contour, vertex: b);
@@ -2288,7 +2294,7 @@ public sealed partial class SdfMeshPathBake {
                 // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
                 // into a valid triangle instead of making one degenerate face immobilize the whole fan.
                 if (!(Dot(a: normal, b: normal) > ((1e-12 * longest) * longest))) { return; }
-                triangles.Add(item: new Triangle(A: a, B: b, C: c, Reference: normal));
+                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(vertex: a, axis: 0) + Patch(vertex: b, axis: 0)) + Patch(vertex: c, axis: 0)), ((Patch(vertex: a, axis: 1) + Patch(vertex: b, axis: 1)) + Patch(vertex: c, axis: 1)), ((Patch(vertex: a, axis: 2) + Patch(vertex: b, axis: 2)) + Patch(vertex: c, axis: 2))), Reference: normal));
                 m_starts[(a + 1)]++;
                 m_starts[(b + 1)]++;
                 m_starts[(c + 1)]++;
@@ -2298,9 +2304,10 @@ public sealed partial class SdfMeshPathBake {
                 var at = (4 * quad);
 
                 var (a, b, c, d) = (contour.Quads[at], contour.Quads[(at + 1)], contour.Quads[(at + 2)], contour.Quads[(at + 3)]);
+                var axis = ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0));
 
-                Add(a: a, b: b, c: c);
-                Add(a: a, b: c, c: d);
+                Add(a: a, axis: axis, b: b, c: c);
+                Add(a: a, axis: axis, b: c, c: d);
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
             m_triangles = [.. triangles];
@@ -2345,6 +2352,15 @@ public sealed partial class SdfMeshPathBake {
                 if ((after < floor) && (after < before)) {
                     limit = Math.Min(val1: limit, val2: (0.99 * Math.Max(val1: 0.0, val2: ((before - floor) / (before - after)))));
                 }
+                if (triangle.Axis == 0) { continue; }
+
+                var alongBefore = Along(contour: contour, point: original, triangle: triangle, vertex: vertex);
+                var alongAfter = Along(contour: contour, point: target, triangle: triangle, vertex: vertex);
+                var alongFloor = Math.Min(val1: (Math.Sqrt(d: Dot(a: triangle.Reference, b: triangle.Reference)) * 1e-5), val2: (alongBefore * 0.5));
+
+                if ((alongAfter < alongFloor) && (alongAfter < alongBefore)) {
+                    limit = Math.Min(val1: limit, val2: (0.99 * Math.Max(val1: 0.0, val2: ((alongBefore - alongFloor) / (alongBefore - alongAfter)))));
+                }
             }
 
             // Positions are ultimately floats. Check the actual rounded point too, backing off when a very narrow
@@ -2356,7 +2372,8 @@ public sealed partial class SdfMeshPathBake {
                 for (var at = m_starts[vertex]; (valid && (at < m_starts[(vertex + 1)])); at++) {
                     var triangle = m_triangles[m_incident[at]];
 
-                    valid = (Facing(contour: contour, point: point, triangle: triangle, vertex: vertex) > 0.0);
+                    valid = ((Facing(contour: contour, point: point, triangle: triangle, vertex: vertex) > 0.0) &&
+                        ((triangle.Axis == 0) || FacesOut(contour: contour, point: point, triangle: triangle, vertex: vertex) || !FacesOut(contour: contour, point: original, triangle: triangle, vertex: vertex)));
                 }
                 if (valid) {
                     amount = ((float)limit);
@@ -2372,6 +2389,28 @@ public sealed partial class SdfMeshPathBake {
             a: ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A)),
             b: ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B)),
             c: ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C))));
+        // The triangle's area normal along its quad's lattice edge with `vertex` at `point` (SdfContourFacing.Along).
+        private static double Along(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
+            var (a, b, c) = Corners(contour: contour, point: point, triangle: triangle, vertex: vertex);
+
+            return SdfContourFacing.Along(a: a, axis: triangle.Axis, b: b, c: c);
+        }
+        // Whether the triangle faces out as the lattice fixed its quad's facing with `vertex` at `point`
+        // (SdfContourFacing.FacesOut): the analytic clip keeps it facing out along its edge, and this also refuses a move
+        // that leaves it edge-on to that edge and turned against its corners' patches.
+        private static bool FacesOut(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
+            var (a, b, c) = Corners(contour: contour, point: point, triangle: triangle, vertex: vertex);
+
+            return SdfContourFacing.FacesOut(a: a, axis: triangle.Axis, b: b, c: c, patches: triangle.Patches);
+        }
+        // The triangle's corners with `vertex` at `point`.
+        private static ((double X, double Y, double Z) A, (double X, double Y, double Z) B, (double X, double Y, double Z) C) Corners(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
+            var a = ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A));
+            var b = ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B));
+            var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
+
+            return ((a.X, a.Y, a.Z), (b.X, b.Y, b.Z), (c.X, c.Y, c.Z));
+        }
         private static (double X, double Y, double Z) Area(Vector3 a, Vector3 b, Vector3 c) {
             var (ux, uy, uz) = ((((double)b.X) - a.X), (((double)b.Y) - a.Y), (((double)b.Z) - a.Z));
             var (vx, vy, vz) = ((((double)c.X) - a.X), (((double)c.Y) - a.Y), (((double)c.Z) - a.Z));

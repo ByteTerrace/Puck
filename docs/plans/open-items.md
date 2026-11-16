@@ -41,8 +41,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
    window, step 2, and step 7's prototype with a GPU grant; then step 3.
-2. [high] [Bake detail](#bake-detail): a contour that holds a crease at any
-   lattice alignment (the tour's mesh-audit reds, the Moth's shin groups),
+2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
+   by every lattice fact and are still turned from the field (vertices the
+   planes put off the surface, slivers beside a crease, a face narrower than
+   a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
 3. [high] [Engine job system](#engine-job-system): the memo's next step,
    which after the scheduling stage's remainder is the control plane's phase
@@ -766,26 +768,50 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: a contour that holds a crease at any lattice alignment, which the tour's
-reds and the Moth's shin groups share, then
+Next: the three kinds of triangle the lattice's facing does not judge, which
+the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
-- [high] The walkthrough tour is red on its mesh audits alone, on both
-  backends: `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds
-  flipped triangles on twelve of the fourteen blend exhibits and three
-  primitives, `shape-groove-union` worst. Which exhibits fold follows where
-  the narrowed box puts the lattice, not the shape: contouring across a crease
-  that falls between samples. A per-axis narrowing was worse over the whole
-  world. The thresholds (`folds > 0` amber, `flipped > 0` red) are right and
-  are not loosened.
+- [high] The walkthrough tour is still red on its mesh audits:
+  `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
+  triangles on six of the fourteen blend exhibits (`shape-groove-union` and
+  `shape-blend-subtraction` worst) and on none of the primitives. Every quad
+  of those contours faces out as its lattice edge says
+  ([the contour's facing](../../.claude/skills/rendering/references/mesh-bake.md#contouring)),
+  so what remains is geometry the lattice's facts do not judge, in three
+  kinds, each a step of its own:
+  - A vertex its crossings' planes put millimetres off the surface where the
+    field check refuses to move it (`SdfMeshPathBake.ProjectCrease`: a kinked
+    gradient, or one turned from its triangles): the fins where
+    `shape-groove-union`'s groove ends against the ball. Along that exhibit's
+    rims a cell's crossings within a gradient tap of the crease read a blend
+    of the two faces, and the cell's point is drawn off its own surface;
+    whether the fins are the same planes is not traced. A crossing whose
+    gradient is a blend should give the cell no plane, and a vertex the check
+    cannot move should return to its crossings' mean. Check: the exhibit's
+    `off surface` and `turned` counts.
+  - A sliver between two rows of vertices a few hundredths of a cell apart
+    along a crease, and a web across the junction of two creases (a carve's
+    rim meeting a box edge): triangles a degree or two past edge-on whose
+    facing is their vertices' rounding. A row the lattice puts that near a
+    crease should take the crease's own vertices (one row, no strip). Check:
+    `flipped` on `shape-blend-subtraction` and `shape-smooth-subtraction`.
+  - A face narrower than the cell between two creases, below.
+  The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
+  loosened. A per-axis narrowing was worse over the whole world, and moving
+  the lattice off a face only moves which exhibit is red.
 - [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) contour badly at their
-  declared detail: `puck mesh audit --world worlds/debug/debug.puck
-  --prototype moth --cpu` prints folds, flipped and turned faces and
-  non-manifold edges on each shin, a tenth of her triangles in two groups; the
-  helmet and the nozzle lips are next. Read the carve and blends against the
-  lattice's sheet and crease handling; the one detail rule exposes the defect
-  and does not cause it.
+  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
+  her flipped triangles in two groups, nearly all under a square millimetre
+  and strung along the blades' edges: each blade tapers to a rim thinner than
+  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
+  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and
+  `range-window` and the Humble Brick's face are the worst of a wider sample;
+  none of those four is examined. The contour needs a rule for a face it cannot
+  resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
+  sheet, or refine it), and the non-manifold edges on the shins' soles sit on
+  the same edges. The one detail rule exposes the defect and does not cause
+  it.
 - [high] The material cut's lists are outside the memory account:
   `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
   that does not end takes the process. Give the lists a bound the account
