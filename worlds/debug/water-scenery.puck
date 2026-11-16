@@ -48,38 +48,36 @@ function riverPlace(leg, along, across, y) = [
     cosine(riverLegs[leg].bearing * riverRadians) * along -
     sine(riverLegs[leg].bearing * riverRadians) * across
 ]
-// A golden-ratio fraction of k, in [0, 1): the stones' scatter.
-function riverScatter(k, ratio) = k * ratio - floor(k * ratio)
 // The riffle stones lie on the bed, four to a leg at scattered places, and the bank stones sit on each crest, one to a
 // side a leg, half sunk in the turf.
 let riverStones = concat(
   map(range(0, 4 * length(riverLegs)), k => {
     position: riverPlace(
       floor(k / 4),
-      riverLegs[floor(k / 4)].length * ((k % 4) + 0.5 + 0.3 * (riverScatter(k, 0.618034) - 0.5)) / 4,
-      3.2 * (riverScatter(k, 0.381966) - 0.5) + 0.0,
+      riverLegs[floor(k / 4)].length * ((k % 4) + 0.5 + 0.3 * (siteScatter(k, 0.618034) - 0.5)) / 4,
+      3.2 * (siteScatter(k, 0.381966) - 0.5) + 0.0,
       riverBed + 0.03
     )
     radii [
-      0.22 + 0.2 * riverScatter(k, 0.754878)
-      0.1 + 0.06 * riverScatter(k, 0.569840)
-      0.18 + 0.16 * riverScatter(k, 0.618034)
+      0.22 + 0.2 * siteScatter(k, 0.754878)
+      0.1 + 0.06 * siteScatter(k, 0.569840)
+      0.18 + 0.16 * siteScatter(k, 0.618034)
     ]
-    yaw: 360 * riverScatter(k, 0.754878)
+    yaw: 360 * siteScatter(k, 0.754878)
   }),
   map(range(0, 2 * length(riverLegs)), k => {
     position: riverPlace(
       floor(k / 2),
-      riverLegs[floor(k / 2)].length * (0.3 + 0.4 * riverScatter(k, 0.618034)),
-      (k % 2 * 2 - 1) * (3.35 + 0.35 * riverScatter(k, 0.381966)),
+      riverLegs[floor(k / 2)].length * (0.3 + 0.4 * siteScatter(k, 0.618034)),
+      (k % 2 * 2 - 1) * (3.35 + 0.35 * siteScatter(k, 0.381966)),
       0.02
     )
     radii [
-      0.3 + 0.25 * riverScatter(k, 0.754878)
-      0.22 + 0.1 * riverScatter(k, 0.569840)
-      0.26 + 0.2 * riverScatter(k, 0.618034)
+      0.3 + 0.25 * siteScatter(k, 0.754878)
+      0.22 + 0.1 * siteScatter(k, 0.569840)
+      0.26 + 0.2 * siteScatter(k, 0.618034)
     ]
-    yaw: 360 * riverScatter(k, 0.569840)
+    yaw: 360 * siteScatter(k, 0.569840)
   })
 )
 

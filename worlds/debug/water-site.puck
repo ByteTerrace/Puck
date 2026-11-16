@@ -4,6 +4,7 @@
 // The pool is a square basin sunk into the lawn at the end of the stream, west of the spawn and 8 m past the end of the
 // lawn's west path. The floor is one slab 0.4 m thick, so the basin reaches 2.4 m under the lawn from the opening.
 
+import "../standard/shading"
 import "valley-form"
 
 // The rest of the water stands on the north-west wall (compass 315, foot 205 m), which the spawn faces left of the hall.
@@ -41,7 +42,7 @@ let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30
 let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 
 // A golden-ratio fraction of k, in [0, 1): a scatter that places the stones without a seed.
-function siteScatter(k, ratio) = k * ratio - floor(k * ratio)
+function siteScatter(k, ratio) = shadeFrac(k * ratio)
 
 // The stones the wall's rock carries in the lake's bowl, in its palette after the rock: sandy cobbles on the shallows and warm
 // boulders on the bank.
