@@ -6,6 +6,7 @@ import "../../standard/styles"
 import "../../standard/kits"
 import "../../standard/camera"
 import "../../standard/mirror"
+import "../../standard/rig"
 import "moth-head"
 import "moth-dash"
 import "moth-camera"
@@ -208,60 +209,30 @@ template mothLimbs(side, isRight) {
       radiusEnd: 0.08
     }
     swings [
-      {
-        driver: "swim"
-        axis [1, 0, 0]
-        amplitude: 0.55
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("swim", [1, 0, 0], 0.55, mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "sine"
         phase: bySide(isRight, 0, 3.14159265358979)
       }
-      {
-        driver: "swim"
-        axis [0, 0, 1]
-        amplitude: flip(isRight, -0.85)
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
-        wave: "constant"
-      }
-      {
-        driver: "run"
-        axis [0, 0, 1]
-        amplitude: flip(isRight, -0.15)
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("swim", [0, 0, 1], flip(isRight, -0.85), mirrorX(isRight, [0.295, 1.4515, 0])) with { wave: "constant" }
+      swing("run", [0, 0, 1], flip(isRight, -0.15), mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "constant"
         phase: 0
       }
-      {
-        driver: "gait"
-        axis: signed(isRight, [0.987688, -0.156434, 0], [1, -1, 1])
-        amplitude: 0.42
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("gait", signed(isRight, [0.987688, -0.156434, 0], [1, -1, 1]), 0.42, mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "sine"
         phase: bySide(isRight, 3.1415927, 6.2831853)
       }
-      {
-        driver: "flight"
-        axis [0, 0, 1]
-        amplitude: flip(isRight, -0.1)
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("flight", [0, 0, 1], flip(isRight, -0.1), mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "linear"
         phase: 0
       }
       // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
-      {
-        driver: "air"
-        axis [0, 0, 1]
-        amplitude: flip(isRight, 0.03)
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("air", [0, 0, 1], flip(isRight, 0.03), mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "linear"
         phase: 15
       }
       // And lift forward 0.12 rad, 0.2 rising.
-      {
-        driver: "air"
-        axis: signed(isRight, [0.987688, -0.156434, 0], [1, -1, 1])
-        amplitude: -0.015
-        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+      swing("air", signed(isRight, [0.987688, -0.156434, 0], [1, -1, 1]), -0.015, mirrorX(isRight, [0.295, 1.4515, 0])) with {
         wave: "linear"
         phase: 8
       }
@@ -344,47 +315,38 @@ template mothLimbs(side, isRight) {
     parent: $"upperArm-{side}"
     exponent: 2.6
     swings [
-      {
-        driver: "run"
-        axis: signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1])
-        amplitude: -0.7
-        pivot: mirrorX(isRight, [0.336, 1.2201, 0.004])
-        wave: "constant"
-        phase: 0
-      }
-      {
-        driver: "gait"
-        axis: signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1])
-        amplitude: 0.18
-        pivot: mirrorX(isRight, [0.336, 1.2201, 0.004])
-        wave: "sine"
-        phase: bySide(isRight, 3.6416, 0.5)
-      }
-      {
-        driver: "flight"
-        axis: signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1])
-        amplitude: -0.25
-        pivot: mirrorX(isRight, [0.336, 1.2201, 0.004])
-        wave: "linear"
-        phase: 0
-      }
+      swing(
+        "run",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        -0.7,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "constant", phase: 0 }
+      swing(
+        "gait",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        0.18,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "sine", phase: bySide(isRight, 3.6416, 0.5) }
+      swing(
+        "flight",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        -0.25,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "linear", phase: 0 }
       // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
-      {
-        driver: "air"
-        axis: signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1])
-        amplitude: -0.03
-        pivot: mirrorX(isRight, [0.336, 1.2201, 0.004])
-        wave: "linear"
-        phase: 12
-      }
+      swing(
+        "air",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        -0.03,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "linear", phase: 12 }
       // And bend a little further as she lands.
-      {
-        driver: "land"
-        axis: signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1])
-        amplitude: 0.05
-        pivot: mirrorX(isRight, [0.336, 1.2201, 0.004])
-        wave: "linear"
-      }
+      swing(
+        "land",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        0.05,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "linear" }
     ]
   }
 
@@ -548,69 +510,21 @@ template mothLimbs(side, isRight) {
     // strides straight ahead of the turned hips, a pure strafe abducts into a sidestep, and a backpedal strides
     // backward.
     swings [
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: 0.7
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "sine"
-      }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: -0.5
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "linear"
-      }
-      {
-        driver: "gait"
-        axis [1, 0, 0]
-        amplitude: 0.7
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
+      swing("heading", [0, 1, 0], 0.7, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "sine" }
+      swing("heading", [0, 1, 0], -0.5, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear" }
+      swing("gait", [1, 0, 0], 0.7, mirrorX(isRight, [0.145, 1.0265, 0])) with {
         wave: "sine"
         phase: bySide(isRight, 0, 3.1415927)
       }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: 0.5
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "linear"
-      }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: -0.7
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "sine"
-      }
+      swing("heading", [0, 1, 0], 0.5, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear" }
+      swing("heading", [0, 1, 0], -0.7, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "sine" }
       // In flight mode the hip undoes the air tuck the hover would hold at zero vertical speed (0.8 rad) and trails
       // the leg 0.1 rad back, so she hovers and flies with straight legs.
-      {
-        driver: "flight"
-        axis [1, 0, 0]
-        amplitude: 0.898
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "linear"
-        phase: 0
-      }
+      swing("flight", [1, 0, 0], 0.898, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear", phase: 0 }
       // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
-      {
-        driver: "air"
-        axis [1, 0, 0]
-        amplitude: -0.06
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "linear"
-        phase: 13.3
-      }
+      swing("air", [1, 0, 0], -0.06, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear", phase: 13.3 }
       // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
-      {
-        driver: "land"
-        axis [1, 0, 0]
-        amplitude: 0.1
-        pivot: mirrorX(isRight, [0.145, 1.0265, 0])
-        wave: "linear"
-      }
+      swing("land", [1, 0, 0], 0.1, mirrorX(isRight, [0.145, 1.0265, 0])) with { wave: "linear" }
     ]
   }
 
@@ -695,48 +609,20 @@ template mothLimbs(side, isRight) {
       startScale: 1
     }
     swings [
-      {
-        driver: "swim"
-        axis [1, 0, 0]
-        amplitude: 0.45
-        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
+      swing("swim", [1, 0, 0], 0.45, mirrorX(isRight, [0.19, 0.7465, 0])) with {
         wave: "sine"
         phase: bySide(isRight, 0, 3.14159265358979)
       }
-      {
-        driver: "gait"
-        axis [1, 0, 0]
-        amplitude: 1.25
-        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
+      swing("gait", [1, 0, 0], 1.25, mirrorX(isRight, [0.19, 0.7465, 0])) with {
         wave: "halfSine"
         phase: bySide(isRight, 5.184, 2.0424)
       }
       // And the knee undoes its 1.2 rad of air tuck, keeping a 0.2 rad bend.
-      {
-        driver: "flight"
-        axis [1, 0, 0]
-        amplitude: -1
-        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
-        wave: "linear"
-        phase: 0
-      }
+      swing("flight", [1, 0, 0], -1, mirrorX(isRight, [0.19, 0.7465, 0])) with { wave: "linear", phase: 0 }
       // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
-      {
-        driver: "air"
-        axis [1, 0, 0]
-        amplitude: 0.05
-        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
-        wave: "linear"
-        phase: 24
-      }
+      swing("air", [1, 0, 0], 0.05, mirrorX(isRight, [0.19, 0.7465, 0])) with { wave: "linear", phase: 24 }
       // The knee takes twice the hip's fold.
-      {
-        driver: "land"
-        axis [1, 0, 0]
-        amplitude: -0.2
-        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
-        wave: "linear"
-      }
+      swing("land", [1, 0, 0], -0.2, mirrorX(isRight, [0.19, 0.7465, 0])) with { wave: "linear" }
     ]
   }
 
@@ -1114,45 +1000,17 @@ template mothLimbs(side, isRight) {
     material: violet
     group: 21 + isRight * 14
     swings [
-      {
-        driver: "gait"
-        pivot: mirrorX(isRight, [0.2, 0.1715, 0.0075])
-        axis [1, 0, 0]
-        amplitude: 0.2
-        phase: bySide(isRight, 0, 3.1416)
+      swing("gait", [1, 0, 0], 0.2, mirrorX(isRight, [0.2, 0.1715, 0.0075])) with {
         wave: "sine"
+        phase: bySide(isRight, 0, 3.1416)
       }
-      {
-        driver: "gait"
-        pivot: mirrorX(isRight, [0.2, 0.1715, 0.0075])
-        axis [1, 0, 0]
-        amplitude: -0.25
-        phase: bySide(isRight, 5.184, 2.0424)
+      swing("gait", [1, 0, 0], -0.25, mirrorX(isRight, [0.2, 0.1715, 0.0075])) with {
         wave: "halfSine"
+        phase: bySide(isRight, 5.184, 2.0424)
       }
-      {
-        driver: "flight"
-        pivot: mirrorX(isRight, [0.2, 0.1715, 0.0075])
-        axis [1, 0, 0]
-        amplitude: 0.12
-        phase: 0
-        wave: "linear"
-      }
-      {
-        driver: "air"
-        pivot: mirrorX(isRight, [0.2, 0.1715, 0.0075])
-        axis [1, 0, 0]
-        amplitude: 0.02
-        phase: 12.5
-        wave: "linear"
-      }
-      {
-        driver: "land"
-        pivot: mirrorX(isRight, [0.2, 0.1715, 0.0075])
-        axis [1, 0, 0]
-        amplitude: 0.1
-        wave: "linear"
-      }
+      swing("flight", [1, 0, 0], 0.12, mirrorX(isRight, [0.2, 0.1715, 0.0075])) with { wave: "linear", phase: 0 }
+      swing("air", [1, 0, 0], 0.02, mirrorX(isRight, [0.2, 0.1715, 0.0075])) with { wave: "linear", phase: 12.5 }
+      swing("land", [1, 0, 0], 0.1, mirrorX(isRight, [0.2, 0.1715, 0.0075])) with { wave: "linear" }
     ]
     parent: $"shin-{side}"
     profile {
@@ -1286,14 +1144,7 @@ template mothLimbs(side, isRight) {
     blend: "Union"
     parent: $"boot-{side}"
     swings [
-      {
-        driver: "air"
-        pivot: mirrorX(isRight, [0.2, 0.09, -0.015])
-        axis [1, 0, 0]
-        amplitude: 1.0471976
-        phase: 0
-        wave: "constant"
-      }
+      swing("air", [1, 0, 0], 1.0471976, mirrorX(isRight, [0.2, 0.09, -0.015])) with { wave: "constant", phase: 0 }
     ]
     slides [
       {
@@ -1336,13 +1187,9 @@ template mothLimbs(side, isRight) {
     group: 129 + isRight * 2
     parent: $"boot-{side}"
     swings [
-      {
-        driver: "air"
-        pivot: mirrorX(isRight, [0.085, 0.09, -0.02])
-        axis [0, 1, 0]
-        amplitude: flip(isRight, 0.1)
-        phase: 0
+      swing("air", [0, 1, 0], flip(isRight, 0.1), mirrorX(isRight, [0.085, 0.09, -0.02])) with {
         wave: "constant"
+        phase: 0
       }
     ]
     profile {
@@ -1383,13 +1230,9 @@ template mothLimbs(side, isRight) {
     group: 130 + isRight * 2
     parent: $"boot-{side}"
     swings [
-      {
-        driver: "air"
-        pivot: mirrorX(isRight, [0.315, 0.09, -0.02])
-        axis [0, 1, 0]
-        amplitude: flip(isRight, -0.28)
-        phase: 0
+      swing("air", [0, 1, 0], flip(isRight, -0.28), mirrorX(isRight, [0.315, 0.09, -0.02])) with {
         wave: "constant"
+        phase: 0
       }
     ]
     profile {
@@ -1497,27 +1340,12 @@ template mothLimbs(side, isRight) {
     parent: "torso"
     exponent: 2
     swings [
-      {
-        driver: "wings"
-        axis [0, 0, 1]
-        amplitude: flip(isRight, 0.105)
-        pivot: mirrorX(isRight, [0.09, 1.6015, -0.185])
+      swing("wings", [0, 0, 1], flip(isRight, 0.105), mirrorX(isRight, [0.09, 1.6015, -0.185])) with {
         wave: "linear"
         phase: 0
       }
-      {
-        driver: "wings"
-        axis [1, 0, 0]
-        amplitude: 0.07
-        pivot: mirrorX(isRight, [0.09, 1.6015, -0.185])
-        wave: "linear"
-        phase: 0
-      }
-      {
-        driver: "bank"
-        axis [0, 1, 0]
-        amplitude: flip(isRight, 0.05)
-        pivot: mirrorX(isRight, [0.09, 1.6015, -0.185])
+      swing("wings", [1, 0, 0], 0.07, mirrorX(isRight, [0.09, 1.6015, -0.185])) with { wave: "linear", phase: 0 }
+      swing("bank", [0, 1, 0], flip(isRight, 0.05), mirrorX(isRight, [0.09, 1.6015, -0.185])) with {
         wave: "linear"
         phase: 0
       }
@@ -3342,68 +3170,17 @@ prototypes {
         // none in a pure strafe or backpedal), trails a turn by 0.12 s of turn rate, and leans about the ground into
         // its planar acceleration, sideways into a curving run and forward into a start.
         swings [
-          {
-            driver: "gait"
-            axis [0, 1, 0]
-            amplitude: 0.08
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-            phase: 0
-          }
+          swing("gait", [0, 1, 0], 0.08, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
           // Moving in flight pitches the whole body 0.6 rad about her middle, so the legs trail behind; the cruise gate
           // eases it in and out. A constant wave: the pitch is a pose, the same at any speed.
-          {
-            driver: "cruise"
-            axis [1, 0, 0]
-            amplitude: 0.6
-            pivot [0, 1, 0]
-            wave: "constant"
-            phase: 0
-          }
-          {
-            driver: "gait"
-            axis [0, 0, 1]
-            amplitude: 0.05
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-            phase: 0
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: 0.7
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-          }
-          {
-            driver: "trail"
-            axis [0, 1, 0]
-            amplitude: -0.12
-            pivot [0, 1.0765, 0]
-            wave: "linear"
-          }
-          {
-            driver: "lean"
-            axis [0, 0, 1]
-            amplitude: -0.016
-            pivot [0, 0, 0]
-            wave: "linear"
-          }
-          {
-            driver: "surge"
-            axis [1, 0, 0]
-            amplitude: 0.006
-            pivot [0, 0, 0]
-            wave: "linear"
-          }
+          swing("cruise", [1, 0, 0], 0.6, [0, 1, 0]) with { wave: "constant", phase: 0 }
+          swing("gait", [0, 0, 1], 0.05, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
+          swing("heading", [0, 1, 0], 0.7, [0, 1.0765, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], -0.12, [0, 1.0765, 0]) with { wave: "linear" }
+          swing("lean", [0, 0, 1], -0.016, [0, 0, 0]) with { wave: "linear" }
+          swing("surge", [1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
           // Landing pitches her forward about the ground point, 0.08 rad at 4 m/s.
-          {
-            driver: "land"
-            axis [1, 0, 0]
-            amplitude: -0.02
-            pivot [0, 0, 0]
-            wave: "linear"
-          }
+          swing("land", [1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
         ]
         slides [
           {
@@ -3432,53 +3209,13 @@ prototypes {
         exponent: softness
         // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
         swings [
-          { driver: "dash", axis [1, 0, 0], amplitude: 0.4, pivot [0, 1.0765, 0], wave: "linear" }
-          {
-            driver: "gait"
-            axis [0, 1, 0]
-            amplitude: -0.16
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-            phase: 0
-          }
-          {
-            driver: "bob"
-            axis [1, 0, 0]
-            amplitude: -0.025
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-            phase: -1.0708
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.4
-            pivot [0, 1.0765, 0]
-            wave: "sine"
-          }
-          {
-            driver: "trail"
-            axis [0, 1, 0]
-            amplitude: 0.08
-            pivot [0, 1.0765, 0]
-            wave: "linear"
-          }
-          {
-            driver: "bank"
-            axis [0, 0, 1]
-            amplitude: -0.2
-            pivot [0, 1.0765, 0]
-            wave: "linear"
-            phase: 0
-          }
-          {
-            driver: "run"
-            axis [1, 0, 0]
-            amplitude: 0.1
-            pivot [0, 1.0765, 0]
-            wave: "constant"
-            phase: 0
-          }
+          swing("dash", [1, 0, 0], 0.4, [0, 1.0765, 0]) with { wave: "linear" }
+          swing("gait", [0, 1, 0], -0.16, [0, 1.0765, 0]) with { wave: "sine", phase: 0 }
+          swing("bob", [1, 0, 0], -0.025, [0, 1.0765, 0]) with { wave: "sine", phase: -1.0708 }
+          swing("heading", [0, 1, 0], -0.4, [0, 1.0765, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.08, [0, 1.0765, 0]) with { wave: "linear" }
+          swing("bank", [0, 0, 1], -0.2, [0, 1.0765, 0]) with { wave: "linear", phase: 0 }
+          swing("run", [1, 0, 0], 0.1, [0, 1.0765, 0]) with { wave: "constant", phase: 0 }
         ]
         slides [
           {
@@ -3625,36 +3362,10 @@ prototypes {
         exponent: softness
         // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
         swings [
-          {
-            driver: "gait"
-            axis [0, 1, 0]
-            amplitude: 0.08
-            pivot [0, 1.5715, 0]
-            wave: "sine"
-            phase: 0.3
-          }
-          {
-            driver: "heading"
-            axis [0, 1, 0]
-            amplitude: -0.3
-            pivot [0, 1.5715, 0]
-            wave: "sine"
-          }
-          {
-            driver: "trail"
-            axis [0, 1, 0]
-            amplitude: 0.07
-            pivot [0, 1.5715, 0]
-            wave: "linear"
-          }
-          {
-            driver: "cruise"
-            axis [1, 0, 0]
-            amplitude: -0.4
-            pivot [0, 1.5715, 0]
-            wave: "constant"
-            phase: 0
-          }
+          swing("gait", [0, 1, 0], 0.08, [0, 1.5715, 0]) with { wave: "sine", phase: 0.3 }
+          swing("heading", [0, 1, 0], -0.3, [0, 1.5715, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.07, [0, 1.5715, 0]) with { wave: "linear" }
+          swing("cruise", [1, 0, 0], -0.4, [0, 1.5715, 0]) with { wave: "constant", phase: 0 }
         ]
       }
 

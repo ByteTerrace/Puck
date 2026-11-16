@@ -1,6 +1,7 @@
 // Reusable foliage and scenery. These templates emit rows only when expanded by a world.
 // World positions in scatter tables are translated by origin; creation shapes keep the author frame.
 import "shading"
+import "rig"
 let landscapeExponent = 2.05
 let meadowSpacing = 0.075
 let meadowHeight = 0.55
@@ -29,7 +30,24 @@ let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
   1, 1, 1
 ], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn) = base with {
-  shade: weathered(under, deposit, seed, scale, lines, settle, edge, reach, threshold, noise, patternScale, softness, octaveRatio, octaveGain, turn, octaves)
+  shade: weathered(
+    under,
+    deposit,
+    seed,
+    scale,
+    lines,
+    settle,
+    edge,
+    reach,
+    threshold,
+    noise,
+    patternScale,
+    softness,
+    octaveRatio,
+    octaveGain,
+    turn,
+    octaves
+  )
   weathering {
     floor: 1
     noise: noise
@@ -517,14 +535,17 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
       behavior {
         reducedRateAtDistance: reducedRateAtDistance
       }
-      palette: map([
-        { color: "#698B3E", roughness: 0.9, specular: 0.025, wrap: 0.45 }
-        { color: "#79964A", roughness: 0.9, specular: 0.025, wrap: 0.45 }
-        { color: "#849C4F", roughness: 0.9, specular: 0.025, wrap: 0.45 }
-        { color: "#9EB75C", roughness: 0.85, specular: 0.035, wrap: 0.55 }
-        { color: "#A5BA63", roughness: 0.85, specular: 0.035, wrap: 0.55 }
-        { color: "#91AB50", roughness: 0.85, specular: 0.035, wrap: 0.55 }
-      ], base => flowed(base, wind))
+      palette: map(
+        [
+          { color: "#698B3E", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+          { color: "#79964A", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+          { color: "#849C4F", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+          { color: "#9EB75C", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+          { color: "#A5BA63", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+          { color: "#91AB50", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+        ],
+        base => flowed(base, wind)
+      )
       drivers [
         {
           name: "gust",
@@ -561,27 +582,13 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
           taper: 0.55
           material: blade["id"] % 3
           swings [
-            {
-              driver: "pose",
-              pivot [-blade["x"], -0.1, -blade["z"]],
-              axis [0.94, 0, 0.342],
-              amplitude: 0.3,
-              wave: "linear"
-            }
-            {
-              driver: "pose",
-              pivot [-blade["x"], -0.1, -blade["z"]],
-              axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])],
-              amplitude: 0.16,
+            swing("pose", [0.94, 0, 0.342], 0.3, [-blade["x"], -0.1, -blade["z"]]) with { wave: "linear" }
+            swing("pose", [cosine(blade["yaw"]), 0, sine(blade["yaw"])], 0.16, [-blade["x"], -0.1, -blade["z"]]) with {
               wave: "constant"
             }
-            {
-              driver: "gust",
-              pivot [-blade["x"], -0.1, -blade["z"]],
-              axis [0.94, 0, 0.342],
-              amplitude: 0.32,
-              phase: (origin[0] + tile[0] + blade["x"]) * 0.7 + (origin[2] + tile[1] + blade["z"]) * 0.45,
+            swing("gust", [0.94, 0, 0.342], 0.32, [-blade["x"], -0.1, -blade["z"]]) with {
               wave: "sine"
+              phase: (origin[0] + tile[0] + blade["x"]) * 0.7 + (origin[2] + tile[1] + blade["z"]) * 0.45
             }
           ]
         }
@@ -593,36 +600,25 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
           taper: 0
           material: 3 + blade["id"] % 3
           swings [
-            {
-              driver: "pose",
-              pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]],
-              axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])],
-              amplitude: 0.28,
-              wave: "constant"
-            }
-            {
-              driver: "pose",
-              pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]],
-              axis [0.94, 0, 0.342],
-              amplitude: 0.2,
+            swing(
+              "pose",
+              [cosine(blade["yaw"]), 0, sine(blade["yaw"])],
+              0.28,
+              [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]]
+            ) with { wave: "constant" }
+            swing("pose", [0.94, 0, 0.342], 0.2, [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]]) with {
               wave: "linear"
             }
-            {
-              driver: "gust",
-              pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]],
-              axis [0.94, 0, 0.342],
-              amplitude: 0.18,
-              phase: (origin[0] + tile[0] + blade["x"]) * 0.7 + (origin[2] + tile[1] + blade["z"]) * 0.45 - 0.4,
+            swing("gust", [0.94, 0, 0.342], 0.18, [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]]) with {
               wave: "sine"
+              phase: (origin[0] + tile[0] + blade["x"]) * 0.7 + (origin[2] + tile[1] + blade["z"]) * 0.45 - 0.4
             }
-            {
-              driver: "flutter",
-              pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]],
-              axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])],
-              amplitude: 0.07,
-              phase: blade["yaw"],
-              wave: "sine"
-            }
+            swing(
+              "flutter",
+              [cosine(blade["yaw"]), 0, sine(blade["yaw"])],
+              0.07,
+              [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]]
+            ) with { wave: "sine", phase: blade["yaw"] }
           ]
         }
       }
