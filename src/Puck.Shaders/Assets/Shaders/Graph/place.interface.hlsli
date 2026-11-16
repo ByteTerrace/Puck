@@ -49,10 +49,10 @@ struct PlacePass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, shape evaluations and shape gradients, as a
+// sky texture loads, shape evaluations, shape gradients and rejected mesh hits, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 14u;
+static const uint PuckWorkRowWords = 16u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -60,6 +60,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShapesWord = 10u;
 static const uint PuckWorkGradientsWord = 12u;
+static const uint PuckWorkRejectedHitsWord = 14u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -123,6 +124,11 @@ void puckCountFragmentWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
+}
+// Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
+// and may sit in divergent control flow, so it takes no wave operation.
+void puckCountRejectedHit() {
+    puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
 }
 
 #endif // PUCK_SHADER_INTERFACE_PLACE

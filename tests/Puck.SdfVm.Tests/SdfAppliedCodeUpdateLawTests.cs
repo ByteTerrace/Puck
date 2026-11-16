@@ -63,7 +63,7 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         Assert.NotEqual(expected: built.Code, actual: edited.Code);
         Assert.EndsWith(expectedEndString: $".{CodeRevision.Current}", actualString: edited.Applied);
         Assert.Equal(expected: edited.Value, actual: SdfMeshBakeIdentity.Of(code: fixture, kernels: kernels).Value);
-        Assert.Equal(expected: edited.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: edited.BakeKernel, code: edited.Code, maskKernel: edited.MaskKernel));
+        Assert.Equal(expected: edited.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: edited.BakeKernel, code: edited.Code, entryVersion: edited.EntryVersion, maskKernel: edited.MaskKernel));
         Assert.Contains(expectedSubstring: $"the code, by the hot-reload update {edited.Applied}", actualString: store.ExplainMisses(identity: edited));
 
         // A value alone has no code to follow.

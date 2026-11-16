@@ -167,6 +167,13 @@ public sealed partial class SdfWorldTables {
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
     // renders.
     private long m_meshRevision;
+    /// <summary>Gets the revision of the staged draw records: one more for every staging that wrote a record. A target a
+    /// pass rasterized holds hits that resolve through the records of the revision it was recorded under. Read on the
+    /// frame thread.</summary>
+    public long MeshRevision => m_meshRevision;
+    // The cause the records the current staging packs count under, or null while it takes the draw journal, which splits
+    // them between a hand-over and a pose (StagingTally).
+    private SdfMeshStagingCause? m_stagingCause;
     private ulong m_meshRegionBytes;
     private ulong m_meshRegionUsedBytes;
     // The draws the frame being rendered rasterizes, from its staged draw list, and how many of them are glass.
@@ -300,8 +307,12 @@ public sealed partial class SdfWorldTables {
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
         ServiceMemoryTrim();
         if (draws.Count == 0) { m_meshHistory.RetireAfter(count: 0); }
+        SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
         PrepareMeshTransformCuts(frame);
-        if (TryStageDrawChanges(frame)) { CommitMeshTransformCuts(frame); return; }
+        if (TryStageDrawChanges(frame, out var refused)) { CommitMeshTransformCuts(frame); return; }
+        // Every record the rest of this staging packs, on either path, counts under the one cause it took the whole
+        // list for.
+        m_stagingCause = refused;
         // Equal-pose cuts need staging too. This also forces the ordinary landing-filter path to observe its actual
         // staged roster, where producer draw indices cannot be used.
         if (m_reseatedDraws.Count > 0) { m_meshStaged = false; }
@@ -328,9 +339,19 @@ public sealed partial class SdfWorldTables {
         if (m_disposed || m_meshStaged || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawsRevision != m_meshSourceRevision)) { return; }
         StageMeshRegion(frame: frame);
     }
-    private bool TryStageDrawChanges(SdfFrame frame) {
+    // The cause a staging that does not take the frame's journal packs its records under: the cause the frame states for
+    // the journal entry this staging is the first to consume, then a landing's refusal, then a lost cursor.
+    private SdfMeshStagingCause RefusalOf(SdfFrame frame) {
+        if ((frame.MeshDrawChangesCause is { } stated) && (frame.MeshDrawChangesSerial != m_drawChangesSerial)) { return stated; }
+        if ((frame.MeshDrawChanges is null) || (m_meshSource is null)) { return SdfMeshStagingCause.Cursor; }
+        return ((!m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (frame.MeshDraws.Count != m_stagedCount))
+            ? SdfMeshStagingCause.Landing
+            : SdfMeshStagingCause.Cursor);
+    }
+    private bool TryStageDrawChanges(SdfFrame frame, out SdfMeshStagingCause refused) {
         var changes = frame.MeshDrawChanges;
         var draws = frame.MeshDraws;
+        refused = RefusalOf(frame: frame);
         if ((changes is null) || !ReferenceEquals(changes, m_drawChangesSource) || !ReferenceEquals(draws, m_meshSource) ||
             !m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (draws.Count != m_stagedCount) ||
             ((frame.MeshDrawsRevision != m_meshSourceRevision) && (frame.MeshDrawChangesSerial <= m_drawChangesSerial)) ||
@@ -350,6 +371,7 @@ public sealed partial class SdfWorldTables {
                 // landed ahead of the draws): any other change of a row's mesh is planned and lands.
                 if (!MeshStands(mesh: mesh)) {
                     SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingMeshChecks, checkedMeshes);
+                    refused = SdfMeshStagingCause.Landing;
                     return false;
                 }
                 renamed++;
@@ -377,6 +399,7 @@ public sealed partial class SdfWorldTables {
         }
         // Every mesh is held at its arena address. Pose, metadata and such a renamed row need neither a new placement
         // plan nor a walk of all mesh claims. Coarsened journal runs may include unchanged records; compare them once.
+        m_stagingCause = null;
         if ((draws.Count > 0) && (StageChangedDraws(draws, m_owedDraws) > 0)) { m_meshRevision++; }
         m_meshSourceRevision = frame.MeshDrawsRevision;
         m_drawChangesSerial = frame.MeshDrawChangesSerial;
@@ -393,6 +416,7 @@ public sealed partial class SdfWorldTables {
             m_meshArena.Plan(draws: draws);
             if (!m_meshArena.Unchanged) { m_meshPlacementVersion++; }
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingPlanRecords, draws.Count);
+            SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsPlanned, value: draws.Count);
             m_meshOrderStale |= !m_meshArena.Unchanged;
             Volatile.Write(
                 location: ref m_meshRegionUsedBytes,
@@ -540,7 +564,7 @@ public sealed partial class SdfWorldTables {
         var changedRecords = 0;
         var changedWords = 0L;
         var comparedRecords = 0;
-        var tally = new StagingTally();
+        var tally = new StagingTally(cause: m_stagingCause);
 
         for (var run = 0; run < (candidates?.Count ?? 1); run++) {
             var start = candidates?.Start(run) ?? 0;

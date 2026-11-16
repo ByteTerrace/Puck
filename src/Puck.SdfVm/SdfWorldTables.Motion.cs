@@ -281,6 +281,7 @@ public sealed partial class SdfWorldTables {
             tally.Selections++;
         }
         tally.Records++;
+        if (incremental && !ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)) { tally.HandOvers++; }
         tally.RecordBytes += (packedWords * sizeof(uint));
         if (observation.Seed) {
             m_seededMeshDraws.Add(length: 1, start: index);
@@ -298,20 +299,32 @@ public sealed partial class SdfWorldTables {
     }
 
     // The staging work of one pass over draw records, counted locally and published once: an interlocked count per
-    // record and kind was a measurable share of staging thousands of records a frame.
-    private struct StagingTally {
+    // record and kind was a measurable share of staging thousands of records a frame. One staging packs through one
+    // tally, so its records reach RecordsPacked and their causes together: under the staging's one cause, or, when it
+    // took the draw journal (Cause null), split between a hand-over (a record naming another mesh than it last staged)
+    // and a pose.
+    private struct StagingTally(SdfMeshStagingCause? cause) {
         public long Normals;
         public long Selections;
         public long Records;
+        public long HandOvers;
         public long RecordBytes;
         public long Matrices;
 
         public readonly void Publish() {
             var work = SdfMeshHistory.ProcessWork;
+            Span<long> causes = stackalloc long[SdfMeshStagingCauses.Count];
 
+            if (cause is { } single) {
+                causes[(int)single] = Records;
+            } else {
+                causes[(int)SdfMeshStagingCause.HandOver] = HandOvers;
+                causes[(int)SdfMeshStagingCause.Pose] = (Records - HandOvers);
+            }
             work.Add(kind: SdfMeshHistory.NormalMatricesComputed, amount: Normals);
             work.Add(kind: SdfMeshHistory.SelectionBoxesComputed, amount: Selections);
             work.Add(kind: SdfMeshHistory.RecordsPacked, amount: Records);
+            SdfMeshHistory.PublishCauses(records: causes);
             work.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: RecordBytes);
             work.Add(kind: SdfMeshHistory.MatricesChanged, amount: Matrices);
             work.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: (Matrices * MeshMatrixBytes));
@@ -325,7 +338,7 @@ public sealed partial class SdfWorldTables {
             offset: 0
         );
 
-        var tally = new StagingTally();
+        var tally = new StagingTally(cause: m_stagingCause);
 
         for (var index = 0; (index < draws.Count); index++) {
             var draw = draws[index];

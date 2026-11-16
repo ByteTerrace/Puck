@@ -43,7 +43,7 @@ ShadowVertex VSMain(uint vertexId : SV_VertexID SDF_MESH_DRAW_INPUT) {
     output.triangleIndex = (vertexId + sdfMeshLevelIndex(record, sdfMeshRasterLevel(drawId))) / 3u;
 
     // Reject a zero-density triangle before rasterization, including mixed-material glass meshes.
-    if (!(sdfMaterialShadowDensity(sdfMeshMaterial(output.draw, output.triangleIndex)) > 0.0)) { output.clip = -1.0; }
+    if (!(sdfMaterialShadowDensity(sdfMeshRasterMaterial(output.draw, output.triangleIndex)) > 0.0)) { output.clip = -1.0; }
     #endif
     return output;
 }

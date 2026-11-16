@@ -71,6 +71,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
         var render = (Width: recording.RenderWidth, Height: recording.RenderHeight);
+
+        m_owner.RecordHits(instance: m_context.Instance, part: SdfWorldPackage.Resolve, tables: tables);
         var temporal = m_owner.TemporalOf(instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: render.Width, renderHeight: render.Height);
 
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,

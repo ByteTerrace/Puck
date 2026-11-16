@@ -37,12 +37,28 @@ public sealed class WorkKindRegistry {
     /// <param name="workClass">What two readings of the kind may be expected to agree on.</param>
     /// <returns>The kind, for the owner to hold as a static property.</returns>
     /// <exception cref="InvalidOperationException">The kinds were already read, so the list is closed.</exception>
-    public WorkKind Declare(string name, string unit, WorkClass workClass) {
-        var kind = new WorkKind(
+    public WorkKind Declare(string name, string unit, WorkClass workClass) =>
+        Add(kind: new WorkKind(
             name: name,
             unit: unit,
             workClass: workClass
-        );
+        ));
+    /// <summary>Creates a peak kind (<see cref="WorkKind.IsPeak"/>) and appends it to the list a report lists.</summary>
+    /// <param name="name">The dotted name; see <see cref="WorkKind"/>.</param>
+    /// <param name="unit">The unit one step of the kind's count stands for.</param>
+    /// <param name="workClass">What two readings of the kind may be expected to agree on.</param>
+    /// <returns>The kind, for the owner to hold as a static property.</returns>
+    /// <exception cref="InvalidOperationException">The kinds were already read, so the list is closed.</exception>
+    public WorkKind DeclarePeak(string name, string unit, WorkClass workClass) =>
+        Add(kind: new WorkKind(
+            name: name,
+            peak: true,
+            unit: unit,
+            workClass: workClass
+        ));
+
+    private WorkKind Add(WorkKind kind) {
+        var name = kind.Name;
 
         lock (m_declared) {
             if (m_kinds is not null) {

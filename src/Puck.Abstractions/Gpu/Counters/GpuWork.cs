@@ -49,7 +49,8 @@ public static partial class GpuWork {
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
     internal const int VerticesColumn = (ShapeGradientsColumn + 1);
     internal const int IndirectDrawsColumn = (VerticesColumn + 1);
-    internal const int SubmissionColumnCount = (IndirectDrawsColumn + 1);
+    internal const int MeshHitsRejectedColumn = (IndirectDrawsColumn + 1);
+    internal const int SubmissionColumnCount = (MeshHitsRejectedColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -122,6 +123,10 @@ public static partial class GpuWork {
     public static WorkKind SkyHashes { get; } = new(name: "gpu.sky.hashes", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting texture loads of sky field runs, including invalid base taps.</summary>
     public static WorkKind SkyTextureLoads { get; } = new(name: "gpu.sky.texture-loads", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the hits a pass's kernels rejected at the mesh hit door: a draw and triangle read
+    /// from a target or a record that name no draw the frame stages, or no triangle of its mesh, resolved as a miss
+    /// instead. Zero on a correct run. The kernels count it on the GPU, so it is per-backend-deterministic.</summary>
+    public static WorkKind MeshHitsRejected { get; } = new(name: "gpu.mesh-hits.rejected", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting compute and graphics pipelines created. A node's ledger counts the pipelines that
     /// node created; a backend's <see cref="GpuPipelineCacheWork"/> counts every pipeline its devices created.</summary>
     public static WorkKind PipelinesCreated { get; } = new(name: "gpu.created.pipelines", unit: "count", workClass: WorkClass.PerBackendDeterministic);
@@ -150,8 +155,8 @@ public static partial class GpuWork {
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
-    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShapesEvaluated"/> and
-    /// <see cref="ShapeGradients"/>.</summary>
+    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShapesEvaluated"/>,
+    /// <see cref="ShapeGradients"/> and <see cref="MeshHitsRejected"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -165,7 +170,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, ShapesEvaluated, ShapeGradients];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, ShapesEvaluated, ShapeGradients, MeshHitsRejected];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -213,6 +218,7 @@ public static partial class GpuWork {
             kinds[ShapeGradientsColumn] = ShapeGradients;
             kinds[VerticesColumn] = Vertices;
             kinds[IndirectDrawsColumn] = IndirectDraws;
+            kinds[MeshHitsRejectedColumn] = MeshHitsRejected;
 
             return kinds;
         }

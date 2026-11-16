@@ -51,15 +51,18 @@ float3 sdfMeshPreviousPosition(uint record, uint k) {
     return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
         (object.z * sdfMeshPreviousRow(record, 2u)) + sdfMeshPreviousRow(record, 3u)));
 }
-// Returns the point carried by the same mesh triangle in the preceding consumed frame.
+// Returns the point carried by the same mesh triangle in the preceding consumed frame: the visibility record's hit (every
+// hit the surface pass writes is a mesh's) resolved through the mesh hit door, which answers no previous point for a hit
+// it rejects.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
     previousPoint = currentPoint;
-    if (!sdfVisibilityHit(visibility)) {
+    SdfMeshHit hit;
+    if (!sdfVisibilityHit(visibility) ||
+        !sdfMeshResolveHit(sdfVisibilitySource(visibility.identity), sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord], hit)) {
         return false;
     }
-    uint draw = sdfVisibilitySource(visibility.identity);
-    uint mesh = sdfMeshRecord(draw);
-    uint first = (3u * sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord]);
+    uint mesh = hit.record;
+    uint first = (3u * hit.triangleIndex);
     float3 a = sdfMeshWorldPosition(mesh, first);
     float3 b = sdfMeshWorldPosition(mesh, first + 1u);
     float3 c = sdfMeshWorldPosition(mesh, first + 2u);

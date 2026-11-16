@@ -431,7 +431,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             case SdfWorldPackage.Parts.Mesh: {
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
-                    return ((PartDrawCount(tables: m_view.Residency.Staged(context: in context)) == 0) && TargetsHoldClear);
+                    var staged = m_view.Residency.Staged(context: in context);
+                    var skips = ((PartDrawCount(tables: staged) == 0) && TargetsHoldClear);
+
+                    if (skips) { m_owner.SkippedClearMeshTarget(instance: m_context.Instance, tables: staged); }
+                    return skips;
                 }
             // The glass clear and the glass raster skip a frame in which no glass draw meets the view's frustum
             // (SdfWorldPasses.GlassSeen); the shading pass, which reads their sums and target, then draws nothing.
@@ -504,6 +508,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         var tables = residency.Staged(context: recording.Context);
 
+        m_owner.RecordHits(instance: m_context.Instance, part: m_part, tables: tables);
         // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation.
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
             var sums = recording.Outputs[0].Buffer!;

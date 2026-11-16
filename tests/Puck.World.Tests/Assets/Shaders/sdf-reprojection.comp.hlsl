@@ -7,8 +7,11 @@
 [[vk::binding(5, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> motionResults : register(u5, space3);
 [[vk::binding(6, 3)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t6, space3);
 [[vk::binding(7, 3)]] StructuredBuffer<uint> sdfFrameSampled : register(t7, space3);
-struct MotionPass { float4 previousView[6]; };
+// The mesh hit door's bound admits every case's draw, and a rejection counts nowhere.
+struct MotionPass { float4 previousView[6]; uint meshDraws; };
 static MotionPass passGroup;
+void puckCountRejectedHit() {
+}
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-reprojection.hlsli"
 
 [numthreads(1, 1, 1)]
@@ -27,6 +30,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             sdfHistoryReceiverDistance(samplePoint.x, a, normal, float3(1.0, 0.0, 0.0), 8192.0), 1.0);
         return;
     }
+    passGroup.meshDraws = 0xFFFFFFFFu;
     for (uint row = 0u; row < 6u; row++) {
         passGroup.previousView[row] = motionCases[first + 1u + row];
     }

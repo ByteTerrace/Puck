@@ -14,11 +14,16 @@ public interface IWorkCounterSource {
     /// source's lifetime.</summary>
     ReadOnlySpan<WorkKind> WorkKinds { get; }
 
-    /// <summary>Reads the current total of one kind.</summary>
+    /// <summary>Reads the current value of one kind.</summary>
     /// <param name="kind">The kind to read, compared by reference.</param>
-    /// <param name="value">The total counted so far, never lower than an earlier read of the same kind; zero when
-    /// the method returns <see langword="false"/>.</param>
+    /// <param name="value">For a total, the total counted so far, never lower than an earlier read of the same kind;
+    /// for a peak (<see cref="WorkKind.IsPeak"/>), the largest value raised since the source last cleared its peaks
+    /// (<see cref="ClearPeaks"/>), never lower than an earlier read since then; zero when the method returns
+    /// <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when this source declares <paramref name="kind"/>; <see langword="false"/> when
     /// the kind is unavailable here.</returns>
     bool TryRead(WorkKind kind, out long value);
+    /// <summary>Returns every peak kind the source declares to zero, so the next read gives the largest value raised
+    /// after the call. Totals are never cleared; a source with no peak kinds does nothing.</summary>
+    void ClearPeaks() { }
 }

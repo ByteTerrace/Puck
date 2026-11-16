@@ -192,12 +192,13 @@ public sealed partial record SdfMesh {
             }
             RunClaimed();
         }
-        // Reads the store entry the mesh was published from and copies the parts back with the gate open: while the state
-        // is Restoring nothing reads the blocks (readers need Resident) and nothing frees them (Free needs Resident), and a
-        // claim on each owning payload keeps its blocks from being disposed. The store answers what it answered at
-        // publication (SdfMeshLibrary.Store publishes what it reads back), so the words a region writes again are the
-        // words it wrote first. Any failure, an allocation's included, ends the storage Lost, which bakes its groups
-        // again; nothing escapes to the worker.
+        // Reads the store entry the mesh was published from and decodes the parts back into their blocks with the gate open:
+        // while the state is Restoring nothing reads the blocks (readers need Resident) and nothing frees them (Free needs
+        // Resident), and a claim on each owning payload keeps its blocks from being disposed. The decode skips every plane
+        // but the normals and the coarser levels' indices (Refill), and checks the entry's counts against the blocks' before
+        // it writes any. The store answers what it answered at publication (SdfMeshLibrary.Store publishes what it reads
+        // back), so the words a region writes again are the words it wrote first. Any failure, an allocation's included,
+        // ends the storage Lost, which bakes its groups again; nothing escapes to the worker.
         private void RunClaimed() {
             var owners = new List<Payload>();
 
@@ -219,13 +220,19 @@ public sealed partial record SdfMesh {
                         // Its last claim went: Detach drops its blocks, and nothing reads them.
                     }
                 }
-                string? refusal = null;
+                Refill refill;
 
-                if ((library.Disk is { } disk) && disk.TryRead(geometry: geometry, identity: identity, materials: out _, mesh: out var stored, refusal: out refusal) && (stored is not null)) {
-                    filled = Fill(owners: claimed, stored: stored);
-                    failure = (filled ? null : "its stored parts no longer match");
+                lock (m_gate) {
+                    refill = new Refill(
+                        levels: [.. m_levels.Where(predicate: entry => claimed.Contains(item: entry.Owner))],
+                        normals: [.. m_normals.Where(predicate: entry => claimed.Contains(item: entry.Owner))]
+                    );
+                }
+                if (library.Disk is { } disk) {
+                    filled = disk.TryReadInto(declined: out var declined, geometry: geometry, identity: identity, materials: out _, mesh: out _, refusal: out var refusal, storage: refill, taking: null);
+                    failure = (filled ? null : (declined ? "its stored parts no longer match" : (refusal ?? "the store holds no entry")));
                 } else {
-                    failure = (refusal ?? "the store holds no entry");
+                    failure = "the store holds no entry";
                 }
             } catch (Exception exception) {
                 filled = false;
@@ -251,38 +258,77 @@ public sealed partial record SdfMesh {
                 library.Lose(geometry: geometry, identity: identity, reason: (failure ?? "unknown"));
             }
         }
-        // Checks every part the claimed owners hold against the stored mesh before writing any, then copies them in.
-        private bool Fill(List<Payload> owners, SdfMesh stored) {
-            ReadOnlyMemory<Vector3> NormalsOf(int piece) => ((piece < 0) ? stored.Normals : PieceOf(piece: piece)?.Normals ?? default);
-            ReadOnlyMemory<uint> LevelOf(int piece, int level) => ((PieceOf(piece: piece) is { } mesh && (level < mesh.Levels.Count)) ? mesh.Levels[level].Indices : default);
-            SdfMesh? PieceOf(int piece) => ((stored.Chunks.Count == 0) ? ((piece == 0) ? stored : null) : (((piece >= 0) && (piece < stored.Chunks.Count)) ? stored.Chunks[piece] : null));
 
-            (int Piece, OwnedBuffer<Vector3> Block, int Length, Payload Owner)[] normals;
-            (int Piece, int Level, OwnedBuffer<uint> Block, int Length, Payload Owner)[] levels;
+        // The storage a restore decodes into: the blocks of the normals and coarser levels' indices that live payloads hold,
+        // each sized to the length it held while resident. It takes no other plane, so the decode skips them by their
+        // stated lengths.
+        private sealed class Refill((int Piece, OwnedBuffer<Vector3> Block, int Length, Payload Owner)[] normals, (int Piece, int Level, OwnedBuffer<uint> Block, int Length, Payload Owner)[] levels) : SdfMeshStorage {
+            private SdfMeshShape? m_shape;
 
-            lock (m_gate) {
-                normals = [.. m_normals.Where(predicate: entry => owners.Contains(item: entry.Owner))];
-                levels = [.. m_levels.Where(predicate: entry => owners.Contains(item: entry.Owner))];
-            }
-            foreach (var (piece, _, length, _) in normals) {
-                if (NormalsOf(piece: piece).Length != length) { return false; }
-            }
-            foreach (var (piece, level, _, length, _) in levels) {
-                if (LevelOf(piece: piece, level: level).Length != length) { return false; }
-            }
-            foreach (var (piece, block, _, _) in normals) {
-                var source = NormalsOf(piece: piece).Span;
+            public override bool Begin(SdfMeshShape shape) {
+                Abandon();
+                foreach (var (piece, _, length, _) in normals) {
+                    var expected = ((piece < 0) ? shape.Pieces.Sum(selector: static each => each.Normals) : ((piece < shape.Pieces.Length) ? shape.Pieces[piece].Normals : 0));
 
-                block.Resize(length: source.Length, clear: false, preserve: false);
-                source.CopyTo(destination: block.GetSpan());
-            }
-            foreach (var (piece, level, block, _, _) in levels) {
-                var source = LevelOf(piece: piece, level: level).Span;
+                    if (expected != length) { return false; }
+                }
+                foreach (var (piece, level, _, length, _) in levels) {
+                    var expected = (((piece < shape.Pieces.Length) && (level < shape.Pieces[piece].Levels.Length)) ? shape.Pieces[piece].Levels[level].Indices : 0);
 
-                block.Resize(length: source.Length, clear: false, preserve: false);
-                source.CopyTo(destination: block.GetSpan());
+                    if (expected != length) { return false; }
+                }
+                foreach (var (_, block, length, _) in normals) { block.Resize(length: length, clear: false, preserve: false); }
+                foreach (var (_, _, block, length, _) in levels) { block.Resize(length: length, clear: false, preserve: false); }
+                m_shape = shape;
+
+                return true;
             }
-            return true;
+            public override bool Normals(int piece, out Span<Vector3> destination) {
+                foreach (var (at, block, _, _) in normals) {
+                    if (at == piece) {
+                        destination = block.GetSpan();
+
+                        return true;
+                    }
+                }
+                foreach (var (at, block, _, _) in normals) {
+                    if (at < 0) {
+                        destination = block.GetSpan().Slice(length: m_shape!.Pieces[piece].Normals, start: m_shape.FirstNormal(piece: piece));
+
+                        return true;
+                    }
+                }
+                destination = default;
+
+                return false;
+            }
+            public override bool LevelIndices(int piece, int level, out Span<uint> destination) {
+                foreach (var (at, which, block, _, _) in levels) {
+                    if ((at == piece) && (which == level)) {
+                        destination = block.GetSpan();
+
+                        return true;
+                    }
+                }
+                destination = default;
+
+                return false;
+            }
+            public override bool Positions(int piece, out Span<Vector3> destination) { destination = default; return false; }
+            public override bool Indices(int piece, out Span<uint> destination) { destination = default; return false; }
+            public override bool Materials(int piece, out Span<uint> destination) { destination = default; return false; }
+            public override bool Members(int piece, out Span<SdfMeshMember> destination) { destination = default; return false; }
+            public override bool VertexMembers(int piece, out Span<byte> destination) { destination = default; return false; }
+            public override bool Influences(int piece, out Span<SdfMeshInfluence> destination) { destination = default; return false; }
+            public override bool LevelMaterials(int piece, int level, out Span<uint> destination) { destination = default; return false; }
+            public override SdfMesh? Finish() { m_shape = null; return null; }
+            // The blocks a failed decode sized hold nothing, so they are freed rather than kept while the storage is lost.
+            public override void Abandon() {
+                if (m_shape is null) { return; }
+                m_shape = null;
+                foreach (var (_, block, _, _) in normals) { block.Free(); }
+                foreach (var (_, _, block, _, _) in levels) { block.Free(); }
+            }
         }
 
         // The storage waiting for a restore, worked off by at most MaxWorkers pool items at once, so a rebuilt region's
