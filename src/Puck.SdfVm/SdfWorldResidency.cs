@@ -220,6 +220,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Names what keeps <see cref="MeshesResident"/> false (<see cref="SdfWorldTables.MeshResidencyPending"/>),
     /// or <see langword="null"/> once resident. Read on the frame thread; never waits.</summary>
     public string? MeshResidencyPending => ((m_tables is { } tables) ? tables.MeshResidencyPending() : "its tables are not built");
+    /// <summary>Gets whether the residency's meshes are still arriving, and only frames that render one of its views
+    /// bring them: its bake owes the frame a mesh (<see cref="SdfMeshPathBake.Pending"/>), whose GPU sampling such a frame
+    /// dispatches, or its tables still owe the staged meshes' words or their upload
+    /// (<see cref="SdfWorldTables.MeshesArriving"/>), which land only after such a frame's upload. A frame that renders
+    /// none of its views still prepares the residency and may pack a frame, which moves what the background work binds,
+    /// so a residency nobody renders stops landing until one of its views renders again. Read on the frame thread; never
+    /// waits.</summary>
+    public bool MeshesArriving => (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false));
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);

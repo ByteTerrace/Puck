@@ -123,6 +123,9 @@ public sealed partial class SdfProgramBuilder {
     // decode needed on the CPU side). Empty for a program with no convex-polygon profile, so packing and validation
     // both no-op exactly as before this shape existed.
     private readonly List<(int InstructionIndex, Vector2[] Vertices)> m_convexPolygonProfiles;
+    // The content identity of the one atlas image the emitted glyphs sample (SdfProgram.GlyphAtlas), default until a glyph
+    // of an atlas with pixels is emitted.
+    private Puck.Assets.AssetContentHash m_glyphAtlas;
 
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
@@ -174,6 +177,7 @@ public sealed partial class SdfProgramBuilder {
         m_sweepCurves.Clear();
         m_fieldScopes?.Clear();
         m_reservedPathWords = 0;
+        m_glyphAtlas = default;
         m_materialRecolor = null;
         m_positionalFold = null;
         ResetOpenInstance();
@@ -1218,6 +1222,7 @@ public sealed partial class SdfProgramBuilder {
         return SdfProgram.Of(
             appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces),
             convexPolygonProfiles: m_convexPolygonProfiles,
+            glyphAtlas: m_glyphAtlas.Value,
             instances: m_instances,
             instructions: m_instructions,
             paths: m_paths,

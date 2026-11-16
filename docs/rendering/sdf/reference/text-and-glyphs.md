@@ -9,6 +9,12 @@ glyph atlas, but they consume different representations of the data.
 `SdfGlyphAtlas` carries the one packed RGBA image the SDF engine binds.
 `Puck.Text` keeps each logical font's metrics and glyph rectangles in a
 `PackedFontAtlasCatalog`, with every rectangle remapped into that image.
+A glyph instruction holds only its cell's UVs, so a program carries the content
+identity of the image its glyphs sample (`SdfProgram.GlyphAtlas`, from
+`FontAtlasImageData.ContentHash`), and every baked group holding a glyph keys its
+geometry by it: new pixels under the same UVs bake the text again. One image binds
+for a program, so `SdfProgramBuilder.Glyph` refuses glyphs of two atlas images in
+one builder; pack both fonts into one catalog instead.
 
 `ManagedFontAtlasGenerator` is the production in-process source for author-provided
 OpenType fonts and collections. Puck reads Unicode mappings, metrics, simple and

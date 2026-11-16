@@ -56,7 +56,7 @@ public sealed partial class ShaderPipelineRenderNode {
         foreach (var slot in m_slots) {
             if (
                 (slot.Leases.Count != 0) &&
-                (slot.Fence is null or { IsSignaled: true })
+                ((slot.Fence is not { } fence) || Signaled(fence: fence))
             ) {
                 slot.Leases.RetireAll();
             }
@@ -215,7 +215,7 @@ public sealed partial class ShaderPipelineRenderNode {
         )) {
             return;
         }
-        if (m_lastSubmissionFence is { IsSignaled: false } fence) {
+        if ((m_lastSubmissionFence is { } fence) && !Signaled(fence: fence)) {
             m_retired.Add(item: new RetiredGraph(
                 afterSubmission: m_submissions,
                 bytes: 0UL,

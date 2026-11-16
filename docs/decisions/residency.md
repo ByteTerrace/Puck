@@ -56,9 +56,17 @@ and a door onto another world adds the crossing transaction.
 
 Across worlds the node exists: the world, whose routed residency
 (`routed$<digest>`) lives while a session or seat shows it, and whose unseen
-window keeps baking at the least share (`WorldPortalVisibility.BakingShare`,
-`WorldViewGraphHost.ReserveBakes`: one window a baking world, with the windows
-on the way to it) so it is ready before its glass comes into view. Within one world there is no node, and that is the gap.
+window keeps rendering at the least share (`WorldPortalVisibility.ArrivalShare`,
+`WorldViewGraphHost.ReserveArrivals`: one window a world whose meshes are still
+arriving, with the windows on the way to it) so it is resident before its glass
+comes into view. Arriving means its bake is pending or its region still owes the
+baked meshes' words or their upload (`SdfWorldResidency.MeshesArriving`), not
+only that its bake is pending: its bake samples, and its meshes land, only in
+frames that render one of its views, because a frame that renders none of them
+may still pack the residency's frame and move what its background work binds.
+A window dropped as soon as the bake settles can leave the meshes owed with no
+landing job and every later pump unbound (`world.residency`'s `unbound` count),
+until someone looks through every window on the way. Within one world there is no node, and that is the gap.
 
 Making every room a world would turn each doorway into a reserve-and-commit
 transfer, stop physics and rules at every door, and give every room its own

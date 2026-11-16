@@ -135,6 +135,7 @@ public sealed partial class RenderGraphCadenceLawTests {
                 return true;
             }
             public void Submitted(int slot) => m_recorded = false;
+            public void Abandoned(int slot) { }
         }
     }
 }

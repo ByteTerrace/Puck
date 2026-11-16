@@ -83,6 +83,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
     }
     public void Submitted(int slot) => m_copies.Submitted(slot: slot);
     public void Completed(int slot) => m_copies.Completed(slot: slot);
+    public void Abandoned(int slot) => m_copies.Abandoned(slot: slot);
     public void Dispose() {
         if (m_disposed) {
             return;

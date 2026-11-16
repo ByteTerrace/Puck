@@ -1200,6 +1200,13 @@ by its fence share is GPU back-pressure, not CPU work.
   and reads its result only once its node proves the frame slot complete. A changed camera or slab, unknown result, or replaced
   view/program retains demand. Occlusion is presentation evidence from an earlier completed frame;
   moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
+- **A hidden window renders until its world is resident.** `WorldViewGraphHost.ReserveArrivals` keeps one window,
+  and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
+  whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
+  residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
+  still prepares it and may pack, which moves what its background work binds. In `world.residency`, a residency
+  whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
+  nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

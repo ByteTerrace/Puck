@@ -199,6 +199,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 owner.Readback!.Read(bytes);
                 owner.Answers.Add(bytes);
             }
+            public void Abandoned(int slot) => _ = m_submitted.Remove(slot);
         }
     }
 }

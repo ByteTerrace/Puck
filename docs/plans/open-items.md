@@ -2407,6 +2407,18 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [medium · unconfirmed · glyph atlas swap] `SdfWorldResidency.ReconcileGlyphAtlas`
+  swaps the bound atlas texture apart from the program that names its new
+  identity (`SdfProgram.GlyphAtlas`); a bake taken between the two could store
+  old pixels under the new key. Confirm whether the order inside
+  `SdfWorldResidency.PrepareOnce` rules it out; if not, bind the texture and
+  the program's identity in one step. `WorldTextCatalog.Reconcile` also copies
+  the whole packed image into `SdfGlyphAtlas` (`RgbaPixels.ToArray()`).
+- [low · bake identity width] The bake closure still reaches reporting and
+  demand code that decides no content: `WorkCounterSet`, `WorkCount` and
+  `WorkKind`, `CameraSnapshot` and `SweptBox` (the tier is already a geometry
+  fact), and `CodeDerivedTable`. Make them stop types, or route the bake past
+  them, with a scratch-edit check that each no longer moves the identity.
 - [low · whole walks on ordinary frames] Walks over every row or copy each
   frame that the arrival memo's row table does not absorb: the bake's copy
   layout (`SdfMeshPathBake` copy layout walk) and two walks over the frame's
@@ -2832,17 +2844,7 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   latest submission (`RetiredGraph.ArmAfterConsumers`, through
   `HoldUntilLatestSubmission`). The change first gives those two their own
   completion (the consumer node's lease already is one), then queues the rest.
-- [low · unconfirmed] A render node that survives an abandoned slot proves it on
-  the next wait. A batch hand-off can fail without a device loss (a refused
-  `vkQueueSubmit`, a refused `ID3D12CommandQueue::Wait` ahead of the execute),
-  and its fences now report `GpuSubmissionAbandonedException` from `IsSignaled`
-  and `Wait` (`GpuBatchedSubmissionFence`). The wait that reports it drains the
-  fence, so `ShaderPipelineRenderNode.WaitSlot` throws once and retires nothing;
-  if the node is kept and waits that slot again, the drained fence returns and
-  `CompletePackageReadbacks` retires readbacks whose copies never ran. Whether a
-  frame failure keeps the node was not traced; the fix is for `WaitSlot` to
-  catch the abandonment and abandon the slot's readbacks rather than complete
-  them (`GpuSurfaceUpload.Settle` is the pattern).
+
 
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
@@ -3448,15 +3450,29 @@ waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
 and `world.residency [radius]` reads its measures.
 
-Open on the windows that render for a bake (`WorldViewGraphHost.ReserveBakes`):
+Open on the windows that render while a world's meshes arrive
+(`WorldViewGraphHost.ReserveArrivals`, `SdfWorldResidency.MeshesArriving`):
 
 - The search walks through session windows only, so a world behind a camera
-  view that its rate holds back has no window rendering for its bake.
-- The nearest window onto a baking world renders at the least share even when
-  a seen window onto the same world renders anyway: one extra view.
+  view that its rate holds back has no window rendering for its meshes.
+- The nearest window onto an arriving world renders at the least share even
+  when a seen window onto the same world renders anyway: one extra view.
 - `world.instance.stop` on a routed world leaves per-view residencies of that
-  world (`session$N$2`) in `world.residency` beside the stale routed line, some
-  landed and never resident. Whether that is intended is not confirmed.
+  world (`session$N$2`) in `world.residency` beside the stale routed line, and
+  at the meadow stop the garden painting's window and one window under it
+  (`session$18`, `session$18$0`) stay scheduled with status `waiting` for at
+  least 600 ticks afterwards. Whether either is intended is not confirmed.
+- `world.residency`'s per-group `resident` count and `all-resident` stamp are
+  not reset by a device loss: a residency whose rebuilt region owes every mesh
+  still reads all resident. Its region line's `owed` is the truth.
+- `world.wait residency` reads only contributors the latest schedule displays
+  (`SdfWorldPasses.PendingMeshesIn`), so it settles while an unseen routed world
+  behind a window still owes its meshes.
+- `WorldViewPaneMappingLawTests.APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldArrives(facing: False, arriving: True)`
+  fails: its fake host's boot session is never reached from the walk's seeds,
+  so no window renders for its world. Unconfirmed whether the fake lacks the
+  synthesized root the walk seeds from, or an authored root leaves the world's
+  views unseeded in a real World too.
 
 #### Memory on the Deck tier
 

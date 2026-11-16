@@ -25,7 +25,8 @@ public static class StartupBake {
             var text = line.Line;
             if (line.Stream == CliProcessOutputStream.Stdout) {
                 const string Prefix = "[world.residency: ";
-                var report = text.StartsWith(Prefix, StringComparison.Ordinal) ? text[Prefix.Length..] : text;
+                // The answer's first residency follows the prefix; each further residency is a line of its own, indented.
+                var report = (text.StartsWith(Prefix, StringComparison.Ordinal) ? text[Prefix.Length..] : text).TrimStart();
                 if (!report.StartsWith("residency=", StringComparison.Ordinal)) { continue; }
                 if (Field(report, "residency-id") is not { } id) {
                     reasons.Add($"world.residency omitted a residency identity: {report}");

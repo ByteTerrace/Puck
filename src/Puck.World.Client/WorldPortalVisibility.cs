@@ -35,9 +35,9 @@ public static class WorldPortalVisibility {
         );
     }
     /// <summary>The fraction of its consumer's image, on each axis, a window out of sight renders at while its world
-    /// still bakes: the least that keeps it rendering, since a world bakes only in frames that render one of its
-    /// views.</summary>
-    public const double BakingShare = 0.0625;
+    /// still bakes or lands its meshes: the least that keeps it rendering, since a world's meshes arrive only in frames
+    /// that render one of its views.</summary>
+    public const double ArrivalShare = 0.0625;
     /// <summary>Returns the fraction of a camera's image a screen's glass spans on each axis: the extent of its face's
     /// projected slab bounds, unclipped by the image's edges, so a session rendered at that fraction of the camera's extent
     /// draws one texel for each pixel the glass covers wherever it lies. A face reaching to or behind the camera's near

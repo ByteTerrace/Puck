@@ -60,12 +60,12 @@ public sealed partial class RenderGraphRuntime {
     // queue completes submissions in order, so a node whose latest submission completed has completed every earlier one.
     private bool NothingInFlight() {
         foreach (var node in m_nodes) {
-            if (node?.LatestSubmission is { IsSignaled: false }) {
+            if (node?.LatestSubmissionRunning == true) {
                 return false;
             }
         }
         foreach (var retiring in m_retiring) {
-            if (retiring.Node?.LatestSubmission is { IsSignaled: false }) {
+            if (retiring.Node?.LatestSubmissionRunning == true) {
                 return false;
             }
         }

@@ -31,6 +31,8 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> is null.</exception>
     /// <exception cref="ArgumentException">Atlas image dimensions disagree with its metadata, or the sampling
     /// correction cannot be represented.</exception>
+    /// <exception cref="InvalidOperationException">The builder already holds a glyph of an atlas with other pixels: one
+    /// atlas binds for every glyph of a program (<see cref="SdfProgram.GlyphAtlas"/>).</exception>
     /// <exception cref="ArgumentOutOfRangeException">A UV or cell dimension is not finite, a cell half-extent is not positive,
     /// <paramref name="distanceScale"/> is not finite and non-negative, <paramref name="material"/> is negative,
     /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
@@ -69,6 +71,7 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(distanceScale),
             subject: "A glyph distance scale"
         );
+        if (atlas.ImageData is { } pixels) { SampleGlyphAtlas(atlas: pixels.ContentHash); }
 
         return Shape(
             blend: blend,
@@ -95,6 +98,14 @@ public sealed partial class SdfProgramBuilder {
             shape: SdfShapeType.Glyph,
             smooth: smooth
         );
+    }
+
+    // Records the pixels an emitted glyph samples: the program's one bound atlas (SdfProgram.GlyphAtlas).
+    private void SampleGlyphAtlas(Puck.Assets.AssetContentHash atlas) {
+        if ((m_glyphAtlas != default) && (m_glyphAtlas != atlas)) {
+            throw new InvalidOperationException(message: $"A program binds one glyph atlas for all its glyphs, and this builder already emitted glyphs of atlas {m_glyphAtlas}; a glyph of atlas {atlas} would sample the other atlas's pixels. Pack both fonts into one catalog (PackedFontAtlasCatalog).");
+        }
+        m_glyphAtlas = atlas;
     }
 
     private static float GlyphSamplingCorrection(FontAtlas atlas, Vector2 uvMin, Vector2 uvMax, float halfWidth, float halfHeight, float distanceScale) {
