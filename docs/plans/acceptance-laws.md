@@ -49,9 +49,16 @@ record a replay tape, with the companion set recorded.
 
 A federated variant runs the same walk across the in-process federation harness.
 A rollback variant refuses the commit, so the traveller stays and the source seat
-is restored. A shared-identity variant seats seats 0 and 1 under one identity and
-walks both into the door in one transfer: the contract is that a shared
-identity is one detached binding, not one per seat.
+is restored. A shared-identity variant asks for seats 0 and 1 under one
+identity. The contract is the hub's
+([I3](hub-and-saves.md#invariants): an identity is embodied by at most
+one seat at a time, through one claim door): the second seat's claim is refused
+by name, and the walk and its rollback preserve the one admitted binding. The
+fixture that seats both and detaches one binding for the pair is the behaviour
+that claim door replaces, and its replay-aliasing regression is a reference
+only while that path exists. Shared control of one character, if it is ever
+wanted, is a mechanism of its own to be named, never two bodies under one
+identity.
 
 **Decided by.**
 

@@ -28,23 +28,17 @@ work in the debug world; quarantined worlds stay quarantined.
 
 ## Phases
 
-0. **Baseline.** Drive the Moth's existing flight, portal round trips and the
-   gallery routes; record whole-frame time, body, mesh, source and staging
-   counts, cold and warm bake work, and a real C# and HLSL edit-to-running
-   time.
-1. **The valley.** Keep the gallery precinct at y 0 on the floor of a basin or
-   caldera with relatively close slopes (provisionally 250 to 450 m of relief,
-   sized to keep the walls near), a clear floor about 400 m across that
-   keeps every exhibit, aperture, the studio, the camera course, the devices
-   and the rate range, and reserves the combat yard (north) and the climate wing
-   (east). Merge the old slab edge into the terrain, add an overlook, and
-   replace the global fall floor with local recovery. Terrain uses the current
-   SDF, contact and mesh systems in eight separately editable macro sectors
-   with local detail; a heightfield source is added only if measured analytic
-   terrain fails the frame or edit bar. Draw distance starts at 6000 m inside the
-   8192 m cap, haze is decoupled from draw distance, macro terrain shadows are
-   added, and displayed surface error stays inside the one-pixel rule with its
-   hysteresis below one pixel.
+The valley itself is built: `worlds/debug/valley.puck` is eight separately
+editable terrain sectors from `worlds/standard/terrain.puck` around a clear
+floor that keeps every exhibit, with an overlook, a 6000 m draw distance and
+local fall recovery in place of the global fall floor. Each sector collides as
+one field collider over its masses and relief, so a body stands on the drawn
+rock. No heightfield source was added: analytic terrain does not fail the edit
+bar or the contact bar, and one is added only if the frame bar's reading at the
+valley stops fails. What the walls still lack is the
+[terrain pass](terrain-pass.md). The phases that remain keep their numbers,
+which other plans cite:
+
 2. **One real moon, then the second.** A moon source world with a surface arrival and a return
    portal, through the existing references, destinations and sessions. The
    valley sky shows that same world as a `View` layer with an authored coverage
@@ -57,11 +51,13 @@ work in the debug world; quarantined worlds stay quarantined.
    the renderer subtracts an exact render origin before narrowing to float,
    for interpolation, cameras, views, shading, shadows, GI and picking. Gravity
    arithmetic is widened. The 8192 m cap rises only after the precision work.
-4. **Residency.** Canonical bounded source tiles with shared borders and coarse
-   exteriors, admitted and evicted across all views, planned against the
-   authored flight speed and braking; tile size is measured, not fixed. This
-   consumes [residency step 7](../decisions/residency.md#order-of-work)'s source
-   tiles and the job system's scheduler.
+4. **Residency.** Terrain tiles as residency units, admitted and evicted across
+   all views and planned against the authored flight speed and braking, then
+   the moons through routed residency. The unit, its seam rule across tiers and
+   its order are the streaming plan's
+   [step 10](streaming-and-memory.md#the-build-order); this phase is that step
+   read on the valley, and [the terrain pass](terrain-pass.md#what-the-bake-needs)
+   states what terrain requires of it.
 5. **Atmosphere, clouds and flight.** A body-frame spherical-shell atmosphere
    with surface occlusion, keeping local valley mist; bounded clouds before
    flying through them; exposure continuous into vacuum. Flight reuses the
@@ -76,81 +72,16 @@ work in the debug world; quarantined worlds stay quarantined.
    exactly once.
 7. **The round trip.** Gallery, rim, clouds, the atmosphere's limb, vacuum, moon
    approach, landing, portal, gallery, and the reverse by flight, including cold
-   work and a delayed or refused transfer, at a steady 60 FPS on the RTX 4070 at
-   the highest settings, both backends, edit-to-running under 30 s. More moons
-   and content follow it. The debug world also proves the highest-quality
-   target of 60 FPS on RTX 2060 and 45 FPS (every frame under 22.2 ms) on
-   Steam Deck.
-
-## The build so far
-
-Headless and CPU counts are the evidence here. The windowed half (GPU bake,
-frame time, the HLSL edit, Vulkan) is the `valley` group of the sweep's tour
-(`worlds/debug/sweep.json`), each stop naming what its still must show.
-
-### Phase 0: before the valley
-
-The debug world's cold bake with every group on the CPU (`puck mesh audit
---cpu`) takes about eight minutes for 13 M triangles, so the one-minute bar is
-missed by roughly eight times. The rule budget is read against
-`RuleCapacity.MaxWorkUnitsPerTick`, and the world's idle tick is read with
-`puck bench world`. Warm GPU bake work, mesh and source counts at the window,
-and the HLSL edit are the window's to read: a headless World builds no
-renderer.
-
-### Phase 1: the valley as built
-
-`worlds/debug/valley.puck`: eight sectors, each one creation placed at the
-centre and turned to its bearing, built from `worlds/standard/terrain.puck`
-(`terrainMass`, `terrainFloorCut`, `terrainRelief`): a main superellipsoid
-mass and two shoulders sunk below the floor plane, cut under it, and
-6-octave fBm relief of 4 m amplitude. The feet stand 205 to 230 m from the
-origin, the summits 300 to 430 m high; the floor (`lawn.puck`'s `floor`) is a
-740 m disc that runs on under every wall, so the old slab edge is gone. The
-overlook is a deck at 345 m on the south-west face. Draw distance is 6000 m
-and the clear day's fog 0.0006 a metre, so the rim keeps about two thirds of
-its light. A body under y −40 is stood on the floor 190 m out below the sector
-whose wedge it fell in (`fall-recovery`).
-
-Each sector bakes alone offline on the CPU (`puck mesh audit --cpu --group
-"(valley-<sector>)"`) in well under a minute with no discarded work, at hundreds of thousands of
-triangles; the floor and the overlook are small. The eight sectors
-add 2.16 M triangles to the world's 13.09 M. Every sector's field reads well
-under a distance (the anisotropic ellipsoid gauge and the noise scope's step
-clamp), which the bake measures against and the audit reports as "loose". The
-worst clusters are folds where the relief crosses the floor cut under the
-floor, out of sight; the visible ones are shading normals up to 60 degrees off
-on the steepest relief, for the window to judge.
-
-Each sector collides as one field collider over its masses and relief
-(`FixedStaticColliderKind.Field`), so the Moth stands on the drawn rock, and at
-rest `body.where` reads no change over 60 ticks on the steepest face, a gentle
-slope or the summit. A body on a slope costs about 50 convex (GJK and EPA)
-queries a tick; a body clear of the walls costs none, and the colliders
-debug view (`world.debug-view report colliders`) finds no red or amber
-witnesses. A relieved six-octave field sample costs about ten times an
-unrelieved mass sample, and the world's other bodies prove themselves clear by
-envelope reads with no relieved sample.
-
-The bake reaches these cell sizes because a scoped creation's relief declares
-its detail (`CreationNoiseDocument.DetailSpacing`: a quarter of the wavelength
-of the finest octave carrying a sixteenth of the amplitude) and the floor cut
-keeps the masses' buried halves off the lattice; without either a sector bakes
-at coarse cells and the relief aliases away. The gallery's NOISE exhibit, the
-world's other scoped noise creation, bakes at a third of its former cell size
-by the same rule. What the terrain still lacks is the
-[terrain packet](open-items.md#the-valleys-terrain).
-
-**Heightfield source: not added.** Analytic terrain does not fail the edit bar
-(one sector rebakes alone, in well under a minute on the CPU, and the GPU bake is the
-window's to time) or the contact bar. The frame bar is read in the window; a
-heightfield is added only if that reading fails.
+   work and a delayed or refused transfer, at
+   [the frame bar](../decisions/rendering.md#the-pipeline-foundation) on every
+   bar device and both backends, with edit-to-running inside its bar. More moons
+   and content follow it.
 
 ## The owner's rulings
 
 - **The valley** is a basin or caldera with relatively close slopes, not far
   away: the walls rise near the clear floor rather than beyond open plains.
-  Phase 1 sizes the relief and floor to that.
+  The built valley is sized to that.
 - **The Nexus island is not part of this design yet.** The valley stands on its
   own.
 - **Two moons** that look relatively close in the sky, one lighter and one

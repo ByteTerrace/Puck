@@ -19,9 +19,10 @@ The machine host is described by [its README](../../src/Puck.World.Machines/READ
 Open across the packages below: screens are index-addressed
 (`WorldScreen.Index`), and a cable group lists screen indices; no rule effect
 invokes a machine operation, no execution or content receipt exists, and a tape
-arms only before any cabinet has stepped; checkpoints still refuse pumped addon
-guests, applied screen operations, live coupled links and enabled rewind
-history; addon memory watches are keyed by screen; no reusable cabinet module
+arms only before any cabinet has stepped; checkpoints still refuse applied
+screen operations, live coupled links and enabled rewind history (a running
+addon guest is captured with the world); addon memory watches are keyed by
+screen; no reusable cabinet module
 exists; `Puck.World` references both bricks and the three forges directly; the
 `puck.cartridge.v1` content-admission preset (`GamingBrickContentPolicies`) has
 no production consumer; the cartridge document declares no procedure, typed
@@ -107,9 +108,9 @@ hardware observations, addon watches, the execution and content receipt,
    refuses by name before advancement. External operations are recorded once;
    deterministic rule and binding work is re-executed once. The world checkpoint
    carries named handheld cores, held input, pacing, instance generations and
-   binding memos; its refusal stays, by name, for a pumped addon guest, an
-   applied screen operation, a live coupled link and enabled rewind history until
-   full restoration round-trips for them. Until the receipt exists and those
+   binding memos; its refusal stays, by name, for an applied screen operation,
+   a live coupled link and enabled rewind history until full restoration
+   round-trips for them. Until the receipt exists and those
    round-trip, a tape can only arm before any cabinet has stepped, which is why
    recorded tapes arm at tick 0.
 4. **Cabinets are priced, and the price is an input to the job-system memo.** A

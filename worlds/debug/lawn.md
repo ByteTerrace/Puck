@@ -61,9 +61,7 @@ the climate wing hold nothing from the lawn.
 
 ## Cost
 
-The lawn's bake, draw, frame and memory measurements before and after it
-landed are in the composition plan's
-[C1 as built](../../docs/plans/debug-world-composition.md#c1-as-built). Each
+Each
 static row bakes on its own, so the tufts and flowers are most of the added
 bakes; the wind-grass patch beside the spawn adds 748 dynamic parts and their
 draws, the forcing load for one draw per shared geometry. `lawnGrassTiles = []`
