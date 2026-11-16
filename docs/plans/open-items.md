@@ -40,6 +40,29 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
+**First, before any push to `main`: the session read doors' remaining
+leaks** [high, from an adversarial review of the read-door fix by Codex Sol;
+findings argued from source, at `.claude/scratch/w4-review-read-doors.md` on
+the lead machine]:
+
+- Write admission for a session that cannot observe still answers through a
+  refusal that names or reveals withheld rows
+  (`WorldDocument.StateTransformAdmission`), and a Frames session holding
+  Edit grants is still blocked from writing, against the read-door fix's own
+  claim. One write door that neither reveals a withheld row's existence nor
+  depends on observing.
+- `body.where` (`PlayerCommandModule.Movement`) answers through authority
+  queries stamped as the console instead of the session's read door.
+- `world.peers` (`WorldNetworkCommandModule`) exposes live population
+  membership without a recipient read view [medium].
+
+And from the review of the one latest-value publication (`PublishBuffer`): its
+stress harness passed every balanced race (eight readers, two writers), and it
+reproduced only misuse: a lease disposed twice corrupts another reader's
+count and strands a slot, a reentrant `Publish` is unguarded, and the 48-bit
+reader count can roll over in principle. Make a double dispose and a
+reentrant publish refuse by construction.
+
 **Wave 2, after the lead's session restart, in this order (agreed with the
 owner):** read-only and headless work runs beside the GPU-bound lanes, and no
 more than one lane besides the lead's batched window holds the GPU at once.
