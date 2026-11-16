@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Counting;
@@ -762,9 +761,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             private const float LooseBox = 64f;
             private const int MaxSplits = 6;
 
-            private Vector3[] m_lows = ArrayPool<Vector3>.Shared.Rent(minimumLength: capacity);
-            private Vector3[] m_highs = ArrayPool<Vector3>.Shared.Rent(minimumLength: capacity);
-            private int[] m_owners = ArrayPool<int>.Shared.Rent(minimumLength: capacity);
+            private Vector3[] m_lows = RentedArrays.Rent<Vector3>(minimumLength: capacity);
+            private Vector3[] m_highs = RentedArrays.Rent<Vector3>(minimumLength: capacity);
+            private int[] m_owners = RentedArrays.Rent<int>(minimumLength: capacity);
 
             public int Count { get; private set; }
             private int Capacity => Math.Min(val1: m_owners.Length, val2: Math.Min(val1: m_lows.Length, val2: m_highs.Length));
@@ -808,9 +807,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 m_lows.AsSpan(start: 0, length: Count).CopyTo(destination: lows.AsSpan(start: at));
                 m_highs.AsSpan(start: 0, length: Count).CopyTo(destination: highs.AsSpan(start: at));
                 m_owners.AsSpan(start: 0, length: Count).CopyTo(destination: owners.AsSpan(start: at));
-                ArrayPool<Vector3>.Shared.Return(array: m_lows);
-                ArrayPool<Vector3>.Shared.Return(array: m_highs);
-                ArrayPool<int>.Shared.Return(array: m_owners);
+                RentedArrays.Return(array: m_lows);
+                RentedArrays.Return(array: m_highs);
+                RentedArrays.Return(array: m_owners);
                 m_lows = m_highs = [];
                 m_owners = [];
             }
@@ -900,7 +899,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 lock (m_chunks) {
                     chunk = m_chunks[index];
                     if (chunk is null) {
-                        chunk = ArrayPool<Node>.Shared.Rent(minimumLength: Math.Min(val1: (1 << ChunkShift), val2: (m_capacity - (index << ChunkShift))));
+                        chunk = RentedArrays.Rent<Node>(minimumLength: Math.Min(val1: (1 << ChunkShift), val2: (m_capacity - (index << ChunkShift))));
                         Volatile.Write(location: ref m_chunks[index], value: chunk);
                     }
                 }
@@ -922,7 +921,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private void ReturnWorkspace() {
             RentedArrays.Return(array: m_centroids);
             for (var index = 0; (index < m_chunks.Length); index++) {
-                if (m_chunks[index] is { } chunk) { ArrayPool<Node>.Shared.Return(array: chunk); }
+                if (m_chunks[index] is { } chunk) { RentedArrays.Return(array: chunk); }
                 m_chunks[index] = null;
             }
         }
