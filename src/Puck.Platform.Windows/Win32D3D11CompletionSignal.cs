@@ -131,9 +131,9 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() {
-        Release(value: m_fence);
+        Win32D3D11.Release(value: m_fence);
         m_fence = null;
-        Release(value: m_context4);
+        Win32D3D11.Release(value: m_context4);
         m_context4 = null;
         m_completed?.Dispose();
         m_completed = null;
@@ -255,11 +255,6 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
             _ = ((IUnknown*)device5)->Release();
         }
     }
-    internal static void Release<T>(T* value) where T : unmanaged {
-        if (value is not null) {
-            _ = ((IUnknown*)value)->Release();
-        }
-    }
 }
 /// <summary>
 /// Orders a Direct3D 11 consumer's reads of shared targets after a producer on another device wrote them: the other
@@ -324,9 +319,9 @@ public sealed unsafe class Win32D3D11FenceWait : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() {
-        Win32D3D11CompletionSignal.Release(value: m_fence);
+        Win32D3D11.Release(value: m_fence);
         m_fence = null;
-        Win32D3D11CompletionSignal.Release(value: m_context4);
+        Win32D3D11.Release(value: m_context4);
         m_context4 = null;
     }
 }

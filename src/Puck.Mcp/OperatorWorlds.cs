@@ -223,11 +223,15 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             var progress = new StartProgress(begun: clock.GetTimestamp());
 
             m_starts[id] = (stop, Task.Run(function: async () => {
-                await using var deadline = clock.CreateTimer(_ => stop.Cancel(), null, TimeSpan.FromSeconds(seconds: seconds), Timeout.InfiniteTimeSpan);
+                using var deadline = new OperationDeadline(
+                    caller: stop.Token,
+                    timeout: TimeSpan.FromSeconds(seconds: seconds),
+                    timeProvider: clock
+                );
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
