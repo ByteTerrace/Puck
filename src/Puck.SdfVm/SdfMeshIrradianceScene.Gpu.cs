@@ -45,6 +45,9 @@ public sealed partial class SdfMeshIrradianceScene {
         var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>();
         var prefixWords = checked(m_nodes.Length * SdfMeshProbeTrace.NodeWords + m_entries.Length * SdfMeshProbeTrace.EntryWords + m_instances.Length * SdfMeshProbeTrace.InstanceWords);
         var prefix = arena.Allocate(Math.Max(1, prefixWords));
+        var prefixBytes = ((long)prefixWords * sizeof(uint));
+        Counters.Add(kind: SdfMeshIrradiance.PrefixBytes, amount: prefixBytes);
+        Counters.Raise(kind: SdfMeshIrradiance.PeakPrefixBytes, value: prefixBytes);
         var entries = checked(prefix + m_nodes.Length * SdfMeshProbeTrace.NodeWords);
         var instances = checked(entries + m_entries.Length * SdfMeshProbeTrace.EntryWords);
         var segments = new List<GpuSegment>();

@@ -100,6 +100,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     public long TriangleCount { get; }
     /// <summary>Gets the static draws the scene holds.</summary>
     public int DrawCount => m_instances.Length;
+    /// <summary>Gets the scene's top-level entries: one a braid of a static draw.</summary>
+    public int EntryCount => m_entries.Length;
     /// <summary>Gets the distinct geometries the scene's draws hold.</summary>
     public int GeometryCount => m_geometries.Count;
     /// <summary>Gets the geometries the build of the scene built: those no previous scene held.</summary>
@@ -211,7 +213,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             instances: instances,
             retained: Retain(geometries: geometries, previous: previous),
             trianglesBuilt: trianglesBuilt
-        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.TraversalFaults]) };
+        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, SdfMeshIrradiance.Kinds) };
     }
 
     /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
