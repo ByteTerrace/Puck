@@ -314,6 +314,9 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 
 ## 5. Stale documentation (claims the code no longer matches)
 
+This list is what the round found when it ran. The pages it names have changed since: items 1, 4 and 9 are corrected
+in `residency.md` and item 8 in `arrival-proportional.md`. Step numbers in this report are the campaign outline's as it stood when the round ran: 2 one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction, 6 mapped portal demand, 7 shared lighting demand, 8 areas, terrain and moons, 9 managed churn. [The plan](../streaming-and-memory.md#the-build-order) builds the same work as its steps 1 and 3, 2, 6, 5, 4, 9, 10 and 11, in that order.
+
 1. **streaming-and-memory.md, table row "Lighting on the same demand points: Not built: the probe window follows the
    first view"**, residency.md step 3 "the probe window follows every view, not `Views[0]` alone", and open-items
    Residency step 2 — partly stale: `WindowLow` already centres each level on the box of every view's camera when it
