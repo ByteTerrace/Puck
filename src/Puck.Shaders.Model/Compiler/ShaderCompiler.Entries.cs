@@ -46,26 +46,21 @@ public sealed partial class ShaderCompiler {
         SHA256.HashData(source: bytes).CopyTo(array: entry, index: 32);
         bytes.CopyTo(array: entry, index: CacheHeaderBytes);
 
-        // Written beside its name first, so publication is one rename within the cache's own volume.
-        var staged = $"{path}.{Guid.NewGuid():N}.tmp";
-
-        try {
-            File.WriteAllBytes(bytes: entry, path: staged);
+        // Published without replacing, so a peer that published the name first keeps it.
+        using (var staged = AtomicFile.StageAllBytes(bytes: entry, path: path)) {
             try {
-                File.Move(destFileName: path, overwrite: false, sourceFileName: staged);
+                staged.Commit(overwrite: false);
 
                 return;
             } catch (IOException) when (File.Exists(path: path)) {
                 // A peer published the name first, or a damaged entry holds it.
             }
-            if (TryRead(path: path) is not null) {
-                return;
-            }
-            try {
-                AtomicFile.WriteAllBytes(bytes: entry, path: path);
-            } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && (TryRead(path: path) is not null))) { }
-        } finally {
-            File.Delete(path: staged);
         }
+        if (TryRead(path: path) is not null) {
+            return;
+        }
+        try {
+            AtomicFile.WriteAllBytes(bytes: entry, path: path);
+        } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && (TryRead(path: path) is not null))) { }
     }
 }

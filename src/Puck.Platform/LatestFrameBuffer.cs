@@ -1,86 +1,89 @@
+using Puck.Abstractions;
+
 namespace Puck.Platform;
 
 /// <summary>
 /// The async→sync bridge for a push-source camera: a grabber thread publishes the newest frame; the render-thread
-/// puller reads the most recent one (latest-frame-wins, stale frames dropped). A lock-based double-copy — correct and
-/// simple; the lock-free triple buffer the plan calls for is a later optimization. All threading a camera introduces is
-/// confined here, so the pull seam stays single-threaded.
+/// puller copies the most recent one out (latest-frame-wins, stale frames dropped). Frames go through a
+/// <see cref="PublishBuffer{T}"/> of pixel images filled in place, so a puller copying a frame never waits on the
+/// grabber and the grabber never waits on a puller. All threading a camera introduces is confined here, so the pull
+/// seam stays single-threaded.
 /// </summary>
 public sealed class LatestFrameBuffer {
-    private readonly Lock m_gate = new();
-    private byte[] m_frame = [];
+    private readonly PublishBuffer<Frame> m_frames = new(create: static () => new Frame());
 
-    private bool m_hasFrame;
-    private int m_height;
-    private long m_timestamp;
-    private long m_version;
-    private int m_width;
-
-    /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent <see cref="Publish"/> —
+    /// <summary>Gets the <see cref="System.Diagnostics.Stopwatch"/> timestamp of the most recent <see cref="Publish"/>,
     /// stamped at the publish site (the grabber thread), so it shares the render pacer's clock domain; the genlock
-    /// arrival signal.</summary>
+    /// arrival signal. Zero before the first frame.</summary>
     public long LastTimestamp {
         get {
-            lock (m_gate) {
-                return m_timestamp;
-            }
+            using var frame = m_frames.Read();
+
+            return frame.Value.Timestamp;
         }
     }
-    /// <summary>A monotonically increasing counter bumped on every <see cref="Publish"/> — lets a puller detect whether a
-    /// new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
-    public long Version {
-        get {
-            lock (m_gate) {
-                return m_version;
-            }
-        }
-    }
+    /// <summary>Gets a monotonically increasing counter bumped on every <see cref="Publish"/>, which lets a puller detect
+    /// whether a new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
+    public long Version => m_frames.Version;
 
     /// <summary>Publishes a newly captured frame (called from the grabber thread).</summary>
     /// <param name="pixels">The frame's tightly packed pixels.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    public void Publish(ReadOnlySpan<byte> pixels, int width, int height) {
-        lock (m_gate) {
-            if (m_frame.Length != pixels.Length) {
-                m_frame = new byte[pixels.Length];
+    public void Publish(ReadOnlySpan<byte> pixels, int width, int height) => m_frames.Publish(
+        fill: static (ref Frame frame, scoped Captured captured) => {
+            if (frame.Pixels.Length != captured.Pixels.Length) {
+                frame.Pixels = new byte[captured.Pixels.Length];
             }
 
-            pixels.CopyTo(destination: m_frame);
-            m_height = height;
-            m_width = width;
-            m_hasFrame = true;
-            m_timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
-            m_version++;
-        }
-    }
+            captured.Pixels.CopyTo(destination: frame.Pixels);
+            frame.Height = captured.Height;
+            frame.Width = captured.Width;
+            frame.Timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        },
+        state: new Captured(height: height, pixels: pixels, width: width)
+    );
     /// <summary>Copies the most recent frame into <paramref name="destination"/> (called from the puller), growing it if
-    /// needed. Returns <see langword="false"/> until the first frame has arrived.</summary>
-    /// <param name="destination">The reused destination buffer; replaced with a larger array if the frame grew.</param>
+    /// needed.</summary>
+    /// <param name="destination">The reused destination buffer; replaced with an array of the frame's length if it
+    /// differs.</param>
     /// <param name="width">The frame width in pixels.</param>
     /// <param name="height">The frame height in pixels.</param>
-    /// <returns><see langword="true"/> if a frame was copied out.</returns>
+    /// <returns><see langword="true"/> if a frame was copied out; <see langword="false"/> until the first frame has
+    /// arrived.</returns>
     public bool TryGetLatest(ref byte[] destination, out int width, out int height) {
-        lock (m_gate) {
-            if (!m_hasFrame) {
-                height = 0;
-                width = 0;
+        using var lease = m_frames.Read();
+        var frame = lease.Value;
 
-                return false;
-            }
+        if (lease.Version == 0L) {
+            height = 0;
+            width = 0;
 
-            if (destination.Length != m_frame.Length) {
-                destination = new byte[m_frame.Length];
-            }
-
-            m_frame.CopyTo(
-                array: destination,
-                index: 0
-            );
-            height = m_height;
-            width = m_width;
-
-            return true;
+            return false;
         }
+        if (destination.Length != frame.Pixels.Length) {
+            destination = new byte[frame.Pixels.Length];
+        }
+
+        frame.Pixels.CopyTo(
+            array: destination,
+            index: 0
+        );
+        height = frame.Height;
+        width = frame.Width;
+
+        return true;
+    }
+
+    private sealed class Frame {
+        public byte[] Pixels = [];
+        public int Height;
+        public long Timestamp;
+        public int Width;
+    }
+    private readonly ref struct Captured(int height, ReadOnlySpan<byte> pixels, int width) {
+        public readonly int Height = height;
+        public readonly ReadOnlySpan<byte> Pixels = pixels;
+        public readonly int Width = width;
     }
 }

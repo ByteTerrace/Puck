@@ -168,8 +168,9 @@ outputs out, through the per-user caches' one
 [retention policy](../development/contributing.md#per-user-directory); a process
 lists the directory for this only once its writes may pass the bound, or a minute
 on, and a staged publication or a duration record never counts. `puck shaders cache prune --unused-minutes <n>` removes
-every entry, duration record and abandoned staged publication (`*.tmp`) no
-compile has used for that long, and leaves any other file alone. A cache that a
+every entry and duration record no compile has used for that long and every
+staged publication (`*.tmp`) whose writer no longer runs, and leaves any other
+file alone. A cache that a
 CI job restores, builds through and then prunes with a bound longer than the job
 holds what that job's builds used, which is how CI keeps a saved cache from
 growing with every commit ([CI and releases](../development/ci.md#build-and-validate)).

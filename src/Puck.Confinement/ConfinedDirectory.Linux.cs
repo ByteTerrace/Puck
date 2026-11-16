@@ -18,13 +18,20 @@ public sealed partial class ConfinedDirectory {
 
         private const uint ModeMask = 0xF000, ModeDirectory = 0x4000, ModeRegular = 0x8000, ModeLink = 0xA000;
 
-        // Linux x86-64 struct stat. Other architectures fail closed before reaching this ABI.
+        // Linux x86-64 struct stat, 144 bytes: st_dev, st_ino and st_nlink are 8 bytes each, st_mode, st_uid, st_gid and
+        // a pad are 4, then st_rdev, st_size (48), st_blksize and st_blocks are 8, and st_atim, st_mtim (88) and st_ctim
+        // are 16-byte timespecs, then three reserved longs. The kernel's arch/x86/include/uapi/asm/stat.h, glibc's
+        // sysdeps/unix/sysv/linux/x86/bits/struct_stat.h (its __x86_64__ arms) and musl's arch/x86_64/bits/stat.h agree.
+        // Other architectures fail closed before reaching this ABI.
         [StructLayout(LayoutKind.Explicit, Size = 144)]
         public struct Stat {
             [FieldOffset(0)] public ulong Device;
             [FieldOffset(8)] public ulong Inode;
             [FieldOffset(16)] public ulong Links;
             [FieldOffset(24)] public uint Mode;
+            [FieldOffset(48)] public long Size;
+            [FieldOffset(88)] public long ModifiedSeconds;
+            [FieldOffset(96)] public long ModifiedNanoseconds;
         }
 
         public static int Fd(SafeFileHandle handle) => checked((int)handle.DangerousGetHandle());
@@ -41,8 +48,9 @@ public sealed partial class ConfinedDirectory {
             }
             return new SafeFileHandle(ownsHandle: true, preexistingHandle: fd);
         }
-        // Opens or creates name below parent without following a link; null when it is missing and not created.
-        public static SafeFileHandle? Open(SafeFileHandle parent, string name, bool directory, bool create, bool write, bool newFile) {
+        // Opens or creates name below parent without following a link; null when it is missing and not created. A
+        // hard-linked file is refused unless hardLinked admits it.
+        public static SafeFileHandle? Open(SafeFileHandle parent, string name, bool directory, bool create, bool write, bool newFile, bool hardLinked = false) {
             var flags = NoFollow | CloseOnExec | NonBlock | (directory ? DirectoryFlag : (write ? ReadWrite : ReadOnly)) |
                 ((create && !directory) ? Create : 0) | (newFile ? Exclusive : 0);
             var fd = OpenAt(flags: flags, mode: 0x180, name: name, parent: Fd(handle: parent));
@@ -69,7 +77,7 @@ public sealed partial class ConfinedDirectory {
             try {
                 var stat = StatOf(handle: handle);
 
-                if (((stat.Mode & ModeMask) != (directory ? ModeDirectory : ModeRegular)) || (!directory && (stat.Links != 1))) {
+                if (((stat.Mode & ModeMask) != (directory ? ModeDirectory : ModeRegular)) || (!directory && !hardLinked && (stat.Links != 1))) {
                     throw new IOException(message: $"'{name}' is a link, a hard-linked file or an unexpected entry type; confined access refuses it.");
                 }
                 return handle;
@@ -90,6 +98,7 @@ public sealed partial class ConfinedDirectory {
             _ => ConfinedEntryKind.Other,
         });
         public static ConfinedIdentity Identity(Stat stat) => new(File: stat.Inode, Volume: stat.Device);
+        public static DateTime ModifiedUtc(Stat stat) => DateTime.UnixEpoch.AddTicks(value: ((stat.ModifiedSeconds * TimeSpan.TicksPerSecond) + (stat.ModifiedNanoseconds / 100)));
         public static List<ConfinedEntry> Entries(SafeFileHandle handle) {
             var entries = new List<ConfinedEntry>();
 
@@ -98,7 +107,7 @@ public sealed partial class ConfinedDirectory {
                 var name = System.IO.Path.GetFileName(path: path);
 
                 if (StatAt(name: name, parent: handle) is { } stat) {
-                    entries.Add(item: new ConfinedEntry(Kind: Kind(stat: stat), Name: name));
+                    entries.Add(item: new ConfinedEntry(Kind: Kind(stat: stat), LastWriteTimeUtc: ModifiedUtc(stat: stat), Length: stat.Size, Name: name));
                 }
             }
             return entries;

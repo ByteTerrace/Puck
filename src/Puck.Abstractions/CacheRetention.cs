@@ -65,9 +65,10 @@ public static class CacheRetention {
     /// processes' writes; within it, it lists only when its own tally passes the bound.</summary>
     public static readonly TimeSpan EnforceInterval = TimeSpan.FromMinutes(minutes: 1);
 
-    /// <summary>How long a temporary file an <see cref="AtomicFile"/> write staged may go unwritten before a listing of its
-    /// directory takes it for abandoned by a write that was killed, and removes it. A name's case does not matter, as the file
-    /// system's does not.</summary>
+    /// <summary>How long a temporary file an <see cref="AtomicFile"/> write staged must go unwritten before a listing of
+    /// its directory considers removing it. Age only chooses candidates: a listing removes a temporary only when
+    /// <see cref="AtomicFile.IsAbandoned"/> finds its writer is not running, so a live writer's temporary stays however
+    /// long it waits between staging and publication.</summary>
     public static readonly TimeSpan AbandonedTemporaryAge = TimeSpan.FromMinutes(minutes: 1);
 
     private static readonly ConcurrentDictionary<string, Tally> Tallies = new(comparer: StringComparer.Ordinal);
@@ -183,7 +184,9 @@ public static class CacheRetention {
     /// kept.</summary>
     /// <param name="directory">The cache directory; one that does not exist holds nothing.</param>
     /// <param name="bound">The bound.</param>
-    /// <param name="isEntry">Which files are entries; anything else is left alone.</param>
+    /// <param name="isEntry">Which files are entries, judged by file name; anything else is left alone. A temporary
+    /// (<see cref="AtomicFile.IsTemporary"/>) is never offered: it is a write in progress, or one
+    /// <see cref="AbandonedTemporaryAge"/> governs.</param>
     /// <param name="search">Whether entries lie in the directory alone or in its subdirectories too.</param>
     /// <param name="inUse">The entry the owner is using, or <see langword="null"/>.</param>
     /// <param name="usedSinceUtc">The earliest stamp an entry keeps, in UTC; or <see langword="null"/> for no age
@@ -192,7 +195,7 @@ public static class CacheRetention {
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="isEntry"/> is <see langword="null"/>.</exception>
-    public static CacheRetentionResult Enforce(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, SearchOption search = SearchOption.TopDirectoryOnly, string? inUse = null, DateTime? usedSinceUtc = null) {
+    public static CacheRetentionResult Enforce(string directory, CacheBound bound, Func<string, bool> isEntry, SearchOption search = SearchOption.TopDirectoryOnly, string? inUse = null, DateTime? usedSinceUtc = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
@@ -204,11 +207,11 @@ public static class CacheRetention {
     /// owner calls after each write.</summary>
     /// <param name="directory">The cache directory.</param>
     /// <param name="bound">The bound.</param>
-    /// <param name="isEntry">Which files are entries.</param>
+    /// <param name="isEntry">Which files are entries, judged by file name; never offered a temporary.</param>
     /// <param name="search">Whether entries lie in subdirectories too.</param>
     /// <param name="inUse">The entry the owner just wrote, counted into the tally, or <see langword="null"/>.</param>
     /// <returns>Whether the directory was listed.</returns>
-    public static bool EnforceOnWrite(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, SearchOption search = SearchOption.TopDirectoryOnly, string? inUse = null) {
+    public static bool EnforceOnWrite(string directory, CacheBound bound, Func<string, bool> isEntry, SearchOption search = SearchOption.TopDirectoryOnly, string? inUse = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
@@ -226,14 +229,16 @@ public static class CacheRetention {
     /// because a reader holds it is kept, and its set with it.</summary>
     /// <param name="directory">The cache directory; one that does not exist holds nothing.</param>
     /// <param name="bound">The bound: its count bounds the sets, its bytes their entries' bytes.</param>
-    /// <param name="isEntry">Which files are entries; anything else is left alone.</param>
+    /// <param name="isEntry">Which files are entries, judged by file name; anything else is left alone. A temporary
+    /// (<see cref="AtomicFile.IsTemporary"/>) is never offered: it is a write in progress, or one
+    /// <see cref="AbandonedTemporaryAge"/> governs.</param>
     /// <param name="inUse">The entry the owner just wrote or is using, whose set is the set in use; or
     /// <see langword="null"/>.</param>
     /// <returns>What was removed and kept, counted in entries.</returns>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="isEntry"/> is <see langword="null"/>.</exception>
-    public static CacheRetentionResult EnforceSets(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, string? inUse = null) {
+    public static CacheRetentionResult EnforceSets(string directory, CacheBound bound, Func<string, bool> isEntry, string? inUse = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
@@ -245,12 +250,12 @@ public static class CacheRetention {
     /// what an owner whose entries come in sets calls after each write.</summary>
     /// <param name="directory">The cache directory.</param>
     /// <param name="bound">The bound.</param>
-    /// <param name="isEntry">Which files are entries.</param>
+    /// <param name="isEntry">Which files are entries, judged by file name; never offered a temporary.</param>
     /// <param name="inUse">The entry the owner just wrote, counted into the tally, or <see langword="null"/>.</param>
     /// <returns>Whether the directory was listed.</returns>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
-    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<FileInfo, bool> isEntry, string? inUse = null) {
+    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<string, bool> isEntry, string? inUse = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
@@ -305,21 +310,20 @@ public static class CacheRetention {
     }
     // Lists a flat directory, then removes entries down to trimTo when the listing is over bound (or the age bound
     // applies). When bound and trimTo are one bound this is the ordinary enforcement.
-    private static Listing EnforceFiles(string directory, CacheBound bound, CacheBound trimTo, Func<FileInfo, bool> isEntry, SearchOption search, string? inUse, DateTime? usedSinceUtc) {
+    private static Listing EnforceFiles(string directory, CacheBound bound, CacheBound trimTo, Func<string, bool> isEntry, SearchOption search, string? inUse, DateTime? usedSinceUtc) {
+        var root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: directory));
+        using var held = TryOpen(directory: root);
         var entries = new List<CacheEntry>();
 
+        if (held is null) { return default; }
         try {
-            var abandonedBefore = (DateTime.UtcNow - AbandonedTemporaryAge);
-
-            foreach (var file in new DirectoryInfo(path: directory).EnumerateFiles(searchOption: search, searchPattern: "*")) {
-                if (isEntry(arg: file)) {
-                    entries.Add(item: new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName));
-                } else if (AtomicFile.IsTemporary(path: file.Name) && (file.LastWriteTimeUtc < abandonedBefore)) {
-                    _ = TryDelete(path: file.FullName);
+            foreach (var item in ListFiles(directory: held, recursive: (search == SearchOption.AllDirectories))) {
+                if (isEntry(arg: item.Entry.Name)) {
+                    entries.Add(item: new CacheEntry(Bytes: item.Entry.Length, LastUsedUtc: item.Entry.LastWriteTimeUtc, Path: PathOf(relativePath: item.Path, root: root)));
                 }
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // A directory that is missing or cannot be listed holds nothing this enforcement can remove.
+            // A directory that cannot be listed holds nothing this enforcement can remove.
         }
 
         var total = entries.Sum(selector: static entry => entry.Bytes);
@@ -328,7 +332,7 @@ public static class CacheRetention {
 
         if ((usedSinceUtc is not null) || (entries.Count > bound.MaxEntries) || (total > bound.MaxBytes)) {
             foreach (var eviction in SelectEvictions(bound: trimTo, entries: entries, inUse: ((inUse is null) ? null : Path.GetFullPath(path: inUse)), usedSinceUtc: usedSinceUtc)) {
-                if (TryDelete(path: eviction.Path)) {
+                if (TryDelete(directory: held, relativePath: Path.GetRelativePath(path: eviction.Path, relativeTo: root))) {
                     removed++;
                     removedBytes += eviction.Bytes;
                 }
@@ -341,32 +345,39 @@ public static class CacheRetention {
     }
     // Lists a directory of sets, then removes sets (and, when the set in use alone is over, that set's own entries) down
     // to trimTo when the listing is over bound. When bound and trimTo are one bound this is the ordinary enforcement.
-    private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<FileInfo, bool> isEntry, string? inUse) {
-        var root = Path.GetFullPath(path: directory);
+    private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<string, bool> isEntry, string? inUse) {
+        var root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: directory));
         var used = ((inUse is null) ? null : Path.GetFullPath(path: inUse));
-        var sets = new List<(CacheEntry Set, List<CacheEntry> Entries)>();
+        var sets = new List<(CacheEntry Set, List<CacheEntry> Entries, bool IsDirectory)>();
+        using var held = TryOpen(directory: root);
 
+        if (held is null) { return new Listing(KeptSets: new HashSet<string>(comparer: PuckPaths.Comparer), KeptUnits: 0, Result: default); }
         try {
-            var info = new DirectoryInfo(path: root);
+            foreach (var entry in held.Entries()) {
+                var path = PathOf(relativePath: entry.Name, root: root);
 
-            foreach (var file in info.EnumerateFiles(searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*")) {
-                if (isEntry(arg: file)) {
-                    var entry = new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName);
+                if (entry.Kind == ConfinedEntryKind.Directory) {
+                    using var child = held.Child(name: entry.Name);
 
-                    sets.Add(item: (entry, [entry]));
+                    if (child is null) { continue; }
+                    var entries = new List<CacheEntry>();
+
+                    foreach (var item in ListFiles(directory: child, recursive: true)) {
+                        if (isEntry(arg: item.Entry.Name)) {
+                            entries.Add(item: new CacheEntry(Bytes: item.Entry.Length, LastUsedUtc: item.Entry.LastWriteTimeUtc, Path: PathOf(relativePath: $"{entry.Name}/{item.Path}", root: root)));
+                        }
+                    }
+                    var lastUsed = ((entries.Count == 0) ? entry.LastWriteTimeUtc : entries.Max(selector: static member => member.LastUsedUtc));
+
+                    sets.Add(item: (new CacheEntry(Bytes: entries.Sum(selector: static member => member.Bytes), LastUsedUtc: lastUsed, Path: path), entries, true));
+                } else if ((entry.Kind == ConfinedEntryKind.File) && !Abandon(directory: held, entry: entry) && isEntry(arg: entry.Name)) {
+                    var file = new CacheEntry(Bytes: entry.Length, LastUsedUtc: entry.LastWriteTimeUtc, Path: path);
+
+                    sets.Add(item: (file, [file], false));
                 }
             }
-            foreach (var child in info.EnumerateDirectories(searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*")) {
-                var entries = child.EnumerateFiles(searchOption: SearchOption.AllDirectories, searchPattern: "*")
-                    .Where(predicate: isEntry)
-                    .Select(selector: static file => new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName))
-                    .ToList();
-                var lastUsed = ((entries.Count == 0) ? child.LastWriteTimeUtc : entries.Max(selector: static entry => entry.LastUsedUtc));
-
-                sets.Add(item: (new CacheEntry(Bytes: entries.Sum(selector: static entry => entry.Bytes), LastUsedUtc: lastUsed, Path: child.FullName), entries));
-            }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // A directory that is missing or cannot be listed holds nothing this enforcement can remove.
+            // A directory that cannot be listed holds nothing this enforcement can remove.
         }
 
         var removed = 0;
@@ -377,39 +388,41 @@ public static class CacheRetention {
         if ((sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
             var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => set.Entries.Any(predicate: entry => IsInUse(entry: entry, inUse: used))));
             // Sets a running process holds (HoldSet) are kept whole whatever their stamps.
-            var pinned = new HashSet<string>(collection: sets.Where(predicate: static set => Directory.Exists(path: set.Set.Path) && IsPinned(set: set.Set.Path)).Select(selector: static set => set.Set.Path), comparer: PuckPaths.Comparer);
+            var pinned = new HashSet<string>(collection: sets.Where(predicate: static set => set.IsDirectory && IsPinned(set: set.Set.Path)).Select(selector: static set => set.Set.Path), comparer: PuckPaths.Comparer);
             var inUsePath = ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null);
 
             // The set in use trims itself first when it alone holds more than the bound, unless a process pins it.
             if ((inUseSet >= 0) && !pinned.Contains(item: sets[inUseSet].Set.Path) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
-                var (set, entries) = sets[inUseSet];
+                var (set, entries, isDirectory) = sets[inUseSet];
                 var kept = set.Bytes;
 
                 foreach (var eviction in SelectEvictions(bound: new CacheBound(MaxBytes: trimTo.MaxBytes, MaxEntries: int.MaxValue), entries: entries, inUse: used)) {
-                    if (TryDelete(path: eviction.Path)) {
+                    if (TryDelete(directory: held, relativePath: Path.GetRelativePath(path: eviction.Path, relativeTo: root))) {
                         removed++;
                         removedBytes += eviction.Bytes;
                         kept -= eviction.Bytes;
                     }
                 }
 
-                sets[inUseSet] = ((set with { Bytes = kept }), entries);
+                sets[inUseSet] = ((set with { Bytes = kept }), entries, isDirectory);
             }
 
             foreach (var eviction in SelectEvictionsCore(bound: trimTo, entries: sets.Select(selector: static set => set.Set), kept: set => (pinned.Contains(item: set.Path) || IsInUse(entry: set, inUse: inUsePath)), usedSinceUtc: null)) {
                 var whole = true;
+                var evicted = sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison));
 
-                foreach (var entry in sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison)).Entries) {
-                    if (TryDelete(path: entry.Path)) {
+                foreach (var entry in evicted.Entries) {
+                    if (TryDelete(directory: held, relativePath: Path.GetRelativePath(path: entry.Path, relativeTo: root))) {
                         removed++;
                         removedBytes += entry.Bytes;
                     } else {
                         whole = false;
                     }
                 }
-                if (Directory.Exists(path: eviction.Path)) {
+                if (evicted.IsDirectory) {
                     try {
-                        Directory.Delete(path: eviction.Path, recursive: true);
+                        // The rest of the set goes through handles too, refusing (and keeping) anything below a link.
+                        _ = held.DeleteChild(name: Path.GetFileName(path: eviction.Path));
                     } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                         // A file a reader holds keeps what is left of the set until a later enforcement.
                         whole = false;
@@ -440,10 +453,43 @@ public static class CacheRetention {
 
         return ((separator < 0) ? path : Path.Combine(path1: root, path2: relative[..separator]));
     }
-    // Deletes a file, answering whether it went: one a reader holds open is in use, and stays.
-    private static bool TryDelete(string path) {
+    // Holds a cache directory: the caller's root, resolved as the operating system resolves it. Everything below is
+    // reached through its handle and never through a link, so no enforcement lists or deletes outside it. A directory
+    // that is missing or cannot be opened, or a platform confined access does not support, holds nothing to remove.
+    private static ConfinedDirectory? TryOpen(string directory) {
         try {
-            File.Delete(path: path);
+            return ConfinedDirectory.OpenAnchor(create: false, path: directory);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            return null;
+        }
+    }
+    // The regular files below a held directory, through handles (a link is never listed as a file nor descended), with
+    // every temporary left out: one whose writer no longer runs is removed on the way (Abandon), and any other is a
+    // write in progress, never an entry.
+    private static IEnumerable<ConfinedTreeEntry> ListFiles(ConfinedDirectory directory, bool recursive) {
+        var items = (recursive
+            ? directory.Walk()
+            : directory.Entries().Select(selector: entry => new ConfinedTreeEntry(Directory: directory, Entry: entry, Path: entry.Name)));
+
+        foreach (var item in items) {
+            if ((item.Entry.Kind == ConfinedEntryKind.File) && !Abandon(directory: item.Directory, entry: item.Entry)) { yield return item; }
+        }
+    }
+    // Whether a listed file is a temporary, removing it when it has gone unwritten for AbandonedTemporaryAge and its
+    // writer is known not to be running (AtomicFile.IsAbandoned): the age only chooses candidates, and the claim decides.
+    private static bool Abandon(ConfinedDirectory directory, ConfinedEntry entry) {
+        if (!AtomicFile.IsTemporary(path: entry.Name)) { return false; }
+        if ((entry.LastWriteTimeUtc < (DateTime.UtcNow - AbandonedTemporaryAge)) && AtomicFile.IsAbandoned(path: entry.Name)) {
+            _ = TryDelete(directory: directory, relativePath: entry.Name);
+        }
+        return true;
+    }
+    private static string PathOf(string root, string relativePath) => Path.Join(path1: root, path2: relativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+    // Deletes a file below a held directory through handles, answering whether it is gone: one a reader holds open is in
+    // use, and stays, as does one reached through a link.
+    private static bool TryDelete(ConfinedDirectory directory, string relativePath) {
+        try {
+            _ = directory.DeleteFile(relativePath: relativePath);
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {

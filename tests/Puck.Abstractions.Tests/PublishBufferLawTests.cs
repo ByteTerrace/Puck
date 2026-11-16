@@ -1,13 +1,17 @@
 namespace Puck.Abstractions.Tests;
 
 /// <summary>
-/// Laws for <see cref="PublishBuffer{T}"/>, the one slot a writer publishes frames into and a reader snapshots from: an
-/// empty buffer reports no frame, a snapshot reads the latest published frame, a reader racing writers never sees a
-/// frame half written, and a steady publish and snapshot allocate nothing.
+/// Laws for <see cref="PublishBuffer{T}"/>, the latest-value handoff writers publish frames into and readers read from:
+/// an empty buffer reports no frame, a buffer of images starts with a complete one, a read sees the latest published
+/// frame, readers racing writers never see a frame half written or going back, a reader never waits on a writer
+/// stalled mid-publish, a held read keeps its frame while writers publish on, and a steady publish and read allocate
+/// nothing.
 /// </summary>
 public sealed class PublishBufferLawTests {
     // A frame wide enough that a copy of it is several machine words, so a torn read would show as mismatched halves.
     private readonly record struct Wide(long A, long B, long C, long D);
+
+    private static Wide Of(long value) => new(A: value, B: value, C: value, D: value);
 
     [Fact]
     public void AnEmptyBufferReportsNoFrame() {
@@ -33,8 +37,18 @@ public sealed class PublishBufferLawTests {
         );
     }
     [Fact]
-    public async Task AReaderRacingTwoWritersNeverSeesAFrameHalfWritten() {
+    public void ABufferOfImagesStartsWithACompleteImage() {
+        var buffer = new PublishBuffer<long[]>(create: static () => [7L, 7L]);
+        using var lease = buffer.Read();
+
+        Assert.True(condition: lease.HasValue);
+        Assert.Equal(actual: lease.Value, expected: [7L, 7L]);
+        Assert.Equal(actual: lease.Version, expected: 0L);
+    }
+    [Fact]
+    public async Task ReadersRacingTwoWritersNeverSeeAFrameHalfWritten() {
         const long Publishes = 200_000;
+        const int Readers = 2;
 
         var buffer = new PublishBuffer<Wide>();
         var torn = 0L;
@@ -42,11 +56,11 @@ public sealed class PublishBufferLawTests {
         var writing = 2;
         var ct = TestContext.Current.CancellationToken;
 
-        // The race is arranged by events, never by scheduling: the three threads start together, and each writer holds
-        // its second half of publishes until the reader has taken a snapshot, so the reader reads while both writers
-        // still publish however the machine schedules them, and it reads at least once.
-        using var start = new Barrier(participantCount: 3);
-        using var readerSnapshotted = new ManualResetEventSlim(initialState: false);
+        // The race is arranged by events, never by scheduling: every thread starts together, and each writer holds its
+        // second half of publishes until both readers have read, so the readers read while both writers still publish
+        // however the machine schedules them, and each reads at least once.
+        using var start = new Barrier(participantCount: (2 + Readers));
+        using var readersRead = new CountdownEvent(initialCount: Readers);
 
         buffer.Publish(value: default);
 
@@ -55,42 +69,100 @@ public sealed class PublishBufferLawTests {
 
             for (var value = 1L; (value <= Publishes); value++) {
                 if (value == (Publishes / 2)) {
-                    readerSnapshotted.Wait(cancellationToken: ct);
+                    readersRead.Wait(cancellationToken: ct);
                 }
 
-                var word = ((value * 2) + writer);
-
-                buffer.Publish(value: new Wide(A: word, B: word, C: word, D: word));
+                buffer.Publish(value: Of(value: ((value * 2) + writer)));
             }
 
             _ = Interlocked.Decrement(location: ref writing);
         }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default)).ToArray();
-        var reader = Task.Factory.StartNew(action: () => {
+        var readers = Enumerable.Range(count: Readers, start: 0).Select(selector: reader => Task.Factory.StartNew(action: () => {
+            var counted = false;
+
             start.SignalAndWait(cancellationToken: ct);
 
             do {
                 if (buffer.TrySnapshot(value: out var frame)) {
-                    snapshots++;
-                    readerSnapshotted.Set();
+                    _ = Interlocked.Increment(location: ref snapshots);
 
+                    if (!counted) {
+                        counted = true;
+                        _ = readersRead.Signal();
+                    }
                     if (
                         (frame.B != frame.A) ||
                         (frame.C != frame.A) ||
                         (frame.D != frame.A)
                     ) {
-                        torn++;
+                        _ = Interlocked.Increment(location: ref torn);
                     }
                 }
             } while (Volatile.Read(location: ref writing) != 0);
-        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
+        }, cancellationToken: ct, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default)).ToArray();
 
-        await Task.WhenAll(tasks: [.. writers, reader]);
+        await Task.WhenAll(tasks: [.. writers, .. readers]);
 
-        Assert.True(condition: (snapshots > 0));
+        Assert.True(condition: (snapshots >= Readers));
         Assert.Equal(
             actual: torn,
             expected: 0L
         );
+    }
+    [Fact]
+    public async Task AReaderNeverWaitsOnAWriterStalledMidPublish() {
+        var ct = TestContext.Current.CancellationToken;
+        var buffer = new PublishBuffer<long[]>(create: static () => new long[2]);
+        using var stalled = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+
+        buffer.Publish(state: 1L, fill: static (ref long[] image, long value) => image.AsSpan().Fill(value: value));
+        // The writer stops between the two halves of its image and holds there until released.
+        var writer = Task.Run(action: () => buffer.Publish(state: (stalled, release, ct), fill: static (ref long[] image, (ManualResetEventSlim Stalled, ManualResetEventSlim Release, CancellationToken Token) gates) => {
+            image[0] = 2L;
+            gates.Stalled.Set();
+            gates.Release.Wait(cancellationToken: gates.Token);
+            image[1] = 2L;
+        }), cancellationToken: ct);
+
+        try {
+            Assert.True(condition: stalled.Wait(cancellationToken: ct, timeout: TimeSpan.FromSeconds(seconds: 30)));
+            // A read that does not finish within the bound waited on the writer.
+            var image = await Task.Run(function: () => {
+                using var lease = buffer.Read();
+
+                return lease.Value.ToArray();
+            }, cancellationToken: ct).WaitAsync(cancellationToken: ct, timeout: TimeSpan.FromSeconds(seconds: 30));
+
+            Assert.Equal(actual: image, expected: [1L, 1L]);
+        } finally {
+            release.Set();
+        }
+        await writer;
+        Assert.True(condition: buffer.TrySnapshot(value: out var published));
+        Assert.Equal(actual: published, expected: [2L, 2L]);
+    }
+    [Fact]
+    public void AHeldReadKeepsItsFrameWhileWritersPublishOn() {
+        var buffer = new PublishBuffer<Wide>();
+
+        buffer.Publish(value: Of(value: 1));
+        using var first = buffer.Read();
+
+        buffer.Publish(value: Of(value: 2));
+        using var second = buffer.Read();
+
+        // Every slot is now published or held, so a writer that waited on a reader would never return from these.
+        for (var value = 3L; (value <= 64L); value++) {
+            buffer.Publish(value: Of(value: value));
+        }
+
+        Assert.Equal(actual: first.Value, expected: Of(value: 1));
+        Assert.Equal(actual: first.Version, expected: 1L);
+        Assert.Equal(actual: second.Value, expected: Of(value: 2));
+        Assert.Equal(actual: second.Version, expected: 2L);
+        Assert.True(condition: buffer.TrySnapshot(value: out var latest));
+        Assert.Equal(actual: latest, expected: Of(value: 64));
     }
     [Fact]
     public void TheVersionCountsCompletedPublications() {
