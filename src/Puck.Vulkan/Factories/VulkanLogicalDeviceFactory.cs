@@ -220,6 +220,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         }
         Console.Error.WriteLine(value: $"[device-fault] VK_EXT_device_fault {(deviceFault ? "ENABLED" : "unavailable")}");
 
+        // A budget and usage per heap; without it the memory reading's budgets are the heap sizes, marked estimates.
+        var memoryBudget = m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: VulkanLogicalDevice.MemoryBudgetExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle);
+
+        if (memoryBudget) {
+            extensions.Add(item: VulkanLogicalDevice.MemoryBudgetExtension);
+        }
+        Console.Error.WriteLine(value: $"[memory-budget] {VulkanLogicalDevice.MemoryBudgetExtension} {(memoryBudget ? "ENABLED" : "unavailable (estimated from heap sizes)")}");
+
         var checkpoints = m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCheckpoints.ExtensionName, instance: instance, physicalDeviceHandle: physicalDeviceHandle);
 
@@ -433,6 +442,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
+        var memorySegments = m_physicalDeviceApi.GetMemorySegments(
+            instance: instance.Commands,
+            physicalDeviceHandle: physicalDevice.Handle,
+            profile: memoryProfile
+        );
         var capabilities = m_physicalDeviceApi.GetDeviceCapabilities(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
@@ -458,6 +472,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,
             Instance: instance.Commands,
+            MemorySegments: memorySegments,
             PhysicalDevice: physicalDevice,
             Queues: BuildQueues(queueFamilySelection: physicalDevice.QueueFamilySelection)
         );
@@ -510,12 +525,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             ) {
                 Capabilities = capabilities,
                 Identity = identity,
+                MemoryBudgetEnabled = extensionNames.Contains(value: VulkanLogicalDevice.MemoryBudgetExtension),
                 MemoryProfile = memoryProfile,
+                MemorySegments = memorySegments,
                 PipelineCache = pipelineCache,
             };
         } catch {
             pipelineCache?.Dispose();
             m_logicalDeviceApi.DestroyDevice(device: device);
+            device.Memory?.EndDevice(device: device.Handle);
 
             throw;
         }

@@ -22,13 +22,23 @@ public sealed class GpuDeviceMemoryWorkLawTests {
 
         return value;
     }
-    private static void Allocate(GpuDeviceMemoryWork work, nint allocation, long bytes, nint device = Device, GpuMemoryRole role = GpuMemoryRole.DeviceLocal) =>
+    // Registers a discrete adapter's segments for the device on its first allocation, and places each allocation in the
+    // segment its role names.
+    private static void Allocate(GpuDeviceMemoryWork work, nint allocation, long bytes, nint device = Device, GpuMemoryRole role = GpuMemoryRole.DeviceLocal) {
+        try {
+            _ = work.SegmentsOf(device: device);
+        } catch (InvalidOperationException) {
+            work.BeginDevice(device: device, segments: GpuMemorySegments.FromDirectX(profile: default));
+        }
+
         work.CountAllocated(
             allocation: allocation,
             bytes: bytes,
             device: device,
-            role: role
+            role: role,
+            segment: (GpuDeviceMemoryWork.IsDeviceLocal(role: role) ? GpuMemorySegments.DirectXLocal : GpuMemorySegments.DirectXNonLocal)
         );
+    }
 
     [Fact]
     public void AllocationsAndReleasesCountTheirSizesAndThePeakHeld() {
@@ -154,6 +164,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
                 ("gpu.memory.host-visible.released", "bytes", WorkClass.Pacing),
                 ("gpu.memory.host-visible.peak", "bytes", WorkClass.Pacing),
                 ("gpu.memory.allocations", "count", WorkClass.Pacing),
+                ("gpu.memory.placement-disagreements", "count", WorkClass.Pacing),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]
         );

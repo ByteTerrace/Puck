@@ -58,4 +58,13 @@ public interface IDirectXDeviceApi {
     /// <returns>The device's capabilities for diagnostics and resource admission.</returns>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     Puck.Abstractions.Gpu.GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle);
+    /// <summary>Opens the DXGI adapter a created device was placed on, found by the device's LUID, as
+    /// <c>IDXGIAdapter3</c>, whose budget queries the device's memory reading holds it for
+    /// (<see cref="DirectXVideoMemory"/>).</summary>
+    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
+    /// <returns>The native <c>IDXGIAdapter3</c>, a reference the caller owns and releases.</returns>
+    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero, or no adapter carries the device's
+    /// LUID.</exception>
+    /// <exception cref="DirectXException">The adapter does not answer as <c>IDXGIAdapter3</c>.</exception>
+    nint OpenAdapter(nint deviceHandle);
 }

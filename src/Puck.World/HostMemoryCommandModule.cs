@@ -4,6 +4,7 @@ using System.Runtime;
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
@@ -34,7 +35,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         for (var index = 0; (index < shown); index++) {
             var owner = owners[index];
 
-            text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
+            text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} pool={PoolName(pool: owner.Pool)} admitted={(owner.Observed ? "no" : "yes")} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
         }
         var omittedOwned = 0L;
         var omittedReserved = 0L;
@@ -50,6 +51,41 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
     }
     private static string Mebibytes(long bytes) =>
         (bytes / (1L << 20)).ToString(provider: CultureInfo.InvariantCulture);
+    private static string PoolName(PhysicalMemory pool) => ((pool == PhysicalMemory.Device) ? "device" : "host");
+    private static string Bytes(long? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
+    private static string Bytes(ulong? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
+    // The pools, the device reading the account last recorded, and each segment's API figures beside the bytes the
+    // backend's ledger placed in it; a segment's usage past its ledger row is driver, swapchain and uncounted memory.
+    private string DescribePools() {
+        var pools = MemoryAccount.Shared.ReadPools();
+        var reading = pools.DeviceReading;
+        var unified = (reading.Layout?.UnifiedMemory ?? false);
+        var ledgers = m_memorySources.OfType<GpuDeviceMemoryWork>()
+            .SelectMany(selector: static work => work.ReadSegments().Select(selector: row => (work.Backend, Row: row))).ToArray();
+        var text = new StringBuilder();
+        var host = pools.Host;
+
+        text.Append(CultureInfo.InvariantCulture, $" | pool host budget={Bytes(host.Budget)} spend-limit={Bytes(host.SpendLimit)} owned={host.Owned} admitted={host.Admitted} observed={host.Observed} reserved={host.Reserved}{(unified ? " unified=yes (the device's segments lie in this pool and are counted once)" : string.Empty)}");
+        if (pools.Device is { Present: true } device) {
+            text.Append(CultureInfo.InvariantCulture, $" | pool device budget={Bytes(device.Budget)} spend-limit={Bytes(device.SpendLimit)} owned={device.Owned} observed={device.Observed}");
+        } else {
+            text.Append(CultureInfo.InvariantCulture, $" | pool device absent ({(unified ? "unified memory: one pool" : $"device reading {reading.State.ToString().ToLowerInvariant()}")})");
+        }
+        text.Append(CultureInfo.InvariantCulture, $" | device reading={reading.State.ToString().ToLowerInvariant()} serial={reading.Serial} estimated={(reading.Estimated ? "yes" : "no")}");
+        for (var index = 0; (index < reading.Segments.Count); index++) {
+            var segment = reading.Segments[index];
+            var limit = ((index < pools.SegmentLimits.Count) ? pools.SegmentLimits[index].SpendLimit : (long?)null);
+            var ledger = ledgers.Where(predicate: entry => (entry.Row.Segment == segment.Segment)).Select(selector: static entry => entry.Row).FirstOrDefault();
+            var beyond = ((segment.Usage is { } usage) ? (long?)(((long)usage) - ledger.Held) : null);
+
+            text.Append(CultureInfo.InvariantCulture, $" | segment {segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} budget={segment.Budget} spend-limit={Bytes(limit)} usage={Bytes(segment.Usage)} available-for-reservation={Bytes(segment.AvailableForReservation)} reservation={Bytes(segment.CurrentReservation)} ledger-held={ledger.Held} usage-beyond-ledger={Bytes(beyond)}");
+        }
+        foreach (var (backend, row) in ledgers) {
+            text.Append(CultureInfo.InvariantCulture, $" | ledger {backend}.{row.Segment.Name} pool={PoolName(pool: row.Segment.Pool)} held={row.Held} peak={row.Peak} allocated={row.Allocated} released={row.Released} placement-disagreements={row.Disagreements}");
+        }
+
+        return text.ToString();
+    }
     // One line: the process, then the managed heap as the last collection left it, in MiB.
     private string Describe() {
         using var process = Process.GetCurrentProcess();
@@ -70,7 +106,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB uptime={((long)uptime.TotalMilliseconds)}ms | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} allocated-bytes={GC.GetTotalAllocatedBytes(precise: false)} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)}{accounting} | jit methods={System.Runtime.JitInfo.GetCompiledMethodCount()} il={Mebibytes(bytes: System.Runtime.JitInfo.GetCompiledILBytes())} MiB compile={((long)System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds)}ms]"
+            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB uptime={((long)uptime.TotalMilliseconds)}ms | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} allocated-bytes={GC.GetTotalAllocatedBytes(precise: false)} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)}{accounting}{DescribePools()} | jit methods={System.Runtime.JitInfo.GetCompiledMethodCount()} il={Mebibytes(bytes: System.Runtime.JitInfo.GetCompiledILBytes())} MiB compile={((long)System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds)}ms]"
         );
     }
 
@@ -81,7 +117,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
+            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the pools by physical memory (host always; a discrete adapter's device memory, named absent on unified memory or without a device) with budget, spend limit and admitted and observed bytes, which change no admission, the device memory reading the account last recorded (state, serial, whether estimated) and for each segment its API budget, usage and reservation figures beside the bytes the backend ledger placed in it, then each ledger segment row with its held, peak, allocated and released bytes and placement disagreements, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
             forms: HostMemoryForms,
             handler: (_, args) => {
                 if ((args.Count is 1 or 2) && args.Is(index: 0, value: "owners")) {

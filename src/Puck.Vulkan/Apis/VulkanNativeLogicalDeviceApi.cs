@@ -203,6 +203,11 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                         memory: m_memory,
                         procedures: m_procedures
                     );
+                    // The heaps are registered before the device's first counted allocation; its teardown ends them
+                    // (VulkanLogicalDevice.Dispose).
+                    if (request.MemorySegments is { } segments) {
+                        m_memory?.BeginDevice(device: deviceHandle, segments: segments);
+                    }
                 } catch {
                     DestroyUnresolvedDevice(deviceHandle: deviceHandle);
 

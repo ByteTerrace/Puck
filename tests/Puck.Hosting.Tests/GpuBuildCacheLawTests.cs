@@ -275,6 +275,8 @@ public sealed class GpuBuildCacheLawTests {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public GpuDeviceServices Services => throw new NotSupportedException();
 
         public void WaitIdle() {

@@ -17,6 +17,7 @@ namespace Puck.Vulkan.Tests;
 /// own device, before the leak is named. The command tables resolve every entry point to a trap that no law reaches, and
 /// the device API records each table whose device it destroys.</summary>
 public sealed unsafe class VulkanDeviceOwnershipLawTests {
+    private static readonly GpuMemorySegments OneHeap = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [0x1U, 0U], profile: default);
     private const nint FirstDeviceHandle = 0x0D00;
     private const nint SecondDeviceHandle = 0x0E00;
 
@@ -72,8 +73,10 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
         var lost = LogicalDevice(api: api, handle: FirstDeviceHandle, memory: memory);
         var replacement = LogicalDevice(api: api, handle: SecondDeviceHandle, memory: memory);
 
-        lost.Commands.CountAllocated(allocationSize: 4096UL, memoryHandle: Reused, role: GpuMemoryRole.DeviceLocal);
-        replacement.Commands.CountAllocated(allocationSize: 256UL, memoryHandle: Reused, role: GpuMemoryRole.DeviceLocal);
+        memory.BeginDevice(device: FirstDeviceHandle, segments: OneHeap);
+        memory.BeginDevice(device: SecondDeviceHandle, segments: OneHeap);
+        lost.Commands.CountAllocated(allocationSize: 4096UL, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
+        replacement.Commands.CountAllocated(allocationSize: 256UL, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: lost.Dispose);
 

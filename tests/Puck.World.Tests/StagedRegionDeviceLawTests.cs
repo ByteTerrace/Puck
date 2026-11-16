@@ -237,6 +237,8 @@ public sealed class StagedRegionDeviceLawTests {
         public GpuDeviceCapabilities? Capabilities => device.Capabilities;
         public GpuDeviceIdentity? Identity => device.Identity;
         public GpuMemoryProfile MemoryProfile => (device.MemoryProfile with { HostVisibleDeviceLocalBytes = 0UL });
+        public GpuMemoryReading MemoryReading => device.MemoryReading;
+        public void RefreshMemoryReading() => device.RefreshMemoryReading();
         public GpuDeviceServices Services => device.Services;
 
         public void WaitIdle() => device.WaitIdle();

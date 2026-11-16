@@ -47,6 +47,25 @@ public interface IVulkanPhysicalDeviceApi {
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
     /// <returns>The device's memory profile, which residency selection branches on.</returns>
     Puck.Abstractions.Gpu.GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle);
+    /// <summary>Gets a physical device's memory segments, one per heap of <c>vkGetPhysicalDeviceMemoryProperties</c>
+    /// with the pool it lies in (<see cref="Puck.Abstractions.Gpu.GpuMemorySegments.FromVulkan"/>), and each memory
+    /// type's heap.</summary>
+    /// <param name="instance">The command table of the instance.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <param name="profile">The device's memory profile (<see cref="GetMemoryProfile"/>).</param>
+    /// <returns>The device's segments.</returns>
+    Puck.Abstractions.Gpu.GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, Puck.Abstractions.Gpu.GpuMemoryProfile profile);
+    /// <summary>Reads a physical device's budget and usage per heap: <c>vkGetPhysicalDeviceMemoryProperties2</c> with
+    /// <c>VkPhysicalDeviceMemoryBudgetPropertiesEXT</c> chained when the device was created with
+    /// <c>VK_EXT_memory_budget</c>; otherwise each heap's size as its budget and no usage, an estimate.</summary>
+    /// <param name="instance">The command table of the instance.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <param name="segments">The device's segments (<see cref="GetMemorySegments"/>).</param>
+    /// <param name="budgetEnabled">Whether the device was created with <c>VK_EXT_memory_budget</c>.</param>
+    /// <param name="estimated">Whether the figures are estimates: the extension is not enabled, or the instance has no
+    /// <c>vkGetPhysicalDeviceMemoryProperties2</c>.</param>
+    /// <returns>One reading per segment, in the segments' order.</returns>
+    Puck.Abstractions.Gpu.GpuSegmentReading[] ReadMemoryBudget(VulkanInstanceCommands instance, nint physicalDeviceHandle, Puck.Abstractions.Gpu.GpuMemorySegments segments, bool budgetEnabled, out bool estimated);
     /// <summary>Gets what a physical device can bind, from <c>vkGetPhysicalDeviceProperties</c>'s limits:
     /// <c>maxBoundDescriptorSets</c>, <c>maxPushConstantsSize</c>, the <c>maxPerStageDescriptor*</c> counts and
     /// <c>maxPerStageResources</c>, and <c>maxUniformBufferRange</c>.</summary>

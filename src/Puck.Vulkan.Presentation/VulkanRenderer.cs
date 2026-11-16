@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
@@ -85,6 +86,60 @@ public sealed class VulkanRenderer(
     GpuDeviceCapabilities? IGpuDeviceContext.Capabilities => m_device?.Capabilities;
     // Read with the identity; the default profile, which reports nothing, without a device.
     GpuMemoryProfile IGpuDeviceContext.MemoryProfile => (m_device?.MemoryProfile ?? default);
+    // Published by RefreshMemoryReading on the frame thread; any thread may read it.
+    GpuMemoryReading IGpuDeviceContext.MemoryReading => ((m_device is not null)
+        ? Volatile.Read(location: ref m_memoryReading)
+        : (m_memoryReadingSerial == 0UL)
+            ? GpuMemoryReading.Absent
+            : GpuMemoryReading.Lost(serial: m_memoryReadingSerial));
+
+    // Vulkan's budget has no change signal, so the frame thread reads it at this fixed interval, in Stopwatch ticks.
+    private static readonly long MemoryReadingInterval = Stopwatch.Frequency;
+
+    private GpuMemoryReading m_memoryReading = GpuMemoryReading.Absent;
+    private ulong m_memoryReadingSerial;
+    private long m_memoryReadAt;
+    private VulkanLogicalDevice? m_memoryReadDevice;
+
+    /// <summary>Reads the device's budget and usage per heap when a second has passed since the last read, or the device
+    /// changed, publishing a new reading whose serial moves when a budget differs from the last; otherwise makes no
+    /// driver call. A renderer with no device publishes nothing and brings none up.</summary>
+    public void RefreshMemoryReading() {
+        var device = m_device;
+
+        if ((device?.MemorySegments is not { } segments) || (m_instance is null)) {
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+
+        if (ReferenceEquals(objA: device, objB: m_memoryReadDevice) && ((now - m_memoryReadAt) < MemoryReadingInterval)) {
+            return;
+        }
+
+        var readings = physicalDeviceApi.ReadMemoryBudget(
+            budgetEnabled: device.MemoryBudgetEnabled,
+            estimated: out var estimated,
+            instance: m_instance.Commands,
+            physicalDeviceHandle: m_physicalDevice.Handle,
+            segments: segments
+        );
+        var last = Volatile.Read(location: ref m_memoryReading);
+        var changed = (!ReferenceEquals(objA: device, objB: m_memoryReadDevice) || (last.State != GpuMemoryReadingState.Read) || (last.Segments.Count != readings.Length));
+
+        for (var index = 0; (!changed && (index < readings.Length)); index++) {
+            changed = (last.Segments[index].Budget != readings[index].Budget);
+        }
+
+        m_memoryReadAt = now;
+        m_memoryReadDevice = device;
+        Volatile.Write(location: ref m_memoryReading, value: GpuMemoryReading.Read(
+            estimated: estimated,
+            readings: readings,
+            segments: segments,
+            serial: (changed ? ++m_memoryReadingSerial : m_memoryReadingSerial)
+        ));
+    }
 
     /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
     public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));

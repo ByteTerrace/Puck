@@ -135,6 +135,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             request.Device.CountAllocated(
                 allocationSize: allocateInfo.AllocationSize,
                 memoryHandle: memoryHandle,
+                memoryTypeIndex: memoryTypeIndex,
                 role: GpuMemoryRole.DeviceLocal
             );
 
