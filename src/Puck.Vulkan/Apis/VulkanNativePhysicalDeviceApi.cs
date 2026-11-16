@@ -319,32 +319,30 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
     /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
-        ValidatePhysicalDeviceInputs(
+        var deviceType = ((uint)GetPhysicalDeviceType(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
-        );
-        instance.GetPhysicalDeviceMemoryProperties(
-            physicalDeviceHandle,
-            out var memory
-        );
+        ));
 
-        return GpuMemoryProfile.FromVulkan(
-            deviceType: ((uint)GetPhysicalDeviceType(
-                instance: instance,
-                physicalDeviceHandle: physicalDeviceHandle
-            )),
-            memoryHeaps: new ReadOnlySpan<ulong>(
-                length: (((int)memory.MemoryHeapCount) * 2),
-                pointer: memory.MemoryHeapPairs
-            ),
-            memoryTypes: new ReadOnlySpan<uint>(
-                length: (((int)memory.MemoryTypeCount) * 2),
-                pointer: memory.MemoryTypePairs
-            )
+        return ReadMemory(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            read: (types, heaps) => GpuMemoryProfile.FromVulkan(deviceType: deviceType, memoryHeaps: heaps, memoryTypes: types)
         );
     }
     /// <inheritdoc/>
-    public GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemoryProfile profile) {
+    public GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemoryProfile profile) =>
+        ReadMemory(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            read: (types, heaps) => GpuMemorySegments.FromVulkan(memoryHeaps: heaps, memoryTypes: types, profile: profile)
+        );
+
+    // The memory types and heaps of vkGetPhysicalDeviceMemoryProperties, in their native { propertyFlags, heapIndex } and
+    // { size, flags } pairs, handed to whatever reads them.
+    private delegate T MemoryRead<T>(ReadOnlySpan<uint> memoryTypes, ReadOnlySpan<ulong> memoryHeaps);
+
+    private static T ReadMemory<T>(VulkanInstanceCommands instance, nint physicalDeviceHandle, MemoryRead<T> read) {
         ValidatePhysicalDeviceInputs(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
@@ -354,16 +352,15 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             out var memory
         );
 
-        return GpuMemorySegments.FromVulkan(
-            memoryHeaps: new ReadOnlySpan<ulong>(
-                length: (((int)memory.MemoryHeapCount) * 2),
-                pointer: memory.MemoryHeapPairs
-            ),
-            memoryTypes: new ReadOnlySpan<uint>(
+        return read(
+            new ReadOnlySpan<uint>(
                 length: (((int)memory.MemoryTypeCount) * 2),
                 pointer: memory.MemoryTypePairs
             ),
-            profile: profile
+            new ReadOnlySpan<ulong>(
+                length: (((int)memory.MemoryHeapCount) * 2),
+                pointer: memory.MemoryHeapPairs
+            )
         );
     }
     /// <inheritdoc/>
