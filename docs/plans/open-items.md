@@ -2420,7 +2420,8 @@ certified-contact packet and step 8 closes. The measured state is in the
   carries something, and all four read zero. The cause is not established;
   the likely one is that the fixture's rates now divide the step exactly.
   Give the fixture a rate that leaves a remainder, or assert the remainder
-  the law needs on a tick that has one.- [low · server laws red on the integration tip] Beside the laws filed here
+  the law needs on a tick that has one.
+- [low · server laws red on the integration tip] Beside the laws filed here
   and the blob-store fixture's, the server suite fails these, each the same
   way with and without the body state door's D3:
   `GpuFaultsCommandModuleLawTests` (two cases: the
@@ -2434,6 +2435,30 @@ certified-contact packet and step 8 closes. The measured state is in the
   `WorldValidatedLoadLawTests` and `WorldAuthorityRecoveryLawTests` (one case
   each, built over the same undersized directory target as the blob-store
   fixture). Each is updated to the behaviour it now meets, or deleted.
+- [medium · background work paced by presentation] `SdfGpuWork`'s background
+  jobs run on the presenting queue, take work only at frame pumps and drive a
+  16.7 ms slice per host iteration, so a slow present (a display at idle
+  clocks read `produce-fence` about 120 ms a frame) paces the bake and probe
+  lighting arbitrarily slowly, and a boot that withholds frames can only
+  progress by staging them. `SdfGpuWork.MostCreditSeconds` (one frame share)
+  turns the GPU budget into a fixed amount per pump once pumps fall below
+  60 Hz, against the class's own contract that budgets are rates of wall
+  time, and the bake's admission (`SdfMeshPathBake.Backlogged`, measured at
+  the take right after a burst of answers) left about 60% of the pool idle on
+  slow frames. Decouple background work from presentation (service it during
+  the host's present wait, or submit it on its own queue) with the credit
+  cap and admission made rates. Found by the cold-bake regression lane.
+- [low · unchecked window index] `WorldDisclosureImages` reads
+  `m_windowVersions[row]` without a bounds check; it would throw if one arena
+  object grew rows mid-window and a new row were written twice in that window.
+  The World host replaces the arena on a row-adding install and
+  `StateArena.TryRelayout` has no caller, so it is latent; guard it, since a
+  row absent at window start has no key proof.
+- [low · formatter drift] `puck format --check` reports about 2,950 files
+  drifted on the integration head, mostly from its whitespace phase, which is
+  too many to be real drift: either the phase or its settings disagree with
+  the repository's `.editorconfig`. Find which, fix it at the cause, and sweep
+  once when few lanes hold files open.
 - [low · exposure at a cut] At a camera cut the exposure snaps to the first
   image rendered after it, which is shaded with the previous place's held
   `airLight`, then follows for about 0.75 s, so walking from outdoors into a
