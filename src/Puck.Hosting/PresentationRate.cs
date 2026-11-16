@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Puck.Hosting;
 
 /// <summary>
@@ -54,12 +56,19 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
     /// <param name="hertz">The floor, in updates a second; zero or less holds nothing.</param>
     /// <param name="elapsedSeconds">The presentation time from the frame the item last updated on to this frame.</param>
     /// <param name="frameSeconds">The latest frame's span, the estimate of how long waiting one more frame takes.</param>
+    /// <param name="leadSeconds">The presentation time the decision counts ahead of <paramref name="elapsedSeconds"/>, which
+    /// places the item within the floor's period by updating it that much early once (<see cref="PresentationPhases"/>);
+    /// zero for none. A frame that runs a step before one that runs none counts no lead, so a lead never brings an
+    /// update onto the step's frame while the next frame serves it.</param>
     /// <returns><see langword="true"/> when holding this frame and updating on the next still keeps the interval within the
     /// floor's period, and, on a frame that runs no step before one that does, holding through that next frame too;
     /// <see langword="false"/> when the item updates this frame, or the host is not paced.</returns>
-    public bool Holds(int hertz, double elapsedSeconds, double frameSeconds) {
+    public bool Holds(int hertz, double elapsedSeconds, double frameSeconds, double leadSeconds = 0d) {
         if (!IsPaced || (hertz <= 0)) {
             return false;
+        }
+        if (!(Steps && !StepsNext)) {
+            elapsedSeconds += leadSeconds;
         }
         if (GridHertz > 0d) {
             var elapsed = Math.Round(value: (elapsedSeconds * GridHertz), mode: MidpointRounding.AwayFromZero);
@@ -93,5 +102,35 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
         return ((DisplayHertz <= 0)
             ? 1
             : Math.Max(val1: 1, val2: ((int)((((long)DisplayHertz) + (hertz - 1)) / hertz))));
+    }
+}
+/// <summary>
+/// Spreads the rated items that take a floor's tier together over the tier's period, so they do not all update on one
+/// frame of it: every other item to take a tier counts its hold decisions half the tier's period ahead of the time since
+/// its latest update (a lead) until it next updates, then keeps the period. The lead only moves one update earlier, so
+/// the floor still holds, and <see cref="PresentationRate.Holds"/>, which takes the lead, still keeps that update off a
+/// frame that runs a simulation step. Each owner of rated items (a pose pool, a lever's views or screens) keeps its own, so its items
+/// split evenly whatever another owner's do. Presentation only; one thread uses an instance.
+/// </summary>
+public sealed class PresentationPhases {
+    // Whether the next item to take each tier takes the later half of its period, by the tier's hertz.
+    private readonly Dictionary<int, bool> m_lateHalf = [];
+
+    /// <summary>Returns the lead of the next item to take a tier: zero, then half the tier's period, alternately.</summary>
+    /// <param name="rate">The frame's presentation rate, whose grid the period rounds to.</param>
+    /// <param name="hertz">The tier the item takes, in updates a second.</param>
+    /// <returns>The seconds the item's hold decisions count ahead until its next update; zero on a host not paced to a
+    /// display, where a floor holds nothing, and for a tier of zero or less.</returns>
+    public double Take(PresentationRate rate, int hertz) {
+        if (!rate.IsPaced || (hertz <= 0)) {
+            return 0d;
+        }
+
+        ref var lateHalf = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_lateHalf, exists: out _, key: hertz);
+        var lead = (lateHalf ? (rate.PeriodSeconds(hertz: hertz) * 0.5d) : 0d);
+
+        lateHalf = !lateHalf;
+
+        return lead;
     }
 }
