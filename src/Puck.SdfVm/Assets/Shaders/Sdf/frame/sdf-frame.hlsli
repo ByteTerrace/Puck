@@ -5,8 +5,8 @@
 // viewBase) are the views set's block, passGroup, written per view by SdfFrameBlock: imageExtent is the engine extent,
 // the largest a view renders and the per-view visibility record stride; viewportCount every view the frame renders;
 // screenCount one past the highest screen whose source is bound (views only); instanceMaskWordCount the live program's
-// mask width; meshDraws the frame's mesh draws, zero when no mesh draws and the mesh visibility target holds nothing this
-// frame. Each view renders through its own set of dispatches, one deep in Z, so a kernel's view is worldViewOf(id.z).
+// mask width; meshDraws the frame's staged mesh draws, the bound the mesh hit door holds a hit's draw to (sdfMeshResolveHit).
+// Each view renders through its own set of dispatches, one deep in Z, so a kernel's view is worldViewOf(id.z).
 
 // The view a dispatch-set invocation renders.
 uint worldViewOf(uint z) {
@@ -30,20 +30,18 @@ struct SdfMeshSample {
 };
 
 // Reads the mesh visibility target at a pixel of the view the set renders, whose mesh pass ran just before its surface
-// pass. A texel whose second channel is zero is one no mesh covers, and a frame with no mesh draws reads nothing, since
-// its target holds an earlier frame's draws.
+// pass. A texel whose second channel is zero is one no mesh covers. A frame whose mesh pass skipped left a target holding
+// the clear (SdfWorldPassRecorder.TargetsHoldClear); a covered texel's draw and triangle are GPU data all the same, which
+// a reader resolves through the mesh hit door (sdfMeshResolveHit) before reading a record.
 SdfMeshSample sdfMeshSampleAt(uint2 pixel) {
     SdfMeshSample hit = (SdfMeshSample)0;
+    float4 texel = meshVisibility.Load(int3(int2(pixel), 0));
 
-    if (passGroup.meshDraws != 0u) {
-        float4 texel = meshVisibility.Load(int3(int2(pixel), 0));
-
-        if (texel.y >= 1.0) {
-            hit.covered = true;
-            hit.t = texel.x;
-            hit.draw = ((uint)texel.y - 1u);
-            hit.triangleIndex = (uint)texel.z;
-        }
+    if (texel.y >= 1.0) {
+        hit.covered = true;
+        hit.t = texel.x;
+        hit.draw = ((uint)texel.y - 1u);
+        hit.triangleIndex = (uint)texel.z;
     }
 
     return hit;

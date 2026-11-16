@@ -589,6 +589,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             // The frame stands, but meshes its draws name can have landed since it was packed.
             tables.StageLandedMeshes(frame: frame);
         }
+        tables.AdvanceHitBound();
 
         // The shading selection follows the frame the passes record (the one the tables hold), never a pending one.
         PrepareShade(frame: m_frame!, device: device);

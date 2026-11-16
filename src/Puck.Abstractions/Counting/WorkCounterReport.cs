@@ -79,7 +79,8 @@ public static class WorkCounterReport {
     }
     /// <summary>Writes one kind's legend entry as the member <c>"&lt;name&gt;":{"unit":"&lt;unit&gt;","class":"&lt;class&gt;"}</c>
     /// of the object <paramref name="writer"/> has open, the class spelled by its wire name
-    /// (<see cref="EnumWireName{TEnum}"/>).</summary>
+    /// (<see cref="EnumWireName{TEnum}"/>), and <c>"peak":true</c> after the class for a peak kind
+    /// (<see cref="WorkKind.IsPeak"/>).</summary>
     /// <param name="writer">The writer to write to, inside an open object.</param>
     /// <param name="kind">The kind to describe.</param>
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> or <paramref name="kind"/> is <see langword="null"/>.</exception>
@@ -96,6 +97,14 @@ public static class WorkCounterReport {
             propertyName: "class",
             value: EnumWireName<WorkClass>.Of(value: kind.Class)
         );
+
+        if (kind.IsPeak) {
+            writer.WriteBoolean(
+                propertyName: "peak",
+                value: true
+            );
+        }
+
         writer.WriteEndObject();
     }
     /// <summary>Writes a source as the JSON object <c>{"name":…,"counts":{…}}</c>.</summary>

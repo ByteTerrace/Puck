@@ -144,11 +144,11 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
     return (radiance + (indirect * (passGroup.indirectApply.rgb * (material.receive * passGroup.indirectApply.w))));
 }
 
-// The ray parameter at which the pixel's ray from `origin` along `rayDirection` meets the plane of a draw's triangle, or
-// `far` where the ray runs along that plane.
-float sdfGlassInterfaceAt(uint draw, uint triangleIndex, float3 origin, float3 rayDirection, float far) {
-    uint record = sdfMeshRecord(draw);
-    uint first = (3u * triangleIndex);
+// The ray parameter at which the pixel's ray from `origin` along `rayDirection` meets the plane of a resolved hit's
+// triangle, or `far` where the ray runs along that plane.
+float sdfGlassInterfaceAt(SdfMeshHit hit, float3 origin, float3 rayDirection, float far) {
+    uint record = hit.record;
+    uint first = (3u * hit.triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
     float3 face = cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a));
     float facing = dot(rayDirection, face);
@@ -157,15 +157,15 @@ float sdfGlassInterfaceAt(uint draw, uint triangleIndex, float3 origin, float3 r
 }
 // The second-nearest glass front face before the opaque hit, from the sums' second record at `word`: the held front
 // face nearest along the ray other than the near one (`nearDraw`, `nearTriangle`, the glass target's), ties going to the
-// lower draw and triangle, so the answer never depends on the order the faces claimed their entries. False where fewer
-// than two front faces lie before the opaque hit, or more than the record holds.
+// lower draw and triangle, so the answer never depends on the order the faces claimed their entries. An entry the mesh
+// hit door rejects is no face. False where fewer than two front faces lie before the opaque hit, or more than the record
+// holds.
 bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3 origin, float3 rayDirection, float nearT, float opaque,
-    out uint draw, out uint triangleIndex, out float t) {
+    out SdfMeshHit far, out float t) {
     uint count = sdfGlassFrontCountAt(word);
     bool found = false;
 
-    draw = 0u;
-    triangleIndex = 0u;
+    far = (SdfMeshHit)0;
     t = opaque;
     if ((count < 2u) || (count > SdfGlassFrontEntries)) {
         return false;
@@ -174,16 +174,17 @@ bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3
     for (uint entry = 0u; (entry < count); entry++) {
         uint entryDraw;
         uint entryTriangle;
+        SdfMeshHit entryHit;
 
         sdfGlassFrontAt(word, entry, entryDraw, entryTriangle);
-        if ((entryDraw != nearDraw) || (entryTriangle != nearTriangle)) {
-            float at = sdfGlassInterfaceAt(entryDraw, entryTriangle, origin, rayDirection, opaque);
-            bool nearer = (!found || (at < t) || ((at == t) && ((entryDraw < draw) || ((entryDraw == draw) && (entryTriangle < triangleIndex)))));
+        if (((entryDraw != nearDraw) || (entryTriangle != nearTriangle)) && sdfMeshResolveHit(entryDraw, entryTriangle, entryHit)) {
+            float at = sdfGlassInterfaceAt(entryHit, origin, rayDirection, opaque);
+            // A record's first word orders hits as their draws do.
+            bool nearer = (!found || (at < t) || ((at == t) && ((entryHit.record < far.record) || ((entryHit.record == far.record) && (entryHit.triangleIndex < far.triangleIndex)))));
 
             if (nearer) {
                 found = true;
-                draw = entryDraw;
-                triangleIndex = entryTriangle;
+                far = entryHit;
                 t = at;
             }
         }
@@ -209,15 +210,21 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 front = glassVisibility.Load(int3(pixel, 0));
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
     float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
-    bool glass = (sdfDebugComposesFinal(passGroup.debugMode) && (front.y >= 1.0) && (front.x < opaque));
-    if ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST || passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER) && front.y >= 1.0 && front.x < opaque) {
-        color = float4(sdfShadeDiagnostic(sdfMeshMaterial((uint)front.y - 1u, (uint)front.z), passGroup.debugMode), 1.0);
+    // The glass target's front face, resolved through the mesh hit door; a rejected face shades no glass.
+    uint nearDraw = ((uint)front.y - 1u);
+    uint nearTriangle = (uint)front.z;
+    SdfMeshHit nearHit = (SdfMeshHit)0;
+    bool seen = ((front.y >= 1.0) && (front.x < opaque));
+    if (seen) {
+        seen = sdfMeshResolveHit(nearDraw, nearTriangle, nearHit);
+    }
+    bool glass = (sdfDebugComposesFinal(passGroup.debugMode) && seen);
+    if ((passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_COST || passGroup.debugMode == SDF_DEBUG_VIEW_SHADE_TIER) && seen) {
+        color = float4(sdfShadeDiagnostic(sdfMeshMaterial(nearHit), passGroup.debugMode), 1.0);
     }
     float reactive = 0.0;
 
     if (glass) {
-        uint nearDraw = ((uint)front.y - 1u);
-        uint nearTriangle = (uint)front.z;
         float nearT = front.x;
         float3 origin = view.position.xyz;
         float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
@@ -225,10 +232,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float thickness = sdfGlassThicknessAt(word, nearT, opaque);
         float3 depth = max(sdfGlassOpticalDepthAt(word), 0.0);
         float footprint = ((2.0 * view.right.w) / max(float(extent.y), 1.0));
-        uint farDraw;
-        uint farTriangle;
+        SdfMeshHit farHit;
         float farT;
-        bool second = sdfGlassSecondInterface(word, nearDraw, nearTriangle, origin, rayDirection, nearT, opaque, farDraw, farTriangle, farT);
+        bool second = sdfGlassSecondInterface(word, nearDraw, nearTriangle, origin, rayDirection, nearT, opaque, farHit, farT);
         uint layers = (second ? 2u : 1u);
         // The near interface's share of the glass: to the nearest back face, never past the far interface; the far one
         // takes the rest.
@@ -257,16 +263,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         [loop]
         for (uint layer = 0u; (layer < layers); layer++) {
             bool isNear = (layer == 0u);
-            uint draw = (isNear ? nearDraw : farDraw);
-            uint triangleIndex = (isNear ? nearTriangle : farTriangle);
+            SdfMeshHit hit = farHit;
+            if (isNear) {
+                hit = nearHit;
+            }
             float t = (isNear ? nearT : farT);
             float share = (isNear ? nearThickness : farThickness);
             float3 surfacePoint = (origin + (rayDirection * t));
             float3 face;
             float curvature;
             int frameSlot;
-            float3 normal = sdfMeshSurfaceNormal(draw, triangleIndex, surfacePoint, rayDirection, face, curvature, frameSlot);
-            int materialId = sdfMeshMaterial(draw, triangleIndex);
+            float3 normal = sdfMeshSurfaceNormal(hit, surfacePoint, rayDirection, face, curvature, frameSlot);
+            int materialId = sdfMeshMaterial(hit);
             SdfMaterialData material = sdfMaterialLoad(materialId);
             SdfShadeBinding shadeBinding = sdfShadeBinding(materialId);
             float ior = max(material.ior, 1.0);
@@ -293,14 +301,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 (sdfShadeReadsOf(shadeBinding) & SDF_SHADE_READ_PAINT) != 0u, painted, paintCoverage);
             material.albedo = painted;
             SdfShadeStamp shadeStamp = sdfShadeStamp(material, surfacePoint, layerPoint, normal, rayDirection,
-                curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, draw);
+                curvature, footprint * t, sdfFrameLanes(frameSlot), sdfGlassContact(material, opaque - t), share, layerRotation, frameSlot, hit);
             sdfShadeSet_surface_geometricNormal(shadeStamp, face);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             if (sdfShadeBound(shadeBinding)) {
                 sdfShadeSurfacePhase(shadeBinding, shadeStamp, material, normal, revealed);
                 roughness = material.roughness;
             } else {
-                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, draw, (footprint * t), sdfFrameLanes(frameSlot),
+                normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, layerRotation, frameSlot, hit, (footprint * t), sdfFrameLanes(frameSlot),
                     sdfGlassContact(material, (opaque - t)), material, revealed);
             }
 

@@ -5,7 +5,8 @@ namespace Puck.Abstractions.Counting;
 /// life — an arena rebuilt when its world's definition changes, a search rebuilt with it, or a frame source for each
 /// offscreen view that comes and goes beside the primary one. A reader registers the forwarder once, and its totals
 /// never go down: it reads the sum of its target (<see cref="Retarget"/>) and every attached instance
-/// (<see cref="Attach"/>), and an instance that retires has its totals carried forward.
+/// (<see cref="Attach"/>), and an instance that retires has its totals carried forward. A peak kind reads the largest
+/// of theirs, carried forward the same way until the forwarder's peaks are cleared (<see cref="ClearPeaks"/>).
 /// <para>
 /// Retargeting, attaching, detaching and reading take one lock, so a read never sees an instance without the carried
 /// totals, or the carried totals twice. A retired instance must not be counted into afterwards; what it counts after it
@@ -118,17 +119,17 @@ public sealed class ForwardingWorkCounterSource : IWorkCounterSource {
             var total = m_carried[index];
 
             if (m_target is { } target) {
-                total = checked((total + Read(
+                total = Fold(kind: kind, held: total, read: Read(
                     instance: target,
                     kind: kind
-                )));
+                ));
             }
 
             foreach (var instance in m_attached) {
-                total = checked((total + Read(
+                total = Fold(kind: kind, held: total, read: Read(
                     instance: instance,
                     kind: kind
-                )));
+                ));
             }
 
             value = total;
@@ -136,6 +137,29 @@ public sealed class ForwardingWorkCounterSource : IWorkCounterSource {
 
         return true;
     }
+    /// <inheritdoc/>
+    /// <remarks>Clears the carried peaks and forwards the call to the target and every attached instance.</remarks>
+    public void ClearPeaks() {
+        lock (m_gate) {
+            for (var index = 0; (index < m_kinds.Length); index++) {
+                if (m_kinds[index].IsPeak) {
+                    m_carried[index] = 0L;
+                }
+            }
+
+            m_target?.ClearPeaks();
+
+            foreach (var instance in m_attached) {
+                instance.ClearPeaks();
+            }
+        }
+    }
+
+    // The instances' totals sum, and their peaks take the largest: one step of work is one instance's.
+    private static long Fold(WorkKind kind, long held, long read) => (kind.IsPeak
+        ? Math.Max(val1: held, val2: read)
+        : checked((held + read))
+    );
 
     private static long Read(IWorkCounterSource instance, WorkKind kind) {
         _ = instance.TryRead(
@@ -148,10 +172,10 @@ public sealed class ForwardingWorkCounterSource : IWorkCounterSource {
     // Folds a retiring instance's totals into the carried ones; the caller holds the lock.
     private void Carry(IWorkCounterSource retiring) {
         for (var index = 0; (index < m_kinds.Length); index++) {
-            m_carried[index] = checked((m_carried[index] + Read(
+            m_carried[index] = Fold(kind: m_kinds[index], held: m_carried[index], read: Read(
                 instance: retiring,
                 kind: m_kinds[index]
-            )));
+            ));
         }
     }
     private void RequireSameName(IWorkCounterSource source, string paramName) {

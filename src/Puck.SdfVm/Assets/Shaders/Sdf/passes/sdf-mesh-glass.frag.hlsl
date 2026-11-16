@@ -39,7 +39,7 @@ GlassFragment PSMain(MeshRasterVertex input) {
     bool counts = (t < opaque);
 
     if (counts && !IsHelperLane()) {
-        SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(input.draw, input.triangleIndex));
+        SdfMaterialData material = sdfMaterialLoad(sdfMeshRasterMaterial(input.draw, input.triangleIndex));
 
         sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, opaque, front, material.absorption, input.draw, input.triangleIndex);
     }

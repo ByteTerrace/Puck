@@ -241,6 +241,12 @@ public sealed record SdfFrame(
     /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. Consumers collect only through this
     /// serial and retain their own staged records when a later producer frame rewrites the borrowed list.</summary>
     public long MeshDrawChangesSerial { get; init; }
+    /// <summary>Gets why the journal entry ending at <see cref="MeshDrawChangesSerial"/> owes every row:
+    /// <see cref="SdfMeshStagingCause.Rebuild"/>, <see cref="SdfMeshStagingCause.Portal"/> or
+    /// <see cref="SdfMeshStagingCause.Retry"/> as the dresser states it, or <see langword="null"/> when the entry names
+    /// rows or the producer states no cause. The tables count the records a staging packs under it
+    /// (<see cref="SdfMeshHistory.RowsPackedOf"/>).</summary>
+    public SdfMeshStagingCause? MeshDrawChangesCause { get; init; }
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {

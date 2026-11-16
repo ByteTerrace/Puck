@@ -10,7 +10,7 @@
 #include "../shade/sdf-material.hlsli"
 
 float PSMain(MeshRasterVertex input) : SV_Depth {
-    float density = sdfMaterialShadowDensity(sdfMeshMaterial(input.draw, input.triangleIndex));
+    float density = sdfMaterialShadowDensity(sdfMeshRasterMaterial(input.draw, input.triangleIndex));
     if (!(density > 0.0)) { return 0.0; }
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);

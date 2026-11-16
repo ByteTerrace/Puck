@@ -20,5 +20,7 @@ void puckCountShapes(uint shapes, uint gradients) {
 }
 void puckCountFragmentWork(uint steps, uint texels) {
 }
+void puckCountRejectedHit() {
+}
 
 #endif // PUCK_SHADER_INTERFACE_SDF_PROBE_TRACE
