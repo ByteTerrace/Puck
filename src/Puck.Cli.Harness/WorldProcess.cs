@@ -163,9 +163,12 @@ public sealed class WorldProcess : IDisposable {
     /// <returns>The exit code, or <see langword="null"/> when the World was killed.</returns>
     public int? WaitForExit(TimeSpan timeout) {
         if (m_process.WaitForExit(timeout: timeout)) {
-            m_process.WaitForExit();
-            JoinPumps();
-            ReleaseGpu();
+            try {
+                m_process.WaitForExit();
+                JoinPumps();
+            } finally {
+                ReleaseGpu();
+            }
 
             return m_process.ExitCode;
         }
@@ -176,9 +179,12 @@ public sealed class WorldProcess : IDisposable {
     }
     /// <summary>Stops this process tree and releases its GPU lease.</summary>
     public void Kill() {
-        KillTree(process: m_process);
-        JoinPumps();
-        ReleaseGpu();
+        try {
+            KillTree(process: m_process);
+            JoinPumps();
+        } finally {
+            ReleaseGpu();
+        }
     }
     /// <inheritdoc/>
     public void Dispose() {
