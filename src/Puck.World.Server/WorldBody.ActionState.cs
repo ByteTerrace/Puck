@@ -687,7 +687,7 @@ public sealed partial class WorldBody {
         } else {
             ActionEdit.TimerValues[ordinal] = value;
             ActionEdit.TimerTicks[ordinal] = holdTicks;
-            SetTimerActor(actor: actor, ordinal: ordinal);
+            SetScriptActor(actor: actor, ordinal: ordinal, pending: false);
         }
     }
     // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).

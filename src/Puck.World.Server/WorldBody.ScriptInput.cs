@@ -11,15 +11,13 @@ public sealed partial class WorldBody {
 
     private ref readonly BodyScriptActorsSection ScriptActors => ref m_scriptActors.Read;
 
-    private void SetTimerActor(int ordinal, Principal actor) {
-        if (ScriptActors.Timers[ordinal] != actor) {
-            m_scriptActors.Write = ScriptActors with { Timers = ScriptActors.Timers.SetItem(index: ordinal, item: actor) };
-        }
-    }
-    private void SetPendingActor(int ordinal, Principal actor) {
-        if (ScriptActors.Pending[ordinal] != actor) {
-            m_scriptActors.Write = ScriptActors with { Pending = ScriptActors.Pending.SetItem(index: ordinal, item: actor) };
-        }
+    // Sets the actor of one channel's pending tap or of its timed press.
+    private void SetScriptActor(bool pending, int ordinal, Principal actor) {
+        var table = (pending ? ScriptActors.Pending : ScriptActors.Timers);
+
+        if (table[ordinal] == actor) { return; }
+        table = table.SetItem(index: ordinal, item: actor);
+        m_scriptActors.Write = (pending ? (ScriptActors with { Pending = table }) : (ScriptActors with { Timers = table }));
     }
     // Replaces both tables from per-channel actors, keeping a table whose actors are already those.
     private void SetScriptActors(ReadOnlySpan<Principal> timers, ReadOnlySpan<Principal> pending) {
