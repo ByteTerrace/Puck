@@ -498,8 +498,8 @@ parallel without changing a value:
   review found four such writes to sleeping bodies: `SetIntentSource`,
   `PressChannel`, `MergeLaneTimer` and the late tether solve). That chokepoint
   is a `WorldBody` redesign; the rest-epoch cache it would make sound saved
-  about 7 % of a recording, so the cache was deleted and the redesign filed in the
-  [refactoring packet](open-items.md#refactoring-campaign). The four writes now
+  about 7 % of a recording, so the cache was deleted; the redesign is
+  [the body's write door memo](body-state-door.md). The four writes now
   wake a resting body (`WorldBody.WakeIfResting`), since each hands it input
   or a pose it must run to carry.
 - **The read boundary.** Every hash folds under the server's `AuthorityGate`,
@@ -526,8 +526,7 @@ The incremental hash cut a recording's own cost by about two thirds and a
 tick refolds under two rows; the always-on sample costs microseconds a tick.
 What the recording still costs is the components that fold whole every tick,
 body continuations far ahead of the rule latch, input and body action state
-([the packet](open-items.md#test-runner-and-replay) holds the order and what
-each needs).
+([the body's write door memo](body-state-door.md) designs all four).
 
 ### Rule evaluation stays serial
 
