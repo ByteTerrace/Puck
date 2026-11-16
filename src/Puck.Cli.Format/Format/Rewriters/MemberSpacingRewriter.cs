@@ -41,26 +41,13 @@ internal sealed class MemberSpacingRewriter : CSharpSyntaxRewriter {
             return "member-coupled";
         }
 
-        var isConst = false;
-        var isStatic = false;
-        var isReadonly = false;
-
-        foreach (var modifier in field.Modifiers) {
-            isConst |= modifier.IsKind(kind: SyntaxKind.ConstKeyword);
-            isStatic |= modifier.IsKind(kind: SyntaxKind.StaticKeyword);
-            isReadonly |= modifier.IsKind(kind: SyntaxKind.ReadOnlyKeyword);
-        }
-
-        return (isConst
-            ? "const"
-            : (isStatic
-                ? (isReadonly
-                    ? "field-static-readonly"
-                    : "field-static")
-                : (isReadonly
-                    ? "field-readonly"
-                    : "field"
-        )));
+        return RewriteShaping.StorageOf(field: field) switch {
+            FieldStorage.Const => "const",
+            FieldStorage.StaticReadonly => "field-static-readonly",
+            FieldStorage.Static => "field-static",
+            FieldStorage.Readonly => "field-readonly",
+            _ => "field",
+        };
     }
     private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) =>
         node.WithMembers(members: Normalize(
