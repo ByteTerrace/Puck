@@ -374,27 +374,25 @@ internal static unsafe class SdfMeshStoreCodec {
         }
     }
     private static float ReadSingle(ReadOnlySpan<byte> bytes, int at) => BitConverter.Int32BitsToSingle(value: BinaryPrimitives.ReadInt32LittleEndian(source: bytes[at..]));
-    // The three planes of an influence are decoded beside one another and joined; skinned bodies are the only meshes that carry them.
+    // The three planes of an influence are walked beside one another, a word of each at a time; skinned bodies are the only
+    // meshes that carry them.
     private static void DecodeInfluences(Plane blends, Plane gradientXY, Plane gradientZ, Span<SdfMeshInfluence> destination) {
         RequireLength(expected: blends.Count, actual: destination.Length);
-        var count = destination.Length;
-        var pool = System.Buffers.ArrayPool<uint>.Shared;
-        var first = pool.Rent(minimumLength: count);
-        var second = pool.Rent(minimumLength: count);
-        var third = pool.Rent(minimumLength: count);
+        uint blend = 0, xy = 0, z = 0;
 
-        try {
-            DecodePlane(destination: first.AsSpan(length: count, start: 0), plane: blends);
-            DecodePlane(destination: second.AsSpan(length: count, start: 0), plane: gradientXY);
-            DecodePlane(destination: third.AsSpan(length: count, start: 0), plane: gradientZ);
-            for (var index = 0; (index < count); index++) { destination[index] = new SdfMeshInfluence(blend: first[index], gradientXY: second[index], gradientZ: third[index]); }
-        } finally {
-            pool.Return(array: first);
-            pool.Return(array: second);
-            pool.Return(array: third);
+        for (var index = 0; (index < destination.Length); index++) {
+            blend = Add(plane: blends, index: index, previous: blend);
+            xy = Add(plane: gradientXY, index: index, previous: xy);
+            z = Add(plane: gradientZ, index: index, previous: z);
+            destination[index] = new SdfMeshInfluence(blend: blend, gradientXY: xy, gradientZ: z);
         }
     }
-
+    private static uint Add(Plane plane, int index, uint previous) => plane.Width switch {
+        1 => (unchecked((previous + plane.Bytes[index])) & 255),
+        2 => Add2(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous),
+        3 => Add3(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous),
+        _ => Add4(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous),
+    };
     // A read position over an entry's inflated bytes. A read past the end is an invalid entry.
     private ref struct Cursor(ReadOnlySpan<byte> data) {
         private readonly ReadOnlySpan<byte> m_data = data;
