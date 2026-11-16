@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.Commands;
@@ -37,7 +38,9 @@ namespace Puck.World.Client;
 /// <para><b>Publication.</b> An embedded destination delivers on its fixed-step thread; a federated observer delivers
 /// on its socket task while the presentation thread reads this mirror. Definition and scalar clock/revision fields
 /// therefore publish through <see cref="Volatile"/>/<see cref="Interlocked"/>. Each entity record is copied before
-/// its active flag's release write; readers acquire that flag before consuming the copied pose fields.</para>
+/// its active flag's release write; readers acquire that flag before consuming the copied pose fields. A reader that
+/// needs the whole table from one delivery (<see cref="CopySnapshotTo"/>) takes the latest complete image each writer
+/// publishes when it finishes, through a triple buffer, so it never waits on a delivery in progress.</para>
 /// </remarks>
 public sealed class WorldSessionMirror : IClientSink {
     // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
@@ -214,11 +217,19 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
     private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
-    // The one door to a coherent whole-image view: the entity arrays are written only under it (DeliverSnapshot and
-    // SeedRoute), and CopySnapshotTo copies under it, so a copy never sees a delivery half applied. A route seed is
-    // written by the transfer/route thread while ordinary snapshots arrive on the observer task, so the two writers
-    // serialize here too. Per-field render reads stay lock-free and need no whole-tick record.
+    // Serializes the two writers of the entity arrays: a route seed written by the transfer/route thread and ordinary
+    // snapshots arriving on the observer task. Per-field render reads stay lock-free and need no whole-tick record;
+    // a whole-image reader takes the published image instead (PublishImage, CopySnapshotTo) and never this gate.
     private readonly Lock m_snapshotWriteGate = new();
+
+    // The latest complete image of the entity table. Invariant: a whole-image reader never sees a torn image and never
+    // waits on a writer. Enforced by TripleBuffer's slot ownership, with its one writer at a time being whoever holds
+    // m_snapshotWriteGate (the only place PublishImage runs) and its one reader whoever holds m_copyGate.
+    private readonly TripleBuffer<SnapshotImage> m_images;
+    private readonly Lock m_copyGate = new();
+
+    // One past the highest entity slot either writer has written; every slot above it is still as constructed.
+    private int m_extent;
     private string m_authority = string.Empty;
     // A real (wall-clock) timestamp — Stopwatch.GetTimestamp() — captured the instant the CURRENT snapshot's poses
     // were copied in. Presentation-only, exactly like WorldClient's own render-pose interpolation is presentation
@@ -256,6 +267,10 @@ public sealed class WorldSessionMirror : IClientSink {
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
+        // Every slot starts as the constructed table's image, so the first copy is already complete.
+        var constructed = m_snapshotArrivalTimestamp;
+
+        m_images = new TripleBuffer<SnapshotImage>(create: () => new SnapshotImage(arrivalTimestamp: constructed));
     }
 
     /// <summary>Raised on the delivering thread after each delivered definition or state is published as
@@ -369,10 +384,29 @@ public sealed class WorldSessionMirror : IClientSink {
             : null
         );
     }
-    /// <summary>Copies one coherent delivered entity record for simulation pinning. The copy holds the gate every delivery
-    /// holds, so a delivery that overlaps it completes first (the copy waits on the host's lock, never spins) rather than
-    /// exposing a mixture of two remote ticks. Placement identities are copied with the poses, so a pinned renderer cannot
-    /// read a newer body's authored policy.</summary>
+    /// <summary>Copies the latest complete delivered entity table for simulation pinning: the image the last finished
+    /// delivery or route seed published, never a mixture of two remote ticks. It never waits on a delivery: one in
+    /// progress leaves the previous complete image to copy, however long it takes. Placement identities are copied with
+    /// the poses, so a pinned renderer cannot read a newer body's authored policy; looks, colliders and body-contact modes
+    /// resolve against the current definition. Concurrent copies serialize with each other, never with a writer. Every
+    /// array holds at least <see cref="WorldBodiesLimits.CapacityCeiling"/> elements.</summary>
+    /// <param name="active">The destination for each slot's active flag.</param>
+    /// <param name="addresses">The destination for each slot's entity address.</param>
+    /// <param name="poseEpochs">The destination for each slot's pose epoch.</param>
+    /// <param name="placementIds">The destination for each slot's placement, <see langword="null"/> for none.</param>
+    /// <param name="previousPositions">The destination for each slot's previous render position.</param>
+    /// <param name="previousOrientations">The destination for each slot's previous render attitude.</param>
+    /// <param name="currentPositions">The destination for each slot's current render position.</param>
+    /// <param name="currentOrientations">The destination for each slot's current render attitude.</param>
+    /// <param name="colors">The destination for each slot's body color.</param>
+    /// <param name="looks">The destination for each slot's resolved look row.</param>
+    /// <param name="catalogRigs">The destination for each slot's catalog rig.</param>
+    /// <param name="colliders">The destination for each slot's compiled kit collider, <see langword="null"/> for none.</param>
+    /// <param name="bodyContacts">The destination for each slot's body-contact mode.</param>
+    /// <param name="tick">The image's destination tick.</param>
+    /// <param name="revision">The image's snapshot revision.</param>
+    /// <param name="stepSeconds">The image's destination step, in seconds.</param>
+    /// <param name="arrivalTimestamp">The image's arrival, in <see cref="Stopwatch.GetTimestamp"/> units.</param>
     public void CopySnapshotTo(
         bool[] active,
         WorldEntityAddress[] addresses,
@@ -392,28 +426,113 @@ public sealed class WorldSessionMirror : IClientSink {
         out float stepSeconds,
         out long arrivalTimestamp
     ) {
-        lock (m_snapshotWriteGate) {
+        lock (m_copyGate) {
+            var image = m_images.Take();
+            var looksTable = Definition.Looks;
+            var kitColliders = Volatile.Read(location: ref m_kitColliders);
+            var kitContacts = Volatile.Read(location: ref m_kitBodyContacts);
+
             for (var index = 0; (index < EntityCapacity); index++) {
-                active[index] = IsActive(index: index);
-                addresses[index] = Address(index: index);
-                poseEpochs[index] = PoseEpoch(index: index);
-                placementIds[index] = PlacementId(index: index);
-                previousPositions[index] = PreviousPosition(index: index);
-                previousOrientations[index] = PreviousOrientation(index: index);
-                currentPositions[index] = CurrentPosition(index: index);
-                currentOrientations[index] = CurrentOrientation(index: index);
-                colors[index] = BodyColor(index: index);
-                looks[index] = Look(index: index);
-                catalogRigs[index] = CatalogRig(index: index);
-                colliders[index] = Collider(index: index);
-                bodyContacts[index] = BodyContact(index: index);
+                var entry = ((index < image.Extent) ? image.Entries[index] : SnapshotImage.Untouched);
+
+                active[index] = entry.Active;
+                addresses[index] = new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index);
+                poseEpochs[index] = entry.PoseEpoch;
+                placementIds[index] = entry.PlacementId;
+                previousPositions[index] = entry.PreviousPosition;
+                previousOrientations[index] = entry.PreviousOrientation;
+                currentPositions[index] = entry.CurrentPosition;
+                currentOrientations[index] = entry.CurrentOrientation;
+                colors[index] = entry.Color;
+                looks[index] = WorldDefinitionRows.ResolveLook(index: entry.Look, rows: looksTable);
+                catalogRigs[index] = entry.CatalogRig;
+                colliders[index] = ((entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null);
+                bodyContacts[index] = ((entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap);
             }
 
-            tick = Tick;
-            revision = SnapshotRevision;
-            stepSeconds = StepSeconds;
-            arrivalTimestamp = SnapshotArrivalTimestamp;
+            tick = image.Tick;
+            revision = image.Revision;
+            stepSeconds = image.StepSeconds;
+            arrivalTimestamp = image.ArrivalTimestamp;
         }
+    }
+    // Publishes the entity table as one complete image (see m_images). Called by a writer holding m_snapshotWriteGate
+    // once its writes are done; copies only the slots below m_extent, since every other slot is still as constructed.
+    private void PublishImage() {
+        var image = m_images.Back;
+        var extent = m_extent;
+
+        if (image.Entries.Length < extent) {
+            image.Entries = new ImageEntry[((int)BitOperations.RoundUpToPowerOf2(value: ((uint)extent)))];
+        }
+        for (var index = 0; (index < extent); index++) {
+            image.Entries[index] = new ImageEntry(
+                Active: m_poses.IsActive(index: index),
+                CatalogRig: m_catalogRig[index],
+                Color: m_bodyColor[index],
+                CurrentOrientation: m_poses.CurrentOrientation(index: index),
+                CurrentPosition: m_poses.CurrentPosition(index: index),
+                Generation: m_generation[index],
+                Kit: m_kit[index],
+                Look: m_look[index],
+                PlacementId: m_poses.PlacementId(index: index),
+                PoseEpoch: m_poses.PoseEpoch(index: index),
+                PreviousOrientation: m_poses.PreviousOrientation(index: index),
+                PreviousPosition: m_poses.PreviousPosition(index: index)
+            );
+        }
+        image.Extent = extent;
+        image.Authority = Authority;
+        image.Tick = Tick;
+        image.Revision = SnapshotRevision;
+        image.StepSeconds = StepSeconds;
+        image.ArrivalTimestamp = SnapshotArrivalTimestamp;
+        m_images.Publish();
+    }
+    private void Extend(int index) {
+        if (index >= m_extent) { m_extent = (index + 1); }
+    }
+
+    // One slot of a published image: what CopySnapshotTo hands out, before resolving the kit and look against the
+    // current definition.
+    private readonly record struct ImageEntry(
+        bool Active,
+        int Generation,
+        int PoseEpoch,
+        string? PlacementId,
+        Vector3 PreviousPosition,
+        Quaternion PreviousOrientation,
+        Vector3 CurrentPosition,
+        Quaternion CurrentOrientation,
+        Vector3 Color,
+        byte Look,
+        byte CatalogRig,
+        byte Kit
+    );
+    private sealed class SnapshotImage(long arrivalTimestamp) {
+        // A slot no writer has touched: as WorldPoseTable and this mirror's arrays are constructed.
+        public static readonly ImageEntry Untouched = new(
+            Active: false,
+            CatalogRig: 0,
+            Color: Vector3.Zero,
+            CurrentOrientation: Quaternion.Identity,
+            CurrentPosition: Vector3.Zero,
+            Generation: 0,
+            Kit: 0,
+            Look: 0,
+            PlacementId: null,
+            PoseEpoch: 0,
+            PreviousOrientation: Quaternion.Identity,
+            PreviousPosition: Vector3.Zero
+        );
+
+        public ImageEntry[] Entries = [];
+        public int Extent;
+        public string Authority = string.Empty;
+        public ulong Tick;
+        public int Revision;
+        public float StepSeconds;
+        public long ArrivalTimestamp = arrivalTimestamp;
     }
     /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -526,6 +645,7 @@ public sealed class WorldSessionMirror : IClientSink {
                     continue;
                 }
 
+                Extend(index: index);
                 m_bodyColor[index] = entry.BodyColor;
                 m_kit[index] = entry.Kit;
                 m_look[index] = entry.Look;
@@ -590,6 +710,8 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             m_arrivals[(m_arrivalCount % ArrivalHistory)] = arrival;
             m_arrivalCount++;
+            // The entity table is complete: publish it before the field and observer tail, which no copy waits on.
+            PublishImage();
 
             lock (m_stampGate) {
                 m_stateTime = ArenaTime.At(engineTick: snapshot.EngineTick, tick: snapshot.Tick);
@@ -887,6 +1009,8 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             m_seededRouteEntity = route.Entity;
             m_seededRouteTick = route.Tick;
+            Extend(index: index);
+            PublishImage();
         }
     }
 }

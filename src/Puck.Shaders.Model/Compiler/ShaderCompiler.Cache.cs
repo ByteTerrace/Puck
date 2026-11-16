@@ -8,11 +8,11 @@ public sealed partial class ShaderCompiler {
     public static readonly CacheBound Retention = new(MaxBytes: (1L << 30), MaxEntries: 4096);
 
     /// <summary>Removes every file of a cache directory that no compile has used since <paramref name="cutoffUtc"/>:
-    /// each entry, duration record and abandoned staged publication whose last write time is earlier. A compiler stamps
-    /// each entry and duration record it reads, and writes each one it publishes, so a file's last write time is when a
-    /// compile last used it.</summary>
-    /// <remarks>Only files the compiler writes are considered: <c>*.spv</c>, <c>*.dxil</c> and <c>*.tmp</c> at the
-    /// cache's top level and every file in its <c>durations</c> directory. Anything else stays. A file a reader still
+    /// each entry and duration record whose last write time is earlier, and each staged publication whose writer no
+    /// longer runs (<see cref="CacheRetention"/>). A compiler stamps each entry and duration record it reads, and writes
+    /// each one it publishes, so a file's last write time is when a compile last used it.</summary>
+    /// <remarks>Only files the compiler writes are considered: <c>*.spv</c> and <c>*.dxil</c> at the cache's top level
+    /// and every file in its <c>durations</c> directory. Anything else stays. A file a reader still
     /// holds, which the operating system will not delete, is kept and counted as kept. A build sharing the directory while
     /// it is pruned loses nothing it needs: an entry removed between its plan and its read compiles again. The age bound
     /// is <see cref="CacheRetention"/>'s, so this and the <see cref="Retention"/> a publication enforces are one policy.</remarks>
@@ -26,7 +26,7 @@ public sealed partial class ShaderCompiler {
         var outputs = CacheRetention.Enforce(
             bound: unbounded,
             directory: cacheDirectory,
-            isEntry: static file => (file.Extension is ".spv" or ".dxil" or ".tmp"),
+            isEntry: static name => (Path.GetExtension(path: name) is ".spv" or ".dxil"),
             usedSinceUtc: cutoffUtc
         );
         var durations = CacheRetention.Enforce(
@@ -50,7 +50,7 @@ public sealed partial class ShaderCompiler {
         bound: Retention,
         directory: m_cacheDirectory,
         inUse: published,
-        isEntry: static file => (file.Extension is ".spv" or ".dxil")
+        isEntry: static name => (Path.GetExtension(path: name) is ".spv" or ".dxil")
     );
     // Records that a compile used a cache file now, so a prune keeps it. Losing a stamp costs at most a later compile
     // of that output, never a wrong result, so a file that cannot be stamped is left as it is.

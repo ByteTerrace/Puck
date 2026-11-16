@@ -16,10 +16,13 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Inspect path components for links, below an optional root (the root itself is the caller's choice and never inspected) | `CliTreeFiles.LinkedAncestor` in `src/Puck.Cli.Core/CliTreeFiles.cs` |
 | Decide whether a directory contains a path by file identity (a "must not contain" refusal) | `ConfinedDirectory.Contains` in `src/Puck.Confinement/ConfinedDirectory.cs`; `PuckPaths.IsWithin` fails open for aliases |
 | Remove an owned directory tree without following descendant links | `ConfinedDirectory.RemoveTree` in `src/Puck.Confinement/ConfinedDirectory.cs` |
+| Walk, open, read or delete below a held directory without following links (every component opened relative to its parent's handle) | `ConfinedDirectory.Walk`, `Descend`, `OpenRead`, `DeleteFile` in `src/Puck.Confinement/ConfinedDirectory.cs` |
 | Stage, flush, publish or discard complete replacement files | `AtomicFile`, including `PendingWrite`, in `src/Puck.Confinement/AtomicFile.cs` |
+| Tell a live writer's staged temporary from an abandoned one (the writer's claim in its name, never its age) | `AtomicFile.IsAbandoned` in `src/Puck.Confinement/AtomicFile.cs` |
+| Hold a cache directory to a bound, listing and deleting only beneath it | `CacheRetention` in `src/Puck.Abstractions/CacheRetention.cs` |
 | Compare files or a file and bytes with bounded memory | `FileContent` in `src/Puck.Confinement/FileContent.cs` |
 | Read an opened file or stream to its end under a byte ceiling, never trusting its length | `FileContent.ReadAtMost` / `ReadAtMostAsync` in `src/Puck.Confinement/FileContent.cs` |
-| Copy a directory tree, or selected files beneath it, without writing through an existing hard link | `CliFiles.CopyDirectory` in `src/Puck.Cli.Core/CliFiles.cs` |
+| Copy a directory tree, or selected files beneath it, without following a link in either tree or writing through an existing hard link; `intoEmpty` for a clean copy that replaces nothing | `CliFiles.CopyDirectory` in `src/Puck.Cli.Core/CliFiles.cs` |
 | Start a redirected companion process and end its output reads after it exits | `ChildProcess.StartRedirected`, `OpenOutputReader` and `DrainAfterExitAsync` in `src/Puck.Abstractions/ChildProcess.cs` |
 | Read source lines or nonempty process-output lines | `CliText` in `src/Puck.Cli.Core/CliText.cs` |
 | Query Git, resolve common directories or commits, list unignored files | `CliGit` in `src/Puck.Cli.Core/CliGit.cs`; local reports use `ReadOnlyAsync` |
@@ -31,8 +34,14 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Match compiler paths against analyzer allowlist identities | `AnalyzerAllowlistPath` in `src/Puck.Analyzers/AnalyzerAllowlistPath.cs` |
 
 Lexical containment and ancestor inspection do not establish confinement against concurrent path replacement.
-Deletion stays beneath the directory handle opened by `ConfinedDirectory.RemoveTree`; its internal traversal
-refuses descendant links. The caller owns the selected root, whose ancestors are resolved by the OS.
+Every repository walk that deletes or replaces files (`ConfinedDirectory.RemoveTree`, `CliFiles.CopyDirectory`,
+`CacheRetention`) stays beneath a directory handle and refuses descendant links. The caller owns the selected
+root, whose ancestors are resolved by the OS. A path-based `Directory.EnumerateFiles(..., AllDirectories)` follows
+junctions and symbolic links, so it never feeds a deletion.
+
+A cleanup never deletes a staged temporary by age alone: a writer can be suspended between staging and
+publication for any length of time. `AtomicFile.IsAbandoned` judges the writer's claim (host, process, start time)
+carried in the temporary's name.
 
 Batch writers own pending writes until each is committed or disposed. `PendingWrite.Commit(overwrite: false)`
 preserves a concurrent winner; replacing that with an existence check followed by an overwriting write does not.

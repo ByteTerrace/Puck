@@ -207,7 +207,7 @@ public static class WorldSourceIndex {
                 bound: DeclarationRetention,
                 directory: directory,
                 inUse: path,
-                isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: DeclarationExtension)
+                isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: DeclarationExtension)
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
         }

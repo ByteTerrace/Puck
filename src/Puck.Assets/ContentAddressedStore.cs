@@ -84,7 +84,7 @@ public sealed class ContentAddressedStore {
             bound: (isRef ? CacheBound.Entries(maxEntries: bound.MaxEntries) : bound),
             directory: (isRef ? m_refsDirectory : Path.Combine(path1: Root, path2: "objects")),
             inUse: written,
-            isEntry: static file => !AtomicFile.IsTemporary(path: file.Name),
+            isEntry: static _ => true,
             search: SearchOption.AllDirectories
         );
     }

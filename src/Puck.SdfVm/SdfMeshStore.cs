@@ -300,7 +300,7 @@ public sealed class SdfMeshStore {
             bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxSets),
             directory: Directory,
             inUse: path,
-            isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: Extension)
+            isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: Extension)
         );
 
         return true;
@@ -338,7 +338,7 @@ public sealed class SdfMeshStore {
             bound: Puck.Abstractions.CacheBound.Entries(maxEntries: RecordedIdentities),
             directory: Directory,
             inUse: path,
-            isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: IdentityExtension)
+            isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: IdentityExtension)
         );
     }
     /// <summary>Returns why a bake under an identity found no entry for some of its groups, in one line, and records the

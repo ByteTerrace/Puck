@@ -12,7 +12,8 @@ public sealed record WorldOutputLine(int Index, CliProcessOutputStream Stream, s
 /// A real <c>Puck.World</c> process driven line by line over its standard input, with every output line recorded in
 /// arrival order, so a run can send a line, read what the World answered, and decide the next line from it. Both
 /// streams are also written to log files in the run's directory. Only an admitted launch starts one
-/// (<see cref="WorldLaunch.Start"/>); it holds that launch's GPU lease until it is disposed.
+/// (<see cref="WorldLaunch.Start"/>); it holds that launch's GPU lease until the World has exited and it is stopped or
+/// disposed.
 /// </summary>
 public sealed class WorldProcess : IDisposable {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -177,25 +178,50 @@ public sealed class WorldProcess : IDisposable {
 
         return null;
     }
-    /// <summary>Stops this process tree and releases its GPU lease.</summary>
+    /// <summary>Stops this process tree, settles both output pumps and releases its GPU lease. The pumps settle on every
+    /// path, a failed termination included (the drain's release ends their reads whether or not the World still runs),
+    /// so when this returns or throws no pump touches a log or reader again. The GPU lease is released only once the
+    /// World has exited: a World that could not be stopped may still be using the GPU, so its lease stays held until
+    /// this process ends.</summary>
+    /// <exception cref="System.ComponentModel.Win32Exception">The process tree could not be terminated.</exception>
+    /// <exception cref="AggregateException">Termination failed and a pump also faulted.</exception>
     public void Kill() {
+        Exception? termination = null;
+
         try {
             KillTree(process: m_process);
-            JoinPumps();
-        } finally {
-            ReleaseGpu();
+        } catch (Exception exception) {
+            termination = exception;
         }
+        try {
+            JoinPumps();
+        } catch (Exception exception) when (termination is not null) {
+            throw new AggregateException(termination, exception);
+        } finally {
+            if (Exited()) { ReleaseGpu(); }
+        }
+        if (termination is not null) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(source: termination); }
     }
     /// <inheritdoc/>
     public void Dispose() {
         try {
             Kill();
         } finally {
-            // Every pump has settled once Kill returns, so no read races the disposal of its reader, log or process.
+            // Kill settles every pump whether it returns or throws, so no read races the disposal of its reader, log or
+            // process.
             m_process.Dispose();
             m_stderr.Dispose();
             m_stdout.Dispose();
             m_release.Dispose();
+        }
+    }
+
+    // Whether the World is known to have exited; a process that cannot be inspected is not.
+    private bool Exited() {
+        try {
+            return m_process.HasExited;
+        } catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) {
+            return false;
         }
     }
 
@@ -222,8 +248,8 @@ public sealed class WorldProcess : IDisposable {
             }
         }
     }
-    // The process has exited when this runs. Every caller shares one drain, which ends both pumps within
-    // ChildProcess.ExitDrainGrace even when a process the World started still holds a pipe.
+    // Every caller shares one drain, which ends both pumps within ChildProcess.ExitDrainGrace even when a process the
+    // World started still holds a pipe, or the World itself could not be stopped.
     private void JoinPumps() {
         Task drained;
 

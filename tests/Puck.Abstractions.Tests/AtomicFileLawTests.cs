@@ -306,8 +306,10 @@ public sealed class AtomicFileLawTests : IDisposable {
             );
             Assert.Matches(
                 actualString: entries[1],
-                expectedRegexPattern: @"^loaded\.dll\.[0-9a-f]{32}\.replaced\.tmp$"
+                expectedRegexPattern: @"^loaded\.dll\.[a-z0-9]+_[0-9]+_[0-9]+_[0-9]+\.replaced\.tmp$"
             );
+            // The backup carries this live writer's claim, so no cleanup takes it for abandoned.
+            Assert.False(condition: AtomicFile.IsAbandoned(path: entries[1]));
         } finally {
             System.Runtime.InteropServices.NativeLibrary.Free(handle: library);
         }
