@@ -7,7 +7,7 @@ namespace Puck.Vulkan.Interop;
 /// Owns a native logical device (<c>VkDevice</c>) through its command table, together with its graphics and present
 /// queues, and destroys the device when disposed.
 /// </summary>
-public sealed class VulkanLogicalDevice : IDisposable {
+public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
 
     private readonly VkQueue m_graphicsQueue;

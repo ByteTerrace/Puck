@@ -2789,16 +2789,7 @@ file-system primitives, has landed as `Puck.Confinement.AtomicFile` and
    suspected the create-only `CliLease` stamp (`CliLease.cs`, the
    `pending.Commit(overwrite: false)` call) depends on Unix `link()` for that
    (unverified); a law that races two stamps on each platform settles it.
-3. Surface upload and readback per backend (L, specialist; a GPU leg).
-   `DirectXSurfaceUpload` (`Puck.DirectX/Interop/DirectXSurfaceUpload.cs`, 592
-   lines) and the readback in `DirectXGpuSurfaceTransferFactory.cs:61`, beside
-   `VulkanSurfaceUpload` (367) and `VulkanSurfaceReadback` (283), implement one
-   staging-buffer-to-image mechanism twice, with different pipelining: Vulkan
-   keeps a blocking submit-and-wait path when no frame synchronization is
-   passed, and `Puck.Vulkan.Presentation/SurfaceCompositor.cs:327` builds a
-   `VulkanSurfaceUpload` directly instead of through `IGpuSurfaceUpload`.
-   Written once over `IGpuBufferFactory` and `IGpuRecorder`, which needs
-   buffer-to-image and image-to-buffer copies added to the recorder.
+
 4. The World boot line inside the World and on Linux (S, implementer).
    Every World process the CLI starts goes through `WorldLaunch`
    (`Puck.Cli.Harness/WorldLaunch.cs`), whose `WorldLaunchRequest.CommandLine` spells
@@ -2878,10 +2869,16 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   (`ShaderPipelineRenderNode.RetireCompleted`), and the node's completions and
   timing fold on `IsSignaled` (`FoldCompletions`, `PollTimings`). The
   sequence-keyed queue (`GpuRetirementQueue`: `SdfWorldTables`,
-  `DirectXSurfaceUpload`) and the per-slot proof (`WaitSlot` to
+  `GpuSurfaceUpload`) and the per-slot proof (`WaitSlot` to
   `IRenderGraphPackageReadback.Completed`, `LeaseRetireList`) are the two
   shapes left; key `RetiredGraph` on the node's submission count through the
-  queue, completed by `WaitSlot`, with the next lifetime change.
+  queue, completed by `WaitSlot`, with the next lifetime change. Two retirements
+  do not fit one non-decreasing key as they stand: a borrowed publication is
+  re-keyed after it is queued (`RetiredGraph.ReleasePublication` moves
+  `AfterSubmission` on), and one awaiting consumers completes on another node's
+  latest submission (`RetiredGraph.ArmAfterConsumers`, through
+  `HoldUntilLatestSubmission`). The change first gives those two their own
+  completion (the consumer node's lease already is one), then queues the rest.
 - [medium · unconfirmed] A submission its batch never queued reads complete:
   `GpuSubmissionBatch.Split`'s failure path aliases every deferred fence to an
   owner that `AbandonIfDeferred` retires, so both `IsSignaled` and `Wait`

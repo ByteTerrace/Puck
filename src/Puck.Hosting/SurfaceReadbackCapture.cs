@@ -33,7 +33,6 @@ public static class SurfaceReadbackCapture {
 
         captureReadback ??= surfaceTransferFactory.CreateReadback();
         var pixels = captureReadback.Read(
-            bytesPerPixel: 4,
             format: format,
             height: surface.Height,
             sourceImageHandle: imageHandle,

@@ -265,6 +265,51 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             width: width
         );
     /// <inheritdoc/>
+    public uint CopyRowAlignment => 1U;
+    /// <inheritdoc/>
+    public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) =>
+        recordingApi.CopyBufferToImage(
+            bufferHandle: bufferHandle,
+            bufferRowLength: RowLengthOf(
+                bufferHandle: bufferHandle,
+                commandBufferHandle: commandBufferHandle,
+                footprint: in footprint,
+                imageHandle: imageHandle
+            ),
+            commandBufferHandle: commandBufferHandle,
+            device: Device,
+            height: footprint.Height,
+            imageHandle: imageHandle,
+            imageLayout: ToVulkanLayout(layout: GpuImageLayout.TransferDestination),
+            width: footprint.Width
+        );
+    /// <inheritdoc/>
+    public void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) =>
+        recordingApi.CopyImageToBuffer(
+            bufferHandle: bufferHandle,
+            bufferRowLength: RowLengthOf(
+                bufferHandle: bufferHandle,
+                commandBufferHandle: commandBufferHandle,
+                footprint: in footprint,
+                imageHandle: imageHandle
+            ),
+            commandBufferHandle: commandBufferHandle,
+            device: Device,
+            height: footprint.Height,
+            imageHandle: imageHandle,
+            imageLayout: ToVulkanLayout(layout: GpuImageLayout.TransferSource),
+            width: footprint.Width
+        );
+    // A buffer-image copy's bufferRowLength: the footprint's pitch in whole texels, which GpuCopyFootprint.Of keeps it.
+    private uint RowLengthOf(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) {
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(imageHandle);
+        footprint.RequireAdmitted(rowAlignment: CopyRowAlignment);
+
+        return (footprint.RowPitch / GpuPixelFormats.TexelBytes(format: footprint.Format));
+    }
+    /// <inheritdoc/>
     public void Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>
         recordingApi.Dispatch(
             commandBufferHandle: commandBufferHandle,

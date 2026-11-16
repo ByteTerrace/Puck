@@ -418,11 +418,11 @@ Two design points worth knowing:
 
 For the simpler "record, then read the results back" case (offscreen rendering, headless
 work), `VulkanQueueSubmitter.SubmitAndWait` batches command buffers into a single submit plus
-one `vkQueueWaitIdle`, and `VulkanSurfaceReadback` copies the rendered image into a
-host-coherent `VulkanBuffer` and reads it back to the CPU. Behind the copy it records a
-barrier to the host (`GpuStage.Host`, `GpuAccess.HostRead`) through `VulkanGpuRecorder`,
-since a completed submission alone makes no device write visible to the host;
-`VulkanSurfaceReadbackLawTests` holds it.
+one `vkQueueWaitIdle`. Reading an image back to the CPU is backend-neutral: `GpuSurfaceReadback`
+copies it into a readback buffer through `GpuReadbackCopy.RecordImage`, which records a
+barrier to the host (`GpuStage.Host`, `GpuAccess.HostRead`) behind the copy, since a
+completed submission alone makes no device write visible to the host;
+`VulkanSurfaceReadbackLawTests` holds it on Vulkan.
 
 ---
 
