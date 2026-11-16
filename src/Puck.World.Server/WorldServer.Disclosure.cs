@@ -19,13 +19,31 @@ public sealed partial class WorldServer {
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
             AuthorityIdentity, () => DeliveryTime);
 
-    /// <summary>Mints the live capability for this ingress-stamped console invocation.</summary>
+    /// <summary>Mints the live capability this ingress-stamped console invocation reads through.</summary>
+    /// <param name="context">The invocation's context, carrying its stamped principal.</param>
+    /// <returns>The caller's view at its admission ceiling.</returns>
+    /// <exception cref="InvalidOperationException">The caller is a session whose state-observation query is refused:
+    /// it is admitted at <see cref="WorldDisclosureTier.Frames"/>, its observation ended or its epoch is retired, or
+    /// it holds no observe all.</exception>
     public WorldRecipientView ReadView(CommandContext context) => ReadView(context.Principal);
 
     /// <summary>Mints the live capability for a mounted addon's host-side identity.</summary>
-    public WorldRecipientView ReadAddonView(string name) => ReadView(Principal.Addon(name));
+    public WorldRecipientView ReadAddonView(string name) => RecipientView(Principal.Addon(name));
 
+    // The read door. A session reads only while its state-observation query would be answered: its observation is
+    // attached and live, its tier carries a document and it holds observe all. Frames, an ended or retired epoch and
+    // a revoked grant refuse here, the same decision the query door makes, so no read answers a session that the
+    // query door refuses. Write admission asks the recipient's policy alone and goes through RecipientView.
     internal WorldRecipientView ReadView(Principal? recipient) {
+        if (recipient is { Kind: PrincipalKind.Session } session && !AllowsSessionQuery(session, StateObservationsQuery)) {
+            throw new InvalidOperationException(WorldSessionObservation.QueryRefusal);
+        }
+        return RecipientView(recipient);
+    }
+    private static readonly WorldQuery StateObservationsQuery = new WorldQuery.StateObservations();
+
+    // A recipient's capability for policy questions (write admission, guards), whether or not it may read now.
+    internal WorldRecipientView RecipientView(Principal? recipient) {
         if (recipient is { Kind: PrincipalKind.Session } session) {
             return m_sessionSinks.TryGetValue(session, out var attached)
                 ? attached.Observation.View
