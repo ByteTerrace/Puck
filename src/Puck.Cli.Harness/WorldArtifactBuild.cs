@@ -109,10 +109,12 @@ public static class WorldArtifactBuild {
                     path = null;
                     return false;
                 }
-                lease = new WorldArtifactStore(parent.FullName).TryTake(key: entry.Name, artifactName: Path.GetFileName(path),
+                lease = new WorldArtifactStore(parent.FullName).TryTake(key: WorldArtifactStore.KeyOf(name: entry.Name), artifactName: Path.GetFileName(path),
                     reused: true, clock: Stopwatch.StartNew(), budget: timeout);
-                if (lease is null) {
-                    error = "The named managed-store artifact could not be retained against pruning.";
+                if ((lease is null) || !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Path.GetDirectoryName(path: lease.Path), y: entry.FullName)) {
+                    lease?.Dispose();
+                    lease = null;
+                    error = "The named managed-store artifact is not its key's published build, so it could not be retained against pruning.";
                     path = null;
                     return false;
                 }
@@ -202,7 +204,7 @@ public static class WorldArtifactBuild {
                 return true;
             }
 
-            using var buildLock = store.AcquireBuild(
+            using var claim = store.AcquireBuild(
                 budget: limit,
                 clock: queue,
                 key: key,
@@ -213,7 +215,7 @@ public static class WorldArtifactBuild {
             if (waited) {
                 Console.Error.WriteLine(value: $"{verb}: another run is building source state {key}; waiting for it.");
             }
-            if (buildLock is null) {
+            if (claim is null) {
                 error = $"another run's Puck.World build of source state {key} did not finish inside the {Minutes(span: limit)}-minute wait.";
 
                 return false;
@@ -252,51 +254,52 @@ public static class WorldArtifactBuild {
                 error = "the checkout's sources changed while waiting to build Puck.World; request the build again.";
                 return false;
             }
-            var staging = store.CreateStaging(key: key);
+            var staging = store.CreateStaging(claim: claim);
 
-            Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
+            try {
+                Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
 
-            var built = CliProjectBuild.TryBuild(
-                artifactName: ArtifactName,
-                build: out _,
-                project: WorldArtifactClosure.WorldProject,
-                repositoryRoot: repositoryRoot,
-                logDirectory: logDirectory,
-                runner: builder,
-                error: out error,
-                outputDirectory: staging,
-                properties: properties,
-                timeout: timeout
-            );
+                var built = CliProjectBuild.TryBuild(
+                    artifactName: ArtifactName,
+                    build: out _,
+                    project: WorldArtifactClosure.WorldProject,
+                    repositoryRoot: repositoryRoot,
+                    logDirectory: logDirectory,
+                    runner: builder,
+                    error: out error,
+                    outputDirectory: staging,
+                    properties: properties,
+                    timeout: timeout
+                );
 
-            if (!built) {
-                RunDirectory.TryDelete(path: staging);
+                if (!built) {
+                    return false;
+                }
+                if (SourcesChanged()) {
+                    error = "the checkout's sources changed while building Puck.World; the build was discarded.";
+                    return false;
+                }
 
-                return false;
+                artifact = store.Publish(
+                    artifactName: ArtifactName,
+                    budget: limit,
+                    claim: claim,
+                    clock: Stopwatch.StartNew(),
+                    staging: staging
+                );
+
+                if (artifact is null) {
+                    error = $"the Puck.World build store {store.Root} stayed locked past the {Minutes(span: limit)}-minute wait.";
+
+                    return false;
+                }
+
+                error = string.Empty;
+
+                return true;
+            } finally {
+                store.Discard(claim: claim, staging: staging);
             }
-            if (SourcesChanged()) {
-                RunDirectory.TryDelete(path: staging);
-                error = "the checkout's sources changed while building Puck.World; the build was discarded.";
-                return false;
-            }
-
-            artifact = store.Publish(
-                artifactName: ArtifactName,
-                budget: limit,
-                clock: Stopwatch.StartNew(),
-                key: key,
-                staging: staging
-            );
-
-            if (artifact is null) {
-                error = $"the Puck.World build store {store.Root} stayed locked past the {Minutes(span: limit)}-minute wait.";
-
-                return false;
-            }
-
-            error = string.Empty;
-
-            return true;
         } catch (TimeoutException exception) {
             error = $"the Puck.World build of source state {key} waited the whole {Minutes(span: limit)}-minute limit for other runs' builds: {exception.Message}";
 
