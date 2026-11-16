@@ -177,6 +177,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             throw new NotSupportedException();
         }
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
+        public nint OpenAdapter(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
     }
     // Creates a real software device, then refuses to read it the way a capability probe refused by an older runtime
@@ -205,6 +206,7 @@ public sealed class DirectXDeviceBringUpLawTests {
         public long GetAdapterLuid(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: UnreadableMessage);
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
+        public nint OpenAdapter(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
     }
 }

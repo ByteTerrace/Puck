@@ -112,6 +112,12 @@ D3D12_FEATURE_DATA_FEATURE_LEVELS
 D3D12_FEATURE_DATA_ARCHITECTURE
 D3D12_FEATURE_DATA_D3D12_OPTIONS16
 
+// DXGI 1.4: the device's memory budget per segment group (GpuMemoryReading), held for the device's life, and the event
+// the OS sets when a budget changes.
+IDXGIAdapter3
+DXGI_QUERY_VIDEO_MEMORY_INFO
+DXGI_MEMORY_SEGMENT_GROUP
+
 // Direct3D 12: the device's capabilities (GpuDeviceCapabilities), recorded and never branched on — options' resource
 // binding tier, the highest root signature version, and options 19's shader-visible heap sizes.
 D3D12_FEATURE_DATA_D3D12_OPTIONS

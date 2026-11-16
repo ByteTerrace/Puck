@@ -651,18 +651,23 @@ public sealed unsafe class VulkanDeviceCommands {
         }
     }
     /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size, keyed by
-    /// this device, in the row its role names (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>); the memory type it chose
-    /// never decides. Swapchain images are never allocated through this table, so they are never counted.</summary>
+    /// this device: in the role row its role names (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>), and in the segment
+    /// of the heap its memory type allocates from, which a preferred request may have taken as a fallback
+    /// (<see cref="GpuMemorySegments.OfMemoryType"/>), charging that heap's pool. Swapchain images are never allocated
+    /// through this table, so they are never counted.</summary>
     /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
     /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
     /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
     /// <param name="role">What the allocation is for.</param>
-    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role) =>
+    /// <param name="memoryTypeIndex">The memory type it allocated from, as <c>VkMemoryAllocateInfo.memoryTypeIndex</c>.</param>
+    /// <exception cref="InvalidOperationException">The device registered no segments with <see cref="Memory"/>.</exception>
+    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role, uint memoryTypeIndex) =>
         Memory?.CountAllocated(
             allocation: memoryHandle,
             bytes: checked((long)allocationSize),
             device: Handle,
-            role: role
+            role: role,
+            segment: Memory.SegmentsOf(device: Handle).OfMemoryType(memoryTypeIndex: memoryTypeIndex)
         );
     /// <summary>Destroys one buffer or image this device owns and then frees the memory bound to it, skipping either
     /// handle when it is zero.</summary>

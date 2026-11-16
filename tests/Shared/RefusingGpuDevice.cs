@@ -42,6 +42,8 @@ internal sealed class RefusingGpuDevice :
     public GpuDeviceCapabilities? Capabilities => null;
     public GpuDeviceIdentity? Identity => null;
     public GpuMemoryProfile MemoryProfile => default;
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets the number of calls refused.</summary>
     public int Reaches => Volatile.Read(location: ref m_reaches);
     /// <summary>Gets this device as every one of its own services.</summary>

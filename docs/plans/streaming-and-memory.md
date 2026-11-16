@@ -458,12 +458,9 @@ Puck admits.
   local group is the device pool's segment and the non-local group is a
   segment of the host pool; on a unified adapter only the local group is read,
   and the two are never added **[external: D3D12 memory pool, D3D12MA, DXVK]**.
-  The adapter is held for the device's life; today
-  `DirectXNativeDeviceApi.ReadAdapter` opens a factory and an `IDXGIAdapter1`
-  for each read **[opened]**.
+  The adapter is held for the device's life (`DirectXVideoMemory`).
 - **Vulkan.** `VK_EXT_memory_budget` gives a budget and usage per heap, enabled
-  when the device lists it (`VulkanLogicalDeviceFactory` enables no such
-  extension today **[opened]**). Each heap is a segment with its own figures;
+  when the device lists it (`VulkanLogicalDeviceFactory`). Each heap is a segment with its own figures;
   heaps are never summed into one budget, since a heap with room does not help
   an allocation that must go in another. Without the extension the heap sizes
   stand in and the reading says it is an estimate.
@@ -1244,90 +1241,89 @@ both backends are in the landing commit: where today's seams are.
 
 ### Step 1 as a brief
 
-**Outcome.** `host.memory` prints, for each pool and each segment the machine
-has, what the device says Puck may use and is using beside what Puck's own
-ledger counts by placement, and `MemoryAccount` carries the pools as ledgers.
-Nothing admits against them yet: `MemoryAccount.Owner.TryReserve` answers
-exactly as it does today, both quarter shares stay, and no reading trims a
-cache. Step 3 switches admission.
+**Built.** `host.memory` prints the host pool, the device pool (named absent on
+unified memory or without a device), the device reading the account last
+recorded, each segment's API budget, usage and reservation figures beside the
+bytes the ledger placed in it (`usage-beyond-ledger`), and each ledger segment
+row. Nothing admits against the pools: `MemoryAccount.Owner.TryReserve`
+answers as it did, both quarter shares stay, and no reading trims a cache.
+Step 3 switches admission.
 
-**What to build.**
-
-1. A budget reading in `Puck.Abstractions`, beside `GpuMemoryProfile`: for each
-   segment (a DXGI segment group or a Vulkan heap) the pool it lies in, its
-   budget and usage, and where the API has them the bytes available for
-   reservation and the current reservation; whether the figures are estimates;
-   and a serial that moves when the device signals a change.
-   `IGpuDeviceContext` returns the current one beside
-   `IGpuDeviceContext.MemoryProfile`, without a driver call when nothing marked
-   it stale. A device that is absent, lost or being recreated returns a
-   reading that says so, never zeros.
-2. Direct3D 12: hold the adapter as `IDXGIAdapter3` for the device's life;
-   read the local group, and the non-local group only when the profile is not
-   `GpuMemoryProfile.UnifiedMemory`; keep every field the query returns;
-   register the budget-change event and test it on the frame thread without
-   waiting; unregister it at teardown and register again on a recreated
-   device.
-3. Vulkan: enable `VK_EXT_memory_budget` when the device lists it and read it
-   per heap beside `VulkanNativePhysicalDeviceApi.GetMemoryProfile`; a heap's
-   pool follows the profile's own device-local rule, every heap in the one
-   pool on unified memory; refresh at a low fixed rate on the frame thread;
-   mark the reading an estimate when the extension is absent.
-4. Placement in the ledger: `GpuDeviceMemoryWork.CountAllocated` takes, beside
-   the role, the segment the allocation was placed in. On Vulkan that is the
-   heap of the memory type the allocation used, the one
-   `VulkanMemoryTypes.FindIndex` returned, which a preferred request may have
-   taken as a fallback. On Direct3D 12 it is the segment group of the heap
-   type's memory pool on that adapter, for a committed resource as for a
-   placed one. The ledger keeps held, peak and released bytes
-   per segment as well as per role, and counts the allocations whose role and
-   placement disagree. `GpuDeviceMemoryWork.IsDeviceLocal` keeps choosing a
-   role's row and is not used to choose a pool.
-5. `MemoryAccount`: pools as ledgers (host and device, one pool on unified
-   memory), each with a budget, a spend limit and owned and reserved bytes,
-   and a door that takes a device reading and records the pools' and segments'
-   budgets and limits. The door fires no trim and changes no admission.
-   Existing owners stay where `TryReserve` counts them, against the budget it
-   reads today; the device owners are charged and printed and stay outside
-   the sum `TryReserve` subtracts, on a discrete card and on unified memory
-   alike. How that is represented (owners that only observe, or a pool that
-   does not admit) is the lane's, and step 3 deletes it.
-6. `GpuDeviceMemoryWork` reports each segment's held bytes to an
-   `IAllocationObserver` the host hands it, so the account carries a device
-   owner per segment; the backends gain no reference to the account.
-7. `HostMemoryCommandModule` prints the pools, the segments and the reading.
-   On unified memory the pool's line prints the sum once, so its ledgers are
-   not read as separate capacity.
+- **The reading.** `GpuMemoryReading` holds, per segment, a
+  `GpuSegmentReading`: budget, usage, and where the API has them the bytes
+  available for reservation and the current reservation. It also holds whether
+  the figures are estimates, a serial, and a state (absent, lost, read), so a
+  device that is absent, lost or being recreated never reads as zeros.
+  `IGpuDeviceContext.MemoryReading` returns it without a driver call;
+  `IGpuDeviceContext.RefreshMemoryReading` refreshes it, and each host calls
+  that at the top of a frame (`DeviceMemoryReadings.Refresh`, which also
+  records it in the account).
+- **Direct3D 12.** `DirectXVideoMemory` holds `IDXGIAdapter3` for the device's
+  life (`IDirectXDeviceApi.OpenAdapter`), reads the local group and, on a
+  discrete adapter only, the non-local group, keeps every field, and queries
+  only when the budget-change event, tested without waiting, is set. It is
+  created with the device and released with it, so a recreated device
+  registers again.
+- **Vulkan.** `VulkanLogicalDeviceFactory` enables `VK_EXT_memory_budget` when
+  the device lists it. `VulkanRenderer.RefreshMemoryReading` reads it once a
+  second through `IVulkanPhysicalDeviceApi.ReadMemoryBudget`, and the serial
+  moves when a budget changes. Without the extension the heap sizes stand in,
+  marked estimated.
+- **Segments and pools.** `GpuMemorySegments` is the one place a segment's
+  pool is decided: a heap's pool follows `GpuMemoryProfile`'s device-local
+  rule, and every segment lies in host memory on unified memory. A backend
+  registers its device's segments with the ledger as it creates the device
+  (`GpuDeviceMemoryWork.BeginDevice`).
+- **Placement in the ledger.** `GpuDeviceMemoryWork.CountAllocated` takes the
+  segment the allocation was placed in. Direct3D 12 computes it with
+  `DirectXDeviceMemory.SegmentOf` from the heap's properties
+  (`GetCustomHeapProperties` on that adapter, for a committed resource as for
+  a placed one's heap). Vulkan reads it from the heap of the memory type the
+  allocation used (`GpuMemorySegments.OfMemoryType`). Per segment the ledger
+  keeps held, peak, allocated and released bytes (`GpuSegmentLedger`) and counts
+  placement disagreements (`gpu.memory.placement-disagreements`).
+  `GpuDeviceMemoryWork.IsDeviceLocal` chooses only the role row.
+- **The account.** `MemoryAccount.ReadPools` reads the pools as ledgers
+  (`MemoryPoolReading`: budget, spend limit, admitted, observed and reserved
+  bytes). An admitted owner charges host memory and is what `TryReserve`
+  subtracts. An observed owner (`MemoryAccount.CreateObservedOwner`) is charged
+  in its pool and stays outside that sum, on a discrete card and on unified
+  memory alike, and reserves nothing. Each ledger segment row reports to an
+  observed owner (`MemoryAccount.SegmentOwners`), which the presenter
+  registrations hand the ledger, so the backends hold no reference to the
+  account. `MemoryAccount.Record` takes a reading and records each segment's
+  budget and spend limit (the budget less the larger of a tenth of it and the
+  headroom); it fires no trim and changes no admission. Step 3 deletes the
+  observed form.
 
 **Invariant.** A byte the ledger counts is charged to exactly one pool, chosen
-by where it was placed. `GpuDeviceMemoryWork.CountAllocated` is the one door
-and its segment argument the one input to the pool; the observers are called
-under its lock. Where it stops: an allocation a door makes without counting is
-invisible to the ledger, and the reading that shows one is the API's usage
-against the ledger per segment; swapchain images and driver memory never reach
-the door.
+by where it was placed. `GpuDeviceMemoryWork.CountAllocated` is the one door,
+and its segment argument, resolved through the segments the device registered,
+is the one input to the pool; a count on a device that registered none is
+refused, and the observers are called under the ledger's lock. Where it stops:
+an allocation a door makes without counting is invisible to the ledger, and the
+reading that shows one is the API's usage against the ledger per segment;
+swapchain images and driver memory never reach the door. Direct3D 12 names no
+pool for a shader-visible descriptor heap, so those are counted in the local
+group, and the CPU-only descriptor heaps are not counted.
 
-**Independent sources.** Each API is read from at least two: for DXGI,
-Microsoft's reference, D3D12MA's budget code and DXVK's implementation of the
-same interface; for a heap type's memory pool on an adapter, Microsoft's
-reference and D3D12MA; for Vulkan, the Khronos reference, VMA's budget code and
-RADV's heap code. Say where they disagree.
+**Where the sources disagree.** On a unified adapter Microsoft says the system
+pool and the local group are one memory, DXVK answers the non-local query with
+the local heaps, and D3D12MA queries both groups and treats the non-local
+capacity as zero; Puck reads the local group alone. Vulkan's specification
+bounds a heap's budget by its size and requires it non-zero, while VMA clamps a
+budget past the heap size and replaces a zero one with 80% of the heap, as
+driver bugs; Puck prints what the driver reports. RADV splits an APU's free
+memory two thirds to its device-local heap and one third to the other, each
+heap's budget its free share plus its own usage.
 
-**Finish line.** Build the projects touched and run a headless World:
-`host.memory` prints the host pool and names the device pool absent. The
-account alone shows the shadow holds: one sequence of `TryReserve` calls
-answers the same with and without device bytes charged, on the discrete and
-the unified layout. That check is run in the lane and not kept, since step 3
-ends the shadow. The windowed reading on both backends is a verification
-request: at the hero spawn and the meadow, the pool and segment lines, each
-segment's API usage against the ledger with the gap named, the allocations
-whose role and placement disagree, the reservation figures, the two backends'
-budgets for the one card, and the change count before and after a second GPU
-program starts. A unified-memory device's reading is the Deck lane's
-([open questions](#open-questions-and-their-owners)).
-
-**Not in this step.** No reservation, no admission change, no limit change, no
-trim, no attribution by owner.
+**What remains.** The windowed reading on both backends is a verification
+request to the lead: at the hero spawn and the meadow, the pool and segment
+lines, each segment's API usage against the ledger with the gap named, the
+allocations whose role and placement disagree, the reservation figures, the
+two backends' budgets for the one card, and the change count before and after
+a second GPU program starts. A unified-memory device's reading is the Deck
+lane's ([open questions](#open-questions-and-their-owners)).
 
 ### Step 2: every gigabyte has an owner
 
@@ -1669,17 +1665,33 @@ opinion, none is the specification.
   release; with [QueryVideoMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo),
   [its fields](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info)
   and [the change notification](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-registervideomemorybudgetchangenotificationevent).
-- D3D12MA: [the allocator's budget](https://gpuopen-librariesandsdks.github.io/D3D12MemoryAllocator/html/class_d3_d12_m_a_1_1_allocator.html),
-  for the non-local budget reading zero on an integrated adapter and for
-  correcting usage between fetches.
+- Heap type to memory pool: [GetCustomHeapProperties](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getcustomheapproperties(uint_d3d12_heap_type)),
+  whose tables put `DEFAULT` in L1 and `UPLOAD` and `READBACK` in L0 on a
+  discrete adapter and every heap type in L0 on a unified one.
+- D3D12MA: [the allocator's budget](https://gpuopen-librariesandsdks.github.io/D3D12MemoryAllocator/html/class_d3_d12_m_a_1_1_allocator.html)
+  and [its source](https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator/master/src/D3D12MemAlloc.cpp):
+  `HeapPropertiesToMemorySegmentGroup` (local on a unified adapter, L1 local
+  and L0 non-local, and for an unknown pool `DEFAULT` or `GPU_UPLOAD` local),
+  `CurrentBudgetData::UpdateBudget` querying both groups with no unified-memory
+  check, the non-local capacity zero on an integrated adapter, and usage
+  corrected between fetches by the blocks allocated since.
 - DXVK: [its DXGI adapter](https://raw.githubusercontent.com/doitsujin/dxvk/master/src/dxgi/dxgi_adapter.cpp),
-  for the non-local group answered with the local budget on a unified adapter.
+  for the non-local group answered with the local heaps on a unified adapter
+  and for the budget event set at registration, as Windows does.
 - Vulkan memory budget: [VkPhysicalDeviceMemoryBudgetPropertiesEXT](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceMemoryBudgetPropertiesEXT.html),
-  for a budget and usage per heap.
-- VMA: [staying within budget](https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/staying_within_budget.html).
+  for a budget and usage per heap, each budget non-zero and at most its heap's
+  size, zeros past the heap count, and values that change with activity outside
+  the implementation; structure type values from
+  [vulkan_core.h](https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/main/include/vulkan/vulkan_core.h).
+- VMA: [staying within budget](https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/staying_within_budget.html)
+  and [its source](https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/master/include/vk_mem_alloc.h):
+  `UpdateVulkanBudget` clamps a budget past the heap size and replaces a zero
+  one with 80% of the heap, and without the extension the budget is 80% of
+  the heap.
 - RADV: Mesa's RADV physical-device source, read through
   [a mirror](https://raw.githubusercontent.com/chaotic-cx/mesa-mirror/main/src/amd/vulkan/radv_physical_device.c),
-  for the two heaps an APU reports and how their budgets are computed.
+  for the two heaps an APU reports (two thirds and one third of its memory) and
+  how their budgets split the free memory the same way.
 - RDNA guide: [AMD's RDNA performance guide](https://gpuopen.com/learn/rdna-performance-guide/),
   for 80% of memory and the advice against querying every frame.
 - NVIDIA Vulkan guidance: [Vulkan dos and don'ts](https://developer.nvidia.com/blog/vulkan-dos-donts/),

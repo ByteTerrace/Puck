@@ -8,6 +8,7 @@ using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Puck.Hosting;
+using Puck.Hosting.Jobs;
 using Puck.Shaders;
 
 namespace Puck.DirectX.Presentation;
@@ -33,7 +34,7 @@ public static class DirectXPresenterServiceRegistration {
     public static IServiceCollection AddDirectXPresenter(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
         services.AddGpuQueueWork();
-        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
+        services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend, observerOf: MemoryAccount.Shared.SegmentOwners(backend: PipelineCacheBackend));
         // The presenter's presentation counters live in the composition, keyed by backend, and are the counter source
         // world.counters reads, as the Vulkan backend's are, so a readout never resolves the device or the compositor.
         if (!services.Any(predicate: static descriptor => (descriptor.IsKeyedService && (descriptor.ServiceType == typeof(PresentationWork)) && Equals(objA: descriptor.ServiceKey, objB: PipelineCacheBackend)))) {

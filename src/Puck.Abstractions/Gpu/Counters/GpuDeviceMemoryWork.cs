@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -9,13 +10,19 @@ namespace Puck.Abstractions.Gpu;
 /// device-local bytes, with the part of them the host maps through the adapter's aperture
 /// (<see cref="GpuMemoryRole.HostVisibleDeviceLocal"/>), and host-visible bytes (staging, upload and readback memory).
 /// <para>
-/// An allocation counts by its <see cref="GpuMemoryRole"/>, never by the memory type the driver chose, and
-/// <see cref="IsDeviceLocal"/> is the one statement of that rule for both backends: images, device-local buffers,
-/// exportable images, imported memory and host-visible device-local buffers (the aperture a ring region lives in) are
-/// device-local, since each consumes the adapter's memory; host-visible, staging, upload and readback buffers are
-/// host-visible, even on a unified-memory device where every memory type is device-local. The two rows never overlap, so
-/// their held bytes add up to what the backend's counted allocations hold; on a unified-memory device both come out of
-/// the same physical memory. Swapchain images, which the presentation engine allocates, never reach here.
+/// An allocation counts twice over, in rows that never add to each other. Its <see cref="GpuMemoryRole"/> chooses its
+/// role row, and <see cref="IsDeviceLocal"/> is the one statement of that rule for both backends: images, device-local
+/// buffers, exportable images, imported memory and host-visible device-local buffers (the aperture a ring region lives
+/// in) are device-local; host-visible, staging, upload and readback buffers are host-visible, even on a unified-memory
+/// device. The segment its backend placed it in (a DXGI segment group, a Vulkan heap) chooses its segment row and the
+/// pool it is charged to, through the <see cref="GpuMemorySegments"/> registered for its device
+/// (<see cref="BeginDevice"/>); the role never chooses a pool. <see cref="CountAllocated"/> is the one door: each counted
+/// byte is in exactly one role row and exactly one segment row, so each set of rows adds up to what the backend's
+/// counted allocations hold, and an allocation whose role and pool disagree on a discrete adapter (a device-local role
+/// placed in system memory, or the reverse) is counted (<see cref="PlacementDisagreements"/>). Each segment row reports
+/// its held bytes to the observer the host hands the constructor, called under this ledger's lock. Swapchain images,
+/// which the presentation engine allocates, and driver memory never reach here: a segment's API usage less its row is
+/// that memory and any allocation made without counting.
 /// </para>
 /// <para>
 /// Each allocation is keyed by the device that made it and the native object whose release frees it, so a driver that
@@ -31,7 +38,12 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly Lock m_gate = new();
-    private readonly Dictionary<(nint Device, nint Allocation), (long Bytes, GpuMemoryRole Role)> m_live = [];
+    private readonly Dictionary<(nint Device, nint Allocation), (long Bytes, GpuMemoryRole Role, SegmentRow Row)> m_live = [];
+    private readonly Dictionary<nint, GpuMemorySegments> m_devices = [];
+    // A row per segment index and pool, kept across devices so a recreated device's segments count into the rows (and
+    // the observers) its predecessor's did.
+    private readonly Dictionary<(int Index, PhysicalMemory Pool), SegmentRow> m_rows = [];
+    private readonly Func<GpuMemorySegment, IAllocationObserver>? m_observerOf;
 
     private readonly WorkCounterSet m_counts;
 
@@ -65,14 +77,21 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the native allocations the device made, of every role: each <c>vkAllocateMemory</c>,
     /// or each Direct3D 12 heap or committed resource, whatever it holds.</summary>
     public static WorkKind Allocations { get; } = new(name: "gpu.memory.allocations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the allocations whose role and placement disagree on a discrete adapter: a
+    /// device-local role placed in a segment of host memory, or a host-visible role placed in the adapter's own.</summary>
+    public static WorkKind PlacementDisagreements { get; } = new(name: "gpu.memory.placement-disagreements", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Initializes a new instance of the <see cref="GpuDeviceMemoryWork"/> class.</summary>
     /// <param name="backend">The backend's name, as a report labels it (<c>vulkan</c>, <c>directx</c>).</param>
+    /// <param name="observerOf">Returns the observer a segment's held bytes are reported to, called once for each
+    /// segment row as a device first registers it, under this ledger's lock; <see langword="null"/> reports to
+    /// none.</param>
     /// <exception cref="ArgumentException"><paramref name="backend"/> is empty, or the composed name
     /// <c>memory.&lt;backend&gt;</c> is not a dotted work name.</exception>
-    public GpuDeviceMemoryWork(string backend) {
+    public GpuDeviceMemoryWork(string backend, Func<GpuMemorySegment, IAllocationObserver>? observerOf = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: backend);
 
+        m_observerOf = observerOf;
         Backend = backend;
         m_counts = new WorkCounterSet(
             kinds: Counts.Kinds,
@@ -120,20 +139,75 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             paramName: nameof(role)
         ),
     };
-    /// <summary>Counts one allocation into the row its role names (<see cref="IsDeviceLocal"/>), keyed by its device and
-    /// the native object whose release frees it.</summary>
+    /// <summary>Registers the segments a device budgets, as its backend read them when it created the device, before its
+    /// first counted allocation; <see cref="EndDevice"/> ends the registration. Each segment's row, and its observer, is
+    /// created the first time any device registers it.</summary>
+    /// <param name="device">The native device: a <c>VkDevice</c> or an <c>ID3D12Device</c>; must be non-zero.</param>
+    /// <param name="segments">The device's segments.</param>
+    /// <exception cref="ArgumentException"><paramref name="device"/> is zero, or is registered already.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="segments"/> is <see langword="null"/>.</exception>
+    public void BeginDevice(nint device, GpuMemorySegments segments) {
+        ArgumentNullException.ThrowIfNull(argument: segments);
+        if (0 == device) {
+            throw new ArgumentException(message: "A registered device needs its native handle.", paramName: nameof(device));
+        }
+
+        lock (m_gate) {
+            if (!m_devices.TryAdd(key: device, value: segments)) {
+                throw new ArgumentException(message: $"{Name}: device 0x{device:X} is registered already.", paramName: nameof(device));
+            }
+
+            foreach (var segment in segments.Segments) {
+                _ = RowOf(segment: segment);
+            }
+        }
+    }
+    /// <summary>Returns the segments registered for a device (<see cref="BeginDevice"/>).</summary>
+    /// <param name="device">The native device.</param>
+    /// <returns>The device's segments.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="device"/> is not registered.</exception>
+    public GpuMemorySegments SegmentsOf(nint device) {
+        lock (m_gate) {
+            return SegmentsOfLocked(device: device);
+        }
+    }
+    /// <summary>Reads every segment row: its held, peak, allocated and released bytes and its placement
+    /// disagreements, under the ledger's lock.</summary>
+    /// <returns>The rows, by segment index then pool.</returns>
+    public IReadOnlyList<GpuSegmentLedger> ReadSegments() {
+        lock (m_gate) {
+            return [.. m_rows.Values
+                .OrderBy(keySelector: static row => row.Segment.Index)
+                .ThenBy(keySelector: static row => row.Segment.Pool)
+                .Select(selector: static row => new GpuSegmentLedger(
+                    Allocated: row.Allocated,
+                    Disagreements: row.Disagreements,
+                    Held: row.Held,
+                    Peak: row.Peak,
+                    Released: row.Released,
+                    Segment: row.Segment
+                ))];
+        }
+    }
+    /// <summary>Counts one allocation into the role row its role names (<see cref="IsDeviceLocal"/>) and the segment row
+    /// of the segment it was placed in, charging the segment's pool, keyed by its device and the native object whose
+    /// release frees it.</summary>
     /// <param name="device">The native device that made the allocation: a <c>VkDevice</c> or an
-    /// <c>ID3D12Device</c>; must be non-zero.</param>
+    /// <c>ID3D12Device</c>; must be non-zero and registered (<see cref="BeginDevice"/>).</param>
     /// <param name="allocation">The native object the allocation is released through: a <c>VkDeviceMemory</c>, an
     /// <c>ID3D12Heap</c> or an <c>ID3D12Resource</c>; must be non-zero and not already counted on
     /// <paramref name="device"/>.</param>
     /// <param name="bytes">The allocation's actual size, in bytes.</param>
     /// <param name="role">What the allocation is for.</param>
+    /// <param name="segment">The index of the segment the device placed it in: the heap of the Vulkan memory type it
+    /// allocated from (<see cref="GpuMemorySegments.OfMemoryType"/>), or the segment group of its Direct3D 12 heap's
+    /// memory pool on the device's adapter.</param>
     /// <exception cref="ArgumentException"><paramref name="device"/> or <paramref name="allocation"/> is zero, or the
     /// allocation is already counted on the device.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative, or <paramref name="role"/> is
-    /// not a defined value.</exception>
-    public void CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative, <paramref name="role"/> is
+    /// not a defined value, or the device has no segment <paramref name="segment"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="device"/> is not registered.</exception>
+    public void CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role, int segment) {
         if (0 == device) {
             throw new ArgumentException(
                 message: "A counted allocation needs the device that made it.",
@@ -152,9 +226,13 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         var deviceLocal = IsDeviceLocal(role: role);
 
         lock (m_gate) {
+            var segments = SegmentsOfLocked(device: device);
+            var placed = segments[segment];
+            var row = RowOf(segment: placed);
+
             if (!m_live.TryAdd(
                 key: (device, allocation),
-                value: (bytes, role)
+                value: (bytes, role, row)
             )) {
                 throw new ArgumentException(
                     message: $"The allocation 0x{allocation:X} is already counted on device 0x{device:X}.",
@@ -166,6 +244,15 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 amount: 1L,
                 kind: Allocations
             );
+            row.Allocate(bytes: bytes);
+
+            if (!segments.UnifiedMemory && (deviceLocal != (placed.Pool == PhysicalMemory.Device))) {
+                row.Disagreements++;
+                m_counts.Add(
+                    amount: 1L,
+                    kind: PlacementDisagreements
+                );
+            }
 
             if (!deviceLocal) {
                 m_hostVisibleHeld += bytes;
@@ -230,6 +317,8 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 return false;
             }
 
+            entry.Row.Release(bytes: entry.Bytes);
+
             if (!IsDeviceLocal(role: entry.Role)) {
                 m_hostVisibleHeld -= entry.Bytes;
                 m_counts.Add(
@@ -257,9 +346,9 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             return true;
         }
     }
-    /// <summary>Ends a device's entries at its teardown. Every allocation still counted on it was leaked by an owner
-    /// that never released it: the entries are dropped, their bytes stay counted as held in their row, and the teardown
-    /// is refused with each one named.</summary>
+    /// <summary>Ends a device's entries and its segments' registration at its teardown. Every allocation still counted
+    /// on it was leaked by an owner that never released it: the entries are dropped, their bytes stay counted as held in
+    /// their rows, and the teardown is refused with each one named.</summary>
     /// <param name="device">The native device being torn down.</param>
     /// <exception cref="InvalidOperationException">An allocation is still counted on <paramref name="device"/>; the
     /// message lists each one and its size.</exception>
@@ -267,6 +356,8 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         List<(nint Allocation, long Bytes)>? leaked = null;
 
         lock (m_gate) {
+            _ = m_devices.Remove(key: device);
+
             foreach (var ((owner, allocation), entry) in m_live) {
                 if (owner == device) {
                     (leaked ??= []).Add(item: (allocation, entry.Bytes));
@@ -299,8 +390,56 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             value: out value
         );
 
+    // Under m_gate.
+    private GpuMemorySegments SegmentsOfLocked(nint device) => (m_devices.TryGetValue(key: device, value: out var segments)
+        ? segments
+        : throw new InvalidOperationException(message: $"{Name}: device 0x{device:X} registered no memory segments; its backend registers them (BeginDevice) when it creates the device."));
+    // Under m_gate: the segment's row, created with its observer the first time any device registers the segment.
+    private SegmentRow RowOf(GpuMemorySegment segment) {
+        if (!m_rows.TryGetValue(key: (segment.Index, segment.Pool), value: out var row)) {
+            row = new SegmentRow(observer: m_observerOf?.Invoke(arg: segment), segment: segment);
+            m_rows.Add(key: (segment.Index, segment.Pool), value: row);
+        }
+
+        row.Segment = segment;
+
+        return row;
+    }
+
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class Counts {
-        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations];
+        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations, PlacementDisagreements];
+    }
+
+    // One segment's bytes, written only under the ledger's lock, which is also where its observer is called.
+    private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) {
+        public GpuMemorySegment Segment = segment;
+        public long Allocated;
+        public long Disagreements;
+        public long Held;
+        public long Peak;
+        public long Released;
+
+        public void Allocate(long bytes) {
+            Allocated += bytes;
+            Held += bytes;
+            Peak = Math.Max(val1: Peak, val2: Held);
+            observer?.Change(bytes: bytes);
+        }
+        public void Release(long bytes) {
+            Released += bytes;
+            Held -= bytes;
+            observer?.Change(bytes: -bytes);
+        }
     }
 }
+
+/// <summary>One segment's row of a backend's device memory ledger, in bytes.</summary>
+/// <param name="Segment">The segment, with the pool its bytes are charged to.</param>
+/// <param name="Held">The bytes counted allocations placed in the segment hold now.</param>
+/// <param name="Peak">The most bytes they held at once.</param>
+/// <param name="Allocated">The bytes allocated in the segment over the process's life.</param>
+/// <param name="Released">The bytes released from the segment over the process's life.</param>
+/// <param name="Disagreements">The allocations placed in the segment whose role names the other pool, on a discrete
+/// adapter.</param>
+public readonly record struct GpuSegmentLedger(GpuMemorySegment Segment, long Held, long Peak, long Allocated, long Released, long Disagreements);
