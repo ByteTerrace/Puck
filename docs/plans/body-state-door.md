@@ -84,7 +84,7 @@ every section not yet behind a holder ([D3 as landed](#d3-as-landed))
 ```
 
 The view hands out the body's live arrays **[opened]**
-(`src/Puck.World.Server/WorldBody.Sections.cs:221`):
+(`src/Puck.World.Server/WorldBody.Sections.cs:212`):
 
 ```csharp
     // A table as a section holds it: the live array for a view, a copy for a capture.
