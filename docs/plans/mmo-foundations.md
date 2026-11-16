@@ -9,6 +9,15 @@ work in the plans and work packets the register's
 three calls stay with the owner, deferred. The records below are the evidence
 the register cites.
 
+They are records of a round, not plans: each is a snapshot that carries no
+queue and no open owner call, and where one disagrees with the register or the
+code, the register and the code win. In particular the reports written before
+the synthesis (`attacks.md`, `custody.md`, `economy.md`, `persistence.md`,
+`seams.md`, `puck-today.md`) list open questions and owner calls as they stood
+then; the register settles or defers every one, and the three still deferred
+are the only ones open. The records stay while the plans they feed (the hub,
+the custody protocol, disclosure, remote home adoption) have open steps.
+
 ## What the owner said
 
 - Puck exists to make it possible, eventually, to build an MMO at the scale of

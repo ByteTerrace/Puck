@@ -8,9 +8,7 @@ evidence, the failure modes each option closes, the favoured option, the
 strongest case against it, the invariant and the one place that enforces it. It
 is the design of [the visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
 "retained instance updates" (its V2b) and says what its record split (V1b) owes
-the hand-over. A review from another family has read it. Each finding is
-answered in the design itself, and [the review answers](#review-answers) say
-where; the steps are ready for build lanes.
+the hand-over. The steps are ready for build lanes.
 
 Labels: **[opened]** means this memo read the symbol at this tree;
 **[reading]** means a count the frame-bar lane measured, which this memo did not
@@ -1016,8 +1014,6 @@ bytes).
 | Step | Counts that must move | Queued timing |
 |---|---|---|
 | R0 | [Its counts](#r0-the-counts-and-the-rule), and its own check | None: its rule decides the order |
-| S1 | Allocation trace across an arrival: the scene constructor, the export and the scene start's snapshot near zero; collections in `host.frames` | Meadow arrival p99 and worst frame |
-| D1 | Allocation trace: the decode and the managed renumbering near zero; restores read fewer planes. Landed: per decoded mesh of the debug world's 2,445 stored entries, managed bytes 1.06 MB to 9.2 KB, and per restore 7.4 MB to 12.8 KB (GC.GetTotalAllocatedBytes around SdfMeshLibrary.TryLoad and a second SdfMeshRegion.WriteMeshes, native scratch as the World runs it) | The same window |
 | R1h | `gpu.mesh-hits.rejected` and `sdf.instances.targets.stale` zero across the tour on both backends; rejections non-zero under the lever | None |
 | R1a | `rows.packed.landing` and `frames.over-chunk.landing` fall to the rows that name each landed mesh; `SdfMeshHistory.Seeded` per landing stops following the list's size | Cold boot's owed frames, if R0 sends it |
 | R1b | `rows.packed.rebuild` and `SdfMeshHistory.DressTopologyBuilds` move only on a start over; `SdfMeshHistory.StagingPlanRecords` equals the rows gained and renamed; a hand-over's packed records equal `rows.owned.changed`; the whole-walk kind stays at zero on a hand-over frame; thread-allocated bytes of that frame; the draws the late occlusion phase emits on the following frame | The hand-over frame |
@@ -1027,55 +1023,37 @@ bytes).
 
 ## Steps
 
-Each is one lane, in this order; S1 and D1 share no file with the R steps and
-run beside them, and R1h shares none with R0. A check that needs a windowed
-World on both backends, or a Vulkan run under GPU-assisted validation, is a
-verification request to the lead.
+Each is one lane, in this order. The scene build's pooling and the decode into
+a mesh's own storage (the memo's S1 and D1) are built. A check that needs a
+windowed World on both backends, or a Vulkan run under GPU-assisted validation,
+is a verification request to the lead.
 
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
-| R0. Count | Landed | `SdfMeshStagingCause` stated by the dresser on the frame (`SdfFrame.MeshDrawChangesCause`: a retry's rebuild is stated as `retry`, so the rule can see it) and classified by the tables in `SdfWorldTables.StageMeshRegion`; one `StagingTally` per staging publishes `RecordsPacked` and the per-cause totals together (`SdfMeshHistory.PublishCauses`); `rows.owned.changed`; `dress.topology-builds.<reason>` (`SdfMeshTopologyReason`); the peaks (`WorkKind.IsPeak`, `WorkCounterSet.Raise`, `IWorkCounterSource.ClearPeaks`, `world.counters <source> clear-peaks`); `sdf.mesh-gi`'s `static-draws`, `entries`, `prefix-bytes` and their peaks; `sdf.instances` and `sdf.mesh-gi` declared through `WorkKindRegistry` | None | `SdfMeshStagingCauseLawTests`: the cause totals sum to `RecordsPacked` and the reasons to `DressTopologyBuilds`. Owed: the lead reads the windows on a windowed World and applies the rule |
-| S1. A scene build keeps what it allocates | Small | **Landed.** The scene's draws, entries and top nodes rented and returned at the last claim (`SdfMeshIrradianceScene.Content`), a trimmed scene sharing them; the build's workspace rented; a static-only snapshot in two swapped rented arrays, its mesh claims moved rather than taken again; the change boxes counted in kept workspace; the prefix written as the upload reads it. Its readings are [below the table](#s1s-readings) | The export still has one publisher | The exported tree equal to the old export's (`puck mesh scene`'s `tree-hash`, which also needed the top level's braid order made independent of the parallel build's node numbering); the allocation trace, a windowed verification request |
-| D1. Decode into the mesh's storage | Medium | **Landed.** SdfMeshStorage (SdfMeshStorage.cs) is the storage parameter of SdfMeshStoreCodec.TryDecode: SdfMeshManagedStorage for an offline read, SdfMesh.NativeStorage (SdfMesh.Storage.cs) for a host, which SdfMesh.NativeCopy now fills through too, and SdfMesh.Restorable's Refill (SdfMesh.Restore.cs) for a restore, which takes only the normals and the coarser levels' indices and skips every other plane by its stated length. Material ids are renumbered as the planes are read (SdfMeshMaterials.Remap; an id outside the palette that the taking group names reads the entry in its stored ids instead). SdfMeshStore reads the entry into owned scratch. **Departure:** the pieces' counts are measured from the plane headers by a first walk of the same reader, not stored in the entry, so the entry format is unchanged and the same files decode under the build before and after | One decoder | The codec's round trip for both storages; a warm boot loads every group; a relocation restores |
-| R1h. The hit door | Landed | `sdfMeshResolveHit` and `SdfMeshHit` in `frame/sdf-mesh.hlsli`; readers taking a resolved hit: the surface stage, the views stage (light stage, `sdfShadeStamp`, `sdfShadeFlow`), the glass stage (near face, `sdfGlassSecondInterface`, the shade-cost diagnostic), `sdfPreviousPoint` (the views reprojection and the resolve's two calls); raster stages read `sdfMeshRasterMaterial`; the kernel kind `gpu.mesh-hits.rejected`; `sdf.instances.targets.stale` (`SdfWorldPasses.RecordHits`, counting the surface, views, resolve and glass shading passes against the mesh, visibility and glass targets); `world.rows force hit-bound [<frames>]` | The resolver | Compiler statistics before and after in the commit. Owed: zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation; a boot's captures unchanged |
+| R0. Count's reading | Owed | The counts are built (`SdfMeshStagingCause` stated by the dresser and classified in `SdfWorldTables.StageMeshRegion`, per-cause totals, `rows.owned.changed`, the topology reasons and the peaks). What remains is the reading | None | The lead reads the windows on a windowed World and applies [the rule](#r0-the-counts-and-the-rule) |
+| R1h. The hit door's checks | Owed | The resolver is built (`sdfMeshResolveHit`, the kernel kind `gpu.mesh-hits.rejected`, `sdf.instances.targets.stale`, `world.rows force hit-bound`). What remains is its windowed check | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation |
 | R1a. The staged table is the producer's | Medium to large | The absent bit and its kernel branch; the staging function's two branches and the per-row retire; rows by mesh and a landing staging them; the journal taken while meshes are owed; the reader and the one cursor in every consumer; the tables' glass row set; the queue precondition; the pack, ledger, seed and device comparisons; the levers for refusal, relocation, trim, a skipping consumer and new tables | The tables' one staging function; the cursor | The cross-check over a cold boot with its forcing counts; the law's part without a row table; a boot's captures fill in as before; `world.wait residency` still names what is owed |
 | R1b. Rows | Large | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
 | R1c. Clips are derived | Small to medium | The slot index over every row, the staged draw computed from base and clips, a clip's copies as a run; the portal path's "everything" and the list rewrite deleted | The table's staging of a row | The cross-check through a crossing by a host-drawn body and by a rigid copy, with clipped rows of each owner kind and ended clips counted; a straddling body clipped on both sides and whole again after it withdraws |
 | R2. Piece rows | Large | With the visibility plan's V1b | That plan's | That plan's, and a hand-over's packed records |
 | S2. Clustered top level | Medium | Cells, clusters reused by equal sorted lists, cluster blocks in the arena, the prefix over cells | The cluster's constructor; the one scene publisher | The cross-check's ray set; the irradiance scene laws; a pack rebuilds no cluster; a scene change during an upload abandons without a lost device on Vulkan |
 
-No step is a stopgap for a later one: R1h's resolver is what R1a's absent
-record is rejected by, R1a's absent record, row-for-row staging and rows by
-mesh are what R1b's free rows and R2's piece rows stand on, and S1's pooled
-arrays are what a cluster keeps.
+No step is a stopgap for a later one: the hit door's resolver is what R1a's
+absent record is rejected by, R1a's absent record, row-for-row staging and rows
+by mesh are what R1b's free rows and R2's piece rows stand on, and the scene
+build's pooled arrays (built) are what a cluster keeps. Decoding into the
+mesh's own storage (decision 4) is built too.
 
-### S1's readings
-
-`puck mesh scene --world worlds/debug` over the store's static meshes (356
-draws, 19865656 triangles, identity transforms, one draw per group), base and
-S1 builds of the CLI run alternately **[reading]**:
-
-| Count | Before S1 | After S1 |
-|---|---|---|
-| Bytes a rebuild that builds no geometry allocates (`move`, `back`) | 3696424 | 100552 |
-| Bytes an export allocates beyond its words | 2496944 | 201392 |
-| `tree-hash` of the first and the restored scene | 3e25d24632584122 | 3e25d24632584122 |
-| Prefix words of one scene | 559289 | 559289 |
-
-A scratch probe of `SdfMeshIrradiance.StartSceneBuild` over 4000 draws (2000
-static, 50 meshes) measured 677040 bytes on the frame thread per scene start
-before S1, and 320 after its first two starts filled the two arrays
-**[reading]**.
-
-What they decide for S2, by [R0's rule](#r0-the-counts-and-the-rule): one
-scene's prefix is 559289 words, 2.2 MB, under
-`SdfGpuWork.MostUploadJobBytes` (8 MiB), and an arrival that rebuilds the scene
-once per `SdfMeshIrradiance.PendingSceneInterval` (4 s) sends about 25 MB of
-prefix in 45 s, under one second of `SdfGpuWork.UploadBytesPerSecond`
-(240 MiB) **[inference]**. Neither clause holds, so S2 is dropped unless the
-frame's own static draws, which add rigid copies that this reading leaves out,
-show more: the `[sdf.mesh-gi] scene` line now prints `prefix-words`, and the
-lead's windowed meadow arrival reads it **[unconfirmed]**.
+**S2 is conditional, and the first reading says drop it.** By
+[R0's rule](#r0-the-counts-and-the-rule), one scene's prefix read offline over
+the store's static meshes is a small fraction of
+`SdfGpuWork.MostUploadJobBytes`, and an arrival that rebuilds the scene once
+per `SdfMeshIrradiance.PendingSceneInterval` sends well under a second of
+`SdfGpuWork.UploadBytesPerSecond` **[inference]**. Neither clause of the rule
+holds, so S2 is dropped unless the frame's own static draws, which add rigid
+copies that the offline reading leaves out, show more: the `[sdf.mesh-gi]
+scene` line prints `prefix-words`, and the lead's windowed meadow arrival reads
+it **[unconfirmed]**.
 
 ## Systems considered
 
@@ -1167,29 +1145,6 @@ lead's windowed meadow arrival reads it **[unconfirmed]**.
 | The cell size of 3d | S2's lane | Clusters built per scene change and traversal steps per ray, both counted |
 | How many runs a program rebuild reallocates | R1b's lane | Runs kept across `world.reload` and a responding placement's toggle |
 | The free share that triggers a pack | R1b's lane | Packs per arrival against the peak extent, both counted |
-
-## Review answers
-
-One line per finding of the review, with where the design answers it.
-
-| Finding | Answered in |
-|---|---|
-| H1. The slot index does not name a clip's host draws and rigid copies | [Clips are derived in the door](#clips-are-derived-in-the-door): the staged draw is computed from the base draw and the clips, over a slot index kept inside the writes; step R1c and its forcing row |
-| H2. The pack comparison cannot pack from nothing, and nothing checked the generation | [What the cross-check compares](#what-the-cross-check-compares): the pack comparison takes the generation as an input, and a ledger with its own state checks clause 3; [a run per owner](#a-run-per-owner) gives the observation the occupancy |
-| M1. A row returning from absence with the same occupant does not seed | [The staged table is the producer's table](#the-staged-table-is-the-producers-table): the absent branch retires the cell, so the return seeds |
-| M2. The door is convention | [The row table and its one writer](#the-row-table-and-its-one-writer): a writer only the creator holds, a table and a reader with no write member, one cursor |
-| M3. R0's rule does not decide | [R0: the counts and the rule](#r0-the-counts-and-the-rule): causes counted on every path, peaks, one threshold, a rule read from counts alone |
-| M4. Row-wise arena operations hid the plan's work | [The arena is named by row](#the-arena-is-named-by-row): placing, refusing, reserve growth with moved meshes' chains, slack and packing |
-| M5. A pick's change count needs the table and the render's count, and host translation assumes leading rows | [How the GPU side stays correct](#how-the-gpu-side-stays-correct), readbacks: the table by reference, the serial the surface pass committed, translation through owner and place |
-| M6. The clamp | [How the GPU side stays correct](#how-the-gpu-side-stays-correct), the hit door: one resolver that rejects and counts, as the lead ruled; step R1h |
-| M7. The cross-check runs where the guarded paths are not | [Forcing every guarded path](#forcing-every-guarded-path): a lever and a non-zero count for each, assigned to a step |
-| L1. A failed reconcile leaks runs | [A failed publication starts over](#a-failed-publication-starts-over): the start over frees through the table |
-| L2. Uncounted walks and three glass counters | [Counts the door keeps](#counts-the-door-keeps): claims and glass kept in the writes, whole walks counted by the table |
-| L3. The scene's key and S2's lists depend on order | [Decision 3](#decision-3-the-trace-scenes-top-level): a key that is a sum, absent rows not static, sorted cell lists; the holders table is corrected |
-| L4. Lockstep packs every frame, in the rebuild's order | [Packing and the canonical order](#packing-and-the-canonical-order): a canonical flag makes the pack idempotent, and the budgeted move never runs on a locked frame |
-| L5. R1a's chain was a stopgap for R2 | [Decision 2](#decision-2-what-a-hand-over-rewrites): the chain stays and links piece rows |
-| L6. The records argument rests on one queue | [How the GPU side stays correct](#how-the-gpu-side-stays-correct), records: the boundary is stated and checked where a landing is recorded |
-| L7. The host copy hides a lost flush | [What the cross-check compares](#what-the-cross-check-compares): the device comparison |
 
 ---
 
