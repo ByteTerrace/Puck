@@ -548,13 +548,12 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     // One resource's placement in a shared block, named to its family.
     private readonly record struct Placement(Allocation Allocation, long Bytes, FamilyRow Family);
 
-    // One segment's bytes, written only under the ledger's lock, which is also where its observer is called.
-    private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) {
-        public GpuMemorySegment Segment = segment;
+    // One row's device bytes: held now, the most held at once, and allocated and released over the process's life,
+    // written only under the ledger's lock, which is also where its observer is called. A row named inside another
+    // (a family's inside its segment's) adds what it holds to that row's Named.
+    private abstract class HeldRow(IAllocationObserver? observer, SegmentRow? namedIn) {
         public long Allocated;
-        public long Disagreements;
         public long Held;
-        public long Named;
         public long Peak;
         public long Released;
 
@@ -562,37 +561,27 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             Allocated += bytes;
             Held += bytes;
             Peak = Math.Max(val1: Peak, val2: Held);
+            if (namedIn is not null) { namedIn.Named += bytes; }
             observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: bytes);
         }
         public void Release(long bytes) {
             Released += bytes;
             Held -= bytes;
+            if (namedIn is not null) { namedIn.Named -= bytes; }
             observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: -bytes);
         }
     }
-    // One family's bytes in one segment, a part of that segment's row; written only under the ledger's lock, which is
-    // also where its observer is called.
-    private sealed class FamilyRow(string family, SegmentRow segment, IAllocationObserver? observer) {
+    // One segment's row: the physical row of its device blocks.
+    private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) : HeldRow(namedIn: null, observer: observer) {
+        public GpuMemorySegment Segment = segment;
+        public long Disagreements;
+        public long Named;
+    }
+    // One family's row in one segment, a part of that segment's row.
+    private sealed class FamilyRow(string family, SegmentRow segment, IAllocationObserver? observer) : HeldRow(namedIn: segment, observer: observer) {
         public string Family { get; } = family;
-        public GpuMemorySegment Segment => segment.Segment;
-        public long Allocated;
-        public long Held;
-        public long Peak;
-        public long Released;
-
-        public void Allocate(long bytes) {
-            Allocated += bytes;
-            Held += bytes;
-            segment.Named += bytes;
-            Peak = Math.Max(val1: Peak, val2: Held);
-            observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: bytes);
-        }
-        public void Release(long bytes) {
-            Released += bytes;
-            Held -= bytes;
-            segment.Named -= bytes;
-            observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: -bytes);
-        }
+        public SegmentRow Parent { get; } = segment;
+        public GpuMemorySegment Segment => Parent.Segment;
     }
 }
 
