@@ -82,8 +82,8 @@ public readonly record struct EntryAdmissionSection(
         writer.WriteArray(
             items: (section.RevokedKeys ?? []),
             writeItem: static (w, row) => {
-                WorldAuthorityCheckpointCodec.WriteCapability(capability: row.Capability, writer: w);
-                WorldAuthorityCheckpointCodec.WriteSubject(subject: row.Subject, writer: w);
+                WorldWireCodec.WriteCapability(capability: row.Capability, writer: w);
+                WorldWireCodec.WriteSubject(subject: row.Subject, writer: w);
             }
         );
         writer.WriteString(value: section.IdentityDomain);

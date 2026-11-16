@@ -505,6 +505,50 @@ public static partial class WorldWireCodec {
 
         return true;
     }
+    /// <summary>Writes a <see cref="WorldCapability"/> as <see cref="TryWriteCapability"/> does, refusing by exception
+    /// for a codec whose encoder has no refusal channel.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="capability">The capability.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldWireEncodeException"><paramref name="capability"/> has no wire value.</exception>
+    public static void WriteCapability(WireWriter writer, WorldCapability capability) {
+        if (!TryWriteCapability(writer, capability)) {
+            throw new WorldWireEncodeException(message: $"{nameof(WorldCapability)}.{capability} has no wire value");
+        }
+    }
+    /// <summary>Writes a grantee as <see cref="TryWriteGrantee"/> does, refusing by exception for a codec whose
+    /// encoder has no refusal channel.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="grantee">The grantee to write.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldWireEncodeException"><paramref name="grantee"/> has no live wire shape.</exception>
+    public static void WriteGrantee(WireWriter writer, Grantee grantee) {
+        if (!TryWriteGrantee(writer, grantee)) {
+            throw new WorldWireEncodeException(message: $"{grantee.Describe()} has no live wire value — its row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it");
+        }
+    }
+    /// <summary>Writes a principal as <see cref="TryWritePrincipal"/> does, refusing by exception for a codec whose
+    /// encoder has no refusal channel.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="principal">The principal to write.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldWireEncodeException"><paramref name="principal"/>'s kind has no live wire value.</exception>
+    public static void WritePrincipal(WireWriter writer, Principal principal) {
+        if (!TryWritePrincipal(writer, principal)) {
+            throw new WorldWireEncodeException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
+        }
+    }
+    /// <summary>Writes a grant subject as <see cref="TryWriteSubject"/> does, refusing by exception for a codec whose
+    /// encoder has no refusal channel.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="subject">The subject to write.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldWireEncodeException"><paramref name="subject"/> has no wire shape.</exception>
+    public static void WriteSubject(WireWriter writer, GrantSubject subject) {
+        if (!TryWriteSubject(writer, subject)) {
+            throw new WorldWireEncodeException(message: $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value");
+        }
+    }
     /// <summary>Writes an intent: 32 raw 64-bit numeric lanes and one packed button word,
     /// then one flag byte for the pointer ray and,
     /// only when the ray is present, its origin and direction as six raw <see cref="FixedQ4816"/> values, so an absent

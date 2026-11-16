@@ -13,8 +13,15 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         return writer.ToArray();
     }
-    private static bool TryDecodeFields(byte[] bytes, out string reason, out IReadOnlyList<WorldFieldRegionCheckpoint>? section) {
-        var reader = new WireReader(bytes: bytes); var count = reader.ReadCount(field: "physical regions", maximum: StateCapacity.MaxRows, minimum: 0);
+    private static bool TryDecodeFields(byte[] bytes, out string reason, out IReadOnlyList<WorldFieldRegionCheckpoint>? section) => TryDecodeSection(
+        bytes: bytes,
+        name: "fields",
+        read: ReadFields,
+        reason: out reason,
+        section: out section
+    );
+    private static IReadOnlyList<WorldFieldRegionCheckpoint> ReadFields(ref WireReader reader) {
+        var count = reader.ReadCount(field: "physical regions", maximum: StateCapacity.MaxRows, minimum: 0);
         var regions = new List<WorldFieldRegionCheckpoint>();
 
         for (var index = 0; ((index < count) && !reader.Failed); index++) {
@@ -28,7 +35,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
             regions.Add(item: new WorldFieldRegionCheckpoint(region, names, new FieldLattice.Checkpoint(Raw: raw)));
         }
-        if (!reader.TryFinish(failure: out var failure)) { section = null; reason = $"fields section: {failure}"; return false; }
-        section = regions; reason = string.Empty; return true;
+
+        return regions;
     }
 }

@@ -255,7 +255,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     what: "pending rebuild",
                     tryEncode: WorldSubmissionCodec.TryEncodeRebuild
                 ));
-                WritePrincipal(
+                WorldWireCodec.WritePrincipal(
                     writer: writer,
                     principal: value.Principal
                 );
@@ -267,7 +267,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             case WorldPendingOpCheckpoint.Undo value:
                 writer.WriteByte(value: 2);
                 writer.WriteInt32(value: value.Count);
-                WritePrincipal(
+                WorldWireCodec.WritePrincipal(
                     writer: writer,
                     principal: value.Principal
                 );
@@ -510,8 +510,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServerCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServerCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "server",
+        read: (ref WireReader reader) => ReadServer(definitionHash: definitionHash, reader: ref reader),
+        reason: out reason,
+        section: out section
+    );
+    private static WorldServerCheckpoint ReadServer(string definitionHash, ref WireReader reader) {
         var definitionJson = reader.ReadBlock(
             field: "server definition",
             maxBytes: MaxSectionBytes
@@ -719,14 +725,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"server section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldServerCheckpoint(
+        return new WorldServerCheckpoint(
             Arena: arena,
             AuthorityIdentity: authorityIdentity,
             BaseDefinitionJson: baseDefinitionJson,
@@ -760,9 +759,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             SolidRevision: solidRevision,
             Undo: undo
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- population section ----
 

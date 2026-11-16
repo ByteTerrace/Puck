@@ -6,13 +6,13 @@ namespace Puck.World.Server;
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteEventEdge(WireWriter writer, WorldEventEdge edge) {
         writer.WriteByte(value: ((byte)edge.Family));
-        WriteSubject(
+        WorldWireCodec.WriteSubject(
             writer: writer,
             subject: edge.GateA
         );
         writer.WriteOptional(
             value: edge.GateB,
-            writeValue: WriteSubject
+            writeValue: WorldWireCodec.WriteSubject
         );
         writer.WriteInt64(value: edge.A);
         writer.WriteInt64(value: edge.B);
@@ -98,8 +98,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeEventFeed(byte[] bytes, out string reason, out WorldEventFeedCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeEventFeed(byte[] bytes, out string reason, out WorldEventFeedCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "event feed",
+        read: ReadEventFeed,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldEventFeedCheckpoint ReadEventFeed(ref WireReader reader) {
         var policy = (reader.ReadBoolean() ? new WorldCollisionEvents(CandidateBudget: reader.ReadInt32(),
             MaxPairsPerBody: reader.ReadInt32(), BeginBudget: reader.ReadInt32()) : null);
         var pending = reader.ReadArray(field: "event feed discovery work", maximum: WorldBodiesLimits.CapacityCeiling,
@@ -170,14 +176,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"event feed section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldEventFeedCheckpoint(
+        return new WorldEventFeedCheckpoint(
             CollisionPending: pending,
             CollisionPolicy: policy,
             Edges: edges,
@@ -187,9 +186,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             RegionOccupancy: regionOccupancy,
             SeatOccupied: seatOccupied
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- owned worlds section ----
 

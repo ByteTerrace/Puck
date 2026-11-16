@@ -47,26 +47,6 @@ public sealed partial class WorldTick {
 
     private IReadOnlyList<string> m_lastTappedActiveLayerTuneIds = [];
 
-    // MusicDirector.ActiveLayerTuneIds is recomputed in stable declared order every Step, so an ordinal sequence
-    // compare is exact — never a set compare, which would treat a reorder as a no-op.
-    private static bool ActiveLayerSetsEqual(IReadOnlyList<string> a, IReadOnlyList<string> b) {
-        if (a.Count != b.Count) {
-            return false;
-        }
-
-        for (var index = 0; (index < a.Count); index++) {
-            if (!string.Equals(
-                a: a[index],
-                b: b[index],
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /// <summary>Dispatches one server-authored event, either inline or through the ordered domain.</summary>
     /// <param name="serverEvent">The event.</param>
     /// <param name="ordered">Whether to enqueue it on the ordered domain rather than apply it inline.</param>
@@ -590,9 +570,11 @@ public sealed partial class WorldTick {
 
             // The active-layer set is level-triggered (never queued), so the tap fires on ANY tick the set differs
             // from what was last tapped — not only a transition-commit tick, and not gated to only fire once.
-            if (!ActiveLayerSetsEqual(
-                a: musicDirector.ActiveLayerTuneIds,
-                b: m_lastTappedActiveLayerTuneIds
+            // ActiveLayerTuneIds is recomputed in stable declared order every Step, so an ordinal sequence compare is
+            // exact — never a set compare, which would treat a reorder as a no-op.
+            if (!musicDirector.ActiveLayerTuneIds.SequenceEqual(
+                comparer: StringComparer.Ordinal,
+                second: m_lastTappedActiveLayerTuneIds
             )) {
                 m_lastTappedActiveLayerTuneIds = [.. musicDirector.ActiveLayerTuneIds];
                 MusicLayerTap?.Invoke(obj: m_lastTappedActiveLayerTuneIds);

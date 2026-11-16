@@ -43,7 +43,7 @@ public sealed record CostModelProfile {
         ArgumentOutOfRangeException.ThrowIfNegative(rateHz);
         if (
             (rateHz > 0) &&
-            ((EngineTicksPerSecond % rateHz) != 0)
+            !FixedTickConversion.IsRate(ratePerSecond: ((ulong)rateHz))
         ) {
             throw new ArgumentException(
                 message: "A positive simulation rate must divide the engine time base exactly.",
@@ -95,7 +95,7 @@ public sealed record CostModelProfile {
         ValidateRate(rateHz: rateHz);
         return ((rateHz == 0)
             ? 0L
-            : (EngineTicksPerSecond / rateHz)
+            : ((long)FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)))
         );
     }
 }

@@ -11,6 +11,13 @@ public interface IWorldTransferForwarder {
     /// <summary>Names host-owned transfer state that prevents this authority from rewinding independently, or
     /// returns null when it has none. Called on the host's tick thread while holding the source authority gate.</summary>
     string? TimelineResetRefusal(WorldServer source);
+    /// <summary>Returns whether a committed onward route is published for a departed traveler incarnation. A traveler
+    /// detaches before its route is published, so a request that lands in that interval finds none yet; a caller
+    /// waits on this rather than reading it from a refusal's text. Safe to call from any thread.</summary>
+    /// <param name="source">The authority whose committed onward route is followed.</param>
+    /// <param name="mobility">The traveler credential.</param>
+    /// <returns><see langword="true"/> when the route is published.</returns>
+    bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility);
     /// <summary>Forwards one intent addressed to a departed traveler incarnation.</summary>
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
     /// <summary>Forwards one typed submission addressed to a departed traveler incarnation, preserving its caller

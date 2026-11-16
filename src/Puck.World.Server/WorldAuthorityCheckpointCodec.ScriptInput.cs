@@ -1,6 +1,5 @@
 using Puck.Commands;
 using Puck.Networking;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -9,11 +8,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     internal static void WriteScriptActor(WireWriter writer, Principal actor) {
         writer.WriteBoolean(value: (actor != default));
         if (actor == default) { return; }
-        writer.WriteBoolean(value: (actor.Kind == PrincipalKind.World));
-        if ((actor.Kind != PrincipalKind.World) && !WorldWireCodec.TryWritePrincipal(principal: actor, writer: writer)) {
-            throw new ArgumentException(message: "script input actor is invalid");
-        }
+        WriteProgramOrPrincipal(
+            actor: actor,
+            writer: writer
+        );
     }
-    internal static Principal ReadScriptActor(ref WireReader reader) => (!reader.ReadBoolean() ? default :
-        (reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadPrincipal(ref reader)));
+    internal static Principal ReadScriptActor(ref WireReader reader) => (!reader.ReadBoolean() ? default : ReadProgramOrPrincipal(reader: ref reader));
 }

@@ -322,10 +322,13 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)sourceRate));
+        var sourceStepTicks = FixedTickConversion.PerRate(ratePerSecond: checked((uint)sourceRate));
         var holdSourceSteps = Math.Max(
             val1: 1UL,
-            val2: checked((((holdEngineTicks + sourceStepTicks) - 1UL) / sourceStepTicks))
+            val2: checked((ulong)FixedTickConversion.StepsCovering(
+                engineTicks: holdEngineTicks,
+                stepTicks: sourceStepTicks
+            ))
         );
         var reservationMembers = ((transfer.Sent is { } sentAgain) ? [.. sentAgain.Request.Members] : new WorldTransferReservationMember[members.Length]);
         // Use the source row's authenticated namespace, not a locally invented composite label.
