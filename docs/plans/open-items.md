@@ -39,8 +39,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 
 1. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
-   agreed with the owner: step 0 (a crossing read as a player takes it),
-   steps 1 and 2 beside each other, and step 7's prototype with a GPU grant.
+   agreed with the owner: step 0's baseline legs on both backends in a quiet
+   window, step 2, and step 7's prototype with a GPU grant; then step 3.
 2. [high] [Bake detail](#bake-detail): a contour that holds a crease at any
    lattice alignment (the tour's mesh-audit reds, the Moth's shin groups),
    then moving blends step 4.
@@ -832,12 +832,20 @@ reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 0, the seam walk as a run, with steps 1 and 2 beside each other and step
-7's prototype under a GPU grant. The plan owns the decisions, the build order
+step 0's baseline legs (`puck bench frames --window` over
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), step 2
+and step 7's prototype under a GPU grant, then step 3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [medium] The seam walk's window counts its opening tick and each burst's
+  tick from the route program's first line (`opens` and `captures[].at` in
+  `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
+  window off course or moves its burst, and nothing ties the two. The burst
+  ticks are estimates to correct after the first windowed reading. Free
+  flight is not walked yet (the fastest leg is run plus dash), and the window
+  does not drive the mixed-sound recording `capture.start` offers.
 - `world.instance.stop` on a routed world leaves that world's per-view
   residencies (`session$N$2`) in `world.residency`, and at the meadow stop the
   garden painting's windows stay scheduled as `waiting` for hundreds of ticks.
@@ -1862,6 +1870,8 @@ and 6; then the researcher brief's priorities
   and counts a failure (`ReadFlockAffinity`), and a binding whose local is
   absent is dropped at its sweep's end, re-arming an Edge rule
   (`RuleEvaluator`'s `HoldOnFault`). Decide what each absence means.
+- [low] A routed `body.where` appends ` anchor=body:N` to a refusal as well as
+  to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
   rows if the grant vocabulary allows.
@@ -2529,6 +2539,12 @@ that stops compiling.
     the printer), `ShippedSourceLintLawTests`
     (`worlds/standard/hydrology.puck` trips PUCK_LINT_003), the
     `SweepEvidenceLawTests` index.
+  - Unconfirmed whether they predate the change that found them:
+    `MeshCommandTests` (`AnOfflineBakeAuditsAGroupWithNoDeviceAndNoStore`,
+    `TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers`,
+    `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`) and
+    `VulkanDeviceChainCleanupLawTests` (two cases failing at log index 1 with
+    `unexpected native call` during instance creation).
 - The keep-list the owner approves: exact results and determinism
   (`Puck.Maths.Tests`' laws; World.Server `MusicReplayReDerivabilityLawTests`,
   `CrossingReplayLawTests`, `ReplayForkLawTests`,
