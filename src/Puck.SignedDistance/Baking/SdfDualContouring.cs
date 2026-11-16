@@ -1408,20 +1408,19 @@ internal static class SdfDualContouring {
             // only this cell sees, a concave crease's) keeps the point they meet at, where clamping would cut the feature
             // off, while the point lies in the region the patch's quads allow (Within): past the cell only through a
             // face the patch does not cross. A point past a face the patch crosses lies among the cells its quads join
-            // it to, where the vertex would turn those quads over; it is the cell's that holds it (`beyond`, HandOff), as a
-            // convex crease is, and this cell's vertex clamps. A point the planes do not all pass through is no feature
-            // and clamps too.
+            // it to, where the vertex would turn those quads over, so this cell's vertex clamps, as it does for a point
+            // the planes do not all pass through, which is no feature, and for a convex crease the neighbour holds
+            // (`beyond`). A clamped vertex keeps clear of the faces its patch crosses (Clear).
             if (!placed) {
-                var meets = (!inside && (beyond is null) && (Math.Max(val1: Math.Abs(value: (sx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (sy - 0.5)), val2: Math.Abs(value: (sz - 0.5)))) <= (0.5 + grid.FeatureReach)) &&
-                    Meets(x: sx, y: sy, z: sz, planes: cellPlanes));
+                var reaches = (!inside && (beyond is null) && (Math.Max(val1: Math.Abs(value: (sx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (sy - 0.5)), val2: Math.Abs(value: (sz - 0.5)))) <= (0.5 + grid.FeatureReach)) &&
+                    Meets(x: sx, y: sy, z: sz, planes: cellPlanes) && Within(edges: edges, x: sx, y: sy, z: sz));
 
-                if (meets && Within(edges: edges, x: sx, y: sy, z: sz)) {
+                if (reaches) {
                     result = (sx, sy, sz);
                 } else {
                     var (low, high) = Clear(edges: edges, mean: mean);
 
                     result = cell.Inside(high: high, low: low, planes: cellPlanes, x: sx, y: sy, z: sz);
-                    if (meets && feature) { beyond = (sx, sy, sz); }
                 }
             }
         }

@@ -15,8 +15,10 @@ namespace Puck.SignedDistance.Baking;
 /// </summary>
 public static class SdfContourFacing {
     // The cosine between a triangle's facing and its lattice edge within which the triangle lies edge-on to the edge and
-    // its corners' patches judge it: about a degree.
-    private const double EdgeOn = 0.02;
+    // its corners' patches judge it: fifteen degrees. A quad squashed into a neighbouring face lies in that face to
+    // within its vertices' rounding, which over a strip a few hundredths of a cell wide tilts a triangle several
+    // degrees out of it, to either side of its edge.
+    private const double EdgeOn = 0.26;
 
     /// <summary>Returns a lattice edge as a signed axis: one, two or three for x, y or z, positive when the field rises
     /// along the positive axis, which is when the edge's lower sample is the one inside.</summary>
