@@ -1587,67 +1587,70 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
-    // The frame's search for the windows that render for a bake (ReserveBakes): the baking worlds it has given a
-    // window, the windows it keeps (each such world's one window and every window on the way to it), each view it
-    // has reached with the consumer it was reached from, and the views reached in the last pass and in this one.
-    private readonly HashSet<object> m_bakingWorlds = new(comparer: ReferenceEqualityComparer.Instance);
-    private readonly HashSet<string> m_bakeKept = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, string?> m_bakeReached = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_bakeFrontier = new(comparer: StringComparer.Ordinal);
-    private readonly List<string> m_bakeNext = [];
+    // The frame's search for the windows that render while a world's meshes arrive (ReserveArrivals): the arriving
+    // worlds it has given a window, the windows it keeps (each such world's one window and every window on the way to
+    // it), each view it has reached with the consumer it was reached from, and the views reached in the last pass and
+    // in this one.
+    private readonly HashSet<object> m_arrivingWorlds = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly HashSet<string> m_arrivalKept = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> m_arrivalReached = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_arrivalFrontier = new(comparer: StringComparer.Ordinal);
+    private readonly List<string> m_arrivalNext = [];
 
     // Whether a window its consumer does not render for its own sake (out of sight, too small or occluded) renders
-    // at the least share this frame for a bake's sake (ReserveBakes).
-    private bool RendersForBake(string view) => m_bakeKept.Contains(item: view);
+    // at the least share this frame so a world's meshes arrive (ReserveArrivals).
+    private bool RendersForArrival(string view) => m_arrivalKept.Contains(item: view);
 
-    // Chooses the windows that render at the least share for a bake's sake this frame. A world bakes only in frames
-    // that render one of its views, so each world with a pending bake needs one rendered view, and a window onto it
-    // renders only if its consumer does. The search walks outward from the views that render whatever the windows
-    // do (the main instance, the roots, the synthesized footprints), through session windows only, a pass a level:
-    // the first window reached onto a baking world its consumer does not render is that world's one window, and it
-    // and every window on the way back to a view that renders are kept. So a world behind a chain of hidden windows
-    // bakes, a window no rendered view leads to never takes a world's place, and a world many windows show keeps
-    // one of them rendering, the nearest.
-    private void ReserveBakes(in FootprintFrame frame) {
-        m_bakingWorlds.Clear();
-        m_bakeKept.Clear();
-        m_bakeReached.Clear();
-        m_bakeFrontier.Clear();
-        m_bakeNext.Clear();
+    // Chooses the windows that render at the least share this frame so the worlds behind them become resident. A
+    // world's meshes arrive only in frames that render one of its views: its bake's sampling is dispatched there, and
+    // its baked meshes land in its region only after such a frame's upload (SdfWorldResidency.MeshesArriving). So each
+    // world whose meshes are still arriving needs one rendered view until they are resident, not only until its bake
+    // settles, and a window onto it renders only if its consumer does. The search walks outward from the views that
+    // render whatever the windows do (the main instance, the roots, the synthesized footprints), through session
+    // windows only, a pass a level: the first window reached onto an arriving world its consumer does not render is
+    // that world's one window, and it and every window on the way back to a view that renders are kept. So a world
+    // behind a chain of hidden windows becomes resident, a window no rendered view leads to never takes a world's
+    // place, a world many windows show keeps one of them rendering, the nearest, and a resident world keeps none.
+    private void ReserveArrivals(in FootprintFrame frame) {
+        m_arrivingWorlds.Clear();
+        m_arrivalKept.Clear();
+        m_arrivalReached.Clear();
+        m_arrivalFrontier.Clear();
+        m_arrivalNext.Clear();
         if (ViewScenes is not { } scenes) { return; }
 
-        _ = m_bakeReached.TryAdd(key: WorldViewGraphs.MainInstance, value: null);
-        foreach (var root in m_viewRoots) { _ = m_bakeReached.TryAdd(key: root.Instance, value: null); }
+        _ = m_arrivalReached.TryAdd(key: WorldViewGraphs.MainInstance, value: null);
+        foreach (var root in m_viewRoots) { _ = m_arrivalReached.TryAdd(key: root.Instance, value: null); }
         if (m_synthesized is { } synthesized) {
-            foreach (var footprint in synthesized.Footprints) { _ = m_bakeReached.TryAdd(key: footprint.Producer, value: null); }
+            foreach (var footprint in synthesized.Footprints) { _ = m_arrivalReached.TryAdd(key: footprint.Producer, value: null); }
         }
-        m_bakeFrontier.UnionWith(other: m_bakeReached.Keys);
-        while (m_bakeFrontier.Count > 0) {
+        m_arrivalFrontier.UnionWith(other: m_arrivalReached.Keys);
+        while (m_arrivalFrontier.Count > 0) {
             foreach (var footprint in m_screenFootprints) {
-                if (m_bakeFrontier.Contains(item: footprint.Consumer)) {
-                    ReachForBake(consumer: footprint.Consumer, frame: in frame, producer: footprint.Producer, scenes: scenes);
+                if (m_arrivalFrontier.Contains(item: footprint.Consumer)) {
+                    ReachForArrival(consumer: footprint.Consumer, frame: in frame, producer: footprint.Producer, scenes: scenes);
                 }
             }
             foreach (var (camera, filmed) in m_filmedViews) {
-                if (m_bakeFrontier.Contains(item: camera.Name)) {
-                    ReachForBake(consumer: camera.Name, frame: in frame, producer: filmed.Name, scenes: scenes);
+                if (m_arrivalFrontier.Contains(item: camera.Name)) {
+                    ReachForArrival(consumer: camera.Name, frame: in frame, producer: filmed.Name, scenes: scenes);
                 }
             }
-            m_bakeFrontier.Clear();
-            m_bakeFrontier.UnionWith(other: m_bakeNext);
-            m_bakeNext.Clear();
+            m_arrivalFrontier.Clear();
+            m_arrivalFrontier.UnionWith(other: m_arrivalNext);
+            m_arrivalNext.Clear();
         }
     }
     // Reaches a session window from a consumer the search has reached, once: a window whose glass stands in another
-    // world than its consumer's is no way onward, and one onto a baking world no window has yet is kept with the
+    // world than its consumer's is no way onward, and one onto an arriving world no window has yet is kept with the
     // windows it was reached through.
-    private void ReachForBake(string consumer, string producer, IWorldViewScenes scenes, in FootprintFrame frame) {
-        if (!m_portals.Contains(item: producer) || m_bakeReached.ContainsKey(key: producer)) { return; }
+    private void ReachForArrival(string consumer, string producer, IWorldViewScenes scenes, in FootprintFrame frame) {
+        if (!m_portals.Contains(item: producer) || m_arrivalReached.ContainsKey(key: producer)) { return; }
         if (frame.PortalCoverage(consumer: consumer, coverage: out _, glass: out _, producer: producer) == PortalSight.Hidden) { return; }
-        m_bakeReached.Add(key: producer, value: consumer);
-        m_bakeNext.Add(item: producer);
-        if ((scenes.BakingWorld(consumer: consumer, view: producer) is not { } world) || !m_bakingWorlds.Add(item: world)) { return; }
-        for (var kept = producer; (kept is not null) && m_bakeKept.Add(item: kept); kept = m_bakeReached.GetValueOrDefault(key: kept)) { }
+        m_arrivalReached.Add(key: producer, value: consumer);
+        m_arrivalNext.Add(item: producer);
+        if ((scenes.ArrivingWorld(consumer: consumer, view: producer) is not { } world) || !m_arrivingWorlds.Add(item: world)) { return; }
+        for (var kept = producer; (kept is not null) && m_arrivalKept.Add(item: kept); kept = m_arrivalReached.GetValueOrDefault(key: kept)) { }
     }
 
     // Finish only after this frame's cameras and placements have been composed. First form the visible graph without
@@ -1655,7 +1658,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // graph would delay wake-up when a consumer grows or a portal becomes visible again.
     private void CompleteFootprints() {
         var frame = new FootprintFrame(this);
-        ReserveBakes(frame: in frame);
+        ReserveArrivals(frame: in frame);
         RootFilmedViews(frame: in frame);
         var firstScreen = m_footprints.Count;
 
@@ -1689,12 +1692,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     }));
 
                     break;
-                // A window out of its consumer's sight, or too small in it, renders at the least share while a bake
-                // needs it (RendersForBake): its world, or one behind it, then bakes before the glass comes into view.
-                case PortalSight.Unseen or PortalSight.Small when RendersForBake(view: footprint.Producer):
+                // A window out of its consumer's sight, or too small in it, renders at the least share while a world's
+                // meshes arrive through it (RendersForArrival): its world, or one behind it, then becomes resident
+                // before the glass comes into view.
+                case PortalSight.Unseen or PortalSight.Small when RendersForArrival(view: footprint.Producer):
                     m_footprints.Add(item: (footprint with {
-                        Height = WorldPortalVisibility.BakingShare,
-                        Width = WorldPortalVisibility.BakingShare,
+                        Height = WorldPortalVisibility.ArrivalShare,
+                        Width = WorldPortalVisibility.ArrivalShare,
                     }));
 
                     break;
@@ -1722,7 +1726,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
     }
-    // Decides the footprints from firstScreen on (a session's glass held, rendered at the baking share or rated; a
+    // Decides the footprints from firstScreen on (a session's glass held, rendered at the arrival share or rated; a
     // source's screens rated), each only after the footprint that shows its consumer: a consumer whose own glass is held
     // as too small renders nothing, so the footprints it would show are neither rated, counted nor listed by
     // world.rates. The display shares were measured before this pruning: a consumer they reach that no kept footprint
@@ -1778,7 +1782,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
     // One footprint's demand: a source's screens rated, a session's glass dropped (false) when too small to render, at
-    // its least share while it bakes, or rated by the views lever.
+    // its least share while a world's meshes arrive through it, or rated by the views lever.
     private bool DecideFootprint(ref RenderGraphFootprint footprint, in FootprintFrame frame) {
         if (!m_portals.Contains(item: footprint.Producer)) {
             footprint = footprint with { Refresh = ScreenRefresh(footprint: in footprint, rates: frame.Rates) };
@@ -1791,8 +1795,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
 
         switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
-            case PortalSight.Small or PortalSight.Hidden when RendersForBake(view: footprint.Producer):
-                footprint = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
+            case PortalSight.Small or PortalSight.Hidden when RendersForArrival(view: footprint.Producer):
+                footprint = footprint with { Width = WorldPortalVisibility.ArrivalShare, Height = WorldPortalVisibility.ArrivalShare };
 
                 return true;
             case PortalSight.Small:
@@ -1831,8 +1835,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                         (width, height) = coverage;
 
                         break;
-                    case PortalSight.Unseen or PortalSight.Small or PortalSight.Hidden when RendersForBake(view: filmed.Name):
-                        (width, height) = (WorldPortalVisibility.BakingShare, WorldPortalVisibility.BakingShare);
+                    case PortalSight.Unseen or PortalSight.Small or PortalSight.Hidden when RendersForArrival(view: filmed.Name):
+                        (width, height) = (WorldPortalVisibility.ArrivalShare, WorldPortalVisibility.ArrivalShare);
 
                         break;
                     case PortalSight.Unseen:

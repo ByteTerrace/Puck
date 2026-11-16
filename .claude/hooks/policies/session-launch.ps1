@@ -1,9 +1,9 @@
 #Requires -Version 7.0
 # session-launch: starting another agent session. A lane does its brief itself and starts no session of its own
 # (AGENTS.md: a lane that fans out hands back before its children finish), so a lane is refused every launch of
-# `codex`, `agy`, `claude` and the Codex companion script (`codex-companion.mjs`), and every `puck evals run` (which
-# starts `claude plugin eval` as its own child, out of this hook's sight), except the forms that only print help, a
-# version, a listing or a dry-run plan. The lead may launch sessions; it is asked only before a Codex launch that changes its
+# `codex`, `agy`, `claude` and the Codex companion script (`codex-companion.mjs`), except the forms that only print
+# help, a version or a listing. `puck evals run` passes for a lane (the owner's ruling): the verb starts
+# `claude plugin eval` as its own child, and a lane runs the eval suites its skill changes need. The lead may launch sessions; it is asked only before a Codex launch that changes its
 # own approvals or sandbox, the same set Claude's settings ask on textually, here applied to every form the classifier
 # sees (a moved or PowerShell launch, options before the subcommand).
 
@@ -136,6 +136,8 @@ function Test-SessionLaunchPolicy {
     $launch = Get-SessionLaunch $Invocation
     if ($null -eq $launch) { return }
     if ($Context.Role -eq 'lane') {
+        # A lane runs eval suites through the verb (the owner's ruling); `claude plugin eval` stays the verb's child.
+        if ($launch.Cli -eq 'puck evals run') { return }
         if (Test-SessionInspection $launch) { return }
         $what = ($launch.Cli -eq 'companion') ? 'the Codex companion' : $launch.Cli
         return New-PolicyDecision 'deny' "A lane starts no agent session of its own ($what): do the brief yourself, and hand back what needs another lane so the lead launches it. $($Invocation.Text)"

@@ -41,7 +41,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     }
 
     private sealed class NestedGlassScenes : IWorldViewScenes {
-        public object? BakingWorld(string view, string consumer) => null;
+        public object? ArrivingWorld(string view, string consumer) => null;
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera(x: 100f);
             return true;
@@ -126,18 +126,19 @@ public sealed partial class WorldViewPaneMappingLawTests {
                 : screens.Mappings)
         );
     }
-    // THE LAW: a session whose glass its consumer does not see renders nothing that frame, unless its world still bakes.
-    // The boot world's session is read by the world's view through the screen's glass; a scene placing that glass behind
-    // the view's camera keeps the session out of the schedule, while one placing it before the camera schedules it. A
-    // glass behind the camera whose world still bakes keeps its session rendering at the baking share, since its world
-    // bakes only in frames that render one of its views; a session in a world no view shows renders nothing either way.
+    // THE LAW: a session whose glass its consumer does not see renders nothing that frame, unless its world's meshes
+    // are still arriving. The boot world's session is read by the world's view through the screen's glass; a scene
+    // placing that glass behind the view's camera keeps the session out of the schedule, while one placing it before the
+    // camera schedules it. A glass behind the camera whose world's meshes still arrive keeps its session rendering at
+    // the arrival share, since its world's meshes arrive only in frames that render one of its views; a session in a
+    // world no view shows renders nothing either way.
     [InlineData(true, false)]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [Theory]
-    public void APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldBakes(bool facing, bool bakes) {
+    public void APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldArrives(bool facing, bool arriving) {
         _ = ShowTwoWorlds();
-        m_host.ViewScenes = new GlassScenes(Bakes: bakes, Glass: (facing
+        m_host.ViewScenes = new GlassScenes(Arriving: arriving, Glass: (facing
             ? FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond"))
             : (FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")) with {
                 Origin = new DocumentVector3(value: new System.Numerics.Vector3(x: 0f, y: 1f, z: 9f)),
@@ -148,15 +149,15 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
         Assert.Equal(
             actual: (RendersOf(instance: BootSession) != 0),
-            expected: (facing || bakes)
+            expected: (facing || arriving)
         );
         Assert.Equal(
             actual: m_host.Footprints.Any(predicate: static footprint => (
                 (footprint.Producer == BootSession) &&
-                (footprint.Width == WorldPortalVisibility.BakingShare) &&
-                (footprint.Height == WorldPortalVisibility.BakingShare)
+                (footprint.Width == WorldPortalVisibility.ArrivalShare) &&
+                (footprint.Height == WorldPortalVisibility.ArrivalShare)
             )),
-            expected: (!facing && bakes)
+            expected: (!facing && arriving)
         );
         Assert.Equal(
             actual: RendersOf(instance: RoutedSession),
@@ -191,12 +192,12 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public object? BakingWorld(string view, string consumer) => null;
+        public object? ArrivingWorld(string view, string consumer) => null;
     }
     // A scene whose boot session stands on a given glass in the boot world, and whose routed session stands in a world
-    // no view shows; every session's world bakes, or none does.
-    private sealed record GlassScenes(WorldScreen Glass, bool Bakes) : IWorldViewScenes {
-        object? IWorldViewScenes.BakingWorld(string view, string consumer) => (Bakes ? view : null);
+    // no view shows; every session's world's meshes are arriving, or none are.
+    private sealed record GlassScenes(WorldScreen Glass, bool Arriving) : IWorldViewScenes {
+        object? IWorldViewScenes.ArrivingWorld(string view, string consumer) => (Arriving ? view : null);
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = default;
 

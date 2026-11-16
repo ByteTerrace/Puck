@@ -84,15 +84,17 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
             if (cause == GpuQueueCause.BatchEnd) { GpuQueueWork.Process.Batch(); }
             Submit(entries: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: entries), owner: owner);
         } finally {
-            // Even after a failed submit every fence answers from the owner. An owner the backend never armed never
-            // reached the queue, so it and every fence answering from it have nothing outstanding; one it armed reports
-            // its device's loss through its own native fence.
-            foreach (var fence in fences) {
-                if (!ReferenceEquals(objA: fence, objB: owner)) { fence.Alias(owner: owner!); }
+            // An owner the backend left deferred never reached the queue: the backend arms it (or marks it run, or
+            // faulted) once its entries are on the queue. Its submissions then ran nowhere, so every fence of the batch
+            // is abandoned, a state each reports rather than reading complete. Otherwise every fence answers from the
+            // owner, which reports its device's loss or its fault itself.
+            if (owner is { IsDeferred: true }) {
+                foreach (var fence in fences) { fence.MarkAbandoned(); }
+            } else {
+                foreach (var fence in fences) {
+                    if (!ReferenceEquals(objA: fence, objB: owner)) { fence.Alias(owner: owner!); }
+                }
             }
-            // Capture the submitted generation first. Abandonment retires that generation, so an alias cannot attach
-            // to the next submission if the unarmed owner is reused before the alias is waited.
-            owner?.AbandonIfDeferred();
             entries.Clear();
             owners.Clear();
             fences.Clear();

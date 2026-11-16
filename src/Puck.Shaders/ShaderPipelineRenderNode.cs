@@ -1537,11 +1537,18 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     // The one door a slot's fence is waited through before the slot is reused or released. A wait that returns proves
     // the slot's previous submission completed, which the node's completions and every readback pass then retire; a lost
-    // device throws here, so nothing is retired for an interrupted submission.
+    // device throws here, so nothing is retired for an interrupted submission. A submission that never reached the queue
+    // proves nothing: its readbacks are dropped and the node's other slots settled (AbandonSlot).
     private void WaitSlot(int slot) {
         var fence = m_slots[slot].Fence!;
 
-        fence.Wait();
+        try {
+            fence.Wait();
+        } catch (GpuSubmissionAbandonedException) {
+            AbandonSlot(slot: slot);
+
+            return;
+        }
         NoteWaited(fence: fence);
         CompletePackageReadbacks(slot: slot);
     }

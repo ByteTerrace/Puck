@@ -87,6 +87,28 @@ public static class GpuImageUsages {
             );
         }
     }
+    /// <summary>Refuses an extent past the largest two-dimensional image a device admits, before anything is created: a
+    /// device may accept a larger image's creation and refuse only what uses it, or take it as invalid usage.</summary>
+    /// <param name="width">The width, in texels.</param>
+    /// <param name="height">The height, in texels.</param>
+    /// <param name="limit">The device's largest image side, in texels.</param>
+    /// <param name="device">The device, as the refusal names it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A side exceeds <paramref name="limit"/>; the parameter name is the
+    /// side's.</exception>
+    public static void RequireWithinLimit(uint width, uint height, uint limit, string device) {
+        RequireSide(dimension: width, device: device, limit: limit, side: nameof(width));
+        RequireSide(dimension: height, device: device, limit: limit, side: nameof(height));
+
+        static void RequireSide(uint dimension, string device, uint limit, string side) {
+            if (dimension > limit) {
+                throw new ArgumentOutOfRangeException(
+                    actualValue: dimension,
+                    message: $"The {side} is {dimension} texels; {device} limits a two-dimensional image to {limit} texels per side.",
+                    paramName: side
+                );
+            }
+        }
+    }
     /// <summary>Refuses an image request whose extent is empty, whose usage is empty or undefined, or whose usage does not
     /// fit its format.</summary>
     /// <param name="format">The image format.</param>

@@ -922,7 +922,12 @@ laws exercise that boundary.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion
-  lanes, the reach of a box it clamps, glass; each appended as a kind tag, its
+  lanes, the reach of a box it clamps, glass, and for a group holding a glyph the
+  content identity of the atlas pixels its glyphs sample, `SdfProgram.GlyphAtlas`,
+  which `SdfProgramBuilder.Glyph` takes from the atlas image's
+  `FontAtlasImageData.ContentHash` and a retained emission carries, since a glyph's
+  instruction holds only its cell's UVs; one texture binds for a program, so the
+  builder refuses glyphs of two atlas images; each appended as a kind tag, its
   length and its payload through `AppendFact`, so no two fact sequences hash
   alike), and every meshed group is stored in the
   `SdfMeshLibrary` all of a presentation's residencies share, so a rebuild, a
@@ -1017,7 +1022,9 @@ laws exercise that boundary.
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
   which hold meshes, at a mesh's claims and restorable parts (the stop types `SdfMesh/Payload` and
   `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and
-  `GpuUploadRuns`, and at the runtime. It also
+  `GpuUploadRuns`, at memory accounting and storage (`MemoryAccount`, `HostMemory`, the allocators and
+  `OwnedBuffer<T>`: admission paces when a group holds its final lattice, never what it meshes, and a buffer holds
+  the words the bake's own code writes), and at the runtime. It also
   stops at `SdfMeshBakeReport`, which words, counts and writes every `[sdf.mesh-bake]` line and owns the counters
   they report (`Accounts`): the bake hands it values (a group's selector, counts, outcomes) and never builds or
   writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or
@@ -1033,7 +1040,9 @@ laws exercise that boundary.
   value, only an `SdfAppearanceOutline` (material count, glass materials, declared screens, the appearance section's
   size). `SdfProgram.Of` runs it and then attaches the `SdfAppearance` and packs its materials and paints into the
   stream's tail; the program's appearance is unattached while the field constructor runs, so a read of it there throws
-  rather than joining the key. The kernels follow the same split: the stream is field first (`SdfProgram.FieldWords`),
+  rather than joining the key. The CPU field evaluators the bake runs (the skin's influence round, the audit) read
+  `SdfProgram.Excerpt`, which the field constructor derives from the outline alone with no appearance attached, so
+  they reach no appearance code either. The kernels follow the same split: the stream is field first (`SdfProgram.FieldWords`),
   the field interpreter finds the bound table at `dataOffset + 2 * instructions`, the material and paint strides and
   lanes live in `sdf-render.hlsli`, and the field fingerprint describes the encoding over `FieldWords` alone (the
   description leaves out a probe input that moves no described word, so a new material input on the probe's material

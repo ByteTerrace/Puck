@@ -56,9 +56,12 @@ public sealed class SdfShadeSlots {
     /// <summary>Initializes a new instance of the <see cref="SdfShadeSlots"/> class.</summary>
     /// <param name="slots">The frames the recorder's graph keeps in flight; positive.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slots"/> is not positive.</exception>
+    // An abandoned submission ran nothing, so it can have executed no identity: it leaves the in-flight set as a
+    // completed one does.
     public SdfShadeSlots(int slots) => m_slots = new RenderGraphSlotResults<SdfShadeSubmission>(slots: slots,
         complete: static submission => submission.Complete(), discard: static submission => submission.Discard(),
-        submit: static submission => submission.Residency.SubmittedShade(submission: submission));
+        submit: static submission => submission.Residency.SubmittedShade(submission: submission),
+        abandon: static submission => submission.Complete());
 
     /// <summary>Captures what a recording into the slot dispatched: the residency that recorded it and the identities its
     /// plan may execute. It replaces any earlier capture of the slot that never reached a submission; a plan that may
@@ -95,6 +98,11 @@ public sealed class SdfShadeSlots {
     /// and a capture that never reached a submission is dropped.</summary>
     /// <param name="slot">The frame slot whose previous submission completed.</param>
     public void Completed(int slot) => m_slots.Completed(slot: slot);
+    /// <summary>Reports the slot's previous submission abandoned (it never reached the queue): its identities leave the
+    /// residency that recorded them, since nothing of it ran, and a capture that never reached a submission is
+    /// dropped.</summary>
+    /// <param name="slot">The frame slot whose previous submission was abandoned.</param>
+    public void Abandoned(int slot) => m_slots.Abandoned(slot: slot);
     /// <summary>Hands every submission not yet proven complete to the package's releases, as the recorder is released.</summary>
     /// <param name="releases">The releases of the recorder's package.</param>
     /// <exception cref="ArgumentNullException"><paramref name="releases"/> is null.</exception>

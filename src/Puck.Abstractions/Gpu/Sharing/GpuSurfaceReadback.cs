@@ -41,6 +41,9 @@ public sealed class GpuSurfaceReadback : IGpuSurfaceReadback {
     }
 
     /// <inheritdoc/>
+    public ulong OwnedBytes => (m_buffer?.SizeBytes ?? 0UL);
+
+    /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The context's device is not the one an earlier read created this
     /// instance's resources on.</exception>
@@ -164,8 +167,12 @@ public sealed class GpuSurfaceReadback : IGpuSurfaceReadback {
         }
 
         m_disposed = true;
-        m_slot.Dispose();
-        m_buffer?.Dispose();
+
+        // Released newest first, the buffer whether or not the slot's release threw (GpuCreationScope).
+        using var releases = new GpuCreationScope();
+
+        if (m_buffer is { } buffer) { _ = releases.Own(created: buffer); }
+        _ = releases.Own(created: m_slot);
         m_buffer = null;
     }
 }

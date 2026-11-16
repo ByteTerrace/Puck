@@ -13,9 +13,14 @@ public interface IGpuSubmissionFence : IDisposable {
     /// armed, or already waited) or the outstanding one has retired on the GPU. Reading it never blocks and never
     /// re-arms the fence, so a submission found retired is still outstanding until <see cref="Wait"/>.</summary>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
+    /// <exception cref="GpuSubmissionAbandonedException">The submission never reached the queue, so nothing proves it
+    /// ran.</exception>
     bool IsSignaled { get; }
 
     /// <summary>Blocks until the last submission armed with this fence has retired on the GPU, then re-arms the
     /// fence for reuse. A no-op when no submission is outstanding (never armed, or already waited).</summary>
+    /// <exception cref="DeviceLostException">The device was lost.</exception>
+    /// <exception cref="GpuSubmissionAbandonedException">The submission never reached the queue, so nothing it recorded
+    /// ran; the fence is drained for reuse.</exception>
     void Wait();
 }

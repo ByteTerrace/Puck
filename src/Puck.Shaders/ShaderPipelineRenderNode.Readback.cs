@@ -71,7 +71,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // the proof WaitSlot gives at reuse: a lost device throws from it and nothing is completed.
     private void RetireSignaledReadbacks() {
         for (var slot = 0; (slot < m_slots.Length); slot++) {
-            if (m_slots[slot] is { ReadbacksOwed: true, Fence: { IsSignaled: true } }) {
+            // An abandoned slot is settled by Signaled itself, which leaves nothing owed.
+            if ((m_slots[slot] is { ReadbacksOwed: true, Fence: { } fence }) && Signaled(fence: fence) && m_slots[slot].ReadbacksOwed) {
                 WaitSlot(slot: slot);
             }
         }

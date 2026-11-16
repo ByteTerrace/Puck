@@ -244,7 +244,6 @@ public sealed class SdfGpuWork : IDisposable {
     // The host payload bytes an idle service may bank: a full slot ring of the largest jobs.
     private const double MostUploadCreditBytes = (SlotCount * (double)MostUploadJobBytes);
 
-    private readonly IGpuDeviceContext m_device;
     private readonly GpuDeviceServices m_gpu;
     private readonly Slot[] m_slots = new Slot[SlotCount];
     private readonly List<ISdfGpuWorkClient> m_clients = [];
@@ -256,7 +255,6 @@ public sealed class SdfGpuWork : IDisposable {
     private int m_nextClient;
     private bool m_disposed;
     private bool m_faulted;
-    private bool m_submissionFailed;
 
     private double m_credit = MostCreditSeconds;
     private double m_uploadCredit = MostUploadCreditBytes;
@@ -295,7 +293,6 @@ public sealed class SdfGpuWork : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        m_device = device;
         m_gpu = device.Services;
         m_name = name;
 
@@ -461,12 +458,12 @@ public sealed class SdfGpuWork : IDisposable {
         // A client can retain one completed output until a dependent copy finishes. Wake a coordinator waiting to
         // submit that copy before waiting for its retained token; device resources stay alive until the drain below.
         foreach (var client in m_clients) { client.Stop(); }
-        // A submit can execute commands and then fail to arm its fence. That fence proves nothing; drain the device
-        // before freeing the recorded resources, including on a backend that armed a fence but never submitted it.
-        if (m_submissionFailed) { m_device.TryWaitIdle(); }
+        // A failed submit leaves a fence that answers for itself (GpuBatchedSubmissionFence): abandoned when nothing reached
+        // the queue, proven once a refused signal's drain ran, or faulted with the drain's failure when even that could not
+        // be queued. So each wait below is a proof or reports why none exists.
         foreach (var slot in m_slots) {
             if (slot.Job is not { } job) { continue; }
-            if (!m_submissionFailed) { try { slot.Fence.Wait(); } catch (DeviceLostException) { } }
+            try { slot.Fence.Wait(); } catch (Exception failure) when (failure is DeviceLostException or GpuSubmissionAbandonedException) { }
             slot.Client!.Abandon(job: job);
             slot.Job = null;
             slot.Client = null;
@@ -634,13 +631,12 @@ public sealed class SdfGpuWork : IDisposable {
             client.Abandon(job: job);
             throw;
         }
-        // Retain the taken job even if submission throws after executing commands but before arming its fence.
+        // Retain the taken job even if submission throws, so disposal waits its fence and abandons it.
         slot.Job = job;
         slot.Client = client;
-        try {
-            using var attribution = GpuQueueWork.Attribute(category: client.Category);
+        using (GpuQueueWork.Attribute(category: client.Category)) {
             m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence);
-        } catch { m_submissionFailed = true; throw; }
+        }
         slot.Estimate = estimate;
         slot.Charged = charged;
         if (charged) { m_credit -= estimate; }
