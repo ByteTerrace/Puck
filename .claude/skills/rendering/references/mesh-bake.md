@@ -692,7 +692,9 @@ laws exercise that boundary.
   vertices decode bit-identically. Unit normals use signed oct16 pairs; non-unit authored normals
   retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
   their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
-  directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
+  directly from the decompressed payload into the storage the mesh keeps (`SdfMeshStorage`), a host's native
+  blocks or an offline read's arrays, applying the taking group's material ids as the planes are read; a
+  restore takes only the normals and the coarser levels' indices.
   Both backends draw six floats per vertex and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
   `SdfMeshLibrary.TryLoad` coalesces a set entry's decode across groups and keeps its result with the
   library's bounded meshes. A failed read is removed so a later derivation can be loaded.

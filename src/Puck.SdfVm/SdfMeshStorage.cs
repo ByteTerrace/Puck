@@ -41,26 +41,11 @@ internal sealed record SdfMeshShape(bool Chunked, bool Encloses, SdfMeshPieceSha
 
         return new SdfMeshShape(Chunked: chunked, Encloses: mesh.Encloses, Pieces: pieces);
     }
-    // The first vertex of a piece among the pieces' together, where a chunked mesh's shared attributes put it.
-    public int FirstVertex(int piece) {
-        var first = 0;
-
-        for (var index = 0; (index < piece); index++) { first += Pieces[index].Vertices; }
-
-        return first;
-    }
-    // The first normal and first triangle material of a piece among the pieces' together.
+    // The first normal of a piece among the pieces' together, where a chunked mesh's shared normals put it.
     public int FirstNormal(int piece) {
         var first = 0;
 
         for (var index = 0; (index < piece); index++) { first += Pieces[index].Normals; }
-
-        return first;
-    }
-    public int FirstMaterial(int piece) {
-        var first = 0;
-
-        for (var index = 0; (index < piece); index++) { first += Pieces[index].Materials; }
 
         return first;
     }
