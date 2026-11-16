@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -48,7 +49,7 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             Trigger: 0
         );
 
-        return AttachmentType.GetConstructors(bindingAttr: BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single().Invoke(parameters: [request, new ProbeReadingRing()]);
+        return AttachmentType.GetConstructors(bindingAttr: BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Single().Invoke(parameters: [request, new PublishBuffer<ProbeReading>()]);
     }
     // The production Direct3D 11 video device on the bench's adapter.
     private static object VideoDevice(KernelBench bench) => VideoDeviceType.GetConstructor(types: [typeof(long)])!.Invoke(parameters: [bench.AdapterLuid]);

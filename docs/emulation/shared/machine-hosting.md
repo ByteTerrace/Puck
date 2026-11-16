@@ -95,7 +95,11 @@ contract; constructing a core starts no worker or rendering infrastructure.
 - Omit `savePath` for in-memory operation and use the cartridge's export/import
   API for a custom save service. File-backed hosts should call `FlushSave`
   periodically; disposal performs a final flush. Optional file I/O failures
-  are reported to standard error.
+  are reported to standard error. `BatterySaveFile` owns the file lifecycle
+  every core shares: the read, the atomic replacement (a failed write keeps the
+  previous file and retries at the next flush), and the stale mark a restore
+  sets because the disk does not rewind with emulated memory. A core supplies
+  its save bytes and its own dirty test.
 
 The `embedding` stage in each Post battery exercises this path without a
 worker, graphics backend or audio device.
@@ -166,7 +170,9 @@ by skipping or deferring it.
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A
 concrete host has one main job: turn loaded content into an
-`IQueuedMachineCore`.
+`IQueuedMachineCore`. The base also answers `IMachineMemoryPeek` through the
+worker and defaults the pending window to
+`QueuedMachineWorker.DefaultMaximumPendingSteps` (8 segments).
 
 The World uses asynchronous submission for ordinary presentation. With
 `world.lockstep on`, `WorldMachineHost.SynchronousSteps` selects the existing

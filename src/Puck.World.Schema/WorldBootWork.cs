@@ -27,6 +27,7 @@ public sealed class WorldBootWork : IWorkCounterSource {
 
     private static readonly AsyncLocal<WorldBootWork?> Attributed = new();
     private static readonly AsyncLocal<bool> Compiling = new();
+    private static readonly WorkKindRegistry Registry = new();
 
     private readonly WorkCounterSet m_counts = new(
         kinds: Kinds,
@@ -43,107 +44,107 @@ public sealed class WorldBootWork : IWorkCounterSource {
 
     /// <summary>Gets the kind counting world document loads: one per document a file or byte load door admits
     /// work for, whatever it goes on to read, compose, parse and validate.</summary>
-    public static WorkKind Loads { get; } = new(name: "world.boot.loads", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Loads { get; } = Registry.Declare(name: "world.boot.loads", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the documents a load or a composition reads: one per root file and one per
     /// basis or import read through an <see cref="IWorldDocumentSource"/>, whether it arrives as a file's bytes or as
     /// a <c>.puck</c> source lowered to its document.</summary>
-    public static WorkKind DocumentsRead { get; } = new(name: "world.boot.documents-read", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind DocumentsRead { get; } = Registry.Declare(name: "world.boot.documents-read", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting basis-and-imports merges: one per document whose graph was merged, counting
     /// every document a composition walked into.</summary>
-    public static WorkKind Compositions { get; } = new(name: "world.boot.compositions", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind Compositions { get; } = Registry.Declare(name: "world.boot.compositions", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the compositions answered from an image held in memory or on disk
     /// rather than merged again.</summary>
-    public static WorkKind CompositionsShared { get; } = new(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CompositionsShared { get; } = Registry.Declare(name: "world.boot.compositions-shared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the documents read while compiling a source, including its inherited basis declarations. A
     /// held compile performs none of this work.</summary>
-    public static WorkKind CompileDocumentsRead { get; } = new(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CompileDocumentsRead { get; } = Registry.Declare(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the basis-and-imports merges performed inside source compilation.</summary>
-    public static WorkKind CompileCompositions { get; } = new(name: "world.boot.compile-compositions", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CompileCompositions { get; } = Registry.Declare(name: "world.boot.compile-compositions", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the held compositions reused inside source compilation.</summary>
-    public static WorkKind CompileCompositionsShared { get; } = new(name: "world.boot.compile-compositions-shared", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CompileCompositionsShared { get; } = Registry.Declare(name: "world.boot.compile-compositions-shared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting <c>.puck</c> compilations that ran: one per source parsed, walked and
     /// lowered, whichever door asked.</summary>
-    public static WorkKind Compiles { get; } = new(name: "world.boot.compiles", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind Compiles { get; } = Registry.Declare(name: "world.boot.compiles", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the <c>.puck</c> texts compilations parsed: the compiled source and each
     /// module its import walk read.</summary>
-    public static WorkKind PuckParses { get; } = new(name: "world.boot.puck-parses", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind PuckParses { get; } = Registry.Declare(name: "world.boot.puck-parses", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the compilations the compile cache answered without compiling, because every
     /// file the held compile read still holds the bytes it read.</summary>
-    public static WorkKind PuckCacheHits { get; } = new(name: "world.boot.puck-cache-hits", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind PuckCacheHits { get; } = Registry.Declare(name: "world.boot.puck-cache-hits", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting strict document parses: one per composed JSON text bound to a
     /// <see cref="WorldDefinition"/>. A boot whose compiled world is keyed by its composed bytes parses only the drawn
     /// definition, and that <c>DEFN</c> load counts the one parse; a boot that parses its authored definition counts that
     /// parse and not its <c>DEFN</c> load. Either way a boot counts the same parses whether or not it finds a compiled
     /// world.</summary>
-    public static WorkKind Parses { get; } = new(name: "world.boot.parses", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Parses { get; } = Registry.Declare(name: "world.boot.parses", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-document validations: one per run of the validator over a
     /// <see cref="WorldDefinition"/>, local or with its adjacency proofs. One admitted load counts one; an environment
     /// completion over an existing receipt counts none.</summary>
-    public static WorkKind Validations { get; } = new(name: "world.boot.validations", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Validations { get; } = Registry.Declare(name: "world.boot.validations", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting rule compilations: one per <see cref="WorldRuleCompilation"/> produced, whether
     /// a validation retained it or a host compiled it directly. A load that reuses its receipt counts one.</summary>
-    public static WorkKind RuleCompilations { get; } = new(name: "world.boot.rule-compilations", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind RuleCompilations { get; } = Registry.Declare(name: "world.boot.rule-compilations", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting neighbour resolutions: one per neighbour document a border proof or a
     /// derived corner reads through a file-backed resolver.</summary>
-    public static WorkKind NeighbourResolves { get; } = new(name: "world.boot.neighbour-resolves", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind NeighbourResolves { get; } = Registry.Declare(name: "world.boot.neighbour-resolves", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting curvature-spline derivations: one per distinct curve shape the process
     /// compiles, since a shape compiled once is shared by every row and instance of it.</summary>
-    public static WorkKind CurveCompiles { get; } = new(name: "world.boot.curve-compiles", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CurveCompiles { get; } = Registry.Declare(name: "world.boot.curve-compiles", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the signed-distance programs built from a world's shapes: the server's static
     /// solid field and each static scene a frame presenter emits from the prototypes and placements.</summary>
-    public static WorkKind ShapeBuilds { get; } = new(name: "world.boot.shape-builds", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind ShapeBuilds { get; } = Registry.Declare(name: "world.boot.shape-builds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting asset loads: one per music, tune, patch or audio document an asset row
     /// resolves off disk, and one per machine content image a machine host prepares. This counts physical work,
     /// including validation and compilation work avoided by held products, rather than authored asset rows.</summary>
-    public static WorkKind AssetLoads { get; } = new(name: "world.boot.asset-loads", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind AssetLoads { get; } = Registry.Declare(name: "world.boot.asset-loads", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the boots whose drawn definition came from a compiled world's <c>DEFN</c> chunk
     /// rather than a fresh draw.</summary>
-    public static WorkKind CompiledHits { get; } = new(name: "world.boot.compiled-hits", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind CompiledHits { get; } = Registry.Declare(name: "world.boot.compiled-hits", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting compiled-world chunks derived fresh: one per chunk a boot or a compile derived
     /// because no compiled world held it.</summary>
-    public static WorkKind ChunkDerivations { get; } = new(name: "world.boot.chunk-derivations", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind ChunkDerivations { get; } = Registry.Declare(name: "world.boot.chunk-derivations", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Surface descriptors validated and indexed after immutable context inputs change.</summary>
-    public static WorkKind SurfaceDescriptors { get; } = new(name: "world.boot.surface.descriptors", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceDescriptors { get; } = Registry.Declare(name: "world.boot.surface.descriptors", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Candidate static surface occurrences considered.</summary>
-    public static WorkKind SurfaceCandidates { get; } = new(name: "world.boot.surface.candidates", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceCandidates { get; } = Registry.Declare(name: "world.boot.surface.candidates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Directed surface projection rays actually queried.</summary>
-    public static WorkKind SurfaceRays { get; } = new(name: "world.boot.surface.rays", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceRays { get; } = Registry.Declare(name: "world.boot.surface.rays", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Field gradients actually sampled for projected roots.</summary>
-    public static WorkKind SurfaceNormals { get; } = new(name: "world.boot.surface.normals", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceNormals { get; } = Registry.Declare(name: "world.boot.surface.normals", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Projection roots rejected by the authored normal-facing threshold.</summary>
-    public static WorkKind SurfaceSlopeRejected { get; } = new(name: "world.boot.surface.slope-rejected", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceSlopeRejected { get; } = Registry.Declare(name: "world.boot.surface.slope-rejected", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Projection rays without a proven surface and normal.</summary>
-    public static WorkKind SurfaceMissed { get; } = new(name: "world.boot.surface.missed", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceMissed { get; } = Registry.Declare(name: "world.boot.surface.missed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Accepted projected static occurrences, including reflected copies.</summary>
-    public static WorkKind SurfaceAccepted { get; } = new(name: "world.boot.surface.accepted", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceAccepted { get; } = Registry.Declare(name: "world.boot.surface.accepted", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Projected occurrence plans derived after a cache miss.</summary>
-    public static WorkKind SurfacePlans { get; } = new(name: "world.boot.surface.plans", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfacePlans { get; } = Registry.Declare(name: "world.boot.surface.plans", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Named contact-surface programs derived after a dependency change.</summary>
-    public static WorkKind SurfaceFields { get; } = new(name: "world.boot.surface.fields", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind SurfaceFields { get; } = Registry.Declare(name: "world.boot.surface.fields", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Canonical occurrence/identity array payload created; not live or process memory.</summary>
-    public static WorkKind StampPayloadBytes { get; } = new(name: "world.boot.stamp.payload-created", unit: "bytes", workClass: WorkClass.Pacing);
+    public static WorkKind StampPayloadBytes { get; } = Registry.Declare(name: "world.boot.stamp.payload-created", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the state arenas a world builds from a document's state section: a server's
     /// arena or its prepared replacement, a seed view declarations are read through, a derived board's recompute, a
     /// settlement's seed, a compose or transform scratch store, and a client's state mirror.</summary>
-    public static WorkKind ArenaBuilds { get; } = new(name: "world.boot.arena-builds", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind ArenaBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the full installs of a live document: the rules recompiled and the arena, the
     /// fields and the screens reconciled against the candidate, with or without the population's rebuild.</summary>
-    public static WorkKind FullInstalls { get; } = new(name: "world.boot.full-installs", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind FullInstalls { get; } = Registry.Declare(name: "world.boot.full-installs", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the installs of a live document that moved state values alone, keeping every
     /// compiled product.</summary>
-    public static WorkKind ValueInstalls { get; } = new(name: "world.boot.value-installs", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind ValueInstalls { get; } = Registry.Declare(name: "world.boot.value-installs", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
     /// keeping the arena, every compiled product and the population.</summary>
-    public static WorkKind PresentationInstalls { get; } = new(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind PresentationInstalls { get; } = Registry.Declare(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the state-bound document values a rewrite replaced with a resolved, bound or
     /// flattened copy (<see cref="WorldStateDocumentValues"/>), each on a copied path; a value a server already bound
     /// is kept and counts nothing.</summary>
-    public static WorkKind DocumentValueCopies { get; } = new(name: "world.boot.document-value-copies", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind DocumentValueCopies { get; } = Registry.Declare(name: "world.boot.document-value-copies", unit: "count", workClass: WorkClass.Deterministic);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
-        Order.Kinds;
+        Registry.Kinds;
 
     /// <inheritdoc/>
     ReadOnlySpan<WorkKind> IWorkCounterSource.WorkKinds =>
@@ -235,44 +236,5 @@ public sealed class WorldBootWork : IWorkCounterSource {
     // members are declared in.
     private static class Shared {
         internal static readonly WorldBootWork Ledger = new();
-    }
-    // A nested holder initializes after every kind above, whatever order the members are declared in.
-    private static class Order {
-        internal static readonly WorkKind[] Kinds = [
-            Loads,
-            DocumentsRead,
-            Compositions,
-            CompositionsShared,
-            CompileDocumentsRead,
-            CompileCompositions,
-            CompileCompositionsShared,
-            Compiles,
-            PuckParses,
-            PuckCacheHits,
-            Parses,
-            Validations,
-            RuleCompilations,
-            NeighbourResolves,
-            CurveCompiles,
-            ShapeBuilds,
-            AssetLoads,
-            CompiledHits,
-            ChunkDerivations,
-            SurfaceDescriptors,
-            SurfaceCandidates,
-            SurfaceRays,
-            SurfaceNormals,
-            SurfaceSlopeRejected,
-            SurfaceMissed,
-            SurfaceAccepted,
-            SurfacePlans,
-            SurfaceFields,
-            StampPayloadBytes,
-            ArenaBuilds,
-            FullInstalls,
-            ValueInstalls,
-            PresentationInstalls,
-            DocumentValueCopies,
-        ];
     }
 }

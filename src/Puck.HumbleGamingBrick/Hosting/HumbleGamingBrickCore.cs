@@ -1,4 +1,3 @@
-using Puck.Confinement;
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
 
@@ -30,7 +29,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
 
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
 
-    private readonly string? m_savePath;
+    private readonly BatterySaveFile m_save;
 
     /// <summary>Assembles and save-loads the machine.</summary>
     /// <param name="model">The hardware model to emulate.</param>
@@ -58,8 +57,11 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
             configuration.BootRom,
             configuration.CartridgeRom
         );
-        m_savePath = savePath;
-        m_machine = MachineFactory.Create(configuration: configuration);
+        m_save = new BatterySaveFile(
+            path: savePath,
+            reportTag: "machine-host"
+        );
+        m_machine =MachineFactory.Create(configuration: configuration);
         m_audioSink = m_machine.GetRequiredService<IAudioSink>();
         m_cartridge = m_machine.GetRequiredService<ICartridge>();
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
@@ -119,12 +121,14 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         );
     }
     /// <inheritdoc/>
-    public void RestoreState(byte[] buffer, int length) =>
+    public void RestoreState(byte[] buffer, int length) {
         m_machine.Machine.RestoreState(reader: new StateReader(
             buffer: buffer,
             length: length,
             start: 0
         ));
+        m_save.MarkRewound();
+    }
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
         new HumbleGamingBrickLookahead(
@@ -233,7 +237,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public void FlushSave(bool force) {
         if (
-            (m_savePath is not { } savePath) ||
+            (m_save.Path is null) ||
             !m_cartridge.Header.HasBattery
         ) {
             return;
@@ -243,29 +247,23 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         var hasRam = (m_cartridge.ExternalRamByteCount > 0);
 
         if (
-            !(m_cartridge.ExternalRamDirty || (force && hasClock)) ||
+            !(m_cartridge.ExternalRamDirty || m_save.IsStale || (force && hasClock)) ||
             !(hasRam || hasClock)
         ) {
             return;
         }
 
-        try {
-            byte[][] parts = [
-                (hasRam
-                ? m_cartridge.ExportExternalRam()
-                : []),
-                (hasClock
-                ? m_cartridge.ExportPersistentClock(unixTimestampSeconds: DateTimeOffset.UtcNow.ToUnixTimeSeconds())
-                : []),
-            ];
+        byte[][] parts = [
+            (hasRam
+            ? m_cartridge.ExportExternalRam()
+            : []),
+            (hasClock
+            ? m_cartridge.ExportPersistentClock(unixTimestampSeconds: DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+            : []),
+        ];
 
-            AtomicFile.WriteAllBytes(
-                path: savePath,
-                bytes: [.. parts[0], .. parts[1]]
-            );
+        if (m_save.TryWrite(data: [.. parts[0], .. parts[1]])) {
             m_cartridge.MarkExternalRamClean();
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
     /// <inheritdoc/>
@@ -279,38 +277,32 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     // the deterministic timeline. The clock RESUMES where the last flush left it; any embedded wall timestamp is ignored.
     private void LoadBatterySave() {
         if (
-            (m_savePath is not { } savePath) ||
             !m_cartridge.Header.HasBattery ||
-            !File.Exists(path: savePath)
+            (m_save.Read() is not { } save)
         ) {
             return;
         }
 
-        try {
-            var save = File.ReadAllBytes(path: savePath);
-            var ramByteCount = m_cartridge.ExternalRamByteCount;
+        var ramByteCount = m_cartridge.ExternalRamByteCount;
 
-            if (ramByteCount > 0) {
-                m_cartridge.ImportExternalRam(source: save.AsSpan(
-                    start: 0,
-                    length: Math.Min(
-                        val1: save.Length,
-                        val2: ramByteCount
-                    )
-                ));
-            }
+        if (ramByteCount > 0) {
+            m_cartridge.ImportExternalRam(source: save.AsSpan(
+                start: 0,
+                length: Math.Min(
+                    val1: save.Length,
+                    val2: ramByteCount
+                )
+            ));
+        }
 
-            if (
-                (m_cartridge.PersistentClockByteCount > 0) &&
-                (save.Length >= (ramByteCount + m_cartridge.PersistentClockByteCount))
-            ) {
-                m_cartridge.ImportPersistentClock(source: save.AsSpan(
-                    start: ramByteCount,
-                    length: m_cartridge.PersistentClockByteCount
-                ));
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[machine-host] battery save '{savePath}' unreadable ({exception.Message}); booting with fresh external RAM.");
+        if (
+            (m_cartridge.PersistentClockByteCount > 0) &&
+            (save.Length >= (ramByteCount + m_cartridge.PersistentClockByteCount))
+        ) {
+            m_cartridge.ImportPersistentClock(source: save.AsSpan(
+                start: ramByteCount,
+                length: m_cartridge.PersistentClockByteCount
+            ));
         }
     }
 }

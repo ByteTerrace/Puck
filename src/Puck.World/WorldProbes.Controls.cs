@@ -47,19 +47,8 @@ internal sealed partial class WorldProbes {
         return new ControlBindingTemplate {
             Channel = channel,
             ControlEnum = controlEnum,
-            MaxAgeTicks = ((long)(control.MaxAgeSeconds * Stopwatch.Frequency)),
+            MaxAgeTicks = MaxAgeTicks(seconds: control.MaxAgeSeconds),
             Row = control,
-        };
-    }
-    // Builds one instance's live control binding state from its row's already-validated template — cheap, never
-    // re-validating.
-    private static ControlState BuildControl(ProbeInstance instance, ControlBindingTemplate template) {
-        return new ControlState {
-            Channel = template.Channel,
-            ControlEnum = template.ControlEnum,
-            Instance = instance,
-            MaxAgeTicks = template.MaxAgeTicks,
-            Row = template.Row,
         };
     }
     // Writes every declared control binding's conditioned value onto its instance's own seat's device control
@@ -76,10 +65,15 @@ internal sealed partial class WorldProbes {
 
         foreach (var instance in m_liveInstances) {
             foreach (var control in instance.ControlBindings) {
-                if (!instance.Ring.TryReadLatest(reading: out var reading)) {
-                    continue;
-                }
-                if ((nowTimestamp - reading.CaptureTimestamp) > control.MaxAgeTicks) {
+                var template = control.Template;
+
+                if (!TryReadUnit(
+                    channel: template.Channel,
+                    instance: instance,
+                    maxAgeTicks: template.MaxAgeTicks,
+                    nowTimestamp: nowTimestamp,
+                    unitInterval: out var unitInterval
+                )) {
                     continue;
                 }
                 if (instance.RowInfo.TriggerSensor is not { } sensor) {
@@ -96,15 +90,7 @@ internal sealed partial class WorldProbes {
                     continue;
                 }
 
-                var spec = instance.RowInfo.Manifest.Channels[control.Channel];
-                var normalized = NormalizeChannel(
-                    raw: ((double)reading[control.Channel]),
-                    min: spec.Min,
-                    max: spec.Max,
-                    neutral: spec.Neutral
-                );
-                var unitInterval = ((normalized + 1.0) / 2.0);
-                var value = ((int)Math.Round(a: (control.Row.Minimum + (unitInterval * (control.Row.Maximum - control.Row.Minimum)))));
+                var value = ((int)Math.Round(a: (template.Row.Minimum + (unitInterval * (template.Row.Maximum - template.Row.Minimum)))));
 
                 if (
                     control.HasWritten &&
@@ -117,7 +103,7 @@ internal sealed partial class WorldProbes {
                     continue;
                 }
                 if (!surface.TrySet(
-                    control: control.ControlEnum,
+                    control: template.ControlEnum,
                     value: value
                 )) {
                     continue;

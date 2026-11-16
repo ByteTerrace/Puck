@@ -116,8 +116,11 @@ public static class CreationStampSampling {
             val1: 1,
             val2: radius
         );
-        var blocksX = ((effectiveWidth + (effectiveSpacing - 1)) / effectiveSpacing);
-        var blocksZ = ((effectiveDepth + (effectiveSpacing - 1)) / effectiveSpacing);
+        var (blocksX, blocksZ) = ScatterBlocks(
+            depth: depth,
+            spacing: spacing,
+            width: width
+        );
         var hashSeed = (seed ^ PackedIntPair.FoldXor(value: worldSeed));
         var originX = (-GridHalfExtent(
             cellSize: cellSize,
@@ -158,19 +161,26 @@ public static class CreationStampSampling {
     /// <param name="depth">Cells along the placement's local +Z.</param>
     /// <param name="spacing">The scatter block edge in cells (clamped to at least 2, matching resolution).</param>
     public static long ScatterInstanceCeiling(int width, int depth, int spacing) {
+        var (blocksX, blocksZ) = ScatterBlocks(
+            depth: depth,
+            spacing: spacing,
+            width: width
+        );
+
+        return (((long)blocksX) * blocksZ);
+    }
+
+    // The blocks a Scatter region divides its grid into along each axis: the one definition of its instance count, which
+    // the resolution above walks and the count above multiplies.
+    private static (int BlocksX, int BlocksZ) ScatterBlocks(int width, int depth, int spacing) {
         var effectiveSpacing = Math.Max(
             val1: 2,
             val2: spacing
         );
-        var blocksX = ((Math.Max(
-            val1: width,
-            val2: 0
-        ) + (effectiveSpacing - 1)) / effectiveSpacing);
-        var blocksZ = ((Math.Max(
-            val1: depth,
-            val2: 0
-        ) + (effectiveSpacing - 1)) / effectiveSpacing);
 
-        return (((long)blocksX) * blocksZ);
+        return (
+            (((Math.Max(val1: width, val2: 0)) + (effectiveSpacing - 1)) / effectiveSpacing),
+            (((Math.Max(val1: depth, val2: 0)) + (effectiveSpacing - 1)) / effectiveSpacing)
+        );
     }
 }

@@ -91,7 +91,6 @@ public sealed unsafe class SharedFenceLawTests {
         );
         Assert.Equal(
             actual: readback.Read(
-                bytesPerPixel: 4,
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: Extent,
                 sourceImageHandle: image.ImageHandle,

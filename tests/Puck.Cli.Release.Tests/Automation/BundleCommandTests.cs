@@ -63,22 +63,7 @@ public sealed class BundleCommandTests {
             expected: 2,
             actual: manifest["files"]!.AsArray().Count
         );
-        manifest["files"]![0]!["path"] = ((string)manifest["files"]![0]!["path"]!).Replace(
-            newChar: '\\',
-            oldChar: '/'
-        );
-        File.WriteAllText(
-            path: path,
-            contents: manifest.ToJsonString()
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: BundleCommand.VerifyManifest(
-                commit: commit,
-                directory: directory
-            )
-        );
-        foreach (var candidate in new[] { "../outside", "functions/../host.json", "release.json", "/outside" }) {
+        foreach (var candidate in new[] { "../outside", "functions/../host.json", "release.json", "/outside", "functions\\.azurefunctions\\worker.json", "functions/host.json:stream", "functions/nul.json" }) {
             manifest = JsonNode.Parse(json: original)!;
             manifest["files"]![0]!["path"] = candidate;
             File.WriteAllText(

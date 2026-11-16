@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Puck.SignedDistance;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -121,24 +122,49 @@ public sealed class WorldShapeIsolation {
 
         return hidden;
     }
-    /// <summary>Returns whether a shape name is hidden under a mask: a name no shape carries is not.</summary>
-    /// <param name="shapes">The document's shapes, which the mask indexes.</param>
-    /// <param name="hidden">The hidden mask, or <see langword="null"/> for none.</param>
-    /// <param name="name">The shape name a paint or volume parents to.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="shapes"/> is <see langword="null"/>.</exception>
-    public static bool IsHidden(IReadOnlyList<ShapeDocument> shapes, bool[]? hidden, string name) {
-        ArgumentNullException.ThrowIfNull(argument: shapes);
+    /// <summary>Admits one authored volume of a creation for emission, the walk every emitter of volumes shares: a
+    /// disabled volume, and one parented to a shape the mask hides, emit nothing. Resolves the shape a volume parents
+    /// to, which a caller composes its own frame from: a static emitter bakes the shape's rest pose, an animated one
+    /// rides the shape's transform slot.</summary>
+    /// <param name="creation">The creation whose <see cref="CreationDocument.Volumes"/> holds the volume.</param>
+    /// <param name="position">The index of the volume in <see cref="CreationDocument.Volumes"/>.</param>
+    /// <param name="hidden">The hidden mask over the creation's shapes, or <see langword="null"/> for none.</param>
+    /// <param name="emitted">The number of volumes the caller's frame already holds.</param>
+    /// <param name="volume">The volume at <paramref name="position"/>.</param>
+    /// <param name="parentIndex">The index in <see cref="CreationDocument.Shapes"/> of the first shape the volume names as
+    /// its parent, or -1 when it parents to the creation root or names a shape none carries.</param>
+    /// <returns><see langword="true"/> when the volume is to be emitted.</returns>
+    /// <exception cref="InvalidOperationException">The volume would exceed <see cref="SdfProgramBuilder.MaxVolumes"/>.</exception>
+    public static bool TryAdmitVolume(CreationDocument creation, int position, bool[]? hidden, int emitted, out VolumeDocument volume, out int parentIndex) {
+        ArgumentNullException.ThrowIfNull(argument: creation);
 
-        if (hidden is null) {
+        volume = creation.Volumes![position];
+        parentIndex = -1;
+
+        if (!volume.Enabled) {
             return false;
         }
 
-        for (var index = 0; ((index < shapes.Count) && (index < hidden.Length)); index++) {
-            if (string.Equals(a: shapes[index].Name?.Value, b: name, comparisonType: StringComparison.Ordinal)) {
-                return hidden[index];
+        if (volume.Parent is { } parent) {
+            var shapes = (creation.Shapes ?? []);
+
+            for (var index = 0; (index < shapes.Count); index++) {
+                if (string.Equals(a: shapes[index].Name?.Value, b: parent, comparisonType: StringComparison.Ordinal)) {
+                    parentIndex = index;
+
+                    break;
+                }
+            }
+
+            if ((hidden is not null) && (parentIndex >= 0) && (parentIndex < hidden.Length) && hidden[parentIndex]) {
+                return false;
             }
         }
 
-        return false;
+        if (emitted >= SdfProgramBuilder.MaxVolumes) {
+            throw new InvalidOperationException(message: $"Creation '{creation.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
+        }
+
+        return true;
     }
 }

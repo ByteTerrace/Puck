@@ -88,15 +88,9 @@ public sealed class BrowserWorkspace {
             error = "a workspace path is empty.";
             return false;
         }
-        if (path.Contains(value: '\\') || path.StartsWith(value: '/') || (path.Contains(value: ':'))) {
-            error = $"'{path}' is not a workspace-relative path: write it forward-slashed, from the workspace root.";
+        if (!Puck.Confinement.PortablePath.IsRelative(path: path)) {
+            error = $"'{path}' is not a workspace-relative path: write it forward-slashed, from the workspace root, every segment naming a directory or a file a disk can hold.";
             return false;
-        }
-        foreach (var segment in path.Split(separator: '/')) {
-            if (segment is "" or "." or "..") {
-                error = $"'{path}' is not a workspace-relative path: every segment names a directory or a file.";
-                return false;
-            }
         }
 
         fullPath = $"{Root}/{path}";

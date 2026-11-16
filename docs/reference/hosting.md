@@ -433,7 +433,7 @@ command allocator, list and committed-resource creates included, answers
 through `DirectXCommandCalls`, so a removed device surfaces as the neutral
 device loss rather than a `COMException` the policy never sees. A surface
 upload, readback or import stays on the device it first created its objects on
-(`DirectXDeviceOwnership`, the peer of `VulkanDeviceOwnership`): its owner
+(`GpuDeviceOwnership`, the one rule both backends' holders use): its owner
 releases it before the device goes, and a holder that outlives a loss refuses
 the replacement device and its own late release by name.
 
@@ -607,8 +607,8 @@ the screens standing in the boot world, so the walk continues from a pane throug
 a screen into its source, or into the view the screen films; any other instance
 reports none, so a ray cast into it ends on its world.
 
-`PublishBuffer<T>` is the smaller handoff for immutable latest-state values. A
-single writer swaps a holder reference and readers snapshot the newest value.
+`PublishBuffer<T>` (in `Puck.Abstractions`, below every host) is the smaller handoff for latest-state values. Writers
+publish under one lock into a seqlock-guarded slot, and readers snapshot the newest value without a lock and never see a torn copy.
 It is not a FIFO and retains no history, so use it only when skipping obsolete
 intermediate publications is correct.
 
@@ -622,7 +622,7 @@ intermediate publications is correct.
 | Host scope | `IHostContext`, `HostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
 | Delegation | `HeldCapabilityGrants`, `ICapabilityTakeBack`, `IHeldCapabilityLeaseSource` | Revocable held-capability chains |
 | Standard authority | `ITerminalControl`, `IInputFocus` | Exit ownership and device focus |
-| Observation | `FrameCaptureController`, `PublishBuffer<T>` | Capture sessions and latest-value handoff |
+| Observation | `FrameCaptureController` | Capture sessions |
 | Background work | `BackgroundBuild<T>` | A candidate built on the thread pool and installed at a frame boundary |
 | Sampled images | `GpuImageLease`, `LeaseRetireList` | An image a submission samples, released once that submission retires |
 | View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent`, `RenderGraphSourceState` | Which views and sources render in a frame, at what extent, rate or cadence, and price |

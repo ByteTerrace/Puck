@@ -50,7 +50,6 @@ public sealed partial class StateArena {
 
     private IReadOnlyList<StateRow> m_rows;
     private ulong[] m_rowGenerations;
-    private ulong[] m_rowVersions;
     private ArenaSlotMap[] m_slotOfKey;
     private int[] m_poolOfDomainRow;
     private ulong[][] m_poolOccupancy;
@@ -170,7 +169,7 @@ public sealed partial class StateArena {
         m_reindexStamp = new long[layout.RowCount];
         m_rowChangeStamp = new long[layout.RowCount];
         m_rowGenerations = new ulong[layout.RowCount];
-        m_rowVersions = new ulong[layout.RowCount];
+        m_rowVersions = new ArenaRowVersions(rowCount: layout.RowCount);
         m_deliveryRows = new bool[layout.RowCount];
         m_rows = NormalizeRows(
             bytes: out m_declarationVisibilityBytes,
@@ -234,7 +233,7 @@ public sealed partial class StateArena {
             // the first time.
             Array.Clear(array: m_rowChangeStamp);
             Array.Clear(array: m_rowGenerations);
-            Array.Clear(array: m_rowVersions);
+            m_rowVersions.ResetAll(rowCount: m_rowVersions.Count, version: 0UL);
         }
     }
 

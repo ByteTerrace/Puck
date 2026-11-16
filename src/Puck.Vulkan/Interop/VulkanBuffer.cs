@@ -122,21 +122,27 @@ public sealed class VulkanBuffer : IGpuStorageBuffer, IGpuReadbackBuffer {
         m_bufferApi.Destroy(handles: m_handles);
         m_handles = default;
     }
-    /// <summary>Copies the buffer's first bytes into <paramref name="destination"/> through its mapping.</summary>
-    /// <param name="destination">The bytes to fill, at most <see cref="SizeBytes"/> long.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="destination"/> is longer than the buffer.</exception>
+    /// <summary>Copies the buffer's bytes from <paramref name="sourceOffsetBytes"/> on into <paramref name="destination"/>
+    /// through its mapping.</summary>
+    /// <param name="destination">The bytes to fill; with the offset, within <see cref="SizeBytes"/>.</param>
+    /// <param name="sourceOffsetBytes">The byte of the buffer the first destination byte comes from.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The range reaches past the buffer.</exception>
     /// <exception cref="InvalidOperationException">The buffer is not host-coherent.</exception>
     /// <exception cref="ObjectDisposedException">The buffer has been disposed.</exception>
-    public unsafe void Read(Span<byte> destination) {
+    public unsafe void Read(Span<byte> destination, ulong sourceOffsetBytes = 0UL) {
         var pointer = RequireMapping();
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
             other: SizeBytes,
+            value: sourceOffsetBytes
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: (SizeBytes - sourceOffsetBytes),
             value: ((ulong)destination.Length)
         );
         new ReadOnlySpan<byte>(
             length: destination.Length,
-            pointer: ((void*)pointer)
+            pointer: (((byte*)pointer) + sourceOffsetBytes)
         ).CopyTo(destination: destination);
     }
     /// <summary>Copies the supplied data into the buffer's mapping from the start. No flush is needed: the memory is

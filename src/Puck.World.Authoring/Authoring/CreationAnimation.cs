@@ -17,7 +17,7 @@ namespace Puck.World.Authoring;
 /// <param name="Signal">One of <see cref="SignalPlanarTravel"/>, <see cref="SignalTravel"/>,
 /// <see cref="SignalTime"/>, <see cref="SignalSpeed"/>, <see cref="SignalVerticalSpeed"/>,
 /// <see cref="SignalTurnRate"/>, <see cref="SignalTravelDirection"/>, <see cref="SignalLateralAcceleration"/>,
-/// <see cref="SignalForwardAcceleration"/>, a <see cref="SignalStatePrefix"/> state cell, or a
+/// <see cref="SignalForwardAcceleration"/>, a state cell (<c>state.&lt;row&gt;[.&lt;key&gt;]</c>, whose numeric value at the frame's tick is the phase times the cadence), or a
 /// <see cref="SignalDriverPrefix"/> earlier driver. The first three integrate: φ accumulates <see cref="Cadence"/> ×
 /// the signal's per-frame delta while w &gt; 0, and wraps modulo 2π so a wheel spins forever without losing precision.
 /// The rest are instantaneous: φ is set to <see cref="Cadence"/> × the current value (through <see cref="Dynamics"/>
@@ -79,9 +79,6 @@ public sealed record CreationDriverDocument(
     /// ride one stride and never leave step with it. Its weight is its own gate's; it refuses
     /// <see cref="Dynamics"/>, since it copies a running cycle.</summary>
     public const string SignalDriverPrefix = "driver.";
-    /// <summary>The prefix of a state-cell signal: <c>state.&lt;row&gt;[.&lt;key&gt;]</c>, whose numeric value at the
-    /// frame's tick is the phase (times the cadence) — a cycle-trait clock, a drawn value, an advancing counter.</summary>
-    public const string SignalStatePrefix = "state.";
     /// <summary>Elapsed presentation time, seconds — the signal a rotor or an idle breath rides.</summary>
     public const string SignalTime = "time";
     /// <summary>Total rendered travel, metres — the climb signal (a wall-riding body has no planar component worth
@@ -172,10 +169,8 @@ public sealed record CreationDriverDocument(
     }
     /// <summary>Returns whether a signal names a state cell.</summary>
     /// <param name="signal">The signal name.</param>
-    public static bool IsStateSignal(string? signal) => ((signal is { } named) && named.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: SignalStatePrefix
-    ) && (named.Length > SignalStatePrefix.Length));
+    public static bool IsStateSignal(string? signal) =>
+        DocumentIdentifier.IsCellReference(value: signal);
 }
 /// <summary>
 /// A curve of an earlier driver's phase, the way a driver's <see cref="CreationDriverDocument.CadenceBy"/> and

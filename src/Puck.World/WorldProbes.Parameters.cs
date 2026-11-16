@@ -44,23 +44,17 @@ internal sealed partial class WorldProbes {
             ) {
                 throw new InvalidOperationException(message: $"{path}.target.field '{target.Field}' names no float config field of probe kind '{targetManifest.Name}'.");
             }
-            if (
-                !ShaderConfigBinding.InRange(
+            RequireRangeWithin(
                 field: targetField,
-                value: parameter.Range.X
-            ) ||
-                !ShaderConfigBinding.InRange(
-                field: targetField,
-                value: parameter.Range.Y
-            )
-            ) {
-                throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{targetManifest.Name}.{target.Field}' [{targetField.Min}, {targetField.Max}].");
-            }
+                name: $"{targetManifest.Name}.{target.Field}",
+                parameter: parameter,
+                path: path
+            );
 
             return new ParameterBindingTemplate {
                 Channel = channel,
                 ConstantOffset = offset,
-                MaxAgeTicks = ((long)(parameter.MaxAgeSeconds * Stopwatch.Frequency)),
+                MaxAgeTicks = MaxAgeTicks(seconds: parameter.MaxAgeSeconds),
                 Row = parameter,
                 TargetRowInfo = targetRow,
             };
@@ -92,6 +86,23 @@ internal sealed partial class WorldProbes {
         ) {
             throw new InvalidOperationException(message: $"{path}.target.field '{post.Field}' names no float config field of post pass '{post.Pass}' ('{package.Id}').");
         }
+        RequireRangeWithin(
+            field: field,
+            name: $"{post.Pass}.{post.Field}",
+            parameter: parameter,
+            path: path
+        );
+
+        return new ParameterBindingTemplate {
+            Channel = channel,
+            MaxAgeTicks = MaxAgeTicks(seconds: parameter.MaxAgeSeconds),
+            PostField = post.Field,
+            PostPass = post.Pass,
+            Row = parameter,
+        };
+    }
+    // Refuses a binding whose authored output range leaves the declared range of the config field it writes.
+    private static void RequireRangeWithin(ShaderConfigField field, string name, WorldProbeBinding.Parameter parameter, string path) {
         if (
             !ShaderConfigBinding.InRange(
             field: field,
@@ -102,30 +113,8 @@ internal sealed partial class WorldProbes {
             value: parameter.Range.Y
         )
         ) {
-            throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{post.Pass}.{post.Field}' [{field.Min}, {field.Max}].");
+            throw new InvalidOperationException(message: $"{path}.range [{parameter.Range.X}, {parameter.Range.Y}] leaves the declared range of '{name}' [{field.Min}, {field.Max}].");
         }
-
-        return new ParameterBindingTemplate {
-            Channel = channel,
-            MaxAgeTicks = ((long)(parameter.MaxAgeSeconds * Stopwatch.Frequency)),
-            PostField = post.Field,
-            PostPass = post.Pass,
-            Row = parameter,
-        };
-    }
-    // Builds one instance's live parameter binding state from its row's already-validated template — cheap, never
-    // re-validating.
-    private static ParameterState BuildParameter(ProbeInstance instance, ParameterBindingTemplate template) {
-        return new ParameterState {
-            Channel = template.Channel,
-            ConstantOffset = template.ConstantOffset,
-            Instance = instance,
-            MaxAgeTicks = template.MaxAgeTicks,
-            PostField = template.PostField,
-            PostPass = template.PostPass,
-            Row = template.Row,
-            TargetRowInfo = template.TargetRowInfo,
-        };
     }
     // Writes every declared parameter binding's conditioned value into its target — a composed post pass, or
     // another probe's instance (resolved fresh here, at this binding's own instance seat, and patched in place —
@@ -139,25 +128,22 @@ internal sealed partial class WorldProbes {
 
         foreach (var instance in m_liveInstances) {
             foreach (var parameter in instance.ParameterBindings) {
-                if (!instance.Ring.TryReadLatest(reading: out var reading)) {
-                    continue;
-                }
-                if ((nowTimestamp - reading.CaptureTimestamp) > parameter.MaxAgeTicks) {
+                var template = parameter.Template;
+
+                if (!TryReadUnit(
+                    channel: template.Channel,
+                    instance: instance,
+                    maxAgeTicks: template.MaxAgeTicks,
+                    nowTimestamp: nowTimestamp,
+                    unitInterval: out var unitInterval
+                )) {
                     continue;
                 }
 
-                var spec = instance.RowInfo.Manifest.Channels[parameter.Channel];
-                var normalized = NormalizeChannel(
-                    raw: ((double)reading[parameter.Channel]),
-                    min: spec.Min,
-                    max: spec.Max,
-                    neutral: spec.Neutral
-                );
-                var unitInterval = ((normalized + 1.0) / 2.0);
-                var range = parameter.Row.Range;
+                var range = template.Row.Range;
                 var value = ((float)(range.X + (unitInterval * (range.Y - range.X))));
 
-                if (parameter.TargetRowInfo is { } targetRow) {
+                if (template.TargetRowInfo is { } targetRow) {
                     if (ResolveInstance(
                         target: targetRow,
                         contextSeat: instance.Seat
@@ -176,7 +162,7 @@ internal sealed partial class WorldProbes {
                     }
 
                     WriteConstant(
-                        offset: parameter.ConstantOffset,
+                        offset: template.ConstantOffset,
                         target: targetInstance,
                         value: value
                     );
@@ -184,8 +170,8 @@ internal sealed partial class WorldProbes {
                 } else if (
                     (value == parameter.LastValue) ||
                     !m_passes.TrySetConfig(
-                    field: parameter.PostField!,
-                    pass: parameter.PostPass!,
+                    field: template.PostField!,
+                    pass: template.PostPass!,
                     value: value
                 )
                 ) {

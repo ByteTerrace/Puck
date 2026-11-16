@@ -120,9 +120,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private Vector3 m_accelerometerScale = new(value: AccelerometerGPerLsb);
     private Vector3 m_gyroBias;
     private Vector3 m_gyroScale = new(value: GyroRadiansPerSecondPerLsbNominal);
-    private bool m_hasSensorTimestamp;
     private bool m_improvedRumble;
-    private uint m_lastSensorTimestamp;
     private TriggerEffectSpec m_leftTriggerEffect;
     private bool m_ledReleaseDue;
     private bool m_lightbarReassertPending;
@@ -359,19 +357,6 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             )
         );
     }
-    // Converts the free-running sensor counter into a seconds delta since the previous report; the unsigned
-    // subtraction carries the delta across a 32-bit wrap, and the tracker clamps a first or implausible sample.
-    private float SensorDeltaSeconds(uint sensorTimestamp) {
-        var delta = (m_hasSensorTimestamp
-            ? unchecked((sensorTimestamp - m_lastSensorTimestamp))
-            : 0u
-        );
-
-        m_hasSensorTimestamp = true;
-        m_lastSensorTimestamp = sensorTimestamp;
-
-        return (delta * SensorTimestampSecondsPerUnit);
-    }
     // Reads feature report 0x05, the factory IMU calibration (also what switches Bluetooth to the full report).
     // Gyro: scale = (speed+ + speed-) / (plus - minus) in deg/s per LSB about the factory bias. Accelerometer:
     // the plus/minus readings span 2 g, so bias = plus - span/2 and scale = 2 g / span. A calibration with a bias
@@ -593,7 +578,11 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             ),
             Orientation: m_tracker.Update(
                 accelerometerG: accelerometer,
-                deltaSeconds: SensorDeltaSeconds(sensorTimestamp: sensorTimestamp),
+                deltaSeconds: m_tracker.ElapsedSeconds(
+                    mask: uint.MaxValue,
+                    secondsPerUnit: SensorTimestampSecondsPerUnit,
+                    timestamp: sensorTimestamp
+                ),
                 gyroRadiansPerSecond: gyro
             ),
             Power: DecodePower(status: block[StatusOffset]),

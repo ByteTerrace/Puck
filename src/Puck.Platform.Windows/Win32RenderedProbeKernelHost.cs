@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 
 namespace Puck.Platform.Windows;
@@ -46,36 +47,32 @@ public sealed class Win32RenderedProbeKernelHost : IRenderedProbeKernelHost {
     /// <inheritdoc/>
     /// <remarks>A kernel is refused when a socket reads a camera sensor, or when its trigger socket reads no
     /// ring.</remarks>
-    public bool TryAttachKernel(in ProbeKernelRequest request, ProbeReadingRing ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
         ArgumentNullException.ThrowIfNull(ring);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
+        return m_bench.TryAttach(
+            fault: out fault,
+            refusal: Refuse(request: in request),
+            request: in request,
+            ring: ring,
+            run: out run
+        );
+    }
+    private static string? Refuse(in ProbeKernelRequest request) {
         foreach (var input in request.Inputs) {
             if (input is ProbeKernelInput.Sensor or ProbeKernelInput.StrobePair) {
-                run = null;
-                fault = "a kernel on the render adapter binds no camera socket";
-
-                return false;
+                return "a kernel on the render adapter binds no camera socket";
             }
         }
 
-        if (request.TriggerRing is null) {
-            run = null;
-            fault = $"the trigger socket {request.Trigger} reads no rendered source";
-
-            return false;
-        }
-
-        run = m_bench.Attach(
-            request: in request,
-            ring: ring
+        return ((request.TriggerRing is null)
+            ? $"the trigger socket {request.Trigger} reads no rendered source"
+            : null
         );
-        fault = "";
-
-        return true;
     }
     /// <inheritdoc/>
     public void Dispose() {

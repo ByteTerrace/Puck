@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Assets.Documents;
 
 namespace Puck.World;
 
@@ -324,7 +325,6 @@ public static class HudBindingVocabulary {
     private const string PositionYSuffix = ".position.y";
     private const string PositionZSuffix = ".position.z";
     private const string SeatPrefix = "seat.";
-    private const string StatePrefix = "state.";
     // The reserved "read truth, not the eased value" facet on a state.* token. A row/cell name can never itself
     // start with '$' (WorldStateRow.ReservedNamePrefix) outside the one engine-minted slot key, so this suffix can
     // never collide with an authored row or cell name.
@@ -421,13 +421,7 @@ public static class HudBindingVocabulary {
         // always the grammar separator — a second dot in the remainder names no row/key pair this substrate could
         // ever hold, so it refuses rather than guessing which half is which. A trailing .$target facet is stripped
         // before that split runs, so it never competes with the row/key dot.
-        if (
-            token.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: StatePrefix
-        ) &&
-            (token.Length > StatePrefix.Length)
-        ) {
+        if (DocumentIdentifier.IsCellReference(value: token)) {
             var isTarget = token.EndsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: TargetFacetSuffix
@@ -437,13 +431,13 @@ public static class HudBindingVocabulary {
                 : token.Length
             );
 
-            if (bodyEnd <= StatePrefix.Length) {
+            if (bodyEnd <= DocumentIdentifier.ReferencePrefix.Length) {
                 return false;
             }
 
             var rest = token.AsSpan(
-                start: StatePrefix.Length,
-                length: (bodyEnd - StatePrefix.Length)
+                start: DocumentIdentifier.ReferencePrefix.Length,
+                length: (bodyEnd - DocumentIdentifier.ReferencePrefix.Length)
             );
             var dot = rest.IndexOf(value: '.');
 

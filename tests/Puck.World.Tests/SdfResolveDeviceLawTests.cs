@@ -367,7 +367,7 @@ public sealed class SdfResolveDeviceLawTests {
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
-            var colors = readback.Read(bytesPerPixel: 8, format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
+            var colors = readback.Read(format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
                 sourceImageHandle: (poisonCurrent ? historyOutput!.ImageHandle : output.ImageHandle), sourceLayout: GpuImageLayout.General);
             var result = MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
 

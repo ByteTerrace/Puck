@@ -383,10 +383,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.subject {subject.Describe()} names a blank row id.");
             } else if (
                 (subject.Kind == GrantSubjectKind.Creation) &&
-                id.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix
-            )
+                Puck.Assets.Documents.DocumentIdentifier.IsReference(value: id)
             ) {
                 errors.Add(item: $"{path}.subject {subject.Describe()} names a state reference rather than a row id — a '{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}' token resolves to some other string at load, so the row it addresses can never equal the granted subject; name the resolved id.");
             }

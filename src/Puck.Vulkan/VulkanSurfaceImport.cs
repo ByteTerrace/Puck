@@ -10,7 +10,7 @@ namespace Puck.Vulkan;
 /// same device memory, then hands back a shader-readable view. The image is imported once (the handle is stable
 /// across frames) with sampling and transfer-source usage, so a consumer may also copy its leased pixels into a finite
 /// snapshot, and is transitioned to the shader-read-only layout. This is the zero-copy alternative to
-/// <see cref="VulkanSurfaceUpload"/>. It imports no fence: a producer's writes are ordered before a Vulkan read by the
+/// a CPU-pixel upload (<see cref="GpuSurfaceUpload"/>). It imports no fence: a producer's writes are ordered before a Vulkan read by the
 /// shared fence the consumer imports on its own (<see cref="VulkanSharedFence"/>), whose wait rides the written slot's
 /// lease, or by the producer's CPU wait on a device that cannot share it, and a consumer holds the written slot through
 /// a CPU lease until its submission retires.
@@ -75,7 +75,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
             return;
         }
 
-        VulkanDeviceOwnership.ThrowIfDestroyed(
+        GpuDeviceOwnership.ThrowIfDestroyed(
             held: device,
             holder: nameof(VulkanSurfaceImport)
         );
@@ -169,7 +169,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         var device = m_deviceContext.LogicalDevice;
 
-        VulkanDeviceOwnership.ThrowIfOtherDevice(
+        GpuDeviceOwnership.ThrowIfOtherDevice(
             held: m_device,
             holder: nameof(VulkanSurfaceImport),
             offered: device

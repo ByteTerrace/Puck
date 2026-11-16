@@ -338,8 +338,7 @@ public sealed partial class WorldCreationInstances {
                 hidden: live.Hidden,
                 live: live,
                 placementScale: placementScale,
-                rootSlot: rootSlot,
-                shapeCount: shapeCount
+                rootSlot: rootSlot
             );
 
             // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest

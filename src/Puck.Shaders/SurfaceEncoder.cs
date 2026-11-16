@@ -257,7 +257,6 @@ public sealed class SurfaceEncoder : IDisposable {
         m_targetLayout = GpuImageLayout.ShaderReadOnly;
 
         return m_readback!.Read(
-            bytesPerPixel: 4,
             format: CaptureFormat,
             height: height,
             sourceImageHandle: target.ImageHandle,

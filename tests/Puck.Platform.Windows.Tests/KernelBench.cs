@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -166,7 +167,7 @@ internal sealed unsafe class KernelBench : IDisposable {
             throw;
         }
     }
-    public Win32D3D11ProbeKernel CreateKernel(in ProbeKernelRequest request, ProbeReadingRing ring) => new(
+    public Win32D3D11ProbeKernel CreateKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring) => new(
         context: ((nint)m_context),
         device: ((nint)m_device),
         device1: ((nint)m_device1),

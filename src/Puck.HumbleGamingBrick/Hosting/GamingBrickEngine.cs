@@ -138,7 +138,6 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineImageRec
                     second: ((HumbleGamingBrickCore)cores[1])
                 ),
                 machines: hosts,
-                maximumPendingSteps: MachineHost.DefaultMaximumPendingSteps,
                 workerName: "Puck GamingBrick link",
                 workers: [.. hosts.Select(selector: static host => host.Worker)]
             );

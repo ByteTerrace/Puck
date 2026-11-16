@@ -4,30 +4,24 @@ using Puck.Vulkan.Interfaces;
 namespace Puck.Vulkan;
 
 /// <summary>
-/// Implements <see cref="IGpuSurfaceTransferFactory"/> by creating adapter wrappers over
-/// <see cref="VulkanSurfaceReadback"/>, <see cref="VulkanSurfaceUpload"/>, and <see cref="VulkanSurfaceImport"/>, each
-/// bound to the factory's device context. The readback and import wrappers convert <see cref="GpuPixelFormat"/>
-/// constants to <c>VkFormat</c> values at call time; the upload reads the neutral format itself, since its byte layout
-/// and capability check follow the format.
+/// Implements <see cref="IGpuSurfaceTransferFactory"/> for Vulkan: the neutral <see cref="GpuSurfaceReadback"/> and
+/// <see cref="GpuSurfaceUpload"/> over the device context's services, and an adapter over
+/// <see cref="VulkanSurfaceImport"/> that converts <see cref="GpuPixelFormat"/> constants to <c>VkFormat</c> values at
+/// call time, each bound to the factory's device context.
 /// </summary>
-/// <param name="deviceContext">The device context every object the factory creates works on.</param>
-/// <param name="bufferApi">The API that makes staging and readback buffers.</param>
-/// <param name="commandBufferRecordingApi">The API used to record copies and transitions.</param>
-/// <param name="commandResourcesFactory">The factory for copy command resources.</param>
+/// <param name="deviceContext">The device context every object the factory creates works on; also its neutral
+/// <see cref="IGpuDeviceContext"/>.</param>
+/// <param name="commandBufferRecordingApi">The API used to record an import's transitions.</param>
+/// <param name="commandResourcesFactory">The factory for an import's command resources.</param>
 /// <param name="externalMemoryApi">The API that imports shared allocations.</param>
 /// <param name="framebufferSetApi">The API that creates and destroys image views.</param>
-/// <param name="frameSynchronizationApi">The API for the upload's pipelined fence.</param>
-/// <param name="offscreenImageApi">The API that creates the upload's sampled image.</param>
 /// <param name="queueSubmitter">The queue submission service.</param>
 public sealed class VulkanGpuSurfaceTransferFactory(
     IVulkanDeviceContext deviceContext,
-    IVulkanBufferApi bufferApi,
     IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
     IVulkanCommandResourcesFactory commandResourcesFactory,
     IVulkanExternalMemoryApi externalMemoryApi,
     IVulkanFramebufferSetApi framebufferSetApi,
-    IVulkanFrameSynchronizationApi frameSynchronizationApi,
-    IVulkanOffscreenImageApi offscreenImageApi,
     VulkanQueueSubmitter queueSubmitter
 ) : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
@@ -80,50 +74,19 @@ public sealed class VulkanGpuSurfaceTransferFactory(
         ));
     /// <inheritdoc/>
     public IGpuSurfaceReadback CreateReadback() =>
-        new VulkanGpuSurfaceReadback(inner: new VulkanSurfaceReadback(
-            bufferApi: bufferApi,
-            commandBufferRecordingApi: commandBufferRecordingApi,
-            commandResourcesFactory: commandResourcesFactory,
-            deviceContext: deviceContext,
-            queueSubmitter: queueSubmitter
-        ));
+        new GpuSurfaceReadback(
+            device: () => deviceContext.LogicalDevice,
+            deviceContext: Neutral
+        );
     /// <inheritdoc/>
     public IGpuSurfaceUpload CreateUpload() =>
-        // The frame-synchronization API opts the upload into its PIPELINED mode (fenced fire-and-forget — see
-        // VulkanSurfaceUpload's remarks), so a per-frame feed behind the frame-ring host never drains the queue.
-        new VulkanGpuSurfaceUpload(inner: new VulkanSurfaceUpload(
-            bufferApi: bufferApi,
-            commandBufferRecordingApi: commandBufferRecordingApi,
-            commandResourcesFactory: commandResourcesFactory,
-            deviceContext: deviceContext,
-            frameSynchronizationApi: frameSynchronizationApi,
-            framebufferSetApi: framebufferSetApi,
-            offscreenImageApi: offscreenImageApi,
-            queueSubmitter: queueSubmitter
-        ));
-}
+        new GpuSurfaceUpload(
+            device: () => deviceContext.LogicalDevice,
+            deviceContext: Neutral
+        );
 
-file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSurfaceReadback {
-    public void Dispose() => inner.Dispose();
-    public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) =>
-        inner.Read(
-            bytesPerPixel: bytesPerPixel,
-            height: height,
-            sourceImageHandle: sourceImageHandle,
-            sourceLayout: sourceLayout,
-            vulkanFormat: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
-            width: width
-        );
-}
-file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {
-    public void Dispose() => inner.Dispose();
-    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
-        inner.Upload(
-            format: format,
-            height: height,
-            pixels: pixels,
-            width: width
-        );
+    private IGpuDeviceContext Neutral =>
+        ((deviceContext as IGpuDeviceContext) ?? throw new InvalidOperationException(message: $"The Vulkan device context {deviceContext.GetType().Name} is not a neutral device context, which a surface upload or readback records through."));
 }
 file sealed class VulkanGpuSurfaceImport(VulkanSurfaceImport inner) : IGpuSurfaceImport {
     public void Dispose() => inner.Dispose();

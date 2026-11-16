@@ -327,7 +327,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>
     /// Encodes <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
     /// GPU-resident surfaces (via a <see cref="DirectXImageViews"/> handle), imported shared textures, and CPU pixel
-    /// surfaces (uploaded via <see cref="DirectXSurfaceUpload"/>). A no-op when the surface is empty.
+    /// surfaces (uploaded through the device's <see cref="IGpuSurfaceUpload"/>). A no-op when the surface is empty.
     /// </summary>
     public void Blit(DirectXDeviceContext deviceContext, Surface surface) {
         if (surface.IsEmpty) {

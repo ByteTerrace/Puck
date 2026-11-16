@@ -12,8 +12,7 @@ public unsafe interface IAllocator {
     /// allocator; whether it yields <see langword="null"/> or a unique zero-length block is implementation-defined,
     /// and any non-null result must still be released with <see cref="Free"/>.</param>
     /// <param name="alignment">The required alignment in bytes, or 0 for the allocator's default. The default is
-    /// implementation-defined: the mimalloc-backed implementation uses <c>mi_malloc</c>'s natural alignment, while
-    /// the <c>NativeMemory</c>-backed implementation aligns to 16 bytes.</param>
+    /// implementation-defined: the mimalloc-backed implementation uses <c>mi_malloc</c>'s natural alignment.</param>
     /// <returns>A pointer to the allocated block, or <see langword="null"/> if the allocation failed.</returns>
     void* Allocate(nuint size, nuint alignment = 0);
     /// <summary>Frees a block previously returned by <see cref="Allocate"/> or <see cref="Reallocate"/>. Passing

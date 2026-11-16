@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Platform;
@@ -415,7 +416,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             builder.Append(value: " output=").Append(value: output.Of);
         }
 
-        if (instance.Ring.TryReadLatest(reading: out var reading)) {
+        if (instance.Ring.TrySnapshot(value: out var reading)) {
             var age = Stopwatch.GetElapsedTime(
                 startingTimestamp: reading.CaptureTimestamp,
                 endingTimestamp: nowTimestamp
@@ -444,7 +445,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         builder.Append(value: " source=").Append(value: axis.Source);
         builder.Append(value: " seat=").Append(value: axis.Instance.Seat);
 
-        if (!axis.Instance.Ring.TryReadLatest(reading: out var reading)) {
+        if (!axis.Instance.Ring.TrySnapshot(value: out var reading)) {
             builder.Append(value: " no-reading");
 
             return;
@@ -468,10 +469,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             : "false"));
     }
     private void DescribeControl(StringBuilder builder, ControlState control) {
-        var channelName = control.Instance.RowInfo.Manifest.Channels[control.Channel].Name;
+        var channelName = control.Instance.RowInfo.Manifest.Channels[control.Template.Channel].Name;
 
         builder.Append(value: "control ").Append(value: control.Instance.Label).Append(value: '.').Append(value: channelName);
-        builder.Append(value: " -> ").Append(value: control.Row.ControlName);
+        builder.Append(value: " -> ").Append(value: control.Template.Row.ControlName);
 
         if (!control.HasWritten) {
             builder.Append(value: " value=none writes=0");
@@ -483,14 +484,15 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         builder.Append(value: " writes=").Append(value: control.Writes);
     }
     private void DescribeParameter(StringBuilder builder, ParameterState parameter) {
-        var channelName = parameter.Instance.RowInfo.Manifest.Channels[parameter.Channel].Name;
+        var template = parameter.Template;
+        var channelName = parameter.Instance.RowInfo.Manifest.Channels[template.Channel].Name;
 
         builder.Append(value: "parameter ").Append(value: parameter.Instance.Label).Append(value: '.').Append(value: channelName);
 
-        if (parameter.TargetRowInfo is { } targetRow) {
-            builder.Append(value: " -> probe ").Append(value: targetRow.Row.Id).Append(value: '.').Append(value: ((WorldProbeParameterTarget.Probe)parameter.Row.Target).Field);
+        if (template.TargetRowInfo is { } targetRow) {
+            builder.Append(value: " -> probe ").Append(value: targetRow.Row.Id).Append(value: '.').Append(value: ((WorldProbeParameterTarget.Probe)template.Row.Target).Field);
         } else {
-            builder.Append(value: " -> post ").Append(value: parameter.PostPass).Append(value: '.').Append(value: parameter.PostField);
+            builder.Append(value: " -> post ").Append(value: template.PostPass).Append(value: '.').Append(value: template.PostField);
         }
 
         if (parameter.Writes == 0L) {
@@ -550,7 +552,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         var ring = recording.Instance.Ring;
 
         if (
-            ring.TryReadLatest(reading: out var reading) &&
+            ring.TrySnapshot(value: out var reading) &&
             (reading.Sequence != recording.LastSequence)
         ) {
             recording.LastSequence = reading.Sequence;
@@ -623,6 +625,33 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             : 0.0
         );
     }
+    // Reads one instance's latest reading of a channel when it is no older than maxAgeTicks and maps it onto [0, 1]
+    // about the channel's neutral: the conditioned value every parameter and control binding scales into its own
+    // target range. False for a ring with no reading yet, or a stale one (the write simply stops).
+    private static bool TryReadUnit(ProbeInstance instance, int channel, long maxAgeTicks, long nowTimestamp, out double unitInterval) {
+        unitInterval = 0.0;
+
+        if (
+            !instance.Ring.TrySnapshot(value: out var reading) ||
+            ((nowTimestamp - reading.CaptureTimestamp) > maxAgeTicks)
+        ) {
+            return false;
+        }
+
+        var spec = instance.RowInfo.Manifest.Channels[channel];
+        var normalized = NormalizeChannel(
+            raw: ((double)reading[channel]),
+            min: spec.Min,
+            max: spec.Max,
+            neutral: spec.Neutral
+        );
+
+        unitInterval = ((normalized + 1.0) / 2.0);
+
+        return true;
+    }
+    // The age ceiling a binding row declares in seconds, in Stopwatch ticks.
+    private static long MaxAgeTicks(double seconds) => ((long)(seconds * Stopwatch.Frequency));
     // The key of a seat-relative row's instance at one seat: the generated name "<id>$<seat>", which no authored
     // probe id can spell (the validator refuses one in the generated form), so an instance key never names a row.
     private static string InstanceKey(string id, int seat) => GeneratedName.Join(
@@ -796,7 +825,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public object? OutputSet { get; set; }
         public List<ParameterState> ParameterBindings { get; } = [];
         public required object?[] ResolvedGenerations { get; init; }
-        public required ProbeReadingRing Ring { get; init; }
+        public required PublishBuffer<ProbeReading> Ring { get; init; }
         public required ProbeRowInfo RowInfo { get; init; }
         public IProbeKernelRun? Run { get; set; }
         public required int Seat { get; init; }
@@ -851,11 +880,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // One declared control binding's live, per-instance state — the last written device value, so a
     // re-authored/repeated write is skipped, and the count probe.status reads back.
     private sealed class ControlState {
-        public required int Channel { get; init; }
-        public required CameraControl ControlEnum { get; init; }
         public required ProbeInstance Instance { get; init; }
-        public required long MaxAgeTicks { get; init; }
-        public required WorldProbeBinding.Control Row { get; init; }
+        public required ControlBindingTemplate Template { get; init; }
 
         public bool HasWritten;
         public int LastValue;
@@ -865,14 +891,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // One declared parameter binding's live, per-instance state — the last written value (NaN until the first
     // write), so an unchanged conditioned value never re-touches its target.
     private sealed class ParameterState {
-        public required int Channel { get; init; }
-        public int ConstantOffset { get; init; }
         public required ProbeInstance Instance { get; init; }
-        public required long MaxAgeTicks { get; init; }
-        public string? PostField { get; init; }
-        public string? PostPass { get; init; }
-        public required WorldProbeBinding.Parameter Row { get; init; }
-        public ProbeRowInfo? TargetRowInfo { get; init; }
+        public required ParameterBindingTemplate Template { get; init; }
 
         public ProbeInstance? LastTarget;
         public float LastValue = float.NaN;
