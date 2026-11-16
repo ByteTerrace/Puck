@@ -98,13 +98,15 @@ public sealed class VulkanDescriptorAllocator(IVulkanDescriptorApi descriptorApi
         ));
     }
     /// <summary>Writes a uniform buffer descriptor into a set, over the buffer from its first byte.</summary>
-    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="device">The logical device, whose reported view limit bounds the write.</param>
     /// <param name="descriptorSetHandle">The native <c>VkDescriptorSet</c> handle to write into.</param>
     /// <param name="binding">The binding index within the set.</param>
     /// <param name="arrayElement">The array element within the binding.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to bind.</param>
     /// <param name="bufferSize">The size, in bytes, of the bound buffer range.</param>
-    public void WriteUniformBuffer(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+    /// <exception cref="ArgumentOutOfRangeException">The range is zero, unaligned or past the device's view limit.</exception>
+    public void WriteUniformBuffer(VulkanLogicalDevice device, nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize, maximumBytes: device.MaxConstantBufferBytes);
         descriptorApi.WriteBuffer(request: new VulkanDescriptorBufferWriteRequest(
             ArrayElement: arrayElement,
             Binding: binding,
@@ -113,7 +115,7 @@ public sealed class VulkanDescriptorAllocator(IVulkanDescriptorApi descriptorApi
             BufferRange: bufferSize,
             DescriptorSetHandle: descriptorSetHandle,
             DescriptorType: VulkanDescriptorType.UniformBuffer,
-            Device: device
+            Device: device.Commands
         ));
     }
     /// <summary>Writes a storage buffer descriptor into a set.</summary>

@@ -317,7 +317,7 @@ entries admits no remote peer at all, and no traveller from another authority
 either (deny by default—a transfer's own arrival verdict comes from the same
 section, through a keyless `federatedAuthority` row naming the source authority
 namespace or `*`). Transport identity alone grants no World permissions.
-`world.peers` echoes each connection's
+`world.peers` (operator-only) echoes each connection's
 verified identity and mapped principal and disclosure tier, plus an `arrivals:`
 group naming each transferred body and the authority its verdict was decided
 against; `world.admission` echoes the document's own authored entries and each

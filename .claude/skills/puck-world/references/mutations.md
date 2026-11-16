@@ -126,6 +126,12 @@ journal → echo. Precisely:
    seeded Mutate over every section but grants and the program sections. `TryAdmitCompleteMutation`, live state members and detached composition
    share it; a batch rechecks after earlier members change declarations or reader lists.
    Cell and fingerprint guards use the view's `Fingerprint`, through one `CheckGuards`.
+   The write door (`WorldServer.WriteView`) is the policy's own tier for every principal, never a
+   session's delivery ceiling or live observation, so a `Frames` session writes a public row its
+   grants name. A name no row holds is refused exactly as a withheld row is (a recipient replaces a
+   row it reads whole and adds none), a refusal names only what the submission spelled (a
+   placement, machine or kit by its own name, a spatial guard as `placements`), and a guard over
+   the whole document is refused by shape as `state`, whatever the document declares.
    The echo and typed outcome carry the same refusal; its code is
    `world.mutation.undisclosed`. Addon binds and typed writes use the same row policy and
    answer `NotDisclosed`. `cellVisibility: true` reserves cell policies on empty rows;

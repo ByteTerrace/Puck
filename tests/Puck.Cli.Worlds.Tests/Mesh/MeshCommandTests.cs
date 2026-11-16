@@ -287,7 +287,7 @@ public sealed class MeshCommandTests {
         var inert = new RestScene.Inert();
         var answered = false;
 
-        inert.Query(completion: _ => answered = true, query: default!);
+        inert.Query(completion: _ => answered = true, principal: Puck.Commands.Principal.Console, query: default!);
         inert.SubmitIntent(submission: default);
         inert.SubmitSession(completion: _ => answered = true, request: default!);
         inert.SubmitCue(eventToken: "cue", site: null);

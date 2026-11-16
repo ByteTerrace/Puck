@@ -60,6 +60,7 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
         );
         transport.Query(
             query: new WorldQuery.PlayerWhere(Index: 1),
+            principal: Principal.Console,
             completion: static _ => { }
         );
 

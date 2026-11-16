@@ -43,7 +43,7 @@ public sealed partial class WorldFramePresenter {
                 m_viewLoads.Add(key: name, value: load);
             }
             scale = state.Controller.Advance(load, m_resolutionContext.DisplayHertz, ceiling,
-                m_settings.Floor(view: name), (((long)width) * height),
+                m_settings.Floor(view: name),
                 ((state.Pin > 0f) ? Math.Clamp(state.Pin, m_settings.Floor(view: name), ceiling) : 0f));
         } else {
             state.Controller.Reset();

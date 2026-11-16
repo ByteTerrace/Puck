@@ -28,27 +28,33 @@ public sealed partial class WorldServer {
     public WorldRecipientView ReadView(CommandContext context) => ReadView(context.Principal);
 
     /// <summary>Mints the live capability for a mounted addon's host-side identity.</summary>
-    public WorldRecipientView ReadAddonView(string name) => RecipientView(Principal.Addon(name));
+    public WorldRecipientView ReadAddonView(string name) => PolicyView(Principal.Addon(name));
 
     // The read door. A session reads only while its state-observation query would be answered: its observation is
     // attached and live, its tier carries a document and it holds observe all. Frames, an ended or retired epoch and
     // a revoked grant refuse here, the same decision the query door makes, so no read answers a session that the
-    // query door refuses. Write admission asks the recipient's policy alone and goes through RecipientView.
+    // query door refuses, and an admitted session reads at its own delivery ceiling.
     internal WorldRecipientView ReadView(Principal? recipient) {
-        if (recipient is { Kind: PrincipalKind.Session } session && !AllowsSessionQuery(session, StateObservationsQuery)) {
-            throw new InvalidOperationException(WorldSessionObservation.QueryRefusal);
+        if (recipient is { Kind: PrincipalKind.Session } session) {
+            if (!AllowsSessionQuery(session, StateObservationsQuery) || !m_sessionSinks.TryGetValue(session, out var attached)) {
+                throw new InvalidOperationException(WorldSessionObservation.QueryRefusal);
+            }
+            return attached.Observation.View;
         }
-        return RecipientView(recipient);
+        return PolicyView(recipient);
     }
     private static readonly WorldQuery StateObservationsQuery = new WorldQuery.StateObservations();
 
-    // A recipient's capability for policy questions (write admission, guards), whether or not it may read now.
-    internal WorldRecipientView RecipientView(Principal? recipient) {
-        if (recipient is { Kind: PrincipalKind.Session } session) {
-            return m_sessionSinks.TryGetValue(session, out var attached)
-                ? attached.Observation.View
-                : DeliveryView(session, WorldDisclosureTier.Frames, () => false);
-        }
+    // The write door: the capability every recipient write, guard and refusal is decided through (complete admission,
+    // live state commands, typed cell writes). A write is judged by the writer's declared policy alone, so the door
+    // mints the policy's own tier for every principal: never a session's delivery ceiling or its live observation,
+    // which restrict what its stream carries, not what it may write. Whether a session may act at all is the
+    // submission door's (a stale epoch is refused before admission), and what it may write is its grants'.
+    internal WorldRecipientView WriteView(Principal? recipient) => PolicyView(recipient);
+
+    // The capability at the policy's own tier: Replica, always observing. Seats, the console, the world and mounted
+    // addons keep theirs; any other principal is minted one per use.
+    private WorldRecipientView PolicyView(Principal? recipient) {
         if (recipient is { Kind: PrincipalKind.Addon } addon &&
             WorldDefinitionRows.FindAddon(Definition.Addons, addon.Name!) is { } declaration) {
             if (!m_addonReadViews.TryGetValue(declaration, out var addonView)) {

@@ -50,7 +50,7 @@ public sealed class WorldFrameLoadAggregateLawTests {
             var standing = (frame > 0);
 
             load.Render(first: !standing, periods: (0.25d + (frame / 32d)));
-            controller.Advance(ceiling: 0.875f, displayHertz: Hertz, floor: 0.5f, load: load, outputPixels: (256L * 144L), pin: 0f);
+            controller.Advance(ceiling: 0.875f, displayHertz: Hertz, floor: 0.5f, load: load, pin: 0f);
         }
 
         Assert.Equal(expected: WorldDynamicResolutionSignal.Gpu, actual: controller.Signal);
@@ -77,7 +77,6 @@ public sealed class WorldFrameLoadAggregateLawTests {
         private double m_secondSeconds;
 
         public PresentTimingSample LastPresentTiming => PresentTimingSample.Unavailable;
-        public double MarchStepBudgetPerPixel => 0d;
 
         public void Render(bool first, double periods) {
             if (first) {
@@ -98,11 +97,6 @@ public sealed class WorldFrameLoadAggregateLawTests {
             reading = m_aggregate.End();
 
             return true;
-        }
-        public bool TryReadMarchSteps(out WorldFrameLoadReading reading) {
-            reading = default;
-
-            return false;
         }
         public ShaderPipelineCompletions TakeCompletions() => default;
 

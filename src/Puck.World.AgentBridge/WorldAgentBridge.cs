@@ -10,7 +10,7 @@ namespace Puck.World.Agents;
 public sealed class WorldAgentBridge {
     private readonly Func<WorldChannelTable> m_channels;
     private readonly IWorldAgentDispatcher m_dispatcher;
-    private readonly IPrincipalServerLink m_link;
+    private readonly IServerLink m_link;
 
     /// <summary>Initializes a bridge over one acting principal and one controlled body.</summary>
     /// <param name="link">The principal-aware in-process server link.</param>
@@ -25,7 +25,7 @@ public sealed class WorldAgentBridge {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bodyIndex"/> is outside world capacity, or
     /// <paramref name="principal"/> is not an ingress-capable actor.</exception>
     public WorldAgentBridge(
-        IPrincipalServerLink link,
+        IServerLink link,
         IWorldAgentDispatcher dispatcher,
         Principal principal,
         int bodyIndex,

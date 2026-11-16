@@ -332,13 +332,12 @@ public sealed class WorldAgentParticipantLawTests {
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
-    private sealed class RecordingLink : IPrincipalServerLink {
+    private sealed class RecordingLink : IServerLink {
         public WorldSubmissionPayload? LastPayload { get; private set; }
         public Principal LastPrincipal { get; private set; }
         public WorldQuery? LastQuery { get; private set; }
         public List<Principal> QueryPrincipals { get; } = [];
 
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) => throw new NotSupportedException();
         public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
             LastQuery = query;
             QueryPrincipals.Add(item: principal);

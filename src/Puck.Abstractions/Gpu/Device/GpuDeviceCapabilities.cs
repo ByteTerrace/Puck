@@ -10,7 +10,7 @@ namespace Puck.Abstractions.Gpu;
 /// bytes, and how many descriptors of each kind one shader stage may reach — and, on Direct3D 12, the resource binding
 /// tier, the highest root signature version and shader model, and the shader-visible heap sizes. It is recorded beside
 /// counted work, like <see cref="GpuDeviceIdentity"/>, so a reading on one device can be held to the contract's
-/// assumptions; it is never branched on.
+/// assumptions. Uniform-region admission also reads its constant-buffer view limit.
 /// </summary>
 /// <param name="Backend">The backend's name: <c>vulkan</c> or <c>directx</c>.</param>
 /// <param name="MaxBoundDescriptorSets">Vulkan's <c>maxBoundDescriptorSets</c>; zero on Direct3D 12, whose tables are
@@ -32,6 +32,8 @@ namespace Puck.Abstractions.Gpu;
 /// unordered access views the tier allows.</param>
 /// <param name="MaxPerStageResources">Vulkan's <c>maxPerStageResources</c>; zero on Direct3D 12, which has no such
 /// limit.</param>
+/// <param name="MaxConstantBufferBytes">The largest constant-buffer view in bytes: Vulkan's
+/// <c>maxUniformBufferRange</c> or Direct3D 12's 4,096 float4 elements.</param>
 /// <param name="ResourceBindingTier">Direct3D 12's <c>ResourceBindingTier</c> (1, 2 or 3); zero on Vulkan.</param>
 /// <param name="RootSignatureVersion">The highest root signature version Direct3D 12 reports (<c>1.1</c>); empty on
 /// Vulkan.</param>
@@ -53,6 +55,7 @@ public sealed record GpuDeviceCapabilities(
     uint MaxPerStageSampledImages,
     uint MaxPerStageStorageImages,
     uint MaxPerStageResources,
+    uint MaxConstantBufferBytes = 0U,
     uint ResourceBindingTier = 0U,
     string RootSignatureVersion = "",
     string ShaderModel = "",
@@ -60,6 +63,8 @@ public sealed record GpuDeviceCapabilities(
     uint SamplerHeapSize = 0U,
     uint StaticSamplerHeapSize = 0U
 ) {
+    /// <summary>Direct3D 12's 4,096 constant-buffer elements, each a 16-byte float4.</summary>
+    public const uint DirectXConstantBufferBytes = (4096U * 16U);
     /// <summary>Direct3D 12's root signature cost limit in 32-bit words (<c>D3D12_MAX_ROOT_COST</c>).</summary>
     public const uint DirectXMaxRootSignatureWords = 64U;
     /// <summary>The CBV/SRV/UAV heap size Direct3D 12 guarantees at every binding tier
@@ -75,6 +80,7 @@ public sealed record GpuDeviceCapabilities(
     // Each field's one spelling, shared by the text form and the JSON form.
     private const string BackendField = "backend";
     private const string BindingTierField = "binding-tier";
+    private const string ConstantBufferBytesField = "constant-buffer-bytes";
     private const string DescriptorSetsField = "descriptor-sets";
     private const string PushConstantBytesField = "push-constant-bytes";
     private const string RootSignatureField = "root-signature";
@@ -138,6 +144,7 @@ public sealed record GpuDeviceCapabilities(
         return new GpuDeviceCapabilities(
             Backend: "directx",
             MaxBoundDescriptorSets: 0U,
+            MaxConstantBufferBytes: DirectXConstantBufferBytes,
             MaxPerStageResources: 0U,
             MaxPerStageSampledImages: stageShaderResources,
             MaxPerStageSamplers: stageSamplers,
@@ -165,6 +172,7 @@ public sealed record GpuDeviceCapabilities(
         ArgumentNullException.ThrowIfNull(builder);
 
         _ = builder.Append(value: ' ').Append(value: BackendField).Append(value: '=').Append(value: Backend);
+        AppendCount(builder: builder, name: ConstantBufferBytesField, value: MaxConstantBufferBytes);
         AppendCount(
             builder: builder,
             name: DescriptorSetsField,
@@ -251,6 +259,7 @@ public sealed record GpuDeviceCapabilities(
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteStartObject();
+        writer.WriteNumber(propertyName: ConstantBufferBytesField, value: MaxConstantBufferBytes);
         writer.WriteString(
             propertyName: BackendField,
             value: Backend

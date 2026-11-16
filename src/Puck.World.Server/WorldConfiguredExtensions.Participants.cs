@@ -12,7 +12,7 @@ public sealed partial class WorldConfiguredExtensions {
     /// <summary>Gets each configured participant's name and live status line, without private settings.</summary>
     public IReadOnlyList<string> Participants => m_participants.Select(selector: static entry => $"{entry.Name}: {entry.Participant.Describe()}").ToArray();
 
-    private void ConfigureParticipants(PuckExtensionSet extensions, IPrincipalServerLink? link) {
+    private void ConfigureParticipants(PuckExtensionSet extensions, IServerLink? link) {
         if (m_configuration.Participants is not { Count: > 0 } rows) { return; }
         if (rows.Count > 16) { throw new ArgumentException(message: "At most 16 participants may be configured."); }
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -32,7 +32,7 @@ public sealed partial class WorldConfiguredExtensions {
             var principal = ParsePrincipal(text: row.Principal);
             var server = m_server;
 
-            if (link is null) { throw new InvalidOperationException(message: $"Participant '{row.Name}' needs a world link that attributes reads to a principal; this host supplies none."); }
+            if (link is null) { throw new InvalidOperationException(message: $"Participant '{row.Name}' needs a world link; this host supplies none."); }
             m_participants.Add(item: (row.Name, type.Create(
                 arg1: new WorldParticipantContext {
                     BodyIndex = row.Body,
