@@ -64,11 +64,15 @@ reader count can roll over in principle. Make a double dispose and a
 reentrant publish refuse by construction.
 
 **Then the [streaming and memory campaign](streaming-and-memory.md)** (agreed
-with the owner): a research round, one byte authority with the device's own
-budget readings, attribution at fixed stops, duplicate copies cut, eviction by
-priority, demand mapped through portal faces, and lighting on the same demand
-points, with the bars read by one recipe so quality and performance are judged
-together.
+with the owner). Its research round is synthesized into the plan's decisions
+and build order, and the research reports it rests on are kept beside it in
+`docs/plans/streaming-and-memory/`. A session picking the campaign up starts
+here: an adversarial review from another family (Codex if Claude leads) reads
+the plan against the current source, its findings are fixed in the plan, and
+then [step 1](streaming-and-memory.md#step-1-as-a-brief), device readings and
+pools on the account, is briefed as written. The two owner questions in the
+plan have defaults and block no step. The bars are read by one recipe so
+quality and performance are judged together.
 
 **Wave 2, after the lead's session restart, in this order (agreed with the
 owner):** read-only and headless work runs beside the GPU-bound lanes, and no
@@ -475,8 +479,8 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
 23. [Test runner and replay](#test-runner-and-replay): step D1 of
     [the body's write door memo](body-state-door.md).
 24. [Bake detail](#bake-detail): the flare's bound.
-25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
-    names GI's work units.
+25. [Residency and streaming](#residency-and-streaming): the
+    [plan](streaming-and-memory.md#the-build-order)'s step 1.
 26. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
 27. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
@@ -823,9 +827,10 @@ The custom no-GC runtime port stays later work, on the
 - [low] `HostMemory.AvailablePhysicalBytes` on Linux reads `/proc/meminfo`
   with LINQ and `string.Split` (`HostMemory.cs:29-39`); the bake reads it at
   most every 0.25 s.
-- [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`
-  (`GpuRegion.cs:331,760,854,980`), the same allocate/copy/publish growth as
-  `OwnedBuffer`, outside `IAllocator` and the account.
+- [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`, the same
+  allocate/copy/publish growth as `OwnedBuffer`, outside `IAllocator` and the
+  account. [The streaming plan](streaming-and-memory.md#the-build-order)'s
+  step 2 charges it through `IAllocationObserver`.
 - Whether a Vulkan cold bake baking more samples and triangles than Direct3D
   12's predates the memory changes is unconfirmed; the [bake-by-backend item](#vulkan-regressions-and-gpu-robustness)
   owns the difference.
@@ -3543,8 +3548,8 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
 ### Residency and streaming
 
 Owner: rendering lane (rendering, verification) · ordinary, with the memory item
-high · Next: the memory item's attribution, then step 2, GI on the same demand
-points, after the [job-system memo](#engine-job-system) names GI's work units.
+high · Next: [the plan](streaming-and-memory.md#the-build-order)'s step 1,
+device readings and pools on the account, once its adversarial review is in.
 
 The design is settled in [residency](../decisions/residency.md), from a
 three-family consensus: only presentation follows the observer; portals are
@@ -3552,7 +3557,10 @@ edges, worlds and optional authored areas are nodes; one selector per
 presentation orders and bounds residency from every demand point; a door never
 waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
-and `world.residency [radius]` reads its measures.
+and `world.residency [radius]` reads its measures. The build, with the
+decisions it rests on, each step's replacements and the reading that judges
+it, is [the streaming and memory plan](streaming-and-memory.md); this packet
+holds the defects and leads beside it.
 
 Open on the windows that render while a world's meshes arrive
 (`WorldViewGraphHost.ReserveArrivals`, `SdfWorldResidency.MeshesArriving`):
@@ -3709,52 +3717,37 @@ Grounded causes and leads, largest first:
   does (`host.memory` `jit methods`), partly from `WorldCodeWarmer`; compare a
   ReadyToRun-published World.
 - The mesh library budgets meshes residencies still hold and forgets them, so
-  a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`). The fix
+  a re-plan reloads a second copy (`SdfMeshLibrary.ByteBudget`,
+  `SdfMeshLibrary.TryTake`). The fix
   is at its cause: a payload stays findable while any claim on it lives, and its
   byte budget charges only cached-only payloads (reuse `Payload.Classify` and
   `MemoryCategory.Cached`, no new counter). Read the crossing's
   `[sdf.mesh-bake] start ... baking= loading= shared=` line first to name why so
   many groups moved on a garden crossing.
-- Puck has no in-process device-memory budget reading: no DXGI
-  `QueryVideoMemoryInfo` or `VK_EXT_memory_budget` in `src/` (cite at least two
-  independent sources per API). Add usage and budget as fields of
-  `host.memory`, and let `MemoryAccount` be the one budget authority with
-  `ShaderPipelineMemoryBudget` as a reservation from it, not a second budget.
-  The account's budget is three quarters of installed RAM and sees only mesh
-  payloads and bake group workspaces, never the managed heap,
-  `GpuRegion` host copies, device or staging heaps, so on a unified-memory Deck
-  it pays no regard to the GPU's share of the same memory.
-- A player's build also keeps the composed-document store
-  (`WorldDefinitionFileSource.cs`, `ForgetComposedDocuments` after boot; the
-  heap walk finds composed bytes and compiled source still held) and may keep
-  the authoring document tree after compiling; confirm and release what a
-  booted compiled world no longer reads.
+- Puck reads no device memory budget, and `MemoryAccount` sees neither device
+  memory nor the managed heap, so on a unified-memory Deck it pays no regard
+  to the GPU's share of the same memory. The plan's
+  [step 1](streaming-and-memory.md#step-1-as-a-brief) adds the readings and
+  the account's pools, and its step 3 makes every budget a reservation from
+  the account.
+- A player's build also keeps the composed-document store for the life of the
+  process: `WorldDefinitionFileSource.ForgetComposedDocuments` exists and
+  nothing in `src/` calls it (the heap walk finds composed bytes and compiled
+  source still held). It may keep the authoring document tree after compiling
+  too. Confirm what a reload reads, and release what a booted compiled world
+  no longer does.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
 
 #### Steps
 
-1. Measure what residency leaves unread: `ProbeCache` after a valley flight,
-   program build and replan against more than one placement count, and time to
-   the occupied area after a document edit that renumbers materials.
-   `world.residency` reads each, with the display on.
-2. GI on the same demand points, after the job-system memo names GI's work
-   units: the probe window follows every view, not `Views[0]`
-   (`SdfMeshIrradiance.cs:456-458`, `WindowCamera`); the irradiance scene and
-   its pending gate are scoped to what the window reaches; `ProbeCache`'s
-   retained blocks are the [memory item](#memory-on-the-deck-tier)'s.
-3. Mapped demand through portal faces, replacing the blanket baking share
-   (`WorldViewGraphHost.ResetFootprints`). A window nobody sees still demands
-   everything about its camera; mapped demand weighs it by its glass.
-4. Eviction under one byte budget across residencies, with coarse levels owning
-   compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
-5. Authored areas (a volume with openings, on an existing volume vocabulary),
-   tried first on the gallery's floors with the stairwell, lift shaft and window
-   bands as openings (the owner's suggestion): time until the occupied floor has
-   landed, with and without the areas, and floor-first eviction under a lowered
-   budget.
-6. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
-   the moons.
+The order of work is [the plan's build order](streaming-and-memory.md#the-build-order).
+Open beside it:
+
+- Measure what residency leaves unread: `ProbeCache` after a valley flight,
+  program build and replan against more than one placement count, and time to
+  the occupied area after a document edit that renumbers materials.
+  `world.residency` reads each, with the display on.
 
 - One group in the debug world has a mesh that no draw names, not yet
   identified; `world.residency` counts it resident, since it costs the region
