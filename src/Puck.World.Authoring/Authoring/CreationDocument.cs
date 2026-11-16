@@ -215,9 +215,7 @@ public sealed record ShapeDocument(
     public const float MaxBend = 1.5f;
     /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp.</summary>
     public const float MaxDilate = 0.2f;
-    /// <summary>The most domain operators <see cref="Domain"/> carries — every kind costs exactly one
-    /// <c>SdfInstruction</c>, so this bounds a shape's domain-op instruction cost for capacity probes
-    /// (<c>Puck.World.Client.WorldCreationInstances</c>'s <c>probeWorstCase</c> sizing).</summary>
+    /// <summary>The most domain operators <see cref="Domain"/> carries.</summary>
     public const int MaxDomainOps = 4;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
     public const float MaxOnion = 0.2f;

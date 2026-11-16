@@ -57,21 +57,6 @@ public static class SdfSolidGeometry {
         y: 1f,
         z: 1f
     );
-    // Every primitive a panel can be authored on — every SdfSolidPrimitive but Plane, which the panel facet refuses
-    // (no meaningful local face). KEEP IN SYNC with the enum: a member added there and left out here silently
-    // undercounts MaxPanelReach's worst case.
-    private static readonly SdfSolidPrimitive[] PanelableTypes = [
-        SdfSolidPrimitive.Sphere,
-        SdfSolidPrimitive.Box,
-        SdfSolidPrimitive.Torus,
-        SdfSolidPrimitive.Cylinder,
-        SdfSolidPrimitive.Capsule,
-        SdfSolidPrimitive.Ellipsoid,
-        SdfSolidPrimitive.RoundCone,
-        SdfSolidPrimitive.Cone,
-        SdfSolidPrimitive.Prism,
-    ];
-
     private static SdfProgramBuilder AppendProfile(SdfProgramBuilder chain, Vector3 scale, SdfPrismProfile profile,
         int material, SdfBlendOp blend, float smooth, SdfLift lift = SdfLift.Extrude, float rounding = 0f, bool detail = false) {
         if (!profile.IsValid()) { throw new ArgumentOutOfRangeException(paramName: nameof(profile)); }
@@ -1173,43 +1158,6 @@ public static class SdfSolidGeometry {
                     return 0f;
                 }
         }
-    }
-    /// <summary>The worst-case additional reach a raised panel (<c>ShapePanelDocument.Depth</c> negative) can
-    /// contribute at a scale, before any specific primitive, face, or inset is known — a capacity probe's own
-    /// ceiling. <c>ShapePanelDocument.Resolve</c>'s own validation ceiling on <c>|Depth|</c> is twice the eroded
-    /// copy's own half-extent along its face, and a nonnegative <c>Inset</c> only shrinks that copy from the
-    /// plate's own — so the worst case, at zero inset, is twice the plate's own widest half-extent, maximized across
-    /// every <see cref="PanelableTypes">primitive a panel can be authored on</see> (and, for
-    /// <see cref="SdfSolidPrimitive.Prism"/>, both lifts — a revolve's radial half-extent reads
-    /// <c>scale.z</c> as an offset rather than an extent and so can exceed the same primitive's extrude form).</summary>
-    /// <param name="scale">The per-axis scale to measure every candidate primitive at.</param>
-    /// <returns>The worst-case additional reach a raised panel can add at this scale, at least zero.</returns>
-    public static float MaxPanelReach(Vector3 scale) {
-        var widest = 0f;
-
-        foreach (var type in PanelableTypes) {
-            widest = MathF.Max(
-                x: widest,
-                y: WidestHalfExtent(
-                    lift: SdfLift.Extrude,
-                    scale: scale,
-                    type: type
-                )
-            );
-
-            if (type == SdfSolidPrimitive.Prism) {
-                widest = MathF.Max(
-                    x: widest,
-                    y: WidestHalfExtent(
-                        lift: SdfLift.Revolve,
-                        scale: scale,
-                        type: type
-                    )
-                );
-            }
-        }
-
-        return (2f * widest);
     }
     // RoundedRectangle and Ellipse take their radial/axial half-extents natively, so they emit exactly at any scale
     // and either lift. A regular polygon carries one circumradius, so it rides a Scale transform: the extrude spelling

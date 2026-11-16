@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 public sealed class WorldCatalogAllocationLawTests {
-    private static SdfProgram Emit(int capacity, int rig, Func<int, bool> active, bool probe = false, int? limit = null) {
+    private static SdfProgram Emit(int capacity, int rig, Func<int, bool> active) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var materials = Enumerable.Repeat(
@@ -18,10 +18,8 @@ public sealed class WorldCatalogAllocationLawTests {
             active,
             materials,
             materials,
-            probe,
             0,
-            _ => rig,
-            probeAvatarLimit: limit
+            _ => rig
         );
         return builder.Build();
     }
@@ -195,7 +193,6 @@ public sealed class WorldCatalogAllocationLawTests {
             _ => true,
             new int[2],
             new int[1],
-            false,
             0
         ));
         WorldRigCatalog.Emit(
@@ -203,38 +200,12 @@ public sealed class WorldCatalogAllocationLawTests {
             _ => true,
             new int[1],
             new int[1],
-            false,
             0
         );
         Assert.Equal(
             WorldRigCatalog.InstructionCount(avatar: 0),
             builder.Build().Instructions.Count
         );
-    }
-    [InlineData(1)]
-    [InlineData(3)]
-    [InlineData(128)]
-    [Theory]
-    public void ProbeCoversRepeatedLargestLooksNotJustADistinctCatalogSubset(int count) {
-        var largest = Enumerable.Range(
-            count: WorldLookSource.Catalog.RigCount,
-            start: 0
-        ).MaxBy(keySelector: WorldRigCatalog.InstructionCount);
-        var probe = Emit(
-            WorldBodiesLimits.CapacityCeiling,
-            largest,
-            _ => false,
-            true,
-            count
-        );
-        var live = Emit(
-            WorldBodiesLimits.CapacityCeiling,
-            largest,
-            index => (index >= (WorldBodiesLimits.CapacityCeiling - count))
-        );
-
-        Assert.True(condition: (probe.Instances.Count >= live.Instances.Count));
-        Assert.True(condition: (probe.Words.Length >= live.Words.Length));
     }
     [Fact]
     public void RenderSlotsAndPartPosesDoNotStopAtTheAppearanceCatalogBoundary() {

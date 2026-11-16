@@ -56,8 +56,6 @@ public static partial class CreationCommand {
         pool.Emit(
             pooled,
             WorldBakedColors.Of(definition: definition),
-            probeWorstCase: false,
-            maxPlacementScale: 1f,
             slotBase: 0
         );
         ReportProgram(

@@ -138,25 +138,6 @@ public abstract record ShapeDomainOp {
 /// <remarks>Every meaning past this boundary belongs to <see cref="SdfDomainOps"/> (the fold) and
 /// <see cref="SdfDomainExpansion"/> (the copies); this type only reads the document.</remarks>
 public static class ShapeDomainOps {
-    /// <summary>A worst-case domain list — <see cref="ShapeDocument.MaxDomainOps"/> entries — for capacity probes.
-    /// A repeat or polar op with an origin costs three <c>SdfInstruction</c>s (a translate to and from the origin
-    /// bracketing the fold itself); every other kind, or an origin-free repeat/polar, costs one. Probing with an
-    /// origin-bearing repeat repeated to the cap covers the instruction-word cost of any real authored
-    /// combination.</summary>
-    public static readonly IReadOnlyList<ShapeDomainOp> ProbeWorstCase = BuildProbeWorstCase();
-
-    private static IReadOnlyList<ShapeDomainOp> BuildProbeWorstCase() {
-        var probe = new ShapeDomainOp[ShapeDocument.MaxDomainOps];
-
-        for (var index = 0; (index < probe.Length); index++) {
-            probe[index] = new ShapeDomainOp.Repeat(
-                Origin: Vector3.UnitX,
-                Spacing: Vector3.One
-            );
-        }
-
-        return probe;
-    }
     private static SdfDomainOp Map(ShapeDomainOp op, Vector3 subject) {
         return op switch {
             ShapeDomainOp.Symmetry symmetry => new SdfDomainOp.Symmetry(

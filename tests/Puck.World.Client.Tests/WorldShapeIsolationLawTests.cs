@@ -48,8 +48,7 @@ public sealed class WorldShapeIsolationLawTests {
         pool.Emit(
             builder: builder,
             colors: WorldBakedColors.Of(definition: CreationDomainParentLawTests.Definition(creation: creation)),
-            maxPlacementScale: 1f,
-            probeWorstCase: false,
+
             slotBase: 0
         );
 

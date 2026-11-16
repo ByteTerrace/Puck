@@ -8,7 +8,6 @@ using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Text;
-using Puck.World.Protocol;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -163,14 +162,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private readonly WorldSessionMirror.DeliveredStateObservation m_shadowObservation;
 
-    // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
-    // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
-    // interpolated (not host-supplied) positions.
-    private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
-    private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
-    private readonly bool[] m_avatarPoseSeeded = new bool[WorldBodiesLimits.CapacityCeiling];
+    // Per-avatar movement-driven gait state over this emitter's own interpolated positions (WorldAvatarGait).
+    private readonly WorldAvatarGait[] m_avatarGaits = new WorldAvatarGait[WorldBodiesLimits.CapacityCeiling];
     private readonly WorldTransformOwners m_avatarOwners = new(capacity: WorldBodiesLimits.CapacityCeiling);
-    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
     private readonly int[] m_emittedRigs = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedScales = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
@@ -293,19 +287,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             TextFault = exception.Message.ReplaceLineEndings(replacementText: " ");
         }
     }
-    // Registers the avatar palette and emits the hybrid catalog range — the probe branch (largest detailed rigs plus
-    // the full coarse band at unit scale) and the live branch (only mirrored-active avatars, each sourcing its look's pinned rig and uniform
-    // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
-    // own avatar block.
-    private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
+    // Registers the avatar palette and emits the mirrored-active avatars, each sourcing its look's pinned rig and uniform
+    // scale, through WorldRigCatalog.Emit as Client.WorldSceneEmitter.Compose's own avatar block does.
+    private void EmitAvatars(SdfProgramBuilder builder, int slotBase) {
         var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!HoldsAvatar(index)) { continue; }
-            // A body the pool registered renders its creation there and parks this catalog avatar; its palette entry
-            // is still emitted, so the catalog keeps the frozen shape its probe reserved.
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
                 bodyColor: m_bodyColor(arg: index),
@@ -328,12 +318,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             slotFor: index => m_catalogSlots[index],
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
-            probeWorstCase: probeWorstCase,
             slotBase: slotBase,
-            rigFor: (probeWorstCase
-            ? null
-            : index => m_emittedRigs[index]),
-            picks: (probeWorstCase ? null : m_picks)
+            rigFor: index => m_emittedRigs[index],
+            picks: m_picks
         );
     }
     // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
@@ -564,10 +551,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         };
     }
     /// <inheritdoc/>
-    /// <remarks>The placement branch chooses static reservation or emission. The avatar branch is
-    /// appended after it, in both the probe and the live arm: <see cref="WorldRigCatalog.Emit"/> already owns its
-    /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
-    /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         var definition = Scoped(definition: m_mirror.Definition);
 
@@ -604,15 +587,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_pool.Emit(
             builder: builder,
             colors: colors,
-            maxPlacementScale: definition.Authoring.MaxPlacementScale,
-            probeWorstCase: false,
             slotBase: (context.SlotBase + m_catalogSlotCount),
             picks: m_picks
         );
 
         EmitAvatars(
             builder: builder,
-            probeWorstCase: false,
             slotBase: context.SlotBase
         );
     }
@@ -646,7 +626,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (m_catalogSlots[index] < 0) { continue; }
             if (!HoldsAvatar(index: index)) {
-                m_avatarPoseSeeded[index] = false;
+                m_avatarGaits[index].Seeded = false;
 
                 if (m_avatarOwners.Vacate(
                     moved: moved,
@@ -676,50 +656,35 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 current: m_mirror.CurrentOrientation(index: index),
                 alpha: alpha
             );
-            var address = m_mirror.Address(index: index);
-
-            if (!m_avatarOwners.Wake(
-                deltaSeconds: 1f,
-                discontinuity: (
-                !m_avatarPoseSeeded[index] ||
-                (m_avatarMotionAddresses[index] != address)
-            ),
+            if (!WorldMirroredAvatarBand.Wake(
+                address: m_mirror.Address(index: index),
+                epoch: m_mirror.PoseEpoch(index: index),
+                gait: ref m_avatarGaits[index],
                 moved: moved,
                 orientation: orientation,
                 owner: index,
+                owners: m_avatarOwners,
                 position: position
             )) {
                 continue;
             }
 
-            WorldMirroredAvatarBand.AdvanceGait(
-                address: address,
-                gaitPhase: ref m_avatarGaitPhases[index],
-                lastAddress: ref m_avatarMotionAddresses[index],
-                lastPosition: ref m_avatarPreviousPositions[index],
-                position: position,
-                seeded: ref m_avatarPoseSeeded[index]
-            );
-
-            m_avatarOwners.Settle(
-                deltaSeconds: 1f,
-                moved: WorldTransformOwners.PackBody(
-                firstSlot: m_catalogSlots[index],
+            WorldMirroredAvatarBand.Pack(
                 avatar: index,
-                // Session panels omit avatar shadows; a routed scene participates when its host enables them.
                 catalogBase: context.SlotBase,
-                gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
+                firstSlot: m_catalogSlots[index],
+                gait: in m_avatarGaits[index],
+                gaitAmplitude: m_emittedGaitAmplitudes[index],
                 moved: moved,
+                owner: index,
+                owners: m_avatarOwners,
                 rig: m_emittedRigs[index],
                 rootOrientation: orientation,
                 rootPosition: (m_pool.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : position),
-                reseat: m_avatarOwners.Reseats(owner: index),
                 scale: m_emittedScales[index],
                 table: slots
-            ),
-                owner: index
             );
         }
 

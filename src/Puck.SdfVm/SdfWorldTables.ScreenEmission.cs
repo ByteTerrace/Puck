@@ -26,16 +26,10 @@ public sealed partial class SdfWorldTables {
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
 
     private sealed class ScreenEmissionPass : IDisposable {
-        private readonly SdfWorldTables m_tables;
-
-        private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_mappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
-        private readonly bool[] m_tainted = new bool[MaxScreenSurfaces];
-        private readonly bool[] m_renderedTainted = new bool[MaxScreenSurfaces];
+        private readonly ScreenSourceWatch m_watch;
 
         public ScreenEmissionPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
-            m_tables = tables;
+            m_watch = new ScreenSourceWatch(tables: tables);
             Publication = new EnvironmentPublication(owner: this);
             Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "screen-emission"),
                 sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage));
@@ -43,7 +37,8 @@ public sealed partial class SdfWorldTables {
 
         public IGpuBuffer Buffer { get; }
 
-        public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
+        // The emitting screens this observation read with a known image.
+        public bool[] Screens => m_watch.Screens;
         public bool Owes { get; private set; } = true;
         // Whether the next observation reduces again whatever its sources say (SdfWorldTables.ProjectTaintedSourcesAgain).
         public bool Forced { get; set; }
@@ -51,9 +46,7 @@ public sealed partial class SdfWorldTables {
         public EnvironmentPublication Publication { get; }
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
-            Array.Clear(array: m_sources);
-            Array.Clear(array: Screens);
-            Array.Clear(array: m_tainted);
+            m_watch.Clear();
             if (residency.ScreenSources is { } sources) {
                 foreach (var screen in sources.Screens) {
                     if (!sources.Emits(screen: screen) || (sources.ReadOf(screen: screen, view: view) is not { } producer) || (reads is null)) { continue; }
@@ -65,35 +58,18 @@ public sealed partial class SdfWorldTables {
                     // An image with no known publication, such as a portal's level that has not rendered because its glass
                     // is out of view, is missing: it writes a zero record rather than holding every other screen's.
                     if ((input.Lease.ImageViewHandle == 0) || !input.Publication.IsKnown) { continue; }
-                    m_tainted[screen] = input.Tainted;
-                    Screens[screen] = true;
-                    m_sources[screen] = input.Publication;
+                    m_watch.Read(screen: screen);
+                    m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
                 }
             }
-            var changed = false;
-
-            for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                var offset = (screen * ScreenMappingStride);
-                var different = ((m_sources[screen] != m_renderedSources[screen]) || (m_tainted[screen] != m_renderedTainted[screen]) ||
-                    !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
-                        .SequenceEqual(other: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
-
-                changed |= different;
-            }
-            Owes = ((Publication.Submitted is null) || changed || Forced);
+            Owes = ((Publication.Submitted is null) || m_watch.Changed() || Forced);
             return unchecked((ulong)(Publication.Renders + (Owes ? 1 : 0)));
         }
         public long Publish() {
-            for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                m_renderedSources[screen] = m_sources[screen];
-                m_renderedTainted[screen] = m_tainted[screen];
-                var offset = (screen * ScreenMappingStride);
-
-                m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset).CopyTo(destination: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset));
-            }
+            m_watch.Commit();
             Owes = false;
             Forced = false;
-            return Publication.Publish(tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
+            return Publication.Publish(tainted: m_watch.Tainted);
         }
         public void Withdraw(long sequence) {
             if (Publication.Unproven(sequence: sequence)) { Forget(); }

@@ -39,15 +39,13 @@ public sealed class ShapeCellsLawTests {
         palette: CreationFixtures.Grey,
         shapes: [shape]
     );
-    private static SdfProgram Emit(ShapeDocument shape, float scale, bool pooled, bool probe = false, float? probeScale = null) {
+    private static SdfProgram Emit(ShapeDocument shape, float scale, bool pooled) {
         var creation = CreationFixtures.Prototype(document: Document(shape: shape));
 
         return (pooled
             ? CreationFixtures.EmitPool(
                 bodyScale: scale,
-                creation: creation,
-                maxPlacementScale: probeScale,
-                probeWorstCase: probe
+                creation: creation
             )
             : CreationFixtures.EmitStatic(
                 document: creation.Document,

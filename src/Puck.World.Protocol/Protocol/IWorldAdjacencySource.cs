@@ -90,6 +90,9 @@ public interface IWorldAdjacencyNeighbour {
     bool IsEntityActive(int index);
     /// <summary>The durable address of a delivered entity slot.</summary>
     WorldEntityAddress EntityAddress(int index);
+    /// <summary>The pose epoch of a delivered entity slot: it moves each time the entity becomes active or teleports,
+    /// the two discontinuities a snapshot declares, so a presentation that follows the pose cuts there.</summary>
+    int PoseEpoch(int index);
     /// <summary>Gets the authored placement identity from the same delivered entity image as its pose, or null
     /// for a body without a placement.</summary>
     string? PlacementId(int index);

@@ -449,10 +449,10 @@ primitive's own local geometry—`SdfOp.Dilate`/`Onion` act on the running
 WORLD-space accumulator directly, and a `ShapeBlend` instruction's blend
 radius composes the shape's already-world-scaled candidate into it, so
 neither is reached by a preceding `Scale` chain op the way a baked-local
-modifier is. Both emission paths therefore multiply them by the placement
-scale explicitly before emission (`CreationStampEmitter.EmitShapeChain` for a
-static placement, `Client.WorldCreationInstances.EmitShape`/`EmitGroup` for the
-animated pool) rather than relying on the chain's own `Scale` op. `Dilate`/
+modifier is. The one shape emission (`ShapeEmission.Emit`, which static
+placements and the animated pool both call) therefore multiplies them by its
+frame's `FacetScale` explicitly rather than relying on the chain's own `Scale`
+op. `Dilate`/
 `Onion` on an otherwise scope-free shape open the same one-deep field scope a
 panel would (below)—unscoped, they would inflate
 or hollow every shape emitted before them in the whole program, not just this
@@ -555,11 +555,11 @@ one derivation both paths emit from: with `h` the plate's half-extent, a recess
 translates the copy by `h + h′ − depth` and a raise by `|depth| + (h − h′)`.
 `CreationDocument.StampShapeCount` counts the expanded operands for bake-work reporting; it is not an admission budget.
 
-Both emission paths open a one-deep field scope
+The shape emission (`ShapeEmission.Emit`, for static placements and the animated
+stamp pool alike) opens a one-deep field scope
 (`SdfProgramBuilder.PushField`/`PopField`) around `[plate, panel]` so the
 panel's compose bites only this shape, never a sibling occupying the same
-space—`CreationStampEmitter.EmitShapeChain` (static placements) and
-`Client.WorldCreationInstances.EmitShape` (the animated stamp pool)—and emit the copy
+space, and emits the copy
 from its own `ResetPoint` chain rather than after the plate's shape
 instruction, whose emission may leave a persistent `Scale` op behind. The
 creation emitter refuses panels outside that independent-shape recipe:
@@ -632,8 +632,7 @@ shape, so a thin subtraction against a plate bakes in as a seam and a small
 union carrying its own material as a rivet, painted through the bake's
 point-sampled materials.
 
-Both emission paths (`CreationStampEmitter.EmitShapeChain`,
-`Client.WorldCreationInstances.EmitShape`) thread `Detail` into
+The shape emission (`ShapeEmission.Emit`) threads `Detail` into
 `SdfSolidGeometry.AppendScaledPrimitive`'s emission of the shape's OWN
 instruction only—never into a panel's or a trim's second copy, so `Detail`
 is refused by name alongside `Panel` or `Trims` on the same shape rather than

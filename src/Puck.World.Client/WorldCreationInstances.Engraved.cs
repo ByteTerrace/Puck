@@ -10,7 +10,7 @@ public sealed partial class WorldCreationInstances {
     // the engraving rides the surface it carved. Glass keeps its separate, unengraved field. Each owner's instance holds
     // its own shapes, the carves its partitions borrow (CreationMotionPlan.Borrows), and the runs that ride one of its
     // shapes or creation space; a run riding another owner's shape carves only that owner.
-    private static void EmitEngravedOwners(SdfProgramBuilder builder, CreationDocument document, CreationMotionPlan motion, int rootSlot, int[] paletteIds, float placementScale, float materialScale, float radius, PackedFontAtlasCatalog textCatalog, IReadOnlyList<TextLayoutResult>? textLayouts) {
+    private static void EmitEngravedOwners(SdfProgramBuilder builder, CreationDocument document, CreationMotionPlan motion, int rootSlot, int[] paletteIds, float materialScale, float radius, PackedFontAtlasCatalog textCatalog, IReadOnlyList<TextLayoutResult>? textLayouts) {
         var shapes = document.Shapes!.Select(selector: (shape, index) => (((shape.Group ?? 0) == 0) ? shape with { Group = -(index + 1), Blend = SdfBlendOp.Union } : shape)).ToArray();
         var partsDocument = document with { Shapes = shapes };
         var runs = (document.TextRuns ?? []);
@@ -23,12 +23,12 @@ public sealed partial class WorldCreationInstances {
 
             _ = builder.BeginInstanceDynamic(slot, Vector3.Zero, radius, separateBake: true, boundInSlotFrame: true, restPoseSkin: true,
                 // Each part declares its own spacing (WorldShapeDetail.Of, through EmitGroup); the instance declares the text's.
-                detail: (glass ? 0f : WorldPlacementStamper.TextDetail(creation: document, scale: placementScale))).PushField(compose: SdfBlendOp.Union);
+                detail: (glass ? 0f : WorldPlacementStamper.TextDetail(creation: document, scale: 1f))).PushField(compose: SdfBlendOp.Union);
             foreach (var group in Enumerable.Range(0, shapes.Length).Where(predicate: Own).Select(selector: index => shapes[index].Group!.Value).Distinct()) {
-                EmitGroup(builder, partsDocument, shapes, group, 0, rootSlot, paletteIds, placementScale, materialScale, false, slot, radius, false, hidden, motion, Vector3.Zero);
+                EmitGroup(builder, partsDocument, shapes, group, 0, rootSlot, paletteIds, materialScale, slot, radius, false, hidden, motion, Vector3.Zero);
             }
             if (!glass) {
-                CreationStampEmitter.EmitTextDynamic(builder, partsDocument, slot, placementScale, textCatalog.Resolve, run => paletteIds[((run.Material ?? 0) % paletteIds.Length)], textLayouts, includes: index => ((runOwners[index] < 0) || (runOwners[index] == owner)));
+                CreationStampEmitter.EmitTextDynamic(builder, partsDocument, slot, 1f, textCatalog.Resolve, run => paletteIds[((run.Material ?? 0) % paletteIds.Length)], textLayouts, includes: index => ((runOwners[index] < 0) || (runOwners[index] == owner)));
             }
             _ = builder.PopField().EndInstance();
         }

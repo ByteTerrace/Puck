@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
@@ -15,15 +14,14 @@ public static class ShapePointOps {
     // explicitly known to be 1-Lipschitz (elongation). Adding an emitted operation cannot omit its scope.
     private static Operations Active(float twist, float bend, ShapeFlareDocument? flare,
         ShapeShearDocument? shear, IReadOnlyList<ShapeBumpDocument>? bumps, ShapeWarpDocument? warp,
-        DocumentVector3? elongate, bool probeWorstCase = false) =>
-        (probeWorstCase ? (Operations)(-1) :
-            ((twist != 0f) ? Operations.Twist : Operations.None) |
-            ((bend != 0f) ? Operations.Bend : Operations.None) |
-            ((flare is not null) ? Operations.Flare : Operations.None) |
-            ((shear is not null) ? Operations.Shear : Operations.None) |
-            ((bumps is { Count: > 0 }) ? Operations.Bumps : Operations.None) |
-            ((warp is not null) ? Operations.Warp : Operations.None) |
-            ((elongate is not null) ? Operations.Elongate : Operations.None));
+        DocumentVector3? elongate) =>
+        ((twist != 0f) ? Operations.Twist : Operations.None) |
+        ((bend != 0f) ? Operations.Bend : Operations.None) |
+        ((flare is not null) ? Operations.Flare : Operations.None) |
+        ((shear is not null) ? Operations.Shear : Operations.None) |
+        ((bumps is { Count: > 0 }) ? Operations.Bumps : Operations.None) |
+        ((warp is not null) ? Operations.Warp : Operations.None) |
+        ((elongate is not null) ? Operations.Elongate : Operations.None);
 
     /// <summary>Whether a shape's point deformations or relief need an isolated Lipschitz clamp.</summary>
     public static bool NeedsScope(ShapeDocument shape) => NeedsScope((shape.Twist ?? 0f), (shape.Bend ?? 0f),
@@ -38,74 +36,71 @@ public static class ShapePointOps {
     /// <summary>Whether contact must evaluate the shape's point deformation rather than its straight primitive.</summary>
     public static bool DeformsContact(ShapeDocument shape) =>
         (Active((shape.Twist ?? 0f), (shape.Bend ?? 0f), null, null, null, null, null) != Operations.None);
-    /// <summary>Applies twist, bend, flare, shear, bumps, warp and elongation in document order.
-    /// <paramref name="lengthScale"/> converts authored creation lengths into the chain's point units;
-    /// inverse lengths convert reciprocally. A chain already carrying the placement Scale uses one.</summary>
-    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, float lengthScale = 1f, float twist = 0f,
+    /// <summary>Applies twist, bend, flare, shear, bumps, warp and elongation in document order, in the chain's point
+    /// units, which are the creation units the shape is authored in.</summary>
+    /// <param name="chain">The chain the deformations apply to.</param>
+    /// <param name="twist">The twist rate, radians per creation unit of local Y.</param>
+    /// <param name="bend">The bend rate, radians per creation unit of local Y.</param>
+    /// <param name="flare">The flare, or <see langword="null"/> for none.</param>
+    /// <param name="shear">The shear, or <see langword="null"/> for none.</param>
+    /// <param name="bumps">The gaussian pushes, or <see langword="null"/> for none.</param>
+    /// <param name="warp">The sine warp, or <see langword="null"/> for none.</param>
+    /// <param name="elongate">The elongation half-extents, or <see langword="null"/> for none.</param>
+    /// <returns>The chain.</returns>
+    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, float twist = 0f,
         float bend = 0f, ShapeFlareDocument? flare = null, ShapeShearDocument? shear = null,
         IReadOnlyList<ShapeBumpDocument>? bumps = null, ShapeWarpDocument? warp = null,
-        DocumentVector3? elongate = null, bool probeWorstCase = false) {
-        var operations = Active(bend: bend, bumps: bumps, elongate: elongate, flare: flare, probeWorstCase: probeWorstCase, shear: shear, twist: twist, warp: warp);
+        DocumentVector3? elongate = null) {
+        var operations = Active(bend: bend, bumps: bumps, elongate: elongate, flare: flare, shear: shear, twist: twist, warp: warp);
 
         if ((operations & Operations.Twist) != 0) {
-            chain = chain.TwistY(rate: (probeWorstCase
-                ? 1f
-                : (twist / lengthScale)));
+            chain = chain.TwistY(rate: twist);
         }
 
         if ((operations & Operations.Bend) != 0) {
-            chain = chain.BendY(rate: (probeWorstCase
-                ? 1f
-                : (bend / lengthScale)));
+            chain = chain.BendY(rate: bend);
         }
 
         if ((operations & Operations.Flare) != 0) {
             chain = chain.AxialProfile(
-                amount: (probeWorstCase ? ShapeFlareDocument.MaxAmount : flare!.Amount),
-                bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
-                top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
-                span: (probeWorstCase ? 1f : (flare!.Span * lengthScale)),
-                axis: (probeWorstCase ? SdfAxis.Y : (SdfAxis)flare!.Axis),
-                startScale: (probeWorstCase ? ShapeFlareDocument.MaxStartScale : flare!.StartScale)
+                amount: flare!.Amount,
+                bulge: flare.Bulge,
+                top: (flare.Top ?? 0f),
+                span: flare.Span,
+                axis: (SdfAxis)flare.Axis,
+                startScale: flare.StartScale
             );
         }
 
         if ((operations & Operations.Shear) != 0) {
             chain = chain.Shear(
-                linear: (probeWorstCase ? ShapeDocument.MaxShear : shear!.Linear),
-                quadratic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Quadratic / lengthScale)),
-                cubic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Cubic / (lengthScale * lengthScale))),
-                target: (probeWorstCase ? SdfAxis.X : (SdfAxis)shear!.Target),
-                driver: (probeWorstCase ? SdfAxis.Y : (SdfAxis)shear!.Driver)
+                linear: shear!.Linear,
+                quadratic: shear.Quadratic,
+                cubic: shear.Cubic,
+                target: (SdfAxis)shear.Target,
+                driver: (SdfAxis)shear.Driver
             );
         }
 
-        if (probeWorstCase) {
-            // Worst-case reserves the widest declared bump list; every entry is otherwise identical for capacity
-            // purposes (each costs the same single instruction) — Push length feeds the caller's reach probe,
-            // not the instruction count.
-            for (var i = 0; (i < ShapeBumpDocument.MaxBumps); i++) {
-                chain = chain.GaussianPush(center: Vector3.Zero, radii: Vector3.One, push: new Vector3(value: ShapeBumpDocument.MaxPushMagnitude));
-            }
-        } else if ((operations & Operations.Bumps) != 0) {
-            foreach (var bump in (bumps ?? [])) {
+        if ((operations & Operations.Bumps) != 0) {
+            foreach (var bump in bumps!) {
                 chain = chain.GaussianPush(
-                    center: (bump.Center.Value * lengthScale),
-                    radii: (bump.Radii.Value * lengthScale),
-                    push: (bump.Push.Value * lengthScale)
+                    center: bump.Center.Value,
+                    radii: bump.Radii.Value,
+                    push: bump.Push.Value
                 );
             }
         }
 
         if ((operations & Operations.Warp) != 0) {
             chain = chain.DomainWarp(
-                amplitude: (probeWorstCase ? ShapeWarpDocument.MaxAmplitude : (warp!.Amplitude * lengthScale)),
-                frequency: (probeWorstCase ? new Vector3(value: ShapeWarpDocument.MaxFrequency) : (warp!.Frequency.Value / lengthScale))
+                amplitude: warp!.Amplitude,
+                frequency: warp.Frequency.Value
             );
         }
 
         if ((operations & Operations.Elongate) != 0) {
-            chain = chain.Elongate(extents: (probeWorstCase ? new Vector3(value: ShapeDocument.MaxElongate) : (elongate!.Value * lengthScale)));
+            chain = chain.Elongate(extents: elongate!.Value);
         }
 
         return chain;

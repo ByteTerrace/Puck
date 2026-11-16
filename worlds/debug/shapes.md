@@ -283,7 +283,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 `Puck.SignedDistance`, the creation document (`CreationDocument.cs`,
 `ShapeDomainOp.cs`, `PaletteLayersDocument.cs`, `VolumeDocument.cs`,
 `CreationEffector.cs`, `CreationAnimation.cs`) and the driver runtime
-(`WorldGaitDrivers`, `WorldStampPool`).
+(`WorldGaitDrivers`, `WorldCreationInstances`).
 
 ### Primitives, profiles and lifts
 
