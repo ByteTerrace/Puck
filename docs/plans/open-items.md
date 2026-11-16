@@ -5160,12 +5160,6 @@ failing case marked "argued" is read from source, not run.
   all (take none until all are free, in one admission decision), so a quiet
   waiter never idles a resource another lane could use.
 
-- [low · unconfirmed] `puck measure request --after-commit` built the World
-  but Windows refused `WorldArtifactStore.Publish`'s directory rename after its
-  retries (`src/Puck.Cli.Harness/WorldArtifactStore.cs:183`, `Directory.Move`),
-  so the request failed until refiled from the built artifact. What held the
-  directory is not named: find the holder (a scanner, a lingering build node,
-  the store's own handle) and fix it there, never with more retries.
 - [medium] `puck integrate`: the lead's integration steps as one verb, in
   place of the hand-run sequence. It composes the existing pieces under one
   report: the build, each generator's `--check`, `puck docs links`, a headless
@@ -5241,8 +5235,11 @@ Launch and process lifecycles:
   (`src/Puck.Abstractions/FileLock.cs:49-68`) deletes a lock file while it holds
   it, and the artifact store deletes keyed locks
   (`src/Puck.Cli.Harness/WorldArtifactStore.cs`): on Linux two builders can lock
-  different inodes at one path and build the same key twice. Check the inode
-  after locking, or stop deleting keyed locks.
+  different inodes at one path and build the same key twice, and a pruning run
+  that locks the new inode deletes the unpublished build directory of a builder
+  still holding the old one (`WorldArtifactBuildClaim` is exclusive only while
+  the lock path names one inode). Check the inode after locking, or stop
+  deleting keyed locks.
 
 CLI maturity remainders (each a [low]):
 
