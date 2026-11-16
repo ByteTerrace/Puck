@@ -160,12 +160,15 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         return heaps;
     }
 
+    // A descriptor heap is no resource heap, and Direct3D 12 names no memory pool for one; it is counted in the local
+    // segment group, where its device-local role places it on a discrete adapter and the only group on a unified one.
     private void Count(nint heap, ulong bytes) =>
         m_memory?.CountAllocated(
             allocation: heap,
             bytes: checked((long)bytes),
             device: m_device,
-            role: GpuMemoryRole.DeviceLocal
+            role: GpuMemoryRole.DeviceLocal,
+            segment: GpuMemorySegments.DirectXLocal
         );
 
     /// <summary>Binds both heaps to a command list, once per recording: a reset clears a command list's heaps.</summary>

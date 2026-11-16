@@ -530,6 +530,7 @@ public sealed class WindowHostPresentation {
                             // The operator's gpu.faults lose or remove: the armed frame loses or removes the device here, and
                             // recovers through the same policy a real loss does.
                             DeviceLossRecovery.CountFrame(faults: m_faults, rootHostContext: m_rootHostContext);
+                            DeviceMemoryReadings.Refresh(rootHostContext: m_rootHostContext);
 
                             // BeginFrame recreates presentation resources when the size changed and waits for the frame queue
                             // to accept another present. The render root keeps its own frames in flight, as the offscreen

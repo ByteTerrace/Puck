@@ -133,7 +133,7 @@ public sealed unsafe class DirectXHeapArena {
         }
     }
 
-    // Creates a heap and counts it.
+    // Creates a heap and counts it in the segment its type's memory pool lies in.
     private nint Allocate((D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) key, ulong bytes) {
         var description = new D3D12_HEAP_DESC {
             Flags = key.Category,
@@ -143,7 +143,13 @@ public sealed unsafe class DirectXHeapArena {
         ID3D12Heap* heap = null;
 
         m_calls.CreateHeap(description: &description, heap: &heap).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreateHeap");
-        m_memory?.CountAllocated(allocation: ((nint)heap), bytes: checked((long)bytes), device: m_device, role: key.Role);
+        m_memory?.CountAllocated(
+            allocation: ((nint)heap),
+            bytes: checked((long)bytes),
+            device: m_device,
+            role: key.Role,
+            segment: DirectXDeviceMemory.SegmentOf(calls: m_calls, heap: in description.Properties, segments: m_memory.SegmentsOf(device: m_device))
+        );
 
         return ((nint)heap);
     }

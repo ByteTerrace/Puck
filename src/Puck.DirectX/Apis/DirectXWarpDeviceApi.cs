@@ -33,4 +33,7 @@ public sealed class DirectXWarpDeviceApi : IDirectXDeviceApi {
     /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
         m_native.GetMemoryProfile(deviceHandle: deviceHandle);
+    /// <inheritdoc/>
+    public nint OpenAdapter(nint deviceHandle) =>
+        m_native.OpenAdapter(deviceHandle: deviceHandle);
 }
