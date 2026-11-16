@@ -2273,14 +2273,16 @@ public sealed partial class SdfMeshPathBake {
         private readonly int[] m_incident;
         private readonly Triangle[] m_triangles;
 
-        // `Axis` is zero where the contour records no lattice edge.
-        private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis);
+        // `Axis` is zero where the contour records no lattice edge; `Patches` is the sum of the corners' patch facings
+        // (SdfContour.Patches), zero where it records none.
+        private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis, (double X, double Y, double Z) Patches);
 
         public ContourProjection(SdfContour contour) {
             var triangles = new List<Triangle>(capacity: (2 * contour.QuadCount));
 
             m_starts = new int[(contour.VertexCount + 1)];
 
+            double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
                 if ((a == b) || (a == c) || (b == c)) { return; }
                 var pa = At(contour: contour, vertex: a);
@@ -2292,7 +2294,7 @@ public sealed partial class SdfMeshPathBake {
                 // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
                 // into a valid triangle instead of making one degenerate face immobilize the whole fan.
                 if (!(Dot(a: normal, b: normal) > ((1e-12 * longest) * longest))) { return; }
-                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Reference: normal));
+                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(vertex: a, axis: 0) + Patch(vertex: b, axis: 0)) + Patch(vertex: c, axis: 0)), ((Patch(vertex: a, axis: 1) + Patch(vertex: b, axis: 1)) + Patch(vertex: c, axis: 1)), ((Patch(vertex: a, axis: 2) + Patch(vertex: b, axis: 2)) + Patch(vertex: c, axis: 2))), Reference: normal));
                 m_starts[(a + 1)]++;
                 m_starts[(b + 1)]++;
                 m_starts[(c + 1)]++;
@@ -2371,7 +2373,7 @@ public sealed partial class SdfMeshPathBake {
                     var triangle = m_triangles[m_incident[at]];
 
                     valid = ((Facing(contour: contour, point: point, triangle: triangle, vertex: vertex) > 0.0) &&
-                        ((triangle.Axis == 0) || (Along(contour: contour, point: point, triangle: triangle, vertex: vertex) > 0.0) || (Along(contour: contour, point: original, triangle: triangle, vertex: vertex) <= 0.0)));
+                        ((triangle.Axis == 0) || FacesOut(contour: contour, point: point, triangle: triangle, vertex: vertex) || !FacesOut(contour: contour, point: original, triangle: triangle, vertex: vertex)));
                 }
                 if (valid) {
                     amount = ((float)limit);
@@ -2394,6 +2396,16 @@ public sealed partial class SdfMeshPathBake {
             var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
 
             return SdfContourFacing.Along(a: (a.X, a.Y, a.Z), axis: triangle.Axis, b: (b.X, b.Y, b.Z), c: (c.X, c.Y, c.Z));
+        }
+        // Whether the triangle faces out as the lattice fixed its quad's facing with `vertex` at `point`
+        // (SdfContourFacing.FacesOut): the analytic clip keeps it facing out along its edge, and this also refuses a move
+        // that leaves it edge-on to that edge and turned against its corners' patches.
+        private static bool FacesOut(SdfContour contour, Triangle triangle, int vertex, Vector3 point) {
+            var a = ((triangle.A == vertex) ? point : At(contour: contour, vertex: triangle.A));
+            var b = ((triangle.B == vertex) ? point : At(contour: contour, vertex: triangle.B));
+            var c = ((triangle.C == vertex) ? point : At(contour: contour, vertex: triangle.C));
+
+            return SdfContourFacing.FacesOut(a: (a.X, a.Y, a.Z), axis: triangle.Axis, b: (b.X, b.Y, b.Z), c: (c.X, c.Y, c.Z), patches: triangle.Patches);
         }
         private static (double X, double Y, double Z) Area(Vector3 a, Vector3 b, Vector3 c) {
             var (ux, uy, uz) = ((((double)b.X) - a.X), (((double)b.Y) - a.Y), (((double)b.Z) - a.Z));

@@ -2242,6 +2242,26 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
             }
         }
+
+        // A merged vertex stands for several cells, so two quads can hold one pair of vertices as opposite corners; split
+        // along that pair both, they make an edge four triangles hold. The later quad takes its other diagonal where that
+        // split faces out too. Only a vertex no crossing pins (SdfContour.Solved, which every merged vertex is) can be
+        // such a corner.
+        var solved = contour.Solved;
+        HashSet<long>? taken = null;
+
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var at = (4 * quad);
+            var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
+
+            if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
+            taken ??= new HashSet<long>(comparer: PackedIntPairComparer.Instance);
+            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)))) { continue; }
+            if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
+            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)))) {
+                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (b, c, d, a);
+            }
+        }
     }
 
     // Whether a quad of four vertex indices splits along its first diagonal, its first corner to its third, rather than
