@@ -3,6 +3,7 @@
 // Imported before hall.puck: body 42 remains the companion and the lift keeps its own population slot.
 import "../standard/inputs"
 import "../standard/kits"
+import "../standard/rig"
 import "companion-senses"
 
 let companionBody = 42
@@ -36,8 +37,8 @@ prototypes {
           bulge: 0.005
         }
         swings [
-          { driver: "bank", pivot [0, 0.13, 0], axis [0, 0, 1], amplitude: 0.06, wave: "linear" }
-          { driver: "pitch", pivot [0, 0.13, 0], axis [1, 0, 0], amplitude: -0.035, wave: "linear" }
+          swing("bank", [0, 0, 1], 0.06, [0, 0.13, 0]) with { wave: "linear" }
+          swing("pitch", [1, 0, 0], -0.035, [0, 0.13, 0]) with { wave: "linear" }
         ]
       }
       shape Sweep "husk-right" {

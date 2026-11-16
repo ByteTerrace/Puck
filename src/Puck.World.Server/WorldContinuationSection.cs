@@ -55,9 +55,10 @@ public enum WorldContinuationSectionKind : byte {
 }
 /// <summary>One section of a slot's simulation continuation: a value whose encoding is a static function of the value
 /// alone. The encoder can read nothing but the section it is handed, so a section's digest cannot depend on state
-/// outside it.</summary>
+/// outside it. Every one is a section a state holder may own (<see cref="IVersionedSection"/>), which is what puts
+/// this project's sections under the DOOR analyzer rules.</summary>
 /// <typeparam name="TSelf">The section type.</typeparam>
-public interface IContinuationSection<TSelf> where TSelf : struct, IContinuationSection<TSelf> {
+public interface IContinuationSection<TSelf> : IVersionedSection where TSelf : struct, IContinuationSection<TSelf> {
     /// <summary>Gets which section this is: its place in a slot's fold and the name its counters carry.</summary>
     static abstract WorldContinuationSectionKind Section { get; }
     /// <summary>Gets a value indicating whether a slot's continuation digest folds this section. A section that is

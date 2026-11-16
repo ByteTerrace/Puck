@@ -13,6 +13,7 @@
 // in its flow's pattern and colour, where the bed or a wall comes within `reach` of the surface along the view. The pool,
 // the basins and the lake hold metres of water; the stream and the falls are thin sheets and scatter more per metre.
 import "shading"
+import "rig"
 let waterGlass = {
   depth: 4
   ior: 1.333
@@ -38,13 +39,17 @@ let stillFlowLayer = {
   seed: 9
 }
 // The standard's surface material, shared with field rows through the ordinary palette vocabulary.
-let waterMaterial = flowed({
-  color: "#3FB8C4"
-  roughness: 0.16
-  specular: 0.5
-  coat: 0.3
-  glass: waterGlass
-}, stillFlowLayer, glass: 1)
+let waterMaterial = flowed(
+  {
+    color: "#3FB8C4"
+    roughness: 0.16
+    specular: 0.5
+    coat: 0.3
+    glass: waterGlass
+  },
+  stillFlowLayer,
+  glass: 1
+)
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
 // ordinary surface and medium queries at the place where visitors meet it. The drawn surface follows the full value as
@@ -262,14 +267,12 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
           ]
           rotation [0 - halfTurnSine(fallsSlope(profile, j)), 0, 0, halfTurnCosine(fallsSlope(profile, j))]
           swings [
-            {
-              driver: "fold"
-              pivot [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
-              axis [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]]
-              amplitude: 1.5707963267948966
-              phase: 1
-              wave: "linear"
-            }
+            swing(
+              "fold",
+              [0, profile[j][1] - profile[j + 1][1], profile[j][0] - profile[j + 1][0]],
+              1.5707963267948966,
+              [0, (profile[j][1] + profile[j + 1][1]) / 2, (profile[j][0] + profile[j + 1][0]) / 2 - standoff]
+            ) with { wave: "linear", phase: 1 }
           ]
         }
       }

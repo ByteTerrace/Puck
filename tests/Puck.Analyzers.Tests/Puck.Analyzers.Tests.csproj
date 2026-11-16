@@ -16,6 +16,11 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <!-- The state holders' own sources, compiled in memory by the door cases: a refusal there is the real door's,
+             and this suite takes no reference on Puck.State that every other harness compilation would then see. -->
+        <EmbeddedResource Include="../../src/Puck.State/Versions/*.cs" LogicalName="DoorSources.%(Filename)%(Extension)" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension
              (OutputItemType="Analyzer", ReferenceOutputAssembly="false"). This suite instead needs the analyzer as
              an ordinary assembly reference, because it instantiates each analyzer directly and drives it over

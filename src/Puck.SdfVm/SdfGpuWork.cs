@@ -339,8 +339,8 @@ public sealed class SdfGpuWork : IDisposable {
             throw;
         }
     }
-    /// <summary>Drives the work for a frame that is held rather than presented (one whose lighting must converge before
-    /// it shows): answers and refills as <see cref="Pump"/> does, repeatedly for up to <see cref="DriveSlice"/>, waiting
+    /// <summary>Drives the work for a frame that is held rather than presented (one whose meshes must land or whose
+    /// lighting must converge before it shows): answers and refills as <see cref="Pump"/> does, repeatedly for up to <see cref="DriveSlice"/>, waiting
     /// on the host for the job in flight to complete, or for a client to offer its next job or give a slot back
     /// (<see cref="Wake"/>). The GPU, upload and recording budgets protect the frame queued behind background work; a
     /// held frame queues none, so a drive takes jobs outside them and charges them nothing, and the work proceeds at the

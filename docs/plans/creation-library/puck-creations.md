@@ -115,7 +115,7 @@ the same length in metres **[opened]**
 ```
 
 A standard design is a template that emits a whole prototype row, keyed by the
-id its caller chooses **[opened]** (`worlds/standard/foliage.puck:70-74`):
+id its caller chooses **[opened]** (`worlds/standard/foliage.puck:88-92`):
 
 ```puck
 template mossyRock(id, colors = limestoneRock) {
@@ -218,8 +218,9 @@ it as "an optional authored design package" **[opened]**
 | Literal prototype | `walker`: a capsule and a visor, 1.7 m | `worlds/standard/walker.puck:96-120` |
 | Foliage templates | `mossyRock`, `broadleafTree`, `flatCrownTree`, `columnTree`, `weepingTree` (over the `groupedTree` helper), `scrubClump`, `flowerCluster`, `grassTuft`, `windMeadowTile`, `sceneryPatch`, `paintedGround`, `fernClump`, `fallenLog`, `leafLitter` | `worlds/standard/foliage.puck` |
 | Water scenery templates | `riverChannel`, `fallsRibbon`, `glacierMass`, `lakeSurface`, `floatGauge`, `impactSpray`, `reservoirPavilion`, `stoneBridge`, `waterBasin` | `worlds/standard/water.puck` |
-| Card deck | `cardDeckPrototypes(variant, prefix)`: 52 faces and a back per variant, two variants | `worlds/standard/cards.puck:4417-4437` |
+| Card deck | `cardDeckPrototypes(variant, prefix)`: 52 faces and a back per variant, two variants | `worlds/standard/cards.puck` |
 | Shape helpers (rows, not prototypes) | `boundsBox`, `localBox`, `barRing`, `flatRing`; `terrainMass`, `terrainBasin`, `terrainFloorCut`, `terrainRelief` | `worlds/standard/bounds.puck`, `worlds/standard/terrain.puck` |
+| Mirrored pairs and rig rows | `bySide`, `mirrorX`, `mirrorRotation`, `signed` (a part's second side from its first); `swing` (one `swings` row) | `worlds/standard/mirror.puck`, `worlds/standard/rig.puck` |
 
 **[ran]** These are the templates whose body emits a `prototype $"..."` row, as
 an `awk` pass over the five files lists them. The tree wrappers emit theirs
