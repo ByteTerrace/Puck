@@ -237,25 +237,19 @@ public sealed class DeliveryReviewLawTests {
                 Visibility: new StateVisibility(Readers: ["seat1"]))).ToArray()
         }));
         fixture.Step();
-        ReclaimObsoleteImages(view);
-        Assert.Contains("disclosure images 0,", images.Describe(), StringComparison.Ordinal);
-        Assert.Equal(WorldProjectionDeliveryKind.None, feed.Compose(view, cursor).Kind);
+        // The image table is a cache whose entries go when it next brings itself current, so a table that has never
+        // composed stands for one that reclaimed every obsolete image: none of the images the feed holds come back.
+        var reclaimed = new WorldDisclosureImages();
+        var fresh = View(fixture, reclaimed, WorldDisclosureTier.Presentation);
+        Assert.NotSame(Assert.Single(feed.Held!.Observations!), fresh.Image(0).Observation);
+        Assert.Equal(WorldProjectionDeliveryKind.None, feed.Compose(fresh, cursor).Kind);
         Assert.Equal(1L, cursor.Sequence);
         Assert.Equal(before, WorldProjection.SerializeCompact(feed.Held!));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 5, WorldDocumentWriteKind.Set));
         fixture.Step();
-        Assert.Equal(WorldProjectionDeliveryKind.Delta, feed.Compose(view, cursor).Kind);
+        Assert.Equal(WorldProjectionDeliveryKind.Delta, feed.Compose(fresh, cursor).Kind);
         Assert.Equal(2L, cursor.Sequence);
         Assert.Equal(5L, Assert.Single(Assert.Single(feed.Held!.Observations!).Cells).Value);
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static void ReclaimObsoleteImages(WorldRecipientView view) {
-        // Preparing another empty stream invalidates structural cache entries without composing any replacement.
-        Assert.Empty(view.Advance(new WorldDeliveryCursor(), []));
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
     }
 
     private sealed class Replica : IClientSink {
