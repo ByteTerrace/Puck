@@ -211,15 +211,15 @@ allocators of an arrival **[reading]**.
 
 ### The store decode
 
-`SdfMeshStore.TryRead` reads the entry into a managed array, and
-`SdfMeshStoreCodec.TryDecode` inflates it into native scratch and then
-the codec's mesh reader decoded every plane into a new managed array
-**[opened]**. `SdfMeshLibrary.TryLoad` renumbers into more managed arrays where
-the group's ids differ (`SdfMeshLibrary.RenumberManaged`) and copies the result
-into native storage (`SdfMesh.NativeCopy`), after which the managed arrays are
-garbage. A restore of a published mesh's normals and coarser levels
-(`SdfMesh.Hold`, and the owed set's needs) reads and decodes the whole entry
-the same way and copies those two parts.
+A host's load decodes an entry straight into the storage its mesh keeps:
+`SdfMeshLibrary.TryLoad` hands `SdfMeshStoreCodec.TryDecode` the mesh's native
+storage (`SdfMesh.Native`), the group's material ids are applied as the
+material planes are read, and `SdfMeshStore` reads the entry into owned
+scratch **[opened]**. Managed arrays remain only for an offline library, which
+has no allocator (`SdfMeshLibrary.RenumberManaged`). A restore of a published
+mesh's normals and coarser levels (`SdfMesh.Hold`, and the owed set's needs)
+reads only those planes and skips the rest by their stated length. This is
+[decision 4](#decision-4-the-store-decode)'s favoured option, built as step D1.
 
 ## Failure modes
 

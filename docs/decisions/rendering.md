@@ -1115,7 +1115,7 @@ window grown by the band that holds the window still (an eighth of it a side),
 and forgets the rest when the window moves, so the cache is bounded by
 residency, not by where the camera has been. Full demand-point windowing and
 scene scope are open work in
-[residency step 2](../plans/open-items.md#residency-and-streaming).
+[the streaming and memory plan](../plans/streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand).
 A still cell reuses its measurement until the lighting or geometry changes.
 [The handbook](../rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 owns its layout, costs and limits.

@@ -105,10 +105,14 @@ demand and priority rather than creating executors.
   through a portal face, each led along its velocity by the landing latency
   (the valley plan's "planned against the authored flight speed").
 - **The passive default needs no authoring.** A group's priority comes from its
-  projected size and error at the nearest demand point: a level is demanded
-  where the coarser level's recorded error would project past about a pixel,
-  with a hysteresis band, which is the rule a level of detail already switches
-  by ([a raster pass draws only what it can show](rendering.md#a-raster-pass-draws-only-what-it-can-show)).
+  projected size and error at the nearest demand point: the tier demanded is
+  the coarsest whose cell stays under half a display pixel there
+  (`SdfMeshTier.Of`), and a finer tier replaces the resident one only once the
+  demand has held for `SdfMeshTier.HoldFrames`, so nothing thrashes at a rung
+  ([bake demand tiers](../plans/bake-demand-tiers.md#the-rule)). It is the
+  reasoning a mesh's collapse levels already switch by at draw time
+  ([a raster pass draws only what it can show](rendering.md#a-raster-pass-draws-only-what-it-can-show)),
+  applied to what is baked and kept.
   Rings at fixed metre radii are rejected in favour of the projected-size
   rule, because it follows the existing ruling, holds at any scale from a card
   to a mountain, and needs no tuning. The coarsest level
@@ -132,7 +136,9 @@ demand and priority rather than creating executors.
 - **One reservation** across every live residency, granted from the job
   system's physical byte-accounting owner and applied by selector policy.
   Eviction goes by priority, never wholesale and never refused on a miss
-  ([machine budgets are bytes](rendering.md)), so no allocation throws past
+  ([machine budgets are bytes](rendering.md)), and a device that refuses a
+  growth lowers the budget instead of ending the World. The mesh region's own
+  limit (`SdfWorldTables.MeshRegionLimitOf`) already keeps it under
   `GpuRegion.MaxByteCount`.
 - **Residency is broader than visibility.** Shadow casters and GI blockers
   within their support regions stay resident though offscreen, and the
@@ -168,9 +174,11 @@ Each step is taken when the measured need appears:
    at the nearest demand point, and `SdfMeshPathBake.Residency` applies it to
    groups and store loads. This is the base policy for the engine scheduler;
    the occupied room returns first.
-3. **GI on the same demand points:** the probe window follows every view, not
-   `Views[0]` alone, the irradiance scene and its pending gate are scoped to what
-   the window reaches, and `ProbeCache` is byte-bounded.
+3. **GI on the same demand points:** the lighting reads the selector's demand
+   points in place of its own view list (each level of its window already
+   centres on every view that fits, anchored on the first:
+   `SdfMeshIrradiance.WindowLow`), the irradiance scene and its pending gate are
+   scoped to what the window reaches, and `ProbeCache` is byte-bounded.
 4. **Mapped demand through portal faces**, replacing the blanket baking share.
 5. **Eviction under the byte budget**, with coarse levels owning compacted
    vertices so dropping a fine level frees its vertices, not only its indices.
@@ -184,6 +192,13 @@ Each step is taken when the measured need appears:
    the next floor gradually; nothing switches at a trigger.
 7. **Terrain tiles** (the valley plan's step 4) as units in the same selector,
    then the moons through routed residency.
+
+[The streaming and memory plan](../plans/streaming-and-memory.md) holds the
+build: where each step stands against the code, the decisions the build rests
+on (one account with pools by physical memory, one reservation across
+residencies, staging by demand in place of a render, a tier as the eviction
+unit with each group's coarsest tier as its floor), and the order with the
+reading that judges each step.
 
 Document and program assembly become spatially incremental only if measurement
 shows them dominating after this. Area-scoped rule sleep, driven by authoritative

@@ -183,9 +183,10 @@ What the budget does not yet do, each a named gap:
   tiers move both ways, so the lighting's cost per retier wave is paid more
   often.
 - **Each residency budgets alone.** Every residency reads the same limit
-  and budgets its own region to it; the nested worlds are small today (tens
-  of megabytes), and one account across a device's residencies is the
-  memory account's when it is not.
+  and budgets its own region to it, so the limits of several residencies sum
+  past the device.
+  [One reservation across residencies](streaming-and-memory.md#decision-3-one-reservation-across-residencies-with-floors-and-classes)
+  replaces the share.
 - **The material cut's lists** grow outside the memory account
   (`SdfMeshMaterialCut.Build`), so a bake's peak is unbounded by any budget
   here; reserving them through `MemoryAccount.Owner.TryReserve` and failing

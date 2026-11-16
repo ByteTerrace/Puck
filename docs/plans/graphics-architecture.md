@@ -415,7 +415,7 @@ residency is absent, and frame-driven dispatch adds latency.
    key alone.
 3. **Demand-bounded residency behind geometry handles** (M4; Codex rank 3),
    with the GI scene's claims counted as demand so a GPU-resident trace no
-   longer pins CPU arrays. **Adopted after V1b**, as residency step 2 and 4
+   longer pins CPU arrays. **Adopted after V1b**, as [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s eviction, CPU-copy and lighting steps
    already schedule it.
 4. **Streamable coarse levels and pages, certified field pruning, cluster
    DAGs, GPU contouring** (Codex ranks 4 to 7). Later, as its file orders
