@@ -109,6 +109,24 @@ public sealed partial class SdfMeshIrradiance {
         }
     }
 
+    /// <summary>Names what a view's GPU camera sample waits for while it has none, for <c>world.exposure</c>: <c>cpu</c>
+    /// when the volume samples on the CPU, <c>window</c> before the volume has a window, <c>scene</c> or
+    /// <c>scene-upload</c> before the device holds the volume's scene, <c>unpublished</c> before the device holds a
+    /// publication of the volume, <c>meter</c> while a meter is in flight, <c>unasked</c> before any meter answered, and
+    /// <c>cut</c> while the answered meter was asked before the view's latest cut.</summary>
+    /// <returns>The wait's name.</returns>
+    internal string CameraSampleWait() {
+        // The client's gate is never taken under this one: its admission takes this gate under its own.
+        if (GpuTrace is not { } client) { return "cpu"; }
+        var scene = client.SceneWait;
+        lock (m_gate) {
+            if (!m_windowValid) { return "window"; }
+            if (scene is not null) { return scene; }
+            if (m_gpuVolume is null) { return "unpublished"; }
+            if (m_gpuMeterTask is { IsCompleted: false }) { return "meter"; }
+            return ((m_gpuMeter is null) ? "unasked" : "cut");
+        }
+    }
     // Called under the volume gate. No hierarchy traversal, ray shading or waiting occurs on the frame thread: a view
     // reads its own latest row, at most one meter round trip old. At a cut (fresh) only a row asked after the view's cut
     // answers, so the reading after a teleport is where the camera stands, never where it stood.
