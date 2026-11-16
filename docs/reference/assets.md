@@ -277,7 +277,10 @@ release store must.
 [Writing and locking files](abstractions.md#writing-and-locking-files). The
 store writes through it. A temporary's name ends in `AtomicFile.TemporarySuffix`,
 which `SetRef` refuses as a ref name, so `ListRefs` and the store's retention
-skip a write in progress, and retention removes one a killed writer abandoned.
+skip a write in progress. Retention removes a temporary only once its writer no
+longer runs: the name carries the writer's claim, which `AtomicFile.IsAbandoned`
+judges, because a live writer can wait any length of time between staging and
+publication.
 
 ## Naming content for people
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.Commands;
@@ -37,7 +38,9 @@ namespace Puck.World.Client;
 /// <para><b>Publication.</b> An embedded destination delivers on its fixed-step thread; a federated observer delivers
 /// on its socket task while the presentation thread reads this mirror. Definition and scalar clock/revision fields
 /// therefore publish through <see cref="Volatile"/>/<see cref="Interlocked"/>. Each entity record is copied before
-/// its active flag's release write; readers acquire that flag before consuming the copied pose fields.</para>
+/// its active flag's release write; readers acquire that flag before consuming the copied pose fields. A reader that
+/// needs the whole table from one delivery (<see cref="CopySnapshotTo"/>) takes the latest complete image each writer
+/// publishes when it finishes, through a triple buffer, so it never waits on a delivery in progress.</para>
 /// </remarks>
 public sealed class WorldSessionMirror : IClientSink {
     // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
@@ -219,20 +222,12 @@ public sealed class WorldSessionMirror : IClientSink {
     // a whole-image reader takes the published image instead (PublishImage, CopySnapshotTo) and never this gate.
     private readonly Lock m_snapshotWriteGate = new();
 
-    // The latest complete image of the entity table, published by a triple buffer. Invariant: a reader never sees a
-    // torn image and never waits on a writer. Enforced by ownership: m_images[m_back] belongs to the writer holding
-    // m_snapshotWriteGate, m_images[m_front] to the reader holding m_copyGate, and the third is m_middle's; each side
-    // changes hands only by one Interlocked.Exchange with m_middle, so {back, front, middle} stays a permutation of the
-    // three and no buffer is ever written while another side may read it. The writer fills its back buffer, then
-    // exchanges it in marked fresh; the reader exchanges its front for a fresh middle and copies from what it now owns.
-    private const int ImageFresh = 4, ImageIndex = 3;
-
-    private readonly SnapshotImage[] m_images;
+    // The latest complete image of the entity table. Invariant: a whole-image reader never sees a torn image and never
+    // waits on a writer. Enforced by TripleBuffer's slot ownership, with its one writer at a time being whoever holds
+    // m_snapshotWriteGate (the only place PublishImage runs) and its one reader whoever holds m_copyGate.
+    private readonly TripleBuffer<SnapshotImage> m_images;
     private readonly Lock m_copyGate = new();
 
-    private int m_middle;
-    private int m_back;
-    private int m_front;
     // One past the highest entity slot either writer has written; every slot above it is still as constructed.
     private int m_extent;
     private string m_authority = string.Empty;
@@ -272,11 +267,10 @@ public sealed class WorldSessionMirror : IClientSink {
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
-        // Every buffer starts as the constructed table's image, so the reader's first front is already complete.
-        m_images = [new SnapshotImage(m_snapshotArrivalTimestamp), new SnapshotImage(m_snapshotArrivalTimestamp), new SnapshotImage(m_snapshotArrivalTimestamp)];
-        m_back = 0;
-        m_middle = 1;
-        m_front = 2;
+        // Every slot starts as the constructed table's image, so the first copy is already complete.
+        var constructed = m_snapshotArrivalTimestamp;
+
+        m_images = new TripleBuffer<SnapshotImage>(create: () => new SnapshotImage(arrivalTimestamp: constructed));
     }
 
     /// <summary>Raised on the delivering thread after each delivered definition or state is published as
@@ -433,12 +427,7 @@ public sealed class WorldSessionMirror : IClientSink {
         out long arrivalTimestamp
     ) {
         lock (m_copyGate) {
-            // One exchange, never retried: a fresh middle becomes this reader's own front, and the old front goes back.
-            if ((Volatile.Read(location: ref m_middle) & ImageFresh) != 0) {
-                m_front = (Interlocked.Exchange(location1: ref m_middle, value: m_front) & ImageIndex);
-            }
-
-            var image = m_images[m_front];
+            var image = m_images.Take();
             var looksTable = Definition.Looks;
             var kitColliders = Volatile.Read(location: ref m_kitColliders);
             var kitContacts = Volatile.Read(location: ref m_kitBodyContacts);
@@ -470,7 +459,7 @@ public sealed class WorldSessionMirror : IClientSink {
     // Publishes the entity table as one complete image (see m_images). Called by a writer holding m_snapshotWriteGate
     // once its writes are done; copies only the slots below m_extent, since every other slot is still as constructed.
     private void PublishImage() {
-        var image = m_images[m_back];
+        var image = m_images.Back;
         var extent = m_extent;
 
         if (image.Entries.Length < extent) {
@@ -498,7 +487,7 @@ public sealed class WorldSessionMirror : IClientSink {
         image.Revision = SnapshotRevision;
         image.StepSeconds = StepSeconds;
         image.ArrivalTimestamp = SnapshotArrivalTimestamp;
-        m_back = (Interlocked.Exchange(location1: ref m_middle, value: (m_back | ImageFresh)) & ImageIndex);
+        m_images.Publish();
     }
     private void Extend(int index) {
         if (index >= m_extent) { m_extent = (index + 1); }

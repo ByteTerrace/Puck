@@ -700,10 +700,11 @@ and compares a Linux DXC build of the same commit against it
 leg.
 
 `cache prune` removes every file of a shader compiler cache that no compile has
-used for `--unused-minutes` (at least 1): each entry (`*.spv`, `*.dxil`), each
-abandoned staged publication (`*.tmp`) and each duration record under
-`durations`, judged by its last write time, which every compile that reads or
-writes the file stamps ([freshness](shaders.md#freshness)). Any other file in
+used for `--unused-minutes` (at least 1): each entry (`*.spv`, `*.dxil`) and
+each duration record under `durations`, judged by its last write time, which
+every compile that reads or writes the file stamps ([freshness](shaders.md#freshness)),
+and each staged publication (`*.tmp`) whose writer no longer runs
+(`AtomicFile.IsAbandoned`). Any other file in
 the directory stays. `--cache` names the directory; without it the verb prunes
 the per-user cache the build and the other verbs share. It prints one line
 naming how many files it removed and kept and their sizes. CI prunes its
