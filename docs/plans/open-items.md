@@ -394,7 +394,7 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   pin already uses (`CopySnapshotTo`). Owner: federation.
 - `LatestSlotPublication.TryAcquireLatest` (the shared GPU texture ring a
   camera or probe kernel publishes into) retries in a loop, where
-  `PublishBuffer<T>` enters a slot with one atomic add and has nothing to
+  `PublishBuffer<T>` enters a slot with one atomic increment and has nothing to
   retry. Move the ring's acquire onto that index mechanism, keeping its fixed
   slot count; a GPU-lifetime change that needs a camera or probe-kernel run.
   Owner: platform.

@@ -13,8 +13,8 @@ namespace Puck.Abstractions;
 public sealed class PublishArena<T> {
     private const long FoldAt = (1L << 32);
     private const int IndexShift = 48;
+    private const long ReaderLimit = (ReaderMask - (1L << 32));
     private const long ReaderMask = ((1L << IndexShift) - 1);
-    private const long ReaderLimit = ReaderMask - (1L << 32);
 
     private readonly long[] m_states;
     private readonly Func<T>? m_create;

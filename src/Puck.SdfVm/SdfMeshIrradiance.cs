@@ -2902,9 +2902,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             var capacity = InitialCapacity;
 
-            while (((kept + 1) * 2) > capacity) { capacity *= 2; }
+            // Reserve the incoming window's cells even after a teleport keeps few or no old probes. Sizing the dense
+            // arena from only kept cells would copy the whole hash table at each tiny arena growth while it refills.
+            var entries = Math.Max(val1: (kept + 1), val2: ((int)cells));
 
-            var compact = new Table(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: Math.Max(val1: 1, val2: (kept * 2))));
+            while ((((long)entries) * 2) > capacity) { capacity *= 2; }
+
+            var compact = new Table(capacity: capacity, entries: entries);
 
             CopyEntries(high: high, low: low, retain: true, source: table, target: compact);
             m_capacity = capacity;
@@ -3184,4 +3188,3 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
     }
 }
-

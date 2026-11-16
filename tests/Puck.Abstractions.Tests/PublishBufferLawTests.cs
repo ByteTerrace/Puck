@@ -294,8 +294,9 @@ public sealed class PublishBufferLawTests {
         buffer.Publish(value: Of(value: 2));
         Assert.Equal(0L, Pending(column: column));
         // Model every fold losing its CAS until the carry guard is reached: refusal cannot change the index.
-        const long Limit = ((1L << 48) - 1) - (1L << 32);
+        const long Limit = (((1L << 48) - 1) - (1L << 32));
         var before = states[0] = (2L << 48) | Limit;
+
         Assert.Throws<InvalidOperationException>(testCode: () => buffer.TrySnapshot(value: out _));
         Assert.Equal(expected: before, actual: states[0]);
     }
@@ -370,4 +371,3 @@ public sealed class PublishBufferLawTests {
         Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
     }
 }
-
