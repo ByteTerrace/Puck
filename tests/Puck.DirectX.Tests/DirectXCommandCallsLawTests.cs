@@ -288,6 +288,7 @@ public sealed unsafe class DirectXCommandCallsLawTests {
         public HRESULT SetEventOnCompletion(ID3D12Fence* fence, ulong value, HANDLE fenceEvent) => Answer(call: nameof(SetEventOnCompletion));
         public HRESULT DeviceRemovedReason() => RemovalReason;
         public D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(D3D12_RESOURCE_DESC* description) => throw new NotSupportedException();
+        public D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType) => throw new NotSupportedException();
         public HRESULT CreateHeap(D3D12_HEAP_DESC* description, ID3D12Heap** heap) => throw new NotSupportedException();
         public HRESULT CreatePlacedResource(ID3D12Heap* heap, ulong offset, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) => throw new NotSupportedException();
         public void ReleaseHeap(ID3D12Heap* heap) => throw new NotSupportedException();

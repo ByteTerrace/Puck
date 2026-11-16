@@ -23,6 +23,8 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     // A bind of this resource fails, and memory of this type refuses its mapping.
     private const nint Refused = 666;
     private const uint Unmappable = 9;
+    // One heap whose ten memory types the laws bind to, as a device registers its segments.
+    private static readonly GpuMemorySegments TenTypes = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [.. Enumerable.Repeat(element: 0U, count: 20)], profile: default);
     private const ulong Block = VulkanMemoryArena.BlockBytes;
 
     [ThreadStatic] private static List<string>? Calls;
@@ -36,6 +38,7 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         NextMemory = 1000;
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
         var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+        work.BeginDevice(device: 17, segments: TenTypes);
         var arena = device.Arena;
         var small = new VkMemoryRequirements { Alignment = 256UL, Size = 1000UL };
 
@@ -124,6 +127,7 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         NextMemory = 1000;
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
         var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+        work.BeginDevice(device: 17, segments: TenTypes);
         var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi());
         var sync = new SynchronizationApi();
         var queue = new VulkanGpuQueueSubmitter(new Context(logical: logical), new VulkanQueueSubmitter(), sync);
@@ -166,6 +170,7 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
 
         // The rebuilt device's arena is its own: it allocates afresh and frees only its own blocks.
         var rebuilt = new VulkanDeviceCommands(18, Procedures(), memory: work);
+        work.BeginDevice(device: 18, segments: TenTypes);
         using (var rebuiltLogical = new VulkanLogicalDevice(rebuilt, default, new VkQueue(familyIndex: 0, handle: 32), default, new LogicalApi())) {
             Assert.Equal(expected: 1003, actual: rebuilt.Arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal));
             rebuilt.Destroy(destroy: rebuilt.DestroyBuffer, handle: 1, memoryHandle: 1003);

@@ -11,6 +11,8 @@ internal sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults fa
     public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
     public GpuDeviceIdentity? Identity => gpu.Identity;
     public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
+    public GpuMemoryReading MemoryReading => gpu.MemoryReading;
+    public void RefreshMemoryReading() => gpu.RefreshMemoryReading();
     public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(
         faults: faults,
         services: gpu.Services

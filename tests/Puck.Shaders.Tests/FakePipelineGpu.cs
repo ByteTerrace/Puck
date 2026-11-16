@@ -154,6 +154,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets this fake as every one of its own services.</summary>
     public GpuDeviceServices Services => field ??= new GpuDeviceServices {
         Bindings = this,
