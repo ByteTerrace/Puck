@@ -72,7 +72,7 @@ survivors and with old-to-young references, not with the garbage.
   dictionary, list or row table that takes a new object every tick marks a card
   and promotes that object. The irradiance cache held a record class per probe
   sweep in a `ConcurrentDictionary`, about 9 MB promoted on a walk into an
-  untraced area; it is now an open-addressed table of `Probe` structs
+  untraced area; it is now an open-addressed table with publication arenas of `ProbeData` values
   ([`SdfMeshIrradiance.ProbeCache`](../../../../src/Puck.SdfVm/SdfMeshIrradiance.cs)).
   `HostLog` kept a ring of strings, so every line promoted; it now copies lines
   into one circular `char[]` ([`HostLog`](../../../../src/Puck.Hosting/HostLog.cs)).

@@ -39,11 +39,12 @@ public sealed class PublishBufferLawTests {
     [Fact]
     public void ABufferOfImagesStartsWithACompleteImage() {
         var buffer = new PublishBuffer<long[]>(create: static () => [7L, 7L]);
-        using var lease = buffer.Read();
 
-        Assert.True(condition: lease.HasValue);
-        Assert.Equal(actual: lease.Value, expected: [7L, 7L]);
-        Assert.Equal(actual: lease.Version, expected: 0L);
+        buffer.Read(state: 0, read: static (in long[] image, long version, int state) => {
+            Assert.Equal(actual: image, expected: [7L, 7L]);
+            Assert.Equal(actual: version, expected: 0L);
+            return 0;
+        });
     }
     [Fact]
     public async Task ReadersRacingTwoWritersNeverSeeAFrameHalfWritten() {
@@ -110,10 +111,10 @@ public sealed class PublishBufferLawTests {
         );
         // Retire the final publication too: every balanced read must leave every retired slot reusable.
         buffer.Publish(value: default);
-        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
+        var slots = Columns(arena: Arena(buffer: buffer));
 
-        foreach (var slot in slots) {
-            Assert.Equal(expected: 0L, actual: ((long)slot!.GetType().GetField(name: "Pending")!.GetValue(obj: slot)!));
+        foreach (Array column in slots) {
+            Assert.Equal(expected: 0L, actual: Pending(column: column));
         }
     }
     [Fact]
@@ -135,11 +136,9 @@ public sealed class PublishBufferLawTests {
         try {
             Assert.True(condition: stalled.Wait(cancellationToken: ct, timeout: TimeSpan.FromSeconds(seconds: 30)));
             // A read that does not finish within the bound waited on the writer.
-            var image = await Task.Run(function: () => {
-                using var lease = buffer.Read();
-
-                return lease.Value.ToArray();
-            }, cancellationToken: ct).WaitAsync(cancellationToken: ct, timeout: TimeSpan.FromSeconds(seconds: 30));
+            var image = await Task.Run(function: () => buffer.Read(state: 0,
+                read: static (in long[] value, long version, int state) => value.ToArray()), cancellationToken: ct)
+                .WaitAsync(cancellationToken: ct, timeout: TimeSpan.FromSeconds(seconds: 30));
 
             Assert.Equal(actual: image, expected: [1L, 1L]);
         } finally {
@@ -154,20 +153,18 @@ public sealed class PublishBufferLawTests {
         var buffer = new PublishBuffer<Wide>();
 
         buffer.Publish(value: Of(value: 1));
-        using var first = buffer.Read();
-
-        buffer.Publish(value: Of(value: 2));
-        using var second = buffer.Read();
-
-        // Every slot is now published or held, so a writer that waited on a reader would never return from these.
-        for (var value = 3L; (value <= 64L); value++) {
-            buffer.Publish(value: Of(value: value));
-        }
-
-        Assert.Equal(actual: first.Value, expected: Of(value: 1));
-        Assert.Equal(actual: first.Version, expected: 1L);
-        Assert.Equal(actual: second.Value, expected: Of(value: 2));
-        Assert.Equal(actual: second.Version, expected: 2L);
+        buffer.Read(state: buffer, read: static (in Wide first, long firstVersion, PublishBuffer<Wide> owner) => {
+            owner.Publish(value: Of(value: 2));
+            owner.Read(state: owner, read: (in Wide second, long secondVersion, PublishBuffer<Wide> writer) => {
+                for (var value = 3L; (value <= 64L); value++) { writer.Publish(value: Of(value: value)); }
+                Assert.Equal(actual: second, expected: Of(value: 2));
+                Assert.Equal(actual: secondVersion, expected: 2L);
+                return 0;
+            });
+            Assert.Equal(actual: first, expected: Of(value: 1));
+            Assert.Equal(actual: firstVersion, expected: 1L);
+            return 0;
+        });
         Assert.True(condition: buffer.TrySnapshot(value: out var latest));
         Assert.Equal(actual: latest, expected: Of(value: 64));
     }
@@ -260,29 +257,6 @@ public sealed class PublishBufferLawTests {
         );
     }
     [Fact]
-    public void DisposingALeaseTwiceCannotReleaseAnotherReaderIncludingThroughAnAlias() {
-        var buffer = new PublishBuffer<Wide>();
-
-        buffer.Publish(value: Of(value: 1));
-        var first = buffer.Read();
-        var alias = first;
-        using var other = buffer.Read();
-
-        first.Dispose();
-        alias.Dispose();
-        first.Dispose();
-        Assert.False(condition: first.HasValue);
-        for (var value = 2L; (value < 32L); value++) { buffer.Publish(value: Of(value: value)); }
-        Assert.Equal(expected: Of(value: 1), actual: other.Value);
-        other.Dispose();
-        // A spurious leave would keep one retired slot at -1 after the real reader left.
-        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
-
-        foreach (var slot in slots) {
-            Assert.Equal(expected: 0L, actual: ((long)slot!.GetType().GetField(name: "Pending")!.GetValue(obj: slot)!));
-        }
-    }
-    [Fact]
     public void BothPublicationOverloadsRefuseInsideAFill() {
         var buffer = new PublishBuffer<Wide>();
 
@@ -297,27 +271,87 @@ public sealed class PublishBufferLawTests {
         Assert.Equal(expected: Of(value: 2), actual: value);
     }
     [Fact]
-    public void ReaderAdmissionRefusesBeforeTheCounterCanCarryIntoTheSlotIndex() {
+    public void ReaderAdmissionsFoldWithoutRefusalIncludingBeforeFirstPublication() {
         var buffer = new PublishBuffer<Wide>();
+        var arena = Arena(buffer: buffer);
+        var states = ((long[])arena.GetType().GetField(bindingAttr: Private, name: "m_states")!.GetValue(obj: arena)!);
+        const long FoldAt = (1L << 32);
 
+        states[0] = (FoldAt - 1);
+        Assert.False(condition: buffer.TrySnapshot(value: out _));
+        Assert.Equal(0L, states[0]);
         buffer.Publish(value: Of(value: 1));
-        const long Mask = ((1L << 48) - 1);
-        const long Limit = (Mask - (1L << 32));
-        var state = typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_state")!;
-        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
-        // Seed balanced earlier reads of this publication, including their already completed leaves.
-        slots.GetValue(index: 0)!.GetType().GetField(name: "Pending")!.SetValue(obj: slots.GetValue(index: 0), value: -(Limit - 1));
-        state.SetValue(obj: buffer, value: (1L << 48) | (Limit - 1));
+        var column = ((Array)Columns(arena: arena).GetValue(index: 0)!);
+        var slot = column.GetValue(index: 0)!;
+
+        slot.GetType().GetField(name: "Pending")!.SetValue(obj: slot, value: -(FoldAt - 1));
+        column.SetValue(index: 0, value: slot);
+        states[0] = (1L << 48) | (FoldAt - 1);
         Assert.True(condition: buffer.TrySnapshot(value: out var value));
-        Assert.Equal(expected: Of(value: 1), actual: value);
-        Assert.Throws<InvalidOperationException>(testCode: () => buffer.TrySnapshot(value: out _));
-        Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read());
-        Assert.Equal(expected: (1L << 48) | Limit, actual: ((long)state.GetValue(obj: buffer)!));
+        Assert.Equal(Of(value: 1), value);
+        Assert.Equal((1L << 48), states[0]);
+        Assert.Equal(0L, Pending(column: column));
         buffer.Publish(value: Of(value: 2));
-        Assert.True(condition: buffer.TrySnapshot(value: out value));
-        Assert.Equal(expected: Of(value: 2), actual: value);
-        Assert.Equal(expected: 0L, actual: ((long)slots.GetValue(index: 0)!.GetType().GetField(name: "Pending")!.GetValue(obj: slots.GetValue(index: 0))!));
+        Assert.Equal(0L, Pending(column: column));
+        // Model every fold losing its CAS until the carry guard is reached: refusal cannot change the index.
+        const long Limit = ((1L << 48) - 1) - (1L << 32);
+        var before = states[0] = (2L << 48) | Limit;
+        Assert.Throws<InvalidOperationException>(testCode: () => buffer.TrySnapshot(value: out _));
+        Assert.Equal(expected: before, actual: states[0]);
     }
+    [Fact]
+    public void RetiredValueSlotsClearButHeldValuesAndFactoryImagesSurvive() {
+        var arena = new PublishArena<object>(capacity: 2);
+        var first = new object();
+        var latest = new object();
+
+        arena.Publish(entry: 0, value: first);
+        arena.Read(entry: 0, state: 0, read: (in object held, long version, int state) => {
+            arena.Publish(entry: 0, value: latest);
+            var retained = new HashSet<object>();
+
+            arena.VisitRetained(state: retained, visit: static (in object value, long number, HashSet<object> found) => {
+                if (value is not null) { found.Add(item: value); }
+                return 0;
+            });
+            Assert.Contains(expected: first, set: retained);
+            Assert.Same(actual: held, expected: first);
+            return 0;
+        });
+        var after = new HashSet<object>();
+
+        arena.VisitRetained(state: after, visit: static (in object value, long version, HashSet<object> found) => {
+            if (value is not null) { found.Add(item: value); }
+            return 0;
+        });
+        Assert.DoesNotContain(expected: first, set: after);
+        Assert.Contains(expected: latest, set: after);
+        arena.Publish(entry: 0, value: new object());
+        after.Clear();
+        arena.VisitRetained(state: after, visit: static (in object value, long version, HashSet<object> found) => {
+            if (value is not null) { found.Add(item: value); }
+            return 0;
+        });
+        Assert.DoesNotContain(expected: latest, set: after);
+        var images = new PublishBuffer<long[]>(create: static () => new long[2]);
+
+        for (var index = 0; (index < 8); index++) {
+            images.Publish(state: 7L, fill: static (ref long[] image, long value) => image.AsSpan().Fill(value: value));
+        }
+        Assert.True(condition: images.TrySnapshot(value: out var image));
+        Assert.Equal(actualArray: image, expectedSpan: [7L, 7L]);
+    }
+
+    private const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+
+    private static object Arena<T>(PublishBuffer<T> buffer) => typeof(PublishBuffer<T>).GetField(bindingAttr: Private, name: "m_arena")!.GetValue(obj: buffer)!;
+    private static Array Columns(object arena) => ((Array)arena.GetType().GetField(bindingAttr: Private, name: "m_slots")!.GetValue(obj: arena)!);
+    private static long Pending(Array column) {
+        var slot = column.GetValue(index: 0)!;
+
+        return ((long)slot.GetType().GetField(name: "Pending")!.GetValue(obj: slot)!);
+    }
+
     [Fact]
     public void AScopedReadReleasesOnThrowAndAllocatesNothingInSteadyUse() {
         var buffer = new PublishBuffer<Wide>();
@@ -336,3 +370,4 @@ public sealed class PublishBufferLawTests {
         Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
     }
 }
+

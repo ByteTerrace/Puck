@@ -300,19 +300,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     /// <summary>Describes the probe caches the volume keeps across window moves, over every level: their probes, their
     /// tables' capacity and bytes, and the bytes of the hit and light blocks their entries hold. Safe to read from any
-    /// thread; a batch landing meanwhile can leave it a block off.</summary>
+    /// thread; accounting holds the volume gate while walking retained slots.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeCache() {
         long table = 0, blocks = 0;
         int capacity = 0, count = 0;
 
-        foreach (var level in m_levels) {
-            var (levelTable, levelBlocks, levelCapacity) = level.Cache.Bytes();
+        lock (m_gate) {
+            foreach (var level in m_levels) {
+                var (levelTable, levelBlocks, levelCapacity) = level.Cache.Bytes();
 
-            table += levelTable;
-            blocks += levelBlocks;
-            capacity += levelCapacity;
-            count += level.Cache.Count;
+                table += levelTable;
+                blocks += levelBlocks;
+                capacity += levelCapacity;
+                count += level.Cache.Count;
+            }
         }
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={(m_scene?.HierarchyBytes ?? 0)} {GpuTrace?.DescribeMemory()}");
@@ -2822,7 +2824,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
         private uint[]? m_hits = (hits ?? new uint[(count * SdfMeshProbeDepth.HitWords)]);
 
-        public long Bytes => ((((long)m_floats.Length) * sizeof(float)) + ((m_hits?.LongLength ?? 0) * sizeof(uint)));
+        public long Bytes => (((32L + 24L) + (((long)m_floats.Length) * sizeof(float))) + ((m_hits is { } hits) ? (24L + (hits.LongLength * sizeof(uint))) : 0L));
 
         public void ReleaseHits() => m_hits = null;
         public Span<float> Sky(int index) => m_floats.AsSpan(length: 6, start: (index * FloatsPerProbe));
@@ -2837,17 +2839,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         private readonly float[] m_floats = BlockWords(length: (count * FloatsPerProbe));
 
-        public long Bytes => (((long)m_floats.Length) * sizeof(float));
+        public long Bytes => ((24L + 24L) + (((long)m_floats.Length) * sizeof(float)));
 
         public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (index * FloatsPerProbe)));
         public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 18)));
         public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
         public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (((index * FloatsPerProbe) + 36) + SdfMeshIrradianceProbe.LightWords)));
     }
-    // The probes by cell. Each occupied entry owns a PublishBuffer: its one publication door keeps ProbeData whole,
-    // and readers never wait for the writer. The volume's gate serializes writes and table replacement. Grow and Retain
-    // copy buffer references, not their slots, so steady updates allocate nothing and table replacement carries fewer
-    // bytes. A reader holding a retired table can still read its entries; eviction never mutates that table's keys.
+    // Table-owned publication arenas: no objects per key. The volume gate serializes writes. Grow/Retain copy
+    // stable snapshots into independent arenas; a reader of an old table retains its complete earlier membership.
     private sealed class ProbeCache {
         private const int InitialCapacity = (1 << 16);
 
@@ -2857,30 +2857,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The probes cached.
         public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
 
-        // Logical table/slot payload bytes and the blocks latest entries name, each block once. Older publications can
-        // still retain blocks through their reusable slots or readers. Object headers and buffer machinery are excluded.
-        // Read without the gate, so a batch landing meanwhile can leave this a block off.
+        // Current cache-owned tables, arena machinery and every referenced block, including held retired values.
+        // The volume gate is held; detached tables belong only to readers already using them, not to this cache.
         public (long Table, long Blocks, int Capacity) Bytes() {
-            if (Volatile.Read(location: ref m_table) is not { } table) { return (0, 0, 0); }
-
-            var capacity = table.Keys.Length;
-            var tableBytes = (((long)capacity) * (((3 * sizeof(int)) + sizeof(int)) + IntPtr.Size));
+            if (m_table is not { } table) { return (32, 0, 0); }
             var blocks = new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
+
+            table.Values.VisitRetained(state: blocks, visit: static (in ProbeData entry, long version, HashSet<object> found) => {
+                if (entry.Hits is { } hits) { found.Add(item: hits); }
+                if (entry.Shading is { } shading) { found.Add(item: shading); }
+                return 0;
+            });
             var blockBytes = 0L;
 
-            for (var slot = 0; (slot < capacity); slot++) {
-                if (Volatile.Read(location: ref table.Used[slot]) == 0) { continue; }
-
-                var publication = table.Entries[slot]!;
-                // Slot payloads, including retired values still held by readers.
-                tableBytes += publication.StorageBytes;
-                if (!publication.TrySnapshot(value: out var entry)) { continue; }
-
-                if ((entry.Hits is { } hits) && blocks.Add(item: hits)) { blockBytes += hits.Bytes; }
-                if ((entry.Shading is { } shading) && blocks.Add(item: shading)) { blockBytes += shading.Bytes; }
+            foreach (var block in blocks) {
+                blockBytes += block switch { ProbeBlock hits => hits.Bytes, LightBlock shading => shading.Bytes, _ => 0L };
             }
+            // x64: cache 32, table 56, three array headers 72, plus each key, used flag and dense-entry index.
+            var hashStride = (System.Runtime.CompilerServices.Unsafe.SizeOf<(int, int, int)>() + (2 * sizeof(int)));
 
-            return (tableBytes, blockBytes, capacity);
+            return (((((32L + 56L) + 72L) + (table.Keys.LongLength * hashStride)) + table.Values.InlineStorageBytes), blockBytes, table.Keys.Length);
         }
         // Forgets every probe; the next write starts a table of the capacity the cache last reached.
         public void Clear() {
@@ -2889,7 +2885,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Forgets the probes outside a box of cells, from low inclusive to high exclusive, once the cache holds more probes
         // than the box has cells; the volume's gate is held. The kept probes are published as a new table, as Grow publishes
-        // one. An old table keeps its earlier key membership; retained keys share their publication with the new table.
+        // one. An old table keeps its earlier key membership and values; retained keys get independent publications.
         // A batch block no kept probe names is released with the forgotten entries once old readers finish.
         public void Retain((int X, int Y, int Z) low, (int X, int Y, int Z) high) {
             if (m_table is not { } table) { return; }
@@ -2908,19 +2904,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             while (((kept + 1) * 2) > capacity) { capacity *= 2; }
 
-            var compact = new Table(capacity: capacity);
+            var compact = new Table(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: Math.Max(val1: 1, val2: (kept * 2))));
 
-            for (var slot = 0; (slot < table.Keys.Length); slot++) {
-                if ((table.Used[slot] == 0) || !Inside(high: high, key: table.Keys[slot], low: low)) { continue; }
-
-                var free = ~Find(key: table.Keys[slot], table: compact);
-
-                compact.Entries[free] = table.Entries[slot];
-                compact.Keys[free] = table.Keys[slot];
-                compact.Used[free] = 1;
-            }
-
-            compact.Count = kept;
+            CopyEntries(high: high, low: low, retain: true, source: table, target: compact);
             m_capacity = capacity;
             Volatile.Write(location: ref m_table, value: compact);
         }
@@ -2939,7 +2925,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 return false;
             }
 
-            return table.Entries[slot]!.TrySnapshot(value: out value);
+            return table.Values.TrySnapshot(entry: table.Entries[slot], value: out value);
         }
 
         // Writes a cell's entry; the volume's gate is held.
@@ -2955,44 +2941,44 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var slot = Find(key: key, table: table);
 
                 if (slot >= 0) {
-                    table.Entries[slot]!.Publish(value: value);
+                    table.Values.Publish(entry: table.Entries[slot], value: value);
 
                     return;
                 }
-                if (((table.Count + 1) * 2) > table.Keys.Length) {
+                if ((table.Count + 1) > table.Values.Capacity) {
                     table = Grow(table: table);
                     slot = Find(key: key, table: table);
                 }
 
-                slot = ~slot;
-                var entry = new PublishBuffer<ProbeData>();
-
-                entry.Publish(value: value);
-                table.Entries[slot] = entry;
-                table.Keys[slot] = key;
-                Volatile.Write(location: ref table.Used[slot], value: 1);
-                table.Count++;
+                Insert(key: key, slot: ~slot, table: table, value: value);
             }
         }
 
-        // A table of twice the capacity holding every entry, published before the write that needed it.
+        // Grows dense storage, and the hash table too once half full, before the write that needed it.
         private Table Grow(Table table) {
-            var grown = new Table(capacity: (table.Keys.Length * 2));
+            var capacity = ((((table.Count + 1) * 2) > table.Keys.Length) ? (table.Keys.Length * 2) : table.Keys.Length);
+            var grown = new Table(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: (table.Values.Capacity * 2)));
 
-            for (var slot = 0; (slot < table.Keys.Length); slot++) {
-                if (table.Used[slot] == 0) { continue; }
-
-                var free = ~Find(key: table.Keys[slot], table: grown);
-
-                grown.Entries[free] = table.Entries[slot];
-                grown.Keys[free] = table.Keys[slot];
-                grown.Used[free] = 1;
-            }
-
-            grown.Count = table.Count;
+            CopyEntries(high: default, low: default, retain: false, source: table, target: grown);
             Volatile.Write(location: ref m_table, value: grown);
 
             return grown;
+        }
+        private static void CopyEntries(Table source, Table target, bool retain, (int X, int Y, int Z) low, (int X, int Y, int Z) high) {
+            for (var slot = 0; (slot < source.Keys.Length); slot++) {
+                var key = source.Keys[slot];
+
+                if ((source.Used[slot] == 0) || (retain && !Inside(high: high, key: key, low: low))) { continue; }
+                _ = source.Values.TrySnapshot(entry: source.Entries[slot], value: out var value);
+                Insert(table: target, slot: ~Find(key: key, table: target), key: key, value: value);
+            }
+        }
+        private static void Insert(Table table, int slot, (int X, int Y, int Z) key, in ProbeData value) {
+            table.Values.Publish(entry: table.Count, value: value);
+            table.Entries[slot] = table.Count;
+            table.Keys[slot] = key;
+            Volatile.Write(location: ref table.Used[slot], value: 1);
+            table.Count++;
         }
         // The slot holding a key, or the complement of the free slot it would take: linear probing from the key's hash,
         // over a table never more than half full.
@@ -3006,10 +2992,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         private static int Hash((int X, int Y, int Z) key) => unchecked(((key.X * 73856093) ^ (key.Y * 19349663)) ^ (key.Z * 83492791));
 
-        private sealed class Table(int capacity) {
+        private sealed class Table(int capacity, int entries = 0) {
             public readonly (int X, int Y, int Z)[] Keys = new (int X, int Y, int Z)[capacity];
             public readonly int[] Used = new int[capacity];
-            public readonly PublishBuffer<ProbeData>?[] Entries = new PublishBuffer<ProbeData>?[capacity];
+            public readonly int[] Entries = new int[capacity];
+            public readonly PublishArena<ProbeData> Values = new(capacity: ((entries == 0) ? (capacity / 2) : entries));
 
             public int Count;
         }
@@ -3197,3 +3184,4 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
     }
 }
+

@@ -328,7 +328,12 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   not reached. In measured order:
   - Steady frame: `ProbeCache.Retain` replaces the probe cache's table whole
     and `Grow` again as probes land (what the cache keeps is the streaming
-    plan's lighting step's). Then the dressed `SdfFrame` copies.
+    plan's lighting step's). Publication now uses table-owned dense arenas:
+    inserts within capacity allocate no per-key objects, and idle retired
+    values release their blocks on retirement or the next write/accounting
+    visit after their readers leave. Table replacement still allocates arrays;
+    its byte report includes arena machinery, held retired values and block
+    headers. Then the dressed `SdfFrame` copies.
     On the bake writer thread `CacheRetention.EnforceSetsCore` enumerates the
     store on every write. Small: `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,
