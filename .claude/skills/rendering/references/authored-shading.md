@@ -15,7 +15,7 @@ response lets through (a cascaded directional's slot shadow; for any other
 directional or point light the probes' share times the ambient occlusion; one
 otherwise), `light.probeShare` the probes' share alone and `light.occlusion` the
 surface's ambient occlusion
-([decision](../../../../docs/decisions/rendering.md#a-light-no-cascade-measures-is-shadowed-by-the-probes-and-the-occlusion-together)). There is no author buffer address or
+([decision](../../../../docs/decisions/rendering.md#global-illumination)). There is no author buffer address or
 neighbour read. Runtime parameters occupy a separate typed block. Structural
 constants enter code; runtime data does not. Canonical words, parameter layout
 and the live semantics fingerprint determine identity. Author names are reporting
