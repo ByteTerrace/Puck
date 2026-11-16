@@ -3459,15 +3459,29 @@ waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
 and `world.residency [radius]` reads its measures.
 
-Open on the windows that render for a bake (`WorldViewGraphHost.ReserveBakes`):
+Open on the windows that render while a world's meshes arrive
+(`WorldViewGraphHost.ReserveArrivals`, `SdfWorldResidency.MeshesArriving`):
 
 - The search walks through session windows only, so a world behind a camera
-  view that its rate holds back has no window rendering for its bake.
-- The nearest window onto a baking world renders at the least share even when
-  a seen window onto the same world renders anyway: one extra view.
+  view that its rate holds back has no window rendering for its meshes.
+- The nearest window onto an arriving world renders at the least share even
+  when a seen window onto the same world renders anyway: one extra view.
 - `world.instance.stop` on a routed world leaves per-view residencies of that
-  world (`session$N$2`) in `world.residency` beside the stale routed line, some
-  landed and never resident. Whether that is intended is not confirmed.
+  world (`session$N$2`) in `world.residency` beside the stale routed line, and
+  at the meadow stop the garden painting's window and one window under it
+  (`session$18`, `session$18$0`) stay scheduled with status `waiting` for at
+  least 600 ticks afterwards. Whether either is intended is not confirmed.
+- `world.residency`'s per-group `resident` count and `all-resident` stamp are
+  not reset by a device loss: a residency whose rebuilt region owes every mesh
+  still reads all resident. Its region line's `owed` is the truth.
+- `world.wait residency` reads only contributors the latest schedule displays
+  (`SdfWorldPasses.PendingMeshesIn`), so it settles while an unseen routed world
+  behind a window still owes its meshes.
+- `WorldViewPaneMappingLawTests.APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldArrives(facing: False, arriving: True)`
+  fails: its fake host's boot session is never reached from the walk's seeds,
+  so no window renders for its world. Unconfirmed whether the fake lacks the
+  synthesized root the walk seeds from, or an authored root leaves the world's
+  views unseeded in a real World too.
 
 #### Memory on the Deck tier
 

@@ -85,6 +85,23 @@ public sealed partial class SdfWorldTables {
     /// thread; never waits.</summary>
     public bool MeshesResident => (MeshResidencyPending() is null);
 
+    /// <summary>Gets whether the current staged mesh geometry is still on its way to the region, and only frames that
+    /// render the tables' views bring it: words the region owes, which land through background GPU work that binds only
+    /// the World set of an upload after the latest pack (<see cref="BindsBackgroundWork"/>), or a required upload not yet
+    /// submitted or complete. Unlike <see cref="MeshesResident"/> it ignores the meshes the region refuses under its
+    /// limit, which no frame brings. Read on the frame thread; never waits.</summary>
+    public bool MeshesArriving => (!m_disposed && ((Volatile.Read(location: ref m_owedWords) != 0) || !MeshUploadComplete));
+
+    // Whether the upload the current sourced geometry requires has been submitted and completed.
+    private bool MeshUploadComplete {
+        get {
+            var required = m_meshRequiredUpload;
+
+            return ((required == 0UL) || ((required <= m_uploads) &&
+                ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled)));
+        }
+    }
+
     /// <summary>Names what keeps <see cref="MeshesResident"/> false: the owed words and meshes of the staged list, how many
     /// of those wait on a store restore, whether background work may bind the latest upload, the meshes the region
     /// refuses under its limit, and the required upload against the submitted and completed ones and its fence;
@@ -104,8 +121,7 @@ public sealed partial class SdfWorldTables {
             return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
                 $"the mesh region refuses {m_meshArena.Refused.Count} meshes: the staged list names {MeshRegionNamedBytes}B, and the region is limited to {MeshRegionLimitBytes}B");
         }
-        if ((required == 0UL) || ((required <= m_uploads) &&
-            ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled))) { return null; }
+        if (MeshUploadComplete) { return null; }
         return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
             $"requires upload {required}; submitted {m_uploads}, completed {m_completedUploads}{((required <= m_uploads) ? ", its fence unsignalled" : ", not yet submitted")}");
     }
