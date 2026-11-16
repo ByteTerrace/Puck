@@ -193,7 +193,7 @@ public sealed class SdfGlassSumsDeviceLawTests {
             recorder.Dispatch(commandBufferHandle: command, groupCountX: Orders, groupCountY: 1, groupCountZ: 1);
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
-            var result = readback.Read(bytesPerPixel: 16, format: GpuPixelFormat.R32G32B32A32Float, height: Rows, width: Orders,
+            var result = readback.Read(format: GpuPixelFormat.R32G32B32A32Float, height: Rows, width: Orders,
                 sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
 
             return MemoryMarshal.Cast<byte, Vector4>(span: result.Span).ToArray();

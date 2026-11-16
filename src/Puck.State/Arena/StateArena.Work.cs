@@ -6,6 +6,7 @@ namespace Puck.State;
 // journal as the deterministic counts a price is held against.
 public sealed partial class StateArena : IWorkCounterSource {
     private WorkCount m_changeWindowProbes;
+    private WorkCount m_moveReadsWhole;
     private WorkCount m_visits;
 
     /// <inheritdoc/>
@@ -25,6 +26,18 @@ public sealed partial class StateArena : IWorkCounterSource {
 
         if (ReferenceEquals(objA: kind, objB: ArenaWork.ChangeWindowProbes)) {
             value = m_changeWindowProbes.Value;
+
+            return true;
+        }
+
+        if (ReferenceEquals(objA: kind, objB: ArenaWork.RowVersionMoves)) {
+            value = MoveSequence;
+
+            return true;
+        }
+
+        if (ReferenceEquals(objA: kind, objB: ArenaWork.MoveReadsWhole)) {
+            value = m_moveReadsWhole.Value;
 
             return true;
         }

@@ -253,6 +253,48 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         );
     }
     /// <inheritdoc/>
+    public uint CopyRowAlignment => DirectXConstants.TextureRowPitchAlignment;
+    /// <inheritdoc/>
+    /// <remarks>The buffer is an upload heap's, in <c>GENERIC_READ</c> for life, or a storage buffer the caller moved into
+    /// <c>COPY_SOURCE</c>.</remarks>
+    public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) {
+        var (buffer, image) = Placed(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            footprint: in footprint,
+            imageHandle: imageHandle
+        );
+
+        ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->CopyTextureRegion(
+            DstX: 0,
+            DstY: 0,
+            DstZ: 0,
+            pDst: in image,
+            pSrc: in buffer,
+            pSrcBox: ((D3D12_BOX?)null)
+        );
+    }
+    /// <inheritdoc/>
+    /// <remarks>The buffer is a readback heap's, in <c>COPY_DEST</c> for life, or a storage buffer the caller moved into
+    /// <c>COPY_DEST</c>.</remarks>
+    public void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) {
+        var (buffer, image) = Placed(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            footprint: in footprint,
+            imageHandle: imageHandle
+        );
+
+        ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->CopyTextureRegion(
+            DstX: 0,
+            DstY: 0,
+            DstZ: 0,
+            pDst: in buffer,
+            pSrc: in image,
+            pSrcBox: ((D3D12_BOX?)null)
+        );
+    }
+    /// <inheritdoc/>
     /// <remarks>A <c>CopyBufferRegion</c>: the source in <c>COPY_SOURCE</c>, which the barrier into
     /// <see cref="GpuAccess.TransferRead"/> moves it to, and the destination in <c>COPY_DEST</c>: either a readback
     /// buffer's permanent state or a storage buffer transitioned through <see cref="GpuAccess.CopyWrite"/>.</remarks>
@@ -741,6 +783,37 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
                 RootParameterIndex: ((uint)rootParameterIndex)
             );
         }
+    }
+    // The two ends of a buffer-image copy: the buffer as a placed footprint at its first byte, which meets the 512-byte
+    // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, and the image's subresource zero.
+    private (D3D12_TEXTURE_COPY_LOCATION Buffer, D3D12_TEXTURE_COPY_LOCATION Image) Placed(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) {
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(imageHandle);
+        footprint.RequireAdmitted(rowAlignment: CopyRowAlignment);
+
+        var buffer = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+            pResource = ((ID3D12Resource*)bufferHandle),
+        };
+        var image = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            pResource = ((ID3D12Resource*)imageHandle),
+        };
+
+        buffer.Anonymous.PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT {
+            Footprint = new D3D12_SUBRESOURCE_FOOTPRINT {
+                Depth = 1,
+                Format = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: footprint.Format),
+                Height = footprint.Height,
+                RowPitch = footprint.RowPitch,
+                Width = footprint.Width,
+            },
+            Offset = 0UL,
+        };
+        image.Anonymous.SubresourceIndex = 0;
+
+        return (buffer, image);
     }
     private static DirectXCommandBufferState DecodeState(nint commandBufferHandle) =>
         DirectXCommandBufferState.Decode(commandBufferHandle: commandBufferHandle);

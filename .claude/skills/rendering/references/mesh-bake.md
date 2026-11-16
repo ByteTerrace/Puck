@@ -692,7 +692,9 @@ laws exercise that boundary.
   vertices decode bit-identically. Unit normals use signed oct16 pairs; non-unit authored normals
   retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
   their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
-  directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
+  directly from the decompressed payload into the storage the mesh keeps (`SdfMeshStorage`), a host's native
+  blocks or an offline read's arrays, applying the taking group's material ids as the planes are read; a
+  restore takes only the normals and the coarser levels' indices.
   Both backends draw six floats per vertex and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
   `SdfMeshLibrary.TryLoad` coalesces a set entry's decode across groups and keeps its result with the
   library's bounded meshes. A failed read is removed so a later derivation can be loaded.
@@ -958,10 +960,10 @@ laws exercise that boundary.
   and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
   region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
   `mesh-released-now` and `mesh-restore-misses`). Restores run on at most a quarter of the processors' pool
-  items and copy outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
+  items and decode into the blocks outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
   library that publishes from a set pins it (`SdfMeshStore.Hold`, `CacheRetention.HoldSet`: a shared lease
   beside the set that no process's eviction passes) for the rest of its process. The held mesh's palette is
-  the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Reversible`); otherwise
+  the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Remap`: the decode reads the entry in the first taker's ids, or in the stored ids when one collides); otherwise
   the store's canonical ids are held. A restore the store cannot answer loses the geometry
   (`SdfMeshLibrary.Lose`): the library forgets it, `LostRevision` moves, and each bake holding the library restarts on
   its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the

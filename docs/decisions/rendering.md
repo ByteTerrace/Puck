@@ -1264,6 +1264,21 @@ whether its own ray toward the light is clear, recomputed on each relight, and
 the surface takes the weight of the measured probes that see it. Without it the
 100 klx sun lit every interior face turned toward it.
 
+**A light no cascade measures is shadowed by the probes and the occlusion
+together.** A light's visibility is one value, computed once
+(`sdfLightInputs`) and read by both the default response and an authored light
+phase (`light.visibility`). A directional light with a cascade slot reads that
+slot's measured shadow, which resolves every scale. Any other directional or
+point light has nothing measuring its shadow at the surface. It takes the
+probes' share (one for an untraced light) times the surface's ambient
+occlusion. The probes resolve only their own spacing, and the occlusion stands
+in for the contact-scale shadowing that nothing measured. Because the one
+value serves every kind and every consumer, an authored program that multiplies
+by `light.visibility` shadows a lamp exactly as the default response does. A
+cel band then treats a lamp's probe shadow as it treats the sun's cascade
+shadow. An author who wants the parts apart reads `light.probeShare` and
+`light.occlusion`.
+
 **Relocation takes the nearest clear candidate.** An embedded or too-near
 centre first tries an exit from the nearest surface, then quarter-cell grid
 candidates in increasing distance order within half a cell on each axis. Each candidate

@@ -69,8 +69,8 @@ until the next writer, shape or case arrives.
 - A body's simulation continuation has no single write door, so a rest-epoch
   cache of its hash missed four writes to sleeping bodies and was deleted
   (`WorldPopulation.AppendContinuationHash`,
-  `src/Puck.World.Server/WorldPopulation.Checkpoint.cs`; the redesign is in the
-  [refactoring campaign](../plans/open-items.md#refactoring-campaign)).
+  `src/Puck.World.Server/WorldPopulation.Checkpoint.cs`; the redesign is
+  [the body's write door memo](../plans/body-state-door.md)).
 - A raster pass that skips must not leave hits a later reader names against the
   current draw records. Keyed on "written once", a part whose draw count fell
   to zero kept its last hits, and the glass shading pass read their draw and

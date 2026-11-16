@@ -280,6 +280,9 @@ internal sealed class UploadModelGpu :
         }
     }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) { }
+    uint IGpuRecorder.CopyRowAlignment => 1U;
+    void IGpuRecorder.CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) { }
+    void IGpuRecorder.CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) { }
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
         m_buffers[sourceBufferHandle].Memory.AsSpan(length: checked((int)sizeBytes), start: checked((int)sourceOffsetBytes))
             .CopyTo(destination: m_buffers[destinationBufferHandle].Memory.AsSpan(start: checked((int)destinationOffsetBytes)));
@@ -440,7 +443,7 @@ internal sealed class UploadModelGpu :
         public long Written { get; set; }
 
         public void Dispose() => _ = owner.TryRemove(key: handle, value: out _);
-        public void Read(Span<byte> destination) => Memory.AsSpan(length: destination.Length, start: 0).CopyTo(destination: destination);
+        public void Read(Span<byte> destination, ulong sourceOffsetBytes = 0UL) => Memory.AsSpan(length: destination.Length, start: checked((int)sourceOffsetBytes)).CopyTo(destination: destination);
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
             data: data,
             destinationOffsetBytes: 0UL

@@ -11,8 +11,8 @@ using Xunit;
 
 namespace Puck.Vulkan.Tests;
 
-/// <summary>Pins, without a device, the commands a <see cref="VulkanSurfaceReadback"/> records through the real
-/// <see cref="VulkanGpuRecorder"/>: after the copy into the readback buffer comes a buffer barrier from the copy's
+/// <summary>Pins, without a device, the commands an image readback (<see cref="GpuReadbackCopy.RecordImage"/>) records
+/// through the real <see cref="VulkanGpuRecorder"/>: after the copy into the readback buffer comes a buffer barrier from the copy's
 /// transfer write to <c>VK_PIPELINE_STAGE_HOST_BIT</c> and <c>VK_ACCESS_HOST_READ_BIT</c>, before the command buffer
 /// ends, so the host that reads the buffer once the submission completes sees the copied bytes. A completed submission
 /// alone makes no device write visible to the host.</summary>
@@ -51,17 +51,15 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
         Assert.Equal(
             actual: calls.Select(selector: call => call.Name),
             expected: [
-                nameof(IVulkanCommandBufferRecordingApi.BeginCommandBuffer),
                 nameof(IVulkanCommandBufferRecordingApi.TransitionImageLayout),
                 nameof(IVulkanCommandBufferRecordingApi.CopyImageToBuffer),
                 nameof(IVulkanCommandBufferRecordingApi.PipelineBufferBarrier),
                 nameof(IVulkanCommandBufferRecordingApi.TransitionImageLayout),
-                nameof(IVulkanCommandBufferRecordingApi.EndCommandBuffer),
             ]
         );
 
-        var copy = calls[2];
-        var barrier = calls[3];
+        var copy = calls[1];
+        var barrier = calls[2];
 
         Assert.Equal(
             actual: copy.Arguments["bufferHandle"],
@@ -84,8 +82,8 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
     [Theory]
     public void TheSourceImageReturnsToItsLayoutAfterTheCopy(GpuImageLayout sourceLayout) {
         var calls = Record(sourceLayout: sourceLayout);
-        var toSource = calls[1];
-        var back = calls[4];
+        var toSource = calls[0];
+        var back = calls[3];
 
         Assert.Equal(
             actual: (toSource.Arguments["oldLayout"], toSource.Arguments["newLayout"]),
@@ -120,19 +118,16 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
             return ((CallRecorder)((object)recording)).Calls;
         }
 
-        VulkanSurfaceReadback.Record(
-            bufferHandle: Buffer,
-            commandBufferHandle: CommandBuffer,
-            device: commands,
-            height: 2,
+        GpuReadbackCopy.RecordImage(
+            commandBuffer: CommandBuffer,
+            destinationBufferHandle: Buffer,
+            footprint: GpuCopyFootprint.Of(format: GpuPixelFormat.R8G8B8A8Unorm, height: 2, rowAlignment: 1, width: 2),
+            imageHandle: Image,
             recorder: new VulkanGpuRecorder(
                 deviceContext: context,
                 recordingApi: recording
             ),
-            recordingApi: recording,
-            sourceImageHandle: Image,
-            sourceLayout: sourceLayout,
-            width: 2
+            sourceLayout: sourceLayout
         );
 
         return ((CallRecorder)((object)recording)).Calls;

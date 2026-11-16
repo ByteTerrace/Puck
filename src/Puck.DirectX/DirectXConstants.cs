@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using Puck.Maths;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
@@ -65,14 +64,6 @@ public static unsafe class DirectXConstants {
         clearValue.Anonymous.Color[3] = 1f;
 
         return clearValue;
-    }
-
-    /// <summary>Rounds a packed row-byte count up to <see cref="TextureRowPitchAlignment"/> — the padded row
-    /// pitch buffer-texture copies require.</summary>
-    /// <param name="packedRowBytes">The tightly packed row size, in bytes.</param>
-    /// <returns>The row pitch, rounded up to the copy alignment.</returns>
-    public static uint AlignRowPitch(uint packedRowBytes) {
-        return packedRowBytes.AlignUp(alignment: TextureRowPitchAlignment);
     }
     /// <summary>Gets a descriptor heap's CPU handle for its first descriptor, via the direct vtable-slot call the
     /// hidden-pointer x64 COM ABI requires (see <see cref="GetCpuDescriptorHandleSlot"/>).</summary>

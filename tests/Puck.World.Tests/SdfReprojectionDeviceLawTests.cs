@@ -206,7 +206,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             recorder.Dispatch(commandBufferHandle: command, groupCountX: ((uint)cases.Length), groupCountY: 1, groupCountZ: 1);
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
-            var result = readback.Read(bytesPerPixel: 16, format: GpuPixelFormat.R32G32B32A32Float, height: 1, width: ((uint)cases.Length),
+            var result = readback.Read(format: GpuPixelFormat.R32G32B32A32Float, height: 1, width: ((uint)cases.Length),
                 sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
 
             return MemoryMarshal.Cast<byte, Vector4>(span: result.Span).ToArray();

@@ -84,8 +84,6 @@ public sealed partial class ShaderPipelineRenderNode {
         )
     );
 
-    // The bytes of the readback staging buffer that reads a published RGBA8 surface of an extent.
-    private static ulong ReadbackBytes(uint width, uint height) => checked(((((ulong)width) * height) * 4UL));
     // The bytes of the preview's targets, one per frame slot, at an extent, and its one encode block.
     private static ulong PreviewBytes((uint Width, uint Height)? extent, uint inFlight) =>
         ((extent is { } preview)

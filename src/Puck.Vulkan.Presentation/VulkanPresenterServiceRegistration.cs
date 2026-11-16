@@ -126,14 +126,11 @@ public static class VulkanPresenterServiceRegistration {
                 shaderModuleFactory: shaderModuleFactory
             ),
                 SurfaceTransferFactory = new VulkanGpuSurfaceTransferFactory(
-                bufferApi: bufferApi,
                 commandBufferRecordingApi: commandBufferRecordingApi,
                 commandResourcesFactory: commandResourcesFactory,
                 deviceContext: deviceContext,
                 externalMemoryApi: externalMemoryApi,
-                frameSynchronizationApi: frameSynchronizationApi,
                 framebufferSetApi: framebufferSetApi,
-                offscreenImageApi: offscreenImageApi,
                 queueSubmitter: queueSubmitter
             ),
             });
@@ -297,7 +294,6 @@ public static class VulkanPresenterServiceRegistration {
             descriptorApi: sp.GetRequiredService<IVulkanDescriptorApi>(),
             externalMemoryApi: sp.GetRequiredService<IVulkanExternalMemoryApi>(),
             framebufferSetApi: sp.GetRequiredService<IVulkanFramebufferSetApi>(),
-            offscreenImageApi: sp.GetRequiredService<IVulkanOffscreenImageApi>(),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
             queueSubmitter: sp.GetRequiredService<VulkanQueueSubmitter>(),

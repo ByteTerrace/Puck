@@ -195,7 +195,6 @@ public sealed partial class StateArena {
         m_reindexStamp = source.m_reindexStamp;
         m_rowChangeStamp = source.m_rowChangeStamp;
         m_rowGenerations = source.m_rowGenerations;
-        m_rowVersions = source.m_rowVersions;
         m_deliveryRows = new bool[source.m_layout.RowCount];
         Array.Fill(m_deliveryRows, true);
         m_rows = source.m_rows;
@@ -219,10 +218,6 @@ public sealed partial class StateArena {
             array: m_rowGenerations,
             value: next
         );
-        Array.Fill(
-            array: m_rowVersions,
-            value: next
-        );
-        MarkEveryRowMoved();
+        ResetRowVersions(version: next);
     }
 }

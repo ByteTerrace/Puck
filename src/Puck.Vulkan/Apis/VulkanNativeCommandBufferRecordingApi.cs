@@ -412,55 +412,26 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
-        ulong bufferOffset,
+        uint bufferRowLength,
         nint imageHandle,
         uint imageLayout,
-        int imageOffsetX,
-        int imageOffsetY,
         uint width,
         uint height
     ) {
-        var copyBufferToImage = device.CmdCopyBufferToImage;
-        var bufferImageCopy = new VkBufferImageCopy {
-            BufferImageHeight = 0,
-            BufferOffset = bufferOffset,
-            BufferRowLength = 0,
-            ImageExtent = new VkExtent3D(
-            depth: 1,
+        var region = WholeImageRegion(
+            bufferRowLength: bufferRowLength,
             height: height,
             width: width
-        ),
-            ImageOffset = new VkOffset3D(
-            x: imageOffsetX,
-            y: imageOffsetY,
-            z: 0
-        ),
-            ImageSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = 0,
-            },
-        };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
+        );
 
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: bufferImageCopy
-            );
-            copyBufferToImage(
-                commandBufferHandle,
-                bufferHandle,
-                imageHandle,
-                imageLayout,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
+        device.CmdCopyBufferToImage(
+            commandBufferHandle,
+            bufferHandle,
+            imageHandle,
+            imageLayout,
+            1,
+            ((nint)(&region))
+        );
     }
     /// <inheritdoc/>
     public void CopyImageToBuffer(
@@ -469,24 +440,50 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         nint imageHandle,
         uint imageLayout,
         nint bufferHandle,
+        uint bufferRowLength,
         uint width,
         uint height
     ) {
-        var copyImageToBuffer = device.CmdCopyImageToBuffer;
-        var bufferImageCopy = new VkBufferImageCopy {
-            BufferImageHeight = 0,
-            BufferOffset = 0,
-            BufferRowLength = 0,
-            ImageExtent = new VkExtent3D(
-            depth: 1,
+        var region = WholeImageRegion(
+            bufferRowLength: bufferRowLength,
             height: height,
             width: width
-        ),
+        );
+
+        device.CmdCopyImageToBuffer(
+            commandBufferHandle,
+            imageHandle,
+            imageLayout,
+            bufferHandle,
+            1,
+            ((nint)(&region))
+        );
+    }
+    // The one region of a buffer-image copy over a whole single-level color image: its rows from the buffer's first
+    // byte, bufferRowLength texels apart (bufferImageHeight zero: the rows are the image's height).
+    private static VkBufferImageCopy WholeImageRegion(uint bufferRowLength, uint width, uint height) {
+        if (bufferRowLength < width) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: bufferRowLength,
+                message: $"A buffer row of {bufferRowLength} texels cannot hold the image's {width}-texel row.",
+                paramName: nameof(bufferRowLength)
+            );
+        }
+
+        return new VkBufferImageCopy {
+            BufferImageHeight = 0,
+            BufferOffset = 0,
+            BufferRowLength = bufferRowLength,
+            ImageExtent = new VkExtent3D(
+                depth: 1,
+                height: height,
+                width: width
+            ),
             ImageOffset = new VkOffset3D(
-            x: 0,
-            y: 0,
-            z: 0
-        ),
+                x: 0,
+                y: 0,
+                z: 0
+            ),
             ImageSubresource = new VkImageSubresourceLayers {
                 AspectMask = ImageAspectColorBit,
                 BaseArrayLayer = 0,
@@ -494,25 +491,6 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = 0,
             },
         };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
-
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: bufferImageCopy
-            );
-            copyImageToBuffer(
-                commandBufferHandle,
-                imageHandle,
-                imageLayout,
-                bufferHandle,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
     }
     /// <inheritdoc/>
     public void CopyImageToImage(

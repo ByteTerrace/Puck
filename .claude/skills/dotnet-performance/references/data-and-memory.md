@@ -259,8 +259,10 @@ that only the worker task touches; a GPU job reads it before its submit
 returns, and a job given a reusable answer array returns it for the next job. A caller that overwrites every
 entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
 Mesh-store decode scratch follows the same scope (`SdfMeshStoreCodec.TryDecode`):
-expanded bytes live in an accounted `OwnedBuffer<byte>` until parsing ends, and
-the returned mesh owns its decoded arrays. Do not put large, burst-only payloads
+the entry's bytes and the expanded bytes live in accounted `OwnedBuffer<byte>`s
+until parsing ends, and each plane is decoded into the storage the mesh keeps
+(`SdfMeshStorage`: a host's native blocks, or arrays offline), so a load allocates
+no managed copy. Do not put large, burst-only payloads
 in `ArrayPool.Shared`: parallel loading can leave one large buffer per bucket
 on each worker after the load ends. Attribute the pool's retained arrays before
 and after collection, rather than treating every returned buffer as freed.
