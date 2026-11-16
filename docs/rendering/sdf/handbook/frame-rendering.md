@@ -297,7 +297,15 @@ frames and rounded up instead. `world.counters sdf.rates` counts what each
 lever held, and `world.rates` prints the presentation rate, each tier's period
 and each lever's longest interval between updates over the last one to two
 seconds, in milliseconds (`SdfUpdateRateIntervals`): a reading within a
-millisecond of the period is the floor holding.
+millisecond of the period is the floor holding. The bodies, the views and the
+screens that take a tier together do not share one frame of its period: every
+other one takes half the period as a lead (`PresentationPhases`), renders that
+much early once and keeps the period from there, and the lead is not counted
+on a step's frame, so the early render lands on another frame that runs no
+step. A producer keeps its lead until the render it asks for
+(`RenderGraphInstanceSchedule.Led`), so a screen with no new tick to show moves
+on a later one. `world.rates` prints each lever's `burst`, the most rated
+views and screens one frame updated over the same window.
 
 ## What each pass costs
 

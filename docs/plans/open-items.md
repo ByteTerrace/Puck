@@ -52,9 +52,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-4. [high] [Engine job system](#engine-job-system): the memo's next step,
-   which after the scheduling stage's remainder is the control plane's phase
-   and bounded waits, then the pool's design.
+4. [high] [Engine job system](#engine-job-system): the memo's next step:
+   the scheduling stage's windowed reading, another family's review of the
+   control plane's phase and bounded waits and its first step, then the
+   pool's design.
 5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
@@ -310,8 +311,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's remainder, the control plane's phase and
-bounded waits (C0), then the pool's design (J1). The garbage-collection cuts
+order once: the scheduling stage's windowed reading, another family's review
+of [the control plane's design](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
+and then its step C0.1, then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -322,6 +324,20 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
+- [medium · unconfirmed] A tick-cadence screen source asked for at the tick's
+  own rate (a 30 Hz floor under a 30 Hz tick) has a new image only on a
+  step's frame, so its floor releases it there and no lead can move it
+  (`RenderGraphScheduler`'s `SourceDue`): it would upload beside every tick.
+  Read it with the scheduler's phase law at 30 Hz, then decide whether such a
+  source uploads on the frame after the step.
+- [low] A rated item's phase is chosen against its own latest update
+  (`PresentationPhases`), so items that take a tier on different frames are
+  not balanced against each other, and nothing weighs a view's cost against a
+  screen's. The frame plan J1 gives the `Frame` class is where a placement by
+  cost belongs.
+- [low] `WorldViewPaneMappingLawTests.APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldArrives`
+  fails its arriving case on the integration tip: a session whose world's
+  meshes still arrive behind the camera is not scheduled. Owner: rendering.
 - [medium · unconfirmed] `WorldDocument.AttachSink` delivers an attach primer
   that reaches `WorldDisclosureImages.Current` without taking
   `WorldServer.AuthorityGate`, while in-tick delivery and ordered-domain

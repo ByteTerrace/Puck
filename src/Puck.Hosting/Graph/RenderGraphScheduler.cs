@@ -46,8 +46,9 @@ namespace Puck.Hosting;
 public static class RenderGraphScheduler {
     // One producer a consumer reads this frame: an image it shows over a footprint, or a buffer (no extent).
     // Holds is whether the footprint's refresh (RenderGraphFootprint.Refresh) holds the producer's latest render through
-    // this frame, every footprint of the pair agreeing; never for a buffer read.
-    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame, ShaderPipelineResourceKind Kind, bool Holds = false);
+    // this frame, every footprint of the pair agreeing; never for a buffer read. HoldsUnled is the same decision with no
+    // lead counted (RenderGraphRefresh.LeadSeconds).
+    internal readonly record struct Shown(int Producer, double Width, double Height, bool PreviousFrame, ShaderPipelineResourceKind Kind, bool Holds = false, bool HoldsUnled = false);
     // The working state of one schedule, sized to its set and cleared at the start of every call, so nothing from an
     // earlier frame reaches a result.
     internal sealed class Scratch {
@@ -65,8 +66,11 @@ public static class RenderGraphScheduler {
             Unchanged = new bool[count];
             ConsumerDemanded = new bool[count];
             Held = new bool[count];
+            Led = new bool[count];
             RootReleases = new bool[count];
+            RootReleasesUnled = new bool[count];
             ShownReleases = new bool[count];
+            ShownReleasesUnled = new bool[count];
             Stale = new bool[count];
             Height = new int[count];
             IsRoot = new bool[count];
@@ -104,6 +108,12 @@ public static class RenderGraphScheduler {
         public bool[] ConsumerDemanded { get; }
         // Whether the demand of roots and footprints held the instance though its own refresh was due.
         public bool[] Held { get; }
+        // Whether the instance is due only by a lead: the demand of roots and footprints would have held it with no
+        // lead counted.
+        public bool[] Led { get; }
+        // RootReleases and ShownReleases with no lead counted.
+        public bool[] RootReleasesUnled { get; }
+        public bool[] ShownReleasesUnled { get; }
         // Whether a root showing the instance asks for it this frame: its refresh does not hold the latest render.
         public bool[] RootReleases { get; }
         // Whether a footprint through which a consumer rendering this frame passed demand asks for the instance this
@@ -141,8 +151,11 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Unchanged);
             Array.Clear(array: ConsumerDemanded);
             Array.Clear(array: Held);
+            Array.Clear(array: Led);
             Array.Clear(array: RootReleases);
+            Array.Clear(array: RootReleasesUnled);
             Array.Clear(array: ShownReleases);
+            Array.Clear(array: ShownReleasesUnled);
             Array.Clear(array: Stale);
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
@@ -181,7 +194,14 @@ public static class RenderGraphScheduler {
         );
     }
     // Whether a refresh holds an instance's latest render through this frame (RenderGraphRefresh.Holds), on the frame's
-    // presentation clock. A floor never holds an instance whose latest render did not show its frame.
+    // presentation clock, and whether it would with no lead counted. A floor never holds an instance whose latest render
+    // did not show its frame.
+    private static bool Holds(RenderGraphRefresh refresh, RenderGraphFrame frame, RenderGraphHistory history, int index, bool[] stale, out bool unled) {
+        unled = Holds(frame: frame, history: history, index: index, refresh: (refresh with { LeadSeconds = 0d }), stale: stale);
+
+        // A lead only counts ahead, so a refresh that does not hold without one does not hold with one.
+        return (unled && ((refresh.LeadSeconds == 0d) || Holds(frame: frame, history: history, index: index, refresh: refresh, stale: stale)));
+    }
     private static bool Holds(RenderGraphRefresh refresh, RenderGraphFrame frame, RenderGraphHistory history, int index, bool[] stale) {
         var last = history.LatestFrame(index: index);
 
@@ -281,7 +301,7 @@ public static class RenderGraphScheduler {
                 );
             }
 
-            var holds = Holds(frame: frame, history: history, index: producer, refresh: footprint.Refresh, stale: stale);
+            var holds = Holds(frame: frame, history: history, index: producer, refresh: footprint.Refresh, stale: stale, unled: out var holdsUnled);
             var list = shown[consumer];
             var existing = -1;
 
@@ -297,6 +317,7 @@ public static class RenderGraphScheduler {
                 list.Add(item: new Shown(
                     Height: height,
                     Holds: holds,
+                    HoldsUnled: holdsUnled,
                     Kind: edge.Kind,
                     PreviousFrame: edge.PreviousFrame,
                     Producer: producer,
@@ -305,6 +326,7 @@ public static class RenderGraphScheduler {
             } else {
                 list[existing] = (list[existing] with {
                     Holds = (list[existing].Holds && holds),
+                    HoldsUnled = (list[existing].HoldsUnled && holdsUnled),
                     Height = Math.Max(
                         val1: list[existing].Height,
                         val2: height
@@ -645,7 +667,8 @@ public static class RenderGraphScheduler {
                 (rootHeight > 0)
             ) {
                 isRoot[index] = true;
-                rootReleases[index] |= !Holds(frame: frame, history: history, index: index, refresh: root.Refresh, stale: stale);
+                rootReleases[index] |= !Holds(frame: frame, history: history, index: index, refresh: root.Refresh, stale: stale, unled: out var rootHoldsUnled);
+                work.RootReleasesUnled[index] |= !rootHoldsUnled;
                 demandWidth[index] = Math.Max(
                     val1: demandWidth[index],
                     val2: rootWidth
@@ -756,11 +779,14 @@ public static class RenderGraphScheduler {
                 // both release it.
                 if (
                     due[index] &&
-                    !forced[index] &&
-                    DemandHolds(consumerDemanded: consumerDemanded[index], isRoot: isRoot[index], rootReleases: rootReleases[index], shownReleases: work.ShownReleases[index])
+                    !forced[index]
                 ) {
-                    due[index] = false;
-                    work.Held[index] = true;
+                    if (DemandHolds(consumerDemanded: consumerDemanded[index], isRoot: isRoot[index], rootReleases: rootReleases[index], shownReleases: work.ShownReleases[index])) {
+                        due[index] = false;
+                        work.Held[index] = true;
+                    } else {
+                        work.Led[index] = DemandHolds(consumerDemanded: consumerDemanded[index], isRoot: isRoot[index], rootReleases: work.RootReleasesUnled[index], shownReleases: work.ShownReleasesUnled[index]);
+                    }
                 }
                 // A source renders at its producer's negotiated extent, so a footprint demands it without sizing it, and
                 // it reads nothing to pass demand on to.
@@ -799,6 +825,7 @@ public static class RenderGraphScheduler {
                     }
                     consumerDemanded[entry.Producer] = true;
                     work.ShownReleases[entry.Producer] |= !entry.Holds;
+                    work.ShownReleasesUnled[entry.Producer] |= !entry.HoldsUnled;
                     // A source supplies its own extent. A buffer consumer has no pixel footprint to multiply,
                     // but still demands the source image it reads, including its unfinished first conversion.
                     if ((entry.Kind == ShaderPipelineResourceKind.Buffer) || set.Instances[entry.Producer].IsSource) {
@@ -1097,6 +1124,7 @@ public static class RenderGraphScheduler {
                             fraction: allocatedHeight
                         )))),
                 Held: (work.Held[index] && !admitted[index]),
+                Led: (work.Led[index] && admitted[index]),
                 Instance: set.Instances[index].Name,
                 IsRoot: isRoot[index],
                 LatestFrame: following.Latest[index],

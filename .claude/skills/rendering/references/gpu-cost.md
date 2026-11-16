@@ -442,8 +442,12 @@ large blocks.
   placement's tiers are sized for its measured part speed
   (`WorldCreationInstances.MeasurePartSpeed`, one `SdfUpdateRateTiers.BodyHertz`
   for bodies and placements), so slow wind reduces nearer than a body would.
+  The items that take a tier together spread over its period: every other
+  body, view and screen takes half the period as a lead (`PresentationPhases`),
+  and `world.rates`' `burst` reads the most rated views and screens one frame
+  updated.
   New rated work decides through the same floor rather than a schedule of its
-  own, reads the frame's flags before it runs (the stamp pool takes them in
+  own, takes its phase from a `PresentationPhases` of its own, reads the frame's flags before it runs (the stamp pool takes them in
   `PresentAt`), and a new reader of a body's parts goes through the pool's part
   accessors, which record it (`NotePoseRead`).
 
@@ -518,8 +522,8 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Growing the program region waits for the device to go idle**
   ([hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
-- **Tick-bound views record on tick frames,** beside the tick itself; rated
-  views and screens still share one phase ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
+- **Tick-bound views record on tick frames,** beside the tick itself
+  ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way
   conflict** and **the bake's `SdfBakeTaps`,**
   indexed by the `[loop]` counter, the shape the local-array rule forbids: the

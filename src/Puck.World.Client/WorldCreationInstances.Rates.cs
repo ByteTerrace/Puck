@@ -28,8 +28,8 @@ public sealed partial class WorldCreationInstances {
     // The shadow cascades of those views, each the renderer's own caster cull (SdfMeshCull) and the view it shadows.
     private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
     private bool m_rateShadowsKnown;
-    // Whether the next body to choose its phase within a tier takes the later half of the period.
-    private bool m_rateLateHalf;
+    // The phases the bodies that take a tier choose within its period.
+    private readonly PresentationPhases m_ratePhases = new();
 
     private SdfUpdateRates m_rates;
     private WorkCounterSet? m_rateCounts;
@@ -284,7 +284,7 @@ public sealed partial class WorldCreationInstances {
     }
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
     // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds), counted
-    // ahead by its phase's lead. The slowest tier since that pack is the one its next interval is recorded under.
+    // ahead by its phase's lead on a frame the lead may bring a pack onto. The slowest tier since that pack is the one its next interval is recorded under.
     private bool HoldsPose(Registration live, float deltaSeconds, Vector3 center, float radius, float placementScale) {
         var (hertz, _) = RateOf(center: center, live: live, placementScale: placementScale, radius: radius);
 
@@ -292,15 +292,16 @@ public sealed partial class WorldCreationInstances {
         ChoosePhase(hertz: hertz, live: live);
 
         return SdfUpdateRateTiers.Holds(
-            elapsedSeconds: ((live.RateSeconds + deltaSeconds) + live.RateLead),
+            elapsedSeconds: (live.RateSeconds + deltaSeconds),
             frameSeconds: deltaSeconds,
             hertz: hertz,
+            leadSeconds: live.RateLead,
             rate: m_presentationRate
         );
     }
-    // Chooses a body's phase within the period of a tier it has just taken: every other body to do so packs half a period
-    // early once, then keeps the period, so bodies that took the tier on one frame pack on alternate frames of it, not
-    // all on one. The lead only moves the pack earlier: the floor still holds.
+    // Chooses a body's phase within the period of a tier it has just taken (PresentationPhases): every other body to take
+    // the tier packs half a period early once, then keeps the period, so bodies that took the tier on one frame pack on
+    // alternate frames of it, not all on one.
     private void ChoosePhase(Registration live, int hertz) {
         if (live.RatePhaseHertz == hertz) {
             return;
@@ -312,8 +313,7 @@ public sealed partial class WorldCreationInstances {
             return;
         }
 
-        live.RateLead = (m_rateLateHalf ? ((float)(m_presentationRate.PeriodSeconds(hertz: hertz) * 0.5d)) : 0f);
-        m_rateLateHalf = !m_rateLateHalf;
+        live.RateLead = ((float)m_ratePhases.Take(hertz: hertz, rate: m_presentationRate));
     }
     // Forgets a body's phase, for a full pack its tier did not ask for: the body chooses again when it next holds.
     private static void ForgetPhase(Registration live) {
