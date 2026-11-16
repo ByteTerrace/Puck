@@ -266,6 +266,11 @@ public sealed class CacheRetentionLawTests {
         var destination = cache.PathOf(name: "entry.bin");
         using var pending = Puck.Confinement.AtomicFile.StageAllBytes(bytes: [1, 2, 3], path: destination);
         var live = Assert.Single(collection: Directory.GetFiles(path: cache.RootPath));
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: live);
+        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => true);
+        Assert.True(condition: File.Exists(path: live));
+
         var fields = Path.GetFileName(path: live)["entry.bin.".Length..^".tmp".Length].Split(separator: '_');
 
         Assert.Equal(expected: 4, actual: fields.Length);
@@ -281,7 +286,6 @@ public sealed class CacheRetentionLawTests {
         var unclaimed = cache.WriteText(name: "other.bin.0123456789abcdef.tmp", text: "x");
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: unclaimed);
-        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: live);
         _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => true);
 
         Assert.True(condition: File.Exists(path: live));
