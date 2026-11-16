@@ -3,7 +3,7 @@ using Puck.Commands;
 namespace Puck.World.Protocol;
 
 /// <summary>A link a console's handlers submit through, which registers each line it mints in its row's table.</summary>
-public interface IConsoleServerLink : IPrincipalServerLink {
+public interface IConsoleServerLink : IServerLink {
     /// <summary>Gets the handle of the row this submission reaches, or <see langword="null"/> when that row keeps no
     /// console table and nothing registers.</summary>
     WorldDeferredVerbRow? Row { get; }
@@ -29,11 +29,6 @@ public sealed class WorldConsoleServerLink : IConsoleServerLink {
 
     WorldDeferredVerbRow? IConsoleServerLink.Row => Row;
 
-    /// <inheritdoc/>
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) => m_transport.Query(
-        completion: completion,
-        query: query
-    );
     /// <inheritdoc/>
     public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => m_transport.Query(
         completion: completion,

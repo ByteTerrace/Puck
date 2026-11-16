@@ -16,6 +16,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (TryRoutedSeatQuery(
             args: in args,
+            caller: context.Principal,
             query: static index => new WorldQuery.PlayerState(Index: index),
             result: out var routed
         )) {
@@ -34,6 +35,7 @@ internal sealed partial class PlayerCommandModule {
         var result = default(CommandResult);
 
         m_link.Query(
+            principal: context.Principal,
             query: new WorldQuery.PlayerState(Index: index),
             completion: answer => {
                 result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };

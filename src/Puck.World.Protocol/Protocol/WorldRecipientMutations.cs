@@ -39,50 +39,63 @@ public static class WorldRecipientMutations {
     /// membership, capacity, fingerprints or composition can disclose anything about that row, and every mutation of
     /// a program section (<see cref="WorldSectionFacts.IsProgram"/>) by its kind alone, before it is compiled: a rule
     /// or interaction reads any row and fires as the world, so authoring one is authoring the world.</summary>
+    /// <remarks>The one write door's two invariants, held here for every recipient door (complete admission, live
+    /// state commands, detached composition and its batch members, guards): the verdict reads the recipient's declared
+    /// policy alone, never its delivery ceiling or whether it observes now (<see cref="WorldRecipientView.Admits(string)"/>,
+    /// which also refuses a name no row holds as it refuses a withheld one); and <paramref name="row"/>, the name the
+    /// refusal carries, is always a name the submission spelled (a row, a placement, machine or kit, a transform's
+    /// first subject, or the section a whole-document or spatial guard reads), never a row the footprint derived from
+    /// the document, so a refusal names no declaration the submitter did not.</remarks>
     /// <param name="view">The recipient's capability.</param>
     /// <param name="mutation">The submitted mutation.</param>
-    /// <param name="row">The first withheld row, or the program section's document name; empty when admitted.</param>
+    /// <param name="row">The submitted name the refusal names, or the program section's document name; empty when admitted.</param>
     /// <returns><see langword="true"/> when the recipient may submit the mutation to grants and composition.</returns>
     public static bool Admits(this WorldRecipientView view, WorldMutation mutation, out string row) {
         row = string.Empty;
         if (view.IsAuthority) { return true; }
         if (WorldMutationKindCatalog.SectionOf(mutation) is var section && section.IsProgram()) {
-            row = section.ToString().ToLowerInvariant();
+            row = SectionName(section);
             return false;
         }
         switch (mutation) {
             case WorldMutation.UpsertStateCell write: row = write.Row; break;
             case WorldMutation.RemoveStateCell remove: row = remove.Row; break;
             case WorldMutation.UpsertStateRow replace:
+                // Every name the declaration check reports is one the submitted declaration spells.
                 if (!view.AdmitsDeclaration(replace.Row, out row)) { return false; }
                 break;
             case WorldMutation.RemoveStateRow remove: row = remove.Name; break;
             case WorldMutation.Generate generate: row = generate.Row; break;
             case WorldMutation.UpsertPlacement placement:
-                if (!view.AdmitsPlacement(placement.Placement, out row)) { return false; }
+                if (!view.AdmitsPlacement(placement.Placement)) { row = placement.Placement.Id; return false; }
                 break;
             case WorldMutation.RemovePlacement placement:
-                if (!view.AdmitsPlacement(placement.Id, out row)) { return false; }
+                if (!view.AdmitsPlacement(placement.Id)) { row = placement.Id; return false; }
                 break;
             case WorldMutation.UpsertMachine machine:
-                if (!view.AdmitsMachine(machine.Machine, machine.Machine.Name, out row)) { return false; }
+                if (!view.AdmitsMachine(machine.Machine, machine.Machine.Name)) { row = machine.Machine.Name; return false; }
                 break;
             case WorldMutation.RemoveMachine machine:
-                if (!view.AdmitsMachine(null, machine.Name, out row)) { return false; }
+                if (!view.AdmitsMachine(null, machine.Name)) { row = machine.Name; return false; }
                 break;
             case WorldMutation.UpsertKit kit:
-                if (!view.AdmitsKit(kit.Kit, kit.Kit.Name, out row)) { return false; }
+                if (!view.AdmitsKit(kit.Kit, kit.Kit.Name)) { row = kit.Kit.Name; return false; }
                 break;
             case WorldMutation.RemoveKit kit:
-                if (!view.AdmitsKit(null, kit.Name, out row)) { return false; }
+                if (!view.AdmitsKit(null, kit.Name)) { row = kit.Name; return false; }
                 break;
-            case WorldMutation.TransformState transform:
-                foreach (var subject in transform.Transform.Subjects()) {
-                    if (!view.Admits(subject.Name)) { row = subject.Name; return false; }
+            case WorldMutation.TransformState transform: {
+                    var subjects = transform.Transform.Subjects();
+                    foreach (var subject in subjects) {
+                        if (!view.Admits(subject.Name)) { row = subject.Name; return false; }
+                    }
+                    if (transform.Guard is { } guard && !view.Admits(guard.Row)) { row = guard.Row; return false; }
+                    if (!view.AdmitsTransform(transform.Transform)) {
+                        row = (subjects.Count == 0) ? SectionName(WorldSection.State) : subjects[0].Name;
+                        return false;
+                    }
+                    break;
                 }
-                if (transform.Guard is { } guard && !view.Admits(guard.Row)) { row = guard.Row; return false; }
-                if (!view.AdmitsTransform(transform.Transform, out row)) { return false; }
-                break;
             case WorldMutation.Batch batch:
                 if (!batch.TryValidateShape(out _)) { return true; }
                 foreach (var cell in batch.ExpectedCells ?? []) {
@@ -91,15 +104,16 @@ public static class WorldRecipientMutations {
                 if (batch.ExpectedDefinition is not null && !view.AdmitsDefinition(batch.ExpectedStateRows, out row)) { return false; }
                 if (batch.ExpectedInputs is { } inputs) {
                     if (!view.AdmitsDefinition(inputs.StateRows, out row)) { return false; }
-                    foreach (var id in inputs.PlacementIds) { if (!view.AdmitsPlacement(id, out row)) { return false; } }
+                    foreach (var id in inputs.PlacementIds) { if (!view.AdmitsPlacement(id)) { row = id; return false; } }
                 }
-                if (batch.ExpectedSpatialReads is { Count: > 0 } && !view.AdmitsSpatial(out row)) { return false; }
+                if (batch.ExpectedSpatialReads is { Count: > 0 } && !view.AdmitsSpatial()) { row = SectionName(WorldSection.Placements); return false; }
                 foreach (var member in batch.Mutations) { if (!view.Admits(member, out row)) { return false; } }
                 return true;
         }
         if (row.Length != 0 && !view.Admits(row)) { return false; }
         return view.AdmitsValues(mutation, out row);
     }
+    private static string SectionName(WorldSection section) => section.ToString().ToLowerInvariant();
 
     /// <summary>One guard implementation for live state batches and detached document composition.</summary>
     public static bool CheckGuards(this WorldRecipientView view, WorldMutation.Batch batch, out string reason) {

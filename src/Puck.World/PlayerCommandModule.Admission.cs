@@ -39,6 +39,7 @@ internal sealed partial class PlayerCommandModule {
         // this identity (an already-bound device relocating) or self-provisioning (an unbound device's bootstrap)
         // governs the target — see its own remarks.
         return DescribeAssign(
+            caller: context.Principal,
             verb: ClaimCommand,
             outcome: m_roster.AssignDevice(
                 device: context.DeviceId,
@@ -133,6 +134,7 @@ internal sealed partial class PlayerCommandModule {
         );
 
         return DescribeAssign(
+            caller: context.Principal,
             outcome: outcome,
             slot: slot,
             verb: "player.cycle"
@@ -141,7 +143,8 @@ internal sealed partial class PlayerCommandModule {
     // Format a device-reassignment outcome, echoing the roster on a change. Each Ignored-shaped outcome gets its OWN
     // accurate reason (see AssignOutcome's own remarks) rather than one hardcoded "roster is full" text that used to
     // print even when the real cause was an exclusively-claimed device or target slot.
-    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot) => PlayerAssignmentCommand.Describe(
+    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot, Principal caller) => PlayerAssignmentCommand.Describe(
+        caller: caller,
         outcome: outcome,
         roster: m_roster,
         slot: slot,
@@ -150,8 +153,8 @@ internal sealed partial class PlayerCommandModule {
     private CommandResult DescribeConfirm(ConfirmOutcome outcome, int slot, InputDeviceId? device, Principal actingPrincipal) {
 
         return (outcome switch {
-            ConfirmOutcome.Confirmed => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} confirmed] {m_roster.Describe()}"),
-            ConfirmOutcome.Joined => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {m_roster.Describe()}"),
+            ConfirmOutcome.Confirmed => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} confirmed] {m_roster.Describe(caller: actingPrincipal)}"),
+            ConfirmOutcome.Joined => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {m_roster.Describe(caller: actingPrincipal)}"),
             ConfirmOutcome.Seated when (device is { } source) => new CommandResult(Output: $"[player.confirm: {m_roster.DeviceToken(device: source)} seated with player {PlayerRoster.DisplayNumber(slot: slot)}]"),
             ConfirmOutcome.Seated => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} seated]"),
             ConfirmOutcome.AlreadyActive => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} is already active]"),
@@ -359,7 +362,7 @@ internal sealed partial class PlayerCommandModule {
                     return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {PlayerRoster.DisplayNumber(slot: rosterSlot)}, which cannot leave or the actor was denied]");
                 }
 
-                return new CommandResult(Output: $"[player.leave: player {PlayerRoster.DisplayNumber(slot: rosterSlot)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
+                return new CommandResult(Output: $"[player.leave: player {PlayerRoster.DisplayNumber(slot: rosterSlot)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe(caller: context.Principal)}");
             }
 
             var leaveReply = instance.Server.ApplySession(request: new SessionRequest.Leave(
@@ -397,7 +400,7 @@ internal sealed partial class PlayerCommandModule {
             slot: PlayerRoster.SlotFromDisplay(number: n),
             actingPrincipal: context.Principal
         )
-            ? new CommandResult(Output: $"[player.leave: player {n} left] {m_roster.Describe()}")
+            ? new CommandResult(Output: $"[player.leave: player {n} left] {m_roster.Describe(caller: context.Principal)}")
             : CommandResult.Error(output: $"[player.leave: player {n} is not joined, or the actor was denied — see wire.errors/world.why]")
         );
     }
@@ -431,7 +434,7 @@ internal sealed partial class PlayerCommandModule {
             SetProfileOutcome.NotJoined => CommandResult.Error(output: $"[player.identity: player {index} is not joined — see world.players]"),
             SetProfileOutcome.InUse => CommandResult.Error(output: $"[player.identity: identity '{profile.Name}' is already in use — see world.players]"),
             SetProfileOutcome.Denied => CommandResult.Error(output: $"[player.identity: {context.Principal.Describe()} cannot set player {index}'s identity — see world.why]"),
-            _ => new CommandResult(Output: $"[player.identity: player {index} is now {profile.Name}] {m_roster.Describe()}"),
+            _ => new CommandResult(Output: $"[player.identity: player {index} is now {profile.Name}] {m_roster.Describe(caller: context.Principal)}"),
         });
     }
     // Format a join result — a STRUCTURED denial/full/occupied/ok outcome (never a bare -1 collapsing "no room" and
@@ -442,7 +445,7 @@ internal sealed partial class PlayerCommandModule {
         return (result switch {
             JoinResult.Ok => new CommandResult(Output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: slot)} {(active
             ? "joined active"
-            : "joined pending")}] {m_roster.Describe()}"),
+            : "joined pending")}] {m_roster.Describe(caller: actingPrincipal)}"),
             JoinResult.Occupied => CommandResult.Error(output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: slot)} is already joined]"),
             JoinResult.Full => CommandResult.Error(output: $"[player.join: the roster is full ({m_roster.LocalSeats} declared local seat(s), population.localSeats)]"),
             _ => CommandResult.Error(output: $"[player.join: {actingPrincipal.Describe()} cannot join slot {PlayerRoster.DisplayNumber(slot: slot)} — see world.why]"),

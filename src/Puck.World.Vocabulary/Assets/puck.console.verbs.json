@@ -275,7 +275,7 @@
     { "name": "world.parked", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.patrol", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.patterns", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
-    { "name": "world.peers", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
+    { "name": "world.peers", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": false },
     { "name": "world.place", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.placement.get", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.placements", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

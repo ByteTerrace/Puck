@@ -199,7 +199,9 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
         completion(obj: result);
     }
 
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) {
+    // Routes by body like every forwarded submission: the remote authority answers the traveler whose credential the
+    // query rides, so principal never crosses this transport (see SubmitEnvelope).
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(completion);
         var bodyIndex = query switch {
             WorldQuery.PlayerWhere where => where.Index,

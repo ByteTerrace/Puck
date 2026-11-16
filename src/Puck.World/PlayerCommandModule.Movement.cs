@@ -1053,9 +1053,9 @@ internal sealed partial class PlayerCommandModule {
             return tokenError!.Value;
         }
 
-        // The instance-targeted form reads straight out of the NAMED instance's OWN tick snapshot via its own
-        // WorldServer.Answer — never the boot world's — and carries no perception anchor (that is client presentation
-        // state a spawned instance's seat has no client mirroring).
+        // The instance-targeted form reads straight out of the NAMED instance's OWN tick snapshot through that
+        // instance's query door, as the caller — never the boot world's — and carries no perception anchor (that is
+        // client presentation state a spawned instance's seat has no client mirroring).
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 1) {
                 return CommandResult.Error(output: $"[body.where: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
@@ -1072,7 +1072,10 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: $"[body.where: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
-            var instanceAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot)));
+            var instanceAnswer = instance.Server.AnswerSubmittedQuery(
+                principal: context.Principal,
+                query: new WorldQuery.PlayerWhere(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot))
+            );
 
             return new CommandResult(Output: WithInstanceTag(
                 text: instanceAnswer.Text,
@@ -1111,6 +1114,7 @@ internal sealed partial class PlayerCommandModule {
                 comparisonType: StringComparison.Ordinal
             ) &&
                 seatRouter.TryRouteQuery(
+                caller: context.Principal,
                 factory: authorityIndex => new WorldQuery.PlayerWhere(Index: (authorityIndex - 1)),
                 result: out var routed,
                 slot: rosterSlot,
@@ -1142,6 +1146,7 @@ internal sealed partial class PlayerCommandModule {
         var result = default(CommandResult);
 
         m_link.Query(
+            principal: context.Principal,
             query: new WorldQuery.PlayerWhere(Index: index),
             completion: answer => {
                 result = new CommandResult(Output: WithPerceptionAnchor(
