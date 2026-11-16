@@ -44,7 +44,8 @@ public sealed partial class CodeClosure {
     /// <summary>Walks roots in a build without loading its assemblies. Missing roots fail by name.</summary>
     /// <param name="directory">The build directory.</param>
     /// <param name="roots">Assembly, full type name and method name (all overloads), or null for the whole type.</param>
-    /// <param name="stopTypes">Types whose called bodies are transport or cache boundaries; explicit roots still run.</param>
+    /// <param name="stopTypes">Full names of the types whose called bodies are transport or cache boundaries, a nested type
+    /// spelled <c>Outer/Nested</c>; a stop type stops the types nested in it, and explicit roots still run.</param>
     /// <returns>The immutable closure.</returns>
     public static CodeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots, IReadOnlySet<string>? stopTypes = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
@@ -263,11 +264,12 @@ public sealed partial class CodeClosure {
 
             return ((blob.ReadSignatureTypeCode() == SignatureTypeCode.GenericTypeInstance) && (blob.ReadSignatureTypeCode() is SignatureTypeCode.TypeHandle) ? Resolve(handle: blob.ReadTypeHandle(), module: module) : null);
         }
+        // A stop type stops the types nested in it too; a nested type named alone stops only itself and its own nested types.
         private bool Stopped(Module module, TypeDefinitionHandle type) {
-            var name = module.FullName(handle: type);
-            var outer = name.IndexOf(value: '/', comparisonType: StringComparison.Ordinal);
-
-            return stopTypes.Contains(item: ((outer < 0) ? name : name[..outer]));
+            for (var name = module.FullName(handle: type); ; name = name[..name.LastIndexOf(value: '/')]) {
+                if (stopTypes.Contains(item: name)) { return true; }
+                if (!name.Contains(value: '/')) { return false; }
+            }
         }
         private void Enqueue(Module module, MethodDefinitionHandle method, bool root = false) {
             if ((root || !Stopped(module: module, type: module.Metadata.GetMethodDefinition(handle: method).GetDeclaringType())) && m_methodsSeen.Add(item: (module, method))) {

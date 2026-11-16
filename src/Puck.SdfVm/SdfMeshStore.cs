@@ -63,9 +63,9 @@ public sealed class SdfMeshStore {
     public long CapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
-    /// <summary>Gets the entry format's eight-byte version tag. A bump already moves the bake identity,
-    /// because the tag is inlined into the entry codec the closure hashes; <see cref="Record"/> writes it beside the
-    /// identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
+    /// <summary>Gets the entry format's eight-byte version tag (<see cref="SdfMeshStoreCodec.Magic"/>). The identity folds it
+    /// (<see cref="BuildIdentityOf"/>), so a bump starts a new set while the decode refuses any entry of another tag;
+    /// <see cref="Record"/> writes it beside the identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
     public static string EntryVersion { get; } = VersionText(magic: Magic);
 
     internal static string VersionText(ulong magic) {
@@ -87,13 +87,20 @@ public sealed class SdfMeshStore {
     /// <param name="code">The code identity (<see cref="SdfMeshBakeClosure.Hash"/>).</param>
     /// <param name="maskKernel">The hash of the mask kernel's bytecode.</param>
     /// <param name="bakeKernel">The hash of the bake kernel's bytecode.</param>
+    /// <param name="entryVersion">The entry format's version tag the walked build's codec writes and reads
+    /// (<see cref="EntryVersion"/>), eight ASCII characters.</param>
     /// <returns>The identity's value.</returns>
-    public static UInt128 BuildIdentityOf(UInt128 code, UInt128 maskKernel, UInt128 bakeKernel) {
-        Span<byte> bytes = stackalloc byte[48];
+    /// <exception cref="ArgumentException"><paramref name="entryVersion"/> is not eight ASCII characters.</exception>
+    public static UInt128 BuildIdentityOf(UInt128 code, UInt128 maskKernel, UInt128 bakeKernel, string entryVersion) {
+        if ((entryVersion?.Length != sizeof(ulong)) || !System.Text.Ascii.IsValid(value: entryVersion)) {
+            throw new ArgumentException(message: "An entry version is eight ASCII characters.", paramName: nameof(entryVersion));
+        }
+        Span<byte> bytes = stackalloc byte[56];
 
         BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes, value: code);
         BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes[16..], value: maskKernel);
         BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes[32..], value: bakeKernel);
+        _ = System.Text.Encoding.ASCII.GetBytes(chars: entryVersion, bytes: bytes[48..]);
 
         return XxHash128.HashToUInt128(source: bytes);
     }
