@@ -125,8 +125,8 @@ cache pass stamps the token, so hits read back for the CPU's surface map are
 never uploaded again. A relight commits records only after `Stands` accepts
 their scene/window, then frame upload copies the ready slots into the published
 GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
-hit arrays once the batch is relit. The camera sample reads the GPU kernel's small answer
-rather than traversing the hierarchy on the frame. A job whose scene's meshes
+hit arrays once the batch is relit. Once the device has answered a meter, the camera sample reads
+the GPU kernel's small answer rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
 never holds the coordinator or the meter behind it without bound.
 
@@ -507,10 +507,21 @@ done line; a nested residency's done line is insufficient.
   after a cut): each view reads its own latest row wherever its camera now
   stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
   `fresh` read answers only from a row asked after the view's cut revision.
+  The device meters only once it holds the volume's scene, which uploads after the
+  scene is built and shares the background upload budget with the mesh region's
+  landing (the debug world's scene is hundreds of megabytes), so it answers seconds
+  into a boot. Until the device first answers, `TrySampleCamera` takes the CPU trace
+  above on the built scene (`TryTraceCamera`), so a view's open sky is known from the
+  build on. Before any sample a view reads the open sky (`airLight` one): a closed
+  room then lights as daylight, the image meter settles near EV 13 instead of 7, and
+  a 150-nit display reads black beside the walls. A screen that reads black only
+  early in a boot is this, never its source: check `world.exposure`'s `camera=`.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
   the previous sample's light and sky visibility. `world.exposure` names the sample's source as
-  `camera=probes`, `camera-trace`, `held` or `none`.
+  `camera=probes`, `camera-trace`, `held` or `none`, and for `held` or `none` what it
+  waits for (`wait=`, `SdfMeshIrradiance.CameraSampleWait`: `scene-build`, `scene`,
+  `scene-upload`, `unpublished`, `meter`, `unasked`, `cut`).
 - A settled frame with no opaque static draws installs an empty scene and
   retraces its probes against open space. Empty is known geometry, distinct from
   a scene not built yet; removing the last draw must discard its occlusion and
