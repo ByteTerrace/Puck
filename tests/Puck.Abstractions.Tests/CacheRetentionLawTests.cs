@@ -76,7 +76,7 @@ public sealed class CacheRetentionLawTests {
             result = CacheRetention.Enforce(
                 bound: CacheBound.Entries(maxEntries: 1),
                 directory: cache.RootPath,
-                isEntry: static file => (file.Extension == ".bin"),
+                isEntry: static name => (Path.GetExtension(path: name) == ".bin"),
                 search: SearchOption.AllDirectories
             );
         }
@@ -113,21 +113,21 @@ public sealed class CacheRetentionLawTests {
         using (var second = CacheRetention.HoldSet(setDirectory: set)) {
             Assert.NotNull(@object: first);
             Assert.NotNull(@object: second);
-            _ = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+            _ = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
             // The writer's own set and the held set stay whole; the unheld, newer set is what goes.
             Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2) && File.Exists(path: used));
             Assert.False(condition: File.Exists(path: other));
 
             // The held set in use, alone past the bound, trims nothing; the unheld set beside it goes.
-            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: pinned.Item1, isEntry: static file => (file.Extension == ".bin"));
+            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: pinned.Item1, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
             Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2));
             Assert.False(condition: File.Exists(path: used));
         }
 
         var fresh = Write(minutesAgo: 0, name: "fresh/a.bin");
 
-        _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: fresh, isEntry: static file => (file.Extension == ".bin"));
+        _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: fresh, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
         Assert.False(condition: Directory.Exists(path: set));
         Assert.False(condition: File.Exists(path: (set + ".lease")));
         Assert.True(condition: File.Exists(path: fresh));
@@ -159,7 +159,7 @@ public sealed class CacheRetentionLawTests {
 
         Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: written.AddDays(value: -1), path: empty);
 
-        var result = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+        var result = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
         Assert.True(condition: File.Exists(path: used));
         Assert.True(condition: File.Exists(path: fresh.Item1) && File.Exists(path: fresh.Item2));
@@ -171,7 +171,7 @@ public sealed class CacheRetentionLawTests {
         // Alone past the bound, the set in use trims its own oldest entries and keeps the one in use.
         var second = Write(minutesAgo: 70, name: "used/b.bin");
         var third = Write(minutesAgo: 60, name: "used/c.bin");
-        var trimmed = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+        var trimmed = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
         Assert.True(condition: File.Exists(path: used) && File.Exists(path: third));
         Assert.False(condition: File.Exists(path: second) || File.Exists(path: fresh.Item1) || File.Exists(path: fresh.Item2));
@@ -181,7 +181,7 @@ public sealed class CacheRetentionLawTests {
         var held = Write(minutesAgo: 50, name: "held/a.bin");
 
         using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: held, share: FileShare.Read)) {
-            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static file => (file.Extension == ".bin"));
+            _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
         }
         Assert.Equal(actual: File.Exists(path: held), expected: OperatingSystem.IsWindows());
 
@@ -214,6 +214,82 @@ public sealed class CacheRetentionLawTests {
         Assert.True(condition: CacheRetention.EnforceOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true));
         Assert.Equal(actual: Directory.GetFiles(path: cache.RootPath).Select(selector: Path.GetFileName).Order(comparer: StringComparer.Ordinal), expected: ["b.bin", "c.bin", "d.bin"]);
         Assert.Equal(expected: new CacheBound(MaxBytes: 14, MaxEntries: 88), actual: bound.LowWater);
+    }
+    // A directory link below a cache is never listed through nor deleted through: the files outside it, entries and old
+    // temporaries alike, survive an enforcement that removes everything it may, flat or by sets.
+    [Fact]
+    public void AnEnforcementNeverListsOrDeletesThroughALink() {
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux())) { return; }
+        using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-link-law-");
+        var hourAgo = DateTime.UtcNow.AddHours(value: -1);
+        var outsideEntry = cache.WriteText(name: "outside/victim.bin", text: "x");
+        var outsideTemporary = cache.WriteText(name: "outside/victim.bin.leftover.tmp", text: "x");
+        var root = Directory.CreateDirectory(path: cache.PathOf(name: "store")).FullName;
+        var inside = cache.WriteText(name: "store/inside.bin", text: "x");
+        var flatLink = Path.Combine(path1: root, path2: "linked");
+        var setLink = Path.Combine(path1: root, path2: "set", path3: "linked");
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: outsideEntry);
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: outsideTemporary);
+        _ = cache.WriteText(name: "store/set/a.bin", text: "x");
+        DirectoryLinks.Create(link: flatLink, target: Path.GetDirectoryName(path: outsideEntry)!);
+        DirectoryLinks.Create(link: setLink, target: Path.GetDirectoryName(path: outsideEntry)!);
+        try {
+            var flat = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: root, isEntry: static _ => true,
+                search: SearchOption.AllDirectories, usedSinceUtc: DateTime.UtcNow.AddDays(value: 1));
+
+            Assert.True(condition: File.Exists(path: outsideEntry));
+            Assert.True(condition: File.Exists(path: outsideTemporary));
+            Assert.False(condition: File.Exists(path: inside));
+            Assert.Equal(expected: 0, actual: flat.Kept);
+
+            // The set holding the link is the older of two, so it is the one evicted.
+            var newer = cache.WriteText(name: "store/newer/b.bin", text: "x");
+
+            Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: Path.Combine(path1: root, path2: "set"));
+            _ = CacheRetention.EnforceSets(bound: CacheBound.Entries(maxEntries: 1), directory: root, inUse: newer, isEntry: static _ => true);
+            Assert.True(condition: File.Exists(path: newer));
+            Assert.True(condition: File.Exists(path: outsideEntry));
+            Assert.True(condition: File.Exists(path: outsideTemporary));
+        } finally {
+            DirectoryLinks.Remove(link: setLink);
+            DirectoryLinks.Remove(link: flatLink);
+        }
+    }
+    // A temporary a live writer staged survives a listing however old it looks, and its writer still publishes it; one
+    // whose claim names a process that no longer runs on this host, or that carries no claim, is removed once old; one
+    // claimed on another host is never judged.
+    [Fact]
+    public void AListingRemovesOnlyTemporariesNoLiveWriterOwns() {
+        using var cache = new TemporaryDirectory(prefix: "puck-cache-retention-temporary-law-");
+        var hourAgo = DateTime.UtcNow.AddHours(value: -1);
+        var destination = cache.PathOf(name: "entry.bin");
+        using var pending = Puck.Confinement.AtomicFile.StageAllBytes(bytes: [1, 2, 3], path: destination);
+        var live = Assert.Single(collection: Directory.GetFiles(path: cache.RootPath));
+        var fields = Path.GetFileName(path: live)["entry.bin.".Length..^".tmp".Length].Split(separator: '_');
+
+        Assert.Equal(expected: 4, actual: fields.Length);
+        string Claimed(string host, string start) {
+            var path = cache.WriteText(name: $"other.bin.{host}_{fields[1]}_{start}_{fields[3]}.tmp", text: "x");
+
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: path);
+            return path;
+        }
+        // This process's id with another start time names a process that has exited.
+        var dead = Claimed(host: fields[0], start: "0");
+        var foreign = Claimed(host: "zforeign", start: "0");
+        var unclaimed = cache.WriteText(name: "other.bin.0123456789abcdef.tmp", text: "x");
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: unclaimed);
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: live);
+        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => true);
+
+        Assert.True(condition: File.Exists(path: live));
+        Assert.True(condition: File.Exists(path: foreign));
+        Assert.False(condition: File.Exists(path: dead));
+        Assert.False(condition: File.Exists(path: unclaimed));
+        pending.Commit();
+        Assert.Equal(expected: new byte[] { 1, 2, 3 }, actual: File.ReadAllBytes(path: destination));
     }
     [Fact]
     public void ASetWriterNeverLeavesTheDirectoryOverItsBound() {

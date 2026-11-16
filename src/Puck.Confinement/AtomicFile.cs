@@ -8,13 +8,13 @@ namespace Puck.Confinement;
 /// disk, and renamed over the destination with <see cref="File.Move(string, string, bool)"/>, so neither a reader nor a
 /// crash mid-write ever finds a partially written file behind the real name.
 /// <para>The temporary file lives in the destination's own directory, so the rename never crosses a volume, and is
-/// named <c>&lt;file name&gt;.&lt;random&gt;.tmp</c>, so concurrent writers of one destination never share a temporary. A
+/// named <c>&lt;file name&gt;.&lt;claim&gt;.tmp</c>, where the claim names its writer (<see cref="IsAbandoned"/>), so concurrent writers of one destination never share a temporary. A
 /// write that fails at any step deletes its temporary file: a failed write leaves the directory as it found it,
 /// except that a missing parent directory is created first. An overwriting <see cref="File.Move(string, string, bool)"/>
 /// is a single atomic rename on NTFS and on POSIX file systems alike. Windows refuses that rename while another
 /// process holds the old file memory-mapped, so a refused rename over an existing file falls back to
 /// <see cref="File.Replace(string, string, string?)"/>, which moves the old file aside and leaves the reader's view on
-/// the old bytes. The old file moves to a backup named <c>&lt;file name&gt;.&lt;random&gt;.replaced.tmp</c>, never to a
+/// the old bytes. The old file moves to a backup named <c>&lt;file name&gt;.&lt;claim&gt;.replaced.tmp</c>, never to a
 /// name ReplaceFile chooses, and is deleted once the replace is done; a replace that failed after moving it aside puts
 /// it back unless another writer's file has taken the name. A backup that cannot be deleted, an image still mapped,
 /// is the one file a write leaves, under that temporary name.</para>
@@ -37,6 +37,74 @@ public static class AtomicFile {
         ArgumentNullException.ThrowIfNull(argument: path);
 
         return Path.GetFileName(path: path.AsSpan()).EndsWith(value: TemporarySuffix, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+    /// <summary>Determines whether no live writer owns a temporary, so a cleanup may delete it. Every temporary this
+    /// class stages, and every backup a replacement sets aside, carries its writer's claim in its name: the host, the
+    /// process id and the process's start time. A claim made on this host is abandoned once that process no longer runs
+    /// (a reused process id has another start time); a claim made on another host, or in another process namespace that
+    /// names its host differently, is never abandoned here, since its writer's liveness cannot be judged; a temporary
+    /// without a claim was not staged by this class and is abandoned. The age of a temporary is no evidence: a live
+    /// writer can be suspended between staging and publication for any length of time.</summary>
+    /// <param name="path">The temporary's file name, or a path whose last component is its file name.</param>
+    /// <returns><see langword="true"/> when the name is a temporary whose writer is known not to be running.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    public static bool IsAbandoned(string path) {
+        if (!IsTemporary(path: path)) { return false; }
+        var name = Path.GetFileName(path: path.AsSpan())[..^TemporarySuffix.Length];
+
+        if (name.EndsWith(value: BackupMarker, comparisonType: StringComparison.OrdinalIgnoreCase)) { name = name[..^BackupMarker.Length]; }
+        var claim = name[(name.LastIndexOf(value: '.') + 1)..];
+        Span<Range> fields = stackalloc Range[5];
+
+        if ((claim.Split(destination: fields, separator: '_') != 4) ||
+            !int.TryParse(s: claim[fields[1]], provider: System.Globalization.CultureInfo.InvariantCulture, result: out var process) ||
+            !long.TryParse(s: claim[fields[2]], provider: System.Globalization.CultureInfo.InvariantCulture, result: out var startSeconds)) {
+            return true;
+        }
+        return (claim[fields[0]].SequenceEqual(other: WriterClaim.Host.AsSpan()) &&!WriterClaim.IsRunning(process: process, startSeconds: startSeconds));
+    }
+
+    // A replacement's backup of the old destination: the temporary's own name with this marker before the suffix.
+    private const string BackupMarker = ".replaced";
+
+    // The claim this process stamps on its temporaries: <host>_<process id>_<start, Unix seconds>_<sequence>. The host
+    // names the operating system and the machine, so Windows and a Linux guest sharing one machine name and one directory
+    // never judge each other's processes.
+    private static class WriterClaim {
+        // Linux derives a process's start time from boot-relative clock ticks, so two readings may differ slightly.
+        private const long StartToleranceSeconds = 2;
+
+        public static readonly string Host = HostOf();
+        private static readonly long StartSeconds = StartOf(process: System.Diagnostics.Process.GetCurrentProcess());
+        private static readonly string Prefix = string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Host}_{Environment.ProcessId}_{StartSeconds}_");
+
+        private static long Sequence;
+
+        public static string Next() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Prefix}{Interlocked.Increment(location: ref Sequence)}");
+        public static bool IsRunning(int process, long startSeconds) {
+            if (process == Environment.ProcessId) { return (Math.Abs(value: (startSeconds - StartSeconds)) <= StartToleranceSeconds); }
+            try {
+                using var running = System.Diagnostics.Process.GetProcessById(processId: process);
+
+                return (Math.Abs(value: (startSeconds - StartOf(process: running))) <= StartToleranceSeconds);
+            } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+                // No process has that id, or it exited while being inspected.
+                return false;
+            } catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or NotSupportedException) {
+                // Its start time cannot be read (another user's process): it may be the writer, so it is kept.
+                return true;
+            }
+        }
+
+        private static long StartOf(System.Diagnostics.Process process) => new DateTimeOffset(dateTime: process.StartTime.ToUniversalTime()).ToUnixTimeSeconds();
+        private static string HostOf() {
+            var host = new System.Text.StringBuilder(value: (OperatingSystem.IsWindows() ? "w" : (OperatingSystem.IsLinux() ? "l" : "u")));
+
+            foreach (var character in Environment.MachineName) {
+                if (char.IsAsciiLetterOrDigit(c: character) && (host.Length < 16)) { _ = host.Append(value: char.ToLowerInvariant(c: character)); }
+            }
+            return host.ToString();
+        }
     }
 
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
@@ -106,7 +174,7 @@ public static class AtomicFile {
         var directory = Path.GetDirectoryName(path: destination)!;
         var temporary = Path.Combine(
             path1: directory,
-            path2: $"{Path.GetFileName(path: destination)}.{Guid.NewGuid():N}{TemporarySuffix}"
+            path2: $"{Path.GetFileName(path: destination)}.{WriterClaim.Next()}{TemporarySuffix}"
         );
         var options = new FileStreamOptions {
             Access = FileAccess.Write,
@@ -191,7 +259,7 @@ public static class AtomicFile {
                 try {
                     File.Move(destFileName: m_destination, overwrite: overwrite, sourceFileName: m_temporary);
                 } catch (Exception exception) when ((overwrite && (exception is IOException or UnauthorizedAccessException) && File.Exists(path: m_destination))) {
-                    backup = Path.ChangeExtension(extension: "replaced.tmp", path: m_temporary);
+                    backup = Path.ChangeExtension(extension: (BackupMarker[1..] + TemporarySuffix), path: m_temporary);
                     File.Replace(destinationBackupFileName: backup, destinationFileName: m_destination, sourceFileName: m_temporary);
                 }
             } finally {
@@ -244,7 +312,7 @@ public static class AtomicFile {
     /// <summary>Atomically and durably replaces <paramref name="path"/> with <paramref name="bytes"/>: the content is
     /// flushed to stable storage, then renamed over the destination with <see cref="PendingWrite.CommitDurably"/>. When
     /// this returns, a power loss leaves the new file; when it throws, the destination is the old file. A killed writer
-    /// leaves at most a sibling <c>&lt;file name&gt;.&lt;random&gt;.tmp</c>, never a displaced destination.</summary>
+    /// leaves at most a sibling <c>&lt;file name&gt;.&lt;claim&gt;.tmp</c>, never a displaced destination.</summary>
     /// <param name="path">The destination file; a missing parent directory is created.</param>
     /// <param name="bytes">The complete new content.</param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
@@ -261,7 +329,7 @@ public static class AtomicFile {
     /// <returns>The unpublished write.</returns>
     public static PendingWrite StageAllText(string path, string contents) => StageAllBytes(path: path, bytes: Encoding.UTF8.GetBytes(s: contents));
     /// <summary>Deletes the backups earlier replacements of <paramref name="path"/> left because their image was still
-    /// mapped (<c>&lt;file name&gt;.&lt;random&gt;.replaced.tmp</c>); a backup still mapped stays for a later call.</summary>
+    /// mapped (<c>&lt;file name&gt;.&lt;claim&gt;.replaced.tmp</c>); a backup still mapped stays for a later call.</summary>
     /// <param name="path">The destination whose backups are deleted.</param>
     /// <returns>The number of backups deleted.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>

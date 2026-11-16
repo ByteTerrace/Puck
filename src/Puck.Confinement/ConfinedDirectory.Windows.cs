@@ -58,8 +58,9 @@ public sealed partial class ConfinedDirectory {
             return handle;
         }
         // Opens or creates name below parent without following a link. Returns null when it is missing (and not created)
-        // or, with busyIsNull, when another holder's sharing mode refuses the open.
-        public static unsafe SafeFileHandle? Open(SafeFileHandle parent, string name, uint access, uint share, bool directory, bool create, bool newFile, bool busyIsNull) {
+        // or, with busyIsNull, when another holder's sharing mode refuses the open. A hard-linked file is refused unless
+        // hardLinked admits it (a read, which cannot change the other names' bytes).
+        public static unsafe SafeFileHandle? Open(SafeFileHandle parent, string name, uint access, uint share, bool directory, bool create, bool newFile, bool busyIsNull, bool hardLinked = false) {
             var disposition = (newFile ? FileCreate : (create ? FileOpenIf : FileOpen));
             var options = SynchronousIo | OpenReparsePoint | (directory ? DirectoryFile : NonDirectoryFile);
             int status;
@@ -78,7 +79,7 @@ public sealed partial class ConfinedDirectory {
                 try {
                     var info = Information(handle: handle);
 
-                    if (((info.Attributes & AttributeReparsePoint) != 0) || (((info.Attributes & AttributeDirectory) != 0) != directory) || (!directory && (info.Links != 1))) {
+                    if (((info.Attributes & AttributeReparsePoint) != 0) || (((info.Attributes & AttributeDirectory) != 0) != directory) || (!directory && !hardLinked && (info.Links != 1))) {
                         throw new IOException(message: $"'{name}' is a link, a hard-linked file or an unexpected entry type; confined access refuses it.");
                     }
                     return handle;
@@ -135,9 +136,11 @@ public sealed partial class ConfinedDirectory {
                         var name = new string(length: checked((int)(*((uint*)(entry + 60)) / 2)), startIndex: 0, value: ((char*)(entry + 68)));
 
                         if (name is not ("." or "..")) {
+                            // FILE_FULL_DIR_INFO: LastWriteTime (a FILETIME) at 24, EndOfFile at 40.
                             entries.Add(item: new ConfinedEntry(Kind: (((attributes & AttributeReparsePoint) != 0)
                                 ? ConfinedEntryKind.Link
-                                : (((attributes & AttributeDirectory) != 0) ? ConfinedEntryKind.Directory : ConfinedEntryKind.File)), Name: name));
+                                : (((attributes & AttributeDirectory) != 0) ? ConfinedEntryKind.Directory : ConfinedEntryKind.File)),
+                                LastWriteTimeUtc: DateTime.FromFileTimeUtc(fileTime: *((long*)(entry + 24))), Length: *((long*)(entry + 40)), Name: name));
                         }
                         var next = *((uint*)entry);
 
