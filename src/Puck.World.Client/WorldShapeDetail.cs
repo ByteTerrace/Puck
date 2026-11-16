@@ -32,8 +32,9 @@ internal static class WorldShapeDetail {
     /// <summary>Returns the spacing, in world units at <paramref name="scale"/>, a shape asks its bake for: the finest
     /// of its round sections' (<see cref="SdfSampledLattice.RoundCell"/>: a sphere's, an ellipsoid's middle radius, a
     /// cylinder's or cone's, a capsule's, a torus's tube, a strand's, an elliptic or rounded profile's tightest bend), its
-    /// rounding's radius, a thin shape's half thickness, a shell's quarter thickness, cellular relief's cell and a warped
-    /// field's share of its extent; no finer than <see cref="FinestDetail"/>.</summary>
+    /// rounding's radius, a thin shape's half thickness, a shell's quarter thickness, cellular relief's cell, a sine
+    /// relief's or warp's tightest bend (<see cref="ShapeWarpDocument.ReliefRadius"/>) and a warped field's share of its
+    /// extent; no finer than <see cref="FinestDetail"/>.</summary>
     /// <param name="shape">The shape, in creation units.</param>
     /// <param name="scale">The placement's uniform scale from creation units to world units.</param>
     /// <returns>The spacing, in world units; zero for a shape that declares none.</returns>
@@ -80,6 +81,8 @@ internal static class WorldShapeDetail {
         }
         if (shape.Onion is > 0f) { Take(spacing: (shape.Onion.Value / 4f)); }
         if (shape.Cells is { } cells) { Take(spacing: (1f / (32f * cells.Frequency))); }
+        if (shape.Displace is { } displace) { Take(spacing: RoundCell(radius: displace.CurvatureRadius, scale: scale)); }
+        if (shape.Warp is { } warp) { Take(spacing: RoundCell(radius: warp.CurvatureRadius, scale: scale)); }
         // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document reads it
         // as authored.
         if (ShapePointOps.NeedsScope(shape)) {

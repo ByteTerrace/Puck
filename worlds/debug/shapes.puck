@@ -3314,6 +3314,8 @@ template galleryPrototypes() {
 // Warps II: the ISA ops no earlier row reaches. A domain warp and a sine relief, an elongation, the two lattices with
 // no finite copy set (a jittered repeat and a log-spherical Droste fold, each clipped by an intersection inside the
 // creation scope) and the two pop-only blends, which compose through a scope the shape opens for itself.
+let reliefHalf = 0.36
+let reliefFrequency = 3.5 * 3.141592653589793 / reliefHalf
 template warpPrototypes() {
   prototype "shape-warp" {
     document {
@@ -3332,16 +3334,20 @@ template warpPrototypes() {
       )
     }
   }
+  // The sine product is centred on the box, so a face at half extent h carries amplitude × |sin(frequency × h)| of it:
+  // at frequency × h = 3π a face sits on a node and reads flat. A frequency of 3.5π / h puts every face on a crest of its
+  // normal axis's sine, so each carries the whole amplitude, seven half-waves of dimples and bumps across.
   prototype "shape-displace" {
     document {
       shape Box "subject" {
         displace {
-          frequency [26, 26, 26]
+          frequency [reliefFrequency, reliefFrequency, reliefFrequency]
           amplitude: 0.022
         }
         material: exhibitMaterial
         position [0, 1.2, 0]
-        scale [0.36, 0.36, 0.36]
+        rounding: 0.06
+        scale [reliefHalf, reliefHalf, reliefHalf]
       }
       exhibit(
         label: "SINE RELIEF",
