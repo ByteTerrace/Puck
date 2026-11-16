@@ -184,16 +184,11 @@ public sealed class ContentAddressedLruCache<TKey, TValue> where TKey : notnull 
     /// <param name="value">When this method returns <see langword="true"/>, the cached value.</param>
     /// <returns><see langword="true"/> if an entry was found; otherwise <see langword="false"/>.</returns>
     public bool TryGet(TKey hash, out TValue value) {
-        if (!m_entries.TryGetValue(
-            key: hash,
-            value: out var node
-        )) {
-            value = default!;
+        if (!TryPeek(hash: hash, value: out value)) {
             return false;
         }
 
-        MarkUsed(node: node);
-        value = node.Value.Value;
+        MarkUsed(node: m_entries[hash]);
         return true;
     }
     /// <summary>Attempts to read the value cached for <paramref name="hash"/> without marking it most-recently-used.</summary>
