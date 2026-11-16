@@ -1055,7 +1055,7 @@ internal static class SdfDualContouring {
             for (var quad = 0; (quad < axes.Length); quad++) {
                 var corners = quads.Slice(start: (4 * quad), length: 4);
 
-                if (SdfContourFacing.Splits(axis: axes[quad], patches: patches, positions: positions, quad: corners) is (false, false)) { } else { continue; }
+                if (SdfContourFacing.Splits(axis: axes[quad], patches: patches, positions: positions, quad: corners) is not (false, false)) { continue; }
 
                 var count = 0;
 
