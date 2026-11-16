@@ -219,9 +219,15 @@ What the memory side holds today:
 - **Background GPU work multiplies the same way, and is paced by
   presentation.** Each residency's tables own an `SdfGpuWork` with its own
   `SdfGpuWork.GpuShare` of GPU time and its own
-  `SdfGpuWork.UploadBytesPerSecond`. Its jobs take work only at frame pumps, so
-  a slow present paces the bake and the lighting, and a boot that withholds
-  frames progresses only by staging them.
+  `SdfGpuWork.UploadBytesPerSecond`. Its jobs run on the presenting queue and
+  take work only at frame pumps, so a slow present paces the bake and the
+  lighting, and a boot that withholds frames progresses only by staging them.
+  The credit cap (`SdfGpuWork.MostCreditSeconds`, one frame's share) turns the
+  budget into a fixed amount per pump once pumps fall under the display rate,
+  against the class's own contract that budgets are rates of wall time, and
+  the bake's admission reads its backlog at the take right after a burst of
+  answers (`SdfMeshPathBake.Backlogged`), which leaves workers idle on slow
+  frames.
 - **The region gives memory back only by replacing itself.** It grows by
   allocating a larger buffer and copying (`GpuRegion.Grow`), and shrinks the
   same way (`GpuRegion.Shrink` from `SdfWorldTables.FitMeshRegion`), so both
@@ -1077,7 +1083,10 @@ traces, so a retier wave is paid again in the lighting
 Its CPU hierarchy also feeds probe placement
 (`SdfMeshIrradianceScene.TryNearestSurface`), depth classification
 (`SdfMeshProbeDepth`) and diagnostics, while the GPU copy feeds the trace, and
-a full scene build holds its pieces beside the old scene. Before a level first
+a full scene build holds its pieces beside the old scene. Traced at full
+detail, the scene is among the largest owners on both sides
+(`trace-scene-written-bytes`, `trace-scene-cpu-array-bytes`) **[reading]**,
+and its upload is part of how long a boot waits for the device meter. Before a level first
 publishes, a surface is lit by the volume's camera sample as one probe
 ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)), so a place
 seen before its window has published shows that stand-in and then steps to
@@ -1129,8 +1138,9 @@ product. C stays the fallback and D is not built.
   geometry and the arena's slack become `Cached` owners in bytes under the
   account, in place of cells, triangles and words. A scene build reserves its
   peak from the workspace class before it starts. A kept probe's block stays
-  alive while any kept probe names it, so the kept probes of mostly forgotten
-  blocks are re-homed when the cache compacts.
+  alive while any kept probe names it, so a tour leaves several times a
+  probe's nominal bytes for each kept probe; the kept probes of mostly
+  forgotten blocks are re-homed when the cache compacts (its `Retain`).
 
 The cache reader's spin (`Thread.SpinWait`) does not wait for this step: it
 breaks the host rule now and is replaced by stable publication or a host wait
@@ -1326,7 +1336,11 @@ trim, no attribution by owner.
 host copies and staging report through `IAllocationObserver`; device
 allocations carry an owner family at the creation doors, with allocated and
 released per family, so the device memory no residency line names (view
-targets, cascades, screens, program tables, ring apertures) has a row; the
+targets, cascades, screens, program tables, ring apertures) has a row. The
+render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) already
+count it per node, but with some thirty session views that answer runs past
+what one MCP reply carries, so the row is those bytes summed by node family;
+the
 trace scene, the volume and the probe cache are owners; the managed heap and
 the allocator are physical rows with residuals; `world.residency` gains a
 fixed-cost line per residency. Like step 1 it changes no admission: its new
@@ -1355,7 +1369,10 @@ its grant at every counted allocation door, view targets, pipelines and
 background work included; a growth reserving old and new; a device refusal
 lowering the segment's limit and returning the grant; the pipeline's peak as a
 reservation; one background budget of GPU time and upload bytes, taken up on
-completion; background jobs in bounded pieces that lease the generations they
+completion and decoupled from presentation (serviced during the host's present
+wait or submitted on a queue of its own, whichever the step measures better),
+with the credit cap and the bake's backlog admission made rates of wall time;
+background jobs in bounded pieces that lease the generations they
 read until their fence and readers retire and reserve everything they hold to
 completion; the process's one forced job; the device bytes of the floors passed to
 `SetVideoMemoryReservation`; a pressure reading firing
@@ -1376,8 +1393,10 @@ under the device's limit. Lowering the device budget in steps along a fixed
 path: held plus promised never passes the limit apart from the one forced job,
 which is counted; the one bias rises; `refusals` stays at nothing; nothing
 throws. No more than one forced job is admitted at once across every bake.
-`SHADERPIPE_BUDGET` still refuses. This step claims that growth stops at the
-limit. It does not claim that held bytes fall when the limit drops below them:
+`SHADERPIPE_BUDGET` still refuses. With the display held at a slow present,
+the bake's and the lighting's GPU time a second stays at the budget's rate and
+the bake's workers do not idle behind a pump. This step claims that growth
+stops at the limit. It does not claim that held bytes fall when the limit drops below them:
 that is step 7's and step 5's, and the reading says which bytes are held over
 the limit meanwhile.
 
@@ -1446,7 +1465,11 @@ bytes at the hero spawn, the painting wing and the garden at a crowd's count,
 with the fixed cost of a world and of a character printed. Along the lowered
 budget path with wanted demand held fixed, no draw waits out of the frame,
 evictions rise while `retiers` stays flat, and after the fences the ledger's
-held bytes fall. Captures from every side of each stop show no missing
+held bytes fall. A relocation, which is rare and is read from the landing
+line's `relocations` count and its reason, moves no byte across the bus:
+`owed` does not rise by the kept meshes' words, and their draws stay in the
+frame until the copy completes. Captures from every side of each stop show no
+missing
 surface, the gallery's plaques and glass among them, and a skinned body at the
 ends of its motion holds together at its floor. A cold arrival's burst shows
 the place whole before it is sharp, and counts every frame a group in view
@@ -1464,9 +1487,9 @@ hierarchy follow steps 5 and 9.
 reason to keep host words.
 
 **Check.** Exists: account `live` and `cached`, `mesh-released-now`, the
-store's restores. First, the bake's start line on a garden crossing says why
-so many groups move there (baking, loading or shared), before the library
-changes. The physical native row at a settled stop falls against
+store's restores. First, the `[sdf.mesh-bake] start` line of a garden
+crossing, with its `baking=`, `loading=` and `shared=` counts, says why so
+many groups move there, before the library changes. The physical native row at a settled stop falls against
 `region-named`, not only the account's own bytes. Across a turn, a relocation,
 a second residency's landing and a device loss: restores and store misses stay
 bounded, no payload is held twice, and no restore is waited for on the frame
@@ -1505,7 +1528,10 @@ a volume per world nothing demands; the CPU hierarchy as placement's input.
 `probe-cache-blocks`. Adds: the trace tier installed and pending, scene
 builds with their bytes and peak, lighting owed in frames a view shows, and
 probes invalidated. First reading: the floor against the view tier as the
-traced tier, at the gallery's lit exhibits and a thin partition. GPU
+traced tier, at the gallery's lit exhibits and a thin partition, with the
+indirect light compared against the full-detail scene's before and after, the
+scene's bytes on both sides, and the boot's wait for the meter. After a tour,
+`probe-cache-blocks` stays near the kept probes' own count. GPU
 placement agrees with the CPU placement it replaces, probe for probe within a
 stated tolerance, before the CPU path goes. Probe and scene bytes stay bounded
 along a valley flight, and `ProbeCache` is read again after it. A retier wave
