@@ -270,7 +270,7 @@ The authoritative hash's components overlap the continuation
 
 - **The arena.** `StateArena.RowVersion` moves only when a row's committed
   bytes differ. The versions and the order the rows last moved in are private
-  to one type whose only mutators are a bump and a reset (`ArenaRowVersions`),
+  to one type whose only mutators are a bump and a reset (`IndexVersions`),
   so nothing moves a version without its readers hearing of it; any number of
   readers each get the distinct rows that moved since their own place
   (`StateArena.TryReadMoves`), at a constant cost per move and with no log to
@@ -442,8 +442,9 @@ reference (`Puck.State`), named here for the build lane to keep or change:
   [the parallel tick](engine-job-system.md#the-contract) already fixes as the
   body partition, so a worker that owns a partition touches only that
   partition's list and its own bodies' bindings. A publish drains the lists
-  in partition order into the shared versions (`ArenaRowVersions`, lifted to a
-  shared type keyed by an index) and is their only caller. Every reader
+  in partition order into the shared versions (`IndexVersions`, the arena's
+  row-version type as a shared type keyed by an index) and is their only
+  caller. Every reader
   publishes before it reads, under the authority gate, so the shared versions
   keep one writer whatever the tick forks, and a note cannot be lost between a
   write and a read. An entry's holders share a binding for the entry's slot;
@@ -975,14 +976,16 @@ moved, the answer differs, and the fact version moves.
 
 ### The slot versions are the arena's type, shared
 
-`ArenaRowVersions` is already the version half of a door: a version per index,
-private storage, two mutators, and an order threaded through the indices so
-each reader is handed every index that moved since its place, once, however
-often it moved. Its writers are single-threaded with one another, which is
-why holders never call it: they note into partition-owned lists, and the
-publish is its one writer ([the design](#the-design)). It is internal to the
-arena and named for rows; the step makes it a shared type keyed by an index
-and gives each population one instance keyed by slot. Nothing is added to it.
+`IndexVersions` is the version half of a door: a version per index, private
+storage, two mutators, and an order threaded through the indices so each
+reader is handed every index that moved since its place, once, however often
+it moved. Its writers are single-threaded with one another, which is why
+holders never call it: they note into partition-owned lists
+(`SlotBinding`, `SlotNotes`), and the publish is its one writer
+([the design](#the-design)). It was internal to the arena and named for rows;
+D2 made it a shared type keyed by an index, with the arena on it, and a
+population takes one instance keyed by slot through its notes. Nothing was
+added to it.
 
 ### The overlapping components
 
@@ -1031,7 +1034,7 @@ over ticks 300 to 600 of the headless debug world with a recording armed.
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
 | D1. Sections as images (landed; [what it fixed](#d1-as-landed)) | Medium | The section types as capture images built from the body's and the entry's fields (`WorldBody.CaptureSections`, `WorldPopulation.EntryCheckpoint`); a static encoder and reader per section (`IContinuationSection<TSelf>`); the checkpoint entry as its sections and a tail (`WorldPopulationEntryCheckpoint`, `WorldPopulationEntryTail`), walked in one stated order; the slot digest as a fold of section digests; the observation and the profile folded beside the segments, the profile by content; the registers out of the whole-population fold; the medium flags and the affecting subject captured and restored (`WorldBody.RestoreSections`); the per-section counters; the codec coverage law | None yet: every section encodes fresh | Ran: `puck test --reproduce --jobs 1` on the go, chess-scope, garden, snapshot-partitions and rule-faults W10/W11 tests; the go tests recorded (`--record`) and compared file by file with a recording of the step before: the delivered snapshots, the crossings and every exported value match, and the authoritative hash differs, as it must; the counters read 590 slots and 5,177,680 bytes a tick; `ContinuationHashLawTests` (a captured population's fold equals the live fold, a profiled seat's included, and an identity's rate edit with no body write moves it); `ContinuationSectionLawTests` (every field of every section reaches its digest and reads back); `WorldMediumLawTests` (a body asleep in a medium restores reading `inmedium`). Not run as specified: the walkthrough scenario for `identity.motion`, because that verb writes the identity inline and tapes nothing, so a replay cannot re-apply it; the law above stands in for the fold's half of it |
-| D2. The door types | Small | The section, array and record holders with the content check and the checked read; the slot binding, the notes and their publish; `ArenaRowVersions` as a shared type with the arena on it; the derived view; DOOR001, DOOR002, DOOR003 and DOOR005; a law that compiles both spikes' statements and asserts each diagnostic | The holders, used by nothing in the body yet | The refusal law; a law that a holder written back to the same value hands out its cached digest and counts one filtered compare; a law that notes written across partitions publish every slot once, in partition order; the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged |
+| D2. The door types (landed; [what it fixed](#d2-as-landed)) | Small | The section, table and record holders (`Versioned<T>`, `VersionedArray<T>`, `VersionedRecord<T>`) with the content check and the checked read; the slot binding, the notes and their publish (`SlotBinding`, `SlotNotes`); `IndexVersions` as a shared type with the arena on it; the derived view (`Derived<TResult>`); DOOR001, DOOR002, DOOR003 and DOOR005 (`DoorAnalyzer`); a law that compiles both spikes' statements against the holders' own sources and asserts each diagnostic | The holders, used by nothing in the body yet | `DoorAnalyzerTests` (each refused shape names its compiler error or its rule, each shape the write side admits reports nothing); `VersionedHolderLawTests` (a holder written back to the same value hands out its cached digest and counts one filtered compare; a checked read names a stale digest; notes written across partitions publish every slot once, in partition order; a derived answer recomputes exactly when a holder moved); the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged; the go tests under `--compare` against D1's recording |
 | D3. The Action section | Medium | The per-channel arrays and the lane runtime as inline arrays in a holder; the bookkeeping arrays in array holders | The Action and Bookkeeping holders | Hashes equal D1's (`puck test --compare` against D1's `--record`); the Action ranges' 2,454,400 bytes fall to about 9,000 and the script actors' 120,360 to zero; about 100 filtered compares of Action a tick (the standing bodies); zero stale digests on every replayed tick; unchanged encodes at a body's first move only |
 | D4. The Input sections | Medium | The intent images and flags, in two sections | The two Input holders | The same; the input ranges' 1,421,900 bytes fall to about 12,000; the walkthrough routes reproduce |
 | D5. Pose, Motion, Clocks, Tape and the configuration | Large | The remaining body fields; the facts as a static function behind a derived view, with the walkable threshold and hold table in the configuration holder; the checkpoint restore and the step snapshot as section copies with the four fixups; the crossing's image as a projection; the residue pair deleted | Their holders | The same; these ranges' 416,540 bytes fall to about 19,000; the walkthrough routes reproduce; a refused sweep still restores (the sweep refusal laws); a law that capture, a contact-field rebuild and a second capture give one digest; the hall tests reproduce |
@@ -1101,6 +1104,62 @@ RegisterWrites 93; Clocks 87; Admission 85; Cadence 48; Navigation 17;
 Program 8; Designations 7; and 4 for each of the four empty tables. The
 whole-population fold no longer encodes the register values, the derived held
 image, or the lengths of constant-length tables.
+### D2 as landed
+
+The types are in `Puck.State` (`src/Puck.State/Versions`), as
+[the design](#the-design) has them, with these decisions the design left to
+the build lane:
+
+- **A section is marked.** A section type implements `IVersionedSection`, and
+  the section and record holders require it of their argument, so the compiler
+  refuses an unmarked type and the analyzer recognises a section wherever it
+  is named, through an accessor, an `in` parameter or another assembly. The
+  server's `IContinuationSection<TSelf>` extends it, so D1's sections are
+  under the rules now. A table holder's element needs no mark: it may be a
+  primitive.
+- **The encoder reaches the holder as a type argument.** A holder's digest
+  read takes a codec type (`ISectionCodec<TSection, TWriter>`,
+  `ISectionTableCodec<TElement, TWriter>`) whose static member encodes the
+  section into the reader's scratch, so `Puck.State` names no wire type and
+  the digest still cannot depend on anything but the section. The read's
+  counts come back in `SectionDigestWork` for the reader to publish.
+- **The checked mode and its report are the notes'.** `SlotNotes.Checked`
+  puts every holder bound to those notes in the checked read, and the first
+  stale digest is kept in `SlotNotes.StaleDigest` by slot, section, version
+  and both digests; the holder heals by adopting the fresh one.
+- **The table holder has a third write.** `VersionedArray<T>.Resize` changes
+  the count through the door; DOOR005 treats it as a write side.
+- **The derived view takes one or two holders** (`IDerivation` of one section
+  or of two), which is what the pose and the facts need, and keys on the
+  holders' identities as well as their versions.
+
+**DOOR002's reach is narrower than the row said, and why.** The row had the
+rule ban, in every project that declares no section, each listed call whose
+type argument is a section, a field type of one, or an open type parameter,
+and expected an empty exception list. Two things in the tree decide
+otherwise:
+
+- `Puck.Maths` and `Puck.SignedDistance` call the listed members over open
+  type parameters (`BinaryFieldKernels`, `CacheAlignedArray`, `SdfSky`).
+  Neither can name a section: they sit below `Puck.State`. The rule
+  therefore applies only in a compilation that can see the holder types, and
+  the exception list stays empty. Of the projects that can, only
+  `Puck.World.Schema` calls a listed member, over a closed type that is no
+  section.
+- "A field type of a section" cannot be decided where the rule runs: the
+  projects that declare such types (`Puck.Maths`, `Puck.Physics`) do not
+  reference the sections that hold them. A nested value that needs the rule
+  outside a declaring project implements the mark itself.
+
+In a project that declares the holders or a section, the rule is the row's:
+every listed call outside the holder types.
+
+**DOOR001 and DOOR005 read paths, not provenance.** DOOR001 is a
+non-`readonly` struct method invoked on a value whose path (through struct
+fields, inline-array and span elements) starts at a readonly reference and is
+a holder's read side or passes through a section. DOOR005 is a `ref` local, a
+`ref` assignment or a `Span<T>` local initialised from a holder's write side
+or from a member that returns a writable reference or span to a section.
 No step is a stopgap for a later one. D1's static encoders are what makes the
 coverage half of the invariant true before any field moves, and every later
 step only changes where a section's value is stored. D12 is the one step the
@@ -1111,7 +1170,7 @@ payoff does not need.
 | System | Verdict | Why |
 |---|---|---|
 | `StateArena.RowVersion` and its row digests | The pattern, not the store | Version, cached digest, segment digest, recompute and sample are copied in shape; body fields as arena cells (1f) would journal the body step |
-| `ArenaRowVersions` and `StateArena.TryReadMoves` | Reused, lifted to a shared type | A version per index behind two mutators, with reader places and each moved index handed over once; the population keys one by slot, and the notes' publish is its one writer |
+| `IndexVersions` (the arena's row versions) and `StateArena.TryReadMoves` | Reused, lifted to a shared type | A version per index behind two mutators, with reader places and each moved index handed over once; the population keys one by slot, and the notes' publish is its one writer |
 | `StateArena.CheckDigests`, `WorldPersistence.StaleDigest` | Reused | The sample, its narration and its heal are the same check for another cache |
 | `WorldStateHashComposition.RecomputeAuthoritative`, `WorldReplayProbe.VerifiesIncrementalHash` | Reused | The existing switch; the continuation arm starts honouring the flag it is already passed |
 | `WorldPersistence.DeclarationDigest`, `WorldStateHashComposition.AppendIdentityRecords` | The pattern for the profile | A digest keyed by the immutable value it was taken from needs no version |

@@ -621,7 +621,7 @@ presentation view's last cut ([runtime plan](runtime-and-delivery.md#the-present
   federation or socket thread writes it, and the arena is not thread-safe.
   Route the attach through the authority operation as a peer's attach does,
   with the lock-order audit of its callers. The arena's move order now heals a
-  reader that overlaps one move (`ArenaRowVersions`), so the log is not the
+  reader that overlaps one move (`IndexVersions`), so the log is not the
   exposure; the unguarded read is.
 
 The owner's direction: performance with quality means removing a cost at its
@@ -2407,6 +2407,28 @@ certified-contact packet and step 8 closes. The measured state is in the
 
 ### Refactoring campaign
 
+- [low · three red checkpoint laws compare a process-local counter]
+  `HoldLawTests.AHeldRowSurvivesACheckpointRestore_AndContinuesBitIdentically`,
+  `HoldLawTests.ALeanedBodyRestoredFromACheckpoint_ReturnsItsDrawnAxisLikeTheLiveBody_WhereANeverLeanedBodySeatsItInstead`
+  and `TetherLawTests.TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically`
+  fail right after the restore, before any step: they compare two servers'
+  `WorldBody.CaptureIntegrationResidue` records whole, and the records differ
+  only in `LastContactFieldVersion` (0 on the uninterrupted seat, the
+  population's version on the restored one). A seat's `WorldBody.Advance` is
+  passed no contact-field version, so it writes zero every tick, while a
+  restore rebases every body's observation onto its population's counter
+  (`WorldBody.RestoreSections`). Nothing reads a seat's observation, so the
+  simulation agrees. Compare the bodies' sections (`WorldBody.CaptureSections`)
+  instead of the residue, which carries the counter raw; the residue goes with
+  [the body state door](body-state-door.md#steps)'s D5.
+- [low · unconfirmed cause · a red transfer law's premise]
+  `TransferAbortKitWideningLawTests.DetachThenRestore_DriveKitBody_EveryNewlyCapturedFieldRoundTripsExactly`
+  fails before its round trip: it requires a nonzero remainder in one of the
+  planar ramp and drive accumulators after two ticks, to prove the round trip
+  carries something, and all four read zero. The cause is not established;
+  the likely one is that the fixture's rates now divide the step exactly.
+  Give the fixture a rate that leaves a remainder, or assert the remainder
+  the law needs on a tick that has one.
 - [low · exposure at a cut] At a camera cut the exposure snaps to the first
   image rendered after it, which is shaded with the previous place's held
   `airLight`, then follows for about 0.75 s, so walking from outdoors into a

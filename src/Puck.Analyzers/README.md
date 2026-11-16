@@ -94,6 +94,25 @@ they follow an alias or a method group; a bool held in a local and never read is
 outside them. A test assembly (one that references xUnit v3) is held to none of
 them.
 
+DOOR001, DOOR002, DOOR003 and DOOR005 hold what the compiler cannot about a
+state holder's two sides (`Versioned<T>`, `VersionedArray<T>`,
+`VersionedRecord<T>` in `Puck.State`; a section is a type that implements
+`IVersionedSection`). The compiler already refuses an assignment, a `ref` or an
+`out` through a holder's read side. DOOR001 refuses a non-`readonly` struct
+method invoked on a value reached through a readonly reference to holder state,
+which the compiler would run on a copy. DOOR002 refuses the members that turn a
+readonly reference into a writable one (`Unsafe.AsRef`,
+`MemoryMarshal.GetReference`, `CreateSpan`, `GetArrayDataReference` and
+`AsMemory`, `ImmutableCollectionsMarshal.AsArray` and `AsImmutableArray`):
+every call outside the holder types in a project that declares the holders or a
+section, and elsewhere a call whose type argument is a section or an open type
+parameter. DOOR003 refuses a `VersionedRecord<T>` section field that is not
+unmanaged, a `string`, a readonly struct of such fields or an immutable array
+of them. DOOR005 refuses a `ref` local, a `ref` field or a `Span<T>` local
+initialised from a write side. Each rule reads one call or one declaration. A
+project that cannot see the holder types, and a test assembly, are held to none
+of them.
+
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
 reads the compiled assembly's attributes, so it sees an
 `[assembly: InternalsVisibleTo(...)]` written in source and a csproj

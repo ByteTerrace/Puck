@@ -19,3 +19,7 @@ OUTCOME001 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provide
 OUTCOME002 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
 OUTCOME003 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
 OUTCOME004 | Puck.Outcomes | Error | OutcomeAnalyzer, [Documentation not provided]
+DOOR001 | Puck.Door | Error | DoorAnalyzer, [Documentation not provided]
+DOOR002 | Puck.Door | Error | DoorAnalyzer, [Documentation not provided]
+DOOR003 | Puck.Door | Error | DoorAnalyzer, [Documentation not provided]
+DOOR005 | Puck.Door | Error | DoorAnalyzer, [Documentation not provided]

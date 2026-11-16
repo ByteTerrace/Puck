@@ -1,9 +1,9 @@
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    // Every row's version and the order the rows last moved in. The storage belongs to ArenaRowVersions, whose only
+    // Every row's version and the order the rows last moved in. The storage belongs to IndexVersions, whose only
     // mutators are Bump and ResetAll, so no part of the arena can move a version without its readers hearing of it.
-    private readonly ArenaRowVersions m_rowVersions;
+    private readonly IndexVersions m_rowVersions;
 
     /// <summary>Gets the place after every row version move so far: what a reader of <see cref="TryReadMoves"/> keeps
     /// when it has just read every row for itself. It moves exactly when a row's version does.</summary>
@@ -35,12 +35,12 @@ public sealed partial class StateArena {
     // Moves one row's version.
     private void BumpRowVersion(int rowOrdinal, bool changesRecorded = false) {
         if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
-        m_rowVersions.Bump(row: rowOrdinal);
+        m_rowVersions.Bump(index: rowOrdinal);
     }
     // Every version restarts at once (adoption of a rebuilt store): every reader must take every row as moved.
     private void ResetRowVersions(ulong version) {
         ChangedKeys.Clear();
         for (var row = 0; row < m_layout.RowCount; row++) { MarkDisclosureRow(row); }
-        m_rowVersions.ResetAll(rowCount: m_layout.RowCount, version: version);
+        m_rowVersions.ResetAll(count: m_layout.RowCount, version: version);
     }
 }
