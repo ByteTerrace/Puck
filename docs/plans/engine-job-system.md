@@ -322,8 +322,9 @@ run a step (`PresentationRate.Holds` with `FrameContext.StepsNext`), holds the
 bodies nothing can show or read (`SdfUpdateRateTiers.HeldHertz`), and
 spreads the bodies, the views and the screens that take a tier together over
 its period: every other one takes half the period as a lead
-(`PresentationPhases`), which `PresentationRate.Holds` counts on any frame but
-a step's, so the early update lands on another frame that runs no step.
+(`PresentationPhases`), which `PresentationRate.Holds` does not count on a
+step's frame that a step-free frame follows, so the early update lands on
+another frame that runs no step.
 Decision: that stage is the `Frame`
 class's placement policy, and the scheduler re-decides none of it. It is one object the frame thread reads once per
 iteration, the frame plan: whether this iteration carries a tick, which rated
@@ -852,8 +853,8 @@ breaks that promise today, and gives waits one door.
   drain runs once an iteration, so the control plane is as late as the longest
   iteration. The known case: a lockstep frame that converges lighting
   (`PresentPacingControl.ConvergesLighting`) blocks inside produce on the scene
-  build (`SdfMeshIrradiance.cs:634`), the refill (`:694`) and the worker
-  (`:706`), then traces the window to the end on the frame thread. No console
+  build (`SdfMeshIrradiance.cs:664`), the refill (`:724`) and the worker
+  (`:736`), then traces the window to the end on the frame thread. No console
   line, MCP call or input sample is read until it returns.
 - **A host-wide hold exists with no deadline and no user.** `TextCommandSource.HoldGate`
   stops every session's drain while it returns true. Nothing implements
@@ -888,7 +889,7 @@ measurement in the step that moves the fences (below).
   `HostIteration`, so no produce runs in an iteration whose control phase did
   not. `HostLoop.Run` stays the only loop; a second loop has no way to mint an
   iteration.
-- **One door for waits, `Puck.Hosting.HostWaits`.** It takes what is waited on
+- **One door for waits, `HostWaits` in `Puck.Hosting`.** It takes what is waited on
   (a wait handle, a task, a submission fence), a `WaitReason` (the waiting
   subsystem and what it waits for, both constant strings) and a budget, and
   returns a `WaitOutcome` of completed or deadline passed. On the pump thread,
@@ -896,8 +897,8 @@ measurement in the step that moves the fences (below).
   clipped to what the iteration has left. The door keeps the standing waits
   and the latest expired ones (reason, thread, start, budget), which is what
   `world.wait` and `host.frames` read. A completed wait allocates nothing.
-- **The unbounded members go.** `IGpuSubmissionFence.Wait`, `BackgroundBuild.Wait`,
-  `GpuBuildCache`'s waits and `QueuedWorkerLifecycle.Drain` lose their
+- **The unbounded members go.** `IGpuSubmissionFence.Wait`, `BackgroundBuild`'s
+  and `GpuBuildCache`'s waits and `QueuedWorkerLifecycle.Drain` lose their
   no-argument forms; each takes the door's bound and returns the outcome. A
   caller cannot reach the old path because it is not there.
 - **An exact analyzer closes the rest.** `WAIT001` in `Puck.Analyzers`: a call
@@ -983,11 +984,11 @@ Reached from the pump thread inside an iteration (read at the cited line):
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `SdfMeshIrradiance.cs:634`, `:694`, `:706` | A converging lockstep frame blocks on the scene build, the refill and the worker, then drains on the frame thread | `FrameRender.Waiting` naming the stage and its progress; the drain runs in slices of one wait budget an iteration and the tick is held between them |
+| `SdfMeshIrradiance.cs:664`, `:724`, `:736` | A converging lockstep frame blocks on the scene build, the refill and the worker, then drains on the frame thread | `FrameRender.Waiting` naming the stage and its progress; the drain runs in slices of one wait budget an iteration and the tick is held between them |
 | `WorldFramePresenter.cs:528` (`AdoptStaticField` with `wait`) | Blocks on the static field's build | The build publishes; adoption reads the publication, and a frame that needs it answers waiting |
 | `SdfCompositionFrameSource.cs:275` (`WaitsForBuild`), `:566` (a layout change) | Blocks on the program build | The same: published program, or waiting with the reason |
-| `SdfWorldResidency.cs:433` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
-| `SurfaceEncoder.cs:162`, `SurfaceCompositor.cs:206`, `DirectXSurfaceCompositor.cs:917` | A pipeline lease waited with no cancellation | Polled; the present shows the latest image while it builds |
+| `SdfWorldResidency.cs:434` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
+| `SurfaceEncoder.cs:162`, `SurfaceCompositor.cs:207`, `DirectXSurfaceCompositor.cs:917` | A pipeline lease waited with no cancellation | Polled; the present shows the latest image while it builds |
 | `ShaderPipelineRenderNode.cs:1546` (`WaitSlot`, the one door a slot's fence is waited through) | Unbounded fence wait before a slot is reused | The door; on expiry the node answers waiting and its image stands |
 | `RenderGraphRuntime.StandIns.cs:126`, `GpuCommandSlot.cs:17`, `GpuSurfaceReadback.cs:71` and `:91`, `GpuSurfaceUpload.cs:127`, `FrameCaptureRequest.cs:193`, `SdfWorldTables.Upload.cs:38` and `:103`, `SdfGpuWork.cs:466` and `:491` | Unbounded fence and slot waits | The door, as device waits |
 | `SdfGpuWork.cs:376`, `:383` | The drive's fence wait is unbounded; its wake wait has the slice's remainder | Both take the pacer's deadline |
