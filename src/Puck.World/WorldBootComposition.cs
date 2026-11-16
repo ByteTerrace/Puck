@@ -1326,6 +1326,7 @@ public static class WorldBootComposition {
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
+        services.AddSingleton<ICommandModule, WorldRowsCommandModule>();
         services.AddSingleton<ICommandModule, WorldSliceCommandModule>();
         // world.resize: an offscreen display has no window to follow, so a script resizes it here.
         services.AddSingleton<ICommandModule, WorldOffscreenCommandModule>();
@@ -1520,6 +1521,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldCommandModule>();
         services.AddSingleton<ICommandModule, WorldShaderReloadCommandModule>();
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
+        services.AddSingleton<ICommandModule, WorldRowsCommandModule>();
         services.AddSingleton<ICommandModule, WorldSliceCommandModule>();
         // The host-section READ-BACK — world.host, the DOCUMENT/RESOLVED/LIVE three-way read; the section is
         // written through world.row.set host <json>. Presentation-only: window/backend/present/pacing knobs.

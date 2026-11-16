@@ -11,8 +11,9 @@ namespace Puck.Shaders;
 /// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
 /// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
-/// named row per active invocation, including divergent layer branches, and <c>puckCountShapes</c> adds a wave's primitive
-/// evaluations to the pass row.
+/// named row per active invocation, including divergent layer branches, <c>puckCountShapes</c> adds a wave's primitive
+/// evaluations to the pass row, and <c>puckCountRejectedHit()</c> adds one hit the mesh hit door rejected
+/// (<see cref="GpuWork.MeshHitsRejected"/>) from the rejecting lane.
 /// An interface that declares all
 /// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
 /// generated beside them; any other interface, a document pass's among them, gets them empty. So a kernel counts
@@ -82,6 +83,8 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
+                void puckCountRejectedHit() {
+                }
 
                 """);
 
@@ -94,7 +97,7 @@ public static class ShaderWorkCounters {
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
             // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-            // sky texture loads, shape evaluations and shape gradients, as a
+            // sky texture loads, shape evaluations, shape gradients and rejected mesh hits, as a
             // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
             // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
@@ -105,6 +108,7 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkSkyTextureLoadsWord = {{number((4 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShapesWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapesEvaluated) * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkGradientsWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapeGradients) * GpuKernelCounters.CountWords))}}u;
+            static const uint PuckWorkRejectedHitsWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.MeshHitsRejected) * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -168,6 +172,11 @@ public static class ShaderWorkCounters {
                     puckAddWork((row + PuckWorkStepsWord), waveSteps);
                     puckAddWork((row + PuckWorkTexelsWord), waveTexels);
                 }
+            }
+            // Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
+            // and may sit in divergent control flow, so it takes no wave operation.
+            void puckCountRejectedHit() {
+                puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
             }
 
             """);

@@ -40,7 +40,7 @@ public sealed partial class ShaderPipelineRenderNode {
             return false;
         }
 
-        rgba = ReadPixels(image: in image, layout: layout).ToArray();
+        rgba = CallerOwned(pixels: ReadPixels(image: in image, layout: layout));
         if (CaptureCompanionFactory?.Invoke() is { } companion) { m_captureCompanions.Add(rgba, companion); }
 
         return true;
@@ -116,6 +116,12 @@ public sealed partial class ShaderPipelineRenderNode {
         owner: m_name,
         pipelines: m_pipelines
     )).IsReady;
+    // Hands over a read's pixels: a readback returns a whole array the caller owns, so it is taken as is, never copied.
+    private static byte[] CallerOwned(ReadOnlyMemory<byte> pixels) =>
+        ((System.Runtime.InteropServices.MemoryMarshal.TryGetArray(memory: pixels, segment: out var whole) &&
+            (whole.Offset == 0) && (whole.Count == whole.Array!.Length))
+            ? whole.Array
+            : pixels.ToArray());
     // Reads a completed same-device image back as RGBA8: a surface format through the node's readback, which sizes its
     // staging buffer to the image, any other through the display encode's SDR.
     private ReadOnlyMemory<byte> ReadPixels(in Surface image, GpuImageLayout layout) {
@@ -141,18 +147,17 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
-        m_readbackBytes = GpuPixelFormats.ImageByteLength(
-            format: image.Format,
-            height: image.Height,
-            width: image.Width
-        );
 
-        return m_readback.Read(
+        var pixels = m_readback.Read(
             format: image.Format,
             height: image.Height,
             sourceImageHandle: image.ImageHandle,
             sourceLayout: layout,
             width: image.Width
         );
+
+        m_readbackBytes = m_readback.OwnedBytes;
+
+        return pixels;
     }
 }

@@ -13,6 +13,12 @@ namespace Puck.Abstractions.Counting;
 /// The owner also declares the kind's <see cref="WorkClass"/>: what two readings of it at the same code over the same
 /// workload may be expected to agree on, which is the only thing a collector compares.
 /// </para>
+/// <para>
+/// A kind is a total or a peak (<see cref="IsPeak"/>). A total only goes up, and a reader takes a window by reading it
+/// twice and subtracting. A peak is a high-water mark: the largest value one step of the owner's work published (one
+/// staging, one build) since its source last cleared its peaks (<see cref="IWorkCounterSource.ClearPeaks"/>), so a
+/// reader clears the peaks at the start of its window and reads them at its end.
+/// </para>
 /// </summary>
 public sealed class WorkKind {
     // The first WorkCounterSet that lists this kind and the kind's index in it, so a count into that set finds its
@@ -26,16 +32,20 @@ public sealed class WorkKind {
     public string Name { get; }
     /// <summary>Gets the unit one step of this kind's count stands for.</summary>
     public string Unit { get; }
+    /// <summary>Gets whether the kind is a peak, the largest value raised since its source last cleared its peaks,
+    /// rather than a total that only goes up.</summary>
+    public bool IsPeak { get; }
 
     /// <summary>Initializes a new instance of the <see cref="WorkKind"/> class.</summary>
     /// <param name="name">The dotted name: at least two segments, each lowercase letters and digits joined by single hyphens.</param>
     /// <param name="unit">The unit: one segment of the same form.</param>
     /// <param name="workClass">What two readings of the kind may be expected to agree on; never
     /// <see cref="WorkClass.AllocationZeroNonzero"/>, which classes an allocation reading rather than a count.</param>
+    /// <param name="peak">Whether the kind is a peak (<see cref="IsPeak"/>) rather than a total.</param>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="unit"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="unit"/> is not of the stated form.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="workClass"/> is not a class a count can have.</exception>
-    public WorkKind(string name, string unit, WorkClass workClass) {
+    public WorkKind(string name, string unit, WorkClass workClass, bool peak = false) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(unit);
 
@@ -62,6 +72,7 @@ public sealed class WorkKind {
         }
 
         Class = workClass;
+        IsPeak = peak;
         Name = name;
         Unit = unit;
     }

@@ -243,15 +243,44 @@ public sealed partial class SdfWorldTables {
     /// exposes every view by one.</summary>
     public SdfViewExposures? ViewExposures { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
-    /// instance-mask width, the mesh draws, the debug view mode and the views' exposures.</summary>
+    /// instance-mask width, the mesh draws (the bound of the mesh hit door, zero on a frame <see cref="ForceHitBound"/>
+    /// armed), the debug view mode and the views' exposures.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
         Exposures: ViewExposures,
         InstanceMaskWordCount: InstanceMaskWordCount,
-        MeshDraws: MeshDrawCount,
+        MeshDraws: (m_hitBoundForced ? 0u : MeshDrawCount),
         ScreenCount: BoundScreenCount(),
         ShadeDefaultFirst: m_shadeDefaultFirst
     );
+    // Frames still to prepare with the hit door's bound forced to zero, and whether the frame being prepared is one.
+    private int m_hitBoundArmed;
+    private bool m_hitBoundForced;
+
+    /// <summary>Arms the next <paramref name="frames"/> prepared frames to give every pass block a mesh draw count of
+    /// zero while the mesh and glass passes still draw into their targets, so each hit a pass reads is rejected by the
+    /// mesh hit door and counted (<see cref="Puck.Abstractions.Gpu.GpuWork.MeshHitsRejected"/>) and shades as a miss. A
+    /// diagnostic lever: it proves the door rejects and counts. Safe to call from any thread.</summary>
+    /// <param name="frames">The prepared frames to force, at least one.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="frames"/> is below one.</exception>
+    public void ForceHitBound(int frames) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: frames, other: 1);
+        Volatile.Write(location: ref m_hitBoundArmed, value: frames);
+    }
+    /// <summary>Gets the prepared frames <see cref="ForceHitBound"/> still forces.</summary>
+    public int HitBoundArmed => Volatile.Read(location: ref m_hitBoundArmed);
+    // Takes one armed frame for the frame being prepared, on the frame thread, once a preparation.
+    internal void AdvanceHitBound() {
+        var armed = Volatile.Read(location: ref m_hitBoundArmed);
+
+        m_hitBoundForced = false;
+        while (armed > 0) {
+            var replaced = Interlocked.CompareExchange(location1: ref m_hitBoundArmed, value: (armed - 1), comparand: armed);
+
+            if (replaced == armed) { m_hitBoundForced = true; break; }
+            armed = replaced;
+        }
+    }
     /// <summary>Gets the live program's instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 

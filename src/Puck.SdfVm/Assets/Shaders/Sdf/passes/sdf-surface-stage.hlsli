@@ -322,13 +322,18 @@ void sdfSurfaceStage(SdfPixel p) {
     }
 
     SdfMeshSample meshHit = sdfMeshSampleAt(p.pixel);
+    // A covered texel whose hit the door rejects is written as a miss.
+    SdfMeshHit resolved = (SdfMeshHit)0;
     bool hit = (meshHit.covered && (meshHit.t < p.farDistance));
+    if (hit) {
+        hit = sdfMeshResolveHit(meshHit.draw, meshHit.triangleIndex, resolved);
+    }
     SdfVisibilityRecordValue value;
     value.visibility.t = (hit ? meshHit.t : p.farDistance);
     value.visibility.identity = (hit ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_MESH, meshHit.draw) : 0u);
-    value.visibility.material = (hit ? sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex) : 0);
+    value.visibility.material = (hit ? sdfMeshMaterial(resolved) : 0);
     value.triangleIndex = (hit ? meshHit.triangleIndex : 0u);
-    value.frameSlot = (hit ? asint(sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SDF_MESH_FRAME_SLOT_WORD]) : SDF_TRANSFORM_SLOT_NONE);
+    value.frameSlot = (hit ? sdfMeshHitFrameSlot(resolved) : SDF_TRANSFORM_SLOT_NONE);
     value.normal = float3(0.0, 0.0, 0.0);
     value.curvature = 0.0;
     value.ambient = 1.0;
@@ -337,7 +342,7 @@ void sdfSurfaceStage(SdfPixel p) {
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
         float3 face;
-        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face, value.curvature, value.frameSlot);
+        float3 normal = sdfMeshSurfaceNormal(resolved, surfacePoint, p.rayDirection, face, value.curvature, value.frameSlot);
 
         value.normal = normal;
         if (!worldAoDisabled()) {

@@ -83,10 +83,10 @@ float3 sdfApplyFlow(float3 layerPoint, float3 layerNormal, float3 layerFlow, flo
 }
 // The flow layer at a shaded surface, in the frame its flow names: a world-frame flow runs in world space, its pattern
 // continuous across every surface wearing it; an object-frame flow runs in the layer frame (sdfLayerFrame), its velocity
-// riding a slot's frame as it is, and turned by the draw's matrix and carry on a draw shading in world space (a static
-// copy). Returns the world shading normal, `normal` itself for a material with no flow; `revealed` and `contact` as
+// riding a slot's frame as it is, and turned by the resolved hit's draw's matrix and carry on a draw shading in world space
+// (a static copy). Returns the world shading normal, `normal` itself for a material with no flow; `revealed` and `contact` as
 // sdfApplyFlow's.
-float3 sdfShadeFlow(float3 surfacePoint, float3 normal, float3 layerPoint, float3 layerNormal, float4 layerRotation, int frameSlot, uint meshDraw,
+float3 sdfShadeFlow(float3 surfacePoint, float3 normal, float3 layerPoint, float3 layerNormal, float4 layerRotation, int frameSlot, SdfMeshHit hit,
     float footprint, float4 lanes, float contact, inout SdfMaterialData material, out float revealed) {
     revealed = 0.0;
     if (material.flowVelocity.w <= 0.0) {
@@ -96,8 +96,7 @@ float3 sdfShadeFlow(float3 surfacePoint, float3 normal, float3 layerPoint, float
     bool slotFlow = (!worldFlow && (frameSlot != SDF_TRANSFORM_SLOT_NONE));
     float3 flowVelocity = material.flowVelocity.xyz;
     if (!worldFlow && !slotFlow) {
-        uint flowRecord = sdfMeshRecord(meshDraw);
-        flowVelocity = sdfMeshCarryDirection(flowRecord, sdfMeshWorldDirection(flowRecord, flowVelocity));
+        flowVelocity = sdfMeshCarryDirection(hit.record, sdfMeshWorldDirection(hit.record, flowVelocity));
     }
     float3 flowNormal = sdfApplyFlow((worldFlow ? surfacePoint : layerPoint), (worldFlow ? normal : layerNormal), flowVelocity,
         passGroup.flowClock, footprint, lanes, contact, material, revealed);

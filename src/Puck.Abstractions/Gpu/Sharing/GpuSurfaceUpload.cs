@@ -34,15 +34,17 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
     private readonly GpuRetirementQueue<IGpuImage> m_retired = new();
     private readonly GpuCommandSlot m_slot = new(name: new GpuObjectName(owner: Owner, part: "commands"));
 
+    // Whether a copy was handed to the queue that no fence has yet proven ran.
+    private bool m_copyPending;
     private bool m_disposed;
     private GpuCopyFootprint m_footprint;
     private IGpuHeldDevice? m_heldDevice;
     private IGpuImage? m_image;
-    // The layout the image is in once every recorded copy has run: Undefined until its first copy.
+    // The layout every proven copy left the image in: Undefined until its first copy is proven to have run.
     private GpuImageLayout m_layout;
     private IGpuStorageBuffer? m_staging;
-    // Copies handed to the queue: the completion points the retired images are keyed by.
-    private ulong m_submitted;
+    // Copies a fence proved ran: the completion points the retired images are keyed by.
+    private ulong m_completed;
 
     /// <summary>Initializes a new instance of the <see cref="GpuSurfaceUpload"/> class.</summary>
     /// <param name="deviceContext">The device context whose services create, record and submit everything.</param>
@@ -107,19 +109,36 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
             services: services,
             state: this
         );
+        // Pending before the submit: a submit that throws either reached the queue (its fence then proves the copy ran) or
+        // abandoned it (its fence reports that), so Settle decides either way.
+        m_copyPending = true;
         m_slot.Submit(services: services);
-        m_submitted++;
-        m_layout = GpuImageLayout.ShaderReadOnly;
 
         return m_image!.ImageViewHandle;
     }
 
-    // Waits for this object's last copy, the one reader of the staging and command buffers, and releases the images
-    // that copy's completion frees. A wait that throws leaves the copy outstanding, so the next call waits again.
+    // Waits for this object's last copy, the one reader of the staging and command buffers. Only a copy its fence proves
+    // ran counts: it advances the completion point, releasing the images that point frees, and leaves the image in
+    // ShaderReadOnly. A copy whose batch never reached the queue (GpuSubmissionAbandonedException) ran nowhere, so
+    // neither moves and the next upload records again from the layout the image is really in. Any other failed wait
+    // leaves the copy outstanding, so the next call waits again.
     private void Settle() {
-        m_slot.Wait();
+        try {
+            m_slot.Wait();
+        } catch (GpuSubmissionAbandonedException) {
+            m_copyPending = false;
+
+            return;
+        }
+
+        if (m_copyPending) {
+            m_copyPending = false;
+            m_completed++;
+            m_layout = GpuImageLayout.ShaderReadOnly;
+        }
+
         m_retired.Release(
-            completed: m_submitted,
+            completed: m_completed,
             release: static image => image.Dispose()
         );
     }
@@ -167,7 +186,7 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
 
         if (m_image is { } replaced) {
             m_retired.Retire(
-                after: (m_submitted + 1UL),
+                after: (m_completed + 1UL),
                 item: replaced
             );
         }
@@ -257,14 +276,21 @@ public sealed class GpuSurfaceUpload : IGpuSurfaceUpload {
         }
 
         m_disposed = true;
+
+        // An incomplete creation scope releases every object it holds, newest first, whether or not an earlier release
+        // threw, and rethrows the first failure once all have run.
+        // The slot goes first, waiting for the last copy.
+        using var releases = new GpuCreationScope();
+
+        if (m_staging is { } staging) { _ = releases.Own(created: staging); }
+        if (m_image is { } image) { _ = releases.Own(created: image); }
+
         m_retired.Release(
             completed: ulong.MaxValue,
-            release: static image => image.Dispose()
+            release: retired => releases.Own(created: retired)
         );
-        m_image?.Dispose();
+        _ = releases.Own(created: m_slot);
         m_image = null;
-        m_staging?.Dispose();
         m_staging = null;
-        m_slot.Dispose();
     }
 }

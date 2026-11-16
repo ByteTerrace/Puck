@@ -164,53 +164,66 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>The probe slots a gather fills: the chosen stage's eight corners, then the remainder stage's eight.</summary>
     public const int GatherSlots = 16;
 
+    // Declaring a kind is what lists it in the counters: the kinds below initialize in textual order after this field.
+    private static readonly WorkKindRegistry Registry = new();
+
     /// <summary>Counts each trace scene built for a change of the static draws.</summary>
-    public static readonly WorkKind Scenes = new(name: "sdf.mesh-gi.scenes", unit: "scenes", workClass: WorkClass.Pacing);
+    public static readonly WorkKind Scenes = Registry.Declare(name: "sdf.mesh-gi.scenes", unit: "scenes", workClass: WorkClass.Pacing);
     /// <summary>Counts each geometry a scene build built: one no earlier scene held.</summary>
-    public static readonly WorkKind GeometriesBuilt = new(name: "sdf.mesh-gi.geometries-built", unit: "geometries", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GeometriesBuilt = Registry.Declare(name: "sdf.mesh-gi.geometries-built", unit: "geometries", workClass: WorkClass.Pacing);
     /// <summary>Counts each geometry a scene build took from the scene it replaced.</summary>
-    public static readonly WorkKind GeometriesReused = new(name: "sdf.mesh-gi.geometries-reused", unit: "geometries", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GeometriesReused = Registry.Declare(name: "sdf.mesh-gi.geometries-reused", unit: "geometries", workClass: WorkClass.Pacing);
     /// <summary>Counts the triangles of the geometries scene builds built.</summary>
-    public static readonly WorkKind TrianglesBuilt = new(name: "sdf.mesh-gi.triangles-built", unit: "triangles", workClass: WorkClass.Pacing);
+    public static readonly WorkKind TrianglesBuilt = Registry.Declare(name: "sdf.mesh-gi.triangles-built", unit: "triangles", workClass: WorkClass.Pacing);
     /// <summary>Counts each probe whose hits were traced: its placement and its hit buffer.</summary>
-    public static readonly WorkKind Traced = new(name: "sdf.mesh-gi.traced", unit: "probes", workClass: WorkClass.Pacing);
+    public static readonly WorkKind Traced = Registry.Declare(name: "sdf.mesh-gi.traced", unit: "probes", workClass: WorkClass.Pacing);
     /// <summary>Counts each probe relight: its radiance cubes and light visibility shaded from its cached hits.</summary>
-    public static readonly WorkKind Relit = new(name: "sdf.mesh-gi.relit", unit: "probes", workClass: WorkClass.Pacing);
+    public static readonly WorkKind Relit = Registry.Declare(name: "sdf.mesh-gi.relit", unit: "probes", workClass: WorkClass.Pacing);
     /// <summary>Counts rays in completed GPU trace jobs, including placement trials and subsequently invalidated batches.</summary>
-    public static readonly WorkKind GpuRays = new(name: "sdf.mesh-gi.gpu-rays", unit: "rays", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuRays = Registry.Declare(name: "sdf.mesh-gi.gpu-rays", unit: "rays", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed trace submissions, including their hierarchy upload and readback copy.</summary>
-    public static readonly WorkKind GpuTraceNanoseconds = new(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
-    public static readonly WorkKind GpuRelightNanoseconds = new(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time spent selecting probes owing work.</summary>
-    public static readonly WorkKind GpuSelectNanoseconds = new(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuSelectNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
-    public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuCancelled = Registry.Declare(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
     /// <summary>Traversal stack or step-limit assertions; valid scenes must leave this at zero.</summary>
-    public static readonly WorkKind TraversalFaults = new(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
+    public static readonly WorkKind TraversalFaults = Registry.Declare(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
     /// <summary>CPU sky captures for probe lighting: each renders the sky map and averages it over the hit texels.</summary>
-    public static readonly WorkKind SkyCaptures = new(name: "sdf.mesh-gi.sky-captures", unit: "count", workClass: WorkClass.Pacing);
+    public static readonly WorkKind SkyCaptures = Registry.Declare(name: "sdf.mesh-gi.sky-captures", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
-    public static readonly WorkKind Behind = new(name: "sdf.mesh-gi.behind", unit: "cycles", workClass: WorkClass.Pacing);
+    public static readonly WorkKind Behind = Registry.Declare(name: "sdf.mesh-gi.behind", unit: "cycles", workClass: WorkClass.Pacing);
     /// <summary>Counts camera hit traces, including rejected samples inside opaque geometry.</summary>
-    public static readonly WorkKind CameraTraces = new(name: "sdf.mesh-gi.camera-traces", unit: "samples", workClass: WorkClass.Pacing);
+    public static readonly WorkKind CameraTraces = Registry.Declare(name: "sdf.mesh-gi.camera-traces", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Counts relights of a cached camera sample's hits under a changed lighting.</summary>
-    public static readonly WorkKind CameraRelights = new(name: "sdf.mesh-gi.camera-relights", unit: "samples", workClass: WorkClass.Pacing);
+    public static readonly WorkKind CameraRelights = Registry.Declare(name: "sdf.mesh-gi.camera-relights", unit: "samples", workClass: WorkClass.Pacing);
 
     /// <summary>Counts each camera sample asked of the volume (<see cref="TrySampleCamera"/>).</summary>
-    public static readonly WorkKind CameraSamples = new(name: "sdf.mesh-gi.camera-samples", unit: "samples", workClass: WorkClass.Pacing);
+    public static readonly WorkKind CameraSamples = Registry.Declare(name: "sdf.mesh-gi.camera-samples", unit: "samples", workClass: WorkClass.Pacing);
 
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
-    public static readonly WorkKind GpuMeterNanoseconds = new(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, TraversalFaults, SkyCaptures, Behind, CameraTraces, CameraRelights, CameraSamples];
+    public static readonly WorkKind GpuMeterNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the static draws scene builds took into their trace scenes.</summary>
+    public static readonly WorkKind StaticDraws = Registry.Declare(name: "sdf.mesh-gi.static-draws", unit: "draws", workClass: WorkClass.Pacing);
+    /// <summary>Counts the top-level entries scene builds made: one a braid of a static draw.</summary>
+    public static readonly WorkKind Entries = Registry.Declare(name: "sdf.mesh-gi.entries", unit: "entries", workClass: WorkClass.Pacing);
+    /// <summary>Counts the bytes of the prefix each scene export packs on the host (the top level's nodes, its entries
+    /// and one record an instance), which its upload sends whole.</summary>
+    public static readonly WorkKind PrefixBytes = Registry.Declare(name: "sdf.mesh-gi.prefix-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the most top-level entries one scene build made since the peaks were last cleared.</summary>
+    public static readonly WorkKind PeakEntries = Registry.DeclarePeak(name: "sdf.mesh-gi.peak.entries", unit: "entries", workClass: WorkClass.Pacing);
+    /// <summary>Gets the most prefix bytes one scene export packed since the peaks were last cleared.</summary>
+    public static readonly WorkKind PeakPrefixBytes = Registry.DeclarePeak(name: "sdf.mesh-gi.peak.prefix-bytes", unit: "bytes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
-    public static ReadOnlySpan<WorkKind> Kinds => DeclaredKinds;
+    public static ReadOnlySpan<WorkKind> Kinds => Registry.Kinds;
 
-    /// <summary>Gets the volume's counts: its scene builds, the geometry they built and reused, its probe traces and
-    /// relights, and its behind cycles.</summary>
-    public WorkCounterSet Counters { get; } = new(kinds: DeclaredKinds, name: SourceName);
+    /// <summary>Gets the volume's counts: its scene builds, the geometry and entries they built and reused, the prefix
+    /// bytes their exports pack, its probe traces and relights, and its behind cycles.</summary>
+    public WorkCounterSet Counters { get; } = new(kinds: Kinds, name: SourceName);
 
     private static readonly Vector3[] PlacementDirections = BuildDirections(count: 32);
 
@@ -1362,6 +1375,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
             Counters.Add(amount: scene.GeometriesReused, kind: GeometriesReused);
             Counters.Add(amount: scene.TrianglesBuilt, kind: TrianglesBuilt);
+            Counters.Add(amount: scene.DrawCount, kind: StaticDraws);
+            Counters.Add(amount: scene.EntryCount, kind: Entries);
+            Counters.Raise(kind: PeakEntries, value: scene.EntryCount);
             lock (m_gate) {
                 if (m_disposed) { scene.Dispose(); return; }
                 var oldScene = m_scene;
