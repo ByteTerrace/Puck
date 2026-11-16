@@ -9,8 +9,12 @@ namespace Puck.SdfVm;
 /// edit anywhere else (the rest of the renderer, a new public member of a referenced assembly, a comment, the checkout's
 /// path) leaves it as it was, and an edit to anything the bake runs changes it.
 /// <para>The bake's roots (<see cref="BakeRoots"/>) are its planning, sampling, contouring and meshing types, the
-/// frame-block rows its kernel reads, the program's derivation of the field words the kernel walks (never its appearance), and the store's entry format.
-/// The walk stops at the library and the store, which hold meshes rather than make them; at the bake's report
+/// frame-block rows and input tables its kernel reads, the program's derivation of the field words the kernel walks (never its
+/// appearance), and the store's encoder, whose quantization is part of the drawn product. Reading an entry back and copying
+/// a mesh into native storage are not roots: they run again on every load, and what an entry's bytes mean is the entry
+/// format's (<see cref="EntryVersion"/>), which the identity holds apart from the code.
+/// The walk stops at the library and the store, which hold meshes rather than make them; at a mesh's claims and the parts
+/// its store can restore (<see cref="SdfMesh"/>'s payload and restorable storage), which own a mesh's memory once it is made; at the bake's report
 /// (<see cref="SdfMeshBakeReport"/>), which words, counts and writes what the bake says about itself and so changes no
 /// mesh, however its text or counters change; at the GPU region and its owed
 /// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at the kernels' interfaces and
@@ -30,16 +34,18 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PrepareFrame"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PlanAhead"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTake"),
-        // Input values and addresses are semantic; allocation, upload and dispatch transport are not.
+        // Input values and addresses are semantic; allocation, upload and dispatch transport are not. The GPU client
+        // (SdfMeshBakeGpuWork) calls these and nothing else reaches them.
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PointRuns"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WriteSampled"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Complete"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
-        // The library is a cache boundary, but normalization runs before it persists the product.
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMesh", "NativeCopy"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "Encode"),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "TryDecode"),
+        // The encoder quantizes what every later run draws (a cold bake publishes the mesh the store reads back). Reading
+        // an entry, and copying a mesh into native storage, transport a stored product: what an entry's bytes mean is the
+        // entry format's, versioned by SdfMeshStoreCodec.Magic, which the identity folds (SdfMeshStore.BuildIdentityOf).
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStoreCodec", "Encode"),
         // The program's only constructor derives the field words the bake kernel walks, from the field's inputs and the
         // appearance's outline alone; SdfProgram.Of packs the appearance after it, outside this closure. A group's
         // geometry hashes its instructions, not their packing.
@@ -49,6 +55,8 @@ public sealed class SdfMeshBakeClosure {
         "Puck.Abstractions.Gpu.GpuRegion",
         "Puck.Abstractions.Gpu.GpuUploadRuns",
         "Puck.SdfVm.SdfKernelInterfaces",
+        "Puck.SdfVm.SdfMesh/Payload",
+        "Puck.SdfVm.SdfMesh/Restorable",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
         "Puck.SdfVm.SdfMeshBakeReport",

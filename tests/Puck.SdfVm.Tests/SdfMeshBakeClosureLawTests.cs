@@ -60,8 +60,17 @@ public sealed class SdfMeshBakeClosureLawTests {
         Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PointRuns));
         Requires(typeof(SdfMeshBakeBatch), "get_" + nameof(SdfMeshBakeBatch.InputRows));
         Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PoseBase));
+        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.WriteSampled));
         Requires(typeof(SdfMeshBakeBlock), nameof(SdfMeshBakeBlock.Write));
         Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
+
+        // The encoder's quantization is part of the drawn product; reading an entry back and copying a mesh into its
+        // storage are not, and the entry format's version owns what an entry's bytes mean.
+        var codec = typeof(SdfMeshStore).Assembly.GetType(name: "Puck.SdfVm.SdfMeshStoreCodec", throwOnError: true)!;
+        Requires(codec, "Encode");
+        Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStoreCodec.TryDecode`", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMesh.NativeCopy`", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMesh/NativeStorage", comparisonType: StringComparison.Ordinal));
 
         // Neither the background GPU work nor the bake's client of it, which only carry a batch's rows and samples to
         // the device and back, may enter derivation.

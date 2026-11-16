@@ -371,7 +371,8 @@ public sealed partial record SdfMesh {
 
     // A palette variant shares the original immutable geometry under an explicit source claim. Only its remapped
     // material arrays are new physical allocations; renumbering must not duplicate positions, normals or indices, and a
-    // chunked mesh's chunks view one renumbered copy of its triangle materials.
+    // chunked mesh's chunks view one renumbered copy of its triangle materials. A native chunked mesh's chunks always
+    // view its attributes (NativeCopy refuses any other, and NativeStorage builds no other).
     internal SdfMesh RenumberNative(int[] from, int[] to, IAllocator allocator, MemoryAccount account) {
         var payload = new Payload(owner: account.CreateOwner("mesh-materials"));
 
@@ -389,19 +390,12 @@ public sealed partial record SdfMesh {
             payload.Borrow(source: m_payload);
 
             var chunks = new SdfMesh[Chunks.Count];
-            var joined = JoinsChunks();
-            var shared = (joined ? payload.Part(owner: account.CreateOwner("mesh-materials")) : payload);
+            var shared = ((chunks.Length != 0) ? payload.Part(owner: account.CreateOwner("mesh-materials")) : payload);
             var materials = Remap(owner: shared, source: TriangleMaterials);
             var triangle = 0;
 
             for (var index = 0; (index < chunks.Length); index++) {
                 var chunk = Chunks[index];
-
-                if (!joined) {
-                    chunks[index] = chunk.RenumberNative(account: account, allocator: allocator, from: from, to: to);
-                    payload.Adopt(source: chunks[index].m_payload);
-                    continue;
-                }
                 var part = payload.Part(owner: account.CreateOwner("mesh-materials"));
 
                 part.Borrow(source: chunk.m_payload);
@@ -469,12 +463,6 @@ public sealed partial record SdfMesh {
             m_sources.Add(item: part);
             m_parts.Add(item: part);
             return part;
-        }
-        // Takes the initial claim of a payload built for this one.
-        public void Adopt(Payload? source) {
-            if (source is null) { return; }
-            m_sources.Add(item: source);
-            m_parts.Add(item: source);
         }
         // Claims storage this payload views but did not build.
         public void Borrow(Payload? source) {
