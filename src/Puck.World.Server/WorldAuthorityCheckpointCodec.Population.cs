@@ -210,8 +210,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         // What is consistent only across sections: every live scripted duration names the actor who authorized it.
         ReadOnlySpan<ulong> timerTicks = entry.Body.Action.TimerTicks;
         ReadOnlySpan<bool> pendingPress = entry.Body.Action.PendingPress;
-        var timerActors = entry.Body.ScriptActors.Timers.Span;
-        var pendingActors = entry.Body.ScriptActors.Pending.Span;
+        var timerActors = entry.Body.ScriptActors.Timers.AsSpan();
+        var pendingActors = entry.Body.ScriptActors.Pending.AsSpan();
 
         for (var ordinal = 0; (ordinal < timerTicks.Length); ordinal++) {
             if ((timerTicks[ordinal] > 0UL) && (timerActors[ordinal] == default(Principal))) {

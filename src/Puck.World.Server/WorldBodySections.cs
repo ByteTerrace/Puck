@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
@@ -595,43 +596,69 @@ public readonly record struct BodyDurableInputSection(ulong Tick, ReadOnlyMemory
     );
 }
 /// <summary>Who authorized each channel's scripted input: the actor of its timed press and of its pending tap, one
-/// per channel ordinal. The tape's actors travel with its segments (<see cref="BodyTapeSection"/>).</summary>
+/// per channel ordinal. The tape's actors travel with its segments (<see cref="BodyTapeSection"/>). The tables are
+/// immutable: a change replaces a table, so a body keeps the section behind a <see cref="VersionedRecord{T}"/>.</summary>
 /// <param name="Timers">The actor of each channel's timed press.</param>
 /// <param name="Pending">The actor of each channel's pending tap.</param>
 public readonly record struct BodyScriptActorsSection(
-    ReadOnlyMemory<Principal> Timers,
-    ReadOnlyMemory<Principal> Pending
+    ImmutableArray<Principal> Timers,
+    ImmutableArray<Principal> Pending
 ) : IContinuationSection<BodyScriptActorsSection> {
+    /// <summary>Gets the section of a body with no scripted input: one unset actor per channel in both tables.</summary>
+    public static BodyScriptActorsSection Empty { get; } = new(
+        Pending: ImmutableArray.Create(items: new Principal[ChannelLimits.MaxChannels]),
+        Timers: ImmutableArray.Create(items: new Principal[ChannelLimits.MaxChannels])
+    );
+
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.ScriptActors;
 
-    private static void WriteActors(WireWriter writer, ReadOnlySpan<Principal> actors) {
-        if (actors.Length > ChannelLimits.MaxChannels) {
-            throw new InvalidOperationException(message: $"a script-actors table holds {actors.Length} actors for {ChannelLimits.MaxChannels} channels.");
+    private static void WriteActors(WireWriter writer, ImmutableArray<Principal> actors) {
+        var table = (actors.IsDefault ? default : actors.AsSpan());
+
+        if (table.Length > ChannelLimits.MaxChannels) {
+            throw new InvalidOperationException(message: $"a script-actors table holds {table.Length} actors for {ChannelLimits.MaxChannels} channels.");
         }
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            WorldAuthorityCheckpointCodec.WriteScriptActor(actor: ((ordinal < actors.Length) ? actors[ordinal] : default), writer: writer);
+            WorldAuthorityCheckpointCodec.WriteScriptActor(actor: ((ordinal < table.Length) ? table[ordinal] : default), writer: writer);
         }
     }
-    private static Principal[] ReadActors(ref WireReader reader) {
+    private static ImmutableArray<Principal> ReadActors(ref WireReader reader) {
         var actors = new Principal[ChannelLimits.MaxChannels];
 
         for (var ordinal = 0; (ordinal < actors.Length); ordinal++) { actors[ordinal] = WorldAuthorityCheckpointCodec.ReadScriptActor(reader: ref reader); }
-        return actors;
+        return ImmutableArray.Create(items: actors);
     }
 
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyScriptActorsSection section) {
-        WriteActors(actors: section.Timers.Span, writer: writer);
-        WriteActors(actors: section.Pending.Span, writer: writer);
+        WriteActors(actors: section.Timers, writer: writer);
+        WriteActors(actors: section.Pending, writer: writer);
     }
     /// <inheritdoc/>
     public static BodyScriptActorsSection Read(ref WireReader reader) => new(
         Timers: ReadActors(reader: ref reader),
         Pending: ReadActors(reader: ref reader)
     );
-}
-/// <summary>One segment of a body's scripted tape.</summary>
+    /// <summary>Returns a table holding the given actors in its first ordinals and unset actors after them: the
+    /// present table when it already does, so a write that changes nothing replaces nothing.</summary>
+    /// <param name="current">The present table.</param>
+    /// <param name="actors">The actors, by channel ordinal; ordinals past the channel count are dropped.</param>
+    /// <returns>The table.</returns>
+    public static ImmutableArray<Principal> Table(ImmutableArray<Principal> current, ReadOnlySpan<Principal> actors) {
+        var count = Math.Min(val1: actors.Length, val2: ChannelLimits.MaxChannels);
+        var table = (current.IsDefault ? default : current.AsSpan());
+
+        if ((table.Length == ChannelLimits.MaxChannels) && table[..count].SequenceEqual(other: actors[..count]) && (table[count..].IndexOfAnyExcept(value: default(Principal)) < 0)) {
+            return current;
+        }
+
+        var replaced = new Principal[ChannelLimits.MaxChannels];
+
+        actors[..count].CopyTo(destination: replaced);
+        return ImmutableArray.Create(items: replaced);
+    }
+}/// <summary>One segment of a body's scripted tape.</summary>
 /// <param name="Intent">The intent the segment holds while live.</param>
 /// <param name="RemainingTicks">The engine ticks the segment has left.</param>
 /// <param name="Actor">The actor who authorized the segment.</param>

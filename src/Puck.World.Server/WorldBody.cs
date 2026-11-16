@@ -248,7 +248,7 @@ public sealed partial class WorldBody {
     // The action track's per-channel state and the lanes' latches, behind their write door: Action reads, ActionEdit
     // moves the section's version and notes the body's slot, and nothing else reaches the section. A write-side
     // reference is used within one statement or handed to one call (DOOR005).
-    private readonly Versioned<BodyActionSection> m_action = new(binding: new SlotBinding());
+    private readonly Versioned<BodyActionSection> m_action;
 
     private ref readonly BodyActionSection Action => ref m_action.Read;
     private ref BodyActionSection ActionEdit => ref m_action.Write;
@@ -361,6 +361,11 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
     public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
+        // One binding for every holder of this body: a write to any of them notes the body's slot once.
+        var slot = new SlotBinding();
+
+        m_action = new Versioned<BodyActionSection>(binding: slot);
+        m_scriptActors = new VersionedRecord<BodyScriptActorsSection>(binding: slot, value: BodyScriptActorsSection.Empty);
         SetTuning(
             holds: holds,
             tuning: tuning

@@ -643,7 +643,7 @@ public sealed partial class WorldBody {
             }
 
             MergeLaneTimer(
-                actor: m_pendingScriptActors[ordinal],
+                actor: ScriptActors.Pending[ordinal],
                 ordinal: ordinal,
                 value: Action.PendingValue[ordinal],
                 holdTicks: stepTicks
@@ -657,7 +657,7 @@ public sealed partial class WorldBody {
     // whatever ticks remained. Shared by PressChannel's timed overload and MaterializeDefaultLanePresses so the
     // wire-timed and host-step-tap press paths can never drift onto two different merge rules.
     private void MergeLaneTimer(int ordinal, FixedQ4816 value, ulong holdTicks, Puck.Commands.Principal actor) {
-        var isSameValueRepress = ((Action.TimerTicks[ordinal] > 0) && (Action.TimerValues[ordinal] == value) && (m_scriptActors[ordinal] == actor));
+        var isSameValueRepress = ((Action.TimerTicks[ordinal] > 0) && (Action.TimerValues[ordinal] == value) && (ScriptActors.Timers[ordinal] == actor));
 
         if (isSameValueRepress) {
             ActionEdit.TimerTicks[ordinal] = Math.Max(
@@ -667,7 +667,7 @@ public sealed partial class WorldBody {
         } else {
             ActionEdit.TimerValues[ordinal] = value;
             ActionEdit.TimerTicks[ordinal] = holdTicks;
-            m_scriptActors[ordinal] = actor;
+            SetTimerActor(actor: actor, ordinal: ordinal);
         }
     }
     // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).

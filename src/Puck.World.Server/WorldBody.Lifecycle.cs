@@ -346,7 +346,7 @@ public sealed partial class WorldBody {
         WakeIfResting();
         ActionEdit.PendingPress[ordinal] = true;
         ActionEdit.PendingValue[ordinal] = value;
-        m_pendingScriptActors[ordinal] = actor;
+        SetPendingActor(actor: actor, ordinal: ordinal);
     }
     /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
     /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time

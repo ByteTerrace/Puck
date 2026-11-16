@@ -50,7 +50,7 @@ public sealed partial class WorldBody {
         }
 
         return new(
-            ScriptActors: new(CopyInto(buffers: buffers, source: m_scriptActors), CopyInto(buffers: buffers, source: m_pendingScriptActors), tapeActors),
+            ScriptActors: new(CopyInto(buffers: buffers, source: ScriptActors.Timers.AsSpan()), CopyInto(buffers: buffers, source: ScriptActors.Pending.AsSpan()), tapeActors),
             PlanarVelocity: m_planarVelocity,
             VerticalVelocity: m_verticalVelocity,
             Orientation: m_orientation,
@@ -294,8 +294,7 @@ public sealed partial class WorldBody {
     /// velocity/orientation fields beside it.</summary>
     /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
     public void ApplyTransferState(WorldBodyTransferState state) {
-        CopyClamped(destination: m_scriptActors, source: state.ScriptActors.Timers);
-        CopyClamped(destination: m_pendingScriptActors, source: state.ScriptActors.Pending);
+        SetScriptActors(pending: state.ScriptActors.Pending, timers: state.ScriptActors.Timers);
         // A restored body never sleeps through the restore that just replaced its velocity/orientation/program —
         // see WorldBody.Sleep.cs's own remarks. SetBodyMotionProgram below wakes too, but only when the captured
         // program name differs from the fresh body's default, so this cannot rely on that alone.

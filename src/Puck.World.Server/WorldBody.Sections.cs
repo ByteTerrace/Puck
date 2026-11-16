@@ -157,10 +157,7 @@ public sealed partial class WorldBody {
         }
         sections.RegisterWrites = new(Rows: registerWrites);
         sections.DurableInput = new(Rows: durableInput, Tick: m_durableInputTick);
-        sections.ScriptActors = new(
-            Pending: Table(alias: alias, live: m_pendingScriptActors),
-            Timers: Table(alias: alias, live: m_scriptActors)
-        );
+        sections.ScriptActors = ScriptActors;
 
         var tape = Grown(alias: alias, count: m_tapeCount, scratch: ref m_viewTape);
 
@@ -199,7 +196,11 @@ public sealed partial class WorldBody {
             work: ref work[((int)WorldContinuationSectionKind.Action)],
             writer: writer
         );
-        return (1U << ((int)WorldContinuationSectionKind.Action));
+        digests[((int)WorldContinuationSectionKind.ScriptActors)] = m_scriptActors.Digest<ContinuationSectionCodec<BodyScriptActorsSection>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.ScriptActors)],
+            writer: writer
+        );
+        return ((1U << ((int)WorldContinuationSectionKind.Action)) | (1U << ((int)WorldContinuationSectionKind.ScriptActors)));
     }
     // A table as a section holds it: the live array for a view, a copy for a capture.
     private static ReadOnlyMemory<T> Table<T>(bool alias, T[] live) => ((alias || (live.Length == 0))
@@ -395,8 +396,10 @@ public sealed partial class WorldBody {
             m_durableInputWriters[slot] = durableInput[slot].Writer;
         }
         m_durableInputTick = sections.DurableInput.Tick;
-        CopyClamped(destination: m_scriptActors, source: sections.ScriptActors.Timers.Span);
-        CopyClamped(destination: m_pendingScriptActors, source: sections.ScriptActors.Pending.Span);
+        SetScriptActors(
+            pending: (sections.ScriptActors.Pending.IsDefault ? default : sections.ScriptActors.Pending.AsSpan()),
+            timers: (sections.ScriptActors.Timers.IsDefault ? default : sections.ScriptActors.Timers.AsSpan())
+        );
         RestoreTape(segments: sections.Tape.Segments.Span);
         m_pendingContinuum = sections.Program.PendingContinuum;
 

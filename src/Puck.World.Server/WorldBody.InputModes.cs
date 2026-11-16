@@ -54,7 +54,7 @@ public sealed partial class WorldBody {
             continuing[destination] = true;
             timers[destination] = Action.TimerTicks[source];
             timerValues[destination] = Action.TimerValues[source];
-            m_inputScriptActorScratch[destination] = m_scriptActors[source];
+            m_inputScriptActorScratch[destination] = ScriptActors.Timers[source];
             previousBits[destination] = (Action.PreviousBit[source] || (accepted[destination] != FixedQ4816.Zero));
             action.LaneLatch[destination] = Action.LaneLatch[source];
             action.LaneFactHeld[destination] = Action.LaneFactHeld[source];
@@ -62,7 +62,7 @@ public sealed partial class WorldBody {
         }
         timers.CopyTo(destination: action.TimerTicks);
         timerValues.CopyTo(destination: action.TimerValues);
-        m_inputScriptActorScratch.CopyTo(array: m_scriptActors, index: 0);
+        SetScriptActors(pending: ScriptActors.Pending.AsSpan(), timers: m_inputScriptActorScratch);
         previousBits.CopyTo(destination: action.PreviousBit);
         ActionEdit = action;
         m_inputRecencyScratch.CopyTo(array: m_laneRecency, index: 0);

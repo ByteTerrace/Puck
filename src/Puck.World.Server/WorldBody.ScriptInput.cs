@@ -5,8 +5,31 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
-    private readonly Principal[] m_scriptActors = new Principal[ActionLaneCount];
-    private readonly Principal[] m_pendingScriptActors = new Principal[ActionLaneCount];
+    // The actors of the channels' timed presses and pending taps, behind their write door. The tables are immutable,
+    // so a write replaces one, and only when the actor differs.
+    private readonly VersionedRecord<BodyScriptActorsSection> m_scriptActors;
+
+    private ref readonly BodyScriptActorsSection ScriptActors => ref m_scriptActors.Read;
+
+    private void SetTimerActor(int ordinal, Principal actor) {
+        if (ScriptActors.Timers[ordinal] != actor) {
+            m_scriptActors.Write = ScriptActors with { Timers = ScriptActors.Timers.SetItem(index: ordinal, item: actor) };
+        }
+    }
+    private void SetPendingActor(int ordinal, Principal actor) {
+        if (ScriptActors.Pending[ordinal] != actor) {
+            m_scriptActors.Write = ScriptActors with { Pending = ScriptActors.Pending.SetItem(index: ordinal, item: actor) };
+        }
+    }
+    // Replaces both tables from per-channel actors, keeping a table whose actors are already those.
+    private void SetScriptActors(ReadOnlySpan<Principal> timers, ReadOnlySpan<Principal> pending) {
+        var replaced = new BodyScriptActorsSection(
+            Pending: BodyScriptActorsSection.Table(actors: pending, current: ScriptActors.Pending),
+            Timers: BodyScriptActorsSection.Table(actors: timers, current: ScriptActors.Timers)
+        );
+
+        if (replaced != ScriptActors) { m_scriptActors.Write = replaced; }
+    }
     private readonly Principal[] m_inputScriptActorScratch = new Principal[ActionLaneCount];
 
     private List<Principal>? m_scriptActorScratch;
@@ -26,7 +49,7 @@ public sealed partial class WorldBody {
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (Action.TimerTicks[ordinal] == 0) { continue; }
             actors ??= m_scriptActorScratch = [];
-            if (!actors.Contains(item: m_scriptActors[ordinal])) { actors.Add(item: m_scriptActors[ordinal]); }
+            if (!actors.Contains(item: ScriptActors.Timers[ordinal])) { actors.Add(item: ScriptActors.Timers[ordinal]); }
         }
         var acceptedTape = default(PlayerIntent);
 
@@ -35,7 +58,7 @@ public sealed partial class WorldBody {
                 var image = ((actor == tapeActor) ? tape : default);
 
                 for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                    if ((Action.TimerTicks[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
+                    if ((Action.TimerTicks[ordinal] > 0) && (ScriptActors.Timers[ordinal] == actor)) {
                         image = image.WithChannel(ordinal: ordinal, value: ((m_channelShapes[ordinal] == ChannelShape.Binary)
                             ? ((Action.TimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
                             : Action.TimerValues[ordinal]));
@@ -45,7 +68,7 @@ public sealed partial class WorldBody {
 
                 if (actor == tapeActor) { acceptedTape = accepted; }
                 for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                    if ((Action.TimerTicks[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
+                    if ((Action.TimerTicks[ordinal] > 0) && (ScriptActors.Timers[ordinal] == actor)) {
                         m_scriptAccepted = m_scriptAccepted.WithChannel(ordinal: ordinal, value: accepted[ordinal]);
                     }
                 }
