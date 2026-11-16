@@ -779,6 +779,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 
 ## Editing kernels
 
+- **A hit read from GPU data goes through the mesh hit door.** A draw and triangle a pass reads from a target texel,
+  a visibility record or the glass sums' front records name a record only through `sdfMeshResolveHit`
+  (`frame/sdf-mesh.hlsli`), which accepts a draw below `passGroup.meshDraws` whose triangle lies below the record's
+  level table word less its index word, and otherwise answers a miss and counts `gpu.mesh-hits.rejected`
+  (`puckCountRejectedHit`). Every reader of a hit's record, indices or triangle material takes the `SdfMeshHit` it
+  returns (`sdfMeshSurfaceNormal`, `sdfMeshMaterial`, `sdfGlassInterfaceAt`, `sdfShadeStamp`, `sdfShadeFlow`,
+  `sdfMeshHitFrameSlot`), so a new reader that skipped the door does not compile; filling one by hand is review's to
+  catch. Only raster stages, whose draw the selection kernel emitted, index `sdfMeshRecord` and
+  `sdfMeshRasterMaterial` directly. A rejection is a miss, never a clamp to an in-bounds triangle. The door cannot tell
+  an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
+  the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
+  bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal

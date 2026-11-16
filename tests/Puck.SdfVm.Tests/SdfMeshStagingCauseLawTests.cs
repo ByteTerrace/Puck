@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Counting;
 using Xunit;
 using static Puck.SdfVm.Tests.SdfWorldTablesUploadLawTests;
@@ -32,21 +33,26 @@ public sealed class SdfMeshStagingCauseLawTests {
         var buildsBefore = work.Read(kind: SdfMeshHistory.DressTopologyBuilds);
 
         work.ClearPeaks();
-        using (var producer = new RootCutProducer(skinned: false, secondGroup: true))
-        using (var rig = new Rig(slots: 3)) {
-            rig.Engine.UploadProgram(producer.Program);
-            // The first dress rebuilds its topology; the tables plan the list, hold out the draws whose meshes are owed,
-            // and stage them as they land.
-            LandRootCut(rig, producer.Publish(rootX: 1, memberY: 1, unusedZ: 1));
-            // A pose: the dresser journals the moved rows and the tables take the journal.
-            RenderRootCut(rig, producer.Publish(rootX: 2, memberY: 1, unusedZ: 1));
+        using (var rig = new Rig(slots: 1))
+        using (var run = new MeshBakeTestRun(new SdfMeshPathBake())) {
+            var poses = Transforms(slots: 1);
+            var moved = new SdfMovedTransforms();
+            SdfFrame Input(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+                moved.Begin(everything: false, tableRows: poses.Length);
+                return Frame(program: rig.LiveProgram, time: 0f, transforms: poses) with { MovedTransforms = moved, MeshDraws = draws, MeshDrawsRevision = revision };
+            }
+            var draws = new List<SdfMeshDraw> { HostDraw(identity: "a", x: 1), HostDraw(identity: "b", x: 2) };
+
+            // The first dress rebuilds its topology for the host's draws; the tables plan the list, hold out the draws
+            // whose meshes are owed, and stage them as they land.
+            LandRootCut(rig, run.Dresser.Dress(Input(draws: draws, revision: 1)));
+            // A pose: the dresser journals the moved row and the tables take the journal.
+            draws[0] = draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 5f, yPosition: 0f, zPosition: 0f) };
+            RenderRootCut(rig, run.Dresser.Dress(Input(draws: draws, revision: 2)));
             // A publication that throws partway, and its retry from the inputs, which owes every row.
-            var faulty = producer.FrameAt(rootX: 3, memberY: 1, unusedZ: 1) with {
-                MeshDraws = new ThrowOnceDraws([HostDraw(identity: "a", x: 1), HostDraw(identity: "b", x: 2)]),
-                MeshDrawsRevision = 1,
-            };
-            Assert.Throws<InvalidOperationException>(() => producer.Dress(faulty));
-            RenderRootCut(rig, producer.Dress(faulty));
+            var faulty = Input(draws: new ThrowOnceDraws([draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 6f, yPosition: 0f, zPosition: 0f) }, draws[1]]), revision: 3);
+            Assert.Throws<InvalidOperationException>(() => run.Dresser.Dress(faulty));
+            RenderRootCut(rig, run.Dresser.Dress(faulty));
         }
 
         var packed = (work.Read(kind: SdfMeshHistory.RecordsPacked) - packedBefore);
@@ -55,11 +61,12 @@ public sealed class SdfMeshStagingCauseLawTests {
 
         Assert.True(packed > 0);
         Assert.Equal(expected: packed, actual: byCause.Sum());
-        Assert.True(byCause[(int)SdfMeshStagingCause.Landing] > 0);
-        Assert.True(byCause[(int)SdfMeshStagingCause.Pose] > 0);
-        Assert.True(byCause[(int)SdfMeshStagingCause.Retry] > 0);
+        Assert.True(byCause[(int)SdfMeshStagingCause.Landing] > 0, "landing");
+        Assert.True(byCause[(int)SdfMeshStagingCause.Pose] > 0, "pose");
+        Assert.True(byCause[(int)SdfMeshStagingCause.Retry] > 0, "retry");
         Assert.Equal(expected: (work.Read(kind: SdfMeshHistory.DressTopologyBuilds) - buildsBefore), actual: byReason.Sum());
-        Assert.True(byReason[(int)SdfMeshTopologyReason.Retry] > 0);
+        Assert.True(byReason[(int)SdfMeshTopologyReason.HostDraws] > 0, "host-draws");
+        Assert.True(byReason[(int)SdfMeshTopologyReason.Retry] > 0, "retry rebuild");
         // No staging of this small list packs past one upload chunk of records, and each cause's peak is one staging's.
         Assert.All(causes, cause => Assert.True(work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause: cause)) <= SdfMeshHistory.ChunkRecords));
         Assert.True(work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause: SdfMeshStagingCause.Pose)) > 0);

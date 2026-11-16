@@ -47,9 +47,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private const string PassWord = "pass";
     private const string SummaryWord = "summary";
     private const string TransfersWord = "transfers";
-    private const string Form = "[<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary|transfers] [--json] | [<source-or-prefix>] clear-peaks";
+    private const string Form = "[<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary|transfers] [--json]";
     private const string Verb = "world.counters";
-    private static readonly CommandForms WorldCountersForms = CommandForms.Of(verb: "world.counters", Form);
+    private static readonly CommandForms WorldCountersForms = CommandForms.Of(verb: "world.counters", Form, "[<source-or-prefix>] clear-peaks");
 
     private readonly IWorkCounterSource[] m_sources = [.. sources.OrderBy(
         comparer: StringComparer.Ordinal,
