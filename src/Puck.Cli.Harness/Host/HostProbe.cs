@@ -18,17 +18,23 @@ public sealed partial class HostProbe(string checkoutRoot) {
     private string? m_leaseRoot;
     private bool m_leaseRootRead;
 
+    /// <summary>Gets this probe's checkout's shared lease root, or null when it has none.</summary>
+    public string? LeaseRoot {
+        get {
+            if (!m_leaseRootRead) {
+                m_leaseRootRead = true;
+                try { m_leaseRoot = CliLease.RootAsync(checkout: checkoutRoot).GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
+            }
+            return m_leaseRoot;
+        }
+    }
     // The Worlds that have reported steady state (WorldReadiness), read from the checkout's shared lease directory; none
     // when the checkout names no such directory.
     private IReadOnlySet<(int ProcessId, long StartTicks)> ReadyWorlds(Dictionary<int, (int Parent, DateTime Started)> tree) {
-        if (!m_leaseRootRead) {
-            m_leaseRootRead = true;
-            try { m_leaseRoot = CliLease.RootAsync(checkout: checkoutRoot).GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
-        }
-        if (m_leaseRoot is null) { return new HashSet<(int, long)>(); }
+        if (LeaseRoot is not { } root) { return new HashSet<(int, long)>(); }
 
         try {
-            return WorldReadiness.ReadyAmong(root: m_leaseRoot, running: tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks));
+            return WorldReadiness.ReadyAmong(root: root, running: tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks));
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return new HashSet<(int, long)>();
         }

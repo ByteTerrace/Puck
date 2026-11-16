@@ -40,7 +40,7 @@ public static class LeaseCommand {
             foreach (var name in (settleWait is null ? names : [])) {
                 var remaining = TimeSpan.FromTicks( Math.Max(val1: 0, val2: (bound - clock.GetElapsedTime(startingTimestamp: started)).Ticks));
                 held.Add(item: await LeasedAdmission.AcquireAsync(
-                    acquire: async (left, token) => await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, checkout: (RepositoryPaths.FindRoot() ?? Environment.CurrentDirectory), lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: (left ?? TimeSpan.Zero), clock: clock, cancellationToken: token).ConfigureAwait(false),
+                    root: directory, name: name, holder: parse.GetValue(option: holder)!, lane: named,
                     admit: admit, checkout: Environment.CurrentDirectory, step: $"{verb} {parse.GetValue(option: holder)}", device: name == "gpu", heavySuite: name == "heavy",
                     kind: (selectedKind ?? (name == "gpu" ? HostStartKind.WindowedWorld : name == "heavy" ? HostStartKind.HeavySuite : HostStartKind.Step)),
                     clock: clock, bound: remaining, progress: Console.Error, stage: null, cancellationToken: cancellationToken).ConfigureAwait(false));
@@ -88,7 +88,7 @@ public static class LeaseCommand {
             }
             _ = text.Append(value: ((state.Queue.Count == 0) ? "\n" : $"; {state.Queue.Count} queued\n"));
             foreach (var (ticket, index) in state.Queue.OrderBy(keySelector: static ticket => ticket.Ahead).ThenBy(keySelector: static ticket => ticket.Id, comparer: StringComparer.Ordinal).Select(selector: static (ticket, index) => (ticket, index))) {
-                _ = text.Append(value: $"  {(index + 1)}. {ticket.Holder} (lane {ticket.Lane}){((ticket.Checkout is null) ? string.Empty : $" from {ticket.Checkout}")} waiting {Age(since: ticket.Since, now: now)}; lane {ticket.Position} of {ticket.Lanes} in the round, {ticket.Ahead} ahead\n");
+                _ = text.Append(value: $"  {(index + 1)}. {ticket.Holder} (lane {ticket.Lane}){((ticket.Checkout is null) ? string.Empty : $" from {ticket.Checkout}")} waiting {Age(since: ticket.Since, now: now)}; lane {ticket.Position} of {ticket.Lanes} in the round, {ticket.Ahead} ahead{(ticket.AdmissionBlocked ? "; waiting for host capacity" : string.Empty)}\n");
             }
         }
         return text.ToString();
@@ -115,6 +115,7 @@ public static class LeaseCommand {
                     ["ahead"] = ticket.Ahead,
                     ["position"] = ticket.Position,
                     ["lanes"] = ticket.Lanes,
+                    ["admissionBlocked"] = ticket.AdmissionBlocked,
                 });
             }
 
@@ -158,7 +159,7 @@ public static class LeaseCommand {
             if (kind is not null) { command.Options.Add(item: kind); }
 
             command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, kind: kind, lane: lane, leaseRoot: leaseRoot, names: [name], parse: parse, settle: null, settleWait: null, admit: ((name is "heavy" or "gpu") ? admit : null), verb: ("lease " + name), wait: wait));
-            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. Waiters take tickets in .claude/leases/<name>.queue and are admitted by rotation between lanes (the first word of --holder, or --lane): the oldest ticket of the lane that held the lease least recently, first come, first served within a lane; a ticket of an exited process is dropped. The exclusive guard proves ownership; stale metadata never prevents acquisition." + ((name is "heavy" or "gpu") ? " Once the lease is held, the run also waits for host headroom, the admission `puck gate` uses (free memory, a commit charge under its share of the commit limit, commit headroom for the start's expected peak, free disk" + ((name == "gpu") ? ", an idle GPU" : ", no other heavy test run") + "), within what --wait has left, and is refused (exit 2, lease released) when it does not return; the wait lines go to standard error." : string.Empty) + " Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
+            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. Waiters take tickets in .claude/leases/<name>.queue and are admitted by rotation between lanes (the first word of --holder, or --lane): the oldest ticket of the lane that held the lease least recently, first come, first served within a lane; a ticket of an exited process is dropped. The exclusive guard proves ownership; stale metadata never prevents acquisition." + ((name is "heavy" or "gpu") ? " The ticket waits without an exclusive hold for host headroom, the admission `puck gate` uses (free memory, a commit charge under its share of the commit limit, commit headroom for the start's expected peak, free disk" + ((name == "gpu") ? ", an idle GPU" : ", no other heavy test run") + "), within what --wait has left, and is refused (exit 2, ticket withdrawn) when it does not return. A fresh nonwaiting reservation under the grant guard parks the same ticket again if headroom changed, without serving its lane; the wait lines go to standard error." : string.Empty) + " Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
             root.Subcommands.Add(item: command);
         }
 
