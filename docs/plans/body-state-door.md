@@ -202,10 +202,13 @@ continuation also encodes.
 ### What already works this way
 
 - **The arena.** `StateArena.RowVersion` moves only when a row's committed
-  bytes differ, every move passes one door that also feeds a log any number of
-  readers follow from their own place (`StateArena.TryReadMoves`), a row's
-  digest is cached by its version, and a segment's digest holds until one of
-  its rows refolds (`StateArena.ComputeHash`).
+  bytes differ. The versions and the order the rows last moved in are private
+  to one type whose only mutators are a bump and a reset (`ArenaRowVersions`),
+  so nothing moves a version without its readers hearing of it; any number of
+  readers each get the distinct rows that moved since their own place
+  (`StateArena.TryReadMoves`), at a constant cost per move and with no log to
+  overflow. A row's digest is cached by its version, and a segment's digest
+  holds until one of its rows refolds (`StateArena.ComputeHash`).
 - **The cross-check.** `StateArena.RecomputeHash` and
   `WorldStateHashComposition.RecomputeAuthoritative` fold with nothing cached,
   `WorldStateHashComposition.DescribeStaleDigest` names the component that
@@ -297,8 +300,10 @@ reference (`Puck.State`), named here for the build lane to keep or change:
 
 - **A section holder** (`Versioned<T> where T : unmanaged`). It owns one
   section privately. Its read property returns `ref readonly T`. Its write
-  property moves the version, notes the slot in the population's move log, and
-  returns `ref T`. The body holds each holder in a `readonly` field.
+  property moves the section's version, bumps the body's slot in the
+  population's slot versions (the arena's `ArenaRowVersions`, shared; see
+  [decision 4](#decision-4-who-else-follows-the-versions)), and returns
+  `ref T`. The body holds each holder in a `readonly` field.
 - **An array holder** (`VersionedArray<T> where T : unmanaged`) for state whose
   length the kit decides (the recency tables, the register bookkeeping, the
   tape ring, a route's path). It reads as a `ReadOnlySpan<T>` and writes as a
@@ -374,10 +379,11 @@ or the live tail the fold reads every time.
 - State that is in no section is not hashed and not restored (DOOR004 makes
   the author label it; a wrong label shows when a restored run diverges under
   `puck test --reproduce`).
-- The parallel tick writes a partition's bodies on one worker, so a version is
-  partition-owned. The move log is shared, so each partition would note into a
-  list of its own that the ordered merge appends **[inference]**; the fold
-  itself already runs outside the tick's writers
+- The parallel tick writes a partition's bodies on one worker, so a section's
+  version is partition-owned. The slot versions are shared and their writers
+  are single-threaded with one another (`ArenaRowVersions`), so each partition
+  would note its slots in a list of its own that the ordered merge bumps
+  **[inference]**; the fold itself already runs outside the tick's writers
   ([the read boundary](engine-job-system.md#the-incremental-state-hash)).
 
 **Strongest case against.** It renames most of a nine-thousand-line type for a
@@ -436,8 +442,8 @@ not this door's; the Clocks and Cadence sections keep its cost to about 130
 bytes a body until it is done.
 
 **Strongest case against.** More sections mean more digests to combine per
-slot. The slot digest is itself cached and refolds only for a slot the move
-log names, so a tick that changes nothing folds no slot.
+slot. The slot digest is itself cached by the slot's version and refolds only
+for a slot that moved, so a tick that changes nothing folds no slot.
 
 ## Decision 3: the digest cache and its proof
 
@@ -446,9 +452,12 @@ was taken at, so a body that is replaced takes its cache with it and a new
 body starts with none. A slot's digest folds its sections' digests in a fixed
 order and then the live tail. A segment of
 `WorldPopulation.HashSegmentSlots` slots keeps its digest until one of its
-slots refolds, as the arena's segments do. The whole-population fold follows
-the move log: it refolds the slots the log names, and every slot when it has
-fallen behind the log or the population was rebuilt.
+slots refolds, as the arena's segments do. The whole-population fold is a
+reader of the slot versions: it refolds the slots that moved since its place,
+and every slot when the versions were reset (a rebuilt population). A slot
+that takes or loses its body is bumped by `Entry`'s own setters, which
+already notify the population (`WorldPopulation.DisturbBody` and the work
+sets).
 
 **The live tail** is what a body version cannot cover, read on every refold and
 small by design:
@@ -504,16 +513,18 @@ visible and names the writer to fix).
 
 - **The rule host's fact derivation.** `WorldRuleHost.DeriveFacts` compares
   every slot's pose and facts on each of eleven passes a tick (4,528 slot
-  visits **[measured]**). It becomes a reader of the move log: it visits the
-  slots noted since its place, compares the Pose and Motion versions it last
+  visits **[measured]**). It becomes a reader of the slot versions: it visits
+  the slots that moved since its place, compares the Pose and Motion versions it last
   saw, and runs its present comparison only for those, so its pose and fact
   versions keep their meaning (they move when the answer changes).
-- **The move log is the arena's, lifted.** `StateArena.TryReadMoves` is a ring
-  with a sequence, a floor and any number of readers. The population needs the
-  same thing keyed by slot, with one addition: a slot noted again before any
-  reader has passed its last note is not appended twice, or a body that writes
-  a hundred fields a step would flood the ring. One type serves both; the
-  arena's readers see fewer duplicates and nothing else.
+- **The slot versions are the arena's type, shared.** `ArenaRowVersions` is
+  already the version half of a door: a version per index, private storage,
+  two mutators, and an order threaded through the indices so each reader is
+  handed every index that moved since its place, once, however often it
+  moved. A body that writes a hundred fields in a step costs it one relink.
+  It is internal to the arena and named for rows; the step makes it a shared
+  type keyed by an index and gives each population one instance keyed by
+  slot. Nothing is added to it.
 - **The overlapping components.** `PopulationPose` becomes the fold of the
   Pose digests, `BodyActionState` the fold of the Action digests and one
   declaration digest per kit, and the per-body halves of `Flock` and
@@ -548,14 +559,14 @@ headless debug world with a recording armed, the per-tick cost of
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
 | D1. Sections as images | Medium | The section structs as capture images built from today's fields; a static encoder per section; the slot digest as a fold of section digests and the live tail; the registers out of the whole-population fold; the per-section counters; the codec coverage law | None yet: every section encodes fresh | `puck test --reproduce --jobs 1` on the go, chess and garden tests; the counters over ticks 300 to 600 with a recording armed read 590 slots and this memo's per-range bytes, less the registers' 218,886 a tick; the law that a captured population's digest equals the live fold |
-| D2. The door types | Small | The section, array and record holders; the move log lifted from the arena with the arena on it; DOOR001 to DOOR003; a law that compiles the spike's statements and asserts each diagnostic | The holders, used by nothing in the body yet | The refusal law; the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged |
+| D2. The door types | Small | The section, array and record holders; `ArenaRowVersions` as a shared type with the arena on it; DOOR001 to DOOR003; a law that compiles the spike's statements and asserts each diagnostic | The holders, used by nothing in the body yet | The refusal law; the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged |
 | D3. The Action section | Medium | The per-channel arrays as inline arrays in a holder; the bookkeeping arrays in array holders | The Action holder | Hashes equal D1's (`puck test --compare` against D1's `--record`); encoded bytes fall by about 2.5 MB a tick; zero stale digests on every replayed tick; unchanged encodes near zero |
 | D4. The Input section | Medium | The intent images and flags | The Input holder | The same, with about 1.4 MB a tick fewer bytes; the walkthrough routes reproduce |
 | D5. Pose, Motion, Clocks and Tape | Large | The remaining body fields; the capture, apply and step-snapshot functions as section copies; the crossing's image as a projection | Their holders | The same; the walkthrough routes reproduce; a refused sweep still restores (the sweep refusal laws) |
 | D6. Contacts | Medium | The contact set's read view and the population's writable take | The contact set | The same; chess and go reproduce with parked islands waking and parking |
-| D7. The entry | Medium | Admission, Producer, Cadence and Navigation sections on `Entry`; the fold following the move log; slot and segment digests cached | Their holders | The same; parked slots encode nothing over the window; encoded bytes a tick are the changed sections' (tens of kilobytes); slot refolds equal the slots the log named |
+| D7. The entry | Medium | Admission, Producer, Cadence and Navigation sections on `Entry`; the fold reading the slot versions; slot and segment digests cached | Their holders | The same; parked slots encode nothing over the window; encoded bytes a tick are the changed sections' (tens of kilobytes); slot refolds equal the slots that moved |
 | D8. Every field labelled | Small | DOOR004 and the labels on what is left outside the sections | The analyzer | The build |
-| D9. The followers | Medium | The fact derivation on the move log; the pose, action, flock and navigation components from section digests | The move log | Fact slot visits a tick fall from 4,528 to the moved slots times the passes; rule due, evaluation, firing and skip counts unchanged; reproduce passes (hashes change once here) |
+| D9. The followers | Medium | The fact derivation on the slot versions; the pose, action, flock and navigation components from section digests | The slot versions | Fact slot visits a tick fall from 4,528 to the moved slots times the passes; rule due, evaluation, firing and skip counts unchanged; reproduce passes (hashes change once here) |
 | D10. The rule latch | Medium | Name digests, the edge-bit door and the per-rule digest, with the two-dictionary merge | The latch's holder | Latch and undo laws; the rule-faults tests reproduce; the recompute covers the latch |
 | D11. The input owners | Medium | The writer inventory, then the holders and a digest per owner | Their holders | The input laws; the walkthrough routes reproduce |
 
@@ -568,7 +579,7 @@ step only changes where a section's value is stored.
 | System | Verdict | Why |
 |---|---|---|
 | `StateArena.RowVersion` and its row digests | The pattern, not the store | Version, cached digest, segment digest, recompute and sample are copied in shape; body fields as arena cells (1f) would journal the body step |
-| `StateArena.TryReadMoves` (the move feed) | Reused, lifted to a shared type | The same ring with reader places; one addition, noted under decision 4 |
+| `ArenaRowVersions` and `StateArena.TryReadMoves` | Reused, lifted to a shared type | A version per index behind two mutators, with reader places and each moved index handed over once; the population keys one by slot |
 | `StateArena.CheckDigests`, `WorldPersistence.StaleDigest` | Reused | The sample and its narration are the same check for another cache |
 | `WorldStateHashComposition.RecomputeAuthoritative`, `WorldReplayProbe.VerifiesIncrementalHash` | Reused | The existing switch; the continuation arm starts honouring the flag it is already passed |
 | The `field` keyword (`StateSection`'s frozen lists, `Entry`'s occupancy) | Kept where it is | Right for a scalar whose setter has a side effect; fails arrays and mutable structs (the spike) |
@@ -585,7 +596,7 @@ step only changes where a section's value is stored.
 | Borrowed | Puck-native beside it | Taken |
 |---|---|---|
 | A smart pointer that flags a component changed on mutable access (Bevy's `Mut<T>`) | The same door, with the digest and the version inside the holder so a replaced body cannot reuse a digest | Both: 1d is the borrowed door |
-| Change versions per chunk and component type, moved when write access is requested (Unity's entities) | Versions per body section, grouped by measured change rate, feeding one move log every reader follows | The native grouping |
+| Change versions per chunk and component type, moved when write access is requested (Unity's entities) | Versions per body section, grouped by measured change rate, with one order of moved slots every reader follows from its own place | The native grouping |
 | Writing only when the value differs (`set_if_neq`) | Counting the encodes that changed nothing, and fixing the writer the count names | The count first; a compare at a writer where it pays |
 | A content hash as the cache key (1e) | The version as the key and the content compare as the check | The native one, at scale |
 
