@@ -1,16 +1,16 @@
 using Puck.Maths;
 using Puck.Networking;
+using Puck.Commands;
 using Puck.Physics.Navigation;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteTargetDesignation(WireWriter writer, WorldTargetDesignation target) {
+    internal static void WriteTargetDesignation(WireWriter writer, WorldTargetDesignation target) {
         writer.WriteInt32(value: target.Index);
         writer.WriteFixedVector(value: target.Point);
     }
-    private static WorldTargetDesignation ReadTargetDesignation(ref WireReader reader) {
+    internal static WorldTargetDesignation ReadTargetDesignation(ref WireReader reader) {
         var index = reader.ReadInt32();
         var point = reader.ReadFixedVector();
 
@@ -20,9 +20,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
 
-    /// <summary>Folds the simulation continuation of captured population entries through the checkpoint's field codecs,
-    /// excluding rendered appearance: the value <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/> folds from the live
-    /// slots the entries were captured from.</summary>
+
+    /// <summary>Folds the simulation continuation of captured population entries: the value
+    /// <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/> folds from the live slots the entries were
+    /// captured from. Each slot's digest folds its sections' digests, the slots fold into segments, and what no slot
+    /// digest holds (the resting bodies' contact-field observations and the profiles) folds beside the segments.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="entries">The entries, in slot order.</param>
     /// <param name="capacity">The population's slot count; every entry's index is below it.</param>
@@ -34,21 +36,47 @@ public static partial class WorldAuthorityCheckpointCodec {
         var writer = new WireWriter();
         var digests = new ulong[capacity];
         var present = new bool[capacity];
+        var beside = ContinuationBeside.Create();
 
         for (var index = 0; (index < entries.Count); index++) {
             var entry = entries[index];
 
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: capacity, value: entry.Index);
             present[entry.Index] = true;
-            digests[entry.Index] = ContinuationDigest(entry: entry, writer: writer);
+            digests[entry.Index] = ContinuationSlotDigest(entry: ref entry, work: null, writer: writer);
+            beside.Add(entry: in entry, work: null, writer: writer);
         }
         FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
+        beside.Fold(hash: ref hash);
     }
 
-    // One slot's continuation digest: the entry's continuation bytes, hashed alone.
-    internal static ulong ContinuationDigest(WireWriter writer, in WorldPopulationEntryCheckpoint entry) {
+    /// <summary>The digest of one section: its encoded bytes, hashed alone.</summary>
+    /// <typeparam name="TSection">The section type.</typeparam>
+    /// <param name="writer">The scratch writer the section is encoded into.</param>
+    /// <param name="section">The section.</param>
+    /// <returns>The digest.</returns>
+    public static ulong SectionDigest<TSection>(WireWriter writer, in TSection section) where TSection : struct, IContinuationSection<TSection> {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
         writer.Reset();
-        WriteContinuationEntry(entry: entry, writer: writer);
+        TSection.Write(section: in section, writer: writer);
+        return Fnv1aHash.Compute(values: writer.WrittenSpan);
+    }
+
+    // One slot's continuation digest: the digests of its folded sections, in the continuation's order, and nothing
+    // else. Nothing a section does not hold can reach it.
+    internal static ulong ContinuationSlotDigest(WireWriter writer, ref WorldPopulationEntryCheckpoint entry, WorldContinuationFoldWork? work) {
+        var digester = new SectionDigester(hash: Fnv1aHash.Create(), work: work, writer: writer);
+
+        WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref digester);
+        return digester.Hash.Value;
+    }
+    // The digest of what a slot's checkpoint carries beside its sections, for a fold that compares one body's whole
+    // image (a replay scope's): encoded afresh, cached nowhere.
+    internal static ulong ContinuationTailDigest(WireWriter writer, in WorldPopulationEntryTail tail, WorldContinuationFoldWork? work) {
+        writer.Reset();
+        WriteTail(tail: in tail, writer: writer);
+        if (work is not null) { work.TailBytes += writer.WrittenSpan.Length; }
         return Fnv1aHash.Compute(values: writer.WrittenSpan);
     }
     // The continuation's shape: the slot count, then one digest per segment of WorldPopulation.HashSegmentSlots slots,
@@ -66,329 +94,131 @@ public static partial class WorldAuthorityCheckpointCodec {
             hash.Add(value: segment.Value);
         }
     }
-    /// <summary>Writes one entry's simulation continuation: its checkpoint encoding without the rendered
-    /// appearance.</summary>
-    /// <param name="writer">The writer.</param>
-    /// <param name="entry">The entry.</param>
-    internal static void WriteContinuationEntry(WireWriter writer, in WorldPopulationEntryCheckpoint entry) => WritePopulationEntry(
-        entry: in entry,
-        includeAppearance: false,
-        writer: writer
-    );
 
-    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) =>
-        WritePopulationEntry(entry: entry, includeAppearance: true, writer: writer);
-    private static void WritePopulationEntry(WireWriter writer, in WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
+    /// <summary>The parts of a population's continuation that no slot digest folds, accumulated slot by slot in slot
+    /// order and folded once, beside the segments. Each is a value a body's own state cannot key: a relation to the
+    /// process's contact-field counters, or a profile its identity can change with no write to the body.</summary>
+    /// <remarks>The parked rigid bodies observe the field together, so they fold as one bit; an asleep kit body folds
+    /// its own slot and bit; an awake body's observation is current by construction and folds nothing. A profiled
+    /// slot folds its slot and its projection's digest, taken from the projection's content on every fold.</remarks>
+    internal struct ContinuationBeside {
+        private bool m_parkedObservationCurrent;
+        private uint m_asleepCount;
+        private Fnv1aHash m_asleep;
+        private uint m_profileCount;
+        private Fnv1aHash m_profiles;
+
+        internal static ContinuationBeside Create() => new() {
+            m_asleep = Fnv1aHash.Create(),
+            m_parkedObservationCurrent = true,
+            m_profiles = Fnv1aHash.Create(),
+        };
+
+        internal void Add(WireWriter writer, in WorldPopulationEntryCheckpoint entry, WorldContinuationFoldWork? work) {
+            if (entry.Body.Clocks.RigidSleepRootPlusOne != 0) {
+                m_parkedObservationCurrent &= entry.Tail.ContactFieldObservationCurrent;
+            } else if (entry.Body.Clocks.AsleepSinceTick != 0UL) {
+                m_asleepCount++;
+                m_asleep.Add(value: ((uint)entry.Index));
+                m_asleep.Add(value: (entry.Tail.ContactFieldObservationCurrent ? ((byte)1) : ((byte)0)));
+            }
+            if (entry.Tail.Profile is { } profile) {
+                writer.Reset();
+                WorldIdentityProjectionWire.Write(projection: profile, writer: writer);
+                m_profileCount++;
+                m_profiles.Add(value: ((uint)entry.Index));
+                m_profiles.Add(value: Fnv1aHash.Compute(values: writer.WrittenSpan));
+                if (work is not null) {
+                    work.Profiles++;
+                    work.ProfileBytes += writer.WrittenSpan.Length;
+                }
+            }
+        }
+        internal readonly void Fold(ref Fnv1aHash hash) {
+            hash.Add(value: (m_parkedObservationCurrent ? ((byte)1) : ((byte)0)));
+            hash.Add(value: m_asleepCount);
+            hash.Add(value: m_asleep.Value);
+            hash.Add(value: m_profileCount);
+            hash.Add(value: m_profiles.Value);
+        }
+    }
+
+    private struct SectionDigester(WireWriter writer, Fnv1aHash hash, WorldContinuationFoldWork? work) : IContinuationSectionVisitor {
+        internal Fnv1aHash Hash = hash;
+
+        public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> {
+            if (!TSection.Folded) { return; }
+            Hash.Add(value: SectionDigest(section: in section, writer: writer));
+            if (work is not null) {
+                work.SectionEncodes[((int)TSection.Section)]++;
+                work.SectionBytes[((int)TSection.Section)] += writer.WrittenSpan.Length;
+            }
+        }
+    }
+    private readonly struct SectionWriter(WireWriter writer) : IContinuationSectionVisitor {
+        public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> =>
+            TSection.Write(section: in section, writer: writer);
+    }
+    private ref struct SectionReader : IContinuationSectionVisitor {
+        internal WireReader Reader;
+
+        public void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection> =>
+            section = TSection.Read(reader: ref Reader);
+    }
+
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
+        var sections = new SectionWriter(writer: writer);
+
         writer.WriteInt32(value: entry.Index);
-        writer.WriteByte(value: entry.KitIndex);
-        writer.WriteInt32(value: entry.SelectedKit);
-        writer.WriteFixed(value: entry.Scale);
-        if (includeAppearance) {
-            writer.WriteInt32(value: entry.SelectedLook);
-            writer.WriteVector(value: entry.BodyColor);
-            writer.WriteByte(value: entry.CatalogRig);
-            // The arrival turn a seat's view carries across crossings: presentation, which the simulation never reads.
-            writer.WriteFixed(value: entry.TravelTurn);
-        }
-        writer.WriteArray(
-            items: entry.Designations,
-            writeItem: WriteTargetDesignation
-        );
-        writer.WriteInt32(value: entry.Generation);
-        writer.WriteBoolean(value: entry.IsAuthorityTransferred);
-        writer.WriteBoolean(value: entry.IsRemoteHuman);
-        writer.WriteOptional(
-            value: entry.Mobility,
-            writeValue: WorldWireLeaves.WriteMobility
-        );
-        writer.WriteInt32(value: entry.MobilityGeneration);
-        writer.WriteBoolean(value: entry.Parked);
-        writer.WriteOptional(
-            value: entry.ParkedUntilTick,
-            writeValue: static (w, v) => w.WriteInt64(value: v)
-        );
-        writer.WriteNullableString(value: entry.PlacementId);
-        writer.WriteBoolean(value: entry.Titled);
-        writer.WriteFixedVector(value: entry.SpawnPosition);
-        writer.WriteFixed(value: entry.SpawnYaw);
-        writer.WriteArray(
-            items: entry.AdmissionInstalledGrantTemplates,
-            writeItem: WriteAdmissionGrant
-        );
-        writer.WriteArray(
-            items: entry.AdmissionRevokedKeys,
-            writeItem: static (w, row) => {
-                WriteCapability(
-                    capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
-                );
-            }
-        );
-        writer.WriteString(value: entry.IdentityDomain);
-        writer.WriteString(value: entry.IdentitySubject);
-        WorldWireLeaves.WriteAdmissionTrust(writer: writer, trust: entry.AdmissionTrust);
-        writer.WriteInt32(value: entry.ProducerAcquiredTarget);
-        writer.WriteFixed(value: entry.ProducerActivityPhase);
-        writer.WriteFixed(value: entry.ProducerActivityRate);
-        writer.WriteFixed(value: entry.ProducerPhase);
-        writer.WriteFixed(value: entry.ProducerPreferredAltitude);
-        writer.WriteFixed(value: entry.ProducerWeaveFrequency);
-        writer.WriteInt64(value: entry.ProducerCurveArcRaw);
-        writer.WriteNullableString(value: entry.ProducerActiveName);
-        writer.WriteInt32(value: entry.ProducerActiveCurveIndex);
-        writer.WriteBoolean(value: entry.Flock.Seeded);
-        writer.WriteInt32(value: entry.Flock.Generation);
-        writer.WriteFixedVector(value: entry.Flock.Desired);
-        writer.WriteUInt64(value: entry.Flock.RemainingTicks);
-        writer.WriteUInt64(value: entry.Flock.SampleOrdinal);
-        writer.WriteBoolean(value: (entry.Flock.Target is not null));
-        if (entry.Flock.Target is { } observed) {
-            writer.WriteInt32(value: observed.Index);
-            writer.WriteInt32(value: observed.Generation);
-            writer.WriteFixedVector(value: observed.Position);
-        }
-        writer.WriteUInt64(value: entry.Autonomy.MotionPeriodTicks);
-        writer.WriteUInt64(value: entry.Autonomy.MotionElapsedTicks);
-        writer.WriteUInt64(value: entry.Autonomy.MotionRemainingTicks);
-        writer.WriteUInt64(value: entry.Autonomy.SteeringPeriodTicks);
-        writer.WriteUInt64(value: entry.Autonomy.SteeringElapsedTicks);
-        writer.WriteUInt64(value: entry.Autonomy.SteeringRemainingTicks);
-        WorldWireCodec.WriteIntent(
-            writer,
-            entry.Autonomy.SteeringIntent
-        );
-        writer.WriteBoolean(value: entry.Autonomy.SteeringSeeded);
-        writer.WriteFixedVector(value: entry.Position);
-        writer.WriteFixed(value: entry.Yaw);
-        WriteTransferState(
-            writer: writer,
-            state: entry.DynamicState
-        );
-        WriteResidue(
-            writer: writer,
-            residue: entry.Residue
-        );
-        writer.WriteArray(
-            items: entry.RigidContacts,
-            writeItem: static (w, slot) => {
-                w.WriteInt32(value: slot.Partner);
-                w.WriteInt32(value: slot.Slot);
-                w.WriteInt32(value: slot.SourceId);
-                w.WriteInt32(value: slot.FeatureId);
-                w.WriteFixedVector(value: slot.AnchorA);
-                w.WriteFixedVector(value: slot.AnchorB);
-                w.WriteFixedVector(value: slot.Normal);
-                w.WriteInt64(value: slot.NormalImpulseRaw);
-                w.WriteFixedVector(value: slot.FrictionImpulse);
-                w.WriteInt32(value: slot.IdleSteps);
-            }
-        );
+        WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref sections);
+        WriteTail(tail: in entry.Tail, writer: writer);
+    }
+    private static void WriteTail(WireWriter writer, in WorldPopulationEntryTail tail) {
+        writer.WriteBoolean(value: tail.ContactFieldObservationCurrent);
         WorldIdentityProjectionWire.WriteOptional(
-            projection: entry.Profile,
+            projection: tail.Profile,
             writer: writer
         );
-        writer.WriteOptional(
-            value: entry.Navigation,
-            writeValue: static (w, navigation) => {
-                w.WriteInt32(value: navigation.ActiveProducerDomainIndex);
-                w.WriteInt32(value: navigation.DomainIndex);
-                w.WriteInt32(value: navigation.GoalCell);
-                w.WriteInt32(value: navigation.Waypoint);
-                w.WriteInt32(value: navigation.ExpandedLast);
-                w.WriteByte(value: checked((byte)navigation.Status));
-                w.WriteArray(
-                    items: navigation.Path,
-                    writeItem: static (pathWriter, value) => pathWriter.WriteInt32(value: value)
-                );
-            }
-        );
+        WriteLongs(values: tail.Registers.Span, writer: writer);
     }
     private static WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
-        var index = reader.ReadInt32();
-        var kitIndex = reader.ReadByte();
-        var selectedKit = reader.ReadInt32();
-        var scale = reader.ReadFixed();
-        var selectedLook = reader.ReadInt32();
-        var bodyColor = reader.ReadFiniteVector(field: "population entry body color");
-        var catalogRig = reader.ReadByte();
-        var travelTurn = WorldWireLeaves.ReadTravelTurn(
-            field: "population entry travel turn",
-            reader: ref reader
-        );
-        var designations = reader.ReadArray(
-            field: "population entry designations",
-            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r),
-            maximum: MaxCollectionCount
-        );
-        var generation = reader.ReadInt32();
-        var isAuthorityTransferred = reader.ReadBoolean();
-        var isRemoteHuman = reader.ReadBoolean();
-        var mobility = reader.ReadOptional(
-            readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
-        );
-        var mobilityGeneration = reader.ReadInt32();
-        var parked = reader.ReadBoolean();
-        var parkedUntilTick = reader.ReadOptional(
-            readValue: static (ref WireReader r) => r.ReadInt64()
-        );
-        var placementId = reader.ReadNullableString(
-            field: "population entry placement id",
-            maxBytes: MaxStringBytes
-        );
-        var titled = reader.ReadBoolean();
-        var spawnPosition = reader.ReadFixedVector();
-        var spawnYaw = reader.ReadFixed();
-        var admissionInstalledGrantTemplates = reader.ReadArray(
-            field: "population entry admission templates",
-            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r),
-            maximum: MaxCollectionCount
-        );
-        var admissionRevokedKeys = reader.ReadArray(
-            field: "population entry admission revoked keys",
-            readItem: static (ref WireReader r) => {
-                var capability = WorldWireCodec.ReadCapability(reader: ref r);
-                var subject = WorldWireCodec.ReadSubject(reader: ref r);
+        var entry = default(WorldPopulationEntryCheckpoint);
 
-                return (capability, subject);
-            },
-            maximum: MaxCollectionCount
-        );
-        var identityDomain = reader.ReadString(
-            field: "population entry identity domain",
-            maxBytes: MaxStringBytes
-        );
-        var identitySubject = reader.ReadString(
-            field: "population entry identity subject",
-            maxBytes: MaxStringBytes
-        );
-        var admissionTrust = WorldWireLeaves.ReadAdmissionTrust(reader: ref reader);
-        var producerAcquiredTarget = reader.ReadInt32();
-        var producerActivityPhase = reader.ReadFixed();
-        var producerActivityRate = reader.ReadFixed();
-        var producerPhase = reader.ReadFixed();
-        var producerPreferredAltitude = reader.ReadFixed();
-        var producerWeaveFrequency = reader.ReadFixed();
-        var producerCurveArcRaw = reader.ReadInt64();
-        var producerActiveName = reader.ReadNullableString(
-            field: "population entry producer active name",
-            maxBytes: MaxStringBytes
-        );
-        var producerActiveCurveIndex = reader.ReadInt32();
-        var flock = new WorldPopulationFlockCheckpoint(
-            reader.ReadBoolean(),
-            reader.ReadInt32(),
-            reader.ReadFixedVector(),
-            reader.ReadUInt64(),
-            reader.ReadUInt64()
-        );
+        entry.Index = reader.ReadInt32();
 
-        if (reader.ReadBoolean()) {
-            flock = flock with {
-                Target = new WorldFlockObservation(
-                reader.ReadInt32(),
-                reader.ReadInt32(),
-                reader.ReadFixedVector()
-            ),
-            };
+        var sections = new SectionReader { Reader = reader };
+
+        WorldPopulationEntryCheckpoint.VisitSections(entry: ref entry, visitor: ref sections);
+        reader = sections.Reader;
+        entry.Tail = new(
+            ContactFieldObservationCurrent: reader.ReadBoolean(),
+            Profile: WorldIdentityProjectionWire.ReadOptional(reader: ref reader),
+            Registers: ReadLongArray(field: "action state lane image", reader: ref reader)
+        );
+        if (reader.Failed) {
+            return entry;
         }
-        var autonomy = new WorldPopulationAutonomyCheckpoint(
-            MotionPeriodTicks: reader.ReadUInt64(),
-            MotionElapsedTicks: reader.ReadUInt64(),
-            MotionRemainingTicks: reader.ReadUInt64(),
-            SteeringPeriodTicks: reader.ReadUInt64(),
-            SteeringElapsedTicks: reader.ReadUInt64(),
-            SteeringRemainingTicks: reader.ReadUInt64(),
-            SteeringIntent: WorldWireCodec.ReadIntent(reader: ref reader),
-            SteeringSeeded: reader.ReadBoolean()
-        );
-        var position = reader.ReadFixedVector();
-        var yaw = reader.ReadFixed();
-        var dynamicState = ReadTransferState(reader: ref reader);
-        var residue = ReadResidue(reader: ref reader);
-        var rigidContacts = reader.ReadArray(
-            field: "population entry rigid contacts",
-            readItem: static (ref WireReader r) => new WorldRigidContactSlotImage(
-                Partner: r.ReadInt32(),
-                Slot: r.ReadInt32(),
-                SourceId: r.ReadInt32(),
-                FeatureId: r.ReadInt32(),
-                AnchorA: r.ReadFixedVector(),
-                AnchorB: r.ReadFixedVector(),
-                Normal: r.ReadFixedVector(),
-                NormalImpulseRaw: r.ReadInt64(),
-                FrictionImpulse: r.ReadFixedVector(),
-                IdleSteps: r.ReadInt32()
-            ),
-            maximum: WorldPopulation.MaximumRigidContactSlotsPerBody
-        );
-        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
-        var navigation = reader.ReadOptional(
-            readValue: static (ref WireReader r) => new WorldPopulationNavigationCheckpoint(
-                ActiveProducerDomainIndex: r.ReadInt32(),
-                DomainIndex: r.ReadInt32(),
-                GoalCell: r.ReadInt32(),
-                Waypoint: r.ReadInt32(),
-                ExpandedLast: r.ReadInt32(),
-                Status: ((NavigationStatus)r.ReadByte()),
-                Path: r.ReadArray(
-                    field: "population entry navigation path",
-                    readItem: static (ref WireReader pathReader) => pathReader.ReadInt32(),
-                    maximum: WorldNavigationCapacity.MaxPathNodes
-                )
-            )
-        );
 
-        return new WorldPopulationEntryCheckpoint(
-            AdmissionInstalledGrantTemplates: admissionInstalledGrantTemplates,
-            AdmissionRevokedKeys: admissionRevokedKeys,
-            AdmissionTrust: admissionTrust,
-            Autonomy: autonomy,
-            BodyColor: bodyColor,
-            CatalogRig: catalogRig,
-            Designations: designations,
-            DynamicState: dynamicState,
-            Flock: flock,
-            Generation: generation,
-            IdentityDomain: identityDomain,
-            IdentitySubject: identitySubject,
-            Index: index,
-            IsAuthorityTransferred: isAuthorityTransferred,
-            IsRemoteHuman: isRemoteHuman,
-            KitIndex: kitIndex,
-            Mobility: mobility,
-            MobilityGeneration: mobilityGeneration,
-            Navigation: navigation,
-            Parked: parked,
-            ParkedUntilTick: parkedUntilTick,
-            PlacementId: placementId,
-            Position: position,
-            ProducerAcquiredTarget: producerAcquiredTarget,
-            ProducerActiveCurveIndex: producerActiveCurveIndex,
-            ProducerActiveName: producerActiveName,
-            ProducerActivityPhase: producerActivityPhase,
-            ProducerActivityRate: producerActivityRate,
-            ProducerCurveArcRaw: producerCurveArcRaw,
-            ProducerPhase: producerPhase,
-            ProducerPreferredAltitude: producerPreferredAltitude,
-            ProducerWeaveFrequency: producerWeaveFrequency,
-            Profile: profile,
-            Residue: residue,
-            RigidContacts: rigidContacts,
-            Scale: scale,
-            SelectedKit: selectedKit,
-            SelectedLook: selectedLook,
-            SpawnPosition: spawnPosition,
-            SpawnYaw: spawnYaw,
-            Titled: titled,
-            TravelTurn: travelTurn,
-            Yaw: yaw
-        );
-    }
-    private static byte[] EncodePopulation(WorldPopulationCheckpoint section) {
+        // What is consistent only across sections: every live scripted duration names the actor who authorized it.
+        var timerTicks = entry.Body.Action.TimerTicks.Span;
+        var pendingPress = entry.Body.Action.PendingPress.Span;
+        var timerActors = entry.Body.ScriptActors.Timers.Span;
+        var pendingActors = entry.Body.ScriptActors.Pending.Span;
+
+        for (var ordinal = 0; (ordinal < timerTicks.Length); ordinal++) {
+            if ((timerTicks[ordinal] > 0UL) && (timerActors[ordinal] == default(Principal))) {
+                reader.Fail(detail: "live scripted timer has no actor", refusal: WireRefusal.PayloadMalformed);
+            }
+            if (pendingPress[ordinal] && (pendingActors[ordinal] == default(Principal))) {
+                reader.Fail(detail: "pending scripted press has no actor", refusal: WireRefusal.PayloadMalformed);
+            }
+        }
+        foreach (ref readonly var segment in entry.Body.Tape.Segments.Span) {
+            if (segment.Actor == default(Principal)) { reader.Fail(detail: "scripted tape segment has no actor", refusal: WireRefusal.PayloadMalformed); }
+        }
+
+        return entry;
+    }    private static byte[] EncodePopulation(WorldPopulationCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteInt32(value: section.SimulatedCount);

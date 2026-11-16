@@ -11,49 +11,66 @@ public sealed partial class WorldPopulation {
     /// <remarks>It is the parallel tick's body partition, so a partitioned fold takes whole segments.</remarks>
     public const int HashSegmentSlots = 32;
 
-    /// <summary>Folds every active slot's simulation continuation through the checkpoint's field codecs, excluding
-    /// rendered color and rig, so state the pose hash does not read (a velocity, an integration remainder, a channel
-    /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a completed step and the
-    /// next; the authoritative hash takes it on every tick a replay records or a history captures. Each slot's digest
-    /// is the bytes <see cref="WorldAuthorityCheckpointCodec.WriteContinuationEntry"/> encodes for the entry
-    /// <see cref="Capture"/> returns, written into a writer the population reuses, so the fold allocates nothing once
-    /// that scratch has grown to the population's shape. Every slot folds into its segment of
-    /// <see cref="HashSegmentSlots"/>, and the segments into the hash.</summary>
+    /// <summary>Folds the population's simulation continuation, excluding the rendered look, so state the pose hash
+    /// does not read (a velocity, an integration remainder, a channel timer) still separates two runs. Called where
+    /// <see cref="Capture"/> may be, between a completed step and the next; the authoritative hash takes it on every
+    /// tick a replay records or a history captures. Each active slot's digest folds the digests of its sections
+    /// (<see cref="WorldPopulationEntryCheckpoint.VisitSections"/>), each section encoded by its own static encoder
+    /// from a view of the live slot; every slot folds into its segment of <see cref="HashSegmentSlots"/>, and the
+    /// segments into the hash. What no slot digest holds is folded beside the segments, read afresh on every fold:
+    /// the resting bodies' contact-field observations and each profiled slot's projection, by content. The register
+    /// values are the arena's, whose own component folds them. The fold writes into scratch the population reuses,
+    /// so it allocates nothing once that scratch has grown to the population's shape.</summary>
     /// <param name="hash">The hash to fold into.</param>
-    /// <remarks>Every slot encodes afresh on every fold. A body's continuation spans dozens of fields and arrays its
-    /// step, commands, contacts and tethers write directly, so no version covers it; a cached slot digest would need
-    /// every one of those writes to pass one door that moves a version.</remarks>
+    /// <remarks>Every section of every active slot encodes afresh on every fold: a body's state is written directly
+    /// by its step, commands, contacts and tethers, so nothing yet says a section is unchanged.</remarks>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     public void AppendContinuationHash(ref Fnv1aHash hash) {
         RequireCapturePoint();
         WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
 
         var digests = ((m_foldDigests.Length == Capacity) ? m_foldDigests : (m_foldDigests = new ulong[Capacity]));
         var present = ((m_foldPresent.Length == Capacity) ? m_foldPresent : (m_foldPresent = new bool[Capacity]));
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var work = (m_foldWork ??= new WorldContinuationFoldWork());
+        var beside = WorldAuthorityCheckpointCodec.ContinuationBeside.Create();
 
         WorldTickWork.Process.Add(amount: Capacity, kind: WorldTickWork.ContinuationSlots);
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
             present[index] = (entry is { Active: true, Body: not null });
-            digests[index] = ((entry is { Active: true, Body: { } body })
-                ? SlotDigest(body: body, entry: entry, index: index)
-                : 0UL);
+            digests[index] = 0UL;
+            if (entry is { Active: true, Body: { } body }) {
+                EntryCheckpoint(alias: true, body: body, entry: entry, image: out var image, index: index);
+                digests[index] = WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, work: work, writer: writer);
+                beside.Add(entry: in image, work: work, writer: writer);
+                work.Slots++;
+            }
         }
         WorldAuthorityCheckpointCodec.FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
+        beside.Fold(hash: ref hash);
+        work.Publish();
     }
-    /// <summary>Folds the simulation continuation of the named slots that hold an active body, as
-    /// <see cref="AppendContinuationHash(ref Fnv1aHash)"/> folds each slot's: their count, then each one's digest in
-    /// the order given. The fold visits the named slots alone, never the rest of the population.</summary>
+    /// <summary>Folds the simulation continuation of the named slots that hold an active body: their count, then, in
+    /// the order given, each one's slot digest (the fold of its sections' digests, as
+    /// <see cref="AppendContinuationHash(ref Fnv1aHash)"/> takes it) and the digest of its tail, encoded afresh. A
+    /// scope compares one body's whole image and not the arena or the population, so its fold reads the register
+    /// values, the profile and the body's own contact-field observation with the body. The fold visits the named
+    /// slots alone, never the rest of the population.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="bodies">The slots to fold, ascending.</param>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     public void AppendContinuationHash(ref Fnv1aHash hash, ReadOnlySpan<int> bodies) {
         RequireCapturePoint();
         WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
         WorldTickWork.Process.Add(amount: bodies.Length, kind: WorldTickWork.ContinuationSlots);
 
         var count = 0;
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var work = (m_foldWork ??= new WorldContinuationFoldWork());
 
         foreach (var index in bodies) {
             if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: not null })) { count++; }
@@ -61,31 +78,19 @@ public sealed partial class WorldPopulation {
         hash.Add(value: ((uint)count));
         foreach (var index in bodies) {
             if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
-                hash.Add(value: SlotDigest(body: body, entry: entry, index: index));
+                EntryCheckpoint(alias: true, body: body, entry: entry, image: out var image, index: index);
+                hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, work: work, writer: writer));
+                hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationTailDigest(tail: in image.Tail, work: work, writer: writer));
+                work.Slots++;
             }
         }
+        work.Publish();
     }
 
-    // The fold's per-slot scratch, reused from one fold to the next.
+    // The fold's per-slot scratch and its work counts, reused from one fold to the next.
     private ulong[] m_foldDigests = [];
     private bool[] m_foldPresent = [];
-
-    private ulong SlotDigest(int index, Entry entry, WorldBody body) {
-        var writer = (m_continuationWriter ??= new WireWriter());
-        var digest = WorldAuthorityCheckpointCodec.ContinuationDigest(
-            entry: EntryCheckpoint(
-                alias: true,
-                body: body,
-                entry: entry,
-                index: index
-            ),
-            writer: writer
-        );
-
-        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationEncodes);
-        WorldTickWork.Process.Add(amount: writer.WrittenSpan.Length, kind: WorldTickWork.ContinuationBytes);
-        return digest;
-    }
+    private WorldContinuationFoldWork? m_foldWork;
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
@@ -114,12 +119,8 @@ public sealed partial class WorldPopulation {
             var entry = m_entries[index];
 
             if (entry is { Active: true, Body: { } body }) {
-                entries.Add(item: EntryCheckpoint(
-                    alias: false,
-                    body: body,
-                    entry: entry,
-                    index: index
-                ));
+                EntryCheckpoint(alias: false, body: body, entry: entry, image: out var image, index: index);
+                entries.Add(item: image);
             }
         }
 
@@ -135,9 +136,10 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: "a population checkpoint requires every pending-output list to be empty — capture only between a completed Step and the next StepInstances.");
         }
     }
-    // The one statement of what a slot's checkpoint entry holds. A capture copies every collection; a view aliases
-    // the slot's live collections and assembles the rest into the population's scratch, valid until the next view.
-    private WorldPopulationEntryCheckpoint EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias) {
+    // The one statement of what a slot's checkpoint entry holds: the body's sections, the entry's sections and the
+    // tail. A capture copies every table; a view aliases the slot's live tables and assembles the rest into scratch
+    // the body and the population reuse, valid until the next view.
+    private void EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias, out WorldPopulationEntryCheckpoint image) {
         List<(WorldCapability, GrantSubject)> revokedKeys;
 
         if (alias) {
@@ -155,64 +157,47 @@ public sealed partial class WorldPopulation {
             return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
         });
 
-        var residue = body.CaptureIntegrationResidue();
-        // Only a parked rigid body or an asleep one compares its observation with the field, to decide whether to wake;
-        // an awake body overwrites it (ParkRigidIsland, UpdateSleepEligibility) before any read. Its observation is
-        // current by construction, so the image never carries a stale stamp that would tie a body's continuation to
-        // field changes elsewhere in the world (a scoped replay compares that image across drives). The parked rigid
-        // bodies observe the field together, through the population's own observation, which a bounded change that
-        // reaches none of them advances without visiting any.
-        var contactFieldObservationCurrent = ((residue.RigidSleepRootPlusOne != 0)
-            ? (m_sleepFieldVersion == ContactFieldVersion)
-            : ((residue.AsleepSinceTick == 0UL) || (residue.LastContactFieldVersion == ContactFieldVersion)));
-
-        residue = residue with {
-            // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
-            // equality with the current field, using canonical representatives so capture/restore/capture is
-            // byte-stable even when reconstruction assigns a different counter.
-            ContactFieldObservationCurrent = contactFieldObservationCurrent,
-            LastContactFieldVersion = (contactFieldObservationCurrent ? 0UL : 1UL),
-        };
-
-        return new WorldPopulationEntryCheckpoint(
-            Index: index,
-            KitIndex: entry.KitIndex,
-            SelectedKit: entry.SelectedKit,
-            SelectedLook: entry.SelectedLook,
-            Scale: body.Scale,
-            BodyColor: entry.BodyColor,
-            CatalogRig: entry.CatalogRig,
-            TravelTurn: entry.TravelTurn,
-            Designations: (alias
-                ? entry.Designations
-                : [.. entry.Designations]),
+        image.Index = index;
+        body.CaptureSections(alias: alias, registers: out var registers, sections: out image.Body);
+        image.Admission = new(
+            AdmissionTrust: entry.AdmissionTrust,
             Generation: entry.Generation,
+            IdentityDomain: entry.IdentityDomain,
+            IdentitySubject: entry.IdentitySubject,
+            InstalledGrantTemplates: (alias
+                ? entry.AdmissionInstalledGrantTemplates
+                : [.. entry.AdmissionInstalledGrantTemplates]),
             IsAuthorityTransferred: entry.IsAuthorityTransferred,
             IsRemoteHuman: entry.IsRemoteHuman,
+            KitIndex: entry.KitIndex,
             Mobility: entry.Mobility,
             MobilityGeneration: entry.MobilityGeneration,
             Parked: entry.Parked,
             ParkedUntilTick: entry.ParkedUntilTick,
             PlacementId: entry.PlacementId,
-            Titled: entry.Titled,
+            RevokedKeys: revokedKeys,
+            SelectedKit: entry.SelectedKit,
             SpawnPosition: entry.SpawnPosition,
             SpawnYaw: entry.SpawnYaw,
-            AdmissionInstalledGrantTemplates: (alias
-                ? entry.AdmissionInstalledGrantTemplates
-                : [.. entry.AdmissionInstalledGrantTemplates]),
-            AdmissionRevokedKeys: revokedKeys,
-            IdentityDomain: entry.IdentityDomain,
-            IdentitySubject: entry.IdentitySubject,
-            AdmissionTrust: entry.AdmissionTrust,
-            ProducerAcquiredTarget: entry.ProducerState.AcquiredTarget,
-            ProducerActivityPhase: entry.ProducerState.ActivityPhase,
-            ProducerActivityRate: entry.ProducerState.ActivityRate,
-            ProducerPhase: entry.ProducerState.Phase,
-            ProducerPreferredAltitude: entry.ProducerState.PreferredAltitude,
-            ProducerWeaveFrequency: entry.ProducerState.WeaveFrequency,
-            ProducerCurveArcRaw: entry.ProducerState.CurveArcRaw,
-            ProducerActiveName: entry.ProducerState.ActiveProducerName,
-            ProducerActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
+            Titled: entry.Titled,
+            TravelTurn: entry.TravelTurn
+        );
+        image.Designations = new(Targets: (alias
+            ? entry.Designations
+            : entry.Designations.AsSpan().ToArray()));
+        image.Look = new(
+            BodyColor: entry.BodyColor,
+            CatalogRig: entry.CatalogRig,
+            SelectedLook: entry.SelectedLook
+        );
+        image.Producer = new(
+            AcquiredTarget: entry.ProducerState.AcquiredTarget,
+            ActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
+            ActiveName: entry.ProducerState.ActiveProducerName,
+            ActiveNavigationDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
+            ActivityPhase: entry.ProducerState.ActivityPhase,
+            ActivityRate: entry.ProducerState.ActivityRate,
+            CurveArcRaw: entry.ProducerState.CurveArcRaw,
             Flock: new WorldPopulationFlockCheckpoint(
                 Desired: entry.ProducerState.FlockDesired,
                 Generation: entry.ProducerState.FlockGeneration,
@@ -221,65 +206,48 @@ public sealed partial class WorldPopulation {
                 Seeded: entry.ProducerState.FlockSeeded,
                 Target: entry.ProducerState.FlockTarget
             ),
-            Autonomy: new WorldPopulationAutonomyCheckpoint(
-                MotionElapsedTicks: entry.AutonomyState.MotionElapsedTicks,
-                MotionPeriodTicks: entry.AutonomyState.MotionPeriodTicks,
-                MotionRemainingTicks: entry.AutonomyState.MotionRemainingTicks,
-                SteeringElapsedTicks: entry.AutonomyState.SteeringElapsedTicks,
-                SteeringIntent: entry.AutonomyState.SteeringIntent,
-                SteeringPeriodTicks: entry.AutonomyState.SteeringPeriodTicks,
-                SteeringRemainingTicks: entry.AutonomyState.SteeringRemainingTicks,
-                SteeringSeeded: entry.AutonomyState.SteeringSeeded
-            ),
-            Position: body.FixedPosition,
-            Yaw: body.FixedYaw,
-            DynamicState: (alias
-                ? body.ViewTransferState()
-                : body.CaptureTransferState()),
-            Residue: residue,
-            RigidContacts: RigidContactImages(alias: alias, body: body),
+            Phase: entry.ProducerState.Phase,
+            PreferredAltitude: entry.ProducerState.PreferredAltitude,
+            WeaveFrequency: entry.ProducerState.WeaveFrequency
+        );
+        image.Steering = new(
+            Intent: entry.AutonomyState.SteeringIntent,
+            Seeded: entry.AutonomyState.SteeringSeeded
+        );
+        image.Cadence = new(
+            MotionElapsedTicks: entry.AutonomyState.MotionElapsedTicks,
+            MotionPeriodTicks: entry.AutonomyState.MotionPeriodTicks,
+            MotionRemainingTicks: entry.AutonomyState.MotionRemainingTicks,
+            SteeringElapsedTicks: entry.AutonomyState.SteeringElapsedTicks,
+            SteeringPeriodTicks: entry.AutonomyState.SteeringPeriodTicks,
+            SteeringRemainingTicks: entry.AutonomyState.SteeringRemainingTicks
+        );
+        image.Navigation = new(
+            DomainIndex: entry.NavigationState.DomainIndex,
+            ExpandedLast: entry.NavigationState.ExpandedLast,
+            GoalCell: entry.NavigationState.GoalCell,
+            Status: entry.NavigationState.Status,
+            Waypoint: entry.NavigationState.Waypoint
+        );
+
+        var path = entry.NavigationState.Path.AsMemory(length: entry.NavigationState.PathLength, start: 0);
+
+        image.Route = new(Path: (alias ? path : path.ToArray()));
+        // Only a parked rigid body or an asleep one compares its observation with the field, to decide whether to wake;
+        // an awake body overwrites it (ParkRigidIsland, UpdateSleepEligibility) before any read. Its observation is
+        // current by construction, so the image never carries a stale stamp that would tie a body's continuation to
+        // field changes elsewhere in the world (a scoped replay compares that image across drives). The parked rigid
+        // bodies observe the field together, through the population's own observation, which a bounded change that
+        // reaches none of them advances without visiting any. The versions compared are process-local rebuild
+        // counters, so the image keeps only whether they agreed.
+        image.Tail = new(
+            ContactFieldObservationCurrent: ((image.Body.Clocks.RigidSleepRootPlusOne != 0)
+                ? (m_sleepFieldVersion == ContactFieldVersion)
+                : ((image.Body.Clocks.AsleepSinceTick == 0UL) || (body.LastContactFieldVersion == ContactFieldVersion))),
             Profile: body.Profile?.Project(),
-            Navigation: new WorldPopulationNavigationCheckpoint(
-                ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
-                DomainIndex: entry.NavigationState.DomainIndex,
-                GoalCell: entry.NavigationState.GoalCell,
-                Waypoint: entry.NavigationState.Waypoint,
-                ExpandedLast: entry.NavigationState.ExpandedLast,
-                Status: entry.NavigationState.Status,
-                Path: NavigationPath(alias: alias, state: entry.NavigationState)
-            )
+            Registers: registers
         );
     }
-    // A body's owned contact slots: the population's reused scratch for a view, a copy for a capture.
-    private IReadOnlyList<WorldRigidContactSlotImage> RigidContactImages(bool alias, WorldBody body) {
-        var images = (alias ? (m_viewRigidContacts ??= []) : []);
-
-        images.Clear();
-        body.CopyRigidContactImages(destination: images);
-
-        return images;
-    }
-    // A route's cached path: the population's reused scratch for a view, a copy for a capture.
-    private IReadOnlyList<int> NavigationPath(bool alias, BodyNavigationState state) {
-        var path = state.Path.AsSpan(
-            length: state.PathLength,
-            start: 0
-        );
-
-        if (!alias) {
-            return path.ToArray();
-        }
-
-        var scratch = (m_viewPath ??= []);
-
-        scratch.Clear();
-        foreach (var node in path) {
-            scratch.Add(item: node);
-        }
-
-        return scratch;
-    }
-
     /// <summary>Restores every entity-table slot from a previously captured checkpoint. Every slot is cleared first —
     /// this replaces the live table wholesale rather than merging onto it. A captured entry that is
     /// <see cref="Entry.IsRemoteHuman"/> and not already <see cref="Entry.Parked"/> is parked as of
@@ -337,7 +305,7 @@ public sealed partial class WorldPopulation {
         foreach (var captured in checkpoint.Entries) {
             var entry = m_entries[captured.Index];
             var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
-            var profile = ((captured.Profile is { } projection)
+            var profile = ((captured.Tail.Profile is { } projection)
                 ? WorldIdentity.FromProjection(
                     defaults: defaults,
                     projection: projection
@@ -358,85 +326,83 @@ public sealed partial class WorldPopulation {
             body.SetGravityField(field: m_gravityField);
             // Reconstruct live geometry before restoring latches. The next register catch-up must be a no-op
             // when scale/selection already matched at capture, and a real change when a write was still pending.
-            body.SetScale(value: captured.Scale);
+            body.SetScale(value: captured.Body.Pose.Scale);
             body.Pose(
-                position: captured.Position,
-                yawRadians: captured.Yaw,
+                position: captured.Body.Pose.Position,
+                yawRadians: captured.Body.Pose.Yaw,
                 pitchRadians: FixedQ4816.Zero,
                 rollRadians: FixedQ4816.Zero
             );
             // The slot is marked occupied before its body's state is written: occupancy admits the action-state
-            // lane ordinal, and the captured transfer state writes registers into it.
+            // lane ordinal, and the captured registers are written into it.
             entry.Body = body;
             entry.Active = true;
-            body.ApplyTransferState(state: captured.DynamicState);
-            body.ApplyIntegrationResidue(
+            body.RestoreSections(
+                contactFieldObservationCurrent: captured.Tail.ContactFieldObservationCurrent,
                 contactFieldVersion: ContactFieldVersion,
-                residue: captured.Residue
+                registers: captured.Tail.Registers.Span,
+                sections: in captured.Body
             );
-            ApplyRigidContactImages(index: captured.Index, images: captured.RigidContacts);
+            ApplyRigidContactImages(index: captured.Index, images: captured.Body.Contacts.Slots.Span);
 
-            var designationCount = Math.Min(
-                val1: captured.Designations.Length,
-                val2: entry.Designations.Length
-            );
+            var admission = captured.Admission;
+            var producer = captured.Producer;
+            var navigation = captured.Navigation;
+            var route = captured.Route.Path.Span;
 
-            for (var slot = 0; (slot < designationCount); slot++) {
-                entry.Designations[slot] = captured.Designations[slot];
-            }
-
-            entry.KitIndex = captured.KitIndex;
-            entry.SelectedKit = captured.SelectedKit;
-            entry.SelectedLook = captured.SelectedLook;
-            entry.BodyColor = captured.BodyColor;
-            entry.CatalogRig = captured.CatalogRig;
-            entry.TravelTurn = captured.TravelTurn;
-            entry.Generation = captured.Generation;
-            entry.IsAuthorityTransferred = captured.IsAuthorityTransferred;
-            entry.IsRemoteHuman = captured.IsRemoteHuman;
-            entry.Mobility = captured.Mobility;
-            entry.MobilityGeneration = captured.MobilityGeneration;
-            entry.Parked = captured.Parked;
-            entry.ParkedUntilTick = captured.ParkedUntilTick;
-            entry.PlacementId = captured.PlacementId;
-            entry.Titled = captured.Titled;
-            entry.SpawnPosition = captured.SpawnPosition;
-            entry.SpawnYaw = captured.SpawnYaw;
-            entry.AdmissionInstalledGrantTemplates = captured.AdmissionInstalledGrantTemplates;
-            entry.AdmissionRevokedKeys = [.. captured.AdmissionRevokedKeys.Select(selector: static key => (key.Capability, key.Subject))];
-            entry.IdentityDomain = captured.IdentityDomain;
-            entry.IdentitySubject = captured.IdentitySubject;
-            entry.AdmissionTrust = captured.AdmissionTrust;
+            captured.Designations.Targets.Span[..Math.Min(val1: captured.Designations.Targets.Length, val2: entry.Designations.Length)].CopyTo(destination: entry.Designations);
+            entry.KitIndex = admission.KitIndex;
+            entry.SelectedKit = admission.SelectedKit;
+            entry.SelectedLook = captured.Look.SelectedLook;
+            entry.BodyColor = captured.Look.BodyColor;
+            entry.CatalogRig = captured.Look.CatalogRig;
+            entry.TravelTurn = admission.TravelTurn;
+            entry.Generation = admission.Generation;
+            entry.IsAuthorityTransferred = admission.IsAuthorityTransferred;
+            entry.IsRemoteHuman = admission.IsRemoteHuman;
+            entry.Mobility = admission.Mobility;
+            entry.MobilityGeneration = admission.MobilityGeneration;
+            entry.Parked = admission.Parked;
+            entry.ParkedUntilTick = admission.ParkedUntilTick;
+            entry.PlacementId = admission.PlacementId;
+            entry.Titled = admission.Titled;
+            entry.SpawnPosition = admission.SpawnPosition;
+            entry.SpawnYaw = admission.SpawnYaw;
+            entry.AdmissionInstalledGrantTemplates = admission.InstalledGrantTemplates;
+            entry.AdmissionRevokedKeys = [.. admission.RevokedKeys.Select(selector: static key => (key.Capability, key.Subject))];
+            entry.IdentityDomain = admission.IdentityDomain;
+            entry.IdentitySubject = admission.IdentitySubject;
+            entry.AdmissionTrust = admission.AdmissionTrust;
             entry.ProducerState = new BodyProducerState {
-                AcquiredTarget = captured.ProducerAcquiredTarget,
-                ActiveProducerCurveIndex = captured.ProducerActiveCurveIndex,
-                ActiveProducerName = captured.ProducerActiveName,
-                ActiveProducerNavigationDomainIndex = (captured.Navigation?.ActiveProducerDomainIndex ?? -1),
-                ActivityPhase = captured.ProducerActivityPhase,
-                ActivityRate = captured.ProducerActivityRate,
-                CurveArcRaw = captured.ProducerCurveArcRaw,
-                FlockDesired = captured.Flock.Desired,
-                FlockGeneration = captured.Flock.Generation,
-                FlockRemainingTicks = captured.Flock.RemainingTicks,
-                FlockSampleOrdinal = captured.Flock.SampleOrdinal,
-                FlockSeeded = captured.Flock.Seeded,
-                FlockTarget = captured.Flock.Target,
-                Phase = captured.ProducerPhase,
-                PreferredAltitude = captured.ProducerPreferredAltitude,
-                WeaveFrequency = captured.ProducerWeaveFrequency,
+                AcquiredTarget = producer.AcquiredTarget,
+                ActiveProducerCurveIndex = producer.ActiveCurveIndex,
+                ActiveProducerName = producer.ActiveName,
+                ActiveProducerNavigationDomainIndex = producer.ActiveNavigationDomainIndex,
+                ActivityPhase = producer.ActivityPhase,
+                ActivityRate = producer.ActivityRate,
+                CurveArcRaw = producer.CurveArcRaw,
+                FlockDesired = producer.Flock.Desired,
+                FlockGeneration = producer.Flock.Generation,
+                FlockRemainingTicks = producer.Flock.RemainingTicks,
+                FlockSampleOrdinal = producer.Flock.SampleOrdinal,
+                FlockSeeded = producer.Flock.Seeded,
+                FlockTarget = producer.Flock.Target,
+                Phase = producer.Phase,
+                PreferredAltitude = producer.PreferredAltitude,
+                WeaveFrequency = producer.WeaveFrequency,
             };
             entry.AutonomyState = new BodyAutonomyState {
-                MotionElapsedTicks = captured.Autonomy.MotionElapsedTicks,
-                MotionPeriodTicks = captured.Autonomy.MotionPeriodTicks,
-                MotionRemainingTicks = captured.Autonomy.MotionRemainingTicks,
-                SteeringElapsedTicks = captured.Autonomy.SteeringElapsedTicks,
-                SteeringIntent = captured.Autonomy.SteeringIntent,
-                SteeringPeriodTicks = captured.Autonomy.SteeringPeriodTicks,
-                SteeringRemainingTicks = captured.Autonomy.SteeringRemainingTicks,
-                SteeringSeeded = captured.Autonomy.SteeringSeeded,
+                MotionElapsedTicks = captured.Cadence.MotionElapsedTicks,
+                MotionPeriodTicks = captured.Cadence.MotionPeriodTicks,
+                MotionRemainingTicks = captured.Cadence.MotionRemainingTicks,
+                SteeringElapsedTicks = captured.Cadence.SteeringElapsedTicks,
+                SteeringIntent = captured.Steering.Intent,
+                SteeringPeriodTicks = captured.Cadence.SteeringPeriodTicks,
+                SteeringRemainingTicks = captured.Cadence.SteeringRemainingTicks,
+                SteeringSeeded = captured.Steering.Seeded,
             };
             if (
-                (captured.ProducerActiveName is { } activeName) &&
+                (producer.ActiveName is { } activeName) &&
                 m_kits[bodyKitIndex].Producers.TryGetValue(
                 key: activeName,
                 value: out var binding
@@ -444,25 +410,19 @@ public sealed partial class WorldPopulation {
             ) {
                 entry.ProducerState.FlockBinding = binding;
             }
-            if (captured.Navigation is { } navigation) {
-                entry.NavigationState.DomainIndex = navigation.DomainIndex;
-                entry.NavigationState.GoalCell = navigation.GoalCell;
-                entry.NavigationState.Waypoint = navigation.Waypoint;
-                entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
-                entry.NavigationState.Status = navigation.Status;
-                entry.NavigationState.PathLength = navigation.Path.Count;
-                if (navigation.Path.Count != 0) {
-                    var path = entry.NavigationState.WritablePath();
-
-                    for (var node = 0; (node < navigation.Path.Count); node++) {
-                        path[node] = navigation.Path[node];
-                    }
-                }
-                if (navigation.DomainIndex >= 0) {
-                    // Even a failed search retains its domain, goal, and status. The source baked that domain
-                    // before searching; preserve the same retention proof after restore, including an empty path.
-                    m_navigation[navigation.DomainIndex].EnsureBaked();
-                }
+            entry.NavigationState.DomainIndex = navigation.DomainIndex;
+            entry.NavigationState.GoalCell = navigation.GoalCell;
+            entry.NavigationState.Waypoint = navigation.Waypoint;
+            entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
+            entry.NavigationState.Status = navigation.Status;
+            entry.NavigationState.PathLength = route.Length;
+            if (route.Length != 0) {
+                route.CopyTo(destination: entry.NavigationState.WritablePath());
+            }
+            if (navigation.DomainIndex >= 0) {
+                // Even a failed search retains its domain, goal, and status. The source baked that domain
+                // before searching; preserve the same retention proof after restore, including an empty path.
+                m_navigation[navigation.DomainIndex].EnsureBaked();
             }
 
             if (
@@ -541,50 +501,53 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"population checkpoint repeats entry index {captured.Index}.");
             }
             restored[captured.Index] = captured;
-            if (((uint)captured.KitIndex) >= ((uint)m_kits.Length)) {
-                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names kit {captured.KitIndex} outside {m_kits.Length} compiled kits.");
+            if (((uint)captured.Admission.KitIndex) >= ((uint)m_kits.Length)) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names kit {captured.Admission.KitIndex} outside {m_kits.Length} compiled kits.");
             }
-            if ((captured.SelectedKit < -1) || (captured.SelectedKit >= m_kits.Length) || (captured.Scale <= FixedQ4816.Zero)) {
+            if ((captured.Admission.SelectedKit < -1) || (captured.Admission.SelectedKit >= m_kits.Length) || (captured.Body.Pose.Scale <= FixedQ4816.Zero)) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has invalid selected geometry.");
             }
-            if (captured.Generation != checkpoint.Generations[captured.Index]) {
+            if (captured.Admission.Generation != checkpoint.Generations[captured.Index]) {
                 throw new InvalidOperationException(message: "population checkpoint entry generation disagrees with the slot image.");
             }
+            var flock = captured.Producer.Flock;
+
             if (
-                (captured.Flock.RemainingTicks > (120UL * FixedTickConversion.TicksPerSecond)) ||
-                (captured.Flock.Desired.Length > FixedQ4816.FromDouble(value: 3.0001)) ||
-                (captured.Flock.Seeded && (captured.Flock.Generation != captured.Generation))
+                (flock.RemainingTicks > (120UL * FixedTickConversion.TicksPerSecond)) ||
+                (flock.Desired.Length > FixedQ4816.FromDouble(value: 3.0001)) ||
+                (flock.Seeded && (flock.Generation != captured.Admission.Generation))
             ) {
                 throw new InvalidOperationException(message: "population checkpoint carries invalid flock steering or cadence state.");
             }
             if (
-                (captured.Flock.Target is { } observed) &&
+                (flock.Target is { } observed) &&
                 ((((uint)observed.Index) >= ((uint)Capacity)) || (observed.Index == captured.Index) || (observed.Generation < 0) ||
                  (observed.Generation > checkpoint.Generations[observed.Index]))
             ) {
                 throw new InvalidOperationException(message: "population checkpoint carries an invalid flock target observation.");
             }
             if (
-                (captured.Residue.Carrying < -1) ||
-                (captured.Residue.Carrying >= Capacity) ||
-                (captured.Residue.Carrying == captured.Index)
+                (captured.Body.Motion.Carrying < -1) ||
+                (captured.Body.Motion.Carrying >= Capacity) ||
+                (captured.Body.Motion.Carrying == captured.Index)
             ) {
-                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries an invalid carry index {captured.Residue.Carrying}.");
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries an invalid carry index {captured.Body.Motion.Carrying}.");
             }
             if (
-                (captured.Residue.CarriedBy < -1) ||
-                (captured.Residue.CarriedBy >= Capacity) ||
-                (captured.Residue.CarriedBy == captured.Index)
+                (captured.Body.Motion.CarriedBy < -1) ||
+                (captured.Body.Motion.CarriedBy >= Capacity) ||
+                (captured.Body.Motion.CarriedBy == captured.Index)
             ) {
-                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Residue.CarriedBy}.");
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Body.Motion.CarriedBy}.");
             }
             var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
 
             ValidateAutonomyCheckpoint(
-                captured.Autonomy,
-                m_kits[bodyKitIndex]
+                state: in captured.Cadence,
+                kit: in m_kits[bodyKitIndex],
+                steering: in captured.Steering
             );
-            ValidateNavigationCheckpoint(navigation: captured.Navigation);
+            ValidateNavigationCheckpoint(activeProducerDomainIndex: captured.Producer.ActiveNavigationDomainIndex, path: captured.Route.Path.Span, state: in captured.Navigation);
         }
 
         var previousEvent = -1;
@@ -596,14 +559,14 @@ public sealed partial class WorldPopulation {
             previousEvent = index;
         }
         var previousGravity = -1;
-        var sleepingCount = checkpoint.Entries.Count(predicate: static entry => (entry.Residue.RigidSleepRootPlusOne > 0));
+        var sleepingCount = checkpoint.Entries.Count(predicate: static entry => (entry.Body.Clocks.RigidSleepRootPlusOne > 0));
 
         if (checkpoint.SleepingGravity.Count != sleepingCount) {
             throw new InvalidOperationException(message: "population checkpoint must retain every sleeper's solved gravity.");
         }
         foreach (var row in checkpoint.SleepingGravity) {
             if ((row.Body <= previousGravity) || (((uint)row.Body) >= ((uint)Capacity)) ||
-                (restored[row.Body] is not { Residue.RigidSleepRootPlusOne: > 0 })) {
+                (restored[row.Body] is not { Body.Clocks.RigidSleepRootPlusOne: > 0 })) {
                 throw new InvalidOperationException(message: "population checkpoint has invalid sleeping gravity.");
             }
             previousGravity = row.Body;
@@ -613,14 +576,14 @@ public sealed partial class WorldPopulation {
         }
 
         foreach (var captured in checkpoint.Entries) {
-            var carrying = captured.Residue.Carrying;
-            var carriedBy = captured.Residue.CarriedBy;
-            var sleeping = captured.Residue.RigidSleepRootPlusOne;
+            var carrying = captured.Body.Motion.Carrying;
+            var carriedBy = captured.Body.Motion.CarriedBy;
+            var sleeping = captured.Body.Clocks.RigidSleepRootPlusOne;
 
             if ((sleeping < 0) || (sleeping > Capacity) ||
                 ((sleeping > 0) && ((sleeping > (captured.Index + 1)) ||
-                    (restored[(sleeping - 1)] is not { } root) || (root.Residue.RigidSleepRootPlusOne != sleeping) ||
-                    !captured.Residue.RigidResting || (carriedBy >= 0) ||
+                    (restored[(sleeping - 1)] is not { } root) || (root.Body.Clocks.RigidSleepRootPlusOne != sleeping) ||
+                    !captured.Body.Motion.RigidResting || (carriedBy >= 0) ||
                     (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Rigid is null)))) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has an invalid sleeping rigid island.");
             }
@@ -635,8 +598,8 @@ public sealed partial class WorldPopulation {
             if (carrying >= 0) {
                 if (
                     (restored[carrying] is not { } target) ||
-                    (target.Residue.CarriedBy != captured.Index) ||
-                    (target.Residue.Carrying >= 0) ||
+                    (target.Body.Motion.CarriedBy != captured.Index) ||
+                    (target.Body.Motion.Carrying >= 0) ||
                     (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Carry is null) ||
                     (m_kits[CapturedKitIndex(captured: target, seatKit: checkpoint.SeatKit)].Rigid is null)
                 ) {
@@ -647,8 +610,8 @@ public sealed partial class WorldPopulation {
             if (carriedBy >= 0) {
                 if (
                     (restored[carriedBy] is not { } carrier) ||
-                    (carrier.Residue.Carrying != captured.Index) ||
-                    (carrier.Residue.CarriedBy >= 0) ||
+                    (carrier.Body.Motion.Carrying != captured.Index) ||
+                    (carrier.Body.Motion.CarriedBy >= 0) ||
                     (m_kits[CapturedKitIndex(captured: carrier, seatKit: checkpoint.SeatKit)].Carry is null) ||
                     (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Rigid is null)
                 ) {
@@ -658,9 +621,9 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    private byte CapturedKitIndex(WorldPopulationEntryCheckpoint captured, byte seatKit) => ((captured.SelectedKit >= 0)
-        ? checked((byte)captured.SelectedKit) : ((captured.Index < LocalSeatCount) ? seatKit : captured.KitIndex));
-    private static void ValidateAutonomyCheckpoint(WorldPopulationAutonomyCheckpoint state, in FixedWorldKit kit) {
+    private byte CapturedKitIndex(in WorldPopulationEntryCheckpoint captured, byte seatKit) => ((captured.Admission.SelectedKit >= 0)
+        ? checked((byte)captured.Admission.SelectedKit) : ((captured.Index < LocalSeatCount) ? seatKit : captured.Admission.KitIndex));
+    private static void ValidateAutonomyCheckpoint(in EntryCadenceSection state, in EntrySteeringSection steering, in FixedWorldKit kit) {
         var maximum = FixedTickConversion.TicksPerSecond;
 
         static bool ValidCadence(ulong period, ulong elapsed, ulong remaining, ulong maximum) => ((period == 0UL)
@@ -691,34 +654,28 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: "population checkpoint autonomous cadence does not match its compiled kit.");
         }
         if (
-            state.SteeringSeeded &&
+            steering.Seeded &&
             (state.MotionPeriodTicks == 0UL) &&
             (state.SteeringPeriodTicks == 0UL)
         ) {
             throw new InvalidOperationException(message: "population checkpoint carries cached autonomous steering without an authored cadence.");
         }
         if (
-            !state.SteeringSeeded &&
-            (state.SteeringIntent != default)
+            !steering.Seeded &&
+            (steering.Intent != default)
         ) {
             throw new InvalidOperationException(message: "population checkpoint carries an unseeded autonomous steering image.");
         }
     }
-    private void ValidateNavigationCheckpoint(WorldPopulationNavigationCheckpoint? navigation) {
-        if (navigation is not { } state) {
-            return;
-        }
-        if (state.Path is null) {
-            throw new InvalidOperationException(message: "population checkpoint navigation path is null.");
-        }
+    private void ValidateNavigationCheckpoint(in EntryNavigationSection state, ReadOnlySpan<int> path, int activeProducerDomainIndex) {
         if (!Enum.IsDefined(value: state.Status)) {
             throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' is not defined.");
         }
         if (
-            (state.ActiveProducerDomainIndex < -1) ||
-            (state.ActiveProducerDomainIndex >= m_navigation.Count)
+            (activeProducerDomainIndex < -1) ||
+            (activeProducerDomainIndex >= m_navigation.Count)
         ) {
-            throw new InvalidOperationException(message: $"population checkpoint producer navigation domain {state.ActiveProducerDomainIndex} lies outside the compiled domain table.");
+            throw new InvalidOperationException(message: $"population checkpoint producer navigation domain {activeProducerDomainIndex} lies outside the compiled domain table.");
         }
         if (
             (state.DomainIndex < -1) ||
@@ -726,13 +683,13 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"population checkpoint navigation domain {state.DomainIndex} lies outside the compiled domain table.");
         }
-        if (state.Path.Count > WorldNavigationCapacity.MaxPathNodes) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Count} nodes; the maximum is {WorldNavigationCapacity.MaxPathNodes}.");
+        if (path.Length > WorldNavigationCapacity.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {path.Length} nodes; the maximum is {WorldNavigationCapacity.MaxPathNodes}.");
         }
         if (state.DomainIndex < 0) {
             if (
                 (state.GoalCell != -1) ||
-                (state.Path.Count != 0) ||
+                (path.Length != 0) ||
                 (state.Waypoint != 0) ||
                 (state.ExpandedLast != 0)
             ) {
@@ -758,8 +715,8 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: "population checkpoint shared search work belongs to its domain, not a body.");
         }
-        if (state.ActiveProducerDomainIndex != state.DomainIndex) {
-            throw new InvalidOperationException(message: $"population checkpoint route domain {state.DomainIndex} does not match active producer domain {state.ActiveProducerDomainIndex}.");
+        if (activeProducerDomainIndex != state.DomainIndex) {
+            throw new InvalidOperationException(message: $"population checkpoint route domain {state.DomainIndex} does not match active producer domain {activeProducerDomainIndex}.");
         }
         if (((uint)state.GoalCell) >= ((uint)domain.CellCount)) {
             throw new InvalidOperationException(message: $"population checkpoint navigation goal {state.GoalCell} lies outside domain '{domain.Name}'.");
@@ -770,16 +727,16 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"population checkpoint navigation expansion count {state.ExpandedLast} exceeds domain '{domain.Name}' budget {domain.Tuning.MaxExpandedNodes}.");
         }
-        if (state.Path.Count > domain.Tuning.MaxPathNodes) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Count} nodes; domain '{domain.Name}' permits {domain.Tuning.MaxPathNodes}.");
+        if (path.Length > domain.Tuning.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {path.Length} nodes; domain '{domain.Name}' permits {domain.Tuning.MaxPathNodes}.");
         }
         if (
             (state.Waypoint < 0) ||
-            (state.Waypoint > state.Path.Count)
+            (state.Waypoint > path.Length)
         ) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Count}-node path.");
+            throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {path.Length}-node path.");
         }
-        if (state.Path.Count == 0) {
+        if (path.Length == 0) {
             if (state.Status is not (NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.Pending or NavigationStatus.CapacityLimited)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
             }
@@ -791,16 +748,16 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"population checkpoint stored path cannot carry status '{state.Status}'.");
             }
         }
-        for (var index = 0; (index < state.Path.Count); index++) {
-            if (((uint)state.Path[index]) >= ((uint)domain.CellCount)) {
-                throw new InvalidOperationException(message: $"population checkpoint navigation path node {state.Path[index]} at index {index} lies outside domain '{domain.Name}'.");
+        for (var index = 0; (index < path.Length); index++) {
+            if (((uint)path[index]) >= ((uint)domain.CellCount)) {
+                throw new InvalidOperationException(message: $"population checkpoint navigation path node {path[index]} at index {index} lies outside domain '{domain.Name}'.");
             }
         }
         if (
-            (state.Path.Count != 0) &&
-            (state.Path[^1] != state.GoalCell)
+            (path.Length != 0) &&
+            (path[^1] != state.GoalCell)
         ) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation path ends at {state.Path[^1]}, not goal {state.GoalCell}.");
+            throw new InvalidOperationException(message: $"population checkpoint navigation path ends at {path[^1]}, not goal {state.GoalCell}.");
         }
     }
 }

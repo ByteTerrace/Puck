@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Games.Tests;
@@ -23,7 +22,7 @@ public sealed partial class NavigationLawTests {
         );
         fixture.Step();
 
-        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Route.Path.ToArray();
 
         Assert.Contains(
             expectedSubstring: "clear=16/16",
@@ -32,7 +31,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             expected: 4,
-            actual: route.Path.Count
+            actual: route.Length
         );
     }
 }

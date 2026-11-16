@@ -669,9 +669,9 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 var entries = expectedCheckpoint!.Population.Entries.ToArray();
 
                 Assert.Single(collection: entries);
-                Assert.False(condition: entries[0].Parked);
-                Assert.Null(value: entries[0].ParkedUntilTick);
-                entries[0] = entries[0] with { Parked = true, ParkedUntilTick = checked((((long)expected["alpha"]) + document.PopulationReconnectGraceTicks.Ticks)) };
+                Assert.False(condition: entries[0].Admission.Parked);
+                Assert.Null(value: entries[0].Admission.ParkedUntilTick);
+                entries[0] = entries[0] with { Admission = entries[0].Admission with { Parked = true, ParkedUntilTick = checked((((long)expected["alpha"]) + document.PopulationReconnectGraceTicks.Ticks)) } };
                 expectedCheckpoint = expectedCheckpoint with { Population = expectedCheckpoint.Population with { Entries = entries } };
             }
             Assert.Equal(

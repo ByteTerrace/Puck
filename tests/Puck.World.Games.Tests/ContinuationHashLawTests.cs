@@ -9,8 +9,8 @@ namespace Puck.World.Games.Tests;
 
 /// <summary>
 /// The authoritative hash folds every body's simulation continuation from views of the live slots
-/// (<see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/>), and the views fold exactly the bytes the checkpoint's own
-/// entries encode, slot by slot and segment by segment (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
+/// (<see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/>), and the views fold exactly what the checkpoint's own
+/// entries fold, section by section, slot by slot and segment by segment (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
 /// <see cref="WorldPopulation.Capture"/>): over a carried body sweeping against a wall behind a walking carrier, and
 /// over a rigid ball that comes to rest, tick by tick, and over a seat driven by an owned identity carrying facts and
 /// records. A steady fold allocates nothing, a profiled seat's included.
@@ -34,11 +34,13 @@ public sealed class ContinuationHashLawTests {
         );
         WorldAuthorityCheckpointCodec.AppendPopulationEntries(
             capacity: population.Capacity,
-            entries: [.. entries.Select(selector: static entry => ((entry.Profile is { } profile)
+            entries: [.. entries.Select(selector: static entry => ((entry.Tail.Profile is { } profile)
                 ? (entry with {
-                    Profile = profile with {
-                        Facts = ((profile.Facts is { } facts) ? (facts with { Cells = [.. (facts.Cells ?? [])] }) : null),
-                        Records = ((profile.Records is { } records) ? (records with { }) : null),
+                    Tail = entry.Tail with {
+                        Profile = profile with {
+                            Facts = ((profile.Facts is { } facts) ? (facts with { Cells = [.. (facts.Cells ?? [])] }) : null),
+                            Records = ((profile.Records is { } records) ? (records with { }) : null),
+                        },
                     },
                 })
                 : entry))],
@@ -156,6 +158,12 @@ public sealed class ContinuationHashLawTests {
         var afterRecord = AssertStreamedFoldsTheCapturedEntries(context: "after a record write", population: population);
 
         Assert.NotEqual(actual: afterRecord, expected: afterFact);
+        // An identity edit that writes no body: the rate lands on the identity alone, as identity.motion writes it,
+        // and the seat stands still. The fold reads the profile by content beside the slots, so it moves.
+        owned.SetMoveSpeed(value: 4.5f);
+        var afterSpeed = AssertStreamedFoldsTheCapturedEntries(context: "after a move-speed edit", population: population);
+
+        Assert.NotEqual(actual: afterSpeed, expected: afterRecord);
         for (var step = 0; (step < 10); step++) {
             fixture.Step();
             _ = AssertStreamedFoldsTheCapturedEntries(context: $"profiled step {step}", population: population);

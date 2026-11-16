@@ -271,7 +271,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             rowA: rowA,
             rowB: rowB
         );
-        var destinationEntry = checkpointB.Population.Entries.Single(predicate: e => (e.Index == peerSlot));
+        var destinationEntry = checkpointB.Population.Entries.Single(predicate: e => (e.Index == peerSlot)).Admission;
 
         Assert.True(condition: destinationEntry.IsRemoteHuman);
         Assert.False(condition: destinationEntry.Parked);
@@ -310,7 +310,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
 
         var remintedRows = 0;
 
-        foreach (var template in destinationEntry.AdmissionInstalledGrantTemplates) {
+        foreach (var template in destinationEntry.InstalledGrantTemplates) {
             restoredB.Server.Grant(
                 actor: Principal.Console,
                 grant: new WorldGrant(

@@ -674,17 +674,17 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
         );
         Assert.Equal(
             expected: BallIndex,
-            actual: checkpoint!.Population.Entries.Single(predicate: entry => (entry.Index == CarrierIndex)).Residue.Carrying
+            actual: checkpoint!.Population.Entries.Single(predicate: entry => (entry.Index == CarrierIndex)).Body.Motion.Carrying
         );
         Assert.Equal(
             expected: CarrierIndex,
-            actual: checkpoint.Population.Entries.Single(predicate: entry => (entry.Index == BallIndex)).Residue.CarriedBy
+            actual: checkpoint.Population.Entries.Single(predicate: entry => (entry.Index == BallIndex)).Body.Motion.CarriedBy
         );
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
 
         Assert.NotNull(@object: restoredDefinition.Kits[checkpoint.Population.SeatKit].Carry);
-        Assert.NotNull(@object: restoredDefinition.Kits[checkpoint.Population.Entries.Single(predicate: entry => (entry.Index == BallIndex)).KitIndex].Rigid);
+        Assert.NotNull(@object: restoredDefinition.Kits[checkpoint.Population.Entries.Single(predicate: entry => (entry.Index == BallIndex)).Admission.KitIndex].Rigid);
         using var controlMachines = new WorldMachineHost(
             engines: [],
             screens: restoredDefinition.Screens
@@ -719,7 +719,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
                 Population = (checkpoint.Population with {
                     Entries = checkpoint.Population.Entries
                         .Select(selector: entry => ((entry.Index == CarrierIndex)
-                ? (entry with { Residue = (entry.Residue with { Carrying = carrying, CarriedBy = carriedBy }) })
+                ? (entry with { Body = (entry.Body with { Motion = (entry.Body.Motion with { Carrying = carrying, CarriedBy = carriedBy }) }) })
                 : entry))
                         .ToArray(),
                 }),
@@ -746,7 +746,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             Population = (checkpoint.Population with {
                 Entries = checkpoint.Population.Entries
                     .Select(selector: entry => ((entry.Index == BallIndex)
-            ? (entry with { Residue = (entry.Residue with { CarriedBy = -1 }) })
+            ? (entry with { Body = (entry.Body with { Motion = (entry.Body.Motion with { CarriedBy = -1 }) }) })
             : entry))
                     .ToArray(),
             }),
@@ -772,9 +772,9 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             Population = (checkpoint.Population with {
                 Entries = checkpoint.Population.Entries
                     .Select(selector: entry => ((entry.Index == CarrierIndex)
-            ? (entry with { Residue = (entry.Residue with { CarriedBy = BallIndex }) })
+            ? (entry with { Body = (entry.Body with { Motion = (entry.Body.Motion with { CarriedBy = BallIndex }) }) })
             : ((entry.Index == BallIndex)
-                ? (entry with { Residue = (entry.Residue with { Carrying = CarrierIndex }) })
+                ? (entry with { Body = (entry.Body with { Motion = (entry.Body.Motion with { Carrying = CarrierIndex }) }) })
                 : entry)))
                     .ToArray(),
             }),

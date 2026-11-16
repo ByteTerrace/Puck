@@ -571,8 +571,8 @@ raws themselves are not independently hashed; they cross only through
 `WorldBodyTransferState`/`WorldAuthorityCheckpointCodec` (see
 [documents-motion.md](documents-motion.md)'s `shaping` section), never the replay tape.
 Checkpoint continuation also carries the follower seed latches, arbitrary-up
-frame/reseat/turn fractions, and same-world tether state through
-`WorldBodyIntegrationResidue`; none is independently covered by this population
+frame/reseat/turn fractions, and same-world tether state in the body's sections
+(`WorldBodySections`); none is independently covered by this population
 hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced
 the same hashed authoritative trajectory. It does not directly prove the request's reply,

@@ -197,16 +197,14 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
         var captured = fixture.Server.Population.Capture();
         var entry = Assert.Single(collection: captured.Entries);
-        var route = entry.Navigation!.Value;
-        var invalid = route with {
+        var invalid = entry.Navigation with {
             ExpandedLast = (shared
             ? 1
             : 0),
-            Path = [],
             Waypoint = 0,
             Status = NavigationStatus.Pending,
         };
-        var malformed = captured with { Entries = [entry with { Navigation = invalid }] };
+        var malformed = captured with { Entries = [entry with { Navigation = invalid, Route = default }] };
         var before = WorldStateHashComposition.HashAuthoritative(
             server: fixture.Server,
             tick: 0

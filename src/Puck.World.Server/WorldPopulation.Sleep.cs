@@ -128,11 +128,11 @@ public sealed partial class WorldPopulation {
     }
     private FixedVector3? SolvedSleepGravity(int index) =>
         (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: index)) ? acceleration : null);
-    /// <summary>Parks a body a scoped replay restored under the island root its captured residue names, as the
-    /// checkpoint restore does for a whole population (<see cref="RestoreSleepingIslands"/>): the residue never writes
-    /// island membership itself.</summary>
+    /// <summary>Parks a body a scoped replay restored under the island root its captured clocks name, as the
+    /// checkpoint restore does for a whole population (<see cref="RestoreSleepingIslands"/>): a section restore never
+    /// writes island membership itself.</summary>
     /// <param name="index">The body's population index.</param>
-    /// <param name="rootPlusOne">The captured residue's island root plus one; zero leaves the body awake.</param>
+    /// <param name="rootPlusOne">The captured island root plus one; zero leaves the body awake.</param>
     internal void AdoptRestoredIsland(int index, int rootPlusOne) {
         if ((rootPlusOne == 0) || m_sleepingBodies.Contains(item: index) || (m_entries[index] is not { Active: true, Body: not null })) { return; }
         ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: index, rootPlusOne: rootPlusOne);
@@ -302,8 +302,8 @@ public sealed partial class WorldPopulation {
         var retiredRoots = new HashSet<int>();
 
         foreach (var captured in checkpoint.Entries) {
-            if ((captured.Residue.RigidSleepRootPlusOne != 0) && (m_entries[captured.Index] is not { Active: true, Body: not null })) {
-                retiredRoots.Add(item: captured.Residue.RigidSleepRootPlusOne);
+            if ((captured.Body.Clocks.RigidSleepRootPlusOne != 0) && (m_entries[captured.Index] is not { Active: true, Body: not null })) {
+                retiredRoots.Add(item: captured.Body.Clocks.RigidSleepRootPlusOne);
             }
         }
         // Discovery eligibility affects bounded collision admission. Keep captured work and add the bodies that
@@ -311,9 +311,9 @@ public sealed partial class WorldPopulation {
         m_eventBodies.Clear();
         foreach (var index in checkpoint.EventBodies) { m_eventBodies.Add(item: index); }
 
-        // Each surviving body parks under the root its captured residue names; the residue never writes it itself.
+        // Each surviving body parks under the root its captured clocks name; a section restore never writes it itself.
         foreach (var captured in checkpoint.Entries) {
-            var rootPlusOne = captured.Residue.RigidSleepRootPlusOne;
+            var rootPlusOne = captured.Body.Clocks.RigidSleepRootPlusOne;
 
             if ((rootPlusOne == 0) || (m_entries[captured.Index] is not { Active: true, Body: { } body })) { continue; }
             if (retiredRoots.Contains(item: rootPlusOne)) { body.WakeRigidIsland(); continue; }
@@ -346,7 +346,7 @@ public sealed partial class WorldPopulation {
         m_sleepIndexDirty = true;
     }
 
-    // This is folded separately from body-entry bytes, which deliberately remain the entry codec's exact image.
+    // Folded beside the slots' digests: the event set and each parked body's solved gravity are the population's own.
     internal void AppendSleepStateHash(ref Fnv1aHash hash) {
         hash.Add(value: ((uint)m_eventBodies.Count));
         foreach (var index in m_eventBodies) { hash.Add(value: index); }

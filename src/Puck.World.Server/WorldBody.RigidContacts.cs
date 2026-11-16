@@ -116,9 +116,24 @@ public sealed partial class WorldBody {
         contact.Manifold.BodyB = null;
         m_releasedRigidContacts.Add(item: contact);
     }
-    /// <summary>Appends every occupied slot of the owned contacts to a list, in contact then slot order.</summary>
-    /// <param name="destination">The list the images are appended to.</param>
-    internal void CopyRigidContactImages(List<WorldRigidContactSlotImage> destination) {
+    /// <summary>Counts the occupied slots of the owned contacts.</summary>
+    /// <returns>The count <see cref="CopyRigidContactImages"/> writes.</returns>
+    internal int CountRigidContactSlots() {
+        var occupied = 0;
+
+        foreach (var contact in m_rigidContacts) {
+            for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); index++) {
+                if (contact.Manifold.Slots[index].Occupied) { occupied++; }
+            }
+        }
+
+        return occupied;
+    }
+    /// <summary>Writes every occupied slot of the owned contacts, in contact then slot order.</summary>
+    /// <param name="destination">The span the images are written to, at least <see cref="CountRigidContactSlots"/> long.</param>
+    internal void CopyRigidContactImages(Span<WorldRigidContactSlotImage> destination) {
+        var written = 0;
+
         foreach (var contact in m_rigidContacts) {
             for (var index = 0; (index < FixedPairManifoldSlotTable.Capacity); index++) {
                 ref readonly var slot = ref contact.Manifold.Slots[index];
@@ -127,7 +142,7 @@ public sealed partial class WorldBody {
                     continue;
                 }
 
-                destination.Add(item: new WorldRigidContactSlotImage(
+                destination[written++] = new WorldRigidContactSlotImage(
                     AnchorA: slot.AnchorA,
                     AnchorB: slot.AnchorB,
                     FeatureId: slot.FeatureId,
@@ -138,7 +153,7 @@ public sealed partial class WorldBody {
                     Partner: contact.Partner,
                     Slot: index,
                     SourceId: slot.SourceId
-                ));
+                );
             }
         }
     }

@@ -36,7 +36,6 @@ public sealed partial class WorldPopulation {
     private readonly List<FixedTwoBodyContact> m_rigidCandidates = [];
     private readonly List<RigidPairHit> m_rigidPairHits = [];
     private List<int>?[] m_rigidContactReferrers = [];
-    private List<WorldRigidContactSlotImage>? m_viewRigidContacts;
     private FixedRigidWorld? m_rigidWorld;
     private ulong m_rigidTickStepTicks;
 
@@ -514,7 +513,7 @@ public sealed partial class WorldPopulation {
         }
     }
     // Writes a checkpoint entry's contact slots into its body; the partner index is rebuilt after every entry.
-    private void ApplyRigidContactImages(int index, IReadOnlyList<WorldRigidContactSlotImage> images) {
+    private void ApplyRigidContactImages(int index, ReadOnlySpan<WorldRigidContactSlotImage> images) {
         var body = m_entries[index].Body!;
 
         for (var position = (body.RigidContacts.Count - 1); (position >= 0); position--) {
@@ -540,7 +539,7 @@ public sealed partial class WorldPopulation {
     /// continuation.</summary>
     /// <param name="index">The body's population index.</param>
     /// <param name="images">The captured contact slots.</param>
-    internal void RestoreRigidContacts(int index, IReadOnlyList<WorldRigidContactSlotImage> images) {
+    internal void RestoreRigidContacts(int index, ReadOnlySpan<WorldRigidContactSlotImage> images) {
         ForgetRigidContacts(index: index, keepReferred: true);
         ApplyRigidContactImages(index: index, images: images);
 
@@ -552,12 +551,10 @@ public sealed partial class WorldPopulation {
     }
     // A captured contact image names valid slots in ascending (partner, slot) order, on a rigid body, with partners the
     // owner rule (WorldRigidContacts.Owner) gives this body: the static field, a kit body, or a rigid body of higher index.
-    private void ValidateRigidContactImages(WorldPopulationEntryCheckpoint captured, WorldPopulationEntryCheckpoint?[] restored, byte seatKit) {
-        if (captured.RigidContacts is null) {
-            throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has no rigid contact image.");
-        }
+    private void ValidateRigidContactImages(in WorldPopulationEntryCheckpoint captured, WorldPopulationEntryCheckpoint?[] restored, byte seatKit) {
+        var images = captured.Body.Contacts.Slots.Span;
 
-        if (captured.RigidContacts.Count == 0) {
+        if (images.Length == 0) {
             return;
         }
 
@@ -567,7 +564,7 @@ public sealed partial class WorldPopulation {
 
         var previous = (Partner: int.MinValue, Slot: int.MinValue);
 
-        foreach (var image in captured.RigidContacts) {
+        foreach (var image in images) {
             var key = (image.Partner, image.Slot);
 
             if (

@@ -672,8 +672,8 @@ combines these frames with preserved dealt instances and guarded reflow.
 Changing a navigation definition, or an edit whose proof affects that domain,
 clears a body's local route cache; a retained domain keeps its route and shared
 search workspace. Clearing designations, switching producers, or transferring authority still clears a body's local route cache
-(`BodyNavigationState`); `WorldPopulationNavigationCheckpoint` carries the
-domain, goal cell, waypoint cursor, status, and expanded-node count, and
+(`BodyNavigationState`); the checkpoint entry's `EntryNavigationSection` carries the
+domain, goal cell, waypoint cursor, status, and expanded-node count, `EntryRouteSection` the path, and
 `WorldAuthorityCheckpointCodec` validates every domain, node, waypoint,
 status, and budget before restore. The authoritative state hash includes
 producer-domain and route state. `world.navigation`, `body.targets`, and
@@ -1146,8 +1146,8 @@ as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a medium hold's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
 round-trips their values through `WorldBodyTransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
-frame/reseat/turn fractions, and complete hold/tether state through
-`WorldBodyIntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development;
+frame/reseat/turn fractions, and complete hold/tether state in the body's sections
+(`WorldBodySections`, written by `WorldAuthorityCheckpointCodec`; still under development:
 an incompatible wire or restored-authority contract moves `SupportedVersion`,
 and older versions have no compatibility reader).
 
@@ -1292,7 +1292,7 @@ islands before integration. `world.rigid` echoes the live per-body census plus
 the quiescent verdict; `world.budget`'s `rigid` segment echoes the last step's
 solved bodies, manifolds, contact points, guard sweeps and solver refusals and
 the compiled policy. The checkpoint entry carries each body's owned contact
-slots (`WorldPopulationEntryCheckpoint.RigidContacts`: partner, slot, identity,
+slots (`BodyContactsSection`: partner, slot, identity,
 anchors, normal, normal and friction impulses, idle count), so the continuation
 hash, the checkpoint and a scoped replay all carry the warm start; the
 diagnostic population hash (`WorldReplaySnapshot.HashState`) covers linear and
@@ -1371,7 +1371,7 @@ hands the target back to the solver with the carrier's own current
 velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
 population indices (`-1` raw, on the same "never a boolean fact" terms
 `AffectingSubject` already carries) folded into checkpoint
-(`WorldBodyIntegrationResidue`) and the authoritative hash; a relationship whose
+(`BodyMotionSection`) and the authoritative hash; a relationship whose
 mirror breaks (a body going inactive, or a live kit retune away from the
 facet either side depends on) self-heals in the same per-tick pass rather
 than leaking a dangling reference forward. That pass walks a sorted,
@@ -1407,8 +1407,7 @@ facet no longer resolves, on the same terms a rigid-facet swap resets
 solver-owned fields. Any other tether-facet retune drops a live attach and
 publishes the cleared fact through its retained `modeState`. A changed attach/detach binding resets its old edge
 history, and a changed `modeState` ordinal clears the old row and publishes
-the live attach fact through the new one. `WorldBodyIntegrationResidue.Tether`
-(`WorldBodyTetherResidue`)
+the live attach fact through the new one. A checkpoint's `BodyMotionSection`
 carries the attach/detach previous-bits and the complete rope state
 (length, min length, reel remainder, anchor) through
 `WorldAuthorityCheckpointCodec` and the authoritative hash; a cross-world

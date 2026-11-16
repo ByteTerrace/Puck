@@ -129,7 +129,7 @@ public sealed class FlockLawTests {
             ),
             userMessage: reason
         );
-        var saved = captured!.Population.Entries[0].Flock;
+        var saved = captured!.Population.Entries[0].Producer.Flock;
 
         Assert.True(condition: saved.Seeded);
         Assert.True(condition: (saved.RemainingTicks > 0));
@@ -334,7 +334,7 @@ public sealed class FlockLawTests {
             flock: false
         );
         fixture.Step();
-        var saved = fixture.Server.Population.Capture().Entries[0].Flock;
+        var saved = fixture.Server.Population.Capture().Entries[0].Producer.Flock;
 
         fixture.Server.Population.Rebuild(
             definition,
@@ -345,7 +345,7 @@ public sealed class FlockLawTests {
             0,
             fixture.Server.Population.FlockStatistics.Updates
         );
-        var kept = fixture.Server.Population.Capture().Entries[0].Flock;
+        var kept = fixture.Server.Population.Capture().Entries[0].Producer.Flock;
 
         Assert.Equal(
             saved.Desired,
@@ -368,7 +368,7 @@ public sealed class FlockLawTests {
         );
         Assert.Equal(
             FixedVector3.Zero,
-            fixture.Server.Population.Capture().Entries[0].Flock.Desired
+            fixture.Server.Population.Capture().Entries[0].Producer.Flock.Desired
         );
     }
     [Fact]
@@ -401,7 +401,7 @@ public sealed class FlockLawTests {
         );
         fixture.Server.Body(index: 4)!.SetIntentSource(source: IntentSource.Idle);
         fixture.Step();
-        var observed = fixture.Server.Population.Capture().Entries[0].Flock.Target;
+        var observed = fixture.Server.Population.Capture().Entries[0].Producer.Flock.Target;
 
         Assert.NotNull(value: observed);
         Assert.Equal(
@@ -477,7 +477,7 @@ public sealed class FlockLawTests {
             0,
             fixture.Server.Population.FlockStatistics.RetainedNeighbors
         );
-        Assert.Null(value: fixture.Server.Population.Capture().Entries[0].Flock.Target);
+        Assert.Null(value: fixture.Server.Population.Capture().Entries[0].Producer.Flock.Target);
         fixture.Step();
         Assert.Equal(
             0,
@@ -512,7 +512,7 @@ public sealed class FlockLawTests {
         );
 
         fixture.Step();
-        var seen = fixture.Server.Population.Capture().Entries[0].Flock.Target;
+        var seen = fixture.Server.Population.Capture().Entries[0].Producer.Flock.Target;
 
         Assert.NotNull(value: seen);
         Assert.Equal(
@@ -535,7 +535,7 @@ public sealed class FlockLawTests {
         Assert.True(condition: (body.FixedPosition.X > before));
         Assert.Equal(
             seen,
-            fixture.Server.Population.Capture().Entries[0].Flock.Target
+            fixture.Server.Population.Capture().Entries[0].Producer.Flock.Target
         );
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(

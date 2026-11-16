@@ -7,9 +7,9 @@ namespace Puck.World.Server.Tests;
 
 // A structural deep comparer over a checkpoint record graph: default record equality compares an array/list field
 // by REFERENCE, not by content, so two independently captured checkpoints with byte-identical arrays would read as
-// unequal under a naive Equals() call. This walks public instance properties recursively, treating any
+// unequal under a naive Equals() call. This walks public instance properties and fields recursively, treating any
 // non-string IEnumerable as an ordered element-wise sequence, and falls back to Equals() only at a genuine leaf
-// (primitives, strings, enums, and value types with no further public properties to walk).
+// (primitives, strings, enums, and value types with no further public members to walk).
 internal static class DeepEqual {
     /// <summary>The property path <see cref="Compare"/> last found a mismatch at — diagnostic only, read after a
     /// failed comparison to name where the two graphs diverged.</summary>
@@ -105,6 +105,20 @@ internal static class DeepEqual {
         }
 
         var properties = type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance);
+        var fields = type.GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var field in fields) {
+            if (!Compare(
+                a: field.GetValue(obj: a),
+                b: field.GetValue(obj: b),
+                path: $"{path}.{field.Name}"
+            )) {
+                return false;
+            }
+        }
+        if ((properties.Length == 0) && (fields.Length != 0)) {
+            return true;
+        }
 
         if (properties.Length == 0) {
             var equal = a.Equals(obj: b);

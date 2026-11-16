@@ -42,10 +42,10 @@ public sealed partial class WorldReplaySnapshot {
         foreach (var entry in checkpoint.Population.Entries) {
             if (
                 (entry.Index < WorldBodiesLimits.LocalSeatCount) &&
-                !entry.IsRemoteHuman
+                !entry.Admission.IsRemoteHuman
             ) {
                 seats.Add(item: new WorldReplaySeat(
-                    Profile: entry.Profile,
+                    Profile: entry.Tail.Profile,
                     Slot: entry.Index
                 ));
             }

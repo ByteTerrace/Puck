@@ -177,7 +177,7 @@ public sealed partial class NavigationLawTests {
                 predicate: tree => (tree.Goal >= 0)
             );
             if (count > 1) {
-                var before = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation!.Value;
+                var before = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1));
 
                 bodies[0].SetIntentSource(source: IntentSource.Idle);
                 bodies[0].Pose(
@@ -198,13 +198,13 @@ public sealed partial class NavigationLawTests {
                         index: 0
                     )
                 );
-                var after = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation!.Value;
+                var after = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1));
 
                 Assert.Equal(
-                    before.Path,
-                    after.Path
+                    before.Route.Path.ToArray(),
+                    after.Route.Path.ToArray()
                 );
-                Assert.True(condition: (after.Waypoint >= before.Waypoint));
+                Assert.True(condition: (after.Navigation.Waypoint >= before.Navigation.Waypoint));
             }
             return expansions;
         }
@@ -501,7 +501,7 @@ public sealed partial class NavigationLawTests {
             slot: 1
         );
         fixture.Step(); fixture.Step();
-        var initial = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation!.Value;
+        var initial = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation;
 
         Assert.True(condition: fixture.Server.ApplyDesignation(
             new WorldDesignation(
@@ -519,7 +519,7 @@ public sealed partial class NavigationLawTests {
         fixture.Step(); fixture.Step();
         Assert.Equal(
             initial.GoalCell,
-            fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation!.Value.GoalCell
+            fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1)).Navigation.GoalCell
         );
         Assert.Equal(
             2,
@@ -554,7 +554,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             initial.GoalCell,
-            fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Navigation!.Value.GoalCell
+            fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Navigation.GoalCell
         );
     }
     [Fact]
@@ -820,13 +820,13 @@ public sealed partial class NavigationLawTests {
             )
         );
         fixture.Step(); fixture.Step();
-        var route = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Navigation!.Value;
+        var route = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Route.Path.ToArray();
 
         Assert.True(
-            condition: (route.Path.Count > 4),
+            condition: (route.Length > 4),
             userMessage: string.Join(
                 separator: ',',
-                values: route.Path
+                values: route
             )
         );
     }

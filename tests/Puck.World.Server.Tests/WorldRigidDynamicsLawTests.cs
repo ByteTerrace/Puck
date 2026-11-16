@@ -56,10 +56,10 @@ public sealed class WorldRigidDynamicsLawTests {
             checkpoint: out var captured, reason: out var reason), userMessage: reason);
         var entry = Assert.Single(collection: captured!.Population.Entries);
 
-        Assert.True(condition: entry.Residue.ContactFieldObservationCurrent);
+        Assert.True(condition: entry.Tail.ContactFieldObservationCurrent);
         captured = captured with {
             Population = captured.Population with {
-                Entries = [entry with { Residue = entry.Residue with { ContactFieldObservationCurrent = false } }],
+                Entries = [entry with { Tail = entry.Tail with { ContactFieldObservationCurrent = false } }],
             },
         };
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured),
@@ -850,7 +850,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.True(condition: restored.RigidResting);
         Assert.True(condition: (restored.RigidRestingHoldTicks > 0UL));
-        Assert.NotEmpty(collection: fixture.Server.Population.Capture().Entries.Single(predicate: static entry => (entry.Index == 0)).RigidContacts);
+        Assert.False(condition: fixture.Server.Population.Capture().Entries.Single(predicate: static entry => (entry.Index == 0)).Body.Contacts.Slots.IsEmpty);
         Assert.Equal(
             expected: FixedVector3.Zero,
             actual: restored.RigidVelocity

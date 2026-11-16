@@ -582,7 +582,7 @@ example.
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
 normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
 normal, and the spend accumulator's remainder are simulation state: captured in
-`WorldBodyIntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
+`BodyMotionSection`, carried through `WorldAuthorityCheckpointCodec`, and part
 of the replay hash.
 
 **A kit's `tether` facet (`WorldTether` → `FixedWorldTether`) — an aimed

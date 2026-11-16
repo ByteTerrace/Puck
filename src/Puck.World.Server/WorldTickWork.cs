@@ -26,10 +26,24 @@ public static class WorldTickWork {
     public static WorkKind ContinuationFolds { get; } = new(name: "world.tick.continuation-folds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the population slots a continuation fold visited to find the ones it folds.</summary>
     public static WorkKind ContinuationSlots { get; } = new(name: "world.tick.continuation-slots", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the slots a continuation fold encoded through the checkpoint's field codecs.</summary>
+    /// <summary>Gets the kind counting the slots a continuation fold encoded through their sections' encoders.</summary>
     public static WorkKind ContinuationEncodes { get; } = new(name: "world.tick.continuation-encodes", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the continuation bytes those slots encoded to.</summary>
+    /// <summary>Gets the kind counting every byte a continuation fold encoded: the sections', the profiles' and a
+    /// replay scope's tails'.</summary>
     public static WorkKind ContinuationBytes { get; } = new(name: "world.tick.continuation-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the profile projections a continuation fold encoded beside its slots.</summary>
+    public static WorkKind ContinuationProfiles { get; } = new(name: "world.tick.continuation-profiles", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the bytes those projections encoded to.</summary>
+    public static WorkKind ContinuationProfileBytes { get; } = new(name: "world.tick.continuation-profile-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the bytes a replay scope's fold encoded for its bodies' tails: the observation,
+    /// the profile and the register values, which the whole-population fold reads elsewhere or not at all.</summary>
+    public static WorkKind ContinuationTailBytes { get; } = new(name: "world.tick.continuation-tail-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
+    /// <summary>Gets, per folded section in <see cref="WorldContinuationSectionKind"/> order, the kind counting the
+    /// times a continuation fold encoded that section.</summary>
+    public static IReadOnlyList<WorkKind> SectionEncodes { get; } = SectionKinds(measure: "encodes", unit: "count");
+    /// <summary>Gets, per folded section in <see cref="WorldContinuationSectionKind"/> order, the kind counting the
+    /// bytes that section encoded to.</summary>
+    public static IReadOnlyList<WorkKind> SectionBytes { get; } = SectionKinds(measure: "bytes", unit: "bytes");
     /// <summary>Gets the kind counting the perception images frozen: one per tick a population with a flock steps, and
     /// one per tick a rule family with a neighbour-reading decision evaluates.</summary>
     public static WorkKind PerceptionFreezes { get; } = new(name: "world.tick.perception-freezes", unit: "count", workClass: WorkClass.Deterministic);
@@ -41,7 +55,46 @@ public static class WorldTickWork {
     /// <summary>Gets the ledger a host's servers count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
-        kinds: [FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids],
+        kinds: [
+            FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids,
+            ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
+        ],
         name: SourceName
     );
+
+    // One kind per section, named by the section: world.tick.section-<measure>.<section>.
+    private static WorkKind[] SectionKinds(string measure, string unit) {
+        var sections = Enum.GetValues<WorldContinuationSectionKind>();
+        var kinds = new WorkKind[sections.Length];
+
+        foreach (var section in sections) {
+            kinds[((int)section)] = new WorkKind(name: $"world.tick.section-{measure}.{SectionName(section: section)}", unit: unit, workClass: WorkClass.Deterministic);
+        }
+        return kinds;
+    }
+    private static string SectionName(WorldContinuationSectionKind section) => section switch {
+        WorldContinuationSectionKind.Pose => "pose",
+        WorldContinuationSectionKind.Motion => "motion",
+        WorldContinuationSectionKind.Clocks => "clocks",
+        WorldContinuationSectionKind.MotionRecency => "motion-recency",
+        WorldContinuationSectionKind.InputImages => "input-images",
+        WorldContinuationSectionKind.InputReadbacks => "input-readbacks",
+        WorldContinuationSectionKind.Action => "action",
+        WorldContinuationSectionKind.LaneRecency => "lane-recency",
+        WorldContinuationSectionKind.RegisterWrites => "register-writes",
+        WorldContinuationSectionKind.DurableInput => "durable-input",
+        WorldContinuationSectionKind.ScriptActors => "script-actors",
+        WorldContinuationSectionKind.Tape => "tape",
+        WorldContinuationSectionKind.Program => "program",
+        WorldContinuationSectionKind.Contacts => "contacts",
+        WorldContinuationSectionKind.Admission => "admission",
+        WorldContinuationSectionKind.Designations => "designations",
+        WorldContinuationSectionKind.Look => "look",
+        WorldContinuationSectionKind.Producer => "producer",
+        WorldContinuationSectionKind.Steering => "steering",
+        WorldContinuationSectionKind.Cadence => "cadence",
+        WorldContinuationSectionKind.Navigation => "navigation",
+        WorldContinuationSectionKind.Route => "route",
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(section)),
+    };
 }

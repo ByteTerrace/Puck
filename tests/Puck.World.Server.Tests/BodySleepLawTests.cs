@@ -224,12 +224,12 @@ public sealed class BodySleepLawTests {
 
         fixture.Step();
 
-        var before = population.Capture().Entries.Single().Residue;
+        var beforeEntry = population.Capture().Entries.Single();
+        var before = beforeEntry.Body.Clocks;
 
         Assert.Equal(expected: 0UL, actual: before.AsleepSinceTick);
         Assert.True(condition: (before.SleepIdleTicks > 0UL));
-        Assert.True(condition: before.ContactFieldObservationCurrent);
-        Assert.Equal(expected: 0UL, actual: before.LastContactFieldVersion);
+        Assert.True(condition: beforeEntry.Tail.ContactFieldObservationCurrent);
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
@@ -257,10 +257,10 @@ public sealed class BodySleepLawTests {
             actual: WorldAuthorityCheckpointCodec.Encode(checkpoint: recaptured!)
         );
 
-        var restoredPartial = fixture.Server.Population.Capture().Entries.Single().Residue;
+        var restoredPartial = fixture.Server.Population.Capture().Entries.Single();
 
-        Assert.Equal(expected: before.SleepIdleTicks, actual: restoredPartial.SleepIdleTicks);
-        Assert.Equal(expected: before.LastContactFieldVersion, actual: restoredPartial.LastContactFieldVersion);
+        Assert.Equal(expected: before.SleepIdleTicks, actual: restoredPartial.Body.Clocks.SleepIdleTicks);
+        Assert.Equal(expected: beforeEntry.Tail.ContactFieldObservationCurrent, actual: restoredPartial.Tail.ContactFieldObservationCurrent);
 
         fixture.Step();
 
@@ -311,7 +311,7 @@ public sealed class BodySleepLawTests {
         var populationCheckpoint = checkpoint!.Population;
         var capturedEntry = populationCheckpoint.Entries.Single();
         var pendingEntry = capturedEntry with {
-            Residue = capturedEntry.Residue with { ContactFieldObservationCurrent = false },
+            Tail = capturedEntry.Tail with { ContactFieldObservationCurrent = false },
         };
 
         checkpoint = checkpoint with {
@@ -352,7 +352,7 @@ public sealed class BodySleepLawTests {
         var capturedEntry = checkpoint!.Population.Entries.Single();
         var pending = RoundTrip(checkpoint: checkpoint with {
             Population = checkpoint.Population with {
-                Entries = [capturedEntry with { Residue = capturedEntry.Residue with { ContactFieldObservationCurrent = false } }],
+                Entries = [capturedEntry with { Tail = capturedEntry.Tail with { ContactFieldObservationCurrent = false } }],
             },
         });
 
