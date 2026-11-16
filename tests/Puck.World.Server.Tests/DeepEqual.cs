@@ -1,8 +1,6 @@
 using System.Collections;
 using System.Reflection;
 
-using Puck.World.Protocol;
-
 namespace Puck.World.Server.Tests;
 
 // A structural deep comparer over a checkpoint record graph: default record equality compares an array/list field
@@ -33,14 +31,10 @@ internal static class DeepEqual {
 
         var type = a.GetType();
 
-        // PlayerIntent's own explicit element-wise Equals is the one door onto its InlineArray backing store — the
-        // compiler's default struct equality throws for an InlineArray, and there is no public indexer to walk it
-        // any other way from outside the type.
-        if (
-            (a is PlayerIntent intentA) &&
-            (b is PlayerIntent intentB)
-        ) {
-            var equal = intentA.Equals(other: intentB);
+        // An inline array compares by its own Equals: reflection sees one backing field and the runtime's struct
+        // equality refuses the type, so every inline array a checkpoint holds declares its equality.
+        if (type.IsDefined(attributeType: typeof(System.Runtime.CompilerServices.InlineArrayAttribute), inherit: false)) {
+            var equal = a.Equals(obj: b);
 
             if (!equal) {
                 LastMismatchPath = path;

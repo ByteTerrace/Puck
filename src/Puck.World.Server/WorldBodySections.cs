@@ -327,31 +327,32 @@ public readonly record struct BodyMotionRecencySection(ReadOnlyMemory<ulong> Clo
 }
 /// <summary>The input images that arrive at a body and the routing they arrive under: one-tick publications the next
 /// advance consumes, the held image a restore keeps, and the source, engagement and mapping that say what fills the
-/// intent and where it goes.</summary>
-/// <param name="Submitted">The live stream's submitted image.</param>
-/// <param name="HasSubmitted">Whether a submission is staged for the next advance.</param>
-/// <param name="Held">The live-held device image.</param>
-/// <param name="Producer">The server-side producer's staged image.</param>
-/// <param name="HasProducer">Whether a producer image is staged for the next advance.</param>
-/// <param name="TransferHeld">The held image a restore keeps until the next input publication.</param>
-/// <param name="HasTransferHeld">Whether <paramref name="TransferHeld"/> is live.</param>
-/// <param name="Source">What fills the intent between tape segments.</param>
-/// <param name="Engaged">Whether the resolved intent is diverted from the avatar.</param>
-/// <param name="Mapping">The compiled input mapping the images are addressed in.</param>
-/// <param name="Epoch">The input epoch the mapping was selected at.</param>
-public readonly record struct BodyInputImagesSection(
-    PlayerIntent Submitted,
-    bool HasSubmitted,
-    PlayerIntent Held,
-    PlayerIntent Producer,
-    bool HasProducer,
-    PlayerIntent TransferHeld,
-    bool HasTransferHeld,
-    IntentSource Source,
-    bool Engaged,
-    ushort Mapping,
-    ulong Epoch
-) : IContinuationSection<BodyInputImagesSection> {
+/// intent and where it goes. The source can name a producer, so the section holds a reference and a body keeps it
+/// behind a <see cref="VersionedRecord{T}"/>.</summary>
+public record struct BodyInputImagesSection : IContinuationSection<BodyInputImagesSection> {
+    /// <summary>The live stream's submitted image.</summary>
+    public PlayerIntent Submitted;
+    /// <summary>Whether a submission is staged for the next advance.</summary>
+    public bool HasSubmitted;
+    /// <summary>The live-held device image.</summary>
+    public PlayerIntent Held;
+    /// <summary>The server-side producer's staged image.</summary>
+    public PlayerIntent Producer;
+    /// <summary>Whether a producer image is staged for the next advance.</summary>
+    public bool HasProducer;
+    /// <summary>The held image a restore keeps until the next input publication.</summary>
+    public PlayerIntent TransferHeld;
+    /// <summary>Whether <see cref="TransferHeld"/> is live.</summary>
+    public bool HasTransferHeld;
+    /// <summary>What fills the intent between tape segments.</summary>
+    public IntentSource Source;
+    /// <summary>Whether the resolved intent is diverted from the avatar.</summary>
+    public bool Engaged;
+    /// <summary>The compiled input mapping the images are addressed in.</summary>
+    public ushort Mapping;
+    /// <summary>The input epoch the mapping was selected at.</summary>
+    public ulong Epoch;
+
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.InputImages;
 
@@ -370,36 +371,36 @@ public readonly record struct BodyInputImagesSection(
         writer.WriteUInt64(value: section.Epoch);
     }
     /// <inheritdoc/>
-    public static BodyInputImagesSection Read(ref WireReader reader) => new(
-        Submitted: WorldWireCodec.ReadIntent(reader: ref reader),
-        HasSubmitted: reader.ReadBoolean(),
-        Held: WorldWireCodec.ReadIntent(reader: ref reader),
-        Producer: WorldWireCodec.ReadIntent(reader: ref reader),
-        HasProducer: reader.ReadBoolean(),
-        TransferHeld: WorldWireCodec.ReadIntent(reader: ref reader),
-        HasTransferHeld: reader.ReadBoolean(),
-        Source: WorldWireCodec.ReadIntentSource(reader: ref reader),
-        Engaged: reader.ReadBoolean(),
-        Mapping: reader.ReadUInt16(),
-        Epoch: reader.ReadUInt64()
-    );
+    public static BodyInputImagesSection Read(ref WireReader reader) => new() {
+        Submitted = WorldWireCodec.ReadIntent(reader: ref reader),
+        HasSubmitted = reader.ReadBoolean(),
+        Held = WorldWireCodec.ReadIntent(reader: ref reader),
+        Producer = WorldWireCodec.ReadIntent(reader: ref reader),
+        HasProducer = reader.ReadBoolean(),
+        TransferHeld = WorldWireCodec.ReadIntent(reader: ref reader),
+        HasTransferHeld = reader.ReadBoolean(),
+        Source = WorldWireCodec.ReadIntentSource(reader: ref reader),
+        Engaged = reader.ReadBoolean(),
+        Mapping = reader.ReadUInt16(),
+        Epoch = reader.ReadUInt64(),
+    };
 }
 /// <summary>The images the last advance resolved, kept for what reads them afterwards: the intent an engaged body
 /// diverts, the held, composed and scalar read-backs rules and commands answer from, and the relative input's
-/// fractions below scalar precision.</summary>
-/// <param name="EngagedIntent">The intent resolved on the most recent advance.</param>
-/// <param name="ReadHeld">The held overlay the last advance admitted.</param>
-/// <param name="ReadComposed">The intent after the held overlay composed with the movement tier.</param>
-/// <param name="ReadScalar">The step's scalar projection.</param>
-/// <param name="RelativeRemainders">The conserved Q32.32 fractions, one per axis; a body with no relative channel
-/// carries none, which stands for zeros.</param>
-public readonly record struct BodyInputReadbacksSection(
-    PlayerIntent EngagedIntent,
-    PlayerIntent ReadHeld,
-    PlayerIntent ReadComposed,
-    PlayerIntent ReadScalar,
-    ReadOnlyMemory<long> RelativeRemainders
-) : IContinuationSection<BodyInputReadbacksSection> {
+/// fractions below scalar precision. The section holds no reference, so a body keeps it behind a
+/// <see cref="Versioned{T}"/>.</summary>
+public struct BodyInputReadbacksSection : IContinuationSection<BodyInputReadbacksSection>, IEquatable<BodyInputReadbacksSection> {
+    /// <summary>The intent resolved on the most recent advance.</summary>
+    public PlayerIntent EngagedIntent;
+    /// <summary>The held overlay the last advance admitted.</summary>
+    public PlayerIntent ReadHeld;
+    /// <summary>The intent after the held overlay composed with the movement tier.</summary>
+    public PlayerIntent ReadComposed;
+    /// <summary>The step's scalar projection.</summary>
+    public PlayerIntent ReadScalar;
+    /// <summary>The conserved Q32.32 fractions, one per axis, inline; zeros for a body with no relative channel.</summary>
+    public ChannelAxes RelativeRemainders;
+
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.InputReadbacks;
 
@@ -409,18 +410,32 @@ public readonly record struct BodyInputReadbacksSection(
         WorldWireCodec.WriteIntent(intent: section.ReadHeld, writer: writer);
         WorldWireCodec.WriteIntent(intent: section.ReadComposed, writer: writer);
         WorldWireCodec.WriteIntent(intent: section.ReadScalar, writer: writer);
-        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxAxes, values: section.RelativeRemainders.Span, writer: writer);
+        WorldSectionWire.WriteFixed(count: ChannelLimits.MaxAxes, values: section.RelativeRemainders, writer: writer);
     }
     /// <inheritdoc/>
-    public static BodyInputReadbacksSection Read(ref WireReader reader) => new(
-        EngagedIntent: WorldWireCodec.ReadIntent(reader: ref reader),
-        ReadHeld: WorldWireCodec.ReadIntent(reader: ref reader),
-        ReadComposed: WorldWireCodec.ReadIntent(reader: ref reader),
-        ReadScalar: WorldWireCodec.ReadIntent(reader: ref reader),
-        RelativeRemainders: WorldSectionWire.ReadFixedInt64s(count: ChannelLimits.MaxAxes, reader: ref reader)
+    public static BodyInputReadbacksSection Read(ref WireReader reader) {
+        var section = new BodyInputReadbacksSection {
+            EngagedIntent = WorldWireCodec.ReadIntent(reader: ref reader),
+            ReadHeld = WorldWireCodec.ReadIntent(reader: ref reader),
+            ReadComposed = WorldWireCodec.ReadIntent(reader: ref reader),
+            ReadScalar = WorldWireCodec.ReadIntent(reader: ref reader),
+        };
+
+        foreach (ref var remainder in ((Span<long>)section.RelativeRemainders)) { remainder = reader.ReadInt64(); }
+        return section;
+    }
+
+    /// <inheritdoc/>
+    public readonly bool Equals(BodyInputReadbacksSection other) => (
+        EngagedIntent.Equals(other: other.EngagedIntent) && ReadHeld.Equals(other: other.ReadHeld) &&
+        ReadComposed.Equals(other: other.ReadComposed) && ReadScalar.Equals(other: other.ReadScalar) &&
+        RelativeRemainders.Equals(other: other.RelativeRemainders)
     );
-}
-/// <summary>One value per channel ordinal, stored inline: a table of <see cref="ChannelLimits.MaxChannels"/> elements
+    /// <inheritdoc/>
+    public override readonly bool Equals(object? obj) => ((obj is BodyInputReadbacksSection other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override readonly int GetHashCode() => HashCode.Combine(EngagedIntent, ReadHeld, ReadComposed, ReadScalar, RelativeRemainders);
+}/// <summary>One value per channel ordinal, stored inline: a table of <see cref="ChannelLimits.MaxChannels"/> elements
 /// that is part of the value that holds it, so a section made of them holds no reference.</summary>
 /// <typeparam name="T">The element type.</typeparam>
 [System.Runtime.CompilerServices.InlineArray(length: ChannelLimits.MaxChannels)]

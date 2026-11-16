@@ -83,13 +83,13 @@ public sealed partial class WorldBody {
             OverlayRemainingTicks: m_overlayRemaining,
             ChannelTimerTicks: CopyInto(buffers: buffers, source: ((ReadOnlySpan<ulong>)Action.TimerTicks)),
             ChannelTimerValues: CopyInto(buffers: buffers, source: ((ReadOnlySpan<FixedQ4816>)Action.TimerValues)),
-            RelativeRemainders: CopyInto(buffers: buffers, source: m_relativeRemainders),
+            RelativeRemainders: CopyInto(buffers: buffers, source: ((m_channels.RelativeMask == 0) ? default : ((ReadOnlySpan<long>)InputReadbacks.RelativeRemainders))),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
-            Source: m_source,
+            Source: InputImages.Source,
             PreviousChannelBit: CopyInto(buffers: buffers, source: ((ReadOnlySpan<bool>)Action.PreviousBit)),
-            HeldChannelImage: (m_hasTransferHeldChannels
-            ? m_transferHeldChannels
-            : m_channelReadHeld),
+            HeldChannelImage: (InputImages.HasTransferHeld
+            ? InputImages.TransferHeld
+            : InputReadbacks.ReadHeld),
             PendingDefaultChannelPress: CopyInto(buffers: buffers, source: ((ReadOnlySpan<bool>)Action.PendingPress)),
             PendingDefaultChannelValue: CopyInto(buffers: buffers, source: ((ReadOnlySpan<FixedQ4816>)Action.PendingValue)),
             MotionRecency: CopyInto(buffers: buffers, source: m_motionRecency),
@@ -338,14 +338,15 @@ public sealed partial class WorldBody {
         m_drivePitch = state.DrivePitch;
         m_overlayVelocity = state.OverlayVelocity;
         m_overlayRemaining = state.OverlayRemainingTicks;
-        m_source = state.Source;
+        InputImagesEdit.Source = state.Source;
         m_pendingContinuum = state.PendingContinuum;
         m_continuumConsumedThroughEngineTick = state.PendingContinuum?.ConsumedThroughEngineTick;
         if (state.PendingContinuum is not null) {
             m_ordinaryAdvanceAdmitted = false;
         }
 
-        CopyClamped(source: state.RelativeRemainders, destination: m_relativeRemainders);
+        // A body with no relative channel carries no fractions, whatever the capture held.
+        if (m_channels.RelativeMask != 0) { CopyClamped(source: state.RelativeRemainders, destination: ((Span<long>)InputReadbacksEdit.RelativeRemainders)); }
         var ticks = state.ChannelTimerTicks;
         var values = state.ChannelTimerValues;
         var timedCount = Math.Min(
@@ -365,8 +366,8 @@ public sealed partial class WorldBody {
             source: state.PreviousChannelBit,
             destination: ((Span<bool>)ActionEdit.PreviousBit)
         );
-        m_transferHeldChannels = state.HeldChannelImage;
-        m_hasTransferHeldChannels = (state.HeldChannelImage != default);
+        InputImagesEdit.TransferHeld = state.HeldChannelImage;
+        InputImagesEdit.HasTransferHeld = (state.HeldChannelImage != default);
         CopyClamped(
             source: state.PendingDefaultChannelPress,
             destination: ((Span<bool>)ActionEdit.PendingPress)
@@ -555,10 +556,10 @@ public sealed partial class WorldBody {
         VerticalVelocityRemainder: m_verticalVelocityAccumulator.Remainder,
         Up: m_up,
         Grounded: m_grounded,
-        Engaged: m_engaged,
-        EngagedIntent: m_engagedIntent,
-        Input: new(m_submittedIntent, m_hasSubmittedIntent, m_heldChannels, m_producerIntent, m_hasProducerIntent,
-            m_transferHeldChannels, m_hasTransferHeldChannels, m_channelReadHeld, m_channelReadComposed, m_channelReadScalar,
+        Engaged: InputImages.Engaged,
+        EngagedIntent: InputReadbacks.EngagedIntent,
+        Input: new(InputImages.Submitted, InputImages.HasSubmitted, InputImages.Held, InputImages.Producer, InputImages.HasProducer,
+            InputImages.TransferHeld, InputImages.HasTransferHeld, InputReadbacks.ReadHeld, InputReadbacks.ReadComposed, InputReadbacks.ReadScalar,
             InputMappingId, InputEpoch),
         OrdinaryAdvanceAdmitted: m_ordinaryAdvanceAdmitted,
         ContinuumConsumedThroughEngineTick: m_continuumConsumedThroughEngineTick,
@@ -623,20 +624,20 @@ public sealed partial class WorldBody {
         );
         m_up = residue.Up;
         m_grounded = residue.Grounded;
-        m_engaged = residue.Engaged;
-        m_engagedIntent = residue.EngagedIntent;
-        m_submittedIntent = residue.Input.Submitted;
-        m_hasSubmittedIntent = residue.Input.HasSubmitted;
-        m_heldChannels = residue.Input.Held;
-        m_producerIntent = residue.Input.Producer;
-        m_hasProducerIntent = residue.Input.HasProducer;
-        m_transferHeldChannels = residue.Input.TransferHeld;
-        m_hasTransferHeldChannels = residue.Input.HasTransferHeld;
-        m_channelReadHeld = residue.Input.ReadHeld;
-        m_channelReadComposed = residue.Input.ReadComposed;
-        m_channelReadScalar = residue.Input.ReadScalar;
-        InputMappingId = residue.Input.Mapping;
-        InputEpoch = residue.Input.Epoch;
+        InputImagesEdit.Engaged = residue.Engaged;
+        InputReadbacksEdit.EngagedIntent = residue.EngagedIntent;
+        InputImagesEdit.Submitted = residue.Input.Submitted;
+        InputImagesEdit.HasSubmitted = residue.Input.HasSubmitted;
+        InputImagesEdit.Held = residue.Input.Held;
+        InputImagesEdit.Producer = residue.Input.Producer;
+        InputImagesEdit.HasProducer = residue.Input.HasProducer;
+        InputImagesEdit.TransferHeld = residue.Input.TransferHeld;
+        InputImagesEdit.HasTransferHeld = residue.Input.HasTransferHeld;
+        InputReadbacksEdit.ReadHeld = residue.Input.ReadHeld;
+        InputReadbacksEdit.ReadComposed = residue.Input.ReadComposed;
+        InputReadbacksEdit.ReadScalar = residue.Input.ReadScalar;
+        InputImagesEdit.Mapping = residue.Input.Mapping;
+        InputImagesEdit.Epoch = residue.Input.Epoch;
         m_ordinaryAdvanceAdmitted = residue.OrdinaryAdvanceAdmitted;
         m_continuumConsumedThroughEngineTick = residue.ContinuumConsumedThroughEngineTick;
         m_affectingSubject = residue.AffectingSubject;

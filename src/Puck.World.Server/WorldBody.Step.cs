@@ -69,8 +69,8 @@ public sealed partial class WorldBody {
         // erase an accepted observation or turn the same held sample into another press on the following tick.
         var inputRuntime = m_stateLane?.Input;
 
-        if (m_hasProducerIntent && SourceNamesProducer(source: m_source) && (inputRuntime is not null)) {
-            m_producerIntent = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: m_producerIntent, tick: tick);
+        if (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (inputRuntime is not null)) {
+            InputImagesEdit.Producer = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
         }
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
@@ -96,7 +96,7 @@ public sealed partial class WorldBody {
 
         // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
         // intent for its targets' translation/passthrough even while the avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
-        m_engagedIntent = intent;
+        InputReadbacksEdit.EngagedIntent = intent;
 
         // The SAME edge test ProcessLaneActions uses below (bit crossing the ordinal's threshold, previous tick's bit
         // clear) — computed here, ahead of integration, so a fired edge can preempt it entirely rather than firing a
@@ -106,10 +106,10 @@ public sealed partial class WorldBody {
             && !Action.PreviousBit[probeOrdinal]);
 
         if (
-            m_engaged ||
+            InputImages.Engaged ||
             engageEdge
         ) {
-            // Captured (m_engaged, i.e. capture:true), OR this tick's press is being diverted into an engage instead
+            // Captured (InputImages.Engaged, i.e. capture:true), OR this tick's press is being diverted into an engage instead
             // of reaching the body (engageEdge): either way the resolved intent never reaches the avatar (no pose
             // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
             // drains identically whether the intent drives the avatar or the route target.
@@ -156,7 +156,7 @@ public sealed partial class WorldBody {
         }
 
         // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
-        if (InputEpoch != inputEpoch) { intent = m_engagedIntent; }
+        if (InputEpoch != inputEpoch) { intent = InputReadbacks.EngagedIntent; }
         // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
@@ -171,7 +171,7 @@ public sealed partial class WorldBody {
 
         // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
         // submission, so a missed tick reads no channels rather than a stale hold.
-        m_heldChannels = default;
+        InputImagesEdit.Held = default;
         m_affectingSubject = -1;
 
         UpdateSleepEligibility(
@@ -190,11 +190,11 @@ public sealed partial class WorldBody {
             RestoreMotion(scratch: scratch);
             // A refused motion step still consumes its one-tick publications. They are sampled again by their
             // producers next tick; restoring the motion must not turn a missed impulse into a retained request.
-            m_submittedIntent = default;
-            m_hasSubmittedIntent = false;
-            m_heldChannels = default;
-            m_producerIntent = default;
-            m_hasProducerIntent = false;
+            InputImagesEdit.Submitted = default;
+            InputImagesEdit.HasSubmitted = false;
+            InputImagesEdit.Held = default;
+            InputImagesEdit.Producer = default;
+            InputImagesEdit.HasProducer = false;
             effectOutputs?.RemoveRange(index: effectOutputCount, count: (effectOutputs.Count - effectOutputCount));
             designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
             generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
@@ -232,7 +232,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in m_channelReadComposed, orientation: m_orientation) * (instruction.Value * m_scale));
+                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in InputReadbacks.ReadComposed, orientation: m_orientation) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -350,7 +350,7 @@ public sealed partial class WorldBody {
             }
         }
         if (writesState) { m_stateLane?.Input?.CommitKitEffects(body: scratch.EntityIndex, logicalChannel: logicalChannel); }
-        if (InputEpoch != epoch) { scratch.Intent = m_engagedIntent; }
+        if (InputEpoch != epoch) { scratch.Intent = InputReadbacks.EngagedIntent; }
         return true;
     }
     // The shared hard-teleport commit: clear the affected integration carries. Face only resets rotation; Warp resets
@@ -902,10 +902,10 @@ public sealed partial class WorldBody {
 
         if (resolved) { movement = acceptedScript; }
         if (!resolved) {
-            movement = ((!m_source.IsIdle && m_hasSubmittedIntent)
-                ? m_submittedIntent
-                : ((SourceNamesProducer(source: m_source) && m_hasProducerIntent)
-                    ? m_producerIntent
+            movement = ((!InputImages.Source.IsIdle && InputImages.HasSubmitted)
+                ? InputImages.Submitted
+                : ((SourceNamesProducer(source: InputImages.Source) && InputImages.HasProducer)
+                    ? InputImages.Producer
                     : default
             ));
         }
@@ -913,10 +913,10 @@ public sealed partial class WorldBody {
         // Both one-tick images are a one-step publish, even when a tape or the source masked them this time. Their
         // producers must republish on the next authoritative step, matching the snapshot discipline of every other
         // input source.
-        m_submittedIntent = default;
-        m_hasSubmittedIntent = false;
-        m_producerIntent = default;
-        m_hasProducerIntent = false;
+        InputImagesEdit.Submitted = default;
+        InputImagesEdit.HasSubmitted = false;
+        InputImagesEdit.Producer = default;
+        InputImagesEdit.HasProducer = false;
 
         // Overlay the action track, per ordinal: a wire timer (body.press) overlays UNCONDITIONALLY — the poke
         // stays a poke regardless of intent source — replacing whatever the movement tier resolved for that ordinal;
@@ -928,9 +928,9 @@ public sealed partial class WorldBody {
         // one the way a numeric max used to.
         var channels = movement.Channels;
         var heldOverlay = default(ChannelValues);
-        var liveHeld = (m_hasTransferHeldChannels
-            ? m_transferHeldChannels
-            : m_heldChannels
+        var liveHeld = (InputImages.HasTransferHeld
+            ? InputImages.TransferHeld
+            : InputImages.Held
         );
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
@@ -940,7 +940,7 @@ public sealed partial class WorldBody {
                     ? ((Action.TimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
                     : Action.TimerValues[ordinal]));
             } else if (
-                m_source.IsLive &&
+                InputImages.Source.IsLive &&
                 !m_roleChannels[ordinal]
             ) {
                 heldOverlay[ordinal] = liveHeld[ordinal];
@@ -952,11 +952,11 @@ public sealed partial class WorldBody {
             }
         }
 
-        m_channelReadHeld = new PlayerIntent(Channels: heldOverlay);
-        m_channelReadComposed = (movement with { Channels = channels });
+        InputReadbacksEdit.ReadHeld = new PlayerIntent(Channels: heldOverlay);
+        InputReadbacksEdit.ReadComposed = (movement with { Channels = channels });
 
-        m_channelReadScalar = ProjectRelative(intent: m_channelReadComposed);
-        return m_channelReadScalar;
+        InputReadbacksEdit.ReadScalar = ProjectRelative(intent: InputReadbacks.ReadComposed);
+        return InputReadbacks.ReadScalar;
     }
     // The planar (XZ) offset from one point to another, whose Yaw is the bearing from the first to the second.
     private static FixedVector3 PlanarOffset(in FixedVector3 from, in FixedVector3 to) =>

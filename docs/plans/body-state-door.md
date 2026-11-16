@@ -210,8 +210,8 @@ that moves on write access sees every one of them as changed, because
 | Section | Written every advanced tick by |
 |---|---|
 | Pose | `m_previousPosition = m_position` at the top of `WorldBody.Advance` |
-| Input read-backs | `m_engagedIntent = intent` in `WorldBody.Advance`; the three read-back images at the end of `WorldBody.NextIntent` |
-| Input images | The submitted and producer images and their flags cleared in `WorldBody.NextIntent`; `m_heldChannels = default` in `WorldBody.Advance` |
+| Input read-backs | The engaged intent written in `WorldBody.Advance`; the three read-back images at the end of `WorldBody.NextIntent` |
+| Input images | The submitted and producer images and their flags cleared in `WorldBody.NextIntent`; the held image cleared in `WorldBody.Advance` |
 | Action | The previous-bit image and every lane timer, each written for every lane (below) |
 | Clocks | The motion recency clocks at the top of `WorldBody.ExecuteProgram`; the idle count in `WorldBody.UpdateSleepEligibility`; the turn budget `WorldBody.SteerUpToward` integrates before it knows whether there is a turn to make |
 | Motion | The motion program's own integration **[inference]**; `m_affectingSubject = -1` in `WorldBody.Advance` |
@@ -239,11 +239,14 @@ default by the fold: a producer's intent is staged before the step and cleared
 inside it. A compare taken at the write, or at the end of the step, would
 still see them as changed.
 
-**The read-back images are state.** `m_channelReadComposed` aims a targeted
-planar impulse (`WorldBody.ApplyTargetedEffect`) and answers a rule's
-`$pointer` (`WorldRuleHost.ReadPointerRay`); `m_channelReadScalar` answers a
-rule's channel read (`WorldBody.ReadChannelScalar`); `m_channelReadHeld` seeds
-the held image a crossing carries (`WorldBody.CaptureTransferState`)
+**The read-back images are state.** The composed image
+(`BodyInputReadbacksSection.ReadComposed`) aims a targeted planar impulse
+(`WorldBody.ApplyTargetedEffect`) and answers a rule's `$pointer`
+(`WorldRuleHost.ReadPointerRay`); the scalar image
+(`BodyInputReadbacksSection.ReadScalar`) answers a rule's channel read
+(`WorldBody.ReadChannelScalar`); the held image
+(`BodyInputReadbacksSection.ReadHeld`) seeds the held image a crossing
+carries (`WorldBody.CaptureTransferState`)
 **[opened]**. They stay in the continuation, and the eleven slots a tick in
 which they change are part of the true cost.
 
@@ -1038,7 +1041,7 @@ over ticks 300 to 600 of the headless debug world with a recording armed.
 | D1. Sections as images (landed; [what it fixed](#d1-as-landed)) | Medium | The section types as capture images built from the body's and the entry's fields (`WorldBody.CaptureSections`, `WorldPopulation.EntryCheckpoint`); a static encoder and reader per section (`IContinuationSection<TSelf>`); the checkpoint entry as its sections and a tail (`WorldPopulationEntryCheckpoint`, `WorldPopulationEntryTail`), walked in one stated order; the slot digest as a fold of section digests; the observation and the profile folded beside the segments, the profile by content; the registers out of the whole-population fold; the medium flags and the affecting subject captured and restored (`WorldBody.RestoreSections`); the per-section counters; the codec coverage law | None yet: every section encodes fresh | Ran: `puck test --reproduce --jobs 1` on the go, chess-scope, garden, snapshot-partitions and rule-faults W10/W11 tests; the go tests recorded (`--record`) and compared file by file with a recording of the step before: the delivered snapshots, the crossings and every exported value match, and the authoritative hash differs, as it must; the counters read 590 slots and 5,177,680 bytes a tick; `ContinuationHashLawTests` (a captured population's fold equals the live fold, a profiled seat's included, and an identity's rate edit with no body write moves it); `ContinuationSectionLawTests` (every field of every section reaches its digest and reads back); `WorldMediumLawTests` (a body asleep in a medium restores reading `inmedium`). Not run as specified: the walkthrough scenario for `identity.motion`, because that verb writes the identity inline and tapes nothing, so a replay cannot re-apply it; the law above stands in for the fold's half of it |
 | D2. The door types (landed; [what it fixed](#d2-as-landed)) | Small | The section, table and record holders (`Versioned<T>`, `VersionedArray<T>`, `VersionedRecord<T>`) with the content check and the checked read; the slot binding, the notes and their publish (`SlotBinding`, `SlotNotes`); `IndexVersions` as a shared type with the arena on it; the derived view (`Derived<TResult>`); DOOR001, DOOR002, DOOR003 and DOOR005 (`DoorAnalyzer`); a law that compiles both spikes' statements against the holders' own sources and asserts each diagnostic | The holders, used by nothing in the body yet | `DoorAnalyzerTests` (each refused shape names its compiler error or its rule, each shape the write side admits reports nothing); `VersionedHolderLawTests` (a holder written back to the same value hands out its cached digest and counts one filtered compare; a checked read names a stale digest; notes written across partitions publish every slot once, in partition order; a derived answer recomputes exactly when a holder moved); the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged; the go tests under `--compare` against D1's recording |
 | D3. The Action section (landed; [what it fixed](#d3-as-landed)) | Medium | The per-channel arrays and the lane runtime as inline arrays in a holder; the bookkeeping arrays in array holders | The Action and Bookkeeping holders | Hashes equal D1's (`puck test --compare` against D1's `--record`); the Action ranges' 2,454,400 bytes fall to about 9,000 and the script actors' 120,360 to zero; about 100 filtered compares of Action a tick (the standing bodies); zero stale digests on every replayed tick; unchanged encodes at a body's first move only. Ran: `puck test --reproduce --jobs 1` on the rule-faults, snapshot-partitions, garden pack and chess scope tests, and on the go tests under `--compare` against D1's recording, every world matching it; each replayed tick's hash is checked against its full recompute (`WorldReplayProbe.Verify`); the analyzer, state, rule, server and games laws, the whole server suite failing the same 29 laws as its base; the counts are in [D3 as landed](#d3-as-landed). No law holds that an unchanged body's held sections encode nothing: the counters show it |
-| D4. The Input sections | Medium | The intent images and flags, in two sections | The two Input holders | The same; the input ranges' 1,421,900 bytes fall to about 12,000; the walkthrough routes reproduce |
+| D4. The Input sections (landed; [what it fixed](#d4-as-landed)) | Medium | The intent images and flags, in two sections | The two Input holders | The same; the input ranges' 1,421,900 bytes fall to about 12,000; the walkthrough routes reproduce |
 | D5. Pose, Motion, Clocks, Tape and the configuration | Large | The remaining body fields; the facts as a static function behind a derived view, with the walkable threshold and hold table in the configuration holder; the checkpoint restore and the step snapshot as section copies with the four fixups; the crossing's image as a projection; the residue pair deleted | Their holders | The same; these ranges' 416,540 bytes fall to about 19,000; the walkthrough routes reproduce; a refused sweep still restores (the sweep refusal laws); a law that capture, a contact-field rebuild and a second capture give one digest; the hall tests reproduce |
 | D6. Contacts | Medium | In `Puck.Physics`: the slot state struct, `FixedRigidWorld.Step` over spans, association over a span, the manifold and slot-table objects gone. In the server: contact records in the body's array holder, `WorldRigidContact` and the slot image gone, the step's association list and scratch | The Contacts holder | The same; the physics laws for the rigid solver; a law that after a rigid step every associated contact's stored state equals its solved scratch, and that every body whose stored contacts changed was noted; the contact-store counter split by whether the owner stepped; chess and go reproduce with parked islands waking and parking |
 | D7. The entry and the reader | Medium | The Admission, Producer, Steering, Cadence and Navigation sections on `Entry`, with the grants and revoked keys as immutable arrays; the profile binding's setter and the profiled set; the fold as a reader of the notes; slot and segment digests cached under the cache epoch; the three-level sample; the open-phase count in place of the pending-output test; the island digests | Their holders | The same; parked slots encode nothing over the window; encoded bytes a tick are between 44,000 and 78,000; slot refolds equal the slots noted; a law that a fold called inside an open phase throws |
@@ -1235,6 +1238,54 @@ for about 85.5 bodies a tick (83.21 filtered and 2.29 encoded), where the row
 expected about 100: `physics.bodies.advances` reads 84.5 over the same window,
 so the writers are the bodies whose step ran **[inference]**.
 
+### D4 as landed
+
+Both Input sections are behind holders:
+
+| Section | Holder | Why that holder |
+|---|---|---|
+| InputImages | `VersionedRecord<BodyInputImagesSection>` | The source can name a producer, a string, so the section holds a reference |
+| InputReadbacks | `Versioned<BodyInputReadbacksSection>` | Four images and the relative fractions, one per axis, inline (`ChannelAxes`) |
+
+- **A record holder written field by field.** `BodyInputImagesSection` is a
+  record struct of fields: every field is an unmanaged value or a readonly
+  struct of those and a string, which is what DOOR003 admits, and the step
+  writes one field at a time through `InputImagesEdit` as it does through a
+  section holder. The holder compares a moved section by the record's own
+  equality, so it counts filtered compares and no compared bytes.
+- **The relative fractions are inline.** A body with no relative channel used
+  to hold no array; it now holds zeros, which encode to the same bytes. A
+  restore and a crossing still give such a body no fractions from what they
+  carry, and a channel table with another relative layout still zeroes them.
+- **An inline array declares its equality.** The runtime's struct equality
+  throws for an inline array, and `PlayerIntent` worked around it with its own
+  loop. `ChannelAxes` now declares equality, `PlayerIntent` and the read-backs
+  rest on it, and the checkpoint tests' structural compare
+  (`DeepEqual`) asks any inline array for its own.
+- **The refused sweep's residue still copies the input fields one by one**
+  (`WorldBodyIntegrationResidue`); D5 replaces it with section copies.
+- The fixed-count table readers of `WorldSectionWire` had no caller left and
+  are deleted.
+
+Counts a tick, the debug world over ticks 300 to 600 with a recording armed
+(four folds a tick):
+
+| Count (`world.tick.`) | D3 | D4 |
+|---|---|---|
+| `continuation-bytes` | 2,529,891 | 1,133,382 |
+| `section-bytes.input-images` | 634,545 | 0 |
+| `section-encodes.input-images` | 590 | 0 |
+| `section-filtered-compares.input-images` | none | 85.5 |
+| `section-bytes.input-readbacks` | 776,440 | 14,476 |
+| `section-encodes.input-readbacks` | 590 | 11 |
+| `section-filtered-compares.input-readbacks` | none | 74.5 |
+| `section-compared-bytes.input-readbacks` | none | 131,328 |
+| `section-unchanged-encodes` of both | none | 0 |
+
+The two sections' 1,410,985 bytes fall to 14,476: the eleven read-back
+sections a tick that change, at 1,316 bytes each. The input images are
+written for 85.5 bodies a tick and are back to the value their digest was
+taken from by every fold, so none encodes.
 No step is a stopgap for a later one. D1's static encoders are what makes the
 coverage half of the invariant true before any field moves, and every later
 step only changes where a section's value is stored. D12 is the one step the

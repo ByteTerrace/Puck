@@ -34,32 +34,4 @@ internal static class WorldSectionWire {
         writer.WriteBooleans(values: Fixed(count: count, padding: out var padding, values: values));
         for (var index = 0; (index < padding); index++) { writer.WriteBoolean(value: false); }
     }
-    /// <summary>Reads a fixed table of 64-bit raws.</summary>
-    internal static long[] ReadFixedInt64s(ref WireReader reader, int count) {
-        var values = new long[count];
-
-        for (var index = 0; (index < count); index++) { values[index] = reader.ReadInt64(); }
-        return values;
-    }
-    /// <summary>Reads a fixed table of unsigned 64-bit values.</summary>
-    internal static ulong[] ReadFixedUInt64s(ref WireReader reader, int count) {
-        var values = new ulong[count];
-
-        for (var index = 0; (index < count); index++) { values[index] = reader.ReadUInt64(); }
-        return values;
-    }
-    /// <summary>Reads a fixed table of fixed-point values.</summary>
-    internal static FixedQ4816[] ReadFixedFixeds(ref WireReader reader, int count) {
-        var values = new FixedQ4816[count];
-
-        for (var index = 0; (index < count); index++) { values[index] = reader.ReadFixed(); }
-        return values;
-    }
-    /// <summary>Reads a fixed table of flags.</summary>
-    internal static bool[] ReadFixedBooleans(ref WireReader reader, int count) {
-        var values = new bool[count];
-
-        for (var index = 0; (index < count); index++) { values[index] = reader.ReadBoolean(); }
-        return values;
-    }
 }
