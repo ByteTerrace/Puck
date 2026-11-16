@@ -190,41 +190,57 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             return true;
         }
         var key = (Identity: identity, Geometry: geometry);
-        var pending = m_reads.GetOrAdd(key, static (key, disk) => new Lazy<StoredMesh>(valueFactory: () => {
-            var loaded = disk.TryRead(geometry: key.Geometry, identity: key.Identity, materials: out var stored, mesh: out var read, refusal: out var why);
 
-            return new StoredMesh(Found: loaded, Materials: stored, Mesh: read, Refusal: why);
-        }), Disk);
-        var result = pending.Value;
+        while (true) {
+            var pending = m_reads.GetOrAdd(key, static (key, state) => new Lazy<StoredMesh>(valueFactory: () => state.Library.Decode(disk: state.Disk, form: state.Form, geometry: key.Geometry, identity: key.Identity, taking: state.Taking)), (Library: this, Disk, Form: form, Taking: materials));
+            var result = pending.Value;
 
-        refusal = result.Refusal;
-        if (!result.Found) {
-            _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
-            return false;
-        }
-        try {
-            if (result.Mesh is null) { StoreEmpty(geometry: geometry, identity: identity); return true; }
-            if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
-            // The decode takes the group's ids before the native copy, so the published storage holds one set of triangle
-            // materials rather than the store's canonical set beside a renumbered variant. The held mesh is what later
-            // groups renumber from, so it keeps the canonical ids when the group's would make that ambiguous: an id no
-            // shape owns equal to one of the group's, or two places with one id (SdfMeshMaterials.Reversible). The copy
-            // runs outside the gate the frame thread takes; the first copy held wins, and a later one is released.
-            var pieces = ((result.Mesh.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[result.Mesh] : result.Mesh.Chunks);
-            var heldIds = ((result.Materials.AsSpan().SequenceEqual(other: materials) || !SdfMeshMaterials.Reversible(from: result.Materials, pieces: pieces, to: materials)) ? result.Materials : materials);
-            var source = (ReferenceEquals(objA: heldIds, objB: result.Materials) ? result.Mesh : RenumberManaged(from: result.Materials, mesh: result.Mesh, to: materials));
-            // Its parts are let go and restored from this set, so the set stays while this process runs.
-            if (Allocator is not null) { _ = Disk.Hold(identity: identity); }
-            var copy = source.NativeCopy(Allocator, Account, restore: (this, identity, geometry));
+            refusal = result.Refusal;
+            if (!result.Found) {
+                _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
+                return false;
+            }
+            if (result.Mesh is null) {
+                StoreEmpty(geometry: geometry, identity: identity);
+                _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
+                return true;
+            }
+
+            // The decode already holds the mesh (Decode), so the groups that shared it take it from the library. One of them
+            // owns the decode's own claim and may use the mesh itself if the library let go of the geometry in between.
+            var owns = result.TakeOwnership();
 
             try {
-                _ = Hold(form: form, geometry: geometry, identity: identity, materials: heldIds, mesh: copy);
-                if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
-                // The library let go of the geometry between the hold and the take (a trim): the copy is the mesh.
-                mesh = (ReferenceEquals(objA: heldIds, objB: materials) ? copy.Acquire() : Renumber(from: heldIds, mesh: copy, to: materials));
-                return true;
-            } finally { copy.Release(); }
-        } finally { _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending)); }
+                if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) {
+                    if (form is { } heldForm) { lock (m_gate) { m_forms[(identity, heldForm)] = geometry; } }
+                    return true;
+                }
+                if (owns) {
+                    // The library let go of the geometry between the hold and the take (a trim): the decode is the mesh.
+                    if (form is { } lostForm) { lock (m_gate) { m_forms[(identity, lostForm)] = geometry; } }
+                    mesh = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh.Acquire() : Renumber(from: result.Materials, mesh: result.Mesh, to: materials));
+                    return true;
+                }
+            } finally {
+                if (owns) { result.Mesh.Release(); }
+                _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
+            }
+        }
+    }
+    // Decodes a geometry's entry into the storage its mesh keeps, with the taking group's ids written in it when the mesh can
+    // be renumbered back from them (SdfMeshStoreCodec.TryDecode), and holds the result for the run. The decode's own claim
+    // outlives the hold, for the groups that share the decode to take the mesh from.
+    private StoredMesh Decode(SdfMeshStore disk, UInt128 identity, SdfMeshGeometry geometry, int[] taking, UInt128? form) {
+        // A native mesh lets its parts go and restores them from this set, so the set stays while this process runs.
+        var storage = ((Allocator is { } native) ? SdfMesh.Native(allocator: native, account: Account, restore: (this, identity, geometry)) : new SdfMeshManagedStorage());
+        var loaded = disk.TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out var held, mesh: out var mesh, refusal: out var why, storage: storage, taking: taking);
+
+        if (loaded && (mesh is not null)) {
+            if (Allocator is not null) { _ = disk.Hold(identity: identity); }
+            _ = Hold(form: form, geometry: geometry, identity: identity, materials: held, mesh: mesh);
+        }
+
+        return new StoredMesh(found: loaded, materials: held, mesh: mesh, refusal: why);
     }
     /// <summary>Takes the mesh of a geometry for a group whose shapes carry <paramref name="materials"/>: the stored mesh
     /// when its group carried the same ids, and otherwise the stored mesh with each triangle's material renumbered from the
@@ -395,5 +411,16 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);
-    private sealed record StoredMesh(bool Found, SdfMesh? Mesh, int[] Materials, string? Refusal);
+    // One decode every group of a geometry shares. Its mesh carries the decode's own claim, which exactly one of them takes
+    // over and releases (TakeOwnership).
+    private sealed class StoredMesh(bool found, SdfMesh? mesh, int[] materials, string? refusal) {
+        private int m_owned;
+
+        public bool Found { get; } = found;
+        public int[] Materials { get; } = materials;
+        public SdfMesh? Mesh { get; } = mesh;
+        public string? Refusal { get; } = refusal;
+
+        public bool TakeOwnership() => (Interlocked.Exchange(location1: ref m_owned, value: 1) == 0);
+    }
 }

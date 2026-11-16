@@ -81,14 +81,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(2f, MemoryMarshal.Read<float>(rig.Gpu.DeviceLocal(sizeBytes: DynamicTransformBytes, part: "previous-dynamic-transforms")));
     }
 
-    private static void RenderRootCut(Rig rig, SdfFrame frame) {
+    internal static void RenderRootCut(Rig rig, SdfFrame frame) {
         rig.Engine.GpuWork.Pump(rig.Engine);
         rig.Engine.Pack(frame);
         rig.Engine.SubmitUpload();
         rig.Engine.GpuWork.Pump(rig.Engine);
     }
     // Renders a frame until the mesh region owes none of its meshes.
-    private static void LandRootCut(Rig rig, SdfFrame frame) {
+    internal static void LandRootCut(Rig rig, SdfFrame frame) {
         RenderRootCut(rig, frame);
         for (var count = 0; (rig.Engine.MeshesLanding || rig.Engine.DrawsAwaitMeshes); count++) {
             Assert.True(count < 64);
@@ -106,7 +106,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected, words[..SdfMeshRecord.MatrixWords].ToArray());
     }
 
-    private sealed class RootCutProducer : IDisposable {
+    internal sealed class RootCutProducer : IDisposable {
         private readonly MeshBakeTestRun m_run;
         private readonly SdfMovedTransforms m_moved = new();
         private readonly DynamicTransform[] m_poses = [new(Vector3.Zero, Quaternion.Identity), new(Vector3.Zero, Quaternion.Identity), new(Vector3.Zero, Quaternion.Identity)];

@@ -3693,11 +3693,19 @@ volume's CPU trace scene (`SdfMeshIrradianceScene`) over the static meshes the
 store holds for the world's rest scene, with no device. It prints a full build,
 one sweep of a High-tier window (48 × 16 × 48 probes of 128 rays, each
 front-facing hit casting a shadow ray) about the changed draw, then the scene
-updated for that draw's mesh replaced by new geometry, for the draw moved and
-for the original draws back, each update with its wall and processor seconds
-and the geometries it built, took from the previous scene and retained, and
-each trace with its hits, lit hits and mean distance, which agree across scenes
-of one geometry. `--change` names the static group by text its label holds
+updated for that draw's mesh replaced by new geometry, for the draw moved, for
+the original draws back and for the draw moved again, each build with its wall
+and processor seconds, the bytes it allocated (every thread's), the geometries
+it built, took from the previous scene and retained, and its prefix words (the
+top level's nodes, entries and instance records, which each scene change
+uploads whole), and each trace with its hits, lit hits and mean distance, which
+agree across scenes of one geometry. Each scene is released once the next is
+built from it, as the volume releases the scene it replaces. The first scene
+and the restored one print their GPU export's words, the bytes exporting
+allocated beyond the returned words, and `tree-hash`: a hash of the exported
+tree as the trace walks it, independent of where the export placed each node,
+so two builds of the CLI that claim to export the same scene print the same
+hash. `--change` names the static group by text its label holds
 (absent, the group with the most triangles); `--cache-dir`, `--build`,
 `--identity` and `--backend` name the store as for `mesh audit`. Exit codes: 0
 timed; 1 the world failed to load or no static group had a stored mesh; 2 a

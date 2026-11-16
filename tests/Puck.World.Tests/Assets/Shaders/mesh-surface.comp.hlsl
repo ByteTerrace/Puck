@@ -12,6 +12,13 @@
 [[vk::binding(3, 3)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t3, space3);
 // The frame's sampled table a displaced draw reads; no case's draw is displaced, so one empty word stands in.
 [[vk::binding(4, 3)]] StructuredBuffer<uint> sdfFrameSampled : register(t4, space3);
+// The pass values the mesh hit door reads: every case's draw lies below its bound, and a rejection counts nowhere.
+struct MeshProbePass {
+    uint meshDraws;
+};
+static const MeshProbePass passGroup = { 0xFFFFFFFFu };
+void puckCountRejectedHit() {
+}
 
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli"
 
@@ -32,5 +39,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float curvature;
     int frameSlot;
 
-    meshResults[uint2(slot, 0u)] = float4(sdfMeshSurfaceNormal(draw, triangleIndex, hit.xyz, ray.xyz, faceNormal, curvature, frameSlot), (float)sdfMeshMaterial(draw, triangleIndex));
+    SdfMeshHit resolved;
+
+    // A case the door rejects writes NaN, which no expected normal equals.
+    meshResults[uint2(slot, 0u)] = (sdfMeshResolveHit(draw, triangleIndex, resolved)
+        ? float4(sdfMeshSurfaceNormal(resolved, hit.xyz, ray.xyz, faceNormal, curvature, frameSlot), (float)sdfMeshMaterial(resolved))
+        : asfloat(0x7FC00000u).xxxx);
 }

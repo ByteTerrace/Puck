@@ -779,6 +779,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 
 ## Editing kernels
 
+- **A hit read from GPU data goes through the mesh hit door.** A draw and triangle a pass reads from a target texel,
+  a visibility record or the glass sums' front records name a record only through `sdfMeshResolveHit`
+  (`frame/sdf-mesh.hlsli`), which accepts a draw below `passGroup.meshDraws` whose triangle lies below the record's
+  level table word less its index word, and otherwise answers a miss and counts `gpu.mesh-hits.rejected`
+  (`puckCountRejectedHit`). Every reader of a hit's record, indices or triangle material takes the `SdfMeshHit` it
+  returns (`sdfMeshSurfaceNormal`, `sdfMeshMaterial`, `sdfGlassInterfaceAt`, `sdfShadeStamp`, `sdfShadeFlow`,
+  `sdfMeshHitFrameSlot`), so a new reader that skipped the door does not compile; filling one by hand is review's to
+  catch. Only raster stages, whose draw the selection kernel emitted, index `sdfMeshRecord` and
+  `sdfMeshRasterMaterial` directly. A rejection is a miss, never a clamp to an in-bounds triangle. The door cannot tell
+  an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
+  the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
+  bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal
@@ -1070,9 +1082,11 @@ wrong. The contracts that bite most often:
 - **Baked meshes persist across runs** (`SdfMeshStore`), keyed by geometry and
   the bake's identity: the bake kernels' bytecode and the IL of every method
   the bake's code reaches, across the `Puck` assemblies, read from the build
-  (`SdfMeshBakeClosure`). No list names the bake's files: code it calls is
+  (`SdfMeshBakeClosure`), and the entry format's version. No list names the bake's files: code it calls is
   covered, code it does not call is not, a checkout's path is not, and a miss
-  logs the part that changed (`[sdf.mesh-bake] miss …`). A hot-reload update to
+  logs the part that changed (`[sdf.mesh-bake] miss …`). Reading a stored mesh
+  back is not covered: a decode edit that changes what an entry's bytes mean
+  changes `SdfMeshStoreCodec.Magic`. A hot-reload update to
   a type the closure declares members of folds into the code identity
   (`SdfMeshBakeClosure.Reads`, `CodeRevision.AppliedTo`), and the residency
   follows it before each plan and stage; an update anywhere else keeps the

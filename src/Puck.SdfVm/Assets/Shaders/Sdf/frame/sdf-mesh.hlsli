@@ -32,10 +32,43 @@ uint sdfMeshLevelIndex(uint record, uint level) {
     return 3u * sdfMeshRegion[table + 3u * min(level, count)];
 }
 
-// The material a draw's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh
-// carries one.
-int sdfMeshMaterial(uint draw, uint triangleIndex) {
-    uint record = sdfMeshRecord(draw);
+// A hit a pass read from GPU data (a mesh or glass target's texel, a visibility record, the glass sums' front records),
+// resolved through the mesh hit door (sdfMeshResolveHit): the first word of its draw's record and its triangle among the
+// mesh's levelled triangles, so its indices begin at three times it. Every reader of a hit's record, indices or triangle
+// material takes one, so a read that skipped the door does not compile; HLSL has no private constructor, so a kernel
+// filling one by hand is review's to catch. The raster stages index the draw the selection kernel emitted and a
+// triangle its own vertex ids name, and read through sdfMeshRecord and sdfMeshRasterMaterial instead.
+struct SdfMeshHit {
+    uint record;
+    uint triangleIndex;
+};
+
+// The mesh hit door. A hit is accepted when its draw is below the frame's staged draws (passGroup.meshDraws) and its
+// triangle lies among its mesh's levelled triangles: three times their count is the record's level table word less its
+// index word (SdfMeshRegion.WriteDraw), which also bounds its triangle materials. Anything else (a target written under
+// other records, a record past the staged extent, a record whose placement words are zero) is a miss, never a triangle
+// that is in bounds and wrong, and is counted (gpu.mesh-hits.rejected, puckCountRejectedHit).
+bool sdfMeshResolveHit(uint draw, uint triangleIndex, out SdfMeshHit hit) {
+    hit.record = 0u;
+    hit.triangleIndex = 0u;
+    if (draw < passGroup.meshDraws) {
+        uint record = sdfMeshRecord(draw);
+        uint indexWord = sdfMeshRegion[(record + SDF_MESH_INDEX_WORD)];
+        uint levelTable = sdfMeshRegion[(record + SDF_MESH_LEVEL_TABLE_WORD)];
+
+        if ((levelTable >= indexWord) && (triangleIndex < ((levelTable - indexWord) / 3u))) {
+            hit.record = record;
+            hit.triangleIndex = triangleIndex;
+            return true;
+        }
+    }
+    puckCountRejectedHit();
+    return false;
+}
+
+// The material a record's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh
+// carries one. Read only through sdfMeshMaterial (a resolved hit) and sdfMeshRasterMaterial (a raster stage's own draw).
+int sdfMeshMaterialOf(uint record, uint triangleIndex) {
     int material = asint(sdfMeshRegion[(record + SDF_MESH_MATERIAL_WORD)]);
 
     if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_MATERIALS_FLAG) != 0u) {
@@ -43,6 +76,19 @@ int sdfMeshMaterial(uint draw, uint triangleIndex) {
     }
 
     return material;
+}
+// The material a resolved hit shades with.
+int sdfMeshMaterial(SdfMeshHit hit) {
+    return sdfMeshMaterialOf(hit.record, hit.triangleIndex);
+}
+// The material a raster stage's triangle shades with: the draw the selection kernel emitted, and the triangle the draw's
+// own vertex ids name. No other stage calls it.
+int sdfMeshRasterMaterial(uint draw, uint triangleIndex) {
+    return sdfMeshMaterialOf(sdfMeshRecord(draw), triangleIndex);
+}
+// The dynamic-transform slot a resolved hit's draw stores its mesh in, or SDF_TRANSFORM_SLOT_NONE.
+int sdfMeshHitFrameSlot(SdfMeshHit hit) {
+    return asint(sdfMeshRegion[(hit.record + SDF_MESH_FRAME_SLOT_WORD)]);
 }
 // The vertex a draw's index `k` names.
 uint sdfMeshIndexAt(uint record, uint k) {
@@ -310,7 +356,7 @@ float sdfMeshMeanCurvature(float3 a, float3 b, float3 c, float3 na, float3 nb, f
         + dot(deltaC, gradientC) - dot(n, deltaC) * dot(n, gradientC));
 }
 
-// The surface normal of a draw's triangle at a world point on it, seen along `rayDirection`: the vertex normals
+// The surface normal of a resolved hit's triangle at a world point on it, seen along `rayDirection`: the vertex normals
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise, facing the
 // camera (sdfMeshFaceCamera). `faceNormal` is the triangle's own unit normal on the camera's side, the plane the
 // rasterized surface lies in. Curvature retains the authored outward orientation, independent of the viewing side.
@@ -318,9 +364,9 @@ float sdfMeshMeanCurvature(float3 a, float3 b, float3 c, float3 na, float3 nb, f
 // paint riding the winning frame) and whose lanes they read: the slot of the shape that won there, as the field's
 // winning frame is. A vertex riding a member rides its own shape's slot (SdfMesh.Members), so the point takes the slot
 // of the triangle's nearest vertex; any other point takes the draw's frame slot, or -1.
-float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature, out int frameSlot) {
-    uint record = sdfMeshRecord(draw);
-    uint first = (3u * triangleIndex);
+float3 sdfMeshSurfaceNormal(SdfMeshHit hit, float3 surfacePoint, float3 rayDirection, out float3 faceNormal, out float curvature, out int frameSlot) {
+    uint record = hit.record;
+    uint first = (3u * hit.triangleIndex);
     float3 a, b, c, na, nb, nc;
     sdfMeshWorldVertex(record, first, a, na);
     sdfMeshWorldVertex(record, first + 1u, b, nb);

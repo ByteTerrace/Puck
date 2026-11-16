@@ -76,13 +76,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.False(retried.MeshDrawChanges!.TryCollect(first.MeshDrawChangesSerial, retried.MeshDrawChangesSerial, new GpuUploadRuns(capacity: 8)));
     }
 
-    private static SdfMeshDraw HostDraw(string identity, float x) => new(
+    internal static SdfMeshDraw HostDraw(string identity, float x) => new(
         Mesh: new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 }),
         ObjectToWorld: Matrix4x4.CreateTranslation(x, 0, 0), Material: 0, Identity: identity);
 
     private static int[] DresserRows(GpuUploadRuns runs) => Enumerable.Range(0, runs.Count).SelectMany(index => Enumerable.Range(runs.Start(index), runs.Length(index))).ToArray();
 
-    private sealed class ThrowOnceDraws(SdfMeshDraw[] draws) : IReadOnlyList<SdfMeshDraw> {
+    internal sealed class ThrowOnceDraws(SdfMeshDraw[] draws) : IReadOnlyList<SdfMeshDraw> {
         private bool m_throws = true;
         public int Count => draws.Length;
         public SdfMeshDraw this[int index] {

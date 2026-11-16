@@ -692,7 +692,9 @@ laws exercise that boundary.
   vertices decode bit-identically. Unit normals use signed oct16 pairs; non-unit authored normals
   retain their magnitudes. Indices use 16 bits through 65,536 vertices and materials use bytes when
   their values fit. Delta-predicted attribute byte planes are zlib-compressed. Decode reads planes
-  directly from the decompressed payload into the CPU arrays, avoiding per-plane byte copies.
+  directly from the decompressed payload into the storage the mesh keeps (`SdfMeshStorage`), a host's native
+  blocks or an offline read's arrays, applying the taking group's material ids as the planes are read; a
+  restore takes only the normals and the coarser levels' indices.
   Both backends draw six floats per vertex and 32-bit indices/materials through `frame/sdf-mesh.hlsli`.
   `SdfMeshLibrary.TryLoad` coalesces a set entry's decode across groups and keeps its result with the
   library's bounded meshes. A failed read is removed so a later derivation can be loaded.
@@ -958,18 +960,30 @@ laws exercise that boundary.
   and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
   region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
   `mesh-released-now` and `mesh-restore-misses`). Restores run on at most a quarter of the processors' pool
-  items and copy outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
+  items and decode into the blocks outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
   library that publishes from a set pins it (`SdfMeshStore.Hold`, `CacheRetention.HoldSet`: a shared lease
   beside the set that no process's eviction passes) for the rest of its process. The held mesh's palette is
-  the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Reversible`); otherwise
+  the first taker's only when later takers can renumber from it (`SdfMeshMaterials.Remap`: the decode reads the entry in the first taker's ids, or in the stored ids when one collides); otherwise
   the store's canonical ids are held. A restore the store cannot answer loses the geometry
   (`SdfMeshLibrary.Lose`): the library forgets it, `LostRevision` moves, and each bake holding the library restarts on
   its program, baking again the groups whose meshes were lost (`Keeps`). A write the store refuses publishes the
   baked mesh, which keeps its parts.
 - **The World's library persists across runs** (`SdfMeshStore`, the `meshes`
   device cache), keyed by geometry and the bake's identity
-  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode
-  and the code the bake runs (`SdfMeshBakeClosure`). The kernels' source
+  (`SdfMeshBakeIdentity`): the hashes of the mask and bake kernels' bytecode,
+  the code the bake runs (`SdfMeshBakeClosure`) and the entry format's version
+  (`SdfMeshStore.EntryVersion`, the codec's `SdfMeshStoreCodec.Magic`, folded by
+  `SdfMeshStore.BuildIdentityOf`). The identity covers what decides a stored
+  mesh's content and nothing that reads or copies one back: code that runs again
+  on every load (the decode, `SdfMesh.NativeCopy`, renumbering, a mesh's claims)
+  can never serve a stale product, so it stays out, and what an entry's bytes
+  mean belongs to the format. A decode edit that keeps that meaning moves no
+  identity; one that changes it changes `SdfMeshStoreCodec.Magic`, which starts a
+  new set, and `TryDecode` refuses any entry of another tag. The encoder stays in,
+  because its quantization (`PositionWidth`, the octahedral normals) decides what
+  every later run draws: a cold bake publishes the mesh the store reads back. The
+  encoder's fit check and the decode share one expansion (`SdfMeshStoreCodec.Expand`),
+  so the encoder's budget holds for what the decode writes. The kernels' source
   closure is `passes/sdf-bake-world.hlsli`: their own interface
   (`isa/sdf-mesh-bake.interface.hlsli`, `SdfWorldInterfaces.MeshBakeParameters`:
   a pass block of `SdfWorldPackage.BakeValues` alone, the masks, samples and
@@ -985,9 +999,9 @@ laws exercise that boundary.
   `SdfMeshBakeClosure` supplies the bake's roots and transport boundaries, while
   compiled-world chunks and generated machine images use the same walker with their own roots.
   Positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
-  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`) and the point table's
-  layout (`SdfMeshBakeBatch.PointRuns`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`, persisted-product normalization
-  (`SdfMesh.NativeCopy`) and the store codec. Their graph reaches group/geometry planning, lattice refinement,
+  the bake's constructor/defaults, `PrepareFrame`, planning, batch taking (`TryTake`), the point and sampled
+  tables' layout (`SdfMeshBakeBatch.PointRuns`, `WriteSampled`), the sample answer (`Complete`), `SdfMeshBakeBlock.Write`
+  and the store's encoder (`SdfMeshStoreCodec.Encode`). Their graph reaches group/geometry planning, lattice refinement,
   contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
   and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
@@ -1001,7 +1015,9 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, and at `GpuRegion` and `GpuUploadRuns`, and at the runtime. It also
+  which hold meshes, at a mesh's claims and restorable parts (the stop types `SdfMesh/Payload` and
+  `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and
+  `GpuUploadRuns`, and at the runtime. It also
   stops at `SdfMeshBakeReport`, which words, counts and writes every `[sdf.mesh-bake]` line and owns the counters
   they report (`Accounts`): the bake hands it values (a group's selector, counts, outcomes) and never builds or
   writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or

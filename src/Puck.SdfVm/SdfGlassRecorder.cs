@@ -74,6 +74,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
 
+        m_owner.RecordHits(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, tables: tables);
         SdfFrameBlock.WriteInto(passBlock: recording.PassBlock, copies: FrameCopies, tables: tables.PassValues, frame: frame, view: index,
             width: recording.RenderWidth, height: recording.RenderHeight, temporal: m_owner.SkyTemporalOf(instance: m_context.Instance), temporalEnabled: m_temporal, residency: residency);
         var set = m_sets.PassSet(slot: recording.Slot);

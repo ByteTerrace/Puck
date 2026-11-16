@@ -336,14 +336,15 @@ public sealed class SdfMeshStoreLawTests {
         mask[((int)SdfKernel.MeshBakeMask)] = new byte[] { 200 };
 
         Assert.True(condition: identity.HasParts);
-        Assert.Equal(expected: "PUCKMSH9", actual: SdfMeshStore.EntryVersion);
         Assert.Equal(expected: SdfMeshStore.EntryVersion, actual: identity.EntryVersion);
+        Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: identity.BakeKernel, code: identity.Code, entryVersion: "PUCKTEST", maskKernel: identity.MaskKernel));
+        Assert.Throws<ArgumentException>(testCode: () => SdfMeshStore.BuildIdentityOf(bakeKernel: identity.BakeKernel, code: identity.Code, entryVersion: "PUCK", maskKernel: identity.MaskKernel));
         Assert.Equal(expected: string.Empty, actual: new SdfMeshBakeIdentity(value: 5).EntryVersion);
         Assert.Equal(expected: SdfMeshBakeClosure.Current.Hash, actual: identity.Code);
         Assert.Equal(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: views)).Value);
         Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: bake)).Value);
         Assert.NotEqual(expected: identity.Value, actual: SdfMeshStore.IdentityOf(kernels: new SdfKernelSet(bytecode: mask)).Value);
-        Assert.Equal(expected: identity.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: identity.BakeKernel, code: identity.Code, maskKernel: identity.MaskKernel));
+        Assert.Equal(expected: identity.Value, actual: SdfMeshStore.BuildIdentityOf(bakeKernel: identity.BakeKernel, code: identity.Code, entryVersion: identity.EntryVersion, maskKernel: identity.MaskKernel));
         Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshStore.IdentityOf(kernels: null!));
         Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshBakeIdentity.Of(code: null!, kernels: null!));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new SdfMeshStore(capacityBytes: 0, directory: "meshes"));
@@ -368,6 +369,7 @@ public sealed class SdfMeshStoreLawTests {
         // An entry-version bump moves the identity to a new key, misses cleanly without refusing or overwriting the earlier
         // entry, and names the version bump as the miss's cause.
         var bumpedBuild = scratch.PathOf(name: "bumped");
+        var bumpedVersion = (SdfMeshStore.EntryVersion[..7] + ((SdfMeshStore.EntryVersion[7] == 'Z') ? 'Y' : 'Z'));
 
         _ = Directory.CreateDirectory(path: bumpedBuild);
         foreach (var dll in Directory.GetFiles(path: AppContext.BaseDirectory, searchPattern: "Puck.*.dll")) {
@@ -376,7 +378,7 @@ public sealed class SdfMeshStoreLawTests {
             if (string.Equals(a: Path.GetFileName(path: dll), b: "Puck.SdfVm.dll", comparisonType: StringComparison.Ordinal)) {
                 var image = File.ReadAllBytes(path: dll);
                 var oldVersion = System.Text.Encoding.ASCII.GetBytes(s: SdfMeshStore.EntryVersion);
-                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: "PUCKMSHA");
+                var newVersion = System.Text.Encoding.ASCII.GetBytes(s: bumpedVersion);
                 var replaced = 0;
 
                 for (var index = 0; (index <= (image.Length - oldVersion.Length)); index++) {
@@ -394,13 +396,13 @@ public sealed class SdfMeshStoreLawTests {
 
         var bumped = SdfMeshBakeIdentity.Of(code: SdfMeshBakeClosure.Of(directory: bumpedBuild), kernels: kernels);
 
-        Assert.Equal(expected: "PUCKMSHA", actual: bumped.EntryVersion);
+        Assert.Equal(expected: bumpedVersion, actual: bumped.EntryVersion);
         Assert.NotEqual(expected: first.Value, actual: bumped.Value);
         Assert.False(condition: store.TryRead(geometry: Geometry, identity: bumped.Value, materials: out _, mesh: out _, refusal: out var bumpedRefusal));
         Assert.Null(@object: bumpedRefusal);
         Assert.True(condition: store.Contains(geometry: Geometry, identity: first.Value));
         Assert.Equal(
-            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> PUCKMSHA) changed",
+            expected: $"identity {bumped.Value:x32} new since {first.Value:x32}: the entry version ({first.EntryVersion} -> {bumpedVersion}) changed",
             actual: store.ExplainMisses(identity: bumped)
         );
         File.Delete(path: Path.Combine(path1: store.Directory, path2: (bumped.Value.ToString(format: "x32", provider: null) + SdfMeshStore.IdentityExtension)));

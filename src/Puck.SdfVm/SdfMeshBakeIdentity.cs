@@ -6,7 +6,8 @@ namespace Puck.SdfVm;
 /// The identity a bake keys the meshes it stores by (<see cref="SdfMeshStore"/>), with what it is made of: the code the
 /// bake runs on the CPU (<see cref="SdfMeshBakeClosure"/>) and the bytecode of the kernels that sample a group's field,
 /// <see cref="SdfKernel.MeshBakeMask"/> and <see cref="SdfKernel.MeshBake"/>, which hold the field interpreter and differ
-/// by backend. A store records each identity's parts beside its entries, so a bake that misses names the part that
+/// by backend, and the store's entry format version (<see cref="EntryVersion"/>), which owns what an entry's bytes mean to
+/// the decode the closure leaves out. A store records each identity's parts beside its entries, so a bake that misses names the part that
 /// changed (<see cref="SdfMeshStore.ExplainMisses"/>). Immutable.
 /// </summary>
 public sealed class SdfMeshBakeIdentity {
@@ -28,7 +29,7 @@ public sealed class SdfMeshBakeIdentity {
         EntryVersion = code.EntryVersion;
         MaskKernel = maskKernel;
         Members = code.Members;
-        Value = SdfMeshStore.BuildIdentityOf(bakeKernel: bakeKernel, code: Code, maskKernel: maskKernel);
+        Value = SdfMeshStore.BuildIdentityOf(bakeKernel: bakeKernel, code: Code, entryVersion: EntryVersion, maskKernel: maskKernel);
         HasParts = true;
     }
 
