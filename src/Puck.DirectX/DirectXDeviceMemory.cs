@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
@@ -16,12 +17,10 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public static unsafe class DirectXDeviceMemory {
-    // ID3D12Device::GetResourceAllocationInfo sits twelve slots before GetDeviceRemovedReason (37), and
-    // ID3D12Resource::GetDesc follows IUnknown, ID3D12Object, ID3D12DeviceChild::GetDevice, Map and Unmap. Both return
-    // a struct by value through the hidden-pointer x64 COM ABI the CsWin32 wrapper omits, so they are invoked through
-    // their slots with the return-by-pointer signature. ID3D12DeviceChild::GetDevice follows IUnknown's three slots and
+    // ID3D12Resource::GetDesc follows IUnknown, ID3D12Object, ID3D12DeviceChild::GetDevice, Map and Unmap. It returns a
+    // struct by value through the hidden-pointer x64 COM ABI the CsWin32 wrapper omits, so it is invoked through its slot
+    // with the return-by-pointer signature. ID3D12DeviceChild::GetDevice follows IUnknown's three slots and
     // ID3D12Object's four.
-    private const int GetResourceAllocationInfoSlot = 25;
     private const int GetResourceDescSlot = 10;
     private const int GetDeviceSlot = 7;
 
@@ -51,12 +50,47 @@ public static unsafe class DirectXDeviceMemory {
         return ((nint)device);
     }
 
-    /// <summary>Counts a committed resource created or opened on a device, in the row its role names
-    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>).</summary>
+    /// <summary>Returns the segment a heap's memory lies in on a device's adapter: the segment group of the heap's memory
+    /// pool, <c>D3D12_MEMORY_POOL_L1</c> the local group and <c>D3D12_MEMORY_POOL_L0</c> the non-local one on a discrete
+    /// adapter, and the local group, the only one, on a unified adapter. A standard heap type's pool is the one
+    /// <c>ID3D12Device::GetCustomHeapProperties</c> reports for it on the adapter; where it reports none, a
+    /// <c>DEFAULT</c> or <c>GPU_UPLOAD</c> heap is local and any other non-local. This is the one statement of a Direct3D
+    /// 12 allocation's placement, for a committed resource as for a placed one's heap.</summary>
+    /// <typeparam name="TCalls">The type of the device calls.</typeparam>
+    /// <param name="calls">The device's calls.</param>
+    /// <param name="segments">The device's segments.</param>
+    /// <param name="heap">The heap's properties: its type, and for a custom heap its memory pool.</param>
+    /// <returns>The segment's index (<see cref="GpuMemorySegments.DirectXLocal"/> or
+    /// <see cref="GpuMemorySegments.DirectXNonLocal"/>).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="segments"/> is <see langword="null"/>.</exception>
+    public static int SegmentOf<TCalls>(TCalls calls, GpuMemorySegments segments, in D3D12_HEAP_PROPERTIES heap) where TCalls : IDirectXCommandCalls {
+        ArgumentNullException.ThrowIfNull(argument: segments);
+
+        if (segments.UnifiedMemory) {
+            return GpuMemorySegments.DirectXLocal;
+        }
+
+        var pool = ((heap.Type == D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_CUSTOM)
+            ? heap.MemoryPoolPreference
+            : calls.CustomHeapProperties(heapType: heap.Type).MemoryPoolPreference);
+
+        return pool switch {
+            D3D12_MEMORY_POOL.D3D12_MEMORY_POOL_L1 => GpuMemorySegments.DirectXLocal,
+            D3D12_MEMORY_POOL.D3D12_MEMORY_POOL_L0 => GpuMemorySegments.DirectXNonLocal,
+            _ => ((heap.Type is D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT or D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_GPU_UPLOAD)
+                ? GpuMemorySegments.DirectXLocal
+                : GpuMemorySegments.DirectXNonLocal),
+        };
+    }
+    /// <summary>Counts a committed resource created or opened on a device, in the role row its role names
+    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>) and the segment its heap lies in (<see cref="SegmentOf"/>), read
+    /// from the resource itself (<c>ID3D12Resource::GetHeapProperties</c>).</summary>
     /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
-    /// <param name="device">The device that created or opened the resource.</param>
+    /// <param name="device">The device that created or opened the resource; registered with
+    /// <paramref name="memory"/>.</param>
     /// <param name="resource">The resource.</param>
     /// <param name="role">What the resource is for.</param>
+    /// <exception cref="InvalidOperationException">The device registered no segments with <paramref name="memory"/>.</exception>
     public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role) {
         if ((memory is null) || (resource is null)) {
             return;
@@ -70,21 +104,19 @@ public static unsafe class DirectXDeviceMemory {
             &description
         );
 
-        var deviceVtable = *((void***)device);
-        D3D12_RESOURCE_ALLOCATION_INFO allocation;
+        var calls = new DirectXDeviceCommandCalls(device: device);
+        var allocation = calls.AllocationInfo(description: &description);
+        var owner = DeviceOf(resource: resource);
+        var heap = default(D3D12_HEAP_PROPERTIES);
+        var flags = default(D3D12_HEAP_FLAGS);
 
-        ((delegate* unmanaged[Stdcall]<ID3D12Device*, D3D12_RESOURCE_ALLOCATION_INFO*, uint, uint, D3D12_RESOURCE_DESC*, D3D12_RESOURCE_ALLOCATION_INFO*>)deviceVtable[GetResourceAllocationInfoSlot])(
-            device,
-            &allocation,
-            0U,
-            1U,
-            &description
-        );
+        resource->GetHeapProperties(&heap, &flags);
         memory.CountAllocated(
             allocation: ((nint)resource),
             bytes: checked((long)allocation.SizeInBytes),
-            device: DeviceOf(resource: resource),
-            role: role
+            device: owner,
+            role: role,
+            segment: SegmentOf(calls: calls, heap: in heap, segments: memory.SegmentsOf(device: owner))
         );
     }
     /// <summary>Counts the release of a resource <see cref="CountAllocated"/> counted; any other resource counts

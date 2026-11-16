@@ -69,6 +69,8 @@ internal static class WindowedHostFixture {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public GpuDeviceServices Services => throw new InvalidOperationException(message: "The fixture device was never created.");
         public int WaitIdleCalls { get; private set; }
 
@@ -85,6 +87,8 @@ internal static class WindowedHostFixture {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public GpuDeviceServices Services => (services ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
 
         public void WaitIdle() { }

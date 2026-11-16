@@ -20,6 +20,8 @@ namespace Puck.Vulkan.Tests;
 /// driver, so each table is resolved exactly as a real one is, and the names a table asks that resolver for are the
 /// destroy entry points every kind must cover.</remarks>
 public sealed unsafe class VulkanDestroyGuardLawTests {
+    // One device-local heap with two memory types, as a law device registers its segments.
+    private static readonly GpuMemorySegments OneHeap = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [0x7U, 0U, 0x7U, 0U], profile: default);
     private const nint DeviceHandle = 0x0D00;
     private const nint FirstHandle = 0x1000;
     private const nint InstanceHandle = 0x0100;
@@ -284,14 +286,17 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             wired: [nameof(VulkanDeviceCommands.FreeMemory)]
         );
 
+        memory.BeginDevice(device: device.Handle, segments: OneHeap);
         device.CountAllocated(
             allocationSize: 65536UL,
             memoryHandle: DeviceLocalMemory,
+            memoryTypeIndex: 0U,
             role: GpuMemoryRole.DeviceLocal
         );
         device.CountAllocated(
             allocationSize: 4096UL,
             memoryHandle: HostMemory,
+            memoryTypeIndex: 1U,
             role: GpuMemoryRole.HostVisible
         );
 
@@ -322,6 +327,7 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
 
         unified.MemoryTypePairs[0] = 0x7U;
         unified.MemoryTypePairs[2] = 0x7U;
+        memory.BeginDevice(device: device.Handle, segments: OneHeap);
 
         foreach (var (kind, handle) in new[] { (VulkanBufferMemory.HostCoherent, HostVisibleBuffer), (VulkanBufferMemory.DeviceLocal, DeviceLocalBuffer) }) {
             var (preferred, required, role) = VulkanNativeBufferApi.MemoryProperties(memory: kind);
@@ -337,12 +343,13 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             device.CountAllocated(
                 allocationSize: 1024UL,
                 memoryHandle: handle,
+                memoryTypeIndex: index,
                 role: role
             );
         }
 
         Assert.Equal(expected: (1024L, 1024L), actual: (memory.Read(kind: GpuDeviceMemoryWork.Allocated), memory.Held));
-        Assert.False(condition: memory.CountReleased(allocation: HostVisibleBuffer, device: device.Handle));
+        Assert.True(condition: memory.CountReleased(allocation: HostVisibleBuffer, device: device.Handle));
         Assert.True(condition: memory.CountReleased(allocation: DeviceLocalBuffer, device: device.Handle));
     }
     [Fact]

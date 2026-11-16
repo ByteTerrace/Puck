@@ -89,6 +89,8 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing, which stages every
     /// region.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets or sets the gate every compute pipeline named <see cref="ComputePipelineGateName"/> waits on before it
     /// is created, or <see langword="null"/> for none. Pipelines build on pool threads, never on the frame thread.</summary>
     public ManualResetEventSlim? ComputePipelineGate { get; set; }

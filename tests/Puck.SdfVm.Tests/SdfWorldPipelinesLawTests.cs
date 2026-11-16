@@ -326,6 +326,8 @@ public sealed class SdfWorldPipelinesLawTests {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public int Persisted => Volatile.Read(location: ref m_persisted);
         public GpuDeviceServices Services { get; } = services;
 

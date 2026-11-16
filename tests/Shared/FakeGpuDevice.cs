@@ -139,6 +139,14 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>The native device handle the fake's tracked memory is counted under.</summary>
     public const nint DeviceHandle = 1;
+    // The fake device registers one discrete adapter's segments, so its device-local creations count in the local one.
+    private static GpuDeviceMemoryWork RegisteredMemory() {
+        var memory = new GpuDeviceMemoryWork(backend: "fake");
+
+        memory.BeginDevice(device: DeviceHandle, segments: GpuMemorySegments.FromDirectX(profile: default));
+
+        return memory;
+    }
 
     public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets the fence created last.</summary>
@@ -150,10 +158,12 @@ internal sealed class FakeGpuDevice :
     public HashSet<Fence> SubmittedFences { get; } = [];
     /// <summary>Gets the device-local memory of the tracked images and device-local buffers: an image is its width times
     /// its height times four bytes, a buffer its size.</summary>
-    public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
+    public GpuDeviceMemoryWork Memory { get; } = RegisteredMemory();
 
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
 
@@ -224,7 +234,8 @@ internal sealed class FakeGpuDevice :
                 allocation: creation.Handle,
                 bytes: ((long)deviceLocalBytes),
                 device: DeviceHandle,
-                role: GpuMemoryRole.DeviceLocal
+                role: GpuMemoryRole.DeviceLocal,
+                segment: GpuMemorySegments.DirectXLocal
             );
         }
 

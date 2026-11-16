@@ -165,6 +165,13 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             read: &ReadMemoryProfile
         );
 
+    /// <inheritdoc/>
+    public nint OpenAdapter(nint deviceHandle) =>
+        ReadAdapter(
+            deviceHandle: deviceHandle,
+            read: &QueryAdapter3
+        );
+
     // Opens the DXGI adapter the device was created on, found by the device's LUID, and runs read over it and the
     // device, releasing the adapter and its factory after.
     private T ReadAdapter<T>(nint deviceHandle, delegate*<IDXGIAdapter1*, ID3D12Device*, T> read) {
@@ -227,6 +234,18 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             DriverVersionRaw: driverVersion,
             VendorId: description.VendorId
         );
+    }
+    // The adapter's IDXGIAdapter3, a reference of its own that outlives ReadAdapter's release of the IDXGIAdapter1.
+    private static nint QueryAdapter3(IDXGIAdapter1* adapter, ID3D12Device* device) {
+        var iid = IDXGIAdapter3.IID_Guid;
+        void* adapter3 = null;
+        var result = ((IUnknown*)adapter)->QueryInterface(riid: &iid, ppvObject: &adapter3);
+
+        if (result.Failed || (adapter3 is null)) {
+            throw new DirectXException(operation: "IDXGIAdapter1::QueryInterface(IDXGIAdapter3)", result: result.Value);
+        }
+
+        return ((nint)adapter3);
     }
     private static GpuMemoryProfile ReadMemoryProfile(IDXGIAdapter1* adapter, ID3D12Device* device) {
         var description = adapter->GetDesc1();

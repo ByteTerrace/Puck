@@ -43,6 +43,15 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>
     public GpuMemoryProfile MemoryProfile { get; init; }
+    /// <summary>Gets the device's memory segments, one per heap with the pool it lies in, as its physical device
+    /// reported them when the device was created; <see langword="null"/> for a device created without them.</summary>
+    public GpuMemorySegments? MemorySegments { get; init; }
+    /// <summary>Gets whether the device was created with <see cref="MemoryBudgetExtension"/>, so its physical device
+    /// reports a budget and usage per heap.</summary>
+    public bool MemoryBudgetEnabled { get; init; }
+    /// <summary>The extension that reports a budget and usage per heap
+    /// (<c>VkPhysicalDeviceMemoryBudgetPropertiesEXT</c>), enabled when the device lists it.</summary>
+    public const string MemoryBudgetExtension = "VK_EXT_memory_budget";
     /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
     public VulkanDeviceCommands Commands { get; }
     /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is

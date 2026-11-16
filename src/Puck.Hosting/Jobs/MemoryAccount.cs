@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 
 namespace Puck.Hosting.Jobs;
@@ -23,6 +24,15 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// A reservation promises only this account's unused budget. The machine's free physical memory is an observation the
 /// caller reads outside the account and passes in: it paces admission, and a caller that has nothing admitted admits
 /// its next job regardless (<see cref="Owner.Reserve"/>), so a reading never holds work back forever.
+/// <para>
+/// The account carries pools (<see cref="PhysicalMemory"/>: host and device memory on a discrete adapter, the host's
+/// alone on unified memory) as ledgers (<see cref="ReadPools"/>). Every owner charges one pool. An admitted owner
+/// (<see cref="CreateOwner"/>) charges host memory and is what <see cref="Owner.TryReserve"/> subtracts from the
+/// budget. An observed owner (<see cref="CreateObservedOwner"/>), such as a device memory segment's, is charged and
+/// printed in its pool and stays outside that sum, on a discrete adapter and on unified memory alike, so admission
+/// answers exactly as it would without it. <see cref="Record"/> takes a device's memory reading and records each
+/// segment's budget and spend limit; it fires no trim and changes no admission.
+/// </para>
 /// </summary>
 public sealed class MemoryAccount {
     /// <summary>Gets the process account shared by mesh libraries, residencies and jobs.</summary>
@@ -30,10 +40,14 @@ public sealed class MemoryAccount {
 
     private readonly Lock m_gate = new();
     private readonly long[] m_bytes = new long[4];
+    // Observed owners' bytes by pool, outside m_bytes and so outside what TryReserve subtracts.
+    private readonly long[] m_observed = new long[2];
     private readonly HashSet<Owner> m_owners = [];
 
     private long m_reserved;
     private long? m_budget;
+    private GpuMemoryReading m_device = GpuMemoryReading.Absent;
+    private MemorySegmentLimit[] m_segmentLimits = [];
 
     /// <summary>Requests that cache owners detach idle claims. Active consumer claims are unaffected.</summary>
     public event Action? TrimRequested;
@@ -96,15 +110,84 @@ public sealed class MemoryAccount {
             return new(Account: Read(), Owners: owners);
         }
     }
-    /// <summary>Creates an explicit owner. It must outlive every allocation that reports to it.</summary>
+    /// <summary>Creates an explicit admitted owner, which charges host memory and is counted by
+    /// <see cref="Owner.TryReserve"/>. It must outlive every allocation that reports to it.</summary>
     /// <param name="name">The owner's name, for diagnostics.</param>
     /// <param name="category">The category its charges count in until it is reclassified.</param>
     /// <returns>The owner.</returns>
-    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live) => new(account: this, category: category, name: name);
+    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live) => new(account: this, category: category, name: name, observed: false, pool: PhysicalMemory.Host);
+    /// <summary>Creates an observed owner: charged in its pool and printed, outside the sum
+    /// <see cref="Owner.TryReserve"/> subtracts, and unable to reserve. It must outlive every allocation that reports to
+    /// it.</summary>
+    /// <param name="name">The owner's name, for diagnostics.</param>
+    /// <param name="pool">The physical memory its storage occupies.</param>
+    /// <returns>The owner.</returns>
+    public Owner CreateObservedOwner(string name, PhysicalMemory pool) => new(account: this, category: MemoryCategory.Live, name: name, observed: true, pool: pool);
+    /// <summary>Returns what a backend's device memory ledger hands each of its segments
+    /// (<see cref="GpuDeviceMemoryWork"/>): an observed owner per segment, named <c>gpu.&lt;backend&gt;.&lt;segment&gt;</c>,
+    /// charging the segment's pool.</summary>
+    /// <param name="backend">The backend's name, as its ledger is keyed (<c>vulkan</c>, <c>directx</c>).</param>
+    /// <returns>The function that creates a segment's owner.</returns>
+    public Func<GpuMemorySegment, IAllocationObserver> SegmentOwners(string backend) =>
+        segment => CreateObservedOwner(name: $"gpu.{backend}.{segment.Name}", pool: segment.Pool);
+    /// <summary>Records a device's memory reading: the reading itself and each segment's budget and spend limit, the
+    /// budget less the larger of a tenth of it and <see cref="Headroom"/>. It fires no trim and changes no admission.
+    /// Recording the reading already held does nothing.</summary>
+    /// <param name="reading">The device's reading (<see cref="IGpuDeviceContext.MemoryReading"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="reading"/> is <see langword="null"/>.</exception>
+    public void Record(GpuMemoryReading reading) {
+        ArgumentNullException.ThrowIfNull(argument: reading);
+        lock (m_gate) {
+            if (ReferenceEquals(objA: reading, objB: m_device)) { return; }
+            var limits = new MemorySegmentLimit[reading.Segments.Count];
+
+            for (var index = 0; (index < limits.Length); index++) {
+                var segment = reading.Segments[index];
+                var budget = ((long)Math.Min(val1: segment.Budget, val2: (ulong)long.MaxValue));
+
+                limits[index] = new(Segment: segment.Segment, Budget: budget, SpendLimit: Math.Max(val1: 0L, val2: (budget - Math.Max(val1: (budget / 10), val2: Headroom))));
+            }
+            m_device = reading;
+            m_segmentLimits = limits;
+        }
+    }
+    /// <summary>Reads the pools, the recorded device reading and its segments' limits under the account's lock.</summary>
+    /// <returns>The pools' reading. The device pool is present when a recorded reading of a discrete adapter names a
+    /// segment in it or an observed owner charges it.</returns>
+    public MemoryPoolsReading ReadPools() {
+        lock (m_gate) {
+            var budget = (m_budget ?? DefaultBudget);
+            var admitted = m_bytes.Sum();
+            var deviceLimits = m_segmentLimits.Where(predicate: static limit => (limit.Segment.Pool == PhysicalMemory.Device)).ToArray();
+            var deviceObserved = m_observed[((int)PhysicalMemory.Device)];
+            var host = new MemoryPoolReading(
+                Admitted: admitted,
+                Budget: budget,
+                Observed: m_observed[((int)PhysicalMemory.Host)],
+                Pool: PhysicalMemory.Host,
+                Present: true,
+                Reserved: m_reserved,
+                SpendLimit: Math.Max(val1: 0L, val2: (budget - Headroom))
+            );
+            var device = new MemoryPoolReading(
+                Admitted: 0L,
+                Budget: ((deviceLimits.Length == 0) ? null : deviceLimits.Sum(selector: static limit => limit.Budget)),
+                Observed: deviceObserved,
+                Pool: PhysicalMemory.Device,
+                Present: ((deviceLimits.Length != 0) || (deviceObserved != 0)),
+                Reserved: 0L,
+                SpendLimit: ((deviceLimits.Length == 0) ? null : deviceLimits.Sum(selector: static limit => limit.SpendLimit))
+            );
+
+            return new(Device: device, DeviceReading: m_device, Host: host, SegmentLimits: m_segmentLimits);
+        }
+    }
 
     /// <summary>One lifecycle's allocation totals and simultaneous-peak reservation, with no buffer registry.</summary>
     public sealed class Owner : IAllocationObserver, IDisposable {
         private readonly MemoryAccount m_account;
+        private readonly PhysicalMemory m_pool;
+        private readonly bool m_observed;
 
         private MemoryCategory m_category;
         private long m_bytes;
@@ -122,7 +205,7 @@ public sealed class MemoryAccount {
             }
         }
 
-        internal Owner(MemoryAccount account, string name, MemoryCategory category) { m_account = account; Name = name; m_category = category; }
+        internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, bool observed) { m_account = account; Name = name; m_category = category; m_pool = pool; m_observed = observed; }
 
         private long Promise => Math.Max(val1: 0, val2: (m_reservationPeak - m_bytes));
 
@@ -138,7 +221,7 @@ public sealed class MemoryAccount {
 
         internal MemoryOwnerReading Read() {
             lock (m_account.m_gate) {
-                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed);
+                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed, m_pool, m_observed);
             }
         }
 
@@ -151,10 +234,12 @@ public sealed class MemoryAccount {
         /// <returns><see langword="true"/> when the reservation is held.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The owner is observed (<see cref="CreateObservedOwner"/>).</exception>
         public bool TryReserve(long peak, long? available = null) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
+                ThrowIfObserved();
                 var extra = (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise);
                 var spare = Math.Max(val1: 0, val2: ((((m_account.m_budget ?? m_account.DefaultBudget) - m_account.Headroom) - m_account.m_bytes.Sum()) - m_account.m_reserved));
 
@@ -171,10 +256,12 @@ public sealed class MemoryAccount {
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The owner is observed (<see cref="CreateObservedOwner"/>).</exception>
         public void Reserve(long peak) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
+                ThrowIfObserved();
                 m_account.m_reserved += (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise);
                 m_reservationPeak = peak;
                 Track();
@@ -194,7 +281,7 @@ public sealed class MemoryAccount {
                 m_account.m_reserved -= Promise;
                 m_bytes = next;
                 m_ownedPeak = Math.Max(val1: m_ownedPeak, val2: next);
-                m_account.m_bytes[((int)m_category)] += bytes;
+                if (m_observed) { m_account.m_observed[((int)m_pool)] += bytes; } else { m_account.m_bytes[((int)m_category)] += bytes; }
                 m_account.m_reserved += Promise;
                 Track();
             }
@@ -204,10 +291,15 @@ public sealed class MemoryAccount {
         public void Classify(MemoryCategory category) {
             lock (m_account.m_gate) {
                 if (category == m_category) { return; }
+                if (m_observed) { m_category = category; return; }
                 m_account.m_bytes[((int)m_category)] -= m_bytes;
                 m_category = category;
                 m_account.m_bytes[((int)m_category)] += m_bytes;
             }
+        }
+        // An observed owner stands outside admission, so it neither reserves nor is reserved for.
+        private void ThrowIfObserved() {
+            if (m_observed) { throw new InvalidOperationException(message: $"Memory owner {Name} is observed: it is charged in its pool outside admission and reserves nothing."); }
         }
         /// <inheritdoc/>
         public void Dispose() {
