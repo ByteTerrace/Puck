@@ -1135,7 +1135,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     }
 
     // A producer's moved set: every Move owes its slot on the next rendered frame, as an emitter would.
-    private sealed class Rig : IDisposable {
+    internal sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();
         private readonly List<int> m_pendingMoves = [];
         private readonly List<(int Slot, DynamicTransform Previous)> m_pendingReseats = [];

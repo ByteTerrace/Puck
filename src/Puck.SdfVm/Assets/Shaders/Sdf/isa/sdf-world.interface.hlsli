@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/75f4b6b199f6d30afcc88db152a8695f1a42086cb9d38942b840bfce2afcfffe). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/778f143f0cc6f7f4ed2643116efb5d33c271f9580fc2f9688b9ead30546da051). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -244,8 +244,8 @@ struct SdfWorldPass {
     [[vk::offset(1276)]] uint _pad1276;
     [[vk::offset(1280)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaC153C049 : register(b0, space3);
-#define passGroup passGroupIsaC153C049
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa2E6AA54E : register(b0, space3);
+#define passGroup passGroupIsa2E6AA54E
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -278,10 +278,10 @@ struct SdfWorldPushedIndex {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, shape evaluations and shape gradients, as a
+// sky texture loads, shape evaluations, shape gradients and rejected mesh hits, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 14u;
+static const uint PuckWorkRowWords = 16u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -289,6 +289,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShapesWord = 10u;
 static const uint PuckWorkGradientsWord = 12u;
+static const uint PuckWorkRejectedHitsWord = 14u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -352,6 +353,11 @@ void puckCountFragmentWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
+}
+// Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
+// and may sit in divergent control flow, so it takes no wave operation.
+void puckCountRejectedHit() {
+    puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_WORLD

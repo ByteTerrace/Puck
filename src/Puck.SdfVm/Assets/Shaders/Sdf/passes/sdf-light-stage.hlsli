@@ -50,9 +50,9 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
     return (p.rayOrigin + (direction * (dot((surfacePoint - p.rayOrigin), normal) / facing)));
 }
 
-// The stage shades with what the views stage resolved before it (sdfViewsStage): the hit's surface point, whether the
-// view shades finally, and the material the pixel shades with.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, out float coverage, out float reactivity) {
+// The stage shades with what the views stage resolved before it (sdfViewsStage): the hit the mesh hit door resolved,
+// the hit's surface point, whether the view shades finally, and the material the pixel shades with.
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;
@@ -140,7 +140,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             shadeMaterial.albedo = paintedAlbedo;
             SdfShadeStamp shadeStamp = sdfShadeStamp(shadeMaterial, surfacePoint, layerPoint, normal, p.rayDirection,
-                s.curvature, p.pixelFootprint * s.t, s.lanes, 0.0, 0.0, frameRotation, s.frameSlot, s.meshDraw);
+                s.curvature, p.pixelFootprint * s.t, s.lanes, 0.0, 0.0, frameRotation, s.frameSlot, meshHit);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
             float revealed;
             if (sdfShadeBound(shadeBinding)) {
@@ -148,7 +148,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             } else {
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
-            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, s.meshDraw, p.pixelFootprint * s.t,
+            normal = sdfShadeFlow(surfacePoint, normal, layerPoint, layerNormal, frameRotation, s.frameSlot, meshHit, p.pixelFootprint * s.t,
                 s.lanes, 0.0, shadeMaterial, revealed);
             }
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);
