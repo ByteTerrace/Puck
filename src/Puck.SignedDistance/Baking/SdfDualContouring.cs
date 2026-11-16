@@ -136,6 +136,9 @@ internal static class SdfDualContouring {
     // The passes Settle makes over a contour's quads: a vertex returned for one quad can leave a neighbouring quad, which
     // faced out about the vertex's placed point, to settle in the next.
     private const int SettleRounds = 4;
+    // How far, in cells, a vertex no feature pins keeps from a face of its cell its patch crosses (Clear): past the
+    // rounding of a placed vertex, short of what a crease a cell's face cuts would show as a bevel.
+    private const double CrossedClear = 0.05;
 
     // The twelve edges of a cell as corner-offset pairs, each offset packed as x | y << 1 | z << 2.
     private static readonly (int A, int B)[] CellEdges = [
@@ -755,7 +758,7 @@ internal static class SdfDualContouring {
         // cell off the crease the neighbour's vertex lies on, a sliver strip between two rows of crease vertices.
         if ((past > 0.0) && (past <= grid.FeatureReach) && (faceA >= 0) && ConvexCrease(faceA: faceA, faceB: faceB, planes: local, point: (mx, my, mz)) &&
             cell.Solve(bias: MeanBias, x: out var sx, y: out var sy, z: out var sz)) {
-            var (ix, iy, iz) = cell.Inside(x: sx, y: sy, z: sz, planes: local);
+            var (ix, iy, iz) = cell.Inside(high: (1.0, 1.0, 1.0), low: (0.0, 0.0, 0.0), planes: local, x: sx, y: sy, z: sz);
 
             beside = true;
             handOff = !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz));
@@ -1394,7 +1397,7 @@ internal static class SdfDualContouring {
                     placed = true;
                 } else if (feature && (past <= grid.FeatureReach) && ConvexCrease(faceA: faceA, faceB: faceB, planes: cellPlanes, point: mean)) {
                     beside = true;
-                    result = BesideCrease(crease: (fx, fy, fz), faceA: faceA, faceB: faceB, held: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), mean: mean, ownFace: out ownFace, planes: cellPlanes);
+                    result = BesideCrease(crease: (fx, fy, fz), faceA: faceA, faceB: faceB, held: cell.Inside(high: (1.0, 1.0, 1.0), low: (0.0, 0.0, 0.0), planes: cellPlanes, x: sx, y: sy, z: sz), mean: mean, ownFace: out ownFace, planes: cellPlanes);
                     if ((ownFace < 0) || (past > TouchedCrease)) {
                         beyond = (fx, fy, fz);
                     }
@@ -1415,7 +1418,9 @@ internal static class SdfDualContouring {
                 if (meets && Within(edges: edges, x: sx, y: sy, z: sz)) {
                     result = (sx, sy, sz);
                 } else {
-                    result = cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes);
+                    var (low, high) = Clear(edges: edges, mean: mean);
+
+                    result = cell.Inside(high: high, low: low, planes: cellPlanes, x: sx, y: sy, z: sz);
                     if (meets && feature) { beyond = (sx, sy, sz); }
                 }
             }
@@ -1462,6 +1467,34 @@ internal static class SdfDualContouring {
 
         return true;
     }
+    // The box of a cell's unit coordinates a vertex no feature pins keeps to (CellSolve.Inside): the cell, less
+    // CrossedClear of it along each face that holds one of the patch's edges (`edges`) running across it, the faces
+    // Within bounds it by. A vertex on such a face lies on the edge of its quadrant about that edge's line: the quad it
+    // shares with the cell across the face has no width there, and which way its triangles turn is the two vertices'
+    // rounding. A face the crossings' mean itself lies nearer than that keeps the mean's distance.
+    private static ((double X, double Y, double Z) Low, (double X, double Y, double Z) High) Clear(int edges, (double X, double Y, double Z) mean) {
+        Span<double> low = [0.0, 0.0, 0.0];
+        Span<double> high = [1.0, 1.0, 1.0];
+        ReadOnlySpan<double> held = [mean.X, mean.Y, mean.Z];
+
+        for (var edge = 0; (edge < CellEdges.Length); edge++) {
+            if ((edges & (1 << edge)) == 0) { continue; }
+
+            var (a, b) = CellEdges[edge];
+            var along = BitOperations.TrailingZeroCount(value: (a ^ b));
+
+            for (var axis = 0; (axis < 3); axis++) {
+                if (axis == along) { continue; }
+                if (((a >> axis) & 1) == 0) {
+                    low[axis] = Math.Min(val1: CrossedClear, val2: held[axis]);
+                } else {
+                    high[axis] = Math.Max(val1: (1.0 - CrossedClear), val2: held[axis]);
+                }
+            }
+        }
+
+        return ((low[0], low[1], low[2]), (high[0], high[1], high[2]));
+    }
     // A cell's tangent planes as their normal equations (the six distinct entries A and the right-hand side B, in the
     // cell's unit coordinates) and its crossings' mean, which a bias on the diagonal draws the solution toward.
     private readonly record struct CellSolve(double A00, double A01, double A02, double A11, double A12, double A22, double B0, double B1, double B2, (double X, double Y, double Z) Mean) {
@@ -1478,28 +1511,31 @@ internal static class SdfDualContouring {
 
             return (Math.Abs(value: det) >= 1e-12);
         }
-        // The point within the cell for a solution (x, y, z) past it: of the least-squares point with each coordinate past
-        // the cell held at the cell's face (Bounded) and the point the segment from the crossings' mean toward the solution
-        // leaves the cell at (Clip), the one nearer the planes. Clamping each coordinate on its own leaves the free ones
+        // The point within the box `low` to `high` of the cell (the cell itself, or the box Clear keeps a vertex to) for a
+        // solution (x, y, z) past it: of the least-squares point with each coordinate past
+        // the box held at the box's face (Bounded) and the point the segment from the crossings' mean toward the solution
+        // leaves the box at (Clip), the one nearer the planes. Clamping each coordinate on its own leaves the free ones
         // where the unconstrained solve put them, off the planes, and along an edge the cells cannot resolve steps the
         // vertices into a staircase aligned with the lattice; the segment keeps them near the surface the crossings sample,
         // and the held solve keeps a corner the cell's faces cut on the corner.
-        public (double X, double Y, double Z) Inside(double x, double y, double z, ReadOnlySpan<double> planes) {
-            var held = Bounded(x: x, y: y, z: z);
-            var clipped = Clip(from: Mean, to: (x, y, z));
+        public (double X, double Y, double Z) Inside(double x, double y, double z, ReadOnlySpan<double> planes, (double X, double Y, double Z) low, (double X, double Y, double Z) high) {
+            var held = Bounded(high: high, low: low, x: x, y: y, z: z);
+            var clipped = Clip(from: Mean, high: high, low: low, to: (x, y, z));
 
             return ((Residual(point: clipped, planes: planes) < Residual(point: held, planes: planes)) ? clipped : held);
         }
-        private (double X, double Y, double Z) Bounded(double x, double y, double z) {
+        private (double X, double Y, double Z) Bounded(double x, double y, double z, (double X, double Y, double Z) low, (double X, double Y, double Z) high) {
             Span<double> point = [x, y, z];
             Span<bool> held = [false, false, false];
+            ReadOnlySpan<double> least = [low.X, low.Y, low.Z];
+            ReadOnlySpan<double> most = [high.X, high.Y, high.Z];
 
             for (var round = 0; (round < 3); round++) {
                 var any = false;
 
                 for (var axis = 0; (axis < 3); axis++) {
-                    if (!held[axis] && ((point[axis] < 0.0) || (point[axis] > 1.0))) {
-                        point[axis] = Math.Clamp(value: point[axis], min: 0.0, max: 1.0);
+                    if (!held[axis] && ((point[axis] < least[axis]) || (point[axis] > most[axis]))) {
+                        point[axis] = Math.Clamp(value: point[axis], min: least[axis], max: most[axis]);
                         held[axis] = true;
                         any = true;
                     }
@@ -1510,7 +1546,7 @@ internal static class SdfDualContouring {
                 SolveHeld(held: held, point: point);
             }
 
-            return (Math.Clamp(value: point[0], min: 0.0, max: 1.0), Math.Clamp(value: point[1], min: 0.0, max: 1.0), Math.Clamp(value: point[2], min: 0.0, max: 1.0));
+            return (Math.Clamp(value: point[0], min: least[0], max: most[0]), Math.Clamp(value: point[1], min: least[1], max: most[1]), Math.Clamp(value: point[2], min: least[2], max: most[2]));
         }
         // Solves the mean-biased normal equations for the coordinates not `held`, the held ones fixed at their values in
         // `point`.
@@ -1555,16 +1591,17 @@ internal static class SdfDualContouring {
 
             return sum;
         }
-        public static (double X, double Y, double Z) Clip((double X, double Y, double Z) from, (double X, double Y, double Z) to) {
+        // The point the segment `from` to `to` leaves the box `low` to `high` at, or `to` within it; `from` lies in the box.
+        public static (double X, double Y, double Z) Clip((double X, double Y, double Z) from, (double X, double Y, double Z) to, (double X, double Y, double Z) low, (double X, double Y, double Z) high) {
             var t = 1.0;
 
-            t = Math.Min(val1: t, val2: Reach(from: from.X, to: to.X));
-            t = Math.Min(val1: t, val2: Reach(from: from.Y, to: to.Y));
-            t = Math.Min(val1: t, val2: Reach(from: from.Z, to: to.Z));
+            t = Math.Min(val1: t, val2: Reach(from: from.X, high: high.X, low: low.X, to: to.X));
+            t = Math.Min(val1: t, val2: Reach(from: from.Y, high: high.Y, low: low.Y, to: to.Y));
+            t = Math.Min(val1: t, val2: Reach(from: from.Z, high: high.Z, low: low.Z, to: to.Z));
 
             return ((from.X + (t * (to.X - from.X))), (from.Y + (t * (to.Y - from.Y))), (from.Z + (t * (to.Z - from.Z))));
 
-            static double Reach(double from, double to) => ((to > 1.0) ? ((1.0 - from) / (to - from)) : ((to < 0.0) ? (from / (from - to)) : 1.0));
+            static double Reach(double from, double to, double low, double high) => ((to > high) ? ((high - from) / (to - from)) : ((to < low) ? ((from - low) / (from - to)) : 1.0));
         }
     }
     // The point of a cell beside a convex crease past it (Place), from the cell's in-cell point `held`
@@ -1595,7 +1632,7 @@ internal static class SdfDualContouring {
         var (heldA, heldB) = (Off(face: faceA, planes: planes, point: held), Off(face: faceB, planes: planes, point: held));
 
         return ((((meanA <= meanB) != (heldA <= heldB)) && (Math.Abs(value: (meanA - meanB)) > NearPlane) && (Math.Abs(value: (heldA - heldB)) > SolvedDrift))
-            ? CellSolve.Clip(from: mean, to: crease)
+            ? CellSolve.Clip(from: mean, high: (1.0, 1.0, 1.0), low: (0.0, 0.0, 0.0), to: crease)
             : held);
     }
     // How far plane `face` of `planes` (nx, ny, nz, d each) passes from the point.
