@@ -1113,6 +1113,17 @@ unverified when no device run exists.
   pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
+- An MSBuild SDK that generates a project of its own names that SDK there without a
+  version, so its version belongs in `global.json`'s `msbuild-sdks`, never in the
+  project's `Sdk="Name/version"` alone. The Azure.Functions.Sdk writes
+  `obj/azure_functions/azure_functions.g.csproj` with `<Project Sdk="Azure.Functions.Sdk">`
+  and evaluates it during the outer project's build. Where that evaluation lands on an
+  MSBuild node that never resolved the versioned reference, the NuGet SDK resolver
+  finds no version "in the project or global.json" and the build fails with MSB4236.
+  Which build hits it follows node count and scheduling, so the failure looks
+  intermittent. `global.json` pins the Functions SDK and
+  `Puck.Azure.Functions.csproj` names it unversioned, so every evaluation resolves it
+  from that one place; bump the version there.
 - The .NET 11 JIT (seen on `11.0.100-rc.2.26504.105`) can emit GC info that
   reports a GC pointer live in a callee-saved register (`rbx`, `rsi`, `rdi`,
   `r12` to `r15`) at the return address of an inline P/Invoke, which the

@@ -72,6 +72,10 @@ public sealed class WorldPeerHost : IDisposable {
     /// route again: detaching a traveler precedes publishing its committed onward route, so ingress landing inside
     /// that window retries rather than refusing an ordinary handoff.</summary>
     public static TimeSpan RouteLookupRetryDelay { get; } = TimeSpan.FromMilliseconds(value: 4);
+    /// <summary>Gets how many times a forwarded submission or intent looks up an onward route, one
+    /// <see cref="RouteLookupRetryDelay"/> apart, before it forwards anyway and takes the refusal the forwarder
+    /// answers.</summary>
+    public const int RouteLookupAttempts = 25;
 
     private readonly IAuthenticator m_authenticator;
     private readonly WorldPeerNetwork m_network;
@@ -803,29 +807,39 @@ public sealed class WorldPeerHost : IDisposable {
             return (null, string.Empty);
         }
 
-        // Detach precedes publication of the committed onward route. A routed query/command can arrive in that small
-        // interval just like a held-stick update can; retain the one typed request at this authority until the
-        // commit path publishes its immutable credential.
-        var reason = string.Empty;
+        // A routed query/command can arrive before the commit path publishes its onward route just like a held-stick
+        // update can; retain the one typed request at this authority until it does.
+        await AwaitOnwardRouteAsync(
+            credential: credential,
+            ct: ct,
+            forwarder: forwarder,
+            mobility: mobility
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        credential.RequireValid();
 
-        for (var attempt = 0; (attempt < 25); attempt++) {
+        return (forwarder.TryForwardSubmission(
+            completion: Answer,
+            mobility: in mobility,
+            operationId: operationId,
+            payload: payload,
+            reason: out var reason,
+            source: m_server
+        )
+            ? (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), reason)
+            : (null, reason)
+        );
+    }
+    // Detach necessarily precedes publication of the committed onward route, so a request landing inside that window
+    // finds none yet. Waits, on the host clock, until the forwarder publishes one or the attempts run out; a refusal
+    // after that is the forwarder's own and is never retried.
+    private async Task AwaitOnwardRouteAsync(Credential credential, CancellationToken ct, IWorldTransferForwarder forwarder, WorldMobilityIdentity mobility) {
+        for (var attempt = 0; (attempt < RouteLookupAttempts); attempt++) {
             credential.RequireValid();
-            if (forwarder.TryForwardSubmission(
-                completion: Answer,
+            if (forwarder.HasOnwardRoute(
                 mobility: in mobility,
-                operationId: operationId,
-                payload: payload,
-                reason: out reason,
                 source: m_server
             )) {
-                return (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), reason);
-            }
-
-            if (!reason.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "no committed onward route"
-            )) {
-                break;
+                return;
             }
 
             await Task.Delay(
@@ -834,9 +848,8 @@ public sealed class WorldPeerHost : IDisposable {
                 timeProvider: m_timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
-
-        return (null, reason);
-    }    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
+    }
+    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
     // between a connection's background read loop and the single-threaded server.
     private Task<T> RunOnTickThreadAsync<T>(Func<T> work, CancellationToken ct = default) {
         var tcs = new TaskCompletionSource<T>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1795,26 +1808,21 @@ public sealed class WorldPeerHost : IDisposable {
                 })) {
                     accepted = true;
                 } else if (m_server.TransferForwarder is { } forwarder) {
-                    // Detach necessarily precedes publication of the committed onward route. Socket ingress can land
-                    // inside that tiny window; retain this state update and retry the route lookup rather than
-                    // turning an ordinary handoff into a visible control-lane outage.
-                    for (var attempt = 0; (attempt < 25); attempt++) {
-                        credential.RequireValid();
-                        accepted = forwarder.TryForwardIntent(
-                            mobility: in mobility,
-                            reason: out reason,
-                            source: m_server,
-                            submission: in stamped
-                        );
-                        if (accepted) {
-                            break;
-                        }
-                        await Task.Delay(
-                            cancellationToken: ct,
-                            delay: RouteLookupRetryDelay,
-                            timeProvider: m_timeProvider
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-                    }
+                    // Socket ingress can land before the committed onward route is published; retain this state update
+                    // rather than turning an ordinary handoff into a visible control-lane outage.
+                    await AwaitOnwardRouteAsync(
+                        credential: credential,
+                        ct: ct,
+                        forwarder: forwarder,
+                        mobility: mobility
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    credential.RequireValid();
+                    accepted = forwarder.TryForwardIntent(
+                        mobility: in mobility,
+                        reason: out reason,
+                        source: m_server,
+                        submission: in stamped
+                    );
                 }
 
                 if (!accepted) {

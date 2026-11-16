@@ -200,20 +200,20 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                 );
             }
         } catch {
-            Release(value: conversion);
-            Release(value: shader);
-            Release(value: previousView);
-            Release(value: previousSrv);
-            Release(value: previous);
-            Release(value: outputView);
-            Release(value: outputSrv);
-            Release(value: output);
-            Release(values: inputViews);
-            Release(value: input);
-            Release(value: multithread);
-            Release(value: context);
-            Release(value: device1);
-            Release(value: device);
+            Win32D3D11.Release(value: conversion);
+            Win32D3D11.Release(value: shader);
+            Win32D3D11.Release(value: previousView);
+            Win32D3D11.Release(value: previousSrv);
+            Win32D3D11.Release(value: previous);
+            Win32D3D11.Release(value: outputView);
+            Win32D3D11.Release(value: outputSrv);
+            Win32D3D11.Release(value: output);
+            Win32D3D11.Release(values: inputViews);
+            Win32D3D11.Release(value: input);
+            Win32D3D11.Release(value: multithread);
+            Win32D3D11.Release(value: context);
+            Win32D3D11.Release(value: device1);
+            Win32D3D11.Release(value: device);
             throw;
         }
 
@@ -307,7 +307,7 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
             );
             m_targets = targets;
         } catch {
-            Release(values: targets);
+            Win32D3D11.Release(values: targets);
             throw;
         }
 
@@ -455,23 +455,23 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         }
 
         m_disposed = true;
-        Release(values: m_targets);
+        Win32D3D11.Release(values: m_targets);
         m_signal?.Dispose();
         m_signal = null;
-        Release(value: m_conversion);
-        Release(value: m_shader);
-        Release(value: m_previousView);
-        Release(value: m_previousSrv);
-        Release(value: m_previous);
-        Release(value: m_outputView);
-        Release(value: m_outputSrv);
-        Release(value: m_output);
-        Release(values: m_inputViews);
-        Release(value: m_input);
-        Release(value: m_multithread);
-        Release(value: m_context);
-        Release(value: m_device1);
-        Release(value: m_device);
+        Win32D3D11.Release(value: m_conversion);
+        Win32D3D11.Release(value: m_shader);
+        Win32D3D11.Release(value: m_previousView);
+        Win32D3D11.Release(value: m_previousSrv);
+        Win32D3D11.Release(value: m_previous);
+        Win32D3D11.Release(value: m_outputView);
+        Win32D3D11.Release(value: m_outputSrv);
+        Win32D3D11.Release(value: m_output);
+        Win32D3D11.Release(values: m_inputViews);
+        Win32D3D11.Release(value: m_input);
+        Win32D3D11.Release(value: m_multithread);
+        Win32D3D11.Release(value: m_context);
+        Win32D3D11.Release(value: m_device1);
+        Win32D3D11.Release(value: m_device);
         m_targets = [];
     }
     /// <summary>Returns the path of the build-compiled conversion kernel for a native subtype: the cs_5_0 DXBC a
@@ -537,20 +537,12 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
         var bytecode = (File.Exists(path: path)
             ? File.ReadAllBytes(path: path)
             : throw new NotSupportedException(message: $"the camera conversion kernel '{entry}' has no precompiled bytecode at '{path}'; a build compiles it on Windows only"));
-        ID3D11ComputeShader* shader = null;
 
-        fixed (byte* code = bytecode) {
-            device->CreateComputeShader(
-                pShaderBytecode: code,
-                BytecodeLength: ((nuint)bytecode.Length),
-                pClassLinkage: null,
-                ppComputeShader: &shader
-            );
-        }
-
-        return ((shader is null)
-            ? throw new InvalidOperationException(message: $"D3D11 camera conversion kernel '{entry}' creation returned no shader")
-            : shader);
+        return Win32D3D11.CreateComputeShader(
+            bytecode: bytecode,
+            device: device,
+            kernel: $"camera conversion kernel '{entry}'"
+        );
     }
     private static string KernelPathOf(string entry) => Path.Combine(
         path1: AppContext.BaseDirectory,
@@ -584,18 +576,8 @@ public sealed unsafe class Win32D3D11CameraFrameConverter : IDisposable, IProbeK
                 throw new NotSupportedException(message: $"the camera GPU selected adapter 0x{actualLuid:X16}, but the renderer uses 0x{expectedLuid:X16}");
             }
         } finally {
-            Release(value: adapter);
-            Release(value: dxgiDevice);
-        }
-    }
-    private static void Release<T>(T* value) where T : unmanaged {
-        if (value is not null) {
-            _ = ((IUnknown*)value)->Release();
-        }
-    }
-    private static void Release<T>(T*[] values) where T : unmanaged {
-        foreach (var value in values) {
-            Release(value: value);
+            Win32D3D11.Release(value: adapter);
+            Win32D3D11.Release(value: dxgiDevice);
         }
     }
 

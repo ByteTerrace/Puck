@@ -303,24 +303,16 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeSearch(byte[] bytes, out string reason, out ArenaSearchCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
-        var jobs = reader.ReadArray(
-            field: "search jobs",
-            readItem: static (ref WireReader r) => ReadSearchJob(reader: ref r),
-            maximum: MaxCollectionCount
-        );
-
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"search section: {failure}";
-
-            return false;
-        }
-
-        section = new ArenaSearchCheckpoint(Jobs: jobs);
-        reason = string.Empty;
-
-        return true;
-    }
+    private static bool TryDecodeSearch(byte[] bytes, out string reason, out ArenaSearchCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "search",
+        read: ReadSearch,
+        reason: out reason,
+        section: out section
+    );
+    private static ArenaSearchCheckpoint ReadSearch(ref WireReader reader) => new(Jobs: reader.ReadArray(
+        field: "search jobs",
+        readItem: static (ref WireReader r) => ReadSearchJob(reader: ref r),
+        maximum: MaxCollectionCount
+    ));
 }

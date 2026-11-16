@@ -89,51 +89,13 @@ public sealed class FixedSpatialNeighborhood {
         return -1;
     }
     private long Floor(long raw) => raw.FloorDivide(divisor: CellWidth.Value);
+    // The nearest neighbours kept so far, as a heap whose first item is the farthest of them, so a nearer candidate
+    // replaces it.
     private static void Retain(FixedSpatialNeighbor candidate, Span<FixedSpatialNeighbor> heap, ref int count) {
-        if (count == heap.Length) {
-            if (Compare(
-                left: candidate,
-                right: heap[0]
-            ) < 0) {
-                heap[0] = candidate;
-                SiftDown(
-                    heap: heap,
-                    parent: 0
-                );
-            }
-            return;
-        }
-        var child = count++;
-
-        heap[child] = candidate;
-        while (child > 0) {
-            var parent = ((child - 1) / 2);
-
-            if (Compare(
-                left: heap[parent],
-                right: heap[child]
-            ) >= 0) { break; }
-            (heap[parent], heap[child]) = (heap[child], heap[parent]);
-            child = parent;
-        }
-    }
-    private static void SiftDown(Span<FixedSpatialNeighbor> heap, int parent) {
-        while (parent < (heap.Length / 2)) {
-            var child = ((parent * 2) + 1);
-
-            if (
-                ((child + 1) < heap.Length) &&
-                (Compare(
-                left: heap[(child + 1)],
-                right: heap[child]
-            ) > 0)
-            ) { child++; }
-            if (Compare(
-                left: heap[parent],
-                right: heap[child]
-            ) >= 0) { break; }
-            (heap[parent], heap[child]) = (heap[child], heap[parent]);
-            parent = child;
+        if (count < heap.Length) {
+            BinaryHeap.Push(count: ref count, heap: heap, item: candidate, order: default(FarthestFirst));
+        } else if (Compare(left: candidate, right: heap[0]) < 0) {
+            BinaryHeap.ReplaceFirst(count: count, heap: heap, item: candidate, order: default(FarthestFirst));
         }
     }
     private static bool TryDistance(in FixedVector3 left, in FixedVector3 right, UInt128 radius, UInt128 limit, out UInt128 squared) {
@@ -276,14 +238,8 @@ public sealed class FixedSpatialNeighborhood {
                 : (cursor + 1)
             );
         }
-        // Retain uses a max heap: extracting the greatest to the tail gives ascending results in place.
-        for (var end = (written - 1); (end > 0); end--) {
-            (destination[0], destination[end]) = (destination[end], destination[0]);
-            SiftDown(
-                heap: destination[..end],
-                parent: 0
-            );
-        }
+        // Retain keeps the farthest first: sorting that heap last-first gives ascending results in place.
+        BinaryHeap.SortDescending(count: written, heap: destination, order: default(FarthestFirst));
         return new FixedNeighborhoodWork(
             AvailableCandidates: available,
             CandidatesExamined: examined,
@@ -368,4 +324,7 @@ public sealed class FixedSpatialNeighborhood {
         }
     }
     private readonly record struct Cell(Key Key, int Start, int Count);
+    private readonly struct FarthestFirst : IComparer<FixedSpatialNeighbor> {
+        public int Compare(FixedSpatialNeighbor x, FixedSpatialNeighbor y) => FixedSpatialNeighborhood.Compare(left: y, right: x);
+    }
 }

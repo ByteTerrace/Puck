@@ -966,9 +966,9 @@ public sealed partial class WorldBody {
             Z: (to.Z - from.Z)
         );
     // A per-second value's share of one fixed step: the exact division by the step's rate, which must divide the
-    // engine tick base (PerRate refuses one that does not).
+    // engine tick base (RateOfStep refuses one that does not).
     private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) =>
-        (value / FixedQ4816.FromInteger(value: checked((long)FixedTickConversion.PerRate(ratePerSecond: checked((uint)stepTicks)))));
+        (value / FixedQ4816.FromInteger(value: checked((long)FixedTickConversion.RateOfStep(stepTicks: stepTicks))));
     // The body's own resolved up may differ from world Y (a tilted planetoid surface, a wall run) — a producer's
     // "preferred altitude" is a distance from the world origin along that axis, not a literal world-Y coordinate.
     // Under the ordinary UnitY up this is exactly the .Y component every world read before the term generalized.

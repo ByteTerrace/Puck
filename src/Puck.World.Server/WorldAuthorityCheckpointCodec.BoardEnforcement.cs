@@ -26,24 +26,16 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeBoardEnforcement(byte[] bytes, out string reason, out WorldBoardEnforcementCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
-        var entries = reader.ReadArray(
-            field: "board enforcement entries",
-            readItem: static (ref WireReader r) => ReadBoardVerdict(reader: ref r),
-            maximum: MaxCollectionCount
-        );
-
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"board enforcement section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldBoardEnforcementCheckpoint(Entries: entries);
-        reason = string.Empty;
-
-        return true;
-    }
+    private static bool TryDecodeBoardEnforcement(byte[] bytes, out string reason, out WorldBoardEnforcementCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "board enforcement",
+        read: ReadBoardEnforcement,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldBoardEnforcementCheckpoint ReadBoardEnforcement(ref WireReader reader) => new(Entries: reader.ReadArray(
+        field: "board enforcement entries",
+        readItem: static (ref WireReader r) => ReadBoardVerdict(reader: ref r),
+        maximum: MaxCollectionCount
+    ));
 }

@@ -7,7 +7,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteRoutedInput(WireWriter writer, WorldRoutedInput route) {
         writer.WriteInt32(value: route.SourceBody); writer.WriteInt32(value: route.SourceGeneration);
         writer.WriteInt32(value: route.TargetBody); writer.WriteInt32(value: route.TargetGeneration);
-        writer.WriteInt32(value: route.PopulationRevision); WritePrincipal(writer, route.Principal);
+        writer.WriteInt32(value: route.PopulationRevision); WorldWireCodec.WritePrincipal(writer, route.Principal);
         writer.WriteUInt64(value: route.Revision); writer.WriteUInt64(value: route.SourceEpoch); writer.WriteUInt64(value: route.TargetEpoch);
         writer.WriteUInt16(value: route.Mapping); WorldWireCodec.WriteIntent(writer, route.Image);
     }

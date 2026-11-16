@@ -5,14 +5,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    internal static void WriteCapability(WireWriter writer, WorldCapability capability) {
-        if (!WorldWireCodec.TryWriteCapability(
-            capability: capability,
-            writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(WorldCapability)}.{capability} has no wire value");
-        }
-    }
     // The (grantee, capability, subject) triple every per-grant row is keyed by — budgets, ceilings, masks, reach,
     // seeded sections — written and read through one pair so no row can spell the key in a different order.
     private static void WriteGrantKey(WireWriter writer, Grantee grantee, WorldCapability capability, GrantSubject subject) {
@@ -20,11 +12,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             grantee: grantee,
             writer: writer
         );
-        WriteCapability(
+        WorldWireCodec.WriteCapability(
             capability: capability,
             writer: writer
         );
-        WriteSubject(
+        WorldWireCodec.WriteSubject(
             subject: subject,
             writer: writer
         );
@@ -43,23 +35,23 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteArray(
             items: row.Drive,
-            writeItem: WriteSubject
+            writeItem: WorldWireCodec.WriteSubject
         );
         writer.WriteArray(
             items: row.Observe,
-            writeItem: WriteSubject
+            writeItem: WorldWireCodec.WriteSubject
         );
         writer.WriteArray(
             items: row.Control,
-            writeItem: WriteSubject
+            writeItem: WorldWireCodec.WriteSubject
         );
         writer.WriteArray(
             items: row.Mutate,
-            writeItem: WriteSubject
+            writeItem: WorldWireCodec.WriteSubject
         );
         writer.WriteArray(
             items: row.Edit,
-            writeItem: WriteSubject
+            writeItem: WorldWireCodec.WriteSubject
         );
         writer.WriteArray(
             items: row.Applications,
@@ -67,7 +59,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteControlApplication(WireWriter writer, ControlApplication application) {
-        WriteSubject(
+        WorldWireCodec.WriteSubject(
             writer: writer,
             subject: application.Target
         );
@@ -143,11 +135,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(
             items: section.Exclusive,
             writeItem: static (w, row) => {
-                WriteCapability(
+                WorldWireCodec.WriteCapability(
                     capability: row.Capability,
                     writer: w
                 );
-                WriteSubject(
+                WorldWireCodec.WriteSubject(
                     subject: row.Subject,
                     writer: w
                 );
@@ -277,7 +269,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(
             items: section.Sessions,
             writeItem: static (w, session) => {
-                WritePrincipal(
+                WorldWireCodec.WritePrincipal(
                     principal: session.Session,
                     writer: w
                 );
@@ -300,18 +292,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(
             items: section.HandleTables,
             writeItem: static (w, table) => {
-                WritePrincipal(
+                WorldWireCodec.WritePrincipal(
                     principal: table.Principal,
                     writer: w
                 );
-                WriteCapability(
+                WorldWireCodec.WriteCapability(
                     capability: table.Capability,
                     writer: w
                 );
                 w.WriteArray(
                     items: table.Slots,
                     writeItem: static (w2, slot) => {
-                        WriteSubject(
+                        WorldWireCodec.WriteSubject(
                             subject: slot.Subject,
                             writer: w2
                         );
@@ -393,8 +385,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             Templates: templates
         );
     }
-    private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrantsCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrantsCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "grants",
+        read: ReadGrants,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldGrantsCheckpoint ReadGrants(ref WireReader reader) {
         var grantees = reader.ReadArray(
             field: "grants grantees",
             readItem: static (ref WireReader r) => ReadGrantsGrantee(reader: ref r),
@@ -566,14 +564,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var revision = reader.ReadInt32();
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"grants section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldGrantsCheckpoint(
+        return new WorldGrantsCheckpoint(
             Budgets: budgets,
             ChannelReach: channelReach,
             DriveGates: driveGates,
@@ -590,9 +581,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Sessions: sessions,
             WriteMasks: writeMasks
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- escrow section ----
 

@@ -731,6 +731,13 @@ public static partial class WorldSubmissionCodec {
             bytes = [];
             failure = exception.Failure;
             return false;
+        } catch (WorldWireEncodeException exception) {
+            bytes = [];
+            failure = Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                exception.Message
+            );
+            return false;
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or JsonException or NotSupportedException or OverflowException)) {
             bytes = [];
             failure = Fail(
@@ -929,6 +936,13 @@ public static partial class WorldSubmissionCodec {
             bytes = [];
             failure = exception.Failure;
             return false;
+        } catch (WorldWireEncodeException exception) {
+            bytes = [];
+            failure = Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                exception.Message
+            );
+            return false;
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or OverflowException)) {
             bytes = [];
             failure = Fail(
@@ -952,14 +966,6 @@ public static partial class WorldSubmissionCodec {
         WorldRebuildKind.Reload => ((request.Definition is null) && (request.Delta is { BaseVersion.IsDelivered: true, BaseHash.Length: > 0, TargetHash.Length: > 0, Patch.Length: > 0 }) && (request.Origin is not null) && (request.ContentHash is not null)),
         _ => false,
     };
-    private static void WriteCapability(WireWriter writer, WorldCapability capability) {
-        if (!WorldWireCodec.TryWriteCapability(
-            capability: capability,
-            writer: writer
-        )) {
-            throw UnknownEnum(value: capability);
-        }
-    }
     private static void WriteCommand(WireWriter writer, WorldCommand command) {
         if (command is null) {
             throw new LeafCodecException(failure: Fail(
@@ -1020,7 +1026,7 @@ public static partial class WorldSubmissionCodec {
                 break;
             case WorldCommand.ComposeControl value:
                 writer.WriteByte(value: 7);
-                WriteSubject(
+                WorldWireCodec.WriteSubject(
                     writer,
                     value.Target
                 );
@@ -1118,11 +1124,11 @@ public static partial class WorldSubmissionCodec {
             grantee: grant.Grantee,
             writer: writer
         );
-        WriteCapability(
+        WorldWireCodec.WriteCapability(
             capability: grant.Capability,
             writer: writer
         );
-        WriteSubject(
+        WorldWireCodec.WriteSubject(
             writer,
             grant.Subject
         );
@@ -1216,15 +1222,10 @@ public static partial class WorldSubmissionCodec {
         )) {
             throw new LeafCodecException(failure: failure);
         }
-        if (!WorldWireCodec.TryWritePrincipal(
+        WorldWireCodec.WritePrincipal(
             principal: principal,
             writer: writer
-        )) {
-            throw new LeafCodecException(failure: Fail(
-                WorldCodecRefusal.EnumValueUnknown,
-                $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value"
-            ));
-        }
+        );
     }
     // A document grantee has no wire value here: this writer serves the live runtime grant leaves, and the
     // cross-document write-back channel reads a document's grants off the owner's document (Server.WorldOwnedWorlds),
@@ -1236,16 +1237,12 @@ public static partial class WorldSubmissionCodec {
         )) {
             throw new LeafCodecException(failure: failure);
         }
-        if (!WorldWireCodec.TryWriteGrantee(
+        WorldWireCodec.WriteGrantee(
             grantee: grantee,
             writer: writer
-        )) {
-            throw new LeafCodecException(failure: Fail(
-                WorldCodecRefusal.EnumValueUnknown,
-                $"{grantee.Describe()} has no live wire value — its row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
-            ));
-        }
-    }    // The rebuild leaf's own tagged union: kind, force, origin, source hash, then a Load document or Reload delta.
+        );
+    }
+    // The rebuild leaf's own tagged union: kind, force, origin, source hash, then a Load document or Reload delta.
     // The delta uses the document composer's keyed vocabulary, with authority version and base/result fingerprints.
     // Reset carries neither an origin, a document, a delta, nor a
     // content-hash pin here: the base is server state, never client-supplied, and its CAS hash is computed at apply
@@ -1397,17 +1394,6 @@ public static partial class WorldSubmissionCodec {
         writer.WriteSingle(value: value.YawRadians);
         writer.WriteSingle(value: value.PitchRadians);
         writer.WriteSingle(value: value.RollRadians);
-    }
-    private static void WriteSubject(WireWriter writer, GrantSubject subject) {
-        if (!WorldWireCodec.TryWriteSubject(
-            subject: subject,
-            writer: writer
-        )) {
-            throw new LeafCodecException(failure: Fail(
-                WorldCodecRefusal.EnumValueUnknown,
-                $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value"
-            ));
-        }
     }
 
     /// <summary>Decodes one canonical leaf selected by its declared submission kind.</summary>
@@ -1858,7 +1844,7 @@ public static partial class WorldSubmissionCodec {
             writer => {
                 writer.WriteInt32(value: designation.EntityIndex);
                 writer.WriteString(value: designation.Register);
-                WriteSubject(
+                WorldWireCodec.WriteSubject(
                     writer: writer,
                     subject: designation.Subject
                 );

@@ -905,11 +905,11 @@ public sealed partial class NavigationRuntime {
             ));
         }
 
-        private readonly struct GoalOrder(Domain domain, int goal) : INodeOrder {
-            public int Compare(int left, int right) => domain.Compare(
+        private readonly struct GoalOrder(Domain domain, int goal) : IComparer<int> {
+            public int Compare(int x, int y) => domain.Compare(
                 goal: goal,
-                left: left,
-                right: right
+                left: x,
+                right: y
             );
         }
 

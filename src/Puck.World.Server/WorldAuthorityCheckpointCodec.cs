@@ -96,6 +96,29 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBlock(value: bytes);
     }
 
+    // Reads one section's fields from a reader the section owns, leaving the reader's end-of-input check to
+    // TryDecodeSection.
+    private delegate TSection SectionReader<out TSection>(ref WireReader reader);
+
+    // The one end-of-section discipline: reads a section's fields, then asks the reader for its single TryFinish, so
+    // a truncated or trailing-byte section refuses by the section's name.
+    private static bool TryDecodeSection<TSection>(byte[] bytes, string name, SectionReader<TSection> read, out string reason, out TSection section) where TSection : class? {
+        var reader = new WireReader(bytes: bytes);
+        var decoded = read(reader: ref reader);
+
+        if (!reader.TryFinish(failure: out var failure)) {
+            section = null!;
+            reason = $"{name} section: {failure}";
+
+            return false;
+        }
+
+        section = decoded;
+        reason = string.Empty;
+
+        return true;
+    }
+
     /// <summary>Decodes a full checkpoint.</summary>
     /// <param name="bytes">The encoded blob.</param>
     /// <param name="checkpoint">The decoded checkpoint on success.</param>

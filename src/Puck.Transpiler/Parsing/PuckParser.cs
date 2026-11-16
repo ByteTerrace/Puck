@@ -885,26 +885,9 @@ public static partial class PuckParser {
             return new ExpressionStatementNode(Column: col, Expression: callExpr, Length: len, Line: line, Offset: startOffset);
         }
 
-        // Check if property assignment: key: expr or key = expr
-        if ((cursor.Current == ':') || (cursor.Current == '=')) {
-            var separator = cursor.Current;
-
-            cursor.Advance();
-            SkipWhiteSpace(context: context);
-            RefuseColonBeforeContainer(col: col, context: context, diagnostics: diagnostics, identifier: firstId, line: line, separator: separator, startOffset: startOffset);
-
-            var valExpr = ParseMemberValue(context: context);
-            var len = (cursor.Offset - startOffset);
-
-            return new PropertyNode(Column: col, Length: len, Line: line, Name: firstId, Offset: startOffset, Value: valExpr);
-        }
-
-        // Check if inline array property: key [ ... ]
-        if (cursor.Current == '[') {
-            var arrayExpr = ParseArrayExpression(context: context);
-            var len = (cursor.Offset - startOffset);
-
-            return new PropertyNode(Column: col, Length: len, Line: line, Name: firstId, Offset: startOffset, Value: arrayExpr);
+        // Check if property: key: expr, key = expr or key [ ... ]
+        if (TryParsePropertyTail(col: col, context: context, diagnostics: diagnostics, line: line, name: firstId, startOffset: startOffset) is { } property) {
+            return property;
         }
 
         // Check if block without name: firstId { ... }

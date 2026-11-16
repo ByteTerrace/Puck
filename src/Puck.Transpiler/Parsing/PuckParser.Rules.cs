@@ -1965,45 +1965,15 @@ public static partial class PuckParser {
         }
 
         SkipWhiteSpace(context: context);
-        if (cursor.Current is ':' or '=') {
-            var separator = cursor.Current;
-
-            cursor.Advance();
-            SkipWhiteSpace(context: context);
-            RefuseColonBeforeContainer(
-                col: col,
-                context: context,
-                diagnostics: diagnostics,
-                identifier: name,
-                line: line,
-                separator: separator,
-                startOffset: startOffset
-            );
-
-            var value = ParseMemberValue(context: context);
-            var len = (cursor.Offset - startOffset);
-
-            return new PropertyNode(
-                Column: col,
-                Length: len,
-                Line: line,
-                Name: name,
-                Offset: startOffset,
-                Value: value
-            );
-        }
-        if (cursor.Current == '[') {
-            var arr = ParseArrayExpression(context: context);
-            var len = (cursor.Offset - startOffset);
-
-            return new PropertyNode(
-                Column: col,
-                Length: len,
-                Line: line,
-                Name: name,
-                Offset: startOffset,
-                Value: arr
-            );
+        if (TryParsePropertyTail(
+            col: col,
+            context: context,
+            diagnostics: diagnostics,
+            line: line,
+            name: name,
+            startOffset: startOffset
+        ) is { } property) {
+            return property;
         }
         if (cursor.Current == '{') {
             var obj = ParseObjectExpression(context: context);
@@ -2021,6 +1991,43 @@ public static partial class PuckParser {
 
         cursor.ResetPosition(position: saved);
         return null;
+    }
+    /// <summary>Reads the tail of a property whose name has been consumed: <c>: value</c>, <c>= value</c> or an
+    /// inline <c>[ ... ]</c> array. Returns <see langword="null"/>, consuming nothing, when the cursor is at
+    /// neither form.</summary>
+    private static PropertyNode? TryParsePropertyTail(int col, ParseContext context, DiagnosticBag? diagnostics, int line, string name, int startOffset) {
+        var cursor = context.Scanner.Cursor;
+        ExpressionNode value;
+
+        if (cursor.Current is ':' or '=') {
+            var separator = cursor.Current;
+
+            cursor.Advance();
+            SkipWhiteSpace(context: context);
+            RefuseColonBeforeContainer(
+                col: col,
+                context: context,
+                diagnostics: diagnostics,
+                identifier: name,
+                line: line,
+                separator: separator,
+                startOffset: startOffset
+            );
+            value = ParseMemberValue(context: context);
+        } else if (cursor.Current == '[') {
+            value = ParseArrayExpression(context: context);
+        } else {
+            return null;
+        }
+
+        return new PropertyNode(
+            Column: col,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Name: name,
+            Offset: startOffset,
+            Value: value
+        );
     }
     private static bool TryReadPileOperand(ParseContext context, out string text) {
         SkipWhiteSpace(context: context);

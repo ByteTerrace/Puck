@@ -99,7 +99,7 @@ public static class WorldWireLeaves {
     /// <summary>Writes a federation owner's accepted hold and pending ordered ingress through the shared input leaf.</summary>
     public static void WriteFederatedInput(WireWriter writer, WorldFederatedIntentCheckpoint input) {
         writer.WriteInt32(value: input.Index);
-        if (!WorldWireCodec.TryWritePrincipal(writer, input.Principal)) { throw new ArgumentException(message: "invalid federated input principal"); }
+        WorldWireCodec.WritePrincipal(writer, input.Principal);
         writer.WriteOptional(value: input.Submission, writeValue: static (w, submission) => {
             if (!WorldWireCodec.TryWriteIntentSubmission(submission: submission, writer: w)) { throw new ArgumentException(message: "invalid federated held input"); }
         });

@@ -98,52 +98,33 @@ public static class WorldModuleExports {
             layer.References.Add(item: (name, field.Facet, site));
         }
     }
-    private static void CollectMachineReferences(JsonObject tree, IMachineValidationCatalog catalog, Layer layer) {
-        if (tree["machines"] is not JsonArray machines) {
-            return;
-        }
+    private static void CollectMachineReferences(JsonObject tree, IMachineValidationCatalog catalog, Layer layer) =>
+        _ = WorldModuleNamespace.TryVisitMachines(
+            catalog: catalog,
+            module: tree,
+            reason: out _,
+            refuseInvalidDescriptor: false,
+            visitor: machine => {
+                MachineConfigurationFields.Visit(
+                    configuration: machine.Configuration,
+                    descriptor: machine.Descriptor,
+                    visitor: site => {
+                        if (
+                            (WorldModuleNamespace.ProviderReferenceKind(role: site.Field.Role) == WorldNameKind.Any) ||
+                            (site.Value is not JsonValue value) ||
+                            !value.TryGetValue<string>(value: out var text) ||
+                            (text.Length == 0)
+                        ) {
+                            return;
+                        }
 
-        foreach (var node in machines) {
-            if (
-                (node is not JsonObject machine) ||
-                (machine["engine"] is not JsonValue engineValue) ||
-                !engineValue.TryGetValue<string>(value: out var engineId) ||
-                (machine["configuration"] is not JsonObject configuration) ||
-                !catalog.TryDescriptor(
-                descriptor: out var descriptor,
-                engineId: engineId
-            )
-            ) {
-                continue;
-            }
-
-            var descriptorErrors = new List<string>();
-
-            if (!MachineConfigurationFields.TryValidateDescriptor(
-                descriptor: descriptor.Configuration,
-                errors: descriptorErrors
-            )) {
-                continue;
-            }
-
-            MachineConfigurationFields.Visit(
-                configuration: configuration,
-                descriptor: descriptor.Configuration,
-                visitor: site => {
-                    if (
-                        (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference)) ||
-                        (site.Value is not JsonValue value) ||
-                        !value.TryGetValue<string>(value: out var text) ||
-                        (text.Length == 0)
-                    ) {
-                        return;
+                        layer.References.Add(item: (text, WorldExportFacet.Read, site.Value!));
                     }
+                );
 
-                    layer.References.Add(item: (text, WorldExportFacet.Read, site.Value!));
-                }
-            );
-        }
-    }
+                return null;
+            }
+        );
     private static Layer Walk(JsonObject tree, string name, NameProbe probe, IMachineValidationCatalog? catalog) {
         var layer = new Layer(name: name);
 

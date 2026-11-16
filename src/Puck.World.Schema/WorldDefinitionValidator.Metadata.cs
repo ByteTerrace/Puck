@@ -28,7 +28,7 @@ public static partial class WorldDefinitionValidator {
         int? upper = null;
 
         for (var candidate = 1; (((ulong)candidate) <= FixedTickConversion.TicksPerSecond); candidate++) {
-            if ((FixedTickConversion.TicksPerSecond % ((ulong)candidate)) != 0UL) {
+            if (!FixedTickConversion.IsRate(ratePerSecond: ((ulong)candidate))) {
                 continue;
             }
 
@@ -1284,7 +1284,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if ((FixedTickConversion.TicksPerSecond % ((ulong)rate)) != 0UL) {
+        if (!FixedTickConversion.IsRate(ratePerSecond: ((ulong)rate))) {
             var (lower, upper) = NearestRateDivisors(rate: rate);
             var nearest = ((lower, upper) switch {
                 ( { } low, { } high) => $"{low} and {high}",

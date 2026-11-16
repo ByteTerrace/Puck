@@ -4,9 +4,17 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Puck.Cli.Format;
 
+// The storage kinds a field falls into, in the order member-groups emits them.
+internal enum FieldStorage {
+    Const,
+    StaticReadonly,
+    Static,
+    Readonly,
+    Mutable,
+}
 // The layout primitives the rewriters share: the annotation guard that keeps a pass off human-arranged
-// code, the accessibility grouping key, blank-line forcing, the structural indent anchor, and the
-// per-slot separated-list rebuild.
+// code, the accessibility grouping key, the field storage classification, blank-line forcing, the
+// structural indent anchor, and the per-slot separated-list rebuild.
 internal static class RewriteShaping {
     // The one home for a newline a pass INVENTS. .editorconfig declares `end_of_line = lf` for every file in
     // the tree and .gitattributes pins the same bytes into the working tree, so an invented line break is a
@@ -99,6 +107,31 @@ internal static class RewriteShaping {
         rebuilt.AddRange(collection: trivia.Skip(count: start));
 
         return SyntaxFactory.TriviaList(trivias: rebuilt);
+    }
+    // A field's storage kind: const, then static readonly, static, readonly, mutable. The declaration order is the
+    // member-groups emission order and the one place the const/static/readonly precedence is decided, so the passes that
+    // order fields and the passes that space them read the same classification.
+    public static FieldStorage StorageOf(FieldDeclarationSyntax field) {
+        var isConst = false;
+        var isStatic = false;
+        var isReadonly = false;
+
+        foreach (var modifier in field.Modifiers) {
+            isConst |= modifier.IsKind(kind: SyntaxKind.ConstKeyword);
+            isStatic |= modifier.IsKind(kind: SyntaxKind.StaticKeyword);
+            isReadonly |= modifier.IsKind(kind: SyntaxKind.ReadOnlyKeyword);
+        }
+
+        return (isConst
+            ? FieldStorage.Const
+            : (isStatic
+                ? (isReadonly
+                    ? FieldStorage.StaticReadonly
+                    : FieldStorage.Static)
+                : (isReadonly
+                    ? FieldStorage.Readonly
+                    : FieldStorage.Mutable
+        )));
     }
     // The indent a wrapped construct hangs from, computed STRUCTURALLY so it is stable across runs
     // (idempotency). Anchoring to the input's current line would compound: once an enclosing construct
