@@ -105,6 +105,7 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
             var texture = DirectXTextures.Create(
                 clearValue: clearValue,
                 device: device,
+                family: GpuObjectName.UnnamedFamily,
                 flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 format: DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
                 height: 4,

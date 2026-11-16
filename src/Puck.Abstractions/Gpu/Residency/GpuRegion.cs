@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -20,7 +21,7 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// <para>
 /// A staged region's destination is either its own device-local buffer or an external one the owner keeps
-/// (<see cref="GpuRegion(IGpuBuffer, long, int, IGpuBufferFactory, IGpuBindings, IGpuRecorder, IGpuComputePipeline, in GpuObjectName, GpuRegionCopySets)"/>):
+/// (<see cref="GpuRegion(IGpuBuffer, long, int, IGpuBufferFactory, IGpuBindings, IGpuRecorder, IGpuComputePipeline, in GpuObjectName, GpuRegionCopySets, IAllocationObserver)"/>):
 /// its word 0 lands at the word <see cref="Target"/> names, and since other work may write the destination, a
 /// retargeted region owes every word written after it.
 /// </para>
@@ -120,6 +121,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // it are m_source's.
     private byte* m_contents;
     private long m_shadowBytes;
+    // Told of every change to the host copy's storage, outside the native allocator (MemoryBacking.NativeDirect).
+    private readonly IAllocationObserver? m_hostCopies;
     private IGpuRegionSource? m_source;
 
     private readonly IGpuComputePipeline? m_copyPipeline;
@@ -201,6 +204,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// uints, or <see cref="GpuBufferUsage.Uniform"/>, bound as a constant buffer of the whole region, which then holds
     /// a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes and is never staged, since the staged
     /// policy's copy kernel writes its buffer as storage.</param>
+    /// <param name="hostCopies">The observer told of every change to the region's host copy, native storage outside the
+    /// engine's allocator (<see cref="MemoryBacking.NativeDirect"/>), or <see langword="null"/> for none. It must outlive
+    /// the region.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/> or <paramref name="recorder"/> is <see langword="null"/>, or a staged region has no
     /// <paramref name="copyPipeline"/>.</exception>
@@ -211,12 +217,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// uniform region is staged or not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage) : this(
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
         copySets: copySets,
+        hostCopies: hostCopies,
         destination: null,
         memory: memory,
         name: in name,
@@ -245,18 +252,22 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="name">The region's debug name, as the policy constructor names it.</param>
     /// <param name="copySets">The region's share of the copy pool its owner reserved (<see cref="GpuRegionCopyPool.Region"/>),
     /// written whenever the region is staged, or <see langword="null"/> to create a pool of its own when it is.</param>
+    /// <param name="hostCopies">The observer told of every change to the region's host copy, native storage outside the
+    /// engine's allocator (<see cref="MemoryBacking.NativeDirect"/>), or <see langword="null"/> for none. It must outlive
+    /// the region.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>, <paramref name="bindings"/>,
     /// <paramref name="recorder"/> or <paramref name="copyPipeline"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not a whole number of
     /// uints or past <see cref="MaxByteCount"/>, or <paramref name="slotCount"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(GpuMemoryProfile profile, bool readersInFlight, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null) : this(
+    public GpuRegion(GpuMemoryProfile profile, bool readersInFlight, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, IAllocationObserver? hostCopies = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: (copyPipeline ?? throw new ArgumentNullException(paramName: nameof(copyPipeline))),
         copySets: copySets,
+        hostCopies: hostCopies,
         destination: null,
         memory: GpuResidency.RingMemory(profile: profile),
         name: in name,
@@ -293,6 +304,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="copySets">The region's share of the copy pool its owner reserved (<see cref="GpuRegionCopyPool.Region"/>),
     /// which it writes in place of creating a pool of its own, or <see langword="null"/> to create one (named by
     /// <paramref name="name"/>). The owner keeps the pool after the region is disposed.</param>
+    /// <param name="hostCopies">The observer told of every change to the region's host copy, native storage outside the
+    /// engine's allocator (<see cref="MemoryBacking.NativeDirect"/>), or <see langword="null"/> for none. It must outlive
+    /// the region.</param>
     /// <exception cref="ArgumentNullException"><paramref name="destination"/>, <paramref name="buffers"/>,
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
@@ -300,12 +314,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// of uints or past <see cref="MaxByteCount"/>, or <paramref name="slotCount"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(IGpuBuffer destination, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null) : this(
+    public GpuRegion(IGpuBuffer destination, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, IAllocationObserver? hostCopies = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
         copyPipeline: copyPipeline,
         copySets: copySets,
+        hostCopies: hostCopies,
         destination: (destination ?? throw new ArgumentNullException(paramName: nameof(destination))),
         memory: GpuHostVisibleMemory.Host,
         name: in name,
@@ -315,7 +330,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         usage: GpuBufferUsage.Storage
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -397,6 +412,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         SlotCount = slotCount;
         m_contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
         m_shadowBytes = byteCount;
+        m_hostCopies = hostCopies;
+        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: byteCount);
         m_copyPipeline = copyPipeline;
         m_bindings = bindings;
         m_buffers = buffers;
@@ -768,7 +785,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_ownedBuffers.Clear();
         m_carrySource = null;
         NativeMemory.Free(ptr: m_contents);
+        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: -m_shadowBytes);
         m_contents = null;
+        m_shadowBytes = 0;
     }
     /// <summary>Grows a region that owns its buffers to <paramref name="byteCount"/> bytes, without waiting for any
     /// submission, and extends <see cref="Contents"/> with zeros. A region that chooses its own residency chooses again
@@ -948,18 +967,28 @@ public sealed unsafe class GpuRegion : IDisposable {
     // takes fresh pages the system zeroes as they are first touched, so only the bytes held are copied, where
     // reallocating would also clear the new tail.
     private void GrowContents(long byteCount) {
-        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
+        ReplaceContents(byteCount: byteCount, zero: true);
+        m_knownWords = ((int)(byteCount / sizeof(uint)));
+    }
+    // Replaces the host copy with one of byteCount bytes holding as much of the old one as both reach, the rest zero when
+    // asked. With the constructor and Dispose, the only place the host copy's storage changes, and each change is
+    // reported to its observer.
+    private void ReplaceContents(long byteCount, bool zero) {
+        var contents = ((byte*)(zero ? NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)) : NativeMemory.Alloc(byteCount: ((nuint)byteCount))));
+        var kept = Math.Min(val1: m_shadowBytes, val2: byteCount);
+        var released = m_shadowBytes;
 
+        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: byteCount);
         System.Buffer.MemoryCopy(
             destination: contents,
             destinationSizeInBytes: byteCount,
             source: m_contents,
-            sourceBytesToCopy: ByteCount
+            sourceBytesToCopy: kept
         );
         NativeMemory.Free(ptr: m_contents);
+        m_hostCopies?.Change(backing: MemoryBacking.NativeDirect, bytes: -released);
         m_contents = contents;
         m_shadowBytes = byteCount;
-        m_knownWords = ((int)(byteCount / sizeof(uint)));
     }
     // Grows a staged region's own destination, carrying the old one's bytes into it on the GPU (RecordCarry).
     private IGpuBuffer GrowDestination(long byteCount) {
@@ -1045,17 +1074,8 @@ public sealed unsafe class GpuRegion : IDisposable {
             val1: m_shadowBytes,
             val2: byteCount
         );
-        var contents = ((byte*)NativeMemory.Alloc(byteCount: ((nuint)shadow)));
 
-        System.Buffer.MemoryCopy(
-            destination: contents,
-            destinationSizeInBytes: shadow,
-            source: m_contents,
-            sourceBytesToCopy: shadow
-        );
-        NativeMemory.Free(ptr: m_contents);
-        m_contents = contents;
-        m_shadowBytes = shadow;
+        ReplaceContents(byteCount: shadow, zero: false);
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
         m_carrySource = null;
@@ -1176,25 +1196,12 @@ public sealed unsafe class GpuRegion : IDisposable {
             return;
         }
 
-        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)shadowBytes)));
-
-        System.Buffer.MemoryCopy(
-            destination: contents,
-            destinationSizeInBytes: shadowBytes,
-            source: m_contents,
-            sourceBytesToCopy: Math.Min(
-                val1: m_shadowBytes,
-                val2: shadowBytes
-            )
-        );
-        NativeMemory.Free(ptr: m_contents);
-        m_contents = contents;
         // The destination holds the host copy no further than both copies reach.
         m_knownWords = Math.Min(
             val1: m_knownWords,
             val2: ((int)(Math.Min(val1: m_shadowBytes, val2: shadowBytes) / sizeof(uint)))
         );
-        m_shadowBytes = shadowBytes;
+        ReplaceContents(byteCount: shadowBytes, zero: true);
     }
     /// <summary>Owes the words of <paramref name="length"/> bytes from <paramref name="offset"/>, past the host copy, in
     /// every buffer, comparing nothing: the region's source (<see cref="Shadow"/>) holds what they are, and the next flush

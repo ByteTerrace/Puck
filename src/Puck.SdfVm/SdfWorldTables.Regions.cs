@@ -52,6 +52,9 @@ public sealed partial class SdfWorldTables {
     private SdfMovedTransforms? m_movedTransformsSource;
     private long m_movedTransformsSerial;
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
+    // Names the regions' host copies, native storage outside the allocator, in the process account; each region reports
+    // its own changes, and the owner outlives them (DisposeRegions).
+    private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateObservedOwner(name: "sdf.world.region-host-copies");
 
     // The mesh region's slots: the upload ring's, then one per background GPU work slot, which lands meshes
     // (MeshLandingSlot).
@@ -86,7 +89,8 @@ public sealed partial class SdfWorldTables {
             name: RegionName(region: region),
             policy: GpuResidencyPolicy.Staged,
             recorder: m_gpu.Recorder,
-            slotCount: MeshRegionSlotCount
+            slotCount: MeshRegionSlotCount,
+            hostCopies: m_regionHostCopies
         )
         : new GpuRegion(
             bindings: m_gpu.Bindings,
@@ -96,6 +100,7 @@ public sealed partial class SdfWorldTables {
             copySets: m_regionCopyPool.Region(index: region),
             name: RegionName(region: region),
             profile: m_deviceContext.MemoryProfile,
+            hostCopies: m_regionHostCopies,
             readersInFlight: true,
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize
@@ -109,6 +114,7 @@ public sealed partial class SdfWorldTables {
         m_meshIrradiance?.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
+        m_regionHostCopies.Dispose();
     }
     // The upload's copies: sends this ring slot, whose previous readers have finished, what it owes of every region, and
     // records every staged region's copy through the one owed-copy recording: at the first copy the barrier ordering the
@@ -164,6 +170,22 @@ public sealed partial class SdfWorldTables {
 
             return bytes;
         }
+    }
+
+    /// <summary>Describes the residency's fixed cost for <c>world.residency</c>: what its tables hold whatever detail is
+    /// resident, every buffer <see cref="TableBytes"/> counts but the mesh region's, which holds the resident meshes, and
+    /// the host copies of those regions; then the mesh region's own bytes beside it.</summary>
+    /// <returns>One line of <c>key=value</c> pairs.</returns>
+    public string DescribeFixedCost() {
+        var tables = TableBytes;
+        var mesh = (m_meshRegion?.OwnedBytes ?? default);
+        var copies = 0UL;
+
+        for (var index = 0; (index < RegionCount); index++) {
+            if ((index != MeshRegionIndex) && (RegionAt(index: index) is { } region)) { copies += region.CpuShadowBytes; }
+        }
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"fixed-cost device-local={(tables.DeviceLocal - mesh.DeviceLocal)} host-visible={(tables.HostVisible - mesh.HostVisible)} host-copies={copies} (tables less the mesh region) mesh-region device-local={mesh.DeviceLocal} host-visible={mesh.HostVisible} host-copy={(m_meshRegion?.CpuShadowBytes ?? 0UL)}");
     }
 
     private GpuRegion? RegionAt(int index) => index switch {

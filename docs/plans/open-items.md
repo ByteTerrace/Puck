@@ -40,9 +40,12 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 1. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, step 2, and step 7's prototype with a GPU grant; then step 3.
-2. [high] [Bake detail](#bake-detail): a contour that holds a crease at any
-   lattice alignment (the tour's mesh-audit reds, the Moth's shin groups),
+   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
+   grant; then step 3.
+2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
+   by every lattice fact and are still turned from the field (vertices the
+   planes put off the surface, slivers beside a crease, a face narrower than
+   a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
 3. [high] [Engine job system](#engine-job-system): the memo's next step,
    which after the scheduling stage's remainder is the control plane's phase
@@ -639,6 +642,12 @@ Stalls and hitches to attribute:
 - [low] Pacing on a high-refresh, variable-rate display under Windows'
   Dynamic Refresh Rate: confirm the bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the top rate.
+- [low] Dynamic resolution adapts on GPU timing only when a display period is
+  known (`WorldDynamicResolution`'s update, `displayHertz > 0`), so a view with
+  GPU timestamps but no display Hertz (an offscreen render, a frame streamed to
+  a thin client; unverified that those pass zero) holds its grid. Give the
+  controller a target period from the view's own cadence (its refresh divisor or
+  the session's frame rate).
 
 ### Bake proportional to change
 
@@ -760,26 +769,50 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: a contour that holds a crease at any lattice alignment, which the tour's
-reds and the Moth's shin groups share, then
+Next: the three kinds of triangle the lattice's facing does not judge, which
+the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
-- [high] The walkthrough tour is red on its mesh audits alone, on both
-  backends: `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds
-  flipped triangles on twelve of the fourteen blend exhibits and three
-  primitives, `shape-groove-union` worst. Which exhibits fold follows where
-  the narrowed box puts the lattice, not the shape: contouring across a crease
-  that falls between samples. A per-axis narrowing was worse over the whole
-  world. The thresholds (`folds > 0` amber, `flipped > 0` red) are right and
-  are not loosened.
+- [high] The walkthrough tour is still red on its mesh audits:
+  `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
+  triangles on six of the fourteen blend exhibits (`shape-groove-union` and
+  `shape-blend-subtraction` worst) and on none of the primitives. Every quad
+  of those contours faces out as its lattice edge says
+  ([the contour's facing](../../.claude/skills/rendering/references/mesh-bake.md#contouring)),
+  so what remains is geometry the lattice's facts do not judge, in three
+  kinds, each a step of its own:
+  - A vertex its crossings' planes put millimetres off the surface where the
+    field check refuses to move it (`SdfMeshPathBake.ProjectCrease`: a kinked
+    gradient, or one turned from its triangles): the fins where
+    `shape-groove-union`'s groove ends against the ball. Along that exhibit's
+    rims a cell's crossings within a gradient tap of the crease read a blend
+    of the two faces, and the cell's point is drawn off its own surface;
+    whether the fins are the same planes is not traced. A crossing whose
+    gradient is a blend should give the cell no plane, and a vertex the check
+    cannot move should return to its crossings' mean. Check: the exhibit's
+    `off surface` and `turned` counts.
+  - A sliver between two rows of vertices a few hundredths of a cell apart
+    along a crease, and a web across the junction of two creases (a carve's
+    rim meeting a box edge): triangles a degree or two past edge-on whose
+    facing is their vertices' rounding. A row the lattice puts that near a
+    crease should take the crease's own vertices (one row, no strip). Check:
+    `flipped` on `shape-blend-subtraction` and `shape-smooth-subtraction`.
+  - A face narrower than the cell between two creases, below.
+  The thresholds (`folds > 0` amber, `flipped > 0` red) are right and are not
+  loosened. A per-axis narrowing was worse over the whole world, and moving
+  the lattice off a face only moves which exhibit is red.
 - [high] The Moth's shin blend groups (`shin-*`, `shinCavity-*`, `archBand-*`,
-  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) contour badly at their
-  declared detail: `puck mesh audit --world worlds/debug/debug.puck
-  --prototype moth --cpu` prints folds, flipped and turned faces and
-  non-manifold edges on each shin, a tenth of her triangles in two groups; the
-  helmet and the nozzle lips are next. Read the carve and blends against the
-  lattice's sheet and crease handling; the one detail rule exposes the defect
-  and does not cause it.
+  `archBandHollow-*`, `archBandBack-*`, `sidePanel-*`) carry seven tenths of
+  her flipped triangles in two groups, nearly all under a square millimetre
+  and strung along the blades' edges: each blade tapers to a rim thinner than
+  the 2 mm floor, two creases in one cell, which one vertex a patch cannot
+  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and
+  `range-window` and the Humble Brick's face are the worst of a wider sample;
+  none of those four is examined. The contour needs a rule for a face it cannot
+  resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
+  sheet, or refine it), and the non-manifold edges on the shins' soles sit on
+  the same edges. The one detail rule exposes the defect and does not cause
+  it.
 - [high] The material cut's lists are outside the memory account:
   `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
   that does not end takes the process. Give the lists a bound the account
@@ -833,12 +866,18 @@ reds and the Moth's shin groups share, then
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
-`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), step 2
-and step 7's prototype under a GPU grant, then step 3. The plan owns the decisions, the build order
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
+and 2's windowed readings and step 7's prototype under a GPU grant, then step
+3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [low] A test schedule admits no authored command (`WorldScheduleCommands`,
+  `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
+  (`world.state.cell.set liftCall`) where a player presses the car's buttons.
+  Admit authored commands in schedules under the step's own principal, then
+  drive the lift through its button reach boxes.
 - [medium] The seam walk's window counts its opening tick and each burst's
   tick from the route program's first line (`opens` and `captures[].at` in
   `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
@@ -863,6 +902,14 @@ and every memory owner are its steps. This packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
+- [medium] Step 2's heap walk on a headless debug world names two large-object
+  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
+  table bounds by no step: `FieldCellDelta[]` arrays held by
+  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
+  need an owner and a bound, or a reason they stay named only.
+- [low] Step 2 names the trace scene's current hierarchy only: a scene a job
+  still borrows after a rebuild sits in the managed row's residual until its
+  last claim ends (`SdfMeshIrradiance`'s sampled owners).
 - A hand-over's draw-list rebuild is
   [arrival work proportional to change](arrival-proportional.md)'s, filed
   under [frame-time findings](#other-frame-time-findings); the capture feed's
@@ -1663,6 +1710,10 @@ Federation and transfers:
   [valley and moons](valley-and-moons.md#phases)' phase 6 says held input
   carries exactly once. Carry it through the seat's existing command path,
   never a second input route.
+  The seam walk's routes (`worlds/debug/walkthrough-tests.puck`) press the
+  stick again every 15 ticks to get across, so the instrument cannot show
+  this defect or a regression after it is fixed: when it lands, a hold-once
+  leg per crossing replaces the re-press.
 - [medium] Sound does not carry across a crossing: `WorldAudioDirector`
   re-enters an emitter from silence when its identity changes, and no plan
   owns continuity; the [audio reference](../reference/audio.md) is the

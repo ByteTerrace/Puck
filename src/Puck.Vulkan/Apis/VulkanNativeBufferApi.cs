@@ -46,7 +46,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero, or <paramref name="memory"/> is not a defined value.</exception>
     /// <exception cref="VulkanException">A native creation, allocation, or bind call failed.</exception>
     /// <exception cref="InvalidOperationException">The buffer came back without a handle, or no compatible memory type was found.</exception>
-    public VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes) {
+    public VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes, string family) {
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentOutOfRangeException.ThrowIfZero(value: sizeBytes);
 
@@ -85,6 +85,7 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
             );
 
             memoryHandle = commands.Arena.Bind(
+                family: family,
                 image: false,
                 memoryTypeIndex: VulkanMemoryTypes.FindIndex(
                     memoryProperties: in memoryProperties,

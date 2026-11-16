@@ -35,6 +35,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
             allocation: allocation,
             bytes: bytes,
             device: device,
+            family: null,
             role: role,
             segment: (GpuDeviceMemoryWork.IsDeviceLocal(role: role) ? GpuMemorySegments.DirectXLocal : GpuMemorySegments.DirectXNonLocal)
         );
@@ -147,6 +148,34 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Allocate(work: work, allocation: 0x10, bytes: 8L);
 
         work.EndDevice(device: (OtherDevice + 1));
+    }
+    [Fact]
+    public void FamiliesNameEachCountedByteOnceAndNeverPastItsBlock() {
+        var work = new GpuDeviceMemoryWork(backend: "directx");
+
+        Allocate(work: work, allocation: 0x10, bytes: 1000L);
+        var first = work.CountPlaced(allocation: 0x10, bytes: 600L, device: Device, family: "sdf.world/mesh-region");
+        var second = work.CountPlaced(allocation: 0x10, bytes: 300L, device: Device, family: "view/targets");
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x10, bytes: 200L, device: Device, family: "view/targets"));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x99, bytes: 1L, device: Device, family: "view/targets"));
+        work.CountAllocated(allocation: 0x20, bytes: 500L, device: Device, family: "backend/descriptor-heaps", role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x20, bytes: 1L, device: Device, family: "view/targets"));
+
+        var local = work.ReadSegments().Single(predicate: static row => (row.Segment.Index == GpuMemorySegments.DirectXLocal));
+
+        Assert.Equal(expected: (1500L, 1400L, 100L), actual: (local.Held, local.Named, local.Residual));
+        Assert.True(condition: work.CountUnplaced(token: second));
+        Assert.False(condition: work.CountUnplaced(token: second));
+        // A block freed with a placement still named in it takes the name with it.
+        Assert.True(condition: work.CountReleased(allocation: 0x10, device: Device));
+        Assert.False(condition: work.CountUnplaced(token: first));
+
+        var families = work.ReadFamilies().ToDictionary(keySelector: static row => row.Family);
+
+        Assert.Equal(expected: (0L, 600L, 600L), actual: (families["sdf.world/mesh-region"].Held, families["sdf.world/mesh-region"].Allocated, families["sdf.world/mesh-region"].Released));
+        Assert.Equal(expected: (0L, 300L), actual: (families["view/targets"].Held, families["view/targets"].Peak));
+        Assert.Equal(expected: 500L, actual: families["backend/descriptor-heaps"].Held);
     }
     [Fact]
     public void TheLegendMakesEveryCountPacing() {

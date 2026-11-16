@@ -28,10 +28,12 @@ public static unsafe class DirectXBuffers {
     /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
     /// <param name="arena">The device's heaps to place it in (<see cref="DirectXHeapArena"/>), which count it, or
     /// <see langword="null"/> to commit it.</param>
+    /// <param name="family">The family its memory is attributed to in <paramref name="memory"/>
+    /// (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The buffer, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* Create(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
+    public static ID3D12Resource* Create(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, string family, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = heapType,
         };
@@ -54,7 +56,7 @@ public static unsafe class DirectXBuffers {
 
         // A device's arena places the buffer in a heap it shares, which it counts; otherwise the buffer is committed.
         if (arena is not null) {
-            return arena.Create(clearValue: null, description: in description, heapType: heapType, initialState: initialState, role: role);
+            return arena.Create(clearValue: null, description: in description, family: family, heapType: heapType, initialState: initialState, role: role);
         }
 
         var buffer = DirectXCommandCalls.CreateCommittedResource(
@@ -68,6 +70,7 @@ public static unsafe class DirectXBuffers {
 
         DirectXDeviceMemory.CountAllocated(
             device: device,
+            family: family,
             memory: memory,
             resource: buffer,
             role: role

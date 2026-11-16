@@ -82,10 +82,12 @@ public static unsafe class DirectXTextures {
     /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
     /// <param name="arena">The device's heaps to place it in (<see cref="DirectXHeapArena"/>), which count it, or
     /// <see langword="null"/> to commit it.</param>
+    /// <param name="family">The family its memory is attributed to in <paramref name="memory"/>
+    /// (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The texture, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* Create(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
+    public static ID3D12Resource* Create(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, string family, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -100,7 +102,7 @@ public static unsafe class DirectXTextures {
         // before its first use, where a committed one starts zeroed.
         if ((arena is not null) && (heapFlags == D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE) &&
             ((flags & (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) == 0)) {
-            return arena.Create(clearValue: clearValue, description: in description, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: initialState, role: GpuMemoryRole.DeviceLocal);
+            return arena.Create(clearValue: clearValue, description: in description, family: family, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: initialState, role: GpuMemoryRole.DeviceLocal);
         }
 
         var texture = DirectXCommandCalls.CreateCommittedResource(
@@ -114,6 +116,7 @@ public static unsafe class DirectXTextures {
 
         DirectXDeviceMemory.CountAllocated(
             device: device,
+            family: family,
             memory: memory,
             resource: texture,
             role: GpuMemoryRole.DeviceLocal

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
 using Puck.Abstractions.Counting;
-using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -16,15 +15,15 @@ public static class GpuWorkRegistration {
     /// <param name="services">The service collection.</param>
     /// <param name="backend">The backend's name (<c>vulkan</c>, <c>directx</c>): the keyed service's key and the
     /// counter source's name suffix (<c>memory.&lt;backend&gt;</c>).</param>
-    /// <param name="observerOf">Returns the observer each of the backend's segments reports its held bytes to
+    /// <param name="owners">The observers each of the backend's segments and families reports its held bytes to
     /// (<see cref="GpuDeviceMemoryWork"/>), the host's account; <see langword="null"/> reports to none. The first
     /// registration of a backend decides it.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="backend"/> is empty.</exception>
-    public static IServiceCollection AddGpuDeviceMemoryWork(this IServiceCollection services, string backend, Func<GpuMemorySegment, IAllocationObserver>? observerOf = null) => AddKeyed(
+    public static IServiceCollection AddGpuDeviceMemoryWork(this IServiceCollection services, string backend, IGpuMemoryOwners? owners = null) => AddKeyed(
         backend: backend,
-        create: name => new GpuDeviceMemoryWork(backend: name, observerOf: observerOf),
+        create: name => new GpuDeviceMemoryWork(backend: name, owners: owners),
         services: services
     );
     /// <summary>Registers <paramref name="backend"/>'s <see cref="GpuPipelineCacheWork"/>, shared by every backend that

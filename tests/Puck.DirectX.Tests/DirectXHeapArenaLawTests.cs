@@ -117,7 +117,7 @@ public sealed unsafe class DirectXHeapArenaLawTests {
     }
 
     private static nint Create(DirectXHeapArena arena, D3D12_RESOURCE_DESC description, D3D12_HEAP_TYPE heapType, GpuMemoryRole role) =>
-        ((nint)arena.Create(clearValue: null, description: in description, heapType: heapType, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, role: role));
+        ((nint)arena.Create(clearValue: null, description: in description, family: GpuObjectName.UnnamedFamily, heapType: heapType, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, role: role));
     private static D3D12_RESOURCE_DESC Buffer(ulong bytes) => new() {
         Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
         Height = 1,

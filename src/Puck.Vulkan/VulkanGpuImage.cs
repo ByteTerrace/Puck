@@ -71,8 +71,9 @@ public sealed class VulkanGpuImage : IGpuImage {
     /// <param name="height">The height in pixels.</param>
     /// <param name="usage">The declared usages; <see cref="GpuImageUsages.Validate"/> refuses a request that breaks a
     /// rule before anything is created.</param>
+    /// <param name="family">The family the image's memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>The image, owned by the caller.</returns>
-    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
+    public static VulkanGpuImage Create(IVulkanOffscreenImageApi offscreenImageApi, IVulkanFramebufferSetApi framebufferSetApi, VulkanDeviceCommands device, VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, string family) {
         ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
         GpuImageUsages.Validate(
@@ -85,6 +86,7 @@ public sealed class VulkanGpuImage : IGpuImage {
         var vkFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);
         var image = offscreenImageApi.CreateColorImage(request: new VulkanOffscreenImageCreateRequest(
             Device: device,
+            Family: family,
             Format: vkFormat,
             Height: height,
             Instance: instance,
@@ -197,6 +199,7 @@ public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IV
         var logicalDevice = vkContext.LogicalDevice;
         var image = VulkanGpuImage.Create(
             device: logicalDevice.Commands,
+            family: name.MemoryFamily(),
             format: format,
             framebufferSetApi: framebufferSetApi,
             height: height,

@@ -132,6 +132,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     private static ID3D12Resource* Source(DirectXDeviceContext context) =>
         DirectXTextures.Create(
             device: ((ID3D12Device*)context.Device.Handle),
+            family: GpuObjectName.UnnamedFamily,
             format: DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
             height: Extent,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,

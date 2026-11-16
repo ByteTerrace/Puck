@@ -90,8 +90,10 @@ public static unsafe class DirectXDeviceMemory {
     /// <paramref name="memory"/>.</param>
     /// <param name="resource">The resource.</param>
     /// <param name="role">What the resource is for.</param>
+    /// <param name="family">The family the resource's memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>),
+    /// which names the whole committed allocation.</param>
     /// <exception cref="InvalidOperationException">The device registered no segments with <paramref name="memory"/>.</exception>
-    public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role) {
+    public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role, string family) {
         if ((memory is null) || (resource is null)) {
             return;
         }
@@ -115,6 +117,7 @@ public static unsafe class DirectXDeviceMemory {
             allocation: ((nint)resource),
             bytes: checked((long)allocation.SizeInBytes),
             device: owner,
+            family: family,
             role: role,
             segment: SegmentOf(calls: calls, heap: in heap, segments: memory.SegmentsOf(device: owner))
         );
@@ -127,7 +130,7 @@ public static unsafe class DirectXDeviceMemory {
         if (0 != resource) {
             DirectXShaderVisibleHeaps.ForgetClears(resource: resource);
         }
-        // A placed resource returns its range to its heap, which alone the counts hold.
+        // A placed resource returns its range to its heap, which alone the counts hold, and ends its family's name there.
         if ((0 != resource) && DirectXHeapArena.Release(resource: resource)) {
             return;
         }
