@@ -104,6 +104,13 @@ public sealed partial record SweepRoute(string Reference, IReadOnlyList<SweepSte
         return true;
     }
 
+    /// <summary>Gives the stop as a tour plays it: its steps are the route's program, then its own, then a frame-history
+    /// reset at the start, and its capture is the test's export tick.</summary>
+    /// <param name="stop">The stop that names this route.</param>
+    /// <returns>The stop with its settle and steps replaced.</returns>
+    public SweepStop Played(SweepStop stop) =>
+        stop with { Settle = Duration, Steps = [.. Steps, .. (stop.Steps ?? []), new SweepStep(At: 0, Run: "host.frames reset")] };
+
     /// <summary>Judges the route's arrival from the windowed body's <c>body.where 0</c> answer at the route's end. The
     /// gates read here are the test's body position and grounded claims; any other claim is judged by the headless run
     /// alone and returned as unjudged.</summary>
