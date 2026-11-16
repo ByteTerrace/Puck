@@ -493,12 +493,18 @@ Microsoft residency]**. Puck plays nice with its host, so:
 | Poll on a timer thread | A thread that exists only to poll |
 | Refresh on the host's signal, correct from the ledger between | Vulkan has no signal |
 
-**Favoured.** On Direct3D 12 the budget-change event
-(`RegisterVideoMemoryBudgetChangeNotificationEvent`) marks the reading stale,
-and the frame thread refreshes a stale reading at the top of a frame; Windows
-sets the event once at registration **[external: DXVK]**, which gives the
-first reading. On Vulkan the frame thread refreshes at a low fixed rate and at
-once after any refused allocation or reservation. Between refreshes, usage is
+**Favoured.** One refresh rule for both backends
+(`GpuMemoryReadingRefresh`): the frame thread refreshes at the top of a frame
+when the API signals a change and otherwise at a low fixed rate (once a
+second), and on Vulkan at once after any refused allocation or reservation. On
+Direct3D 12 the budget-change event
+(`RegisterVideoMemoryBudgetChangeNotificationEvent`) is that signal; Windows
+sets it once at registration **[external: DXVK]**. The event signals budget
+changes only, never usage, so a reading refreshed on the event alone keeps its
+first usage for the process's life **[reading]**: the fixed rate is what keeps
+usage current on both backends. A reading's serial moves only when a budget,
+the segments or the estimate change, never for usage, because what derives
+from it (the spend limits) derives from budgets. Between refreshes, usage is
 the last reading plus the ledger's change since, so admission never calls the
 driver. No thread spins or polls.
 
@@ -1261,14 +1267,15 @@ Step 3 switches admission.
 - **Direct3D 12.** `DirectXVideoMemory` holds `IDXGIAdapter3` for the device's
   life (`IDirectXDeviceApi.OpenAdapter`), reads the local group and, on a
   discrete adapter only, the non-local group, keeps every field, and queries
-  only when the budget-change event, tested without waiting, is set. It is
-  created with the device and released with it, so a recreated device
-  registers again.
+  when the budget-change event, tested without waiting, is set and otherwise
+  once a second (`GpuMemoryReadingRefresh`), since the event signals budget
+  changes and never usage. It is created with the device and released with it,
+  so a recreated device registers again.
 - **Vulkan.** `VulkanLogicalDeviceFactory` enables `VK_EXT_memory_budget` when
   the device lists it. `VulkanRenderer.RefreshMemoryReading` reads it once a
-  second through `IVulkanPhysicalDeviceApi.ReadMemoryBudget`, and the serial
-  moves when a budget changes. Without the extension the heap sizes stand in,
-  marked estimated.
+  second through `IVulkanPhysicalDeviceApi.ReadMemoryBudget` under the same
+  rule. On both backends the serial moves when a budget changes, never for
+  usage. Without the extension the heap sizes stand in, marked estimated.
 - **Segments and pools.** `GpuMemorySegments` is the one place a segment's
   pool is decided: a heap's pool follows `GpuMemoryProfile`'s device-local
   rule, and every segment lies in host memory on unified memory. A backend
@@ -1283,15 +1290,15 @@ Step 3 switches admission.
   keeps held, peak, allocated and released bytes (`GpuSegmentLedger`) and counts
   placement disagreements (`gpu.memory.placement-disagreements`).
   `GpuDeviceMemoryWork.IsDeviceLocal` chooses only the role row.
-- **The account.** `MemoryAccount.ReadPools` reads the pools as ledgers
-  (`MemoryPoolReading`: budget, spend limit, admitted, observed and reserved
-  bytes). An admitted owner charges host memory and is what `TryReserve`
-  subtracts. An observed owner (`MemoryAccount.CreateObservedOwner`) is charged
-  in its pool and stays outside that sum, on a discrete card and on unified
-  memory alike, and reserves nothing. Each ledger segment row reports to an
-  observed owner (`MemoryAccount.SegmentOwners`), which the presenter
-  registrations hand the ledger, so the backends hold no reference to the
-  account. `MemoryAccount.Record` takes a reading and records each segment's
+- **The account.** `MemoryAccount.ReadPools` reads the pools
+  (`MemoryPoolReading`: budget, spend limit, admitted and reserved bytes, and
+  from step 2 the physical rows). An admitted owner charges host memory and is
+  what `TryReserve` subtracts. An observed owner
+  (`MemoryAccount.CreateObservedOwner`) stays outside that sum, on a discrete
+  card and on unified memory alike, and reserves nothing. Each ledger segment
+  row reports to the account (`MemoryAccount.DeviceOwners`), which the
+  presenter registrations hand the ledger, so the backends hold no reference to
+  the account. `MemoryAccount.Record` takes a reading and records each segment's
   budget and spend limit (the budget less the larger of a tenth of it and the
   headroom); it fires no trim and changes no admission. Step 3 deletes the
   observed form.
@@ -1327,34 +1334,87 @@ lane's ([open questions](#open-questions-and-their-owners)).
 
 ### Step 2: every gigabyte has an owner
 
-**Builds.** The physical rows and residuals of
-[what adds and what only names](#what-adds-and-what-only-names). `GpuRegion`'s
-host copies and staging report through `IAllocationObserver`; device
-allocations carry an owner family at the creation doors, with allocated and
-released per family, so the device memory no residency line names (view
-targets, cascades, screens, program tables, ring apertures) has a row. The
-render-graph nodes' `owned-bytes` gauges (`world.counters gpu --json`) already
-count it per node, but with some thirty session views that answer runs past
-what one MCP reply carries, so the row is those bytes summed by node family;
-the
-trace scene, the volume and the probe cache are owners; the managed heap and
-the allocator are physical rows with residuals; `world.residency` gains a
-fixed-cost line per residency. Like step 1 it changes no admission: its new
-owners are charged and printed outside what `TryReserve` subtracts.
+**Built.** `host.memory` measures the account and prints each pool as its
+physical rows, which alone add, each with the part its owners name and its
+residual; nothing admits against them, and `TryReserve` answers as it did.
+
+- **A charge names its row.** `IAllocationObserver.Change` takes the
+  `MemoryBacking` the storage lies in, stated by the storage that makes the
+  charge: an `OwnedBuffer` is `NativeAllocator` with an allocator and `Managed`
+  without one, a `GpuRegion`'s host copy is `NativeDirect`, and a ledger row is
+  `DeviceBlocks`. `MemoryAccount.Owner` keeps its bytes per row and refuses a
+  row its kind cannot hold (device blocks on an admitted owner, a host row on a
+  device pool's owner or a segment's).
+- **The rows** (`MemoryAccount.ReadPools`, `MemoryRowReading`): device blocks
+  per pool, charged by the ledgers' segment owners
+  (`MemoryAccount.DeviceOwners`); native allocator, the allocator's committed
+  bytes; native direct, the sum of its owners' charges; managed, the
+  collector's committed bytes; and runtime and driver, the page walk's private
+  bytes less the other host rows (`HostMemory.WalkProcess`: `VirtualQuery` over
+  the address space on Windows, `/proc/self/smaps_rollup` on Linux). The
+  measured rows are a sample `MemoryAccount.Measure` records with its age
+  (`HostMemorySample.Take`); the account never calls the allocator, the
+  collector or the driver. A residual skew makes negative reads as nothing and
+  is counted (`negative-residuals`).
+- **Device families.** Each counted device byte is named by at most one owner
+  family, `GpuObjectName.MemoryFamily` (the owner without its `$` instance
+  suffixes, then the part), at the creation door that knows the name: a
+  dedicated allocation by the family `GpuDeviceMemoryWork.CountAllocated`
+  takes, a shared block by each placement's `GpuDeviceMemoryWork.CountPlaced`
+  from the arena that placed it (`DirectXHeapArena`, `VulkanMemoryArena`).
+  Each family row keeps held, peak, allocated and released bytes per segment
+  (`GpuFamilyLedger`) and reports to an observed owner, so a family that churns
+  reads apart from one that holds. The segment row's residual
+  (`GpuSegmentLedger.Residual`) is the room inside shared blocks and the
+  emptied blocks kept for reuse. This replaces summing the render-graph nodes'
+  `owned-bytes` gauges: the families come from the ledger, at placement, for
+  every creator alike, and add to the segment rows by construction.
+- **Host owners.** The tables' region host copies
+  (`sdf.world.region-host-copies`, native direct); the trace scene's CPU
+  hierarchy and the probe caches, as sampled owners in the managed row
+  (`MemoryAccount.CreateSampledOwner`, read at each measure). The irradiance
+  volume's device memory is named by its families.
+- **Fixed cost.** `world.residency` prints each residency's fixed cost
+  (`SdfWorldTables.DescribeFixedCost`): its tables' bytes and region host
+  copies less the mesh region, beside the mesh region's own.
+- **Heap walk.** `host.memory heap [min-mib]` asks the runtime for its own heap
+  dump over an EventPipe session the process opens on itself
+  (`ManagedHeapWalk`): one blocking full collection with every managed thread
+  suspended, during which the runtime writes every live object and root. It
+  lists the large objects' totals and each tenant of at least the stated size
+  (4 MiB by default) by type and first holder.
+
+**Invariant.** Per pool, the rows are disjoint and each byte a ledger or owner
+counts lies in exactly one; an owner names a part of exactly one row per
+charge, chosen by the storage that made it, and the parameter
+`IAllocationObserver.Change` takes makes every charge state it. Per segment, the
+families never name more than the row holds: `CountPlaced` refuses a placement
+in a block a family names whole, in a block never counted, or past a block's
+size, and a freed block takes its placements' names with it. Where it stops: a
+sampled owner names what its subsystem derives at the instant of the measure
+(the probe cache's figure excludes object headers); the managed and allocator
+rows are samples at nearby instants, not one; whether a driver maps device
+blocks into the process's private bytes is the driver's, so on a discrete card
+the runtime-and-driver row may hold part of the host pool's device blocks, and
+the walk cannot tell.
 
 **Replaces.** The inference that device allocations beyond the held bytes are
-growth by copy; `host.memory`'s "unified physical total is unavailable".
+growth by copy (the families' allocated and released bytes read it); the
+trailing "unified physical total is unavailable" (each pool's `physical`
+total, with `complete` saying whether every row holds a figure).
 
-**Check.** For every physical row, its owners and its residual add to the row,
-and each residual is named. Against a page walk of the process on Windows and
-the DRM client statistics on Linux, the rows explain the process to within a
-stated share. A suspended heap walk names the large object heap's tenants, and
-each tenant past the stated size is listed with the step that bounds it. What
-the process holds after a cold bake that the managed heap, the allocator and
-the ledger do not explain is named with a native allocation trace, and so is
-what the host-visible blocks hold above a warm boot's: ranges freed inside a
-shared block that stays held, and staging that grew with landing. The spend
-margin is set from the bytes a budget drop takes.
+**What remains.** The windowed reading is a verification request to the lead:
+on Direct3D 12 and Vulkan at the hero spawn and the meadow, settled, the rows
+of each pool with their residuals, the walk's private bytes against
+`process-private` and the share the named owners explain, the families against
+the segment rows, and whether the driver's mapped device blocks show in the
+walk's private bytes (the host pool's device blocks against the
+runtime-and-driver row before and after a large upload). A cold bake's
+residual in the native rows is named with a native allocation trace, and so
+is what the host-visible blocks hold above a warm boot's. The spend margin is
+set from the bytes a budget drop takes, on that reading. The DRM client
+statistics half (`/proc/self/fdinfo` `drm-memory-*`) is owed to a Linux
+machine, and a unified-memory device's reading to the Deck lane.
 
 ### Step 3: one reservation
 

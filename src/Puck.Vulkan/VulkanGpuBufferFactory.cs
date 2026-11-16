@@ -91,6 +91,7 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
 
         var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
+            family: name.MemoryFamily(),
             device: deviceContext,
             memory: VulkanBufferMemory.HostCachedCoherent,
             sizeBytes: sizeBytes,
@@ -114,6 +115,7 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
 
         var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
+            family: name.MemoryFamily(),
             device: deviceContext,
             memory: memory,
             sizeBytes: sizeBytes,

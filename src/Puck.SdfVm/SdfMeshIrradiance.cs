@@ -93,6 +93,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool m_disposed;
     private bool m_trimListening;
 
+    // Name the trace scene's CPU hierarchy and the probe caches in the managed heap's row of the process account, read
+    // when the account is measured. Disposed outside m_gate, which their reads take while the account holds its sample
+    // gate.
+    private readonly IDisposable m_sceneOwner;
+    private readonly IDisposable m_cacheOwner;
+
+    /// <summary>Initializes a new instance of the <see cref="SdfMeshIrradiance"/> class, naming its trace scene's CPU
+    /// hierarchy and its probe caches in the process account (<see cref="Puck.Hosting.Jobs.MemoryAccount.CreateSampledOwner"/>)
+    /// until it is disposed.</summary>
+    public SdfMeshIrradiance() {
+        m_sceneOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, name: "sdf.mesh-gi.trace-scene", read: () => {
+            lock (m_gate) { return (m_scene?.HierarchyBytes ?? 0L); }
+        });
+        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, name: "sdf.mesh-gi.probe-cache", read: CacheBytes);
+    }
+
     // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
     // whose claim alone keeps that geometry alive, so it adopts the trimmed one, which exports the same words, without an
     // upload. The client's gate is taken after this one is left: its admission reads this gate under its own.
@@ -128,6 +144,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_owed = m_traceOwed = m_refillOwed = false;
             jobs = new[] { m_build, m_refill, m_worker }.OfType<Task>().ToArray();
         }
+        m_sceneOwner.Dispose();
+        m_cacheOwner.Dispose();
         if (jobs.Length == 0) { ReleaseScene(); return; }
         _ = Task.WhenAll(jobs).ContinueWith(continuationAction: _ => ReleaseScene(), scheduler: TaskScheduler.Default);
     }
@@ -303,6 +321,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// thread; a batch landing meanwhile can leave it a block off.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeCache() {
+        var (table, blocks, capacity, count) = CacheFigures();
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={(m_scene?.HierarchyBytes ?? 0)} {GpuTrace?.DescribeMemory()}");
+    }
+    // The probe caches' table and block bytes over every level, as DescribeCache prints them.
+    private long CacheBytes() {
+        var (table, blocks, _, _) = CacheFigures();
+
+        return (table + blocks);
+    }
+    // Every level's probe cache: its table bytes, block bytes, capacity and probes, summed.
+    private (long Table, long Blocks, int Capacity, int Count) CacheFigures() {
         long table = 0, blocks = 0;
         int capacity = 0, count = 0;
 
@@ -315,7 +345,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             count += level.Cache.Count;
         }
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={(m_scene?.HierarchyBytes ?? 0)} {GpuTrace?.DescribeMemory()}");
+        return (table, blocks, capacity, count);
     }
 
     // The worker's candidates and a batch's results, kept across batches: one worker runs at a time.

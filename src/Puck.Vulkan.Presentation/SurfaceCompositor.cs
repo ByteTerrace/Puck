@@ -108,6 +108,7 @@ public sealed class SurfaceCompositor : IDisposable {
         var block = scope.Own(created: VulkanBuffer.Create(
             bufferApi: m_bufferApi,
             device: m_renderer,
+            family: new GpuObjectName(owner: "display-encode", part: "block").MemoryFamily(),
             memory: VulkanBufferMemory.HostCoherent,
             sizeBytes: IGpuBindings.ConstantBufferAlignment,
             usage: VulkanBufferUsageFlags.UniformBuffer
