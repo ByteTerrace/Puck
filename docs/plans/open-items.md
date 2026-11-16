@@ -63,6 +63,13 @@ count and strands a slot, a reentrant `Publish` is unguarded, and the 48-bit
 reader count can roll over in principle. Make a double dispose and a
 reentrant publish refuse by construction.
 
+**Then the [streaming and memory campaign](streaming-and-memory.md)** (agreed
+with the owner): a research round, one byte authority with the device's own
+budget readings, attribution at fixed stops, duplicate copies cut, eviction by
+priority, demand mapped through portal faces, and lighting on the same demand
+points, with the bars read by one recipe so quality and performance are judged
+together.
+
 **Wave 2, after the lead's session restart, in this order (agreed with the
 owner):** read-only and headless work runs beside the GPU-bound lanes, and no
 more than one lane besides the lead's batched window holds the GPU at once.
