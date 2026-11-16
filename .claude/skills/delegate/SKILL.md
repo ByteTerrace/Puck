@@ -138,7 +138,9 @@ orders, verifying a change by building and running it, and fixing a defect at it
   your hand-back.
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
-  `Brief: <id> done` or `Brief: <id> blocked: <question>`.
+  `Brief: <id> done` or `Brief: <id> blocked: <question>`. Exactly one commit carries it: merges of
+  the integration tip may follow that commit, so a re-check after such a merge adds no second
+  `Brief:` commit (`puck landing handback` refuses two).
 - Commit only with `git commit` over an index you inspected. Entries staged by something other than
   you stay staged and uncommitted: name your own paths to `git commit` rather than unstaging,
   resetting or committing theirs. Never build a commit from plumbing (`git commit-tree`,
