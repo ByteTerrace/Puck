@@ -88,9 +88,8 @@ public sealed partial class WorldBody {
             Yaw: m_yaw
         );
     }
-    // The order the checkpoint restore uses: the transfer state, then the residue over it (which undoes the transfer
-    // state's own wake and latch writes), then the pose and the re-derived facts, which a program switch inside
-    // ApplyTransferState may have re-pinned.
+    // The transfer state, then the residue over it (which undoes the transfer state's own wake and latch writes), then
+    // the pose and the re-derived facts, which a program switch inside ApplyTransferState may have re-pinned.
     internal void RestoreMotion(StepScratch scratch) {
         ref readonly var motion = ref scratch.Facts;
 

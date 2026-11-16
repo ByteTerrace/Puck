@@ -11,74 +11,64 @@ public sealed partial class WorldBody {
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
     /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="WorldBodyTransferState"/>'s own
     /// remarks for the complete field-by-field classification.</summary>
-    public WorldBodyTransferState CaptureTransferState() => TransferState(
-        alias: false,
-        buffers: null
-    );
-
-    /// <summary>Reads this body's <see cref="WorldBodyTransferState"/> as a view for immediate encoding: its arrays are
-    /// the body's own live storage, and the ones that need assembling are scratch the body reuses, so the read
-    /// allocates nothing once the scratch has grown to this body's shape. The view is valid only until the body next
-    /// changes or is viewed again; anything kept takes <see cref="CaptureTransferState"/>.</summary>
-    /// <returns>The view.</returns>
-    internal WorldBodyTransferState ViewTransferState() => TransferState(
-        alias: true,
-        buffers: null
-    );
+    public WorldBodyTransferState CaptureTransferState() => TransferState(buffers: null);
 
     // Captures into arrays taken from the buffers, so a capture taken every step (the sweep refusal's snapshot,
     // WorldBody.SweepRefusal.cs) allocates nothing in steady state. A capture into buffers lasts until they are next
     // reset.
-    private WorldBodyTransferState CaptureTransferStateInto(CaptureBuffers buffers) => TransferState(
-        alias: false,
-        buffers: buffers
-    );
-    // The one statement of what the transfer state holds. A capture owns every array, taken from the buffers when
-    // there are some and fresh otherwise; a view aliases the live arrays and assembles the rest into the body's own
-    // view scratch, which no capture shares.
-    private WorldBodyTransferState TransferState(bool alias, CaptureBuffers? buffers) {
-        var laneLatch = Assembled(alias: alias, buffers: buffers, length: ActionLaneCount, scratch: ref m_viewLaneLatch);
-        var laneFactHeld = Assembled(alias: alias, buffers: buffers, length: ActionLaneCount, scratch: ref m_viewLaneFactHeld);
-        var laneRecency = Assembled(alias: alias, buffers: buffers, length: ActionLaneCount, scratch: ref m_viewLaneRecency);
+    private WorldBodyTransferState CaptureTransferStateInto(CaptureBuffers buffers) => TransferState(buffers: buffers);
+    // The one statement of what the transfer state holds. The capture owns every array, taken from the buffers when
+    // there are some and fresh otherwise.
+    private WorldBodyTransferState TransferState(CaptureBuffers? buffers) {
+        var laneLatch = Take<ulong>(buffers: buffers, length: ActionLaneCount);
+        var laneFactHeld = Take<ulong>(buffers: buffers, length: ActionLaneCount);
+        var laneRecency = Take<ulong[]?>(buffers: buffers, length: ActionLaneCount);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = m_laneActions[lane].Latch;
             laneFactHeld[lane] = m_laneActions[lane].FactHeld;
             laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
-                ? Own(alias: alias, buffers: buffers, live: recency)
+                ? CopyInto(buffers: buffers, source: recency)
                 : null
             );
         }
 
-        var actionState = Assembled(alias: alias, buffers: buffers, length: m_actionStateDefinitions.Length, scratch: ref m_viewActionState);
+        var actionState = Take<long>(buffers: buffers, length: m_actionStateDefinitions.Length);
 
         ReadActionState(image: actionState);
 
-        var (tapeIntents, tapeRemainingTicks, tapeActors) = Tape(
-            alias: alias,
-            buffers: buffers
-        );
+        var tapeIntents = Take<PlayerIntent>(buffers: buffers, length: m_tapeCount);
+        var tapeRemainingTicks = Take<ulong>(buffers: buffers, length: m_tapeCount);
+        var tapeActors = Take<Principal>(buffers: buffers, length: m_tapeCount);
+
+        for (var offset = 0; (offset < m_tapeCount); offset++) {
+            var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
+
+            tapeIntents[offset] = segment.Intent;
+            tapeRemainingTicks[offset] = segment.RemainingTicks;
+            tapeActors[offset] = segment.Actor;
+        }
 
         return new(
-            ScriptActors: new(Own(alias: alias, buffers: buffers, live: m_scriptActors), Own(alias: alias, buffers: buffers, live: m_pendingScriptActors), tapeActors),
+            ScriptActors: new(CopyInto(buffers: buffers, source: m_scriptActors), CopyInto(buffers: buffers, source: m_pendingScriptActors), tapeActors),
             PlanarVelocity: m_planarVelocity,
             VerticalVelocity: m_verticalVelocity,
             Orientation: m_orientation,
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: Own(alias: alias, buffers: buffers, live: m_laneTimers),
-            ChannelTimerValues: Own(alias: alias, buffers: buffers, live: m_channelTimerValues),
-            RelativeRemainders: Own(alias: alias, buffers: buffers, live: m_relativeRemainders),
+            ChannelTimerTicks: CopyInto(buffers: buffers, source: m_laneTimers),
+            ChannelTimerValues: CopyInto(buffers: buffers, source: m_channelTimerValues),
+            RelativeRemainders: CopyInto(buffers: buffers, source: m_relativeRemainders),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: Own(alias: alias, buffers: buffers, live: m_previousChannelBit),
+            PreviousChannelBit: CopyInto(buffers: buffers, source: m_previousChannelBit),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: Own(alias: alias, buffers: buffers, live: m_pendingDefaultChannelPress),
-            PendingDefaultChannelValue: Own(alias: alias, buffers: buffers, live: m_pendingDefaultChannelValue),
-            MotionRecency: Own(alias: alias, buffers: buffers, live: m_motionRecency),
+            PendingDefaultChannelPress: CopyInto(buffers: buffers, source: m_pendingDefaultChannelPress),
+            PendingDefaultChannelValue: CopyInto(buffers: buffers, source: m_pendingDefaultChannelValue),
+            MotionRecency: CopyInto(buffers: buffers, source: m_motionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
             DriveLatRemainder: m_driveLatAccumulator.Remainder,
@@ -101,77 +91,18 @@ public sealed partial class WorldBody {
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
             ActionState: actionState,
-            ActionStateDirty: Own(alias: alias, buffers: buffers, live: m_actionStateDirty),
-            ActionStateDirtyKind: Own(alias: alias, buffers: buffers, live: m_actionStateDirtyKind),
-            ActionStateDirtyOperand: Own(alias: alias, buffers: buffers, live: m_actionStateDirtyOperand),
-            DurableInputPresent: Own(alias: alias, buffers: buffers, live: m_durableInputPresent),
-            DurableInputValues: Own(alias: alias, buffers: buffers, live: m_durableInputValues),
-            DurableInputTimers: Own(alias: alias, buffers: buffers, live: m_durableInputTimers),
-            DurableInputWriters: Own(alias: alias, buffers: buffers, live: m_durableInputWriters),
+            ActionStateDirty: CopyInto(buffers: buffers, source: m_actionStateDirty),
+            ActionStateDirtyKind: CopyInto(buffers: buffers, source: m_actionStateDirtyKind),
+            ActionStateDirtyOperand: CopyInto(buffers: buffers, source: m_actionStateDirtyOperand),
+            DurableInputPresent: CopyInto(buffers: buffers, source: m_durableInputPresent),
+            DurableInputValues: CopyInto(buffers: buffers, source: m_durableInputValues),
+            DurableInputTimers: CopyInto(buffers: buffers, source: m_durableInputTimers),
+            DurableInputWriters: CopyInto(buffers: buffers, source: m_durableInputWriters),
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             PendingContinuum: m_pendingContinuum
         );
-    }
-    // A view's array is the live one; a capture's is its own copy, taken as Take takes one.
-    private static T[] Own<T>(bool alias, CaptureBuffers? buffers, T[] live) => (alias
-        ? live
-        : CopyInto(
-            buffers: buffers,
-            source: live
-        ));
-    // An assembled array of exactly length elements: the body's view scratch for a view (grown only when this body's
-    // shape changes), or an array taken as Take takes one for a capture.
-    private static T[] Assembled<T>(bool alias, CaptureBuffers? buffers, int length, ref T[]? scratch) {
-        if (!alias) {
-            return Take<T>(
-                buffers: buffers,
-                length: length
-            );
-        }
-        if ((scratch is null) || (scratch.Length != length)) {
-            scratch = new T[length];
-        }
-
-        return scratch;
-    }
-    // The tape, oldest segment first: the body's reused view lists for a view, whose count follows the tape without
-    // reallocating, or arrays taken as Take takes one for a capture.
-    private (IReadOnlyList<PlayerIntent> Intents, IReadOnlyList<ulong> RemainingTicks, IReadOnlyList<Principal> Actors) Tape(bool alias, CaptureBuffers? buffers) {
-        if (alias) {
-            var viewIntents = (m_viewTapeIntents ??= []);
-            var viewRemainingTicks = (m_viewTapeRemainingTicks ??= []);
-            var viewActors = (m_viewTapeActors ??= []);
-
-            viewIntents.Clear();
-            viewRemainingTicks.Clear();
-            viewActors.Clear();
-
-            for (var offset = 0; (offset < m_tapeCount); offset++) {
-                var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
-
-                viewIntents.Add(item: segment.Intent);
-                viewRemainingTicks.Add(item: segment.RemainingTicks);
-                viewActors.Add(item: segment.Actor);
-            }
-
-            return (viewIntents, viewRemainingTicks, viewActors);
-        }
-
-        var intents = Take<PlayerIntent>(buffers: buffers, length: m_tapeCount);
-        var remainingTicks = Take<ulong>(buffers: buffers, length: m_tapeCount);
-        var actors = Take<Principal>(buffers: buffers, length: m_tapeCount);
-
-        for (var offset = 0; (offset < m_tapeCount); offset++) {
-            var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
-
-            intents[offset] = segment.Intent;
-            remainingTicks[offset] = segment.RemainingTicks;
-            actors[offset] = segment.Actor;
-        }
-
-        return (intents, remainingTicks, actors);
     }
 
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
@@ -337,11 +268,9 @@ public sealed partial class WorldBody {
 
     /// <summary>Writes a previously captured lane image back into this body's slot lanes.</summary>
     /// <param name="image">The lane image, parallel to the kit's compiled definitions.</param>
-    public void RestoreActionState(IReadOnlyList<long> image) {
-        ArgumentNullException.ThrowIfNull(argument: image);
-
+    public void RestoreActionState(ReadOnlySpan<long> image) {
         var count = Math.Min(
-            val1: image.Count,
+            val1: image.Length,
             val2: m_actionStateDefinitions.Length
         );
 
@@ -365,8 +294,8 @@ public sealed partial class WorldBody {
     /// velocity/orientation fields beside it.</summary>
     /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
     public void ApplyTransferState(WorldBodyTransferState state) {
-        CopyClamped(state.ScriptActors.Timers, m_scriptActors);
-        CopyClamped(state.ScriptActors.Pending, m_pendingScriptActors);
+        CopyClamped(destination: m_scriptActors, source: state.ScriptActors.Timers);
+        CopyClamped(destination: m_pendingScriptActors, source: state.ScriptActors.Pending);
         // A restored body never sleeps through the restore that just replaced its velocity/orientation/program —
         // see WorldBody.Sleep.cs's own remarks. SetBodyMotionProgram below wakes too, but only when the captured
         // program name differs from the fresh body's default, so this cannot rely on that alone.
@@ -546,11 +475,10 @@ public sealed partial class WorldBody {
 
         m_durableInputTick = state.DurableInputTick;
 
-        RestoreTape(
-            actors: state.ScriptActors.Tape,
-            intents: state.TapeIntents,
-            remainingTicks: state.TapeRemainingTicks
-        );
+        ResetTape(count: Math.Min(val1: state.TapeIntents.Count, val2: state.TapeRemainingTicks.Count));
+        for (var index = 0; (index < m_tapeCount); index++) {
+            m_tape[index] = new TapeSegment { Actor = state.ScriptActors.Tape[index], Intent = state.TapeIntents[index], RemainingTicks = state.TapeRemainingTicks[index] };
+        }
     }
     /// <summary>Stops an exhausted continuum at the last confirmed ownership face. Tangential momentum survives;
     /// only velocity trying to leave this owner is removed.</summary>
@@ -612,7 +540,7 @@ public sealed partial class WorldBody {
         AsleepSinceTick: m_asleepSinceTick,
         SleepIdleTicks: m_sleepIdleTicks,
         LastContactFieldVersion: m_lastContactFieldVersion,
-        ContactFieldObservationCurrent: true,
+
         PlanarFollowerSeeded: m_planarFollowerSeeded,
         VerticalFollowerSeeded: m_verticalFollowerSeeded,
         Tether: new WorldBodyTetherResidue(
@@ -641,13 +569,11 @@ public sealed partial class WorldBody {
     /// <summary>Restores a previously captured integration residue onto this body — called after
     /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> has already set position/orientation and
     /// after <see cref="ApplyTransferState"/> has already set the rest of the live state, so this call's own writes
-    /// are never overwritten by an earlier restore step. The restored population's equivalent contact field can have
-    /// a different process-local version, so a current observation is rebased to <paramref name="contactFieldVersion"/>
-    /// while a pending version edge remains deliberately unequal.</summary>
-    /// <param name="residue">The checkpoint-only continuation state.</param>
-    /// <param name="contactFieldVersion">The reconstructed population's current contact-field version, or
-    /// <see langword="null"/> to restore the captured numeric version directly.</param>
-    public void ApplyIntegrationResidue(WorldBodyIntegrationResidue residue, ulong? contactFieldVersion = null) {
+    /// are never overwritten by an earlier restore step. The captured contact-field observation is restored as the
+    /// number it was: the residue is a same-process snapshot, and a checkpoint restore rebases that process-local
+    /// value itself (<see cref="RestoreSections"/>).</summary>
+    /// <param name="residue">The same-process continuation state.</param>
+    public void ApplyIntegrationResidue(WorldBodyIntegrationResidue residue) {
         m_previousPosition = residue.PreviousPosition;
         m_positionAccumulator = FixedVector3RateAccumulator.FromRemainders(
             xRemainder: residue.PositionRemainderX,
@@ -696,16 +622,7 @@ public sealed partial class WorldBody {
         );
         m_asleepSinceTick = residue.AsleepSinceTick;
         m_sleepIdleTicks = residue.SleepIdleTicks;
-        // A stale observation must stay stale against every version the next step can present. Versions only grow,
-        // so the version just below the current one is never seen again; flipping the low bit would equal the next
-        // version whenever the current one is even, and a sleeping body would then skip the wake the live run took.
-        m_lastContactFieldVersion = ((contactFieldVersion is not { } currentVersion)
-            ? residue.LastContactFieldVersion
-            : (residue.ContactFieldObservationCurrent
-                ? currentVersion
-                : unchecked((currentVersion - 1UL))
-            )
-        );
+        m_lastContactFieldVersion = residue.LastContactFieldVersion;
         m_planarFollowerSeeded = residue.PlanarFollowerSeeded;
         m_verticalFollowerSeeded = residue.VerticalFollowerSeeded;
 

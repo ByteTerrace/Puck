@@ -173,7 +173,7 @@ public sealed partial class WorldScopedReplayRuntime {
     private void Restore() {
         if (m_start is null) { throw new InvalidOperationException(message: "Capture the scope's fresh starting state first."); }
         foreach (var image in m_startBodies) {
-            if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) {
+            if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Admission.Generation)) {
                 // A start a replaced body can no longer be restored to is no start: the scope holds none until it captures again.
                 DropStart();
                 throw new InvalidOperationException(message: "A scoped body was replaced; capture again.");
@@ -187,13 +187,17 @@ public sealed partial class WorldScopedReplayRuntime {
         foreach (var image in m_startBodies) {
             var body = m_server.Body(index: image.Index)!;
 
-            body.Pose(image.Position, image.Yaw, FixedQ4816.Zero, FixedQ4816.Zero);
-            body.ApplyTransferState(state: image.DynamicState);
-            body.ApplyIntegrationResidue(image.Residue, m_server.Population.ContactFieldVersion);
+            body.Pose(image.Body.Pose.Position, image.Body.Pose.Yaw, FixedQ4816.Zero, FixedQ4816.Zero);
+            body.RestoreSections(
+                contactFieldObservationCurrent: image.Tail.ContactFieldObservationCurrent,
+                contactFieldVersion: m_server.Population.ContactFieldVersion,
+                registers: image.Tail.Registers.Span,
+                sections: in image.Body
+            );
         }
         foreach (var image in m_startBodies) {
-            m_server.Population.RestoreRigidContacts(images: image.RigidContacts, index: image.Index);
-            m_server.Population.AdoptRestoredIsland(index: image.Index, rootPlusOne: image.Residue.RigidSleepRootPlusOne);
+            m_server.Population.RestoreRigidContacts(images: image.Body.Contacts.Slots.Span, index: image.Index);
+            m_server.Population.AdoptRestoredIsland(index: image.Index, rootPlusOne: image.Body.Clocks.RigidSleepRootPlusOne);
         }
         if (Hash() != m_startHash) { throw new InvalidOperationException(message: "Scope starting hash MISMATCH after restore."); }
         StopInput();

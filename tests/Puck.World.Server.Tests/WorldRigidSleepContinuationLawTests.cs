@@ -80,7 +80,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             if (step == 0) {
                 Assert.Equal(0, population.SleepingRigidBodies);
                 Assert.Equal(1, population.SimulatedBodyVisits);
-                Assert.False(condition: population.Capture().Entries[1].Residue.Grounded);
+                Assert.False(condition: population.Capture().Entries[1].Body.Motion.Grounded);
                 Assert.True(condition: (population.EntryBody(index: 0)!.FixedPosition.X > FixedQ4816.Zero));
             }
             if (step == 1) { Assert.Equal(2, population.SimulatedBodyVisits); }
@@ -111,7 +111,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
         // A sleeping load carries its support as its own contact with the remote body.
-        if (remoteSupport && !rigidSupport) { Assert.Contains(collection: captured.Entries.Single(predicate: static entry => (entry.Index == 1)).RigidContacts, filter: static slot => (slot.Partner == 0)); }
+        if (remoteSupport && !rigidSupport) { Assert.Contains(collection: captured.Entries.Single(predicate: static entry => (entry.Index == 1)).Body.Contacts.Slots.ToArray(), filter: static slot => (slot.Partner == 0)); }
         population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
         Assert.Null(@object: population.EntryBody(index: 0));
         Assert.Equal(0, population.SleepingRigidBodies);

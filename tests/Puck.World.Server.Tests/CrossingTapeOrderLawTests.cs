@@ -317,7 +317,7 @@ public sealed partial class CrossingTapeOrderLawTests {
     private static (bool AuthorityTransferred, bool RemoteHuman, WorldMobilityIdentity? Mobility, int MobilityGeneration, bool Parked, long? ParkedUntilTick)? Restored(WorldServer server) {
         foreach (var entry in server.Population.Capture().Entries) {
             if (entry.Index == 0) {
-                return (entry.IsAuthorityTransferred, entry.IsRemoteHuman, entry.Mobility, entry.MobilityGeneration, entry.Parked, entry.ParkedUntilTick);
+                return (entry.Admission.IsAuthorityTransferred, entry.Admission.IsRemoteHuman, entry.Admission.Mobility, entry.Admission.MobilityGeneration, entry.Admission.Parked, entry.Admission.ParkedUntilTick);
             }
         }
 

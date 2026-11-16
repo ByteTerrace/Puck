@@ -447,14 +447,14 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
 
         var checkpoint = fixture.Server.Population.Capture();
-        var navigation = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: checkpoint.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var navigation = checkpoint.Entries.Single(predicate: row => (row.Index == 0)).Route.Path.ToArray();
 
         Assert.Contains(
             expectedSubstring: "clear=16/16",
             actualString: fixture.Server.Population.DescribeNavigation(),
             comparisonType: StringComparison.Ordinal
         );
-        Assert.NotEmpty(collection: navigation.Path);
+        Assert.NotEmpty(collection: navigation);
         Assert.Contains(
             expectedSubstring: "ground:surface",
             actualString: fixture.Server.Population.DescribeNavigation(),
@@ -487,13 +487,13 @@ public sealed partial class NavigationLawTests {
         );
         fixture.Step();
 
-        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Route.Path.ToArray();
 
         Assert.True(
-            condition: (route.Path.Count > 4),
+            condition: (route.Length > 4),
             userMessage: $"the route crossed the direct four-cell lane: {string.Join(
                 separator: ',',
-                values: route.Path
+                values: route
             )}"
         );
     }
@@ -521,9 +521,9 @@ public sealed partial class NavigationLawTests {
             ),
             userMessage: reason
         );
-        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Route.Path.ToArray();
 
-        Assert.NotEmpty(collection: route.Path);
+        Assert.NotEmpty(collection: route);
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: captured);
 
         Assert.True(
@@ -630,7 +630,7 @@ public sealed partial class NavigationLawTests {
             ),
             userMessage: reason
         );
-        Assert.NotEmpty(collection: Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation).Path);
+        Assert.NotEmpty(collection: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Route.Path.ToArray());
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(
                 bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured),
@@ -1251,8 +1251,7 @@ public sealed partial class NavigationLawTests {
             userMessage: reason
         );
         var entry = captured!.Population.Entries.Single(predicate: row => (row.Index == 0));
-        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: entry.Navigation);
-        var malformedEntry = entry with { Navigation = route with { Path = [int.MaxValue] } };
+        var malformedEntry = entry with { Route = new EntryRouteSection(Path: new[] { int.MaxValue }) };
         var malformed = captured with {
             Population = captured.Population with {
                 Entries = captured.Population.Entries.Select(selector: row => ((row.Index == entry.Index)

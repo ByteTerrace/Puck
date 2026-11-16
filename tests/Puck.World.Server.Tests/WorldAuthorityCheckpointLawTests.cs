@@ -142,7 +142,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         ));
 
         var entries = checkpoint!.Population.Entries;
-        var corruptedEntry = entries[0] with { Generation = (entries[0].Generation + 1000) };
+        var corruptedEntry = entries[0] with { Admission = entries[0].Admission with { Generation = (entries[0].Admission.Generation + 1000) } };
         var corrupted = checkpoint with {
             Population = checkpoint.Population with {
                 Entries = [corruptedEntry, .. entries.Skip(count: 1)],
@@ -206,16 +206,15 @@ public sealed class WorldAuthorityCheckpointLawTests {
             (entries.Length - 1)
         );
         entries[peer] = entries[peer] with {
-            Autonomy = new WorldPopulationAutonomyCheckpoint(
-            MotionElapsedTicks: 1UL,
-            MotionPeriodTicks: 1UL,
-            MotionRemainingTicks: 1UL,
-            SteeringElapsedTicks: 0UL,
-            SteeringIntent: default,
-            SteeringPeriodTicks: 0UL,
-            SteeringRemainingTicks: 0UL,
-            SteeringSeeded: false
-        ),
+            Cadence = new EntryCadenceSection(
+                MotionElapsedTicks: 1UL,
+                MotionPeriodTicks: 1UL,
+                MotionRemainingTicks: 1UL,
+                SteeringElapsedTicks: 0UL,
+                SteeringPeriodTicks: 0UL,
+                SteeringRemainingTicks: 0UL
+            ),
+            Steering = default,
         };
         var malformed = captured with { Population = captured.Population with { Entries = entries } };
         var beforeHash = WorldStateHashComposition.HashAuthoritative(
@@ -238,7 +237,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
 
         entries[peer] = entries[peer] with {
-            Autonomy = entries[peer].Autonomy with {
+            Cadence = entries[peer].Cadence with {
                 MotionPeriodTicks = 2UL,
                 MotionElapsedTicks = 0UL,
                 MotionRemainingTicks = 1UL,
@@ -255,7 +254,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
 
         entries = captured.Population.Entries.ToArray();
-        entries[peer] = entries[peer] with { KitIndex = byte.MaxValue };
+        entries[peer] = entries[peer] with { Admission = entries[peer].Admission with { KitIndex = byte.MaxValue } };
         malformed = captured with { Population = captured.Population with { Entries = entries } };
         Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Equal(

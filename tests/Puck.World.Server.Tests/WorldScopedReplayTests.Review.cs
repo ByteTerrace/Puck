@@ -173,13 +173,13 @@ public sealed partial class WorldScopedReplayTests {
         var outsider = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 1));
         var before = WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0);
         var exception = Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: checkpoint with {
-            Bodies = [outsider with { Position = new FixedVector3(X: FixedQ4816.FromInteger(value: 91), Y: FixedQ4816.FromInteger(value: 92), Z: FixedQ4816.FromInteger(value: 93)) }],
+            Bodies = [outsider with { Body = outsider.Body with { Pose = outsider.Body.Pose with { Position = new FixedVector3(X: FixedQ4816.FromInteger(value: 91), Y: FixedQ4816.FromInteger(value: 92), Z: FixedQ4816.FromInteger(value: 93)) } } }],
         }));
 
         Assert.Contains("scope", exception.Message, StringComparison.Ordinal);
         Assert.Contains("body inventory", exception.Message, StringComparison.Ordinal);
         Assert.Equal(before, WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0));
-        Assert.Equal(outsider.Position, fixture.Server.Body(index: 1)!.FixedPosition);
+        Assert.Equal(outsider.Body.Pose.Position, fixture.Server.Body(index: 1)!.FixedPosition);
 
         var image = checkpoint.Start!;
         var numbers = image.Numbers.ToArray();

@@ -26,8 +26,8 @@ public sealed class BodyContinuationHashLawTests {
         Assert.Equal(expected: before, actual: WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0UL));
         var captured = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0));
 
-        Assert.Equal(expected: new Vector3(x: 0.125f, y: 0.25f, z: 0.5f), actual: captured.BodyColor);
-        Assert.Equal(expected: ((byte)7), actual: captured.CatalogRig);
+        Assert.Equal(expected: new Vector3(x: 0.125f, y: 0.25f, z: 0.5f), actual: captured.Look.BodyColor);
+        Assert.Equal(expected: ((byte)7), actual: captured.Look.CatalogRig);
     }
     [Fact]
     public void RevokedAdmissionKeysHaveCanonicalOrder() {
@@ -44,7 +44,7 @@ public sealed class BodyContinuationHashLawTests {
         fixture.Server.Population.SetPeerAdmissionRevokedKeys(bodyIndex: 0, revokedKeys: new HashSet<(WorldCapability, GrantSubject)> { second, first });
 
         Assert.Equal(expected: before, actual: WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0UL));
-        Assert.Equal(expected: captured.AdmissionRevokedKeys, actual: fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).AdmissionRevokedKeys);
+        Assert.Equal(expected: captured.Admission.RevokedKeys, actual: fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Admission.RevokedKeys);
         fixture.Server.Population.SetPeerAdmissionRevokedKeys(bodyIndex: 0, revokedKeys: new HashSet<(WorldCapability, GrantSubject)> { first });
         Assert.NotEqual(expected: before, actual: WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0UL));
     }

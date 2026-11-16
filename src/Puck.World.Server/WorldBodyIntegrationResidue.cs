@@ -3,11 +3,11 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The position-integration remainders <see cref="WorldBodyTransferState"/> deliberately drops (see its own
-/// remarks) because a transfer's destination frame makes them meaningless — captured here instead for a
-/// checkpoint restore, which is CONTINUOUS: the restored body keeps advancing in the identical frame it was
-/// captured in, so a dropped remainder would round the very next step's swept segment differently and the
-/// restored trajectory would diverge from the uninterrupted one by one raw unit within a few ticks.</summary>
+/// <summary>The same-frame continuation <see cref="WorldBodyTransferState"/> deliberately drops (see its own remarks)
+/// because a transfer's destination frame makes it meaningless: with the transfer state it is the snapshot a step
+/// restores when its sweep is refused (<see cref="WorldBody.StepScratch"/>), where the body keeps advancing in the
+/// frame and the process it was captured in. A checkpoint carries a body's sections instead
+/// (<see cref="WorldBodySections"/>).</summary>
 /// <param name="PreviousPosition">The position at the top of the most recently completed <see cref="WorldBody.Advance"/> —
 /// mirrors <see cref="WorldBody.FixedPreviousPosition"/>, carried here so a restore can set it directly.</param>
 /// <param name="PositionRemainderX">The position-rate accumulator's X-axis remainder.</param>
@@ -41,10 +41,8 @@ namespace Puck.World.Server;
 /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
 /// <param name="AsleepSinceTick">The simulation tick at which the body fell asleep, or 0 while awake.</param>
 /// <param name="SleepIdleTicks">The consecutive idle engine ticks accumulated toward the authored sleep floor.</param>
-/// <param name="LastContactFieldVersion">The contact-field version observed by the body's latest advance.</param>
-/// <param name="ContactFieldObservationCurrent">Whether that observation matched the population's field at
-/// checkpoint capture; always <see langword="true"/> for an awake body, which overwrites its observation before any
-/// read. Versions are process-local, so this semantic edge is what a restore preserves.</param>
+/// <param name="LastContactFieldVersion">The contact-field version observed by the body's latest advance: a
+/// process-local counter, meaningful only to the process that captured it.</param>
 /// <param name="PlanarFollowerSeeded">Whether the planar dynamics follower has consumed its first target.</param>
 /// <param name="VerticalFollowerSeeded">Whether the vertical dynamics follower has consumed its first target.</param>
 /// <param name="Tether">The body-local tether continuation state.</param>
@@ -95,7 +93,6 @@ public readonly record struct WorldBodyIntegrationResidue(
     ulong AsleepSinceTick,
     ulong SleepIdleTicks,
     ulong LastContactFieldVersion,
-    bool ContactFieldObservationCurrent,
     bool PlanarFollowerSeeded,
     bool VerticalFollowerSeeded,
     WorldBodyTetherResidue Tether,

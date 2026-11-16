@@ -554,7 +554,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var entry = checkpoint!.Population.Entries.Single(predicate: static row => (row.Index == 0));
 
         Assert.True(
-            condition: (entry.ProducerCurveArcRaw != 0L),
+            condition: (entry.Producer.CurveArcRaw != 0L),
             userMessage: "the driven curve-follow arc position must be off rest before this law proves anything"
         );
 

@@ -302,7 +302,6 @@ public sealed partial class WorldPopulation {
     // the next.
     private WireWriter? m_continuationWriter;
     private List<(WorldCapability, GrantSubject)>? m_viewRevokedKeys;
-    private List<int>? m_viewPath;
 
     // The definition's kit rows: the authored rows (body construction reads a row's tuning) and their fixed-point
     // compilations (producer programs read their parameter maps), plus the resolved seat row. Assigned by CompileFixedTables from

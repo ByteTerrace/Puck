@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteCapability(WireWriter writer, WorldCapability capability) {
+    internal static void WriteCapability(WireWriter writer, WorldCapability capability) {
         if (!WorldWireCodec.TryWriteCapability(
             capability: capability,
             writer: writer

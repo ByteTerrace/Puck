@@ -820,7 +820,7 @@ public sealed partial class WorldPersistence {
 
         WorldTick.ValidateFederatedInputs(server.FederatedInputs, restoredDefinition.Population.Capacity);
         foreach (var input in server.FederatedInputs) {
-            if (!checkpoint.Population.Entries.Any(predicate: entry => ((entry.Index == input.Index) && (entry.Generation == input.Principal.Generation) && entry.IsRemoteHuman))) {
+            if (!checkpoint.Population.Entries.Any(predicate: entry => ((entry.Index == input.Index) && (entry.Admission.Generation == input.Principal.Generation) && entry.Admission.IsRemoteHuman))) {
                 throw new ArgumentException(message: "federated input checkpoint does not name its admitted peer generation");
             }
         }
@@ -987,11 +987,11 @@ public sealed partial class WorldPersistence {
         foreach (var entry in checkpoint.Population.Entries) {
             if (
                 !restoreOwnedIdentities ||
-                entry.IsRemoteHuman ||
-                (entry.Profile is not { } projection) ||
+                entry.Admission.IsRemoteHuman ||
+                (entry.Tail.Profile is not { } projection) ||
                 (Host.HomeSeatIdentity(
                     id: projection.Id,
-                    mobility: entry.Mobility,
+                    mobility: entry.Admission.Mobility,
                     slot: entry.Index
                 ) is not { } owned)
             ) {
@@ -1002,7 +1002,7 @@ public sealed partial class WorldPersistence {
                 slot: entry.Index
             );
             Host.Population.SetBodyColor(
-                color: entry.BodyColor,
+                color: entry.Look.BodyColor,
                 slot: entry.Index
             );
         }

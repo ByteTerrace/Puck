@@ -9,7 +9,6 @@ public sealed partial class WorldBody {
     private readonly Principal[] m_pendingScriptActors = new Principal[ActionLaneCount];
     private readonly Principal[] m_inputScriptActorScratch = new Principal[ActionLaneCount];
 
-    private List<Principal>? m_viewTapeActors;
     private List<Principal>? m_scriptActorScratch;
     private PlayerIntent m_scriptAccepted;
 

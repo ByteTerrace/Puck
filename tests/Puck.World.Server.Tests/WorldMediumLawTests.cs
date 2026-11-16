@@ -327,6 +327,83 @@ public sealed class WorldMediumLawTests {
         Assert.True(condition: wetBody.InMedium);
         Assert.False(condition: dryBody.InMedium);
     }
+    // THE LAW: a checkpoint carries a body's medium facts, so a restored body answers `inmedium` as the captured one
+    // did before it next advances, and a sleeping body, which is not advanced, keeps answering it. A peer idles in
+    // the medium's covered cell; its captured image is put to sleep, as the world's idle floor would put it, and
+    // restored. The red leg is a restore that leaves the facts for the next advance to derive: the restored sleeper
+    // reads dry while the body it was captured from read wet.
+    [Fact]
+    public void ABodyAsleepInAMediumRestoresReadingInMediumAsItDidWhenCaptured() {
+        var document = BuildMediumHoldDocument(topology: Topology(
+            depth: 2,
+            width: 2
+        ));
+
+        document = document with {
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
+                NetworkPlayers = 1,
+                SleepAfterSeconds = 0.0125m,
+            },
+        };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var population = fixture.Server.Population;
+        var index = WorldBodiesLimits.LocalSeatCount;
+
+        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+
+        var body = population.EntryBody(index: index)!;
+
+        body.SetIntentSource(source: IntentSource.Idle);
+        body.Pose(
+            pitchRadians: FixedQ4816.Zero,
+            position: FixedVector3.Zero,
+            rollRadians: FixedQ4816.Zero,
+            yawRadians: FixedQ4816.Zero
+        );
+        fixture.Step();
+        Assert.True(condition: body.InMedium);
+        Assert.True(condition: body.Facts.HasFlag(flag: BodyFacts.InMedium));
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpoint,
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        var captured = checkpoint!.Population.Entries.Single(predicate: entry => (entry.Index == index));
+
+        Assert.True(condition: captured.Body.Motion.InMedium);
+
+        var asleep = checkpoint with {
+            Population = checkpoint.Population with {
+                Entries = [.. checkpoint.Population.Entries.Select(selector: entry => ((entry.Index == index)
+                    ? (entry with { Body = entry.Body with { Clocks = entry.Body.Clocks with { AsleepSinceTick = 1UL } } })
+                    : entry))],
+            },
+        };
+
+        Assert.True(
+            condition: WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: asleep),
+                checkpoint: out var decoded,
+                reason: out reason
+            ),
+            userMessage: reason
+        );
+        fixture.Server.RestoreCheckpoint(checkpoint: decoded!);
+
+        var restored = fixture.Server.Body(index: index)!;
+
+        Assert.True(condition: restored.Asleep);
+        Assert.True(condition: restored.InMedium);
+        Assert.Equal(expected: body.AtMediumBand, actual: restored.AtMediumBand);
+        Assert.True(condition: restored.Facts.HasFlag(flag: BodyFacts.InMedium));
+        fixture.Step();
+        Assert.True(condition: fixture.Server.Body(index: index)!.InMedium);
+    }
     [Fact]
     public void AMediumHoldInADryWorldIsAdmitted_SoAnAvatarCarriesItIntoEveryWorldItIsWornIn() {
         var topology = Topology();

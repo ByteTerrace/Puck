@@ -29,19 +29,10 @@ public sealed partial class WorldBody {
             m_roleChannels[ordinal] = ((roleMask is { } roles) && (ordinal < roles.Length) && roles[ordinal]);
         }
     }
-    // The shared clamped-copy every array field ApplyTransferState restores uses: never trusts the captured array's
-    // length to match the restored body's own (a defensive habit, not a load-bearing one — the SAME seat kit always
-    // produces the SAME lengths for a same-process abort/restore).
-    private static void CopyClamped<T>(T[] source, T[] destination) {
-        var count = Math.Min(
-            val1: source.Length,
-            val2: destination.Length
-        );
-
-        for (var index = 0; (index < count); index++) {
-            destination[index] = source[index];
-        }
-    }
+    // The clamped copy every restored table uses: it never trusts the captured table's length to match the restored
+    // body's own. The same kit produces the same lengths; a decoded checkpoint is untrusted input.
+    private static void CopyClamped<T>(ReadOnlySpan<T> source, Span<T> destination) =>
+        source[..Math.Min(val1: source.Length, val2: destination.Length)].CopyTo(destination: destination);
     // Advance the ring past its front segment (a FIFO dequeue): step the head and shrink the live count.
     private void DropFrontSegment() {
         m_tapeHead = ((m_tapeHead + 1) % m_tape.Length);
@@ -59,26 +50,23 @@ public sealed partial class WorldBody {
         m_tape = grown;
         m_tapeHead = 0;
     }
-    // Rewrites the WHOLE tape ring from a captured FIFO snapshot — the abort-restore counterpart to
-    // CaptureTransferState's own tape read. Bypasses EnqueueRun's seconds-based API deliberately: re-deriving ticks
-    // from a seconds-rounded value would drift the restored segment's remaining duration from the exact tick count
-    // that was live at capture. Always called on a freshly constructed restore body (RestoreDetachedSeat never calls
-    // ApplyTransferState on a live one), so there is never an existing segment to preserve or lose.
-    private void RestoreTape(IReadOnlyList<PlayerIntent> intents, IReadOnlyList<ulong> remainingTicks, IReadOnlyList<Principal> actors) {
-        var count = Math.Min(
-            val1: intents.Count,
-            val2: remainingTicks.Count
-        );
-
+    // Empties the tape ring and sizes it for count segments a restore then writes from index 0, in dequeue order. A
+    // restore writes exact tick counts and never goes through EnqueueRun: re-deriving ticks from rounded seconds would
+    // drift a segment's remaining duration from the count that was live at capture.
+    private void ResetTape(int count) {
+        m_tapeHead = 0;
+        m_tapeCount = 0;
         while (m_tape.Length < count) {
             GrowTape();
         }
 
-        m_tapeHead = 0;
         m_tapeCount = count;
-
-        for (var index = 0; (index < count); index++) {
-            m_tape[index] = new TapeSegment { Intent = intents[index], RemainingTicks = remainingTicks[index], Actor = actors[index] };
+    }
+    // Rewrites the whole tape from captured segments, oldest first.
+    private void RestoreTape(ReadOnlySpan<WorldTapeSegmentImage> segments) {
+        ResetTape(count: segments.Length);
+        for (var index = 0; (index < segments.Length); index++) {
+            m_tape[index] = new TapeSegment { Actor = segments[index].Actor, Intent = segments[index].Intent, RemainingTicks = segments[index].RemainingTicks };
         }
     }
     private void SetBodyMotionProgram(CompiledBodyMotionProgram program) {
@@ -708,7 +696,7 @@ public sealed partial class WorldBody {
     /// REFERENCE changes is woken: its rest latch was derived against the old static world,
     /// and a live solid edit that moved or removed the floor
     /// beneath it must let it fall rather than leave it frozen in the air — a checkpoint restore hands the field to a
-    /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
+    /// fresh body BEFORE <see cref="RestoreSections"/> re-applies the captured latch, so a restore is never
     /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) => AdoptContactField(field: field, wake: true);

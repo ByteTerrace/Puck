@@ -75,11 +75,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         ));
 
         var entries = checkpoint!.Population.Entries;
-        var original = entries[0].Residue;
-        var corruptedResidue = original with { PositionRemainderX = (original.PositionRemainderX + 1) };
+        var original = entries[0].Body.Motion;
+        var corruptedMotion = original with { PositionRemainder = ((original.PositionRemainder.X + 1), original.PositionRemainder.Y, original.PositionRemainder.Z) };
         var corrupted = checkpoint with {
             Population = checkpoint.Population with {
-                Entries = [entries[0] with { Residue = corruptedResidue }, .. entries.Skip(count: 1)],
+                Entries = [entries[0] with { Body = entries[0].Body with { Motion = corruptedMotion } }, .. entries.Skip(count: 1)],
             },
         };
 
@@ -87,11 +87,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         var restoredResidue = restored.Body(index: entries[0].Index)!.CaptureIntegrationResidue();
 
         Assert.NotEqual(
-            expected: original.PositionRemainderX,
+            expected: original.PositionRemainder.X,
             actual: restoredResidue.PositionRemainderX
         );
         Assert.Equal(
-            expected: corruptedResidue.PositionRemainderX,
+            expected: corruptedMotion.PositionRemainder.X,
             actual: restoredResidue.PositionRemainderX
         );
     }
@@ -191,11 +191,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
 
         var entries = checkpoint!.Population.Entries;
 
-        Assert.False(condition: entries[0].IsRemoteHuman);
+        Assert.False(condition: entries[0].Admission.IsRemoteHuman);
 
         var corrupted = checkpoint with {
             Population = checkpoint.Population with {
-                Entries = [entries[0] with { IsRemoteHuman = true, Parked = false, ParkedUntilTick = null }, .. entries.Skip(count: 1)],
+                Entries = [entries[0] with { Admission = entries[0].Admission with { IsRemoteHuman = true, Parked = false, ParkedUntilTick = null } }, .. entries.Skip(count: 1)],
             },
         };
 
@@ -249,7 +249,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
             hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
-        Assert.False(condition: checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot)).Parked);
+        Assert.False(condition: checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot)).Admission.Parked);
 
         var restoredHonest = Restore(checkpoint: checkpoint);
         // The counterfactual: a checkpoint that captured this row as already parked (unchanged by restore's own
@@ -258,7 +258,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         var forcedUnparked = checkpoint with {
             Population = checkpoint.Population with {
                 Entries = [.. checkpoint.Population.Entries.Select(selector: e => ((e.Index == PeerSlot)
-            ? (e with { Parked = false, ParkedUntilTick = null })
+            ? (e with { Admission = e.Admission with { Parked = false, ParkedUntilTick = null } })
             : e))],
             },
         };
@@ -314,7 +314,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
             reason: out _
         ));
 
-        var entry = checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot));
+        var entry = checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot)).Admission;
 
         Assert.False(condition: entry.Parked);
 

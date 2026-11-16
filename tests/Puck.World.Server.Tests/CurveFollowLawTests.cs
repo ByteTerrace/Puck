@@ -73,7 +73,7 @@ public sealed class CurveFollowLawTests {
             userMessage: reason
         );
 
-        return checkpoint!.Population.Entries.Single(predicate: row => (row.Index == bodyIndex)).ProducerCurveArcRaw;
+        return checkpoint!.Population.Entries.Single(predicate: row => (row.Index == bodyIndex)).Producer.CurveArcRaw;
     }
     // The straight, zero-curvature StraightPath collapses arc length to world X exactly (see StraightPath's own
     // remarks), so the expected curve point at elapsed second t is (min(rate * t, 20), 0, 0) with no independent
@@ -294,7 +294,7 @@ public sealed class CurveFollowLawTests {
             userMessage: reason
         );
 
-        var capturedArcRaw = checkpoint!.Population.Entries.Single(predicate: row => (row.Index == 0)).ProducerCurveArcRaw;
+        var capturedArcRaw = checkpoint!.Population.Entries.Single(predicate: row => (row.Index == 0)).Producer.CurveArcRaw;
 
         Assert.True(
             condition: (capturedArcRaw > 0L),

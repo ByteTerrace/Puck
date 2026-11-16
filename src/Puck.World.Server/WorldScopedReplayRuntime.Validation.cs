@@ -20,7 +20,7 @@ public sealed partial class WorldScopedReplayRuntime {
             if ((checkpoint.Bodies.Count != m_bodies.Count) || !checkpoint.Bodies.Select(selector: body => body.Index).ToHashSet().SetEquals(other: m_bodies)) { Refuse(detail: "starting body inventory differs from the declared scope"); }
             m_server.Arena.ValidateScope(image: start);
             foreach (var body in checkpoint.Bodies) {
-                if ((m_server.Body(index: body.Index) is null) || (body.Generation != m_server.Population.Generation(index: body.Index))) { Refuse(detail: "a starting body was replaced"); }
+                if ((m_server.Body(index: body.Index) is null) || (body.Admission.Generation != m_server.Population.Generation(index: body.Index))) { Refuse(detail: "a starting body was replaced"); }
             }
         } else if ((checkpoint.Bodies.Count != 0) || (checkpoint.StartHash != 0) || (checkpoint.Hashes.Count != 0) || (checkpoint.RuleGateHeld.Count != 0) || (checkpoint.InteractionGateHeld.Count != 0)) {
             Refuse(detail: "continuation without a starting image");

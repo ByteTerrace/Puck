@@ -301,13 +301,6 @@ public sealed partial class WorldBody {
     // ordinals too.
     private readonly FixedQ4816[] m_channelThresholds = new FixedQ4816[ActionLaneCount];
 
-    // Scratch a transfer-state view assembles into (ViewTransferState), reused from one view to the next.
-    private ulong[]? m_viewLaneLatch;
-    private ulong[]? m_viewLaneFactHeld;
-    private ulong[]?[]? m_viewLaneRecency;
-    private long[]? m_viewActionState;
-    private List<PlayerIntent>? m_viewTapeIntents;
-    private List<ulong>? m_viewTapeRemainingTicks;
 
     // The declared shape per ordinal — EVERY ordinal, not just bound ones: the
     // held-image overlay below composes a channel whether or not a kit binds an action to it. Resolved once from the

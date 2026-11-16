@@ -17,7 +17,7 @@ namespace Puck.World.Server;
 /// struct entirely.</summary>
 /// <remarks>
 /// <para>Every mutable instance field this class declares is classified between this transfer record and the
-/// checkpoint-only <see cref="WorldBodyIntegrationResidue"/>/<see cref="WorldBodyTetherResidue"/> records below, so a reviewer
+/// same-frame <see cref="WorldBodyIntegrationResidue"/>/<see cref="WorldBodyTetherResidue"/> records below, so a reviewer
 /// can check a table rather than re-hunt every partial declaration. Two invariants bound the transfer
 /// classification either way: no park state (governed by
 /// <see cref="Puck.World.Server.WorldPopulation.Entry.ParkedUntilTick"/>, never this struct — re-derived on the
@@ -121,7 +121,9 @@ namespace Puck.World.Server;
 /// unconditionally by <c>RestoreDetachedSeat</c>'s own <c>Pose()</c> call, which already writes the correct
 /// value (Teleport) for a genuinely discontinuous restore. <c>m_affectingSubject</c> — reset to <c>-1</c> at the
 /// tail of every <see cref="WorldBody.Advance"/>, one-tick, like <c>m_heldChannels</c>.</para>
-/// <para><b>Checkpoint-only continuation.</b> <see cref="WorldBodyIntegrationResidue"/> carries the same-world integration
+/// <para><b>Same-frame continuation.</b> A checkpoint carries a body as its sections (<see cref="WorldBodySections"/>),
+/// which hold everything here and below. <see cref="WorldBodyIntegrationResidue"/> is the refused sweep's half of that:
+/// with this record it carries the same-world integration
 /// state a cross-world transfer deliberately cannot: position/rotation/gravity-axis accumulator remainders,
 /// canonical rigid sleeping-island membership (the population rebuilds its wake graph and spatial index),
 /// previous position, grounded/up/frame/reseat state, dynamics-follower seed latches, engagement latches, and the

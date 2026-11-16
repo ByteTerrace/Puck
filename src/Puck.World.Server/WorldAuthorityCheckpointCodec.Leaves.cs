@@ -7,28 +7,36 @@ using System.Runtime.InteropServices;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    // The counted tables: a count, then the elements. The span forms are the one encoding of each; a list that is an
+    // array takes its span, and any other list writes the same bytes an element at a time.
+    internal static void WriteULongs(WireWriter writer, ReadOnlySpan<ulong> values) {
+        writer.WriteArrayCount(count: values.Length);
+        writer.WriteInt64s(values: MemoryMarshal.Cast<ulong, long>(span: values));
+    }
     private static void WriteULongArray(WireWriter writer, IReadOnlyList<ulong> values) {
         if (values is ulong[] array) {
-            writer.WriteArrayCount(count: array.Length);
-            writer.WriteInt64s(values: MemoryMarshal.Cast<ulong, long>(span: array.AsSpan()));
+            WriteULongs(values: array, writer: writer);
         } else {
             writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteUInt64(value: v));
         }
     }
-    private static ulong[] ReadULongArray(ref WireReader reader, string field) => reader.ReadArray(
+    internal static ulong[] ReadULongArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadUInt64(),
         maximum: MaxCollectionCount
     );
+    internal static void WriteLongs(WireWriter writer, ReadOnlySpan<long> values) {
+        writer.WriteArrayCount(count: values.Length);
+        writer.WriteInt64s(values: values);
+    }
     private static void WriteLongArray(WireWriter writer, IReadOnlyList<long> values) {
         if (values is long[] array) {
-            writer.WriteArrayCount(count: array.Length);
-            writer.WriteInt64s(values: array);
+            WriteLongs(values: array, writer: writer);
         } else {
             writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteInt64(value: v));
         }
     }
-    private static long[] ReadLongArray(ref WireReader reader, string field) => reader.ReadArray(
+    internal static long[] ReadLongArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadInt64(),
         maximum: MaxCollectionCount
@@ -42,15 +50,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         readItem: static (ref WireReader r) => r.ReadInt32(),
         maximum: MaxCollectionCount
     );
+    internal static void WriteBools(WireWriter writer, ReadOnlySpan<bool> values) {
+        writer.WriteArrayCount(count: values.Length);
+        writer.WriteBooleans(values: values);
+    }
     private static void WriteBoolArray(WireWriter writer, IReadOnlyList<bool> values) {
         if (values is bool[] array) {
-            writer.WriteArrayCount(count: array.Length);
-            writer.WriteBooleans(values: array);
+            WriteBools(values: array, writer: writer);
         } else {
             writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteBoolean(value: v));
         }
     }
-    private static bool[] ReadBoolArray(ref WireReader reader, string field, int maximum = MaxCollectionCount) => reader.ReadArray(
+    internal static bool[] ReadBoolArray(ref WireReader reader, string field, int maximum = MaxCollectionCount) => reader.ReadArray(
         field: field,
         maximum: maximum,
         readItem: static (ref WireReader r) => r.ReadBoolean()
@@ -67,15 +78,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         ),
         maximum: MaxCollectionCount
     );
+    internal static void WriteFixeds(WireWriter writer, ReadOnlySpan<FixedQ4816> values) {
+        writer.WriteArrayCount(count: values.Length);
+        writer.WriteInt64s(values: MemoryMarshal.Cast<FixedQ4816, long>(span: values));
+    }
     private static void WriteFixedArray(WireWriter writer, IReadOnlyList<FixedQ4816> values) {
         if (values is FixedQ4816[] array) {
-            writer.WriteArrayCount(count: array.Length);
-            writer.WriteInt64s(values: MemoryMarshal.Cast<FixedQ4816, long>(span: array.AsSpan()));
+            WriteFixeds(values: array, writer: writer);
         } else {
             writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteFixed(value: v));
         }
     }
-    private static FixedQ4816[] ReadFixedArray(ref WireReader reader, string field) => reader.ReadArray(
+    internal static FixedQ4816[] ReadFixedArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadFixed(),
         maximum: MaxCollectionCount
@@ -103,7 +117,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{grantee.Describe()} has no live wire value");
         }
     }
-    private static void WriteSubject(WireWriter writer, GrantSubject subject) {
+    internal static void WriteSubject(WireWriter writer, GrantSubject subject) {
         if (!WorldWireCodec.TryWriteSubject(
             subject: subject,
             writer: writer
