@@ -747,8 +747,12 @@ name only itself; naming another is refused by name.
 **Disclosure chokepoint.** A seat's own console session reaches every verb, so a
 read-back of state values never reads `WorldServer.Definition` for it directly.
 `WorldServer.ReadView(CommandContext)` mints the caller's live `WorldRecipientView`
-at its admission ceiling. Sessions reuse `WorldSessionObservation.View`, including
-live Observe admission; a missing or ended session sees the undisclosed document.
+at its admission ceiling. Sessions reuse `WorldSessionObservation.View`. A session
+reads only while its state-observation query would be answered
+(`WorldServer.AllowsSessionQuery`): at `Frames`, after its observation ends or its
+epoch retires, and while it lacks `observe all`, `WorldServer.ReadView` throws
+`InvalidOperationException` with the query door's refusal, and the verb faults.
+Write admission asks policy alone through `WorldServer.RecipientView`.
 `WorldStateReadView` is the console adapter over this capability until the final
 cleanup in the disclosure plan. It never reads authority state separately.
 What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the

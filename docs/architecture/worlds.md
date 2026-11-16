@@ -877,7 +877,8 @@ Session queries cross the same disclosure decision as delivery. A `Frames` sessi
 `Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
 for delivery. Authoritative readbacks require a `Replica` admission and disclose-all observer policy. A
 session whose observation has ended has no query read door. Session state read views use the delivered tier's
-definition projection; Frames and ended sessions are refused there too.
+definition projection and ask the query door's own decision before they mint one: Frames sessions, ended or
+retired sessions and sessions without `observe all` are refused there too.
 
 A session screen observes its destination as a session. When the screen binds,
 `WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
