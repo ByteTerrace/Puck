@@ -2443,7 +2443,14 @@ certified-contact packet and step 8 closes. The measured state is in the
   `WorldValidatedLoadLawTests` and `WorldAuthorityRecoveryLawTests` (one case
   each, built over the same undersized directory target as the blob-store
   fixture). Each is updated to the behaviour it now meets, or deleted.
-- [medium · background work paced by presentation] `SdfGpuWork`'s background
+- [low · a red input scenario] `puck test worlds/debug/input-continuity-tests.puck`
+  fails one world with every verdict passing: "a mid-session checkpoint
+  restores held origins and replays their later release" submits
+  `replay.record`, `replay.stop` and `replay.inspect` as `seat1`, and each is
+  refused as an operator verb, so the step's recorded outcome is not the
+  `submitted` it declares. It fails the same way with and without the body
+  state door's D4. Give the test a way to issue the three verbs as the
+  operator, or grant the seat what the test needs.- [medium · background work paced by presentation] `SdfGpuWork`'s background
   jobs run on the presenting queue, take work only at frame pumps and drive a
   16.7 ms slice per host iteration, so a slow present (a display at idle
   clocks read `produce-fence` about 120 ms a frame) paces the bake and probe
