@@ -2403,6 +2403,13 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
+- [high] `puck test` takes the heavy lease and then waits up to 120 minutes for
+  host capacity while holding it ("gate: waiting for host capacity before test
+  worker"), so every other lane's heavy run queues behind a run that is itself
+  waiting: a lead `puck test` held the heavy lease 18 minutes behind a
+  windowed World's admission while a lane's scenario run waited 8 minutes for
+  it. Admit before acquiring an exclusive lease, or release the lease while
+  waiting on admission and requeue at the same ticket.
 - [medium] `puck integrate`: the lead's integration steps as one verb under
   one report: the build, each generator's `--check`, `puck docs links`, a
   headless boot of the debug world, windowed Direct3D 12 and Vulkan boots, and
