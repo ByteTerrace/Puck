@@ -344,7 +344,7 @@ What a first swallow taught, in the order it went wrong:
 - **Every shape declares its detail by one rule** (`WorldShapeDetail.Of`), on
   a static stamp, in a pooled blend group or alone: its round sections (a
   cylinder's and a cone's included), its rounding, its thickness when it is a
-  plate or folded, and its warps. A blend group's shapes each refine their own
+  plate or folded, and its warps and sine relief (their crests' bend). A blend group's shapes each refine their own
   box at their own factor, and only where the surface turns, so grouping a part
   to borrow a neighbour's detail is never needed (`puck mesh audit --prototype
   <id> --cpu` prints each group's cell and triangles). A section thinner than
