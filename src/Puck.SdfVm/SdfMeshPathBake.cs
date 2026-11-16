@@ -1442,9 +1442,13 @@ public sealed partial class SdfMeshPathBake {
 
         if (gradients) { target = MathF.Max(x: target, y: MinimumCell); }
 
-        int Samples(float length) => Math.Clamp(value: (((int)MathF.Ceiling(x: (length / target))) + 1), min: minimum, max: FinalSamples);
+        var (x, y, z) = SdfMeshLattice.Dims(cell: target, extent: extent, minimum: minimum);
 
-        var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
+        return Spanning(dims: (Math.Min(val1: x, val2: FinalSamples), Math.Min(val1: y, val2: FinalSamples), Math.Min(val1: z, val2: FinalSamples)), extent: extent, gradients: gradients, group: group);
+    }
+    // The request for a lattice of `dims` samples spanning a group's box of `extent` from its low corner, each axis's
+    // spacing the extent over its cells.
+    private static SdfMeshBakeRequest Spanning(Group group, Vector3 extent, (int X, int Y, int Z) dims, bool gradients) {
         var cell = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
 
         return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
@@ -1658,12 +1662,7 @@ public sealed partial class SdfMeshPathBake {
             y: (longest / (SdfMeshBakeBlock.MaxSlabPlanes - 2))
         );
 
-        int Samples(float length) => Math.Max(val1: FinalMinimum, val2: (((int)MathF.Ceiling(x: (length / cell))) + 1));
-
-        var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
-        var spacing = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
-
-        return new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
+        return Spanning(dims: SdfMeshLattice.Dims(cell: cell, extent: extent, minimum: FinalMinimum), extent: extent, gradients: false, group: group);
     }
     // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
     // than MinimumCell.
