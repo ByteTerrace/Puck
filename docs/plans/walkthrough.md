@@ -11,8 +11,10 @@ creations. Before this plan the debug world had `puck sweep`'s fixed poses
 (four for the whole gallery), `puck bench frames` at four stops and `puck
 motion`'s studio scenarios, none of which walks anything.
 
-This page records the design the first slice proved and how it scales to the
-whole world.
+The mechanism is built (`SweepRoute`, `puck sweep --tour`;
+[the CLI reference](../reference/cli.md#puck-sweepthe-debug-worlds-sweep)) and
+proved on gallery level 1's blend row and an inspection stop at the avatar
+studio. This page keeps its invariant and how it scales to the whole world.
 
 ## The design
 
@@ -66,23 +68,6 @@ caught, not enforced:
 - A segment's motion depends on the seat camera's yaw, since the left stick
   strafes relative to it: the program recenters it itself (the View page's
   North button under the left trigger) before it moves.
-
-## The first slice
-
-Gallery level 1's blend row: fourteen exhibits, 2.6 m apart along +X at
-z = 25. The program poses the body at `shape-blend-union`'s spawn point facing
-+Z, enters first person, recenters, looks down with the right stick held two ticks
-so each plinth's plaque stands in frame under its exhibit, then strafes
-with the left stick held at full deflection for the ticks of `blendRowHolds`
-(19, 19 and 18 in turn: a `for` over the list with a `repeat` of each hold) and
-rests 26 ticks before each exhibit, which keeps every rest within 0.13 m of its
-exhibit's spawn point. The tour stop `route-blend-row` takes a still at each
-rest, and the arrival still at `shape-pipe-subtraction`.
-
-The inspection stop `inspect-moth-studio` stands the Moth on the avatar
-studio's platform under the `studio-boots` layout, idle, then walking off the
-platform's edge at half deflection, with settled stills of each and an
-eight-frame presented burst mid-stride.
 
 ### What is mechanical and what a reviewer judges
 

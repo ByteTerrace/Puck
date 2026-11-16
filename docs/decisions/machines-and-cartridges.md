@@ -24,6 +24,16 @@ hardware vocabulary: neutral hosting is engine infrastructure, and cartridge
 formats, console models, memory maps, cable protocols, and forges belong to
 providers.
 
+**An emulator core is machinery (the owner's ruling).** The C# emulator cores
+are virtual machines, as the SDF VM is: engine machinery that runs authored
+programs. The cartridges, and whatever else runs on a machine, are the authored
+programs. A core written in C# is therefore not a second implementation of
+something an author programs: "Puck code over engine code" (AGENTS.md) governs
+what runs on the machine, which authors build and own, and the core is the
+machinery that runs, schedules and costs it. The emulator plans stand as
+written ([machines and cartridges](../plans/machines-and-cartridges.md),
+[the Humble Gaming Deck](../plans/humble-gaming-deck.md)).
+
 **Settled implementation contracts.**
 
 | Contract | Decision |
@@ -137,6 +147,42 @@ what makes it slow.
 holds an arbitrary instruction stream is a hex dump with syntax); emulator
 edits to make a forged image agree; a DMG target; a cost refusal; entity,
 text, battle, or tracker primitives.
+
+## The Humble Gaming Deck
+
+The choices behind [the Deck's plan](../plans/humble-gaming-deck.md).
+
+- **The accuracy matrix.** The first milestone, through NTSC accuracy, targets
+  the RP2A03G CPU and RP2C02G PPU, the revisions AccuracyCoin is written for.
+  Regional hardware adds the RP2A07 and RP2C07 (PAL) and the UA6527P and UA6538
+  (Dendy). The boards are the common set (mappers 0 to 4, MMC6 as MMC3
+  submapper 1, and 7) and the plan's long-tail table. The peripherals are the
+  standard controller, the Four Score and the Hori four-player adapter, the
+  Zapper, the Famicom microphone, the Arkanoid controller, the Power Pad, and
+  the Family BASIC keyboard. Anything outside the matrix is refused by name.
+- **Deterministic defaults.** What hardware leaves to chance is a named
+  power-on profile in the machine's configuration and identity, never a random
+  draw. The defaults are CPU and PPU alignment phase 0, work RAM filled with
+  zero, and an open-bus decay deadline chosen as the value AccuracyCoin's
+  open-bus tests accept.
+- **Corpora.** Every external corpus is fetched at run time into the per-user
+  cache by pinned URL and SHA-256, as the Humble battery fetches its Game Boy
+  collection, and never committed, whatever its licence. The loader resolves a
+  cartridge from its header alone, so no game database is used; an ambiguous
+  iNES header gets an explicit diagnostic instead of a lookup.
+- **The co-simulation oracle** is an instrumented Mesen build the user supplies,
+  as the Humble battery's SameBoy build is.
+- **FDS firmware** is a user-supplied BIOS only, a local and by-hand input no
+  check stage reads. An original Puck FDS BIOS is not planned: games call its
+  services throughout play, so it would need verification on the scale of a
+  second core.
+- **Performance** is judged by counted work, as the bricks' is: zero
+  steady-state allocation per frame is the battery's reading, and throughput is
+  reported. Wall-clock realtime on the Steam Deck is measured only when the
+  owner asks for a timing run.
+- **Licence.** The Deck projects take the engine's Apache-2.0 licence. The
+  GamingBricks dual licence names the brick projects, and widening it is a
+  licensing change of its own.
 
 ---
 

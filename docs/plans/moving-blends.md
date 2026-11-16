@@ -6,25 +6,15 @@ out how such a seam holds under continuous motion and recommends one design,
 reviewed before code. The Moth's rebuild relies on whatever lands here, so each
 step names its owner type and the check that shows it worked.
 
-## Starting point before implementation
-
-- A pooled blend group bakes one mesh at the pose its program arrives in
-  (`SdfMeshBakeGroup.Plan`, `SdfMeshGeometryBuilder.Poses`). A second points
-  round over the finished mesh (`SdfMeshPathBake`, the `skinned` branch of
-  `Build`) sampled each vertex lifted 0.5 mm along its normal and
-  records the winning slot. The mesh keeps each other slot as a member
-  (`SdfMesh.Members`) and each vertex as one member's (`SdfMesh.VertexMembers`).
-  The vertex stage carries a member's vertex through that slot's live transform
-  (`sdfMeshWorldPosition` in `frame/sdf-mesh.hlsli`).
-- Every vertex follows exactly one slot. Across a blend seam, neighbouring
-  vertices belong to different slots, so the triangles between them stretch as
-  the parts separate. A glance tears the throat into spikes.
-- The settle rebake (`SdfMeshPathBake.Settle`, `SdfMeshSettle`) bakes the group
-  again once the relative pose holds still, replacing the mesh when it lands.
-  A form baked at another pose can also be reused (`SdfMeshLibrary.TryTakeForm`),
-  so a skin's reference pose is whatever pose first baked it.
-- PUCK122 (`CreationMotion.MovingBlends`) warns that the seam stretches. It
-  compares motion owners only; it bounds no motion.
+Steps 1 to 3 are built: a skinned group bakes at its authored rest, each vertex
+rides one owner rigidly or two through a normalized dual-quaternion blend, and a
+blend past its admitted envelope is split and bakes as a crease, which PUCK122
+reports. The rendering skill's
+[mesh-bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)
+owns the built contract. What remains is step 4 (paints and lanes across the
+seam), step 5 (the settle mechanism's deletion and the cost reading) and the
+envelope published as a bound. The tags (F1) to (F9) in the headings name the
+design review's findings each section answers.
 
 ## The invariants any answer keeps
 
@@ -255,18 +245,12 @@ takes the same rule through the shared helpers.
 
 ## Steps, each with the check that shows it worked
 
-### Implementation of steps 1–3
+### What is built, and its invariants
 
 The invariant is enforced at the pooled emission and mesh boundaries: only delta-frame
 instances opt into `SdfInstanceRange.RestPoseSkin`; `SdfMeshGeometryBuilder` freezes those
 slots, and the motion plan is the emitter's single partition. No presentation result
 feeds simulation state. Other dynamic instances retain their absolute-pose semantics.
-
-| Step | Result by symbol | Mechanical evidence |
-|---|---|---|
-| 1 | `CreationMotion.Envelope`, `CreationMotionPlan.RenderDocument`, `SdfMeshGeometryBuilder.RestPoseSkin` | `MovingBlendRestLawTests.EveryOwnerPublishesTheIdentityDeltaAtAuthoredRest` exercises swing, slide and timeline owners through `PackTransforms`; `MovingBlendLawTests.ArrivalPoseCannotChangeTheRestGeometryOrItsMembers` compares geometry, form and frozen poses at two arrivals. `CreationMotion.Describe` reports θ, D and the whole group's actual outcome. |
-| 2 | `SdfFieldEvaluator.ReadInfluences`, `ReadInfluenceGradient`, `SdfMeshSkin.Build`, `SdfMeshSkinTuple.Of`, `SdfMesh.Influences` | `MovingBlendLawTests.NestedSharesFollowLeavesAndScopes` gives ¼, ¼, ½; `CopiesShareTuplesAndTheStoreAndMergePreserveThem` covers crease copies and codec planes; `SdfMeshPlanarMergeLawTests.ABlendZoneKeepsItsInteriorVerticesAndEveryTuple` exercises a removable grid interior; `AThirdOwnerRefusesTheSkinAndBakesRigidPieces` exercises the fallback contour. The audit prints root, rigid-member and blended vertices and split-tuple places; `world.counters sdf.mesh-skin` counts the same paths over the meshes a World draws. |
-| 3 | `sdfMeshWorldVertex`, `sdfMeshSkinPose`, `sdfMeshSkinSlotsOf`, `sdfMeshMemberDelta`, `sdfMeshPreviousPosition` | One pose helper serves current and previous positions; each caller reads its own transform table. The shadow entry calls the same position helper. `TranslationBendsTheNormalAndQuaternionSignsDoNotChangeThePose` is the CPU witness; `SdfMeshSkin.Pose` reuses `FixedRigidTransform` for the audit counterpart. |
 
 Three invariants hold the skin, each behind one door:
 
@@ -297,39 +281,11 @@ crease. The envelope's frame term is each frame's largest separation of the two 
 composed motions over the seam box's corners, and each swing's reach grows by the
 displacement counted before it, so the bound holds for swings about different pivots.
 
-The rest-identity premise was checked, and holds: `WorldCreationInstances.PackRegistration`
-publishes each owner's pose after removing its authored shape pose; `ShapeEmission.Emit` reapplies
-the authored pose after the dynamic transform. One memo premise needed correction:
-`WorldGaitDrivers` clamps `weightBy` to [0,1] before the motion reads it, so those weights
-are already bounded. Curve waveforms still require a world-curve bound and crease here.
-
 The conservative partition is per authored group: any rejected pair splits the group by
 actual motion owner. Every diagnostic reports that group outcome, even for another pair
 whose own envelope fits. Empty inflated-box intersections contribute no seam bound.
 Followers and timeline descendants inherit their actual parent's slot. Unbounded
 followers cannot enter an admitted blend.
-
-The evaluator's existing gradient reading is central differences. `ReadInfluenceGradient`
-uses six fixed-point taps on the renormalized pair, in addition to the centre share
-reading; it is not an analytic gradient. `SdfMeshSkin.Build` sets the step to a sixteenth
-of the group's narrowest smooth radius, between 1/16384 and 1/1024 unit, so the stencil
-stays inside a millimetre blend zone. The step is a function of the group's instructions,
-which keeps the influence function independent of tessellation normals and backend. Three half
-components plus padding and the packed share/second-owner word add twelve GPU bytes.
-Planar merge compares complete tuples and removes no strictly blended vertex.
-
-An active case absent from the draft premise was engraved animated text: the old emitter
-coupled glyphs and several motion owners into one field. Glyphs have no CPU reading.
-`WorldCreationInstances.EmitEngravedOwners` now uses the existing group and text emitters
-to carve rigid owner surfaces, with engraving riding the surface it carved. A run riding
-a shape (`TextRunDocument.ShapeId`) is emitted only into that shape's owner; a run in
-creation space carves every owner. The updated
-`WorldTextAuthoringLawTests.AnEngravedMovingCreationCarvesEachRigidOwnerInItsOwnInstance`
-checks that no such instance reads another motion slot. Regular polygons partition before
-emission. A third-owner overflow uses `MemberFields` and the existing `ContourLevel`, with
-the same `SdfMeshCpuField` sampler the offline tools use; there is no second contourer.
-Its cell coarsens until each owner's lattice holds at most `SdfMeshSkin.SplitSamples`, a
-union final lattice's budget.
 
 Step 4 is next: material coordinates and blended lanes. Steps 1–3 do not claim that
 paints already follow the seam. Rest skins are excluded from the old settle watch now;
@@ -390,27 +346,6 @@ ran them.
 The rendering skill carries a capability eval, `moving-blend-crease-copies`, for the
 lead's eval window.
 
-1. **Rest-pose bake and the envelope.** `SdfMeshGeometryBuilder` keys a skinned
-   group at rest. `CreationMotion` computes θ and D per moving blend, and
-   PUCK122 reports the outcome. The pooled emitter splits a blend past its
-   envelope. Checks: on the draft swallow, `puck compile --validate` prints θ,
-   D and the split decision for each pair. `puck mesh audit --cpu` keys the
-   same geometry at any arrival pose. A law shows rest is the identity delta for
-   a swing, a slide and a frame.
-2. **Influences.** The evaluator's influence reading, the per-place skin round,
-   the two-owner truncation and the split on a third owner. `SdfMesh` gains the
-   influence arrays, and planar merge and the codec carry them. Checks: the
-   audit prints blend-zone vertices and finds zero places with split tuples. A
-   law compares the propagated shares with leaf shares for nested smooth unions
-   (the ¼, ¼, ½ case). A planar-merge law keeps every blend-zone vertex and
-   every tuple.
-3. **Vertex stage.** Dual-quaternion blending in the group's frame with the
-   hemisphere rule, and the normal correction, in `sdfMeshWorldPosition`,
-   `sdfMeshWorldNormal`, `sdfMeshPreviousPosition` and the shadow stage. Checks:
-   a presented burst on both backends through a full admitted glance (60
-   frames) shows no spike and no fold at the seam. The `motion` debug view stays
-   zero on still parts. `puck mesh audit` with a pose argument measures the
-   posed skin against the posed field within D at the envelope's extremes.
 4. **Material coordinates.** The rest-point mapping for paints, insets and
    weathering, and blended lanes, in the opaque and glass passes. Check: a
    striped palette across a moving neck, captured in a presented burst, shows
@@ -420,6 +355,13 @@ lead's eval window.
    `world.counters sdf.mesh-settle` no longer exists, and the frame bar holds in
    the close-up and the crowd on both backends.
 
+6. **The envelope as a bound.** The group's admitted separation `D` is published
+   in the mesh and its record, so a blended draw's box can be its members' boxes
+   widened by it ([virtual geometry](virtual-geometry.md#d2-bounds-for-skinned-and-multi-slot-draws)'s
+   G3b). Check: the posed audit at the envelope's extremes tests every resolved
+   vertex of a blended group against that box and prints the largest excursion
+   beside `D`; none exceeds it.
+
 ## Scope it does not cover
 
 Contact reads the authored field (`CreationStampEmitter.EmitContact`, the
@@ -427,21 +369,6 @@ field colliders), not the posed mesh. A pooled creation's seam is presentation.
 A solid creation that needs posed contact needs its own design. Skinned meshes
 keep no coarser levels (`SdfMeshCollapse.Levels`); a pose-aware level error is a
 later step.
-
-## Review findings and how each is answered
-
-| Finding | Decision |
-|---|---|
-| F1 fixed weights do not bound separation | Admitted envelope θ ≤ 60°, D ≤ k/2, computed at compile time. Past it the blend splits into a crease and PUCK122 states it. The Jacobian determinant stays ≥ ½. |
-| F2 dual-quaternion branch | Blend only group-frame relative motions. Hemisphere of the first owner, which never switches inside the envelope. Normalization stays ≥ 0.5. The same rule applies to previous positions. |
-| F3 normals miss the weight derivative | Store ∇w and correct the normal by the inverse-transpose Jacobian, bounded by the envelope. |
-| F4 lifted samples split crease copies | One tuple per place, sampled at the exact position and shared by every copy. The winning member moves to the same rule. Audited at zero. |
-| F5 a final h is not the accumulated share | Influence vectors propagated through every composition and scope on the CPU evaluator. Blends with no share are admitted only within one owner. Two owners a vertex, with a split past a 1/64 third share. |
-| F6 post-passes drop the attributes | Planar merge compares the whole tuple and keeps blend-zone vertices. `Build` remaps the arrays. The codec persists them. Collapse and chunks are already excluded. |
-| F7 paints switch rigid frames | Rest point from interpolated rest positions, mapped through the layer parent's baked pose. Lanes blend by share. The rule covers opaque and glass. |
-| F8 settle rebake pops | Bake at the authored rest. The envelope bounds error at every pose, so the settle rebake is deleted, and the guarantee is stated per baked mesh. |
-| F9 per-pixel cost omitted | Counted model, a rigid fast path, a per-triangle resolve helper and a packed 12-byte layout. A quiet-window measurement of close-up and crowd on both backends is owned by step 5. |
-| Backend identity | Influences are bitwise identical for identical meshes and the same function everywhere. Posed output is visually equivalent across backends, since the posed blend is presentation float math. |
 
 ## Systems considered
 

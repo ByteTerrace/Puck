@@ -243,38 +243,17 @@ prepare, integrate velocities, warm start, solve, integrate positions, relax,
 restitution, store impulses. Catto: "Relaxation is expensive, but it improves
 the simulation quality dramatically." Box3D keeps the same solver.
 
-**What Puck does.** Landed (brief B): `FixedRigidWorld` is the one rigid
-contact solver, the static field and body pairs alike, wired into the tick
-(`WorldPopulation.SolveRigidContacts`); `FixedRigidSolver` and the World's
-per-substep sweep and pair passes are deleted. The manifold slots and
-accumulated impulses ride each body's checkpoint entry, so the continuation
-hash, the checkpoint and a scoped replay carry the warm start. A manifold's
-points are solved together rather than in visiting order, which a single-pass
-Gauss-Seidel sweep needs to keep a tall piece that lands flat from spinning on
-its first corner.
-
-**Expected gain.** Nothing at idle: every rigid piece sleeps. In an active
-scene (a Go board knocked, a chess capture, a reversi flip, the regression's
-557 advances) the exact query count per awake rigid body falls from
-substeps × passes × candidates to candidates once a step, and the pair work
-from passes × (broadphase + narrowphase) to one broadphase and a fixed solver
-budget over cached constraints. Stacking and resting stability improve with
-warm starting and multi-point manifolds; the debug world's
-`physics(quiescent)` gates (the chess demo) depend on bodies settling.
-
-**Determinism.** Everything is already fixed point, ordered by canonical keys
-with no hash container (`FixedRigidWorld`'s remarks). What does not transfer
-from Box2D is its float discipline, which Puck does not need. What Puck must
-add is that the manifold slots and accumulated impulses are continuation
-state: they ride the checkpoint and the authority hash, as Box2D's replay post
-found when its snapshots had to copy the engine's internal data structures to make
-rollback possible. Hashes move once.
-
-**Cost.** Large: candidate generation from Puck's colliders into
-`FixedContactCandidate` and `FixedTwoBodyContact`, the World's features the
-live path carries (sweep refusal, the continuous-collision substep bound,
-support blocking, kinematic carriers, rolling resistance, sleep islands), the
-pair budget, and deletion of the old path.
+**Built.** `FixedRigidWorld` is the one rigid contact solver, for the static
+field and for body pairs alike (`WorldPopulation.SolveRigidContacts`), and its
+manifold slots and accumulated impulses are continuation state. The invariant:
+every rigid contact is solved by its substep sequence, and a step runs the
+contact geometry once per candidate pair; it is enforced by the old path's
+deletion, with `SolveRigidContacts` the only caller of `FixedRigidWorld.Step` in
+the World. Where it stops: kit bodies keep `FixedStaticContactSolver` and the
+certified sweep, a carried body's tangibility push is still positional, and a
+rigid body near a field collider takes the sweep, so on a relieved game table
+the exact queries per awake piece did not fall
+([rigid bodies](open-items.md#rigid-bodies-and-physics)).
 
 ### 3. The gyroscopic term
 
@@ -293,25 +272,12 @@ it gains energy"). Box3D's solver carries the same Newton step, and the
 announcement names the missing term in Unreal's Chaos as one reason Box3D
 exists.
 
-**What Puck does.** Landed: `FixedGyroscopicStep.Advance` (Puck.Physics) is
-this Newton step, solved by `FixedLinearSolve.TrySolve3`, called once per
-rigid step from `WorldBody.PrepareRigidStep` before contact, the one
-solve's integrate stage. Its law
-(`tests/Puck.Physics.Tests/GyroscopicStepLawTests.cs`) measured what the
-memo had expected to be conservation "within the fixed-point budget": at
-60 Hz implicit Euler's own truncation is first order and dissipative, and the
-Newton step alone lowers momentum magnitude and energy on every step. So the
-step then scales the corrected ω by one factor `s ≥ 1`, the smaller of
-`|L₀|/|L₁|` and `√(E₀/E₁)`, both free-flight invariants: one is restored
-exactly, the other stays at or below its value before the step, so energy
-never rises and the scheme keeps its stability. Over 300 steps from about
-4 rad/s, a disc's world-momentum drift falls from 2.1 % to 0.8 % and its
-magnitude drift from 2.1 % to 0.08 % (the momentum factor binds); a slender
-triaxial block's falls from 13.9 % to 8.1 %, its magnitude drift from 13.1 %
-to 6.5 % (the energy factor binds). With world ω held constant the drifts are
-44 % and 88 %. What drift remains is the scheme's error in the momentum's
-direction, and the fixed-point run tracks the exact-arithmetic scheme to
-rounding.
+**Built.** `FixedGyroscopicStep.Advance` is this Newton step, called once per
+rigid step before contact. Implicit Euler at the tick rate is dissipative, so
+the step then scales the corrected angular velocity by one factor that
+restores either the momentum's magnitude or the energy, whichever asks for
+less, so energy never rises. What drift remains is the scheme's error in the
+momentum's direction.
 
 ### 4. Wake and islands proportional to change
 
@@ -325,7 +291,7 @@ islands move to their own solver set and leave the constraint graph
 correctness. They are an optimization." "Sleeping must be done per island, not
 per body." Jolt documents the same per-island rest rule.
 
-**What Puck does.** Landed (brief B): the island graph is the bodies'
+**What Puck does.** The island graph is the bodies'
 persistent contact manifolds, with no per-tick rebuild or allocation, and a
 bounded field change takes its candidates from the sleeping index over the change
 box; the parked bodies observe the field through the population's
@@ -342,8 +308,7 @@ rebuild and allocation in active rigid scenes; unmeasured.
 wake (the existing pair sweep does this), so the wake order is unchanged.
 
 **Cost.** Small; the wake half is filed in the
-[refactoring packet](open-items.md#refactoring-campaign) and is a Codex-sized
-lane.
+[rigid bodies packet](open-items.md#rigid-bodies-and-physics).
 
 ### 5. Order-free merges and exact reductions for the parallel tick
 
@@ -477,37 +442,13 @@ position correction is not done.
   nondeterministic (islands post); Puck's serial island bookkeeping is the
   right shape.
 
-## Brief B: one rigid solver: Soft Step
-
-**Mechanism.** Hoist geometry out of the iteration loop: compute each
-contact's manifold once a step, then run substeps and solver passes on cached
-constraints whose separations are updated from anchor displacement. One
-implementation of rigid contact for the World and `Puck.Physics`.
-
-**Invariant.** Every rigid contact, static or between bodies, is solved by
-`FixedRigidWorld`'s substep sequence, and a step runs the contact geometry once
-per candidate pair. **Enforcement:** the old path is deleted
-(`ResolveRigidPairContact`, the pair-pass loop, `AdvanceRigid`'s per-substep
-sweep, `FixedRigidSolver`), and the only caller of `FixedRigidWorld.Step` in the
-World is `WorldPopulation.SolveRigidContacts`, which every awake rigid body's
-prepared step reaches. **Where it stops:** kit bodies keep
-`FixedStaticContactSolver` and the certified sweep; a carried body's tangibility
-push is still positional (open items); a field collider within reach makes a
-body's surface contacts come from one sweep rather than one query per surface
-(open items).
-
-**Where it stands.** Steps 0 to 4 closed; their evidence is in the commits. The
-one remaining measure: on the Go knock scene, exact queries per awake stone a
-tick fell only where surfaces are analytic, because the game tables carry
-relief and take the sweep (open items, "A rigid body near a field collider").
-
 ## Open questions and who settles them
 
 - **Whether lesson 6 pays.** With lesson 1 landed the contact work of the idle tick is
   about 0.2 ms; lesson 6 is not scheduled until a quiet-window profile shows a
   bounds pass worth vectorising.
 - **Whether contact recycling pays in fixed point.** Settled inside the one
-  solver by measurement on brief B's Go knock scene; lesson 8 is not scheduled
+  solver by measurement on the Go knock scene; lesson 8 is not scheduled
   until that measurement runs.
 - **Whether a parallel rigid solve pays.** The job-system memo's T2 measures
   the rigid share of an active tick; lesson 7 waits on that reading.

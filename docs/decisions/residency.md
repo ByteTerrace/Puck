@@ -55,18 +55,16 @@ fallback. A pair in one world carries a body through in place
 and a door onto another world adds the crossing transaction.
 
 Across worlds the node exists: the world, whose routed residency
-(`routed$<digest>`) lives while a session or seat shows it, and whose unseen
-window keeps rendering at the least share (`WorldPortalVisibility.ArrivalShare`,
-`WorldViewGraphHost.ReserveArrivals`: one window a world whose meshes are still
-arriving, with the windows on the way to it) so it is resident before its glass
-comes into view. Arriving means its bake is pending or its region still owes the
+(`routed$<digest>`) lives while a session or seat shows it. Its work is ordered
+by the mapped demand of the windows onto it, and it is staged by that demand,
+so it is resident before its glass comes into view without a render of a view
+nobody sees. Arriving means its bake is pending or its region still owes the
 baked meshes' words or their upload (`SdfWorldResidency.MeshesArriving`), not
-only that its bake is pending: its bake samples, and its meshes land, only in
-frames that render one of its views, because a frame that renders none of them
-may still pack the residency's frame and move what its background work binds.
-A window dropped as soon as the bake settles can leave the meshes owed with no
-landing job and every later pump unbound (`world.residency`'s `unbound` count),
-until someone looks through every window on the way. Within one world there is no node, and that is the gap.
+only that its bake is pending. Until staging by demand is built, an unseen
+window onto an arriving world still renders at the least share
+(`WorldPortalVisibility.ArrivalShare`, `WorldViewGraphHost.ReserveArrivals`);
+[the plan](../plans/streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render)
+holds what replaces it. Within one world there is no node, and that is the gap.
 
 Making every room a world would turn each doorway into a reserve-and-commit
 transfer, stop physics and rules at every door, and give every room its own
@@ -132,14 +130,23 @@ demand and priority rather than creating executors.
 - **Portal destinations** are demanded from the mapped eye, so a painting's
   quarter-scale room is ready at its frame though it lies far away in world
   coordinates. A routed residency keeps its session-driven lifetime; demand
-  only orders its work, and replaces rendering a hidden view to make it bake.
+  orders its work and decides how much it holds for presentation, and replaces
+  rendering a hidden view to make it bake.
 - **One reservation** across every live residency, granted from the job
-  system's physical byte-accounting owner and applied by selector policy.
-  Eviction goes by priority, never wholesale and never refused on a miss
-  ([machine budgets are bytes](rendering.md)), and a device that refuses a
-  growth lowers the budget instead of ending the World. The mesh region's own
-  limit (`SdfWorldTables.MeshRegionLimitOf`) already keeps it under
-  `GpuRegion.MaxByteCount`.
+  system's physical byte-accounting owner and applied by selector policy. A
+  byte is admitted before it is allocated, in the pool of the physical memory
+  it occupies. Eviction goes by priority, never wholesale and never refused on
+  a miss ([machine budgets are bytes](rendering.md)), and a device that
+  refuses a growth lowers the budget instead of ending the World. The mesh
+  region's own limit (`SdfWorldTables.MeshRegionLimitOf`) already keeps it
+  under `GpuRegion.MaxByteCount`.
+- **The unit that leaves is a bake tier.** Each group's coarsest tier that
+  still covers it stays as its floor, and the tier a view demands is detail
+  above it, so evicting hands the draws back to the floor and bakes nothing.
+- **Prediction decides arrival, and observation decides retention.** What a
+  view would resolve is computed ahead from planned boxes, so a turn or a
+  first sight finds its meshes. What a pass actually used is read back, and
+  under pressure detail nothing uses leaves before detail in view coarsens.
 - **Residency is broader than visibility.** Shadow casters and GI blockers
   within their support regions stay resident though offscreen, and the
   full-detail floor reaches at least as far as any interaction, since picking
@@ -157,6 +164,12 @@ crossing's held image, and it is counted. An author who wants the Metroid beat
 authors a door that takes time to open. A gameplay loading barrier, if ever
 wanted, is a separately designed, ordered and replayed authority event.
 
+What a miss may look like and what normal play may show are different bars.
+"Never a hole" bounds the first: a floor, haze, a fallback or a held image
+each satisfies it. The [seam ruling](#the-owners-rulings-on-look-and-policy)
+sets the second: any of those is a seam when a player sees it, so a crossing
+in normal play shows no miss at all.
+
 Two more guards: no rule fact ever exposes whether something is resident, and a
 settled capture waits until its views' demanded set has landed, so captures do
 not vary with landing time. Bake order affects latency only: a mesh is a function
@@ -164,48 +177,49 @@ of its geometry, and its identity hashes only what the bake reads.
 
 ## Order of work
 
-Each step is taken when the measured need appears:
+[The streaming and memory plan](../plans/streaming-and-memory.md#the-build-order)
+holds the build: its order and step names, where each stands against the
+code, the decisions it rests on and the reading that judges each step. No
+other page numbers the steps. What the build delivers, each taken when the
+measured need appears:
 
-1. **Measure:** time until everything near the spawn has landed (cold and warm),
-   mesh bytes by level, `ProbeCache` bytes after a walk and a valley flight,
-   program build and replan time against placement count, and store read rate
-   against the landing rate.
-2. **Near-first is delivered:** `SdfMeshDemand` ranks demand by pixels per metre
-   at the nearest demand point, and `SdfMeshPathBake.Residency` applies it to
-   groups and store loads. This is the base policy for the engine scheduler;
-   the occupied room returns first.
-3. **GI on the same demand points:** the lighting reads the selector's demand
-   points in place of its own view list (each level of its window already
-   centres on every view that fits, anchored on the first:
-   `SdfMeshIrradiance.WindowLow`), the irradiance scene and its pending gate are
-   scoped to what the window reaches, and `ProbeCache` is byte-bounded.
-4. **Mapped demand through portal faces**, replacing the blanket baking share.
-5. **Eviction under the byte budget**, with coarse levels owning compacted
-   vertices so dropping a fine level frees its vertices, not only its indices.
-6. **Authored areas**, tried first on the gallery's floors: each level an area,
-   the stairwell, the lift shaft and the window bands its openings (the outdoors
-   is then an area beside every floor). Distance and projected size misjudge
-   floors, since the level above is a few metres away behind a slab; an occupied
-   floor and its neighbours through openings rank first, and under a lowered
-   budget unoccupied floors evict first. The measure is time until the occupied
-   floor has landed, with and without the areas. Approaching an opening raises
-   the next floor gradually; nothing switches at a trigger.
-7. **Terrain tiles** (the valley plan's step 4) as units in the same selector,
-   then the moons through routed residency.
-
-[The streaming and memory plan](../plans/streaming-and-memory.md) holds the
-build: where each step stands against the code, the decisions the build rests
-on (one account with pools by physical memory, one reservation across
-residencies, staging by demand in place of a render, a tier as the eviction
-unit with each group's coarsest tier as its floor), and the order with the
-reading that judges each step.
+- **A measure:** time until everything near the spawn has landed (cold and
+  warm), mesh bytes by level, `ProbeCache` bytes after a walk and a valley
+  flight, program build and replan time against placement count, and store
+  read rate against the landing rate.
+- **Near-first ordering:** `SdfMeshDemand` ranks demand by pixels per metre at
+  the nearest demand point, and `SdfMeshPathBake.Residency` applies it to
+  groups and store loads. This is the base policy for the engine scheduler;
+  the occupied room returns first.
+- **Lighting on the same demand points:** the lighting reads the selector's
+  demand points in place of its own view list (each level of its window
+  already centres on every view that fits, anchored on the first:
+  `SdfMeshIrradiance.WindowLow`), the irradiance scene and its pending gate are
+  scoped to what the window reaches, `ProbeCache` is byte-bounded, and a
+  place's lighting is ready before it is first seen.
+- **Mapped demand through portal faces**, with a world staged by that demand
+  in place of the blanket baking share.
+- **Eviction under the byte budget**, by bake tier above a floor. A tier owns
+  its vertices, so dropping one frees them.
+- **Authored areas**, tried first on the gallery's floors: each level an area,
+  the stairwell, the lift shaft and the window bands its openings (the outdoors
+  is then an area beside every floor). Distance and projected size misjudge
+  floors, since the level above is a few metres away behind a slab; an occupied
+  floor and its neighbours through openings rank first, and under a lowered
+  budget unoccupied floors evict first. The measure is time until the occupied
+  floor has landed, with and without the areas. Approaching an opening raises
+  the next floor gradually; nothing switches at a trigger.
+- **Source tiles for terrain** as units in the same selector, meeting under
+  the plan's one
+  [seam rule](../plans/streaming-and-memory.md#the-source-tile-and-its-seam-rule),
+  then the moons through routed residency.
 
 Document and program assembly become spatially incremental only if measurement
 shows them dominating after this. Area-scoped rule sleep, driven by authoritative
 body occupancy rather than views, is legal under rule 4 but is a simulation
 design and needs its own decision. Card tables depend on none of this
 work; the board game room on level 2 against a spawn in the lobby makes them a
-test case for step 2.
+test case for near-first ordering.
 
 ## The owner's rulings on look and policy
 
@@ -225,3 +239,15 @@ test case for step 2.
   is split into worlds, shards or authorities is not a seam; a transfer that
   shows only in logs or tooling is no leak ("Learning that their world is
   sharded by mining logs isn't a 'leak'").
+- Normal play conditions are a player's real setup: a fresh process on a bar
+  device, each backend the device ships, the prewarmed mesh store a player's
+  build ships, the first crossing after boot and the return. An empty store or
+  a lowered budget is reported beside the acceptance and never is it.
+- The cold-bake bar's minute covers what the boot's views demand; a tier a later
+  view asks for is a cache miss, derived and counted, and a tour's whole bake is
+  a trend beside the bar.
+
+The seam ruling is read by
+[the seam walk](../plans/streaming-and-memory.md#the-seam-walk): the debug
+world's crossings walked as a player takes them, with every counted miss a
+failure.

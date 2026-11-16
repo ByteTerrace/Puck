@@ -303,7 +303,9 @@ audio, and a user-supplied BIOS.
 **Delivers:** disk games, with the disk as persistent state.
 
 **Check:** disk operations and mid-transfer snapshot and fork replay; firmware
-identity checks.
+identity checks. The BIOS is commercial firmware the user supplies, so these
+run locally, by hand, and no battery or check stage reads one (AGENTS.md:
+tests never depend on commercial ROMs).
 
 ### 7. Peripherals
 
@@ -337,54 +339,16 @@ while recording.
 
 ## Decisions
 
-- **The accuracy matrix.** The first milestone, through NTSC accuracy, targets
-  the RP2A03G CPU and RP2C02G PPU, the revisions AccuracyCoin is written for.
-  Regional hardware adds the RP2A07 and RP2C07 (PAL) and the UA6527P and UA6538
-  (Dendy). The boards are the common set (mappers 0 to 4, MMC6 as MMC3
-  submapper 1, and 7) and the long-tail table in
-  [package 4](#4-long-tail-boards). The peripherals are the standard controller,
-  the Four Score and the Hori four-player adapter, the Zapper, the Famicom
-  microphone, the Arkanoid controller, the Power Pad, and the Family BASIC
-  keyboard. Anything outside the matrix is refused by name.
-- **Deterministic defaults.** What hardware leaves to chance is a named
-  power-on profile in the machine's configuration and identity, never a random
-  draw. The defaults are CPU and PPU alignment phase 0, work RAM filled with
-  zero, and an open-bus decay deadline chosen when the PPU lands, as the value
-  AccuracyCoin's open-bus tests accept.
-- **Corpora.** Every external corpus is fetched at run time into the per-user
-  cache by pinned URL and SHA-256, as the Humble battery fetches its Game Boy
-  collection, and never committed, whatever its licence. The loader resolves a
-  cartridge from its header alone, so no game database is used; an ambiguous
-  iNES header gets an explicit diagnostic instead of a lookup.
-- **The co-simulation oracle** is an instrumented Mesen build the user supplies,
-  as the Humble battery's SameBoy build is.
-- **FDS firmware** is a user-supplied BIOS only. An original Puck FDS BIOS is not
-  planned: games call its services throughout play, so it would need
-  verification on the scale of a second core.
-- **Performance** is judged by counted work, as the bricks' is: a battery stage
-  gates zero steady-state allocation per frame, and throughput is reported, not
-  gated. Wall-clock realtime on the Steam Deck is measured only when the owner
-  asks for a timing run.
-- **Licence.** The Deck projects take the engine's Apache-2.0 licence. The
-  GamingBricks dual licence names the brick projects, and widening it is a
-  licensing change of its own.
+The Deck's settled choices (the accuracy matrix, deterministic defaults,
+corpora, the co-simulation oracle, FDS firmware, how performance is judged and
+the licence) are in
+[the machines decisions](../decisions/machines-and-cartridges.md#the-humble-gaming-deck).
 
 ## Open items
 
-What the plan still owes. A line is deleted when its work lands, never ticked.
-The shared-layer rename to `Puck.Machines`, the neutral contracts (rational
-clock rates and multi-port input), the CPU and the bus, and a complete NTSC
-machine are in.
+[Where it stands](#where-it-stands) says what is in progress, and every other
+package above is not started. One item belongs to no package:
 
-- NTSC accuracy: AccuracyCoin reports each test's own result, and 35 of its 144
-  tests fail.
-- Common boards: MMC1 and MMC3 are in; UxROM, CNROM, AxROM, MMC6, bus
-  conflicts, the public board test ROMs and the co-simulation remain. Then
-  regional hardware, long-tail boards and expansion audio.
-- World cabinets: the engine, its extension, port-naming routes and two test
-  cartridges built on demand are in; ordered operations while recording and the
-  replay receipt (the cabinet module's) remain.
-- The Famicom Disk System; peripherals.
 - Emulation rate. A Deck takes several times longer per world tick than the
   World's own tick CPU (`puck bench world` prints each machine's tick alone), and
   a headless unpaced run (`puck test`, replay catch-up, `--unpaced`) waits on the

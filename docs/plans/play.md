@@ -103,8 +103,16 @@ records.
    behaviors have no live signal yet, and the widening adds one for each:
    - A compiled WASM addon guest acquires a handle, submits an
      `UpsertHudPanel` and then a chained `UpsertHudElement` through a
-     verb-masked grant, `world.hud` reflects both, and `replay.record` refuses
-     to arm once the guest has pumped.
+     verb-masked grant, and `world.hud` reflects both. Then, with the guest
+     pumped and not restarted, `replay.record` arms, and the replay restores
+     the guest's continuation and continues it: a running addon's state is
+     hashed and checkpointed with the world
+     ([the state review](../decisions/state-and-language.md#the-state-review)),
+     and recording takes the same capture persistence does
+     (`WorldPersistence.TryCaptureReplayStart`). A refusal is right only for
+     the named conditions that capture still has: an interrupted tick, a
+     declared addon host that is absent or not yet restored, or a stepped
+     machine whose host cannot checkpoint.
    - Region-conditioned music: a conditional layer and a region-entry
      embellishment fire as a driven body crosses a region of the debug world,
      locally and over `--connect`. The debug world binds no region music today,
@@ -170,9 +178,12 @@ proofs from the debug world itself.
 
 ### The content wave
 
-Dormant until the fundamentals land (the [engine job
-system](open-items.md#engine-job-system) and the packets ranked before it) and
-until the porting packet's inventory names what the debug world lacks.
+Two kinds of content, with two timings. The ports that force a fundamental are
+not this wave and do not wait: the [port plan](port-experimental.md#lanes-in-order)
+owns them, and each lands just before the engine step it proves (the owner's
+ruling there). Everything else below is content expansion, dormant until the
+fundamentals land (the [engine job system](open-items.md#engine-job-system)
+and the packets ranked before it).
 
 **Owns:** the studio prologue's acts, the arena crawl's spawners and bosses,
 the arcade hearth's seam content, the retail basis deltas that pin a boot seat

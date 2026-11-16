@@ -212,22 +212,12 @@ pointer-sized. `mi_heap_delete` transfers live blocks to the main heap;
 `mi_heap_destroy` frees them. Probe the actual ABI, alignment, zero-size behavior,
 failed resize, and selected thread lifecycle.
 
-The thread that loads the DLL is mimalloc's main thread (`mi_tld_main_init`
-in mimalloc's own `init.c`): its theap and tld are the static `theap_main`/`tld_main`, and its
-exit tears them down (`_mi_theap_free` leaves `theap_main.tld` null). Windows
-thread ids are TEB addresses, which a later thread reuses, and that thread then
-takes the main path onto the dead `theap_main` and faults inside `mi_malloc`
-(upstream calls the loader-thread rule intended:
-[mimalloc#1271](https://github.com/microsoft/mimalloc/issues/1271)). A .NET
-thread-pool worker retires when idle, so it must never be the loader:
-`MimallocAllocator`'s type initializer loads the library on a thread of its own
-that waits until process exit. `MimallocThreadLifecycleLawTests` sets up the
-trigger itself: in a process that has not loaded mimalloc, a short-lived thread
-makes the first allocation and exits, and the law starts threads until one
-reuses that thread's TEB address (read with `NtQueryInformationThread`), which
-then allocates. Without the owner thread the test host faults in that
-allocation. The law skips, rather than passes, when mimalloc was already loaded
-or no thread reused the address.
+The thread that loads the library is mimalloc's main thread and must outlive
+every other, which `MimallocAllocator` already arranges and documents (its
+owner thread; upstream calls the loader-thread rule intended,
+[mimalloc#1271](https://github.com/microsoft/mimalloc/issues/1271)). A
+freestanding port keeps that rule: whatever attaches native threads on Puck's
+own host loads the allocator on a thread that never exits.
 
 Use a persistent default domain for general buffers. Add private heaps for
 actual independently retired graphs/resources. A world returns globally cached
@@ -298,10 +288,10 @@ observable completion evidence; they introduce no new landing gates.
 
 | Package | Owner and output | Dependency and closing evidence |
 |---|---|---|
-| M1: Real allocation boundary | Runtime/platform: minimal live system-module build, raw allocation/free/resize, native thread lifecycle, separately proven typed-array creation/release | The job system's native-storage contract. Own-runtime executable checks native spans, ordinary arrays, and failure cleanup. EFI/QEMU proves freestanding primitives/reuse; hosted success alone is not EFI proof. |
-| R1: State runtime closure | Runtime/State/Maths: required collections, generic numerics, strings, typed/reference storage, metadata lifetimes | M1 and every framework feature reached. Actual State source runs mutation, nested scratch, relayout refusal/adoption, disposal on the custom runtime. No required feature deferred to R3 or second State kernel substituted. |
-| R2: Jobs and shared resources | Hosting/assets/machines/rendering: workspaces, meshes, codec/network/machine buffers, object scopes, upload retirement | The job system's shared reuse and admission, and each consumer's task/native/runtime features. Success/cancel/discard/eviction reclaim storage; desktop World and both backends remain sound. |
-| R3: Full-World lifetime closure | Runtime/World: remaining graphs, weak-cache owners, framework/native dependencies for a chosen workload | R1/R2 plus independent platform/GPU work. Actual custom-runtime load/edit/replace/unload cycles do not accumulate unreachable storage. Unsupported capabilities remain explicit work and never silently disappear. |
+| OM1: Real allocation boundary | Runtime/platform: minimal live system-module build, raw allocation/free/resize, native thread lifecycle, separately proven typed-array creation/release | The job system's native-storage contract. Own-runtime executable checks native spans, ordinary arrays, and failure cleanup. EFI/QEMU proves freestanding primitives/reuse; hosted success alone is not EFI proof. |
+| OM2: State runtime closure | Runtime/State/Maths: required collections, generic numerics, strings, typed/reference storage, metadata lifetimes | OM1 and every framework feature reached. Actual State source runs mutation, nested scratch, relayout refusal/adoption, disposal on the custom runtime. No required feature deferred to OM4 or second State kernel substituted. |
+| OM3: Jobs and shared resources | Hosting/assets/machines/rendering: workspaces, meshes, codec/network/machine buffers, object scopes, upload retirement | The job system's shared reuse and admission, and each consumer's task/native/runtime features. Success/cancel/discard/eviction reclaim storage; desktop World and both backends remain sound. |
+| OM4: Full-World lifetime closure | Runtime/World: remaining graphs, weak-cache owners, framework/native dependencies for a chosen workload | OM2 and OM3 plus independent platform/GPU work. Actual custom-runtime load/edit/replace/unload cycles do not accumulate unreachable storage. Unsupported capabilities remain explicit work and never silently disappear. |
 
 ## Residual implementation probes
 
@@ -320,7 +310,7 @@ earns its cost. These details need evidence:
   overshoot, sparse columns, concurrent candidates, and canceled work.
 - Benefit of array caching, partitions, or worker slots after ownership/clearing
   costs, measured against retained workspace and direct allocation.
-- Actual framework/native dependencies reached by R1 and R3, established by
+- Actual framework/native dependencies reached by OM2 and OM4, established by
   source compilation and execution rather than CLR simulation.
 
 These are engineering probes, not unanswered owner product decisions. This

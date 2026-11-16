@@ -54,6 +54,7 @@ Not ported again:
 | Sky, atmosphere and indirect-light canaries | `skies.puck`, the `gi-corner` room, `quality.puck` |
 | The island's garden district: flocks, a stalker, wall crawling, rumour | the garden's pond plot (`pond.puck`, [garden.md](../../worlds/debug/garden.md)), `garden-crowd.puck` at 128 creatures, the standard's `crawlHold` |
 | `moth-courtyard.puck`'s meadow and foliage | [the meadow](../../worlds/debug/meadow.md) (`meadow.puck`), the standard's `foliage.puck` |
+| `modules/dive.puck`'s pool as a medium lattice; the `flow-conservation-live` and `lattice-draw-fill` canaries' flow across basins | `worlds/debug/water.puck` and the standard's `hydrology`: the pool is a medium a body swims in, and the chain from glacier to aquifer is a conserved flow on a lattice ([the water plan](water.md) holds what its look still owes) |
 
 ## Lanes, in order
 
@@ -61,10 +62,15 @@ Not ported again:
 workloads (the owner's ruling).** Each lands just before the step it proves,
 so every optimization is measured on the load it exists for:
 - the second seat (lane 5) and authored passes (lane 1) ahead of parallel
-  view recording (R1);
-- the quilt (lane 2) with residency step 2;
-- water and fields (lane 3), the rules arcade (lane 7) and the combat yard's
-  pair primitive (lane 13) as the field, rule-VM and pair-rule workloads.
+  view recording (the [job system](engine-job-system.md#6-build-order)'s R1),
+  whose admission reading they supply;
+- the quilt (lane 2) with the [streaming plan](streaming-and-memory.md#the-build-order)'s
+  staging by demand (its step 4) and the led demand point of its step 10,
+  since a neighbour authority's residency arriving ahead of a walker is the
+  load both exist for;
+- the rules arcade (lane 7) and the combat yard's pair primitive (lane 13) as
+  the rule-VM and pair-rule workloads. The field workload is already in the
+  debug world (the water chain).
 
 The rest (lanes 6, 8, 10, 11, 12 and 14) is content, taken after the
 fundamentals ([job system](engine-job-system.md#6-build-order)).
@@ -77,9 +83,10 @@ end west of the spawn), the plan's placement governs.
 
 Within that, order is value to the proving ground: lanes that exercise engine
 systems the debug world does not touch come first. Beyond the garden's pond
-plot (`interactions`, `navigation`, flocks, a `Pull` hold), a search of
-`worlds/` finds no `adjacencies`, `curves` track, `region(` trigger, medium,
-`field` lattice, authored HLSL package, `embeds` row or identity fact.
+plot (`interactions`, `navigation`, flocks, a `Pull` hold) and the water chain
+(a `field` lattice and a medium), a search of `worlds/` finds no `adjacencies`,
+`curves` track, `region(` trigger, authored HLSL package, `embeds` row or
+identity fact.
 
 ### 1. Authored render passes
 
@@ -111,17 +118,6 @@ authority handoff) and identity facts carried across a crossing are built
 | A pitched seam that hands a falling body to the world below | canaries `rim-drop`, `rim-refused`, `rim-round-trip` | wire | Beside the endless fall (`paintings.md`), which is the portal form of the same drop | small |
 | Authored composition: `entry world`, `world`, `border` and a module that carries its own tests | `experimental/worlds/beacons/` (`beacon.puck`, `beacons.puck`) | wire ([Transpiler README](../../src/Puck.World.Transpiler/README.md)) | The terrace is authored this way, so the package doubles as the worked example | small |
 | A win written onto the visitor's record that opens a gate on return | `experimental/worlds/rulepush/hub.puck`, `rulepush.puck`; island rules `seat1-returning-identity-wakes-at-plaza`; the studio gate that opens once awakened | wire (`WorldIdentityProjection`, `src/Puck.World.Schema/WorldIdentity.Records.cs`) | The night field awards a fact; a hall door opens on it | medium |
-
-### 3. Water and fields
-
-Both rows are built in composition lane C3 ([as built](debug-world-composition.md#c3-as-built)):
-the pool is a medium lattice a body swims in, and the chain from glacier to aquifer is a
-conserved flow on a lattice, with the pool fed by its river.
-
-| Feature | Source | Support | Place and why | Size |
-|---|---|---|---|---|
-| A pool whose `field` lattice is a medium: swimming, buoyancy, depth rows read from regions | `modules/dive.puck` (`lattices field(name: "pool"...)`, `bond: Medium` holds, `dive-depth-*` rules); canaries `dive-medium`, `medium-submersion` | wire ([documents-motion](../../.claude/skills/puck-world/references/documents-motion.md)); standard: a swim hold row the Moth refines, as `abilities.puck` holds `dashAbility` | A courtyard pool; the first `field` lattice and `Medium` hold in the debug world, and the base the climate wing's wetness and puddles stand on | medium |
-| Flow across basins: a source topped up each step, boundary spill, a drawn whole-field pass | canaries `flow-conservation-live`, `lattice-draw-fill` | wire | The pool's inflow; proves reactions run live | small |
 
 ### 5. Second seat and hidden information
 

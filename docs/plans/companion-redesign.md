@@ -323,9 +323,12 @@ not reached yet. The source's notice never settles a hop by itself. Home's own h
 home's own settlement record, never from the destination's answer, because home's
 departure may still be in doubt when the destination has already answered `Dead`, and the
 body it restores must find its slot held. A hop whose destination cannot be reached stays
-pending, and the title waits in durable custody: home neither recalls nor releases it from
-under a destination that may hold home's confirmation for its commit (5.5). A destination
-gone for good therefore leaves the title pending (section 10).
+pending while its lease is live: home neither recalls nor releases the title from under a
+destination that may hold home's confirmation for its commit. The wait is bounded by the
+lease, not by the destination's goodwill. Once the destination has missed the hop's lease
+deadline, as home recorded it on home's own ticks, by the margin the standard package
+authors, the title is recallable (5.5), so a destination gone for good does not hold the
+title forever. The engine's default margin is unbounded, which is the wait.
 
 ### 5.4 Stranded, grace, shed
 
@@ -352,19 +355,30 @@ a timer; the record outlives reaping and stop (5.8). A shed image's only ends ar
 
 Only home ends or recalls a title.
 
-- **Recall.** Precondition: custody `Away` (a `Pending` title is resolved first, since the
-  pending hop's destination may hold a verified lease or a delayed verification answer; a
-  destination that cannot be reached keeps the title pending, and the companion waits in
-  custody), no live return lease at home, the owner reachable (the player embodied at home
+- **Recall.** Precondition: custody `Away`, or `Pending` with the hop's right expired. A
+  `Pending` title is resolved first (5.3), since the pending hop's destination may hold a
+  verified lease or a delayed verification answer, and while that lease is live the title
+  stays pending and the companion waits in custody. The two cases are told apart by home's
+  own record, never by silence alone: an *active* hop is one whose lease deadline plus the
+  authored margin has not passed on home's ticks, or whose commit home itself holds as
+  `Uncertain`; an *expired* hop is one whose destination has answered no `CustodyQuery`
+  since that deadline plus the margin passed. An expired hop is recallable exactly as a
+  custodian that missed its lease is. The other preconditions hold in both cases: no live
+  return lease at home, the owner reachable (the player embodied at home
   or at an authority whose link to home is up; never on silence while the owner may share
   the companion's partition) and not standing at the custodian (a companion beside its
   owner is not stranded). Home records `Recall(I, e'')` with `e''` above every epoch it ever
   issued and embodies its last committed image in the held slot; the notice is a separate
   durable obligation (`Noticed(I, recalled@e'')`, one per recall) the next drain records, so a
   crash between the two still tells the player, and a second recall of the same title owes a
-  second notice. Every pending hop of `I` is superseded. A copy abroad at
-  a lower epoch is stale; its next `Reserve` or `HopRequest` is refused `Stale` and it
-  retires. Recall happens by the player's request or an author's declared recall window;
+  second notice. Every pending hop of `I` is superseded, and home records the supersession
+  with the recall, so the hop's old answer is fenced: a destination that later answers
+  `Landed` for the superseded key, or that committed while partitioned on a confirmation
+  home issued before the recall, holds a copy at an epoch below `e''`. A copy abroad at
+  a lower epoch is stale; its next `Reserve`, `HopRequest` or `CustodyQuery` answer is
+  refused `Stale` and it retires, having earned nothing settled meanwhile
+  ([the decision](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
+  Recall happens by the player's request or an author's declared recall window;
   the engine's default is to wait, and the standard package declares the window as the
   margin by which a custodian may miss its lease
   ([lease-missed recall](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
@@ -562,12 +576,21 @@ real authority fixtures as evidence:
    `ShedAttemptsNeverReuseAKey`, `ShedKeysComeFromTheCommonAllocator`, `M2_TheGraceWindowAndTheShedReturnSurviveACrash`,
    `ABindingNamesTheFollowedGeneration`, `AStrandingDoesNotCarryIntoALaterVisit`, `ReleaseIsHomesRecordAndTheCustodianRetiresOnContact`,
    `AForgedReturnToHomeIsStaleWhileTheCurrentCustodianKeepsCustody`.
-7. **Recall and release.** `Recall` from `Away` only, under its preconditions, with the
-   `Noticed` obligation; `Install` as release; the player's notices. The lease-missed
-   recall: a title whose custodian has missed its lease by the authored margin is
+7. **Recall and release.** `Recall` from `Away`, and from `Pending` once the hop's right
+   has expired (5.5), under its preconditions, with the `Noticed` obligation; `Install` as
+   release; the player's notices. The lease-missed recall: a title whose custodian, or
+   whose pending hop's destination, has missed its lease by the authored margin is
    recallable by home, and the same rule covers a home restarted without its checkpoint,
    whose `NotMyTitle` answer this step must turn into a recallable title rather than a
-   wait (the MMO round's step 8; [the decision](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
+   wait ([the decision](../decisions/worlds-and-federation.md#recall-after-a-missed-lease)).
+   The model is amended first: its pending-recall obligation today says a pending title
+   always waits (`APendingTitleWaitsForItsHopBeforeARecall`), which holds only while the
+   hop's lease is live. It gains two obligations: a pending title becomes recallable once
+   its destination misses the lease by the margin, and a late answer to a superseded hop is
+   stale. The check that shows the step worked is
+   [the hub's exit from an unreachable host](hub-and-saves.md): Exit to hub recalls a
+   character whose pending hop's destination is partitioned, after the authored margin
+   and never before it.
    A scarce companion whose title sits at a settlement domain takes that domain as home
    and the player's host as custodian, which waits for
    [the settlement door](open-items.md#settlement-trust-roles-and-revocation). Laws:

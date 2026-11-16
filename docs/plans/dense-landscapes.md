@@ -7,7 +7,7 @@ work and storage an author causes. A small pressure patch does not close it.
 
 The owning mechanism plans remain [visibility](visibility.md),
 [frame queries](open-items.md#other-frame-time-findings),
-[memory](open-items.md#memory-on-the-deck-tier),
+[memory](streaming-and-memory.md),
 [baking](open-items.md#bake-proportional-to-change) and
 [terrain](terrain-pass.md). This page owns the landscape workload, current
 assessment, order of implementation and completion criteria. Historical run
@@ -28,106 +28,43 @@ and local density independently: connected 20×20, 40×40 and 80×80 m portions,
 then the belt; vary tree spacing, shrubs and grass separately. Count canopy
 coverage and uninterrupted under-canopy distance, not just placed trees.
 
-The existing bars are 60 FPS on RTX 2060/4070 and 45 FPS on Steam Deck at the
-highest quality, a cold debug-world bake within one minute per backend, and
-engine edit to running within 30 seconds. The Deck-tier memory work uses a
-10 GB budget; [its packet](open-items.md#memory-on-the-deck-tier)
-owns attribution and qualification. Record device resolution and every quality
-setting. A 4070 at Deck resolution does not qualify the Deck.
+The bars are the frame, cold-bake, memory and seam bars, each read by
+[the one recipe](streaming-and-memory.md#how-the-bars-are-read), and engine
+edit to running inside its bar (AGENTS.md). Record device resolution and every
+quality setting. A 4070 at Deck resolution does not qualify the Deck.
 
 ## Current status
 
-The debug forest authors a connected southern belt through `forest-layout` and
-its canopy, understory, floor and clearing layers. Seeded sampler positions,
-shared lawn tree variants, younger edges, three glades, ferns, shrubs, fallen wood,
-leaf litter and flower drifts replace the regular pressure patch. Native D3D12
-and Vulkan captures inspect the composition; the standard foliage surfaces use
-active procedural weathering. A bounded solid noise-relief patch proves geometric
-ground texture and walking contact in the eastern glade. Two low woodland banks
-and the static planting use named-ground projection into one canonical fixed-point
-occurrence stream shared by drawing, collision, picking and the scene census.
-Motion retains the resolved roots without new grounding rays. Inspection cameras
-are authored in `forest.puck`. Bank contact remains query-heavy despite zero
-repeated grounding; lighting defects and frame/memory qualification remain open.
+The debug forest is a connected southern belt authored through `forest-layout`
+with canopy, understory, floor and clearing layers, placed by seeded sampler
+positions and named-ground projection into one canonical fixed-point occurrence
+stream that drawing, collision, picking and the scene census share. Static
+trees, shrubs and tufts share prototype assets, a replayable road route with
+pinned counter windows exists, and counts are read through `world.counters`,
+`world.residency`, `world.work` and `host.memory`. What it has not shown:
 
-The query and memory conclusions below come from the **earlier pressure-patch
-workload**, before the expanded belt. They do not qualify the larger forest:
-record the route again and collect normal-paced counts, transfers, memory and
-timing for the belt.
-
-The controlled route stays on the cleared road beneath the pressure patch's
-canopy. It records authority input once, then replays it in fresh Worlds, checking
-the presentation samples, camera/program/pose inputs and consumed authority state.
-Geometry residency is held through upload completion before the window, and counter
-endpoints are pinned to command drains. This measures instrumented tick
-throughput, not the normal-paced frame bar. The route selects High quality,
-native scale, shadows High, AO/temporal on, indirect High, dynamic resolution
-off and GPU timestamps on; a reading records device resolution and every setting.
-
-Point-only superellipsoid certificates, added to the existing pruning walk,
-change neither shape evaluation nor interval certificates. In interleaved
-comparisons against an A/A control on D3D12 they cut visited point instructions
-and exact power-memo misses sharply and shortened instrumented elapsed time. A
-Vulkan pair shows the same instruction reduction but no elapsed win. The candidate creates no point scratch,
-certificate or cull payload during the measured window. Process point-call totals
-vary slightly between reference legs while the sampled semantic inputs match, so
-do not describe every process tap as invariant. GPU summary reads are endpoint
-submission snapshots. The route reads cumulative transfer prefixes and rejects
-changed or missing ledger domains. Normal-paced timing remains a separate check.
-
-**Memory remains a budget problem.** The residency owns one shared bake-result
-destination, borrowed by its views with fence-safe ownership refresh. Against
-per-view destinations it cuts the backend's device-local bytes held, its
-device-local peak and process-private bytes, with the selected
-authority/presentation samples unchanged.
-These layers overlap and are not additive. The semantic bake identity is
-unchanged, and focused repository laws cover backing refresh, exact readback
-bytes, publication/fence lifetimes and isolated residency ownership. A windowed
-Vulkan boot renders the settled forest and a portal crossing into the garden with
-no wire errors.
-
-Demand-sized bake input separately shrinks its concrete CPU owner by well over an
-order of magnitude in ordinary paced runs. Per-recorder GPU and managed readback
-slots still retain full sample capacity on demand. Unsampled heap graphs identify
-those arrays and substantial GI acceleration/probe work; local-variable roots
-alone do not establish permanent retention. Private bytes after collection stay
-above the Deck budget in both a forest run and a broader Vulkan portal composition.
-Presentation waits distort frame duration, so neither those runs nor private
-bytes qualify the frame/Deck bars. Driver/physical residency and cold-peak
-qualification remain owed; process, managed, allocator, account and device
-readings stay separate.
-
-A moving trace attributed a large share of sampled time to camera, effector and
-contact field queries. Certified pruning addresses that structural cost. The exact
-power memo still needs a controlled on/off decision after pruning.
-
-## Implemented mechanisms
-
-Static trees, shrubs and tufts share prototype assets, preserving ordinary
-per-shape bake partitions, static GI membership, picking, materials and contact.
-Forest tree/shrub fields use a few dozen prototype instances rather than thousands
-of expanded ones. This is geometry sharing; GPU geometry/detail buckets are still
-open.
-
-`SdfMeshPathBake` owns derivation and `SdfMeshDresser` owns draw expansion. Renderer
-and draw edits no longer enter the bake closure through that combined class.
-
-`GpuChangedRows` supplies captured-endpoint history to transforms and draws.
-Dressing follows reverse slot/copy dependencies; GPU staging compares affected
-records and retains unchanged mesh claims/placements. Missing/full/expired history
-and clipping fall back conservatively. Pose-check avoidance on a narrow slice does
-not predict the binding-visit saving, which is a minority of potential visits.
-Thousands of independent authored grass poses still move each step, so a
-shared-slot matrix cache would save only a handful of compositions per moving
-frame.
-
-Query, pose, march, power, upload and memory counts are available through
-`world.counters`, `world.residency`, `world.work` and `host.memory`. Exact power
-memoization retains one process-shared 512 KiB payload, with full atomic key/result
-matching. Its measured local kernel gain does not establish a full-frame win.
-Keep it only if the controlled route demonstrates worthwhile time/work/cache
-cost; compare a cheaper exact numeric path as well. No shape approximation or
-collider substitution is authorized by a performance result.
+- **The belt is unqualified.** Every query and memory conclusion so far came
+  from the earlier pressure patch. The route is recorded again on the belt,
+  with normal-paced counts, transfers, memory and timing; instrumented tick
+  throughput on the route is not the frame bar.
+- **Memory is over budget.** Private bytes after collection stay above the
+  Deck budget in a forest run and in a Vulkan portal composition. Per-recorder
+  GPU and managed readback slots keep full sample capacity on demand, and the
+  heap shows substantial GI acceleration and probe work. Driver and physical
+  residency and the cold peak are owed, with process, managed, allocator,
+  account and device readings kept apart
+  ([how memory is read](streaming-and-memory.md#what-adds-and-what-only-names)).
+- **Field queries dominate a moving frame.** A moving trace puts a large share
+  of sampled time in camera, effector and contact field queries; certified
+  pruning addresses that, and bank contact stays query-heavy. The exact power
+  memo (one process-shared payload) still needs a controlled on-or-off decision
+  after pruning, against a cheaper exact numeric path; a local kernel gain does
+  not establish a full-frame win, and no shape approximation or collider
+  substitution is authorized by a performance result.
+- **Grass poses are independent.** Thousands of authored grass poses move each
+  step, so a shared-slot matrix cache would save only a handful of compositions
+  a frame; GPU geometry and detail buckets are still open.
+- **Lighting defects** in the belt are open, their cause unconfirmed.
 
 ## Implementation order
 
@@ -139,18 +76,17 @@ wind and roads are authored Puck programs/data, not feature-specific C# paths.
 
 | Step | Work and evidence |
 |---|---|
-| L0. Reproducible query and frame workload | The replayable road route, pinned presentation/counter windows and point-only superellipsoid pruning are implemented on D3D12/Vulkan. Preserve exact point/material/gradient results and sweep decisions. Next compare the remaining exact power memo on/off, attribute query/evaluator construction frequency and reduce shared camera/contact/effector dependency work. Normal-paced frame qualification remains separate. |
+| L0. Reproducible query and frame workload | On the built road route, preserving exact point, material and gradient results and sweep decisions: compare the exact power memo on and off, attribute how often queries and evaluators are constructed, and reduce shared camera, contact and effector dependency work. Normal-paced frame qualification remains separate. |
 | L0m. Attribute memory before scaling | Compare matched settle, motion, cut, edit and cold-bake windows. Attribute managed/allocator/device live and peak owners, caches and retirement; separate physical pages from reservations and overlapping counters. Explain the expanded process footprint and meet the Deck budget. |
-| L1. Finish the shared instance/history contract | Root/member reseat provenance and durable journal/history laws are implemented, including unchanged-pose cuts and skipped frames. Finish native cut/filtered-landing qualification. Preserve current sharing, picking, clips, GI semantics and change-proportional staging. Measure a prototype edit's real derivation closure. |
+| L1. Finish the shared instance/history contract | Finish native cut and filtered-landing qualification on the composed workload. Preserve current sharing, picking, clips, GI semantics and change-proportional staging. Measure a prototype edit's real derivation closure. |
 | L2. Compact the existing GPU path | Use visibility V1a/V1b stable identities, ordered survivors and geometry/detail buckets. Count candidates, survivors, nonempty buckets and initialized/executed commands in every raster pass. Validate cuts, materials, picks and portal straddles on both backends. |
-| L3. Author terrain-following continuous forest | The belt, seeded candidates, authored masks/clustering, per-copy variation, relieved banks and canonical surface-bound roots are implemented. Shared fixed-point queries resolve named-ground placement once for visuals and collision, with counted admission/rejection and payload. Native capture and contact checks inspect the composed woodland. Measure canopy continuity and route coverage alongside L0/L1 as memory permits. |
+| L3. Author terrain-following continuous forest | The belt is authored. Measure canopy continuity and route coverage alongside L0 and L1 as memory permits, with native captures and contact checks on the composed woodland. |
 | L4. Scale authored motion and distance | Derive conservative animated bounds from authored programs, extend eligible placement rate reuse and design traced canopy representation/invalidation. Compile/batch authored poses or derive GPU instance records only where measured work warrants it and synchronous CPU consumers stay correct. Geometry/detail/shadow reductions preserve coverage and quality. The far field is [the virtual geometry plan](virtual-geometry.md#d3-a-hierarchy-above-the-draw)'s stand parent (its step G7), contoured from the field over a stand of copies, judged against the reference from the overlook and against the shared prototype path on bytes, derivation and frame cost; the hybrid mesh-volume tier is briefed only if it fails the reference at sub-pixel error, and the shared path (with parents kept over repeated arrangements) is the far field where the stand parent costs more. |
 | L5. Qualify the composed landscape | Run the fixed route, wind, cuts, nested view, day changes, edit closure and cold store on both backends and target devices. Close frame, memory, bake and edit bars with current quality and counted-work evidence. |
 
 ## Next action
 
-The query route matches on D3D12 and Vulkan, and the shared bake destination is
-implemented. A normal-paced CPU trace identifies remaining physics/rule execution,
+A normal-paced CPU trace identifies remaining physics/rule execution,
 portal-boundary scans, transform packing, changed-draw staging and exposure work.
 Use the current stacks to reduce repeated dependency work; do not infer CPU
 submission counts from PIX's expanded indirect events. Attribute retained readback
@@ -164,10 +100,8 @@ kernels. Black bands also occur in the Vulkan indirect-light diagnostic while
 normals and material IDs remain continuous. Compare picked dark/lit receivers and
 their probe weights before choosing a lighting fix; the cause is unconfirmed.
 
-The root/member history correction and replay-restore availability fix are
-covered by durable repository laws. Native cuts and filtered landing still need
-their composed-workload check. New measurements must keep the route's and
-residency's qualification guarantees.
+Native cuts and filtered landing still need their composed-workload check. New
+measurements must keep the route's and residency's qualification guarantees.
 
 The design pass uses the expanded belt and repeatable overview/clearing cameras.
 Keep taking presented captures at ordinary player height as well as the overview.
@@ -177,7 +111,7 @@ Belt qualification must include work, memory and transfers as well as time.
 
 The [visibility research round](visibility.md) owns GPU architecture decisions,
 and [the virtual geometry plan](virtual-geometry.md) owns detail and the far
-field (field-derived levels, skinned bounds, parents above draws, demand tiers).
+field (skinned bounds, parents above draws, demand tiers).
 For placement, [Guerrilla's procedural placement work](https://www.guerrilla-games.com/read/gpu-based-procedural-placement-in-horizon-zero-dawn)
 and [SideFX HeightField Scatter](https://www.sidefx.com/docs/houdini/nodes/sop/heightfield_scatter.html)
 separate authored eligibility, density and footprint coverage. Puck combines
