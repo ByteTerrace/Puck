@@ -41,6 +41,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// the direction its triangles face out along. Empty for a contour that records none, whose quads are then judged by
     /// their vertices' normals.</summary>
     public sbyte[] QuadAxes { get; init; } = [];
+    /// <summary>Gets, per vertex, three components: the way the lattice says the vertex's surface patch faces
+    /// (<see cref="SdfContourFacing.Patch"/>), which judges a triangle lying edge-on to its quad's lattice edge. Empty for
+    /// a contour that records none. A vertex <see cref="SplitAtCreases"/> appends records none.</summary>
+    public float[] Patches { get; init; } = [];
 
     // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
     // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
@@ -2218,6 +2222,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         ) {
             Beside = surface.Beside,
             Features = surface.Features,
+            Patches = [.. surface.Patches.Select(selector: static value => ((float)value))],
             QuadAxes = axes,
             Solved = surface.Solved,
         };
@@ -2233,27 +2238,27 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(axis: ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0)), features: contour.Features, normals: contour.Normals, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(axis: ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0)), features: contour.Features, normals: contour.Normals, patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
                 (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
             }
         }
     }
 
     // Whether a quad of four vertex indices splits along its first diagonal, its first corner to its third, rather than
-    // its second: the diagonal whose two triangles both face out along the lattice edge the quad crosses (`axis`, zero
-    // for a contour that records none; SdfContourFacing), where only one's do, since that direction is the quad's facing
-    // as the lattice fixed it and a corner normal is an estimate; else the diagonal whose two triangles both face the
+    // its second: the diagonal whose two triangles both face out as the lattice fixed the quad's facing (`axis`, zero
+    // for a contour that records none; SdfContourFacing.Splits), where only one's do, since a corner normal is an
+    // estimate; else the diagonal whose two triangles both face the
     // way the corner normals point, where only one's do; else
     // the one whose triangles turn least from the normals of their corners that lie on no crease (Turn); else the
     // shorter. A quad around an edge beside a crease that steps across the lattice holds a crease vertex, a vertex of
     // each face and a fourth: split one way, a triangle joins the two faces' vertices across the crease and cuts its
     // corner; split the other, the crease vertex is a corner of both triangles and each lies on one face. Every quad of a
     // contour splits by this one rule.
-    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, bool[] features, ReadOnlySpan<int> quad, sbyte axis) {
+    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, float[] patches, bool[] features, ReadOnlySpan<int> quad, sbyte axis) {
         var (v0, v1, v2, v3) = (Vertex(values: positions, vertex: quad[0]), Vertex(values: positions, vertex: quad[1]), Vertex(values: positions, vertex: quad[2]), Vertex(values: positions, vertex: quad[3]));
 
         if (axis != 0) {
-            var (first, second) = SdfContourFacing.Splits(a: (v0.X, v0.Y, v0.Z), axis: axis, b: (v1.X, v1.Y, v1.Z), c: (v2.X, v2.Y, v2.Z), d: (v3.X, v3.Y, v3.Z));
+            var (first, second) = SdfContourFacing.Splits(axis: axis, patches: patches, positions: positions, quad: quad);
 
             if (first != second) { return first; }
         }
