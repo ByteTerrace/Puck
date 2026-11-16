@@ -58,6 +58,32 @@ public abstract class MachineSnapshot<TSnapshot, TIdentity, TClock>
     /// <summary>Opens a forward-only reader over the captured state.</summary>
     /// <returns>The state reader.</returns>
     public StateReader OpenReader() => m_image.OpenReader();
+    /// <summary>Replaces a machine's entire state with this snapshot's after checking that the snapshot was taken from
+    /// the same machine and that the restore consumed exactly the image. A shortfall or overrun means a save/load
+    /// field-order drift that would otherwise load as silently wrong state, so it faults deterministically and a byte
+    /// difference stays a genuine divergence, never a misread.</summary>
+    /// <typeparam name="TMachine">The machine type.</typeparam>
+    /// <param name="machine">The machine to restore into.</param>
+    /// <param name="expected">The identity the machine holds; the snapshot's must equal it.</param>
+    /// <param name="identityFields">The fields the identity covers, named for the refusal sentence.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="machine"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The snapshot's identity does not match, or the restore consumed a
+    /// different number of bytes than the image holds.</exception>
+    public void RestoreInto<TMachine>(TMachine machine, TIdentity expected, string identityFields) where TMachine : ISnapshotableMachine {
+        ArgumentNullException.ThrowIfNull(argument: machine);
+
+        if (!Identity.Equals(other: expected)) {
+            throw new InvalidOperationException(message: $"Snapshot identity ({identityFields}) does not match this machine; refusing to restore a mismatched image.");
+        }
+
+        var reader = m_image.OpenReader();
+
+        machine.RestoreState(reader: reader);
+
+        if (!reader.AtEnd) {
+            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
+        }
+    }
     /// <summary>Returns a copy with one captured state byte overwritten.</summary>
     /// <param name="offset">The byte offset to overwrite.</param>
     /// <param name="value">The replacement byte.</param>

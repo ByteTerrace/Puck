@@ -152,18 +152,17 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <summary>Captures all components, including CPU latches and the master-clock phase.</summary>
     /// <returns>An independent snapshot with a complete section table.</returns>
     public HgdMachineSnapshot Snapshot() {
-        m_writer.Reset();
-        var sections = new SnapshotSection[m_components.Length];
+        var capture = new SnapshotCapture(
+            sectionCount: m_components.Length,
+            writer: m_writer
+        );
 
-        for (var index = 0; (index < m_components.Length); ++index) {
-            var offset = m_writer.Length;
+        capture.Save(
+            components: m_components,
+            names: m_componentNames
+        );
 
-            m_components[index].SaveState(writer: m_writer);
-            sections[index] = new(Name: m_componentNames[index], Offset: offset, Length: (m_writer.Length - offset));
-        }
-
-        return new(identity: m_identity, takenAt: MasterTicks,
-            image: new SnapshotImage(data: m_writer.ToArray(), sections: sections));
+        return new(identity: m_identity, takenAt: MasterTicks, image: capture.Finish());
     }
     /// <summary>Restores a capture whose image, model, profile, and layout match this machine.</summary>
     /// <param name="snapshot">The capture to restore.</param>
@@ -172,15 +171,11 @@ public sealed class HgdMachine : ISnapshotableMachine {
     /// <exception cref="InvalidDataException">A serialized component position is outside its valid range.</exception>
     public void Restore(HgdMachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
-        if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Deck snapshot identity does not match the configuration, model, power-on profile, or image hashes.");
-        }
-        var reader = snapshot.OpenReader();
-
-        RestoreState(reader: reader);
-        if (!reader.AtEnd) {
-            throw new InvalidOperationException(message: "Deck snapshot contains unconsumed state bytes.");
-        }
+        snapshot.RestoreInto(
+            expected: m_identity,
+            identityFields: "configuration, model, power-on profile, image hashes",
+            machine: this
+        );
     }
     /// <inheritdoc/>
     public void SerializeState(StateWriter writer) {

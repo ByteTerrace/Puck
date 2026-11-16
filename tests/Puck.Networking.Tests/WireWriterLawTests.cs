@@ -6,8 +6,8 @@ using Xunit;
 namespace Puck.Networking.Tests;
 
 /// <summary>
-/// Laws for <see cref="WireWriter"/> — the two ways its bytes are reached (<see cref="WireWriter.WrittenMemory"/>
-/// and <see cref="WireWriter.WrittenSpan"/> alias the buffer; <see cref="WireWriter.ToArray"/> copies), growth past
+/// Laws for <see cref="WireWriter"/> — the two ways its bytes are reached (<see cref="Puck.Assets.LittleEndianWriter.WrittenMemory"/>
+/// and <see cref="Puck.Assets.LittleEndianWriter.WrittenSpan"/> alias the buffer; <see cref="Puck.Assets.LittleEndianWriter.ToArray"/> copies), growth past
 /// the initial capacity, and <see cref="WireWriter.WriteString"/>'s in-place encoding and its one caller-bug throw.
 /// </summary>
 public sealed class WireWriterLawTests {
@@ -184,7 +184,7 @@ public sealed class WireWriterLawTests {
         );
     }
     /// <summary>A write that outgrows the initial capacity moves the buffer: every byte written before survives, and
-    /// a <see cref="WireWriter.WrittenMemory"/> taken before the growth no longer aliases the live buffer — which is
+    /// a <see cref="Puck.Assets.LittleEndianWriter.WrittenMemory"/> taken before the growth no longer aliases the live buffer — which is
     /// exactly why it is for immediate consumption only.</summary>
     [Fact]
     public void Write_PastTheInitialCapacity_GrowsAndKeepsEveryByte_InvalidatingEarlierViews() {
@@ -214,9 +214,9 @@ public sealed class WireWriterLawTests {
         );
         Assert.False(condition: writer.WrittenSpan.Overlaps(other: beforeGrowth.Span));
     }
-    /// <summary><see cref="WireWriter.WrittenMemory"/> and <see cref="WireWriter.WrittenSpan"/> are views over the
+    /// <summary><see cref="Puck.Assets.LittleEndianWriter.WrittenMemory"/> and <see cref="Puck.Assets.LittleEndianWriter.WrittenSpan"/> are views over the
     /// writer's own buffer, not copies: they overlap each other, they see a byte written after they were taken, and
-    /// <see cref="WireWriter.ToArray"/> is the one accessor that does not overlap them. Falsifier: implementing either
+    /// <see cref="Puck.Assets.LittleEndianWriter.ToArray"/> is the one accessor that does not overlap them. Falsifier: implementing either
     /// accessor as a copy breaks the overlap, and a copy taken before the second write cannot see it.</summary>
     [Fact]
     public void WrittenMemoryAndWrittenSpan_AliasTheWritersBuffer_WhileToArrayCopies() {
