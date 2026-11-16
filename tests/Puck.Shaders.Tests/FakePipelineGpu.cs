@@ -906,6 +906,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         private byte[] m_pixels = [];
         private Created? m_staging;
 
+        public ulong OwnedBytes => StagingBytes;
         public ulong StagingBytes => ((m_staging is { DisposeCount: 0 } staging)
             ? staging.Bytes
             : 0UL);

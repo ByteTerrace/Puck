@@ -122,7 +122,11 @@ public sealed partial class RenderGraphRuntime {
         }
         public void Dispose(bool wait) {
             if (wait) {
-                fence.Wait();
+                try {
+                    fence.Wait();
+                } catch (GpuSubmissionAbandonedException) {
+                    // The stand-in's submission never reached the queue, so nothing reads it.
+                }
             }
 
             fence.Dispose();

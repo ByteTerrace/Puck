@@ -16,6 +16,37 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
     private const uint SampleCount1Bit = 1;
     private const uint SharingModeExclusive = 0;
     private const uint StructureTypeImageCreateInfo = 14;
+    private const uint FormatFeatureSampledImageBit = 0x00000001;
+
+    // Refuses, before vkCreateImage, an extent past the device's maxImageDimension2D and a sampled image of a format whose
+    // optimal-tiling features lack SAMPLED_IMAGE, naming the format and the device; vkCreateImage takes neither as a
+    // reported error, only as invalid usage.
+    private static void RequireSupported(VulkanOffscreenImageCreateRequest request) {
+        var (name, limit) = VulkanNativePhysicalDeviceApi.ImageLimitsOf(
+            instance: request.Instance,
+            physicalDeviceHandle: request.PhysicalDeviceHandle
+        );
+
+        GpuImageUsages.RequireWithinLimit(
+            device: $"the Vulkan device {name}",
+            height: request.Height,
+            limit: limit,
+            width: request.Width
+        );
+
+        if ((request.UsageFlags & VulkanImageUsageFlags.Sampled) == 0) {
+            return;
+        }
+
+        var features = stackalloc uint[3];
+
+        request.Instance.GetPhysicalDeviceFormatProperties(request.PhysicalDeviceHandle, request.Format, ((nint)features));
+
+        if ((features[1] & FormatFeatureSampledImageBit) == 0) {
+            throw new NotSupportedException(message: $"The Vulkan device {name} cannot sample VkFormat {request.Format} images: its optimal-tiling features are 0x{features[1]:X}.");
+        }
+    }
+
 
     private static void ValidateCreateRequest(VulkanOffscreenImageCreateRequest request) {
         ArgumentNullException.ThrowIfNull(
@@ -47,6 +78,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
     /// <inheritdoc/>
     public VulkanOffscreenImageCreateResult CreateColorImage(VulkanOffscreenImageCreateRequest request) {
         ValidateCreateRequest(request: request);
+        RequireSupported(request: request);
 
         var getPhysicalDeviceMemoryProperties = request.Instance.GetPhysicalDeviceMemoryProperties;
 

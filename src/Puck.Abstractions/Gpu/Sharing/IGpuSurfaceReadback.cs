@@ -7,6 +7,10 @@ namespace Puck.Abstractions.Gpu;
 /// goes, a device loss included. Both backends implement it once, as <see cref="GpuSurfaceReadback"/>.
 /// </summary>
 public interface IGpuSurfaceReadback : IDisposable {
+    /// <summary>Gets the bytes of the host-visible buffer the readback holds for its last read's extent and format (the
+    /// device's copy footprint, rows padded to its pitch), or zero before the first read. The pixels a read returns are
+    /// the caller's and not counted here.</summary>
+    ulong OwnedBytes { get; }
     /// <summary>Copies the source image to a host-visible buffer, blocks until the copy completes, and returns the
     /// pixel data. The source image is restored to <paramref name="sourceLayout"/>.</summary>
     /// <param name="sourceImageHandle">The native image handle to read back from.</param>

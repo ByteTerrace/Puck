@@ -39,13 +39,12 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             usage: usage,
             width: width
         );
-        RequireWithinTextureLimit(
-            dimension: width,
-            name: nameof(width)
-        );
-        RequireWithinTextureLimit(
-            dimension: height,
-            name: nameof(height)
+        // The device accepts a larger texture's creation and refuses only the recording that copies into it.
+        GpuImageUsages.RequireWithinLimit(
+            device: "Direct3D 12",
+            height: height,
+            limit: PInvoke.D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION,
+            width: width
         );
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
@@ -102,19 +101,7 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <inheritdoc/>
     public uint Width { get; }
 
-    // Refuses a width or height beyond the largest two-dimensional texture Direct3D 12 admits. The device accepts a larger
-    // texture's creation and refuses only the recording that copies into it, so the limit is checked first.
-    private static void RequireWithinTextureLimit(uint dimension, string name) {
-        const uint Limit = PInvoke.D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 
-        if (dimension > Limit) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: dimension,
-                message: $"The {name} is {dimension} texels; Direct3D 12 limits a two-dimensional texture to {Limit} texels per side.",
-                paramName: name
-            );
-        }
-    }
     // Refuses a format the device cannot sample from a two-dimensional texture, naming the format and what the device
     // reports for it.
     private static void RequireSampled(ID3D12Device* device, GpuPixelFormat format, DXGI_FORMAT dxgiFormat) {
