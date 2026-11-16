@@ -410,10 +410,11 @@ up. The sample is the view's GPU frame time against the display period, from
 the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
 reports every kept present as exactly its period, so only the GPU's time shows
 the headroom to raise the grid again. A device that times nothing falls back to
-the present interval, and a host with neither, an offscreen one, to the view's
-counted march steps against `WorldDynamicResolution.StepBudgetPerPixel` per
-output pixel. Counted work per frame then scales with the grid, which
-`world.counters gpu` shows as the sky pass's texels written.
+the present interval. Without either timing source or a known display period,
+the grid holds its last scale (the ceiling on first use), reported as
+`signal=unavailable`. An offscreen host has no display deadline to recover;
+bake march counts do not measure the rasterized frame's load. GPU counters
+remain diagnostics, separate from the controller's timing signal.
 
 A sample counts only at the grid the views render now. Each view's node
 records the quantized grid of every submission it renders, and a reading,

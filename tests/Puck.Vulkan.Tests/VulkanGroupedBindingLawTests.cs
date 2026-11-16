@@ -71,6 +71,9 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
             bufferSize: 100UL,
             descriptorSetHandle: GroupSet
         ));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => rig.Bindings.WriteConstantBuffer(
+            arrayElement: 0, binding: 0, bufferHandle: 0x61, bufferSize: (16384UL + 256UL), descriptorSetHandle: GroupSet));
+        Assert.Single(collection: rig.Descriptors.Buffers);
     }
     [Fact]
     public void A_groups_set_binds_at_its_set_number_and_only_there() {
@@ -178,7 +181,12 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
                 logicalDeviceApi: new NoLogicalDeviceApi(),
                 physicalDevice: default,
                 presentQueue: default
-            ));
+            ) {
+                Capabilities = new GpuDeviceCapabilities(Backend: "vulkan", MaxBoundDescriptorSets: 4,
+                    MaxRootSignatureWords: 0, MaxPushConstantBytes: 128, MaxPerStageSamplers: 16,
+                    MaxPerStageUniformBuffers: 12, MaxPerStageStorageBuffers: 4, MaxPerStageSampledImages: 16,
+                    MaxPerStageStorageImages: 4, MaxPerStageResources: 128, MaxConstantBufferBytes: 16384),
+            });
 
             Device = context.LogicalDevice;
             Bindings = new VulkanGpuBindings(

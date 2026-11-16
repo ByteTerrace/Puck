@@ -24,6 +24,9 @@ namespace Puck.DirectX;
 /// <param name="deviceContext">The device context whose current device creates every heap and view.</param>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext) : IGpuBindings {
+    /// <inheritdoc/>
+    public ulong MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
+
     private const nint LinearSampler = 1;
     private const nint NearestSampler = 2;
 
@@ -280,7 +283,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
     public void DestroySampler(nint samplerHandle) { }
     /// <inheritdoc/>
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
-        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize);
+        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize, maximumBytes: MaxConstantBufferBytes);
 
         var set = GroupSetFor(
             binding: binding,
@@ -301,7 +304,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             ),
             pDesc: &cbvDesc
         );
-        set.Views[set.SlotByBinding[binding] + arrayElement] = 0;
+        set.Views[(set.SlotByBinding[binding] + arrayElement)] = 0;
     }
     /// <inheritdoc/>
     /// <remarks>A write of the live view the slot already holds creates nothing.</remarks>
@@ -376,6 +379,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
+
         set.Views[set.SlotByBinding[binding]] = 0;
 
         var raw = (0 == elementStride);

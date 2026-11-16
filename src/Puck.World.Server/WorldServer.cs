@@ -415,13 +415,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// submission-only seam.</summary>
     public Action<WorldRebuildRequest, Principal, string>? RebuildTap { get; set; }
     /// <summary>Gets the rule-fired <c>save</c> effect's own I/O seam, invoked with the settling tick from
-    /// <c>FireWorldRuleEffect</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
+    /// <c>WorldRuleHost.FireDocument</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
     /// out, the composition root supplies the capability" shape: this project (<c>Puck.World.Server</c>) references
     /// no rendering or input, so it cannot itself compose the snapshot the manual <c>world.save</c> verb writes
     /// (<see cref="WorldSessionCapture.Capture"/> folds the authority half, but the lever half,
     /// <c>WorldSessionLevers.Fold</c>, needs the live render levers, audio director and pacing control — none of
-    /// which exist here). A <see langword="null"/> tap is a
-    /// silent no-op, the same convention <see cref="EchoTap"/> follows; every live boot shape wires one
+    /// which exist here). A <see langword="null"/> tap refuses the effect as <c>SaveUnavailable</c>; every live boot shape wires one
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
     /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
     /// side-effect-free: a fired save effect there is suppressed, never reaching disk, and is named on stderr rather
@@ -720,7 +719,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         // admitted document settled before its admission, so this export agrees with it and the receipt still names
         // the definition being installed.
         definition = WorldStateSettlement.SettleFrom(definition: definition, seeded: m_arena);
-        definition = RecompileRules(arena: m_arena, compilation: compilation, definition: definition, continuity: WorldArenaContinuity.Load);
+        definition = RecompileRules(arena: m_arena, compilation: compilation, continuity: WorldArenaContinuity.Load, definition: definition);
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         m_tick.PaintLatticeDraws(definition: definition);

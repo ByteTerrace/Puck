@@ -235,6 +235,9 @@ internal sealed class UploadModelGpu :
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
         PipelineOf(layout: description.Layout);
 
+    /// <summary>Gets or sets the modeled device's constant-buffer view limit.</summary>
+    public ulong MaxConstantBufferBytes { get; set; } = GpuDeviceCapabilities.DirectXConstantBufferBytes;
+
     long IGpuBindings.HeapReleaseRevision => m_inner.Services.Bindings.HeapReleaseRevision;
 
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => NextHandle();
@@ -247,7 +250,10 @@ internal sealed class UploadModelGpu :
         m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
         BufferDescriptorWrites++;
     }
-    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) {
+        IGpuBindings.RequireConstantBufferSize(bufferSize: bufferSize, maximumBytes: MaxConstantBufferBytes);
+        m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    }
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
@@ -280,7 +286,9 @@ internal sealed class UploadModelGpu :
         }
     }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) { }
+
     uint IGpuRecorder.CopyRowAlignment => 1U;
+
     void IGpuRecorder.CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) { }
     void IGpuRecorder.CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) { }
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
@@ -347,11 +355,13 @@ internal sealed class UploadModelGpu :
             var word = (request[((int)(Header + (run * 2u)))] + (thread - request[((int)((Header + (run * 2u)) + 1u))]));
             var sourceWord = (blockBase + thread);
             var destinationWord = (destinationBase + word);
+
             if (request[4] != 0) {
                 var row = (word / request[4]);
                 var column = (word % request[4]);
-                sourceWord = (blockBase + (row * request[5]) + column);
-                destinationWord = (destinationBase + (row * request[6]) + column);
+
+                sourceWord = ((blockBase + (row * request[5])) + column);
+                destinationWord = ((destinationBase + (row * request[6])) + column);
             }
 
             destination[((int)destinationWord)] = source[((int)sourceWord)];
@@ -410,7 +420,6 @@ internal sealed class UploadModelGpu :
     }
     void IGpuQueueSubmitter.BeginBatch() => m_inner.Services.QueueSubmitter.BeginBatch();
     void IGpuQueueSubmitter.FlushBatch() => m_inner.Services.QueueSubmitter.FlushBatch();
-
     IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) => new CommandPool(
         handle: NextHandle(),
         inner: m_inner.Services.CommandPoolFactory.Create(name: name)

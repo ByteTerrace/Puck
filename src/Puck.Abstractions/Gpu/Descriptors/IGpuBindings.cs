@@ -20,18 +20,23 @@ public interface IGpuBindings {
     static int ConstantBufferBytes(uint blockBytes) =>
         checked((int)((ulong)blockBytes).AlignUp(alignment: ConstantBufferAlignment));
 
-    /// <summary>The one check every backend's <see cref="WriteConstantBuffer"/> makes: a view's size is a non-zero
+    /// <summary>Gets the largest constant-buffer view in bytes on the current device.</summary>
+    ulong MaxConstantBufferBytes { get; }
+
+    /// <summary>The one check uniform regions and descriptor writes make: a view fits the device and is a non-zero
     /// multiple of <see cref="ConstantBufferAlignment"/>.</summary>
     /// <param name="bufferSize">The viewed size in bytes.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The size is zero or unaligned.</exception>
-    static void RequireConstantBufferSize(ulong bufferSize) {
+    /// <param name="maximumBytes">The device's <see cref="MaxConstantBufferBytes"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The size is zero, unaligned or past the device's limit.</exception>
+    static void RequireConstantBufferSize(ulong bufferSize, ulong maximumBytes) {
         if (
             (bufferSize == 0) ||
-            ((bufferSize % ConstantBufferAlignment) != 0)
+            ((bufferSize % ConstantBufferAlignment) != 0) ||
+            (bufferSize > maximumBytes)
         ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: bufferSize,
-                message: $"A constant buffer's view is a non-zero multiple of {ConstantBufferAlignment} bytes.",
+                message: $"A constant buffer's view is a non-zero multiple of {ConstantBufferAlignment} bytes within the device's {maximumBytes}-byte limit.",
                 paramName: nameof(bufferSize)
             );
         }
@@ -111,7 +116,7 @@ public interface IGpuBindings {
     /// <param name="bufferHandle">The native buffer handle.</param>
     /// <param name="bufferSize">The viewed size in bytes, a multiple of <see cref="ConstantBufferAlignment"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bufferSize"/> is zero or not a multiple of
-    /// <see cref="ConstantBufferAlignment"/>.</exception>
+    /// <see cref="ConstantBufferAlignment"/>, or exceeds <see cref="MaxConstantBufferBytes"/>.</exception>
     void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize);
     /// <summary>Writes a sampled image descriptor into a group's set: an image a <see cref="GpuBindingKind.SampledImage"/>
     /// binding reads through a separate sampler, in its shader-read-only layout.</summary>

@@ -41,6 +41,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const int LimitsMaxPerStageStorageImagesOffset = (PhysicalDeviceLimitsOffset + 84);
     private const int LimitsMaxPerStageUniformBuffersOffset = (PhysicalDeviceLimitsOffset + 72);
     private const int LimitsMaxPushConstantsSizeOffset = (PhysicalDeviceLimitsOffset + 32);
+    // maxUniformBufferRange follows the six image/texel-buffer dimension uints.
+    private const int LimitsMaxUniformBufferRangeOffset = (PhysicalDeviceLimitsOffset + 24);
     private const uint StructureTypePhysicalDeviceDriverProperties = 1000196000;
     private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
@@ -77,6 +79,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             *((uint*)(properties + LimitsMaxImageDimension2DOffset))
         );
     }
+
     private static unsafe void ValidatePhysicalDeviceInputs(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 
@@ -267,6 +270,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return new GpuDeviceCapabilities(
                 Backend: "vulkan",
+                MaxConstantBufferBytes: Read(offset: LimitsMaxUniformBufferRangeOffset),
                 MaxBoundDescriptorSets: Read(offset: LimitsMaxBoundDescriptorSetsOffset),
                 MaxPerStageResources: Read(offset: LimitsMaxPerStageResourcesOffset),
                 MaxPerStageSampledImages: Read(offset: LimitsMaxPerStageSampledImagesOffset),

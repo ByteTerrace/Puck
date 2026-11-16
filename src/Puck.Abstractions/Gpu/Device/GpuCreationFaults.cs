@@ -266,6 +266,7 @@ public sealed class GpuCreationFaults {
             return (m_recordingArmed != 0L);
         }
     }
+
     /// <summary>Gets how many frame recordings render nodes have counted since the faults were last disarmed.</summary>
     public long RecordingsSeen {
         get {
@@ -274,6 +275,7 @@ public sealed class GpuCreationFaults {
             }
         }
     }
+
     /// <summary>Counts one frame a GPU host is about to produce, and throws when it is the frame the armed loss fires
     /// on, clearing the loss as it fires. A host calls this once per frame, inside the frame body its device-loss
     /// policy guards.</summary>
@@ -422,6 +424,8 @@ internal abstract class FaultingWrapper(GpuCreationFaults faults) {
 }
 
 file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuBindings {
+    public ulong MaxConstantBufferBytes => inner.MaxConstantBufferBytes;
+
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         inner.AllocateSet(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
@@ -557,9 +561,9 @@ file sealed class FaultingImageFactory(IGpuImageFactory inner, GpuCreationFaults
 
         return inner.CreateDepth(
             attachment: in attachment,
-            sampled: sampled,
             height: height,
             name: name,
+            sampled: sampled,
             width: width
         );
     }

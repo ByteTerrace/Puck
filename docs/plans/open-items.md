@@ -2700,41 +2700,13 @@ validation that makes the skill suites believable.
 
 ### Refactoring campaign
 
-Owner: the lead, one implementer lane per group · high · Next: the GPU region
-growth merge (with the uniform view limit enforced in `Grow`), then the two
-overlay writers, the dead march-step budget and the groups below, largest
-payoff first; the two snapshot mirrors wait for the presentation view. The
+Owner: the lead, one implementer lane per group · high · Next: the body
+gate-program merge and the groups below, largest payoff first; the two snapshot
+mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
-- [medium] Uniform region growth accepts an unbindable size
-  (`GpuRegion.Grow`): a 65,536-byte uniform ring can grow to 65,792 bytes,
-  since the check accepts any multiple of 256, past Direct3D 12's 4,096
-  float4 constant-buffer elements
-  ([constants](https://learn.microsoft.com/en-us/windows/win32/direct3d12/constants))
-  and a Vulkan device's `maxUniformBufferRange`
-  ([device limits](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceLimits.html)).
-  `IGpuBindings.RequireConstantBufferSize` checks only alignment. Expose the
-  view limit as a shared capability of both backends and enforce it at
-  uniform-region construction, growth and descriptor writes. No production
-  caller grows one yet.
-- [medium] Delete the retired march-step budget:
-  `WorldDynamicResolutionSignal.Steps` and
-  `WorldDynamicResolution.StepBudgetPerPixel` (read through
-  `MarchStepBudgetPerPixel` in `WorldFrameLoadSource`) are calibrated against
-  the deleted per-pixel march, so the offscreen fallback's signal reads near
-  zero and the grid never falls. Rebase the fallback on a per-frame signal the
-  frame still has, or delete it with its mentions in the rendering plan and
-  `frame-rendering.md`.
-- [medium] Code and its own documentation disagree in two places
-  `puck docs links` does not read: `documents-rules.md` says a `setState` or
-  `addState` effect is submitted only when it could move the destination, but
-  the code that enforces it was not found, and `WorldServer.SaveEffectTap`'s
-  XML doc names the deleted `FireWorldRuleEffect`;
-  `SdfFieldEvaluator.SdfSuperellipsoid`'s comment claims exact 1-Lipschitz
-  for every radius while the hazards page keeps its small-radius disagreement
-  open.
 - [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
   beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
   stack, but body predicates keep a separate dispatch over recency clocks,

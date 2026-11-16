@@ -241,6 +241,8 @@ profile constructor so it chooses ring, in place or staged by `GpuResidency.Sele
 replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
 constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
 after the submissions that read the old buffers (`SdfWorldTables.Retire`).
+Uniform construction, growth and descriptor writes share `IGpuBindings.RequireConstantBufferSize`: aligned,
+nonzero and within `IGpuBindings.MaxConstantBufferBytes`, the current backend's view limit.
 
 A growing table picks its next size with `GpuCapacity`: `Grown` (a fraction of the current size, for amortized growth)
 or `Headroom` (a fraction over the need, for a table fitted to its need). An object replaced while a queue may still

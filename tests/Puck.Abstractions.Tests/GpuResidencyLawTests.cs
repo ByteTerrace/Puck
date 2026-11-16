@@ -15,6 +15,33 @@ namespace Puck.Abstractions.Tests;
 /// region at its target, and a retarget owes every word written after it.
 /// </summary>
 public sealed class GpuResidencyLawTests {
+    [InlineData(16384L)]
+    [InlineData(65536L)]
+    [Theory]
+    public void UniformConstructionGrowthAndWritesShareTheDeviceViewLimit(long limit) {
+        var gpu = new UploadModelGpu { MaxConstantBufferBytes = ((ulong)limit) };
+        var bindings = gpu.Services.Bindings;
+
+        GpuRegion Create(long bytes) => new(
+            bindings: bindings, buffers: gpu.Services.BufferFactory, byteCount: bytes, copyPipeline: null,
+            memory: GpuHostVisibleMemory.Host, policy: GpuResidencyPolicy.Ring, name: default,
+            recorder: gpu.Services.Recorder, slotCount: 2, usage: GpuBufferUsage.Uniform);
+
+        using var region = Create(bytes: (limit - 256));
+        using var retired = region.Grow(byteCount: limit);
+
+        bindings.WriteConstantBuffer(descriptorSetHandle: 1, binding: 0, arrayElement: 0,
+            bufferHandle: region.Buffer(slot: 0).BufferHandle, bufferSize: ((ulong)limit));
+        var handle = region.Buffer(slot: 0).BufferHandle;
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Create(bytes: (limit + 256)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.Grow(byteCount: (limit + 256)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => bindings.WriteConstantBuffer(
+            arrayElement: 0, binding: 0, bufferHandle: handle, bufferSize: ((ulong)(limit + 256)), descriptorSetHandle: 1));
+        Assert.Equal(expected: limit, actual: region.ByteCount);
+        Assert.Equal(expected: handle, actual: region.Buffer(slot: 0).BufferHandle);
+    }
+
     private const uint DeviceLocal = 0x1U;
     private const uint DiscreteDevice = 2U;
     private const ulong GiB = (1UL << 30);
@@ -857,15 +884,18 @@ public sealed class GpuResidencyLawTests {
     [Fact]
     public void BridgingDirtyRangesCopyEveryWordOnceInEitherInsertionOrder() {
         int[][] orders = [[0, 1, 2], [2, 1, 0], [1, 2, 0]];
+
         foreach (var order in orders) {
             var runs = new GpuUploadRuns(capacity: 8);
-            foreach (var index in order) { runs.Add(start: (10 * index), length: 2); }
-            runs.Add(start: 1, length: 20);
+
+            foreach (var index in order) { runs.Add(length: 2, start: (10 * index)); }
+            runs.Add(length: 20, start: 1);
             var writes = new int[22];
+
             for (var run = 0; (run < runs.Count); run++) {
                 for (var word = runs.Start(index: run); (word < (runs.Start(index: run) + runs.Length(index: run))); word++) { writes[word]++; }
             }
-            Assert.All(collection: writes, action: count => Assert.Equal(expected: 1, actual: count));
+            Assert.All(collection: writes, action: count => Assert.Equal(actual: count, expected: 1));
         }
     }
     // A run list past its capacity closes its narrowest gaps: runs packed at a table's head merge among themselves and a
@@ -1137,7 +1167,6 @@ public sealed class GpuResidencyLawTests {
             expected: [1, 2, 3, 4]
         );
     }
-
     // A staged region grows without staging what it held: the next recording clears the new destination and copies the
     // old one into it on the GPU, behind the barriers Direct3D 12's states need, and stages only the owed words packed. A
     // second grow before that recording carries from the destination last written and hands back the one never written.
@@ -1174,10 +1203,10 @@ public sealed class GpuResidencyLawTests {
 
         var unwritten = region.Grow(byteCount: 512);
 
-        Assert.NotSame(expected: first, actual: unwritten);
+        Assert.NotSame(actual: unwritten, expected: first);
         Assert.Equal(expected: 512, actual: region.ByteCount);
         Assert.Equal(expected: 512UL, actual: region.CpuShadowBytes);
-        Assert.All(collection: region.Contents[256..].ToArray(), action: static value => Assert.Equal(expected: 0, actual: value));
+        Assert.All(collection: region.Contents[256..].ToArray(), action: static value => Assert.Equal(actual: value, expected: 0));
         unwritten.Dispose();
         gpu.ResetTallies();
 
@@ -1291,7 +1320,7 @@ public sealed class GpuResidencyLawTests {
             recorder: gpu.Services.Recorder,
             slotCount: 2
         );
-        var truth = new uint[Bytes / sizeof(uint)];
+        var truth = new uint[(Bytes / sizeof(uint))];
         var source = new ArraySource(words: truth);
 
         for (var index = 0; (index < truth.Length); index++) { truth[index] = ((uint)((index * 2654435761U) | 1U)); }
@@ -1317,7 +1346,7 @@ public sealed class GpuResidencyLawTests {
         region.Shadow(shadowBytes: 256, source: source);
         Assert.True(condition: region.Write(bytes: new byte[128], offset: 128));
         Copy(gpu: gpu, region: region, slot: 0);
-        Assert.All(collection: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle)[128..256], action: static value => Assert.Equal(expected: 0, actual: value));
+        Assert.All(collection: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle)[128..256], action: static value => Assert.Equal(actual: value, expected: 0));
         region.Shadow(shadowBytes: 256, source: source);
         Assert.False(condition: region.Write(bytes: new byte[128], offset: 128));
 
@@ -1397,6 +1426,7 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Shadow(shadowBytes: 32, source: source));
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.OweSourced(length: 4, offset: 32));
     }
+
     // A source over an array of the region's words, counting the words it is asked for.
     private sealed class ArraySource(uint[] words) : IGpuRegionSource {
         public int Words { get; set; }
@@ -1406,6 +1436,7 @@ public sealed class GpuResidencyLawTests {
             buffer.Write<uint>(data: words.AsSpan(length: count, start: word), destinationOffsetBytes: destinationOffsetBytes);
         }
     }
+
     // A region grows under whichever policy GpuResidency.Select gave it: a staged region carries its destination on the
     // GPU, and a ring or in-place region replaces its host-visible buffers and owes each the whole region, so every slot
     // then reads the grown region exact, the words held before the grow included. A device whose host-visible
@@ -1435,7 +1466,7 @@ public sealed class GpuResidencyLawTests {
         _ = region.Write(bytes: held, offset: 0);
         for (var slot = 0; (slot < Slots); slot++) { Copy(gpu: gpu, region: region, slot: slot); }
 
-        var before = Enumerable.Range(start: 0, count: Slots).Select(selector: slot => region.Buffer(slot: slot)).ToArray();
+        var before = Enumerable.Range(count: Slots, start: 0).Select(selector: slot => region.Buffer(slot: slot)).ToArray();
         var replaced = region.Grow(byteCount: 256);
 
         Assert.Equal(expected: 256, actual: region.ByteCount);
@@ -1573,7 +1604,6 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.RecordCarry(commandBuffer: 2, copies: false, readers: GpuStage.ComputeShader));
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Contents.Length);
     }
-
     // No run of the debug world reaches 2 GiB of mesh region, so a region past it is held here, through buffers that
     // record their writes and hold no bytes. An in-place region owes its whole 3 GiB at first and writes it in pieces of
     // at most a gibibyte, then a word at the region's end at its byte offset past 2 GiB.
@@ -1613,8 +1643,8 @@ public sealed class GpuResidencyLawTests {
 
         var tail = Assert.Single(collection: buffers.Created[0].Writes);
 
-        Assert.Equal(expected: ((ulong)(Bytes - 8)), actual: tail.Offset);
-        Assert.Equal(expected: new byte[] { 6, 7, 8, 9, 10, 11, 12, 13 }, actual: tail.Head);
+        Assert.Equal(actual: tail.Offset, expected: ((ulong)(Bytes - 8)));
+        Assert.Equal(actual: tail.Head, expected: new byte[] { 6, 7, 8, 9, 10, 11, 12, 13 });
     }
     // A staged region past 2 GiB over an external destination owes nothing until written; its copy runs name the region
     // words past 2 GiB in uints, and the staging buffer carries only the owed words behind the header and run table.
@@ -1658,11 +1688,11 @@ public sealed class GpuResidencyLawTests {
         // A packed region's copy states no row width or strides (header words 4 to 6).
         Assert.Equal(
             actual: words,
-            expected: [3U, 2U, ((uint)BlockBase), 0U, 0U, 0U, 0U, (uint)((2L << 30) / sizeof(uint)), 0U, (uint)((Bytes - 8) / sizeof(uint)), 1U]
+            expected: [3U, 2U, ((uint)BlockBase), 0U, 0U, 0U, 0U, ((uint)((2L << 30) / sizeof(uint))), 0U, ((uint)((Bytes - 8) / sizeof(uint))), 1U]
         );
         Assert.Equal(
             actual: staging.Writes.Where(predicate: static write => (write.Offset != 0UL)).Select(selector: static write => (write.Offset, write.Length)),
-            expected: [(((ulong)BlockBase) * sizeof(uint), 4), ((((ulong)BlockBase) + 1UL) * sizeof(uint), 8)]
+            expected: [((((ulong)BlockBase) * sizeof(uint)), 4), (((((ulong)BlockBase) + 1UL) * sizeof(uint)), 8)]
         );
         Assert.Equal(
             actual: staging.Writes.Single(predicate: static write => (write.Length == 8)).Head,
