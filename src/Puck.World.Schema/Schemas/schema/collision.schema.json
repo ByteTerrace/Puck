@@ -45,7 +45,7 @@
       ],
       "properties": {
         "candidateBudget": {
-          "description": "The most sweep-and-prune candidates inspected for one body while discovering new overlaps. Must be at least MaxPairsPerBody.",
+          "description": "The most box-overlapping sweep candidates inspected for one body while discovering new overlaps; a body whose bounding box misses the searching body\u0027s is never charged. Must be at least MaxPairsPerBody.",
           "type": "integer",
           "default": 32
         },

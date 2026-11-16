@@ -6,7 +6,6 @@ using Puck.Maths;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.System.Com;
 
 namespace Puck.Platform.Windows;
 
@@ -304,15 +303,15 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 m_dispatchHeight = triggerHeight;
             }
 
-            accumulateShader = CreateShader(
+            accumulateShader = Win32D3D11.CreateComputeShader(
                 bytecode: request.AccumulateBytecode.Span,
                 device: device,
-                entry: request.AccumulateEntry
+                kernel: $"probe kernel '{request.AccumulateEntry}'"
             );
-            finalizeShader = CreateShader(
+            finalizeShader = Win32D3D11.CreateComputeShader(
                 bytecode: request.FinalizeBytecode.Span,
                 device: device,
-                entry: request.FinalizeEntry
+                kernel: $"probe kernel '{request.FinalizeEntry}'"
             );
 
             completion = new Win32D3D11CompletionSignal(
@@ -322,18 +321,18 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             );
         } catch {
             completion?.Dispose();
-            Release(value: finalizeShader);
-            Release(value: accumulateShader);
-            Release(values: outputTargets);
-            Release(value: outputUav);
-            Release(value: output);
-            Release(value: channelsStaging);
-            Release(value: channelsUav);
-            Release(value: channelsBuffer);
-            Release(value: accumulateUav);
-            Release(value: accumulateBuffer);
-            Release(value: frameBuffer);
-            Release(value: constantBuffer);
+            Win32D3D11.Release(value: finalizeShader);
+            Win32D3D11.Release(value: accumulateShader);
+            Win32D3D11.Release(values: outputTargets);
+            Win32D3D11.Release(value: outputUav);
+            Win32D3D11.Release(value: output);
+            Win32D3D11.Release(value: channelsStaging);
+            Win32D3D11.Release(value: channelsUav);
+            Win32D3D11.Release(value: channelsBuffer);
+            Win32D3D11.Release(value: accumulateUav);
+            Win32D3D11.Release(value: accumulateBuffer);
+            Win32D3D11.Release(value: frameBuffer);
+            Win32D3D11.Release(value: constantBuffer);
             throw;
         }
 
@@ -453,18 +452,18 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
 
         m_disposed = true;
         m_completion.Dispose();
-        Release(value: m_finalizeShader);
-        Release(value: m_accumulateShader);
-        Release(values: m_outputTargets);
-        Release(value: m_outputUav);
-        Release(value: m_output);
-        Release(value: m_channelsStaging);
-        Release(value: m_channelsUav);
-        Release(value: m_channelsBuffer);
-        Release(value: m_accumulateUav);
-        Release(value: m_accumulateBuffer);
-        Release(value: m_frameBuffer);
-        Release(value: m_constantBuffer);
+        Win32D3D11.Release(value: m_finalizeShader);
+        Win32D3D11.Release(value: m_accumulateShader);
+        Win32D3D11.Release(values: m_outputTargets);
+        Win32D3D11.Release(value: m_outputUav);
+        Win32D3D11.Release(value: m_output);
+        Win32D3D11.Release(value: m_channelsStaging);
+        Win32D3D11.Release(value: m_channelsUav);
+        Win32D3D11.Release(value: m_channelsBuffer);
+        Win32D3D11.Release(value: m_accumulateUav);
+        Win32D3D11.Release(value: m_accumulateBuffer);
+        Win32D3D11.Release(value: m_frameBuffer);
+        Win32D3D11.Release(value: m_constantBuffer);
     }
 
     private void Dispatch(ReadOnlySpan<nint> inputViews, int slot, out ProbeChannelValues channels, out FixedQ4816 confidence, out ulong fenceValue) {
@@ -644,33 +643,6 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 pDstResource: ((ID3D11Resource*)m_constantBuffer),
                 pSrcData: data
             );
-        }
-    }
-    private static ID3D11ComputeShader* CreateShader(ID3D11Device* device, string entry, ReadOnlySpan<byte> bytecode) {
-        ID3D11ComputeShader* shader = null;
-
-        fixed (byte* code = bytecode) {
-            device->CreateComputeShader(
-                pShaderBytecode: code,
-                BytecodeLength: ((nuint)bytecode.Length),
-                pClassLinkage: null,
-                ppComputeShader: &shader
-            );
-        }
-
-        return ((shader is null)
-            ? throw new InvalidOperationException(message: $"D3D11 probe kernel '{entry}' creation returned no shader")
-            : shader
-        );
-    }
-    private static void Release<T>(T* value) where T : unmanaged {
-        if (value is not null) {
-            _ = ((IUnknown*)value)->Release();
-        }
-    }
-    private static void Release<T>(T*[] values) where T : unmanaged {
-        foreach (var value in values) {
-            Release(value: value);
         }
     }
 }

@@ -121,7 +121,10 @@ public static class WorldClockAnchors {
         if (
             (row.Kind != CellKind.Fixed) ||
             (rateHz <= 0) ||
-            ((FixedTickConversion.TicksPerSecond % ((ulong)rateHz)) != 0UL)
+            !FixedTickConversion.TryPerRate(
+                period: out var step,
+                ratePerSecond: ((uint)rateHz)
+            )
         ) {
             return (0L, 0UL);
         }
@@ -143,7 +146,6 @@ public static class WorldClockAnchors {
             return (0L, 0UL);
         }
 
-        var step = (FixedTickConversion.TicksPerSecond / ((ulong)rateHz));
         // The raw advance per engine tick, as the measure the row's trait allocates by; every authoritative tick adds
         // the same amount exactly when its span of engine ticks covers whole periods of that allocation.
         var measure = DiscreteMeasure.Rational(

@@ -2124,7 +2124,10 @@ public sealed partial class WorldTransferEscrow {
         ) {
             return "source lease deadline does not advance on a positive simulation rate";
         }
-        if ((FixedTickConversion.TicksPerSecond % checked((ulong)request.SourceRateHz)) != 0UL) {
+        if (!FixedTickConversion.TryPerRate(
+            period: out var sourceStepTicks,
+            ratePerSecond: checked((uint)request.SourceRateHz)
+        )) {
             return $"source simulation rate {request.SourceRateHz}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge";
         }
 
@@ -2133,17 +2136,21 @@ public sealed partial class WorldTransferEscrow {
         if (destinationRate <= 0) {
             return "destination simulation rate is stopped, so no binding lease can expire there";
         }
-        if ((FixedTickConversion.TicksPerSecond % checked((ulong)destinationRate)) != 0UL) {
+        if (!FixedTickConversion.TryPerRate(
+            period: out var destinationStepTicks,
+            ratePerSecond: checked((uint)destinationRate)
+        )) {
             return $"destination simulation rate {destinationRate}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge";
         }
 
-        var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)request.SourceRateHz));
-        var destinationStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)destinationRate));
         var remainingSourceSteps = (request.DeadlineSourceTick - request.SourceTick);
         // The source supplies both the interval and the rate. Widen before multiplication and rounding so a
         // well-formed hostile frame receives a refusal, rather than escaping the wire door as an overflow.
         var remainingEngineTicks = (((UInt128)remainingSourceSteps) * sourceStepTicks);
-        var destinationSteps = (((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks);
+        var destinationSteps = FixedTickConversion.StepsCovering(
+            engineTicks: remainingEngineTicks,
+            stepTicks: destinationStepTicks
+        );
         var destinationDeadline = (((UInt128)(m_server.NextInputTick - 1UL)) + destinationSteps);
 
         if (destinationDeadline > ulong.MaxValue) {

@@ -578,6 +578,22 @@
       },
       {
         "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "TryPerRate"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "IsRate"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "RateOfStep"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "StepsCovering"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
         "Name": "ToSeconds"
       }
     ],
@@ -594,7 +610,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "PerRate answers the exact period at 240, 60, 24, 7, 50400 and 1 Hz, refuses zero by ArgumentOutOfRangeException and a non-divisor (11 Hz) by ArgumentException, both naming ratePerSecond; ToSeconds is exactly one at 50400 ticks, a half at 25200, zero at zero, and the double quotient 7/50400 at seven",
+        "Subject": "PerRate answers the exact period at 240, 60, 24, 7, 50400 and 1 Hz, refuses zero by ArgumentOutOfRangeException and a non-divisor (11 Hz) by ArgumentException, both naming ratePerSecond; TryPerRate and IsRate answer the same divisors and refuse zero and 11 Hz by value; RateOfStep inverts PerRate and refuses zero and a non-divisor naming stepTicks; StepsCovering rounds a span up to whole steps (0, 1, 840, 841 ticks at 840) and refuses a zero step; ToSeconds is exactly one at 50400 ticks, a half at 25200, zero at zero, and the double quotient 7/50400 at seven",
         "Against": "",
         "Shared": "",
         "Citation": "",

@@ -54,8 +54,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeHostRow(byte[] bytes, out string reason, out WorldAuthorityHostRowCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeHostRow(byte[] bytes, out string reason, out WorldAuthorityHostRowCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "host row",
+        read: ReadHostRow,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldAuthorityHostRowCheckpoint ReadHostRow(ref WireReader reader) {
         var scheduleAccumulatorTicks = reader.ReadUInt64();
         var elapsedEngineTicks = reader.ReadUInt64();
         var isPaused = reader.ReadBoolean();
@@ -124,14 +130,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var stopping = reader.ReadBoolean();
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"host row section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldAuthorityHostRowCheckpoint(
+        return new WorldAuthorityHostRowCheckpoint(
             AnnouncedCrossingHolds: announcedCrossingHolds,
             AppliedTransferHighWater: appliedTransferHighWater,
             AppliedTransferIds: appliedTransferIds,
@@ -147,8 +146,5 @@ public static partial class WorldAuthorityCheckpointCodec {
             SeededArrivals: seededArrivals,
             Stopping: stopping
         );
-        reason = string.Empty;
-
-        return true;
     }
 }

@@ -434,13 +434,31 @@ public sealed partial class WorldInstanceHost {
     }
 
     /// <inheritdoc/>
-    public bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription routeDescription, out string reason) {
-        if (!m_forwardedBodies.TryGetValue(
+    public bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility) => m_forwardedBodies.ContainsKey(key: (source, mobility.Incarnation));
+    private bool TryFindOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility, out ForwardedBody route, out string reason) {
+        if (m_forwardedBodies.TryGetValue(
             key: (source, mobility.Incarnation),
-            value: out var route
+            value: out route
+        )) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = $"traveler {mobility.Incarnation} has no committed onward route";
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription routeDescription, out string reason) {
+        if (!TryFindOnwardRoute(
+            mobility: in mobility,
+            reason: out reason,
+            route: out var route,
+            source: source
         )) {
             routeDescription = default;
-            reason = $"traveler {mobility.Incarnation} has no committed onward route";
+
             return false;
         }
 
@@ -521,11 +539,12 @@ public sealed partial class WorldInstanceHost {
     }
     /// <inheritdoc/>
     public bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason) {
-        if (!m_forwardedBodies.TryGetValue(
-            key: (source, mobility.Incarnation),
-            value: out var route
+        if (!TryFindOnwardRoute(
+            mobility: in mobility,
+            reason: out reason,
+            route: out var route,
+            source: source
         )) {
-            reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 
@@ -538,11 +557,12 @@ public sealed partial class WorldInstanceHost {
     public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        if (!m_forwardedBodies.TryGetValue(
-            key: (source, mobility.Incarnation),
-            value: out var route
+        if (!TryFindOnwardRoute(
+            mobility: in mobility,
+            reason: out reason,
+            route: out var route,
+            source: source
         )) {
-            reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 

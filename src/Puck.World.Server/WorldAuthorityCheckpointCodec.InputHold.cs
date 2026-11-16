@@ -32,7 +32,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: row.Active);
 
         if (row.Active) {
-            WritePrincipal(
+            WorldWireCodec.WritePrincipal(
                 writer: writer,
                 principal: row.Principal
             );
@@ -89,8 +89,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeInputHold(byte[] bytes, out string reason, out WorldInputHoldCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeInputHold(byte[] bytes, out string reason, out WorldInputHoldCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "input hold",
+        read: ReadInputHold,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldInputHoldCheckpoint ReadInputHold(ref WireReader reader) {
         var maximumSetter = reader.ReadInt32();
         var participants = reader.ReadArray(
             field: "input hold participants",
@@ -98,20 +104,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"input hold section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldInputHoldCheckpoint(
+        return new WorldInputHoldCheckpoint(
             MaximumSetter: maximumSetter,
             Participants: participants
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- event feed section ----
 

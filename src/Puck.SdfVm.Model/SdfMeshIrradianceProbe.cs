@@ -11,8 +11,9 @@ public static class SdfMeshIrradianceProbe {
     public const int DepthWord = (SkyLightWord + 9);
     /// <summary>The packed surface words followed by one FP16 normal-gradient curvature per texel.</summary>
     public const int DepthWords = (((3 * DepthSize) * DepthSize) / 2);
-    /// <summary>The signed octahedral normal byte's scale; axis normals remain exact.</summary>
-    public const float DepthNormalScale = 127f;
+    /// <summary>The width of a signed octahedral normal coordinate (<c>SdfOctahedral.PackSigned</c>), a byte; axis normals
+    /// remain exact.</summary>
+    public const int DepthNormalBits = 8;
     /// <summary>The surface gap over which an angular tap closes, in metres, smaller than normal bias.</summary>
     public const float DepthSurfaceFade = 0.02f;
     /// <summary>The symmetric point/normal residual below which angular taps belong to one smooth surface patch.</summary>

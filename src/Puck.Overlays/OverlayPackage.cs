@@ -57,8 +57,9 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{RenderGraphPackageCatalog.Overlay}' must read one image and write one.");
         }
 
-        var lease = context.Pipelines.Acquire(
-            device: context.Device,
+        return await PassPipelineBuild.AcquireAsync(
+            cancellationToken: cancellationToken,
+            context: context,
             key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
@@ -82,18 +83,9 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     Store: GpuAttachmentStore.Store
                 )]),
                 vertex: vertexBytecode
-            )
-        );
-
-        try {
-            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        } catch {
-            lease.Release();
-
-            throw;
-        }
-
-        return new Built(lease: lease);
+            ),
+            package: "overlay"
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -105,14 +97,10 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        if (built is not Built objects) {
-            built?.Dispose();
-
-            throw new ArgumentException(
-                message: "The overlay package was handed another package's build.",
-                paramName: nameof(built)
-            );
-        }
+        var objects = PassPipelineBuild.Of(
+            built: built,
+            package: "overlay"
+        );
 
         OverlayFrameComposer composer;
 
@@ -155,18 +143,10 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         m_themeRevision++;
     }
 
-    // One pass's lease on its pipeline and the render pass it draws in, which its recorder owns once created.
-    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
-        public IGpuPipeline Pipeline { get; } = lease.Current!.Graphics!;
-        public IGpuRenderPass RenderPass { get; } = lease.Current!.RenderPass!;
-
-        public void Dispose() =>
-            lease.Release();
-    }
     // Records one overlay pass. Everything a frame rewrites is per frame slot, since the instance waits only that slot's
     // previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
-        private readonly Built m_built;
+        private readonly PassPipelineBuild m_built;
         private readonly OverlayFrameComposer m_composer;
         // The storage buffer the shader reads, the instance's region: the static prefix (the token slab and the glyph
         // pack), then the frame's records at the builder's own bases, so the pass block's bases are the same every frame.
@@ -186,7 +166,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         private bool m_disposed;
         private int m_themeRevision;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, OverlayFrameComposer composer, RenderGraphPackageGroups groups, OverlayPackage package) {
+        public Recorder(RenderGraphPackageRecorderContext context, PassPipelineBuild built, OverlayFrameComposer composer, RenderGraphPackageGroups groups, OverlayPackage package) {
             var inFlight = context.InFlightFrames;
             var builder = composer.Builder;
             var parameters = context.Parameters;

@@ -107,9 +107,7 @@ public sealed class SurfaceEncoder : IDisposable {
             "Runtime",
             ((fragment
                 ? FragmentStem
-                : VertexStem) + (directX
-                ? ".dxil"
-                : ".spv")),
+                : VertexStem) + ShaderBytecode.FileExtension(hostsOnDirectX: directX)),
         ]);
         var bytecode = File.ReadAllBytes(path: path);
 

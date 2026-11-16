@@ -856,6 +856,43 @@ internal static class SharedKernelClaims {
         } catch (ArgumentException exception) when (exception.ParamName == "ratePerSecond") {
         }
 
+        foreach (var (rate, period) in (ReadOnlySpan<(uint Rate, ulong Period)>)[(240U, 210UL), (60U, 840UL), (1U, 50400UL)]) {
+            if (!FixedTickConversion.TryPerRate(period: out var tried, ratePerSecond: rate) || (tried != period)) { return $"TryPerRate({rate}) is not {period}"; }
+            if (FixedTickConversion.RateOfStep(stepTicks: period) != rate) { return $"RateOfStep({period}) is not {rate}"; }
+            if (!FixedTickConversion.IsRate(ratePerSecond: rate)) { return $"IsRate({rate}) refused a divisor"; }
+        }
+
+        if (FixedTickConversion.TryPerRate(period: out var refusedPeriod, ratePerSecond: 11U) || (refusedPeriod != 0UL)) { return "TryPerRate(11) admitted a non-divisor"; }
+        if (FixedTickConversion.TryPerRate(period: out refusedPeriod, ratePerSecond: 0U) || (refusedPeriod != 0UL)) { return "TryPerRate(0) admitted zero"; }
+        if (FixedTickConversion.IsRate(ratePerSecond: 0UL) || FixedTickConversion.IsRate(ratePerSecond: 11UL) || FixedTickConversion.IsRate(ratePerSecond: 50401UL)) { return "IsRate admitted a non-divisor"; }
+
+        try {
+            _ = FixedTickConversion.RateOfStep(stepTicks: 11UL);
+
+            return "RateOfStep(11) did not refuse a non-divisor";
+        } catch (ArgumentException exception) when (exception.ParamName == "stepTicks") {
+        }
+
+        try {
+            _ = FixedTickConversion.RateOfStep(stepTicks: 0UL);
+
+            return "RateOfStep(0) did not refuse";
+        } catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "stepTicks") {
+        }
+
+        foreach (var (span, step, steps) in (ReadOnlySpan<(ulong Span, ulong Step, ulong Steps)>)[(0UL, 840UL, 0UL), (1UL, 840UL, 1UL), (840UL, 840UL, 1UL), (841UL, 840UL, 2UL), (5000UL, 1UL, 5000UL)]) {
+            if (FixedTickConversion.StepsCovering(engineTicks: span, stepTicks: step) != steps) { return $"StepsCovering({span}, {step}) is not {steps}"; }
+        }
+
+        if (FixedTickConversion.StepsCovering(engineTicks: (((UInt128)ulong.MaxValue) * 840UL), stepTicks: 840UL) != ulong.MaxValue) { return "StepsCovering lost a span wider than 64 bits"; }
+
+        try {
+            _ = FixedTickConversion.StepsCovering(engineTicks: 1UL, stepTicks: 0UL);
+
+            return "StepsCovering at a zero step did not refuse";
+        } catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "stepTicks") {
+        }
+
         if (FixedTickConversion.ToSeconds(ticks: 50400UL) != 1d) { return "ToSeconds(50400) is not one"; }
         if (FixedTickConversion.ToSeconds(ticks: 25200UL) != 0.5d) { return "ToSeconds(25200) is not a half"; }
         if (FixedTickConversion.ToSeconds(ticks: 0UL) != 0d) { return "ToSeconds(0) is not zero"; }

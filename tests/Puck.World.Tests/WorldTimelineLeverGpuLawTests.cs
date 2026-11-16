@@ -20,24 +20,24 @@ public sealed class WorldTimelineLeverGpuLawTests {
     public void HeldSkySubmitsOnlyItsFirstFrameOnVulkan() {
         using var device = HeadlessVulkanDevice.Create(nameof(WorldTimelineLeverGpuLawTests));
 
-        Verify(device: device, extension: ".spv");
+        Verify(device: device, target: ShaderTarget.Spirv);
     }
     [Fact]
     public void HeldSkySubmitsOnlyItsFirstFrameOnDirectX() {
         using var device = DirectXTestDevices.Hardware();
 
-        Verify(device: device, extension: ".dxil");
+        Verify(device: device, target: ShaderTarget.Dxil);
     }
 
-    private static void Verify(IGpuDeviceContext device, string extension) {
+    private static void Verify(IGpuDeviceContext device, ShaderTarget target) {
         var definition = TimelineLeverFixtures.Definition();
         var mirror = ClientFixtures.StateMirror(definition);
 
         Assert.True(condition: mirror.ControlClock(name: "tide", operation: WorldTimelineOperation.At, rate: 1d, refusal: out var refusal, tick: 12600UL), userMessage: refusal);
         using var source = new Source(definition: definition, mirror: mirror);
         var cache = new GpuPassPipelineCache();
-        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: cache), new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: cache));
-        using var view = new SdfTestView(new SdfWorldResidency(pipelines, source, pipelines.LoadDeployed(bytecodeExtension: extension), SdfTestView.Instance, 32, 32), pipelines, device, 32, hostsOnDirectX: (extension == ".dxil"));
+        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(target: target, pipelines: cache), new SdfMeshRasterPass(target: target, pipelines: cache));
+        using var view = new SdfTestView(new SdfWorldResidency(pipelines, source, pipelines.LoadDeployed(target: target), SdfTestView.Instance, 32, 32), pipelines, device, 32, hostsOnDirectX: (target == ShaderTarget.Dxil));
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device }),
             StepTicks: 0, TargetHeight: 32, TargetWidth: 32);

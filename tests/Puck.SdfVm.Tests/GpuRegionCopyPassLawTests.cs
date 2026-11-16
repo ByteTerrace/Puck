@@ -54,14 +54,14 @@ public sealed class GpuRegionCopyPassLawTests {
     public void ThePassReadsItsDeployedKernelWhenConstructedAndAnAcquireReadsNothing() {
         var cache = new GpuPassPipelineCache();
 
-        _ = Assert.Throws<FileNotFoundException>(testCode: () => new GpuRegionCopyPass(bytecodeExtension: ".absent", pipelines: cache));
+        _ = Assert.Throws<DirectoryNotFoundException>(testCode: () => GpuRegionCopyPass.Load(target: ShaderTarget.Spirv, directory: Path.Combine(path1: GpuRegionCopyPass.DefaultDirectory, path2: "absent")));
 
-        var pass = new GpuRegionCopyPass(bytecodeExtension: ".spv", pipelines: cache);
+        var pass = new GpuRegionCopyPass(target: ShaderTarget.Spirv, pipelines: cache);
         var gpu = new UploadModelGpu();
 
         Assert.Equal(
             actual: pass.Key,
-            expected: GpuRegionCopyPass.KeyOf(kernel: GpuRegionCopyPass.Load(bytecodeExtension: ".spv", directory: GpuRegionCopyPass.DefaultDirectory))
+            expected: GpuRegionCopyPass.KeyOf(kernel: GpuRegionCopyPass.Load(target: ShaderTarget.Spirv, directory: GpuRegionCopyPass.DefaultDirectory))
         );
 
         var first = pass.Acquire(device: gpu);

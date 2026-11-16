@@ -7,6 +7,7 @@
 // its medium and its revealed flow surface receive.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
+#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
 
@@ -44,7 +45,7 @@ float3 sdfMeshCameraSurroundings() {
     float luminance = 0.0;
 
     [unroll] for (uint axis = 0u; (axis < 6u); axis++) {
-        luminance += dot(passGroup.meterLight[axis].rgb, SDF_LUMINANCE);
+        luminance += dot(passGroup.meterLight[axis].rgb, PuckRec709Luminance);
     }
     return ((passGroup.meterLight[0].w > 0.0) ? ((luminance / 6.0) * (1.0 - saturate(passGroup.airLight))) : 0.0).xxx;
 }

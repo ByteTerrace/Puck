@@ -34,6 +34,36 @@ public static class SdfOctahedral {
 
         return new Double3(X: x, Y: y, Z: z).Normalize();
     }
+    /// <summary>Gets the scale of a signed-normalized coordinate of a given width: the largest code, which maps to 1, so
+    /// -1 and 1 are exact and the most negative code is left unused.</summary>
+    /// <param name="bits">The width of each coordinate, 2 to 16.</param>
+    /// <returns>The scale, <c>2^(bits - 1) - 1</c>.</returns>
+    public static float SignedScale(int bits) => ((1 << (bits - 1)) - 1);
+    /// <summary>Packs a unit direction as two signed-normalized octahedral coordinates, each its coordinate times
+    /// <see cref="SignedScale"/> rounded, the first in the low <paramref name="bits"/> bits and the second above it.</summary>
+    /// <param name="direction">The unit direction.</param>
+    /// <param name="bits">The width of each coordinate, 2 to 16.</param>
+    /// <returns>The word, whose bits above twice <paramref name="bits"/> are zero.</returns>
+    public static uint PackSigned(Double3 direction, int bits) {
+        var (x, y) = Encode(direction: direction);
+        var scale = ((double)SignedScale(bits: bits));
+        var mask = ((1u << bits) - 1u);
+
+        return unchecked(((((uint)((int)Math.Round(a: (x * scale)))) & mask) | ((((uint)((int)Math.Round(a: (y * scale)))) & mask) << bits)));
+    }
+    /// <summary>Unpacks a word <see cref="PackSigned"/> wrote.</summary>
+    /// <param name="word">The word; bits above twice <paramref name="bits"/> are ignored.</param>
+    /// <param name="bits">The width of each coordinate, 2 to 16.</param>
+    /// <returns>The unit direction.</returns>
+    public static Double3 UnpackSigned(uint word, int bits) {
+        var scale = ((double)SignedScale(bits: bits));
+        var shift = (32 - bits);
+
+        return Decode(
+            x: ((((int)(word << shift)) >> shift) / scale),
+            y: ((((int)((word >> bits) << shift)) >> shift) / scale)
+        );
+    }
     /// <summary>Returns the interior texel a texel of an octahedral map with a one-texel border holds: an interior texel
     /// holds itself, and a border texel copies the interior texel across the octahedron's fold, so a filter tap one texel
     /// past an edge reads the neighbouring direction rather than wrapping.</summary>

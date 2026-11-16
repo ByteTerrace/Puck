@@ -267,7 +267,7 @@ public static class WorldMotionTuningFactory {
         );
 
         return new FixedMotionDynamics(Planar: compiled.Compile(
-            stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)simulationRateHz)),
+            stepTicks: FixedTickConversion.PerRate(ratePerSecond: checked((uint)simulationRateHz)),
             ticksPerSecond: FixedTickConversion.TicksPerSecond
         ));
     }

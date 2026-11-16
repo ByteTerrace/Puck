@@ -43,6 +43,7 @@ same change.
 | Never tunnel, however fast or thin | `FixedFieldContactSolver.ResolveSweep` (certified sweep through `ICertifiedSweepQuery`); `FixedStaticContactSolver.ResolveSweep` (sliced analytic sweep); both refuse with `ContactRefusal` rather than wrap | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap` | [motion](../puck-world/references/documents-motion.md) |
 | Body-against-body depenetration and collision events | `FixedDynamicBodyContacts.TryCorrection`; events ask `FixedDynamicBodyContacts.Overlaps` (a positive push at zero margin, so a touching pair is neither), so an event and a contact never disagree; host pairs in `WorldPopulation.ResolveDynamicContacts` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
+| Which bodies might touch: pairs in sweep order under a candidate budget, or the bodies near a box | `FixedSweepGrid` (X sweep crossed with a Y/Z grid, culling before it charges the budget), the one broadphase behind body contacts, `WorldEventFeed` discovery and the sleeping index (`WorldPopulation.NearbySleepingBodies`, `WakeSleepersNear`) | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Remove a velocity's approach into a contact | `FixedVector3.LimitAlong` with the inward axis and a zero bound, shared by ordinary, field, tether and seam responses | `maths-usage` |
 | Rigid bodies: impulses, friction, restitution, warm-started manifolds | `FixedRigidWorld` (the one solver), `FixedRigidContacts`, `FixedRigidManifold`, `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`; host side `WorldBody.Rigid.cs`, `WorldPopulation.Rigid.cs` | [the rigid solver](../../../docs/reference/physics.md#the-rigid-solver) |
 | A rope that caps distance and keeps swing momentum | `FixedTetherConstraint` (`ResolveAnchor`, `Reel`); host `WorldBody.Tether.cs` | [tether](../../../docs/reference/physics.md#the-tether-constraint) |
@@ -95,7 +96,8 @@ same change.
   new answer's exactness, not by matching old bytes (AGENTS.md rule 4).
 - **Kernels decide nothing.** Walkability, authority, waking and admission
   are the caller's. A kernel returning a correction must not mutate a body.
-- **One mechanism per question.** One rigid solver, one round-core rule
+- **One mechanism per question.** One rigid solver, one broadphase
+  (`FixedSweepGrid`), one round-core rule
   (`TryRoundPush`, behind both static spheres and dynamic round pairs), one
   box geometry owner (`FixedOrientedBox`), one approach-removal
   (`FixedVector3.LimitAlong`), one overlap sense for events and contacts.
@@ -169,8 +171,12 @@ same change.
 - The chase camera's clearance sweeps and an effector's surface probe query
   the rendered field for presentation (`WorldFieldAnswer`, `puck-world`), not
   the contact seam.
-- `FixedSpatialNeighborhood` is perception; the body-pair broadphase is the
-  population's X sweep and YZ grid under `collision.bodyContacts`.
+- `FixedSpatialNeighborhood` is perception; the body-pair broadphase is
+  `FixedSweepGrid`, budgeted by `collision.bodyContacts` for contacts and by
+  `collision.events` for events.
+- Binary heaps (navigation's `NodeHeap`, the board path cost, the
+  neighbourhood's top-k) all run on `Puck.Abstractions.Collections.BinaryHeap`;
+  a new priority queue uses it with a struct `IComparer<T>`.
 - `collision.events` budgets proximity events; `collision.bodyContacts`
   budgets physical depenetration. They are separate limits.
 

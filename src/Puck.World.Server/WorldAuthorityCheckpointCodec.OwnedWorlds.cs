@@ -43,8 +43,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             RelativeDirectory: relative
         );
     }
-    private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "owned worlds",
+        read: ReadOwnedWorlds,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldOwnedWorldsCheckpoint ReadOwnedWorlds(ref WireReader reader) {
         var documents = reader.ReadArray(
             field: "owned worlds documents",
             readItem: static (ref WireReader r) => ReadOwnedDocument(reader: ref r),
@@ -52,20 +58,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var revision = reader.ReadInt64();
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"owned worlds section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldOwnedWorldsCheckpoint(
+        return new WorldOwnedWorldsCheckpoint(
             Documents: documents,
             Revision: revision
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- host row section ----
 

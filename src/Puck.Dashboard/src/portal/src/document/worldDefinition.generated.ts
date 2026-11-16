@@ -6770,7 +6770,7 @@ export type WorldCollision = {
 
 export type WorldCollisionEvents = {
   /**
-   * The most sweep-and-prune candidates inspected for one body while discovering new overlaps. Must be at least MaxPairsPerBody.
+   * The most box-overlapping sweep candidates inspected for one body while discovering new overlaps; a body whose bounding box misses the searching body's is never charged. Must be at least MaxPairsPerBody.
    */
   candidateBudget?: number;
   /**

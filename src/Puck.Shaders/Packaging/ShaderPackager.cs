@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Confinement;
@@ -979,7 +980,7 @@ public sealed partial class ShaderPackager {
     );
     // Where a binary lives inside a package: one file per pass, variant, stage and target under binaries/.
     private static string BinaryPath(string pass, string variant, ShaderStage stage, string target) {
-        var path = $"binaries/{pass}.{variant}.{stage switch { ShaderStage.Vertex => "vert", ShaderStage.Fragment => "frag", _ => "comp" }}.{((target == ShaderPackageBinary.SpirvTarget) ? "spv" : "dxil")}";
+        var path = $"binaries/{pass}.{variant}.{stage switch { ShaderStage.Vertex => "vert", ShaderStage.Fragment => "frag", _ => "comp" }}{ShaderBytecode.FileExtension(hostsOnDirectX: (target != ShaderPackageBinary.SpirvTarget))}";
 
         if (!IsLogicalPath(path: path)) {
             throw new ShaderClosureRefusedException(

@@ -59,8 +59,9 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// does not reuse either solver's admitted pair set: it runs an honest overlap test over selected pairs of the bodies'
 /// collider volumes in full 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
 /// box-involving pair by an oriented per-axis extent test on X, Y, and Z. A kit with no collider has no event volume
-/// and therefore emits no collision pair. Discovery uses deterministic sweep-and-prune and the authored
-/// <see cref="WorldCollisionEvents"/> limits; established pairs are retained first. A saturated crowd therefore has
+/// and therefore emits no collision pair. Discovery uses the broadphase body contacts use (<see cref="FixedSweepGrid"/>,
+/// so both see the same candidates) under the authored <see cref="WorldCollisionEvents"/> limits; established pairs are
+/// retained first. A saturated crowd therefore has
 /// bounded work and memory and may omit lower-priority new proximity pairs. It is deliberately not a claim about
 /// physical contact response.</para>
 /// <para>Frozen bodies retain their region and overlap results. Collection visits awake/changed bodies and their
@@ -100,7 +101,8 @@ public sealed class WorldEventFeed {
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
     private readonly Dictionary<string, bool[]> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
 
-    private readonly WorldSweepBody[] m_collisionBodies;
+    private readonly FixedSweepSphere[] m_collisionBodies;
+    private readonly FixedSweepGrid m_collisionGrid;
     private readonly byte[] m_collisionDegrees;
     private readonly bool[] m_bodyChanged;
     private readonly bool[] m_collisionIncluded;
@@ -127,7 +129,8 @@ public sealed class WorldEventFeed {
         );
 
         m_maximumTrackedPairs = MaximumTrackedPairsForCapacity(capacity: capacity);
-        m_collisionBodies = new WorldSweepBody[capacity];
+        m_collisionBodies = new FixedSweepSphere[capacity];
+        m_collisionGrid = new FixedSweepGrid(capacity: capacity);
         m_collisionDegrees = new byte[capacity];
         m_bodyChanged = new bool[capacity];
         m_collisionIncluded = new bool[capacity];
@@ -137,7 +140,7 @@ public sealed class WorldEventFeed {
         _ = m_overlapping.EnsureCapacity(capacity: m_maximumTrackedPairs);
     }
 
-    /// <summary>Gets the new-pair broadphase candidates inspected by the latest collection pass.</summary>
+    /// <summary>Gets the box-overlapping new-pair broadphase candidates inspected by the latest collection pass.</summary>
     public int CollisionCandidates { get; private set; }
     /// <summary>Gets the bodies whose new-pair search exhausted its candidate budget in the latest pass.</summary>
     public int CollisionLimitedBodies { get; private set; }
@@ -359,8 +362,8 @@ public sealed class WorldEventFeed {
             if (policyChanged) {
                 for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
             }
-            Array.Sort(array: m_collisionBodies, index: 0, length: bodyCount);
         }
+        m_collisionGrid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
 
         void Include(int index) {
             if (
@@ -371,45 +374,34 @@ public sealed class WorldEventFeed {
                 return;
             }
             m_collisionIncluded[index] = true;
-            var radius = body.BroadphaseRadius;
-
-            m_collisionBodies[bodyCount++] = new WorldSweepBody(
+            m_collisionBodies[bodyCount++] = new FixedSweepSphere(
                 Index: index,
-                MinimumX: (body.FixedPosition.X - radius),
-                MaximumX: (body.FixedPosition.X + radius),
-                Radius: radius
+                Center: body.FixedPosition,
+                Radius: body.BroadphaseRadius,
+                Active: (policyChanged || m_bodyChanged[index])
             );
         }
 
-        // Discover new pairs. The x sweep removes distant bodies; Y/Z enclosing-sphere checks remove the other two
-        // axes before the exact compound-volume test. Both the inspected-candidate and retained-degree bounds hold
-        // even when every body occupies the same point.
+        // Discover new pairs through the population's own broadphase: the grid culls on every axis of the bodies'
+        // bounding spheres before it charges a candidate, and an unchanged body searches changed bodies only. The exact
+        // compound-volume test follows. Both the inspected-candidate and retained-degree bounds hold even when every
+        // body occupies the same point.
         var begins = 0;
+        var grid = m_collisionGrid;
 
         for (var leftOrdinal = 0; (leftOrdinal < bodyCount); leftOrdinal++) {
             if (begins >= policy.BeginBudget) {
                 break;
             }
-            var left = m_collisionBodies[leftOrdinal];
+            var left = grid.Sphere(ordinal: leftOrdinal);
 
             if (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) {
                 continue;
             }
-
-            var inspected = 0;
-
-            for (var rightOrdinal = (leftOrdinal + 1);
-                ((rightOrdinal < bodyCount) && (m_collisionBodies[rightOrdinal].MinimumX <= left.MaximumX));
-                rightOrdinal++) {
-                var right = m_collisionBodies[rightOrdinal];
-
-                if (!policyChanged && !m_bodyChanged[left.Index] && !m_bodyChanged[right.Index]) { continue; }
-                if (inspected >= policy.CandidateBudget) {
-                    CollisionLimitedBodies++;
-                    break;
-                }
-                inspected++;
+            grid.BeginPairs(activeOnly: !left.Active, candidateBudget: policy.CandidateBudget, leftOrdinal: leftOrdinal);
+            while (grid.NextPair(rightOrdinal: out var rightOrdinal)) {
                 CollisionCandidates++;
+                var right = grid.Sphere(ordinal: rightOrdinal);
 
                 if (
                     (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) ||
@@ -427,21 +419,11 @@ public sealed class WorldEventFeed {
                     val2: right.Index
                 );
 
-                if (m_overlapping.Contains(item: (a, b))) {
-                    continue;
-                }
-
-                var leftBody = population.EntryBody(index: left.Index)!;
-                var rightBody = population.EntryBody(index: right.Index)!;
-                var radius = (left.Radius + right.Radius);
-                var delta = (leftBody.FixedPosition - rightBody.FixedPosition);
-
                 if (
-                    (FixedQ4816.Abs(value: delta.Y) > radius) ||
-                    (FixedQ4816.Abs(value: delta.Z) > radius) ||
+                    m_overlapping.Contains(item: (a, b)) ||
                     !TestOverlap(
-                    a: leftBody,
-                    b: rightBody
+                    a: population.EntryBody(index: left.Index)!,
+                    b: population.EntryBody(index: right.Index)!
                 )
                 ) {
                     continue;
@@ -460,6 +442,9 @@ public sealed class WorldEventFeed {
                 if (begins >= policy.BeginBudget) {
                     break;
                 }
+            }
+            if (grid.PairsLimited) {
+                CollisionLimitedBodies++;
             }
         }
 

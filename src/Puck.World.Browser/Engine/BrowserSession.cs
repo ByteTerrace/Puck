@@ -489,7 +489,7 @@ public sealed class BrowserSession {
     // A design-time session never changes its simulation rate between ticks, so its engine-tick coordinate is the
     // tick count times the document rate's step width; a resident world (rateHz 0) never advances.
     private ulong EngineTickAt(ulong tick) => ((Definition.SimulationRateHz > 0)
-        ? checked((tick * (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)Definition.SimulationRateHz))))
+        ? checked((tick * Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: ((uint)Definition.SimulationRateHz))))
         : 0UL
     );
 

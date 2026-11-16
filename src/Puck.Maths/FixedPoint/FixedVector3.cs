@@ -53,6 +53,29 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
     /// <summary>Gets the zero vector.</summary>
     public static FixedVector3 Zero => AdditiveIdentity;
 
+    /// <summary>Gets a component by its axis.</summary>
+    /// <param name="axis">The axis: 0 for <see cref="X"/>, 1 for <see cref="Y"/>, 2 for <see cref="Z"/>.</param>
+    /// <returns>The component.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not 0, 1 or 2.</exception>
+    public FixedQ4816 this[int axis] => axis switch {
+        0 => X,
+        1 => Y,
+        2 => Z,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(axis)),
+    };
+
+    /// <summary>Returns the vector with one component replaced.</summary>
+    /// <param name="axis">The axis: 0 for <see cref="X"/>, 1 for <see cref="Y"/>, 2 for <see cref="Z"/>.</param>
+    /// <param name="value">The new component.</param>
+    /// <returns>This vector with the component of <paramref name="axis"/> set to <paramref name="value"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="axis"/> is not 0, 1 or 2.</exception>
+    public FixedVector3 With(int axis, FixedQ4816 value) => axis switch {
+        0 => (this with { X = value }),
+        1 => (this with { Y = value }),
+        2 => (this with { Z = value }),
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(axis)),
+    };
+
     /// <summary>Adds two vectors componentwise.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>

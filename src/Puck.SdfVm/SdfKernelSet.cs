@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The compiled SDF kernels of one backend: each <see cref="SdfKernel"/>'s bytecode, SPIR-V for Vulkan or DXIL for
-/// Direct3D 12. <see cref="Load(string)"/> reads the set from the deployed assets, one file a kernel named by
+/// Direct3D 12. <see cref="Load(ShaderTarget)"/> reads the set from the deployed assets, one file a kernel named by
 /// <see cref="StemOf"/>, and counts every load into <see cref="LoadWork"/>. Each kernel reads the interface
 /// <see cref="LayoutOf"/> names, stamped with the instruction set it was compiled against, and
 /// <see cref="InterfaceMismatch"/> holds a kernel's reflected bindings to this host's.
@@ -60,20 +60,20 @@ public sealed class SdfKernelSet {
         path4: "Sdf"
     );
     /// <summary>The standard deploy location of the pass entry points' bytecode, the deployed tree's passes directory
-    /// (<see cref="PassesDirectory(string)"/>) — <see cref="Load(string)"/>'s default directory, exposed for callers that
+    /// (<see cref="PassesDirectory(string)"/>) — <see cref="Load(ShaderTarget)"/>'s default directory, exposed for callers that
     /// load an individual stage directly (the mesh raster pass's stages, the shared <c>fullscreen.vert</c> vertex stage a
     /// 2D overlay decorator reuses) rather than the whole kernel set.</summary>
     public static string DefaultDirectory => PassesDirectory(tree: DeployedTree);
 
-    /// <summary>Gets the kind counting kernel-set loads: one per <see cref="Load(string, string, WorkCounterSet)"/>
+    /// <summary>Gets the kind counting kernel-set loads: one per <see cref="Load(ShaderTarget, string, WorkCounterSet)"/>
     /// that starts reading, each reading every kernel of one backend.</summary>
     public static WorkKind Loads { get; } = new(name: "shaders.sdf-kernels.loads", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting the bytecode bytes those loads read; SPIR-V and DXIL sets differ in size, so it
     /// is compared within one backend only.</summary>
     public static WorkKind BytecodeBytes { get; } = new(name: "shaders.sdf-kernels.bytecode-bytes", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
 
-    /// <summary>Gets the process's kernel-set load counts, which <see cref="Load(string)"/> and
-    /// <see cref="Load(string, string)"/> count into and a host registers as its <see cref="LoadWorkSourceName"/>
+    /// <summary>Gets the process's kernel-set load counts, which <see cref="Load(ShaderTarget)"/> and
+    /// <see cref="Load(ShaderTarget, string)"/> count into and a host registers as its <see cref="LoadWorkSourceName"/>
     /// source. Counts only go up, and any thread may load.</summary>
     public static WorkCounterSet LoadWork =>
         LoadCounts.Process;
@@ -168,35 +168,34 @@ public sealed class SdfKernelSet {
         path2: "passes"
     );
     /// <summary>Loads the kernel set from the standard deploy location (<see cref="DefaultDirectory"/>).</summary>
-    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
+    /// <param name="target">The backend's shader target: its compiled-kernel extension names the bytecode loaded.</param>
     /// <returns>The loaded kernel set.</returns>
-    public static SdfKernelSet Load(string bytecodeExtension) =>
+    public static SdfKernelSet Load(ShaderTarget target) =>
         Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: DefaultDirectory
         );
     /// <summary>Loads the kernel set from an explicit directory (for hosts with a non-standard asset layout).</summary>
-    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
+    /// <param name="target">The backend's shader target: its compiled-kernel extension names the bytecode loaded.</param>
     /// <param name="directory">The directory holding the compiled <c>sdf-*.comp</c> kernels.</param>
     /// <returns>The loaded kernel set.</returns>
-    public static SdfKernelSet Load(string bytecodeExtension, string directory) =>
+    public static SdfKernelSet Load(ShaderTarget target, string directory) =>
         Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: directory,
             work: LoadWork
         );
     /// <summary>Loads the kernel set from an explicit directory, counting the load and the bytes it read into
     /// <paramref name="work"/> rather than the process's <see cref="LoadWork"/>.</summary>
-    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for Direct3D 12).</param>
+    /// <param name="target">The backend's shader target: its compiled-kernel extension names the bytecode loaded.</param>
     /// <param name="directory">The directory holding the compiled <c>sdf-*.comp</c> kernels.</param>
     /// <param name="work">The counts the load adds to; it must count <see cref="Loads"/> and <see cref="BytecodeBytes"/>.</param>
     /// <returns>The loaded kernel set.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> or <paramref name="directory"/> is
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is
     /// empty, or <paramref name="work"/> does not count <see cref="Loads"/> and <see cref="BytecodeBytes"/>.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
     /// <exception cref="IOException">A kernel file is missing or cannot be read.</exception>
-    public static SdfKernelSet Load(string bytecodeExtension, string directory, WorkCounterSet work) {
-        ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
+    public static SdfKernelSet Load(ShaderTarget target, string directory, WorkCounterSet work) {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(work);
 
@@ -205,13 +204,10 @@ public sealed class SdfKernelSet {
         var bytecode = new ReadOnlyMemory<byte>[Kernels.Count];
 
         foreach (var kernel in Kernels) {
-            var path = Path.Combine(
-                path1: directory,
-                path2: $"{StemOf(kernel: kernel)}.comp{bytecodeExtension}"
-            );
+            var path = target.DeployedPath(directory: directory, stage: "comp", stem: StemOf(kernel: kernel));
 
             // A Windows development build of one project ships DXIL alone (build/Shaders.targets).
-            if ((bytecodeExtension == ".spv") && !File.Exists(path: path)) {
+            if ((target == ShaderTarget.Spirv) && !File.Exists(path: path)) {
                 throw new FileNotFoundException(
                     fileName: path,
                     message: $"The Vulkan kernel '{path}' is missing: a Windows development build ships Direct3D 12 kernels alone. Build with -p:PuckShaderSpirvEnabled=true (or build the solution) to run on Vulkan."

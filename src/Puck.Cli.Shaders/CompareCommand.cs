@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Xml.Linq;
+using Puck.Abstractions.Gpu;
 using Puck.Confinement;
 
 namespace Puck.Cli.Shaders;
@@ -24,7 +25,7 @@ public static class CompareCommand {
     private static readonly string[] DxcItems = ["VertexShaderSource", "FragmentShaderSource", "ComputeShaderSource"];
 
     // The one target every host builds and the comparison holds across hosts.
-    private const string Extension = ".spv";
+    private static readonly string Extension = ShaderBytecode.FileExtension(hostsOnDirectX: false);
     private const string Verb = "shaders compare";
 
     private static bool IsSpirv(string path) => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: Extension);

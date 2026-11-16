@@ -1,5 +1,4 @@
 using Puck.Networking;
-using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -32,12 +31,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteInputInterval(writer, state.Interval);
         writer.WriteArray(items: state.Intervals, writeItem: WriteInputInterval);
         writer.WriteArray(items: state.Owners, writeItem: static (w, participant) => {
-            if (!WorldWireCodec.TryWritePrincipal(w, participant.Principal)) { throw new ArgumentException(message: "input checkpoint principal is invalid"); }
+            WorldWireCodec.WritePrincipal(w, participant.Principal);
             w.WriteInt32(value: participant.Body); w.WriteInt32(value: participant.Generation);
             w.WriteOptional(value: participant.Controller, writeValue: static (w, controller) => {
                 // This is an authority checkpoint, not a submission. World stays forbidden on the live wire.
-                w.WriteBoolean(value: (controller.Actor.Kind == PrincipalKind.World));
-                if ((controller.Actor.Kind != PrincipalKind.World) && !WorldWireCodec.TryWritePrincipal(w, controller.Actor)) { throw new ArgumentException(message: "input controller actor is invalid"); }
+                WriteProgramOrPrincipal(w, controller.Actor);
                 w.WriteString(value: controller.Source); w.WriteUInt64(value: controller.ActivationSequence); w.WriteUInt64(value: controller.ObservationTick);
             });
             w.WriteArray(items: participant.SeatStates, writeItem: static (w, cell) => { w.WriteString(value: cell.Family); w.WriteString(value: cell.State); });
@@ -68,7 +66,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             var principal = WorldWireCodec.ReadPrincipal(ref r);
             var body = r.ReadInt32(); var generation = r.ReadInt32();
             var controller = r.ReadOptional(readValue: static (ref WireReader r) => new WorldInputControllerOrigin(
-                (r.ReadBoolean() ? Principal.World : WorldWireCodec.ReadPrincipal(ref r)), r.ReadRequiredString("input controller source", maxBytes: 256), r.ReadUInt64(), r.ReadUInt64()));
+                ReadProgramOrPrincipal(reader: ref r), r.ReadRequiredString("input controller source", maxBytes: 256), r.ReadUInt64(), r.ReadUInt64()));
             var cells = ReadInputArray(ref r, WorldInputCatalog.MaximumTuples, 8, static (ref WireReader r) =>
                 new WorldInputSeatState(Family: r.ReadRequiredString("input seat family"), State: r.ReadRequiredString("input seat state")));
             var revision = r.ReadUInt32(); var epoch = r.ReadUInt64(); var mapping = r.ReadUInt16();

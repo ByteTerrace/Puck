@@ -830,19 +830,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             current
         );
     }
-    private static bool SameApplications(IReadOnlyList<ControlApplication> first, IReadOnlyList<ControlApplication> second) {
-        if (first.Count != second.Count) {
-            return false;
-        }
-
-        for (var index = 0; (index < first.Count); index++) {
-            if (first[index] != second[index]) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     // Non-Drive permissive defaults shared by seats and the console: Observe over every subject, Control over every
     // screen, Mutate over every section except Grants and the program sections (the console alone is seeded over
     // them, see below), and Edit over the `all` wildcard (Edit's domain is state:<name>).
@@ -1736,16 +1723,13 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         // The default set has exactly one canonical representation — an ABSENT row — so a set composed back to the
         // default never lingers as a stored row that CollectApplicationHolders would then report as a composition.
-        if (SameApplications(
-            first: composed,
-            second: DefaultApplications(principal: principal)
-        )) {
+        if (composed.SequenceEqual(second: DefaultApplications(principal: principal))) {
             _ = m_applications.Remove(key: principal);
         } else {
             m_applications[principal] = composed;
         }
 
-        if (!SameApplications(first: previous, second: composed)) { m_host?.Input.ResetRoute(principal: principal); }
+        if (!previous.SequenceEqual(second: composed)) { m_host?.Input.ResetRoute(principal: principal); }
 
         foreach (var dropped in previous) {
             if (!Holds(

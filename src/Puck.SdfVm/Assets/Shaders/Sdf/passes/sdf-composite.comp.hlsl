@@ -31,6 +31,7 @@
 //   layer meter nothing.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
+#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
 
@@ -161,7 +162,7 @@ bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
     // rest of its own; a debug view leaves it as it is, but for a tier view, which is the final image tinted.
     if (sdfDebugComposesFinal(passGroup.debugMode)) {
         if (!geometryOnly) {
-            exposed = (dot(color, SDF_LUMINANCE) * max(passGroup.exposure, 0.0));
+            exposed = (dot(color, PuckRec709Luminance) * max(passGroup.exposure, 0.0));
             covered = saturate(litColor.a);
         }
         color *= pow(max(passGroup.exposure, 1.0e-12), passGroup.exposeShare);
