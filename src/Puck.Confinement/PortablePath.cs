@@ -52,13 +52,26 @@ public static class PortablePath {
 
         return true;
     }
+    /// <summary>Returns the name before its first dot, so <c>paddleball.world.puck</c> has the stem <c>paddleball</c>; a
+    /// name with no dot is its own stem, and one that begins with a dot has the empty stem. Every compound extension is
+    /// dropped, which <see cref="System.IO.Path.GetFileNameWithoutExtension(string)"/> (the last extension only) does not.</summary>
+    /// <param name="name">A file or directory name, with no directory part.</param>
+    /// <returns>The part of <paramref name="name"/> before its first dot, or all of it when it has none.</returns>
+    public static string StemOf(string name) {
+        var dot = name.IndexOf(value: '.');
+
+        return ((dot < 0)
+            ? name
+            : name[..dot]
+        );
+    }
     /// <summary>Tests whether a path segment names a Windows device, which Windows resolves to the device whatever
     /// directory it sits in and whatever extension follows it: <c>CON</c>, <c>PRN</c>, <c>AUX</c>, <c>NUL</c>,
     /// <c>COM1</c> to <c>COM9</c> and <c>LPT1</c> to <c>LPT9</c> (the superscript digits too), in any case.</summary>
     /// <param name="segment">One path segment, with or without an extension.</param>
     /// <returns><see langword="true"/> when the part of the segment before its first dot names a device.</returns>
     public static bool IsDeviceName(string segment) {
-        var stem = segment.Split(separator: '.', count: 2)[0];
+        var stem = StemOf(name: segment);
 
         return (stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "CON") ||
             stem.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "PRN") ||

@@ -236,7 +236,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
                 // The HRESULT mapping throws a handle that is no fence (E_INVALIDARG) as an ArgumentException and one
                 // this process may not open (E_ACCESSDENIED) as an UnauthorizedAccessException; each is the device
                 // refusing the fence, not a fault of the caller.
-                _ = ((IUnknown*)queried)->Release();
+                Win32D3D11.Release(value: queried);
 
                 return new SharedFenceOrder(
                     Reason: $"ID3D11Device5::{(createOwn ? "CreateFence" : "OpenSharedFence")} refused the fence (0x{exception.HResult:X8})",
@@ -252,7 +252,7 @@ public sealed unsafe class Win32D3D11CompletionSignal : IDisposable {
                 SharedFence: true
             );
         } finally {
-            _ = ((IUnknown*)device5)->Release();
+            Win32D3D11.Release(value: device5);
         }
     }
 }

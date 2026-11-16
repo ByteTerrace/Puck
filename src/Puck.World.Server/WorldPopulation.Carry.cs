@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Puck.Maths;
 using Puck.Physics;
 
@@ -5,6 +6,17 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     private readonly record struct CarryRelationship(int CarrierIndex, int TargetIndex);
+
+    // The broadphase scratch a carried target's neighbour queries share: an image of the awake bodies' poses, which is
+    // Fresh only until a pose it holds changes, and the buffers its queries fill. Created with the first carry, so a
+    // population that never carries pays nothing.
+    private sealed class CarryNeighbourhood(int capacity) {
+        public readonly FixedSweepGrid Grid = new(capacity: capacity);
+        public readonly FixedSweepSphere[] Spheres = new FixedSweepSphere[capacity];
+        public readonly int[] Found = new int[capacity];
+        public readonly int[] Sleepers = new int[capacity];
+        public bool Fresh;
+    }
 
     /// <summary>Attempts to begin <paramref name="carrierIndex"/> carrying <paramref name="targetIndex"/> — see
     /// <see cref="WorldBody.TryBeginCarry"/> for the full refusal set (a carrier kit with no carry facet, a target
@@ -94,20 +106,27 @@ public sealed partial class WorldPopulation {
             return true;
         }
 
-        if (target.Collider is not { } targetCollider) {
+        if (target.Collider is null) {
             return false;
         }
 
         var targetVolumes = target.ScaledColliderVolumes();
+        var neighbourhood = (m_carryNeighbourhood ??= new CarryNeighbourhood(capacity: Capacity));
 
-        for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
-            if (
-                (otherIndex == targetIndex) ||
-                (otherIndex == carrierIndex) ||
-                !m_entries[otherIndex].Active ||
-                (BodyContact(index: otherIndex) != WorldBodyContactMode.Solid) ||
-                (m_entries[otherIndex].Body is not { Collider: { } otherCollider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } other)
-            ) {
+        // A release runs between ticks, after bodies the last pass never saw may have moved.
+        neighbourhood.Fresh = false;
+
+        var neighbours = GatherCarriedNeighbours(
+            carrierIndex: carrierIndex,
+            neighbourhood: neighbourhood,
+            target: target,
+            targetIndex: targetIndex
+        );
+
+        for (var ordinal = 0; (ordinal < neighbours.Length); ordinal++) {
+            var otherIndex = neighbours[ordinal];
+
+            if (!IsCarryNeighbour(index: otherIndex, other: out var other)) {
                 continue;
             }
 
@@ -134,15 +153,20 @@ public sealed partial class WorldPopulation {
     /// <summary>Updates valid attachments from their carriers' final pose after movement, dynamic contact, and tether
     /// correction, then performs the same bounded consistency check. Both carry passes walk the sorted,
     /// preallocated active-relationship table, so a NO-CARRY tick is O(1) and allocation-free rather than scanning
-    /// population capacity; a tick with an active carry still pays one O(Capacity) scan per carried body inside
-    /// <see cref="ResolveCarriedBodyPush"/> (and, on release, <see cref="IsCarriedTargetPenetrating"/>) — a carried
-    /// target can be pushed by or block against ANY other active solid body, not only carriers, so that scan is the
-    /// same broadphase cost <see cref="ResolveDynamicContacts"/> pays, bounded by how many carries are active rather
-    /// than by the tick itself.</summary>
+    /// population capacity. A tick with an active carry builds one <see cref="FixedSweepGrid"/> over the awake solid
+    /// bodies' poses (rebuilt only after a push moved one) and asks it, with the retained sleeping index, for the
+    /// bodies near each carried target inside <see cref="ResolveCarriedBodyPush"/> (and, on release,
+    /// <see cref="IsCarriedTargetPenetrating"/>) — a carried target can be pushed by or block against ANY other active
+    /// solid body, not only carriers, and only the ones whose bounds meet its own are tested.</summary>
     public void UpdateCarriedBodies() => ReconcileCarriedBodies(follow: true);
 
     private void ReconcileCarriedBodies(bool follow) {
         var relationshipIndex = 0;
+
+        if (follow && (m_carryNeighbourhood is { } neighbourhood)) {
+            // Bodies moved since the last pass (integration, contact, tethers), so its awake image is stale.
+            neighbourhood.Fresh = false;
+        }
 
         while (relationshipIndex < m_activeCarryCount) {
             var relationship = m_activeCarries[relationshipIndex];
@@ -191,18 +215,22 @@ public sealed partial class WorldPopulation {
     /// (<see cref="FixedDynamicBodyContacts.TryCorrection"/>); which bodies pair is this population's own call, on
     /// the same terms as <see cref="ResolveDynamicContacts"/>.</summary>
     private void ResolveCarriedBodyPush(WorldBody carrier, int carrierIndex, WorldBody target, int targetIndex) {
-        if (target.Collider is not { } targetCollider) {
+        if (target.Collider is null) {
             return;
         }
 
-        for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
-            if (
-                (otherIndex == targetIndex) ||
-                (otherIndex == carrierIndex) ||
-                !m_entries[otherIndex].Active ||
-                (BodyContact(index: otherIndex) != WorldBodyContactMode.Solid) ||
-                (m_entries[otherIndex].Body is not { Collider: { } otherCollider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } other)
-            ) {
+        var neighbourhood = (m_carryNeighbourhood ??= new CarryNeighbourhood(capacity: Capacity));
+        var neighbours = GatherCarriedNeighbours(
+            carrierIndex: carrierIndex,
+            neighbourhood: neighbourhood,
+            target: target,
+            targetIndex: targetIndex
+        );
+
+        for (var ordinal = 0; (ordinal < neighbours.Length); ordinal++) {
+            var otherIndex = neighbours[ordinal];
+
+            if (!IsCarryNeighbour(index: otherIndex, other: out var other)) {
                 continue;
             }
 
@@ -234,7 +262,65 @@ public sealed partial class WorldPopulation {
             // locomotion body's own planar/vertical-velocity channels, which a rigid body does not read.
             ApplyPairShare(body: other, share: otherShare);
             ApplyPairShare(body: carrier, share: targetShare);
+            // Two bodies moved, so the awake image the next carry queries no longer holds their poses.
+            neighbourhood.Fresh = false;
         }
+    }
+    // Whether the slot holds an active solid body that a carried target pushes and is blocked by: the body must advance
+    // on its own (so not itself carried) and have a collider.
+    private bool IsCarryNeighbour(int index, [NotNullWhen(returnValue: true)] out WorldBody? other) {
+        other = null;
+
+        if (
+            !m_entries[index].Active ||
+            (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
+            (m_entries[index].Body is not { Collider: not null, OrdinaryAdvanceAdmitted: true, CarriedBy: null } body)
+        ) {
+            return false;
+        }
+
+        other = body;
+        return true;
+    }
+    // The slots of the bodies whose bounds meet the carried target's, in ascending slot order (the order every carry
+    // pass applied their corrections in), excluding the target and its carrier. Awake bodies come from an image of
+    // their current poses, rebuilt only after a pose it holds changed; sleepers, which never move, come from the
+    // retained sleeping index. Each slot still passes IsCarryNeighbour and the exact overlap test, so the broadphase
+    // only narrows which slots are asked.
+    private ReadOnlySpan<int> GatherCarriedNeighbours(int carrierIndex, CarryNeighbourhood neighbourhood, WorldBody target, int targetIndex) {
+        if (!neighbourhood.Fresh) {
+            var count = 0;
+
+            foreach (var index in m_awakeBodies) {
+                if (IsCarryNeighbour(index: index, other: out var awake)) {
+                    neighbourhood.Spheres[count++] = new FixedSweepSphere(Index: index, Center: awake.FixedPosition, Radius: awake.BroadphaseRadius);
+                }
+            }
+            neighbourhood.Grid.Rebuild(spheres: neighbourhood.Spheres.AsSpan(start: 0, length: count));
+            neighbourhood.Fresh = true;
+        }
+
+        var radius = target.BroadphaseRadius;
+        var found = neighbourhood.Grid.Query(
+            box: FixedAabb.Around(center: target.FixedPosition, radius: radius),
+            destination: neighbourhood.Found
+        );
+        var sleepers = NearbySleepingBodies(body: target, destination: neighbourhood.Sleepers, reach: radius);
+        var kept = 0;
+
+        for (var ordinal = 0; (ordinal < (found + sleepers)); ordinal++) {
+            var index = ((ordinal < found) ? neighbourhood.Found[ordinal] : neighbourhood.Sleepers[(ordinal - found)]);
+
+            if ((index != targetIndex) && (index != carrierIndex)) {
+                neighbourhood.Found[kept++] = index;
+            }
+        }
+
+        // Awake and sleeping slots never repeat; one sort of both yields slot order.
+        var neighbours = neighbourhood.Found.AsSpan(start: 0, length: kept);
+
+        neighbours.Sort();
+        return neighbours;
     }
     // A carry share through the body's own door: the rigid positional correction for a rigid body, the locomotion one
     // otherwise.
