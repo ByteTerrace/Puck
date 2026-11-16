@@ -1871,28 +1871,37 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: Claude review of disclosure
-decision 3a, then its single build table alongside disclosure steps 5 and 6;
-then the researcher brief's priorities
+Owner: disclosure build lanes · high · Next: implement revised D1 with its
+escalation laws, then the single disclosure build table; the rd2-review
+findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
 - [high] No principal but the host's console can declare a state row, moderate
   a hosted world or operate a world it owns: the write door refuses every
   recipient declaration, and the operator is a principal kind.
   [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
-  is the design (an operator grant, a host audience, contribution scopes with a
-  restricted preparation door and a reserved quota) and answers the write door's
-  first four review findings and the later structural-footprint findings.
-  Next: the lead's Claude design review, then its steps D0a–D0d and D1–D7 as
-  build briefs; a change to a trust boundary, so each step takes an adversarial
-  review ([silent invariants](../development/hazards.md#silent-invariants)).
+  is the revised design: operator grant and Host audience; writable scopes
+  with private contributor policies, structural membership and runtime row/key/
+  byte partitions; declarations-only preparation; a static declaration security
+  closure whose checks recorded reads cannot remove; and validity maintained
+  by each authority commit. It answers H1–H6, M1–M8 and L1–L7 of rd2-review.
+  D1 remains unimplemented: the operator predicate must replace all kind-keyed
+  trust checks together with group and grants-section escalation admission,
+  single-subject admission templates, field-split peer reporting and silo
+  admission. Its law set is in the one [build table](disclosure.md#the-build-order).
+  The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
+  host preparation and authority maintenance land separately as D0b2–D0b4.
+  D4/D5/D7 build closed scopes, D6 opens and migrates private/default-tier input,
+  then D0c switches the remaining general routes. No partial Operate capability
+  is introduced by the memo. Implementation still needs the specified checks
+  and trust-boundary review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
   learns that a withheld declaration sits in a write's footprint (never its
   name). [The structural write footprint](disclosure.md#the-structural-write-footprint)
   chooses declaration entitlement for general writes and closed scopes for
-  lower-tier writes; D0c/D6 implements that choice with the authored input and
-  addon migration. Nothing enforces it yet.
+  lower-tier writes; D6 migrates authored input and addon bindings to protected
+  scopes before D0c closes their old general-write routes. Nothing enforces it yet.
 - [high, before any push to `main`] The write door's footprint is
   enumerated per field, and an Antigravity adversarial review of the read-door
   fix found five high and three medium leaks it missed: state-row references
@@ -1906,15 +1915,15 @@ then the researcher brief's priorities
   the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
   definition; `world.parked` and `world.hud.template`.
   [Decision 3a's structural write footprint](disclosure.md#the-structural-write-footprint)
-  records the reopened evidence, options, restricted transaction, derived
-  validation dependencies, cost counters and a finding-by-finding harness
+  records the reopened evidence, options, restricted transaction, static
+  security closure, supplemental derived dependencies, cost counters and a finding-by-finding harness
   witness. The review's one-versus-two `Placeholder` example is permitted
   disclosure to its named seat; D0a recasts the actual guard-ceiling attack at
   a lower tier and verifies every claimed reproduction. The design is complete,
-  not implemented; its one build table follows the Claude design review.
+  not implemented; its one build table incorporates the Claude design review.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
-  is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
+  is the structural fix and owns the queue: D0b1–D0b4 and step 6, step 0's fuzzer,
   step 0b's principals and step 7's red-team extension.
 - [medium] The deployed debug world hands its whole document to every
   authenticated authority: `debug.puck`, `garden.puck` and `night.puck` author
