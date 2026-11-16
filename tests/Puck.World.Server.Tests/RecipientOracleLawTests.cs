@@ -196,7 +196,7 @@ public sealed class RecipientOracleLawTests {
             answers.Add((view.Admits(new WorldMutation.UpsertPlacement(Principal.Seat(0), probe), out var withheld), withheld));
         }
         Assert.Equal(answers[0], answers[1]);
-        Assert.Equal((false, "pile"), answers[0]);
+        Assert.Equal((false, "probe"), answers[0]);
     }
 
     // An unrelated document edit revalidates the whole authority and recompiles every rule. The compile-time audience
@@ -275,7 +275,7 @@ public sealed class RecipientOracleLawTests {
             outcomes.Add($"{outcome.Code}:{outcome.Detail}");
         }
         Assert.Equal(outcomes[0], outcomes[1]);
-        Assert.Equal($"{WorldRecipientMutations.NotDisclosedCode}:'vault' is not disclosed to seat1", outcomes[0]);
+        Assert.Equal($"{WorldRecipientMutations.NotDisclosedCode}:'tmpl' is not disclosed to seat1", outcomes[0]);
     }
 
     // Whole-document validation prices the rules and every search job on each install, and both numbers reach a
