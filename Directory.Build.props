@@ -135,6 +135,8 @@
             OutputItemType="Analyzer"
             ReferenceOutputAssembly="false"
         />
+        <!-- WaitAnalyzer (WAIT001) holds a project to the one wait door when the project sets PuckWaitRule to true. -->
+        <CompilerVisibleProperty Include="PuckWaitRule" />
     </ItemGroup>
 
     <ItemGroup>

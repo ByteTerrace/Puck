@@ -87,6 +87,8 @@ public sealed class OutcomeAnalyzer : DiagnosticAnalyzer {
         ("Puck.State", "Resolved", "Resolved<T>"),
         ("Puck.State", "Verdict", "Verdict"),
         ("Puck.State.Rules", "RuleOutcome", "RuleOutcome"),
+        // A wait's expiry is the waiter's to handle; a dropped one is a wait that silently gave up.
+        ("Puck.Abstractions.Waiting", "WaitOutcome", "WaitOutcome"),
     ];
     private static readonly (string Namespace, string Name)[] CaseTypes = [
         ("Puck.State", "Verdict"),

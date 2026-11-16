@@ -3,8 +3,8 @@
 Puck.Analyzers provides the Roslyn analyzers used when building the repository.
 It checks strict-enum usage, unmanaged function-pointer calls, environment
 reads, any-address listeners, the GPU trait on test classes, references read
-after their replacement, dropped rule outcomes, and `InternalsVisibleTo`
-grants. It is a
+after their replacement, dropped rule outcomes, blocking waits outside the
+wait door, and `InternalsVisibleTo` grants. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -83,7 +83,7 @@ STALE001 fails the build under `TreatWarningsAsErrors`
 OUTCOME001 to OUTCOME004 hold what the rule-fault types cannot hold by their
 shape ([hazards](../../docs/development/hazards.md#a-result-a-caller-can-drop)).
 OUTCOME001 refuses an expression statement or a discard of an `Outcome`,
-`Resolved<T>`, `Verdict` or `RuleOutcome`, except in a `catch` that rethrows
+`Resolved<T>`, `Verdict`, `RuleOutcome` or a wait's `WaitOutcome`, except in a `catch` that rethrows
 and in the members `OutcomeDiscardAllowlist` names. OUTCOME002 refuses a
 `TryFinite` or `TryNamed` whose bool is dropped, and a `Verdict` or
 `FiringDecision` compared to one case other than `Faulted`. OUTCOME003 refuses a
@@ -112,6 +112,20 @@ of them. DOOR005 refuses a `ref` local, a `ref` field or a `Span<T>` local
 initialised from a write side. Each rule reads one call or one declaration. A
 project that cannot see the holder types, and a test assembly, are held to none
 of them.
+
+WAIT001 reports a thread that blocks outside the engine's one wait door,
+`HostWaits` in `Puck.Abstractions`
+([the design](../../docs/plans/engine-job-system.md#what-enforces-it)). It holds
+a project that sets `<PuckWaitRule>true</PuckWaitRule>`, never a test assembly,
+and fails that project's build under `TreatWarningsAsErrors`. It reads symbols:
+a call, a method group or delegate conversion, or a property read of any
+managed wait family (task waits and results, wait handles, slim events and
+semaphores, `Monitor.Wait`, thread joins, sleeps and spins, blocking
+collections) and of `ConfinedDirectory.AcquireLock`. A call with a constant
+zero timeout polls and passes; a task's `Result` or `GetResult` passes inside a
+branch whose condition tests the same expression's completion. To list a
+project's sites without failing it, build it with `-p:PuckWaitRule=true
+-p:TreatWarningsAsErrors=false -p:CodeAnalysisTreatWarningsAsErrors=false`.
 
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
 reads the compiled assembly's attributes, so it sees an
