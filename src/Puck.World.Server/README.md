@@ -1093,6 +1093,30 @@ contact scratch.
 The checkpoint codec carries this continuation state, identity-owned
 record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 
+A slot's checkpoint entry is its sections and a tail
+(`WorldPopulationEntryCheckpoint`). A section (`IContinuationSection<TSelf>`,
+named by `WorldContinuationSectionKind`) is a value whose encoder and reader
+are static functions of the section alone, so its digest cannot read state
+outside it. `WorldPopulationEntryCheckpoint.VisitSections` is the one statement
+of a slot's sections and their order: the checkpoint's writer and reader and
+the continuation fold all walk it. The tail (`WorldPopulationEntryTail`) holds
+what no section does: whether a resting body had observed the contact field as
+it stood, the profile, and the register values the arena owns.
+`WorldBody.CaptureSections` builds a body's sections from its fields and
+`WorldBody.RestoreSections` writes them back, the medium facts included, so a
+restored body answers `inmedium` as the captured one did before it next
+advances.
+
+A slot's continuation digest folds its folded sections' digests and nothing
+else (the rendered look is captured and never folded). The population's fold
+(`WorldPopulation.AppendContinuationHash`) folds the slots into segments and
+then, beside them, one bit for the parked rigid bodies' shared observation,
+each asleep kit body's own, and each profiled slot's projection by content, so
+an identity edit that writes no body still moves the hash. A replay scope's
+fold takes each named body's slot digest and the digest of its whole tail.
+`world.counters world.tick` counts each section's encodes and bytes
+(`WorldTickWork.SectionEncodes`, `WorldTickWork.SectionBytes`).
+
 Body-frame policy is compiled separately from that provider seam. Every body
 uses opposed solved gravity (or the contact field's ambient up fallback) as its
 ambient frame. Authoring `GradientDerivedUp` additionally selects
