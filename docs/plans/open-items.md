@@ -42,8 +42,8 @@ experimental worlds have that it lacks is ported into it
 
 **First, before any push to `main`: the session read doors' remaining
 leaks** [high, from an adversarial review of the read-door fix by Codex Sol;
-findings argued from source, at `.claude/scratch/w4-review-read-doors.md` on
-the lead machine]:
+findings argued from source; the commit that filed them carries the
+review's summary]:
 
 - Write admission for a session that cannot observe still answers through a
   refusal that names or reveals withheld rows
