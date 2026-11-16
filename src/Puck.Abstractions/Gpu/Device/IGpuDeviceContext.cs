@@ -21,10 +21,10 @@ public interface IGpuDeviceContext {
     /// device. Reading it never brings the device up. It is recorded beside counted work and never branched on.</summary>
     GpuDeviceIdentity? Identity { get; }
     /// <summary>Gets what the device can bind — descriptor sets or root-signature words, push-constant bytes, per-stage
-    /// descriptor limits, and Direct3D 12's binding tier, root signature version, shader model and heap sizes — as its
+    /// descriptor limits, constant-buffer view bytes, and Direct3D 12's binding tier, root signature version, shader model and heap sizes — as its
     /// backend reported it when the device was created, or <see langword="null"/> before the device is brought up or
-    /// when the host has no real device. Reading it never brings the device up. Like <see cref="Identity"/> it is
-    /// recorded and never branched on.</summary>
+    /// when the host has no real device. Reading it never brings the device up. It is recorded beside
+    /// <see cref="Identity"/>; view and heap limits also bound resource admission.</summary>
     GpuDeviceCapabilities? Capabilities { get; }
     /// <summary>Gets what the device's memory is — whether it is coherent unified memory, how much is device-local, its
     /// largest device-local heap, and how much of it the host can write directly — as its backend reported it when the
@@ -32,7 +32,17 @@ public interface IGpuDeviceContext {
     /// host has no real device. Reading it never brings the device up. Unlike <see cref="Identity"/> it is branched on:
     /// <see cref="GpuResidency.Select"/> chooses a region's residency from it.</summary>
     GpuMemoryProfile MemoryProfile { get; }
+    /// <summary>Gets the device's latest memory budget reading: for each segment, what its API says the process may use
+    /// and is using. Reading it makes no driver call and never brings the device up; the reading changes only through
+    /// <see cref="RefreshMemoryReading"/>. A device not brought up reads <see cref="GpuMemoryReading.Absent"/>, and one
+    /// lost or being recreated reads <see cref="GpuMemoryReadingState.Lost"/>. Safe to read from any thread.</summary>
+    GpuMemoryReading MemoryReading { get; }
 
+    /// <summary>Refreshes <see cref="MemoryReading"/> when its device marked it stale: on Direct3D 12 when the budget-change
+    /// event is set, tested without waiting; on Vulkan, whose budget has no signal, at a low fixed rate. A refresh that
+    /// finds nothing stale makes no driver call, and one never brings the device up. The host calls it once a frame on
+    /// its frame thread, at the top of the frame.</summary>
+    void RefreshMemoryReading();
     /// <summary>Blocks until the device is idle — all queued work has completed. A device that was never brought up
     /// has run no work, so waiting on it returns at once and never attempts the bring-up; teardown relies on this.</summary>
     void WaitIdle();

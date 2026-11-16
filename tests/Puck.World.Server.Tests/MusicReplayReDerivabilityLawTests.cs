@@ -162,14 +162,14 @@ public sealed class MusicReplayReDerivabilityLawTests {
         fixture.Step();
 
         var stream = new List<string> {
-            fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text,
+            fixture.Server.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.MusicState(Index: 1)).Text,
         };
 
         for (var step = 0; (step < 1); step++) {
             fixture.Step();
         }
 
-        stream.Add(item: fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text);
+        stream.Add(item: fixture.Server.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.MusicState(Index: 1)).Text);
 
         return stream;
     }

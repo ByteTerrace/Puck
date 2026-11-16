@@ -1,6 +1,5 @@
 using Puck.Abstractions;
 using Puck.Storage;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -41,7 +40,7 @@ public sealed partial class WorldConfiguredExtensions {
                 : () => row.Server.CaptureExternalOperationCause(hostRow: instances.CaptureRow(row: row))),
             configuration: configuration,
             extensions: extensions,
-            link: (row.Link as IPrincipalServerLink),
+            link: row.Link,
             server: row.Server,
             store: store,
             target: target,

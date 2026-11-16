@@ -26,7 +26,7 @@ public sealed class WorldParticipantContext {
     public required PuckExtensionSet Extensions { get; init; }
     /// <summary>Gets the world link every read and action crosses, stamped with <see cref="Principal"/>. Use it only
     /// from <see cref="IWorldParticipant.Pump"/>'s thread.</summary>
-    public required IPrincipalServerLink Link { get; init; }
+    public required IServerLink Link { get; init; }
     /// <summary>Gets the configured participant name.</summary>
     public required string Name { get; init; }
     /// <summary>Gets the acting principal.</summary>

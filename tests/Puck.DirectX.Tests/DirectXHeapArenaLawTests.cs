@@ -29,6 +29,7 @@ public sealed unsafe class DirectXHeapArenaLawTests {
     public void ResourcesShareHeapsAndFindTheirRangesThroughTheirTokens() {
         var calls = new FakeHeapCalls();
         var work = new GpuDeviceMemoryWork(backend: "directx");
+        work.BeginDevice(device: 0xD0, segments: GpuMemorySegments.FromDirectX(profile: default));
         var arena = new DirectXHeapArena(calls: calls, device: 0xD0, memory: work);
         var upload = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
         var gpu = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT;
@@ -141,6 +142,7 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         public bool FailPlacement { get; set; }
         public bool FailTag { get; set; }
 
+        public D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType) => default;
         public D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(D3D12_RESOURCE_DESC* description) => new() {
             Alignment = 65536UL,
             SizeInBytes = ((description->Dimension == D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER) ? ((description->Width + 65535UL) & ~65535UL) : 65536UL),

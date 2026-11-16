@@ -458,7 +458,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         router: seatRouter,
         slot: slot
     ).Text;
-    private bool TryRoutedSeatQuery(in WireArgs args, Func<int, WorldQuery> query, out CommandResult result, Principal? caller = null) {
+    private bool TryRoutedSeatQuery(in WireArgs args, Func<int, WorldQuery> query, Principal caller, out CommandResult result) {
         result = default;
         if (
             !WorldArgs.TryParseIndex(

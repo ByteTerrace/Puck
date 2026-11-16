@@ -120,7 +120,8 @@ public static class GpuWorkCounting {
     /// <exception cref="ArgumentException"><paramref name="submitter"/> is already counting.</exception>
     public static IGpuQueueSubmitter Wrap(IGpuQueueSubmitter submitter, GpuWorkLedger ledger) {
         var inner = Guard(instance: submitter, ledger: ledger);
-        ledger.BindTransferQueue(inner);
+
+        ledger.BindTransferQueue(queue: inner);
         return new CountingQueueSubmitter(inner: inner, ledger: ledger);
     }
     /// <summary>Wraps a shader-module factory. Counts the modules created; the modules themselves are the backend's,
@@ -316,8 +317,10 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.IndirectDispatchesColumn);
     }
+
     public bool CanDrawIndirectCount =>
         inner.CanDrawIndirectCount;
+
     // The draws and vertices of the commands are the GPU's to count (GpuKernelCounters.DrawnWords); the call counts here.
     public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) {
         inner.DrawIndirectCount(
@@ -349,8 +352,10 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
+
     public uint CopyRowAlignment =>
         inner.CopyRowAlignment;
+
     public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) {
         inner.CopyBufferToImage(
             bufferHandle: bufferHandle,
@@ -429,6 +434,8 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
     }
 }
 file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBindings {
+    public ulong MaxConstantBufferBytes => inner.MaxConstantBufferBytes;
+
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         Created(
             created: inner.AllocateSet(
@@ -554,6 +561,7 @@ file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger
             objA: counting?.Ledger,
             objB: Ledger
         ) ? counting : null);
+
         _ = Ledger.Seal(fence: owned);
     }
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
@@ -671,9 +679,9 @@ file sealed class CountingImageFactory(IGpuImageFactory inner, GpuWorkLedger led
         Created(
             created: inner.CreateDepth(
                 attachment: in attachment,
-                sampled: sampled,
                 height: height,
                 name: name,
+                sampled: sampled,
                 width: width
             ),
             lifetimeIndex: GpuWork.ImagesCreatedIndex

@@ -257,7 +257,7 @@ public sealed class SurfaceCompositor : IDisposable {
                 bufferHandle: m_block.BufferHandle,
                 bufferSize: m_block.SizeBytes,
                 descriptorSetHandle: m_descriptorSets[setIndex],
-                device: device.Commands
+                device: device
             );
             drawCommandsPerSet[setIndex] = [
                 new VulkanDrawCommand(

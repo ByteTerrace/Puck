@@ -154,6 +154,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets this fake as every one of its own services.</summary>
     public GpuDeviceServices Services => field ??= new GpuDeviceServices {
         Bindings = this,
@@ -412,7 +414,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         NoteUse(commandBuffer: commandBufferHandle, handle: destinationImageHandle, use: "copy to");
         CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
     }
+
     public uint CopyRowAlignment => 1U;
+
     public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) =>
         NoteUse(commandBuffer: commandBufferHandle, handle: imageHandle, use: "copy to");
     public void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) =>
@@ -580,6 +584,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
 
     public long HeapReleaseRevision => (DescriptorHeap?.ReleaseRevision ?? 0L);
+    public ulong MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
 
     public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         GpuDescriptorAdmission? admission = null;
@@ -870,7 +875,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     private sealed class FakeFence(FakePipelineGpu gpu, Created created) : IGpuSubmissionFence {
         // The submission the fence was last armed with, in queue order.
         public long Number;
-
         // Whether the fence's submission never reached the queue.
         public bool Abandoned;
 

@@ -64,7 +64,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     /// is configured and <paramref name="link"/> is <see langword="null"/>.</exception>
     public static WorldConfiguredExtensions Create(WorldExtensionConfiguration configuration, PuckExtensionSet extensions,
         WorldServer server, IObjectBlobStore store, ObjectStorageTarget target, Func<string> captureCause,
-        TimeProvider? timeProvider = null, IPrincipalServerLink? link = null) {
+        TimeProvider? timeProvider = null, IServerLink? link = null) {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(extensions);
         ArgumentNullException.ThrowIfNull(server);

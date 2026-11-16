@@ -14,8 +14,8 @@ MCP adapter share one authority boundary instead of growing separate game APIs.
 ## The boundary
 
 `WorldAgentBridge` controls one 0-based body index as one `Principal`. Its
-constructor takes an `IPrincipalServerLink`, which is the explicit-principal
-form of Puck's in-process server link, an `IWorldAgentDispatcher`, and a
+constructor takes an `IServerLink` (Puck's in-process server link, whose every
+query names its principal), an `IWorldAgentDispatcher`, and a
 function that returns the current `WorldChannelTable`.
 
 Puck's in-process link must be used from the simulation thread, so the usual

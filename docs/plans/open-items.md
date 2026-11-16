@@ -37,60 +37,56 @@ built on the engine's systems stresses them, and what it surfaces is fixed at
 the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high, before any push to `main`] [Security review](#security-review):
-   the session read doors' remaining leaks, and with them the publication
-   buffer's two misuse cases ([engine job system](#engine-job-system)).
-2. [high] [Residency and streaming](#residency-and-streaming): the
+1. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0 (a crossing read as a player takes it),
    steps 1 and 2 beside each other, and step 7's prototype with a GPU grant.
-3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
+2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-4. [high] [Engine job system](#engine-job-system): the memo's next step,
+3. [high] [Engine job system](#engine-job-system): the memo's next step,
    which after the scheduling stage's remainder is the control plane's phase
    and bounded waits, then the pool's design.
-5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
+4. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
-6. [high] [Refactoring campaign](#refactoring-campaign): the duplication
+5. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-7. [high] [The visual bar](#the-visual-bar): the caldera water as its first
+6. [high] [The visual bar](#the-visual-bar): the caldera water as its first
    proof, built by [Water](#water)'s lanes A2 to A5.
-8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
+7. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-9. [high] [Lighting and GI](#lighting-and-gi): the probe cache reader's spin
-   now, then what the GPU trace still owes under a moving sun, then a cold
-   area lit the moment a view arrives.
-10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
-    one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
-    V1a, with `lane/g5` landed beside them.
-11. [high] [Transmission](transmission.md): its implementation lanes in order;
+8. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
+   under a moving sun, then a cold area lit the moment a view arrives.
+9. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+   one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
+   V1a, with `lane/g5` landed beside them.
+10. [high] [Transmission](transmission.md): its implementation lanes in order;
     the defects it closes are in [Lighting and GI](#lighting-and-gi).
-12. [high] [Bake proportional to change](#bake-proportional-to-change): one
+11. [high] [Bake proportional to change](#bake-proportional-to-change): one
     store for both backends, then the collapse's acceptance search.
-13. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
+12. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
     and 6, with step 0's fuzzer and step 0b's principals.
-14. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
+13. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-15. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
+14. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
     release's three causes and the production deploy, which a push to `main`
     needs.
-16. [high] [Transfers, federation and server](#transfers-federation-and-server):
+15. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
-17. [high] [Test runner and replay](#test-runner-and-replay): the body's write
+16. [high] [Test runner and replay](#test-runner-and-replay): the body's write
     door from step D5.
-18. [medium] [Certified field contact](#certified-field-contact): box and
+17. [medium] [Certified field contact](#certified-field-contact): box and
     ellipsoid bodies, then clearance close to a slope.
-19. [medium] [Language and authoring](#language-and-authoring) and
+18. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the spelling pairs, the overlay text advance.
-20. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
+19. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
-21. Then, by ordinary priority:
+20. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
@@ -320,13 +316,6 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
-- [high] `PublishBuffer<T>` admits two misuses its stress harness reproduced
-  (every balanced race passed): a `Lease` disposed twice decrements its slot's
-  reader count twice, which corrupts another reader's count and strands the
-  slot, and `Publish(in T)` called from inside a fill is unguarded, where the
-  fill overload refuses. The 48-bit reader count can also roll over in
-  principle. Make a double dispose and a reentrant publish refuse by
-  construction.
 - [medium · unconfirmed] `WorldDocument.AttachSink` delivers an attach primer
   that reaches `WorldDisclosureImages.Current` without taking
   `WorldServer.AuthorityGate`, while in-tick delivery and ordered-domain
@@ -404,6 +393,15 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   retry. Move the ring's acquire onto that index mechanism, keeping its fixed
   slot count; a GPU-lifetime change that needs a camera or probe-kernel run.
   Owner: platform.
+- [medium] The publication-reader audit also found compare/exchange retry
+  loops in `SingleSlotPublication.TryAcquireLatest` and `Release`
+  (`src/Puck.Platform/SingleSlotPublication.cs`), and the scene-claim reader
+  `SdfMeshIrradianceScene.Acquire` (`src/Puck.SdfVm/SdfMeshIrradianceScene.cs`).
+  Make acquisition bounded without waiting on another participant; keep GPU
+  lifetime checks with the single-slot change. `CodeDerivedTable.CurrentGeneration`
+  (`src/Puck.Abstractions/CodeDerivedTable.cs`) also retries while installing a
+  changed code generation; its steady read returns directly. Owner: job system
+  with platform and rendering.
 
 #### Memory ownership
 
@@ -916,7 +914,6 @@ in [sweep](#sweep-and-visual-checks).
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
-the probe cache reader's spin, dispatched now; then
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
 the CPU reference; then a cold area lit from the coarser levels or the sky
@@ -927,11 +924,6 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
-- [high, dispatch now] The probe cache's reader retries with
-  `Thread.SpinWait` while an entry is published, which breaks the host rule
-  (AGENTS.md: no spinning in place of a wait). Replace it with stable
-  publication or a host wait; it does not wait for the streaming plan's
-  lighting step.
 - [high] A view-driven retier relights the whole window: a landed retier is a
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
@@ -1820,21 +1812,15 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: the session read doors'
-remaining leaks, before any push to `main`; then the researcher brief's
-priorities ([security review](../development/security-review.md)).
+Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
+and 6; then the researcher brief's priorities
+([security review](../development/security-review.md)).
 
-- [high, before any push to `main`] The session read doors still leak, each
-  argued from source:
-  - Write admission for a session that cannot observe answers through a
-    refusal that names or reveals withheld rows
-    (`WorldDocument.StateTransformAdmission`), and a Frames session holding
-    Edit grants is still blocked from writing. One write door that neither
-    reveals a withheld row's existence nor depends on observing.
-  - `body.where` (`PlayerCommandModule.Movement`) answers through authority
-    queries stamped as the console instead of the session's read door.
-  - [medium] `world.peers` (`WorldNetworkCommandModule`) exposes live
-    population membership without a recipient read view.
+- [medium] The write footprint reads declarations a recipient below `Replica`
+  is not delivered, so a `Frames` or `Presentation` session holding Edit
+  learns that a withheld declaration sits in a write's footprint (never its
+  name). [The disclosure plan's open items](disclosure.md#open-items) hold the
+  two candidates.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
@@ -2732,41 +2718,13 @@ validation that makes the skill suites believable.
 
 ### Refactoring campaign
 
-Owner: the lead, one implementer lane per group · high · Next: the GPU region
-growth merge (with the uniform view limit enforced in `Grow`), then the two
-overlay writers, the dead march-step budget and the groups below, largest
-payoff first; the two snapshot mirrors wait for the presentation view. The
+Owner: the lead, one implementer lane per group · high · Next: the body
+gate-program merge and the groups below, largest payoff first; the two snapshot
+mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
-- [medium] Uniform region growth accepts an unbindable size
-  (`GpuRegion.Grow`): a 65,536-byte uniform ring can grow to 65,792 bytes,
-  since the check accepts any multiple of 256, past Direct3D 12's 4,096
-  float4 constant-buffer elements
-  ([constants](https://learn.microsoft.com/en-us/windows/win32/direct3d12/constants))
-  and a Vulkan device's `maxUniformBufferRange`
-  ([device limits](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceLimits.html)).
-  `IGpuBindings.RequireConstantBufferSize` checks only alignment. Expose the
-  view limit as a shared capability of both backends and enforce it at
-  uniform-region construction, growth and descriptor writes. No production
-  caller grows one yet.
-- [medium] Delete the retired march-step budget:
-  `WorldDynamicResolutionSignal.Steps` and
-  `WorldDynamicResolution.StepBudgetPerPixel` (read through
-  `MarchStepBudgetPerPixel` in `WorldFrameLoadSource`) are calibrated against
-  the deleted per-pixel march, so the offscreen fallback's signal reads near
-  zero and the grid never falls. Rebase the fallback on a per-frame signal the
-  frame still has, or delete it with its mentions in the rendering plan and
-  `frame-rendering.md`.
-- [medium] Code and its own documentation disagree in two places
-  `puck docs links` does not read: `documents-rules.md` says a `setState` or
-  `addState` effect is submitted only when it could move the destination, but
-  the code that enforces it was not found, and `WorldServer.SaveEffectTap`'s
-  XML doc names the deleted `FireWorldRuleEffect`;
-  `SdfFieldEvaluator.SdfSuperellipsoid`'s comment claims exact 1-Lipschitz
-  for every radius while the hazards page keeps its small-radius disagreement
-  open.
 - [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
   beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
   stack, but body predicates keep a separate dispatch over recency clocks,

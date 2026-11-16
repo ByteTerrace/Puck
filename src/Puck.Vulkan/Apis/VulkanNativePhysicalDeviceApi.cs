@@ -41,10 +41,14 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const int LimitsMaxPerStageStorageImagesOffset = (PhysicalDeviceLimitsOffset + 84);
     private const int LimitsMaxPerStageUniformBuffersOffset = (PhysicalDeviceLimitsOffset + 72);
     private const int LimitsMaxPushConstantsSizeOffset = (PhysicalDeviceLimitsOffset + 32);
+    // maxUniformBufferRange follows the six image/texel-buffer dimension uints.
+    private const int LimitsMaxUniformBufferRangeOffset = (PhysicalDeviceLimitsOffset + 24);
     private const uint StructureTypePhysicalDeviceDriverProperties = 1000196000;
     private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
     private const uint StructureTypePhysicalDeviceProperties2 = 1000059001;
+    private const uint StructureTypePhysicalDeviceMemoryProperties2 = 1000059006;
+    private const uint StructureTypePhysicalDeviceMemoryBudgetProperties = 1000237000;
 
     private readonly IAllocator m_allocator;
 
@@ -77,6 +81,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             *((uint*)(properties + LimitsMaxImageDimension2DOffset))
         );
     }
+
     private static unsafe void ValidatePhysicalDeviceInputs(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 
@@ -267,6 +272,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             return new GpuDeviceCapabilities(
                 Backend: "vulkan",
+                MaxConstantBufferBytes: Read(offset: LimitsMaxUniformBufferRangeOffset),
                 MaxBoundDescriptorSets: Read(offset: LimitsMaxBoundDescriptorSetsOffset),
                 MaxPerStageResources: Read(offset: LimitsMaxPerStageResourcesOffset),
                 MaxPerStageSampledImages: Read(offset: LimitsMaxPerStageSampledImagesOffset),
@@ -317,6 +323,30 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
     /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        var deviceType = ((uint)GetPhysicalDeviceType(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        ));
+
+        return ReadMemory(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            read: (types, heaps) => GpuMemoryProfile.FromVulkan(deviceType: deviceType, memoryHeaps: heaps, memoryTypes: types)
+        );
+    }
+    /// <inheritdoc/>
+    public GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemoryProfile profile) =>
+        ReadMemory(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle,
+            read: (types, heaps) => GpuMemorySegments.FromVulkan(memoryHeaps: heaps, memoryTypes: types, profile: profile)
+        );
+
+    // The memory types and heaps of vkGetPhysicalDeviceMemoryProperties, in their native { propertyFlags, heapIndex } and
+    // { size, flags } pairs, handed to whatever reads them.
+    private delegate T MemoryRead<T>(ReadOnlySpan<uint> memoryTypes, ReadOnlySpan<ulong> memoryHeaps);
+
+    private static T ReadMemory<T>(VulkanInstanceCommands instance, nint physicalDeviceHandle, MemoryRead<T> read) {
         ValidatePhysicalDeviceInputs(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
@@ -326,20 +356,68 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             out var memory
         );
 
-        return GpuMemoryProfile.FromVulkan(
-            deviceType: ((uint)GetPhysicalDeviceType(
-                instance: instance,
-                physicalDeviceHandle: physicalDeviceHandle
-            )),
-            memoryHeaps: new ReadOnlySpan<ulong>(
-                length: (((int)memory.MemoryHeapCount) * 2),
-                pointer: memory.MemoryHeapPairs
-            ),
-            memoryTypes: new ReadOnlySpan<uint>(
+        return read(
+            new ReadOnlySpan<uint>(
                 length: (((int)memory.MemoryTypeCount) * 2),
                 pointer: memory.MemoryTypePairs
+            ),
+            new ReadOnlySpan<ulong>(
+                length: (((int)memory.MemoryHeapCount) * 2),
+                pointer: memory.MemoryHeapPairs
             )
         );
+    }
+    /// <inheritdoc/>
+    /// <remarks>A heap's reported budget is kept as the driver reports it: the specification bounds it by the heap's
+    /// size and requires it non-zero, which a reading shows rather than corrects.</remarks>
+    public GpuSegmentReading[] ReadMemoryBudget(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemorySegments segments, bool budgetEnabled, out bool estimated) {
+        ArgumentNullException.ThrowIfNull(argument: segments);
+        ValidatePhysicalDeviceInputs(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var readings = new GpuSegmentReading[segments.Segments.Count];
+        var getMemoryProperties2 = instance.GetPhysicalDeviceMemoryProperties2;
+
+        estimated = (!budgetEnabled || (getMemoryProperties2 is null));
+
+        if (estimated) {
+            for (var index = 0; (index < readings.Length); index++) {
+                var segment = segments.Segments[index];
+
+                readings[index] = new GpuSegmentReading(AvailableForReservation: null, Budget: segment.Bytes, CurrentReservation: null, Segment: segment, Usage: null);
+            }
+
+            return readings;
+        }
+
+        var budget = new VkPhysicalDeviceMemoryBudgetPropertiesEXT {
+            SType = StructureTypePhysicalDeviceMemoryBudgetProperties,
+        };
+        var properties2 = new VkPhysicalDeviceMemoryProperties2 {
+            PNext = ((nint)(&budget)),
+            SType = StructureTypePhysicalDeviceMemoryProperties2,
+        };
+
+        getMemoryProperties2(
+            physicalDeviceHandle,
+            ((nint)(&properties2))
+        );
+
+        for (var index = 0; (index < readings.Length); index++) {
+            var segment = segments.Segments[index];
+
+            readings[index] = new GpuSegmentReading(
+                AvailableForReservation: null,
+                Budget: budget.HeapBudget[segment.Index],
+                CurrentReservation: null,
+                Segment: segment,
+                Usage: budget.HeapUsage[segment.Index]
+            );
+        }
+
+        return readings;
     }
     /// <inheritdoc/>
     public string GetDeviceName(VulkanInstanceCommands instance, nint physicalDeviceHandle) {

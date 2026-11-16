@@ -41,6 +41,10 @@ public sealed unsafe class VulkanInstanceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, uint, nint, void> GetPhysicalDeviceFormatProperties;
     /// <summary>The <c>vkGetPhysicalDeviceMemoryProperties</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> GetPhysicalDeviceMemoryProperties;
+    /// <summary>The <c>vkGetPhysicalDeviceMemoryProperties2</c> entry point, which takes a
+    /// <c>VkPhysicalDeviceMemoryProperties2</c> chain; core in Vulkan 1.1; <see langword="null"/> on an older
+    /// instance.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceMemoryProperties2;
     /// <summary>The <c>vkGetPhysicalDeviceProperties</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceProperties;
     /// <summary>The <c>vkGetPhysicalDeviceProperties2</c> entry point; core in Vulkan 1.1; <see langword="null"/> on an older instance.</summary>
@@ -131,6 +135,10 @@ public sealed unsafe class VulkanInstanceCommands {
         ));
         GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)procedures.ResolveInstanceProc(
             functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
+            instanceHandle: instanceHandle
+        ));
+        GetPhysicalDeviceMemoryProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveOptionalInstanceProc(
+            functionName: "vkGetPhysicalDeviceMemoryProperties2"u8,
             instanceHandle: instanceHandle
         ));
         GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveInstanceProc(

@@ -23,10 +23,11 @@ internal sealed class WorldRulesCommandModule(IServerLink link) : ICommandModule
             name: "world.rules",
             description: "Reads every live compiled rule back: its name, its mode, its gate-held latch (latch=held when the gate held at the last evaluation — an edge rule will not fire again until it lets go; latch=open when it did not, so the next tick the gate holds is a crossing), the gate's OWN PREDICATES spelled out (an 'all' gate prints its conjuncts, never a type name), and its effects.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => {
+            handler: context => {
                 var result = default(CommandResult);
 
                 link.Query(
+                    principal: context.Principal,
                     query: new WorldQuery.Rules(),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };

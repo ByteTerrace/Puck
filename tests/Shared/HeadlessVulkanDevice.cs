@@ -50,6 +50,8 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
     public VulkanInstance Instance { get; }
     public VulkanLogicalDevice LogicalDevice { get; }
     public GpuMemoryProfile MemoryProfile => LogicalDevice.MemoryProfile;
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets the physical device's name, as its driver reports it.</summary>
     public string Name { get; }
     public VkPhysicalDevice PhysicalDevice => LogicalDevice.PhysicalDevice;

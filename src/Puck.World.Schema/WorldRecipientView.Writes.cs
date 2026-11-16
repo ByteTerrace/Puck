@@ -29,23 +29,33 @@ public sealed partial class WorldRecipientView {
     /// when its key is outside the domain, and a write that removes a domain key is refused when a dependent row still
     /// holds it (<see cref="StateArena.TryValidateRelations(ReadOnlySpan{bool}, out string)"/>), so the write's verdict
     /// reads the current members of each; every one must read whole or the verdict would be an oracle over hidden
-    /// members. Absent declarations carry no restriction; ordinary composition diagnoses them. A declared set admits
-    /// only if every row its expression reads admits.</summary>
+    /// members. A declared set admits only if every row its expression reads admits. A name that resolves to no row
+    /// and no set is refused exactly as a withheld row is, so the write door never tells a declared row the recipient
+    /// cannot read from one that does not exist.</summary>
+    /// <remarks>Every write question this view answers is the recipient's declared policy alone
+    /// (<see cref="WritesWhole"/>): neither the delivery ceiling nor whether the recipient observes now enters it, so a
+    /// session admitted at <see cref="WorldDisclosureTier.Frames"/> writes a public row its grants name, and no refusal
+    /// reads observation state.</remarks>
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
         if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return AdmitsSet(row); }
         var ordinal = handle.Ordinal;
         var domain = Arena.Layout[ordinal].DomainOrdinal;
-        if (!ReadsWhole(ordinal) || ((domain >= 0) && !ReadsWhole(domain))) { return false; }
+        if (!WritesWhole(ordinal) || ((domain >= 0) && !WritesWhole(domain))) { return false; }
         foreach (var dependent in Arena.Catalog.DependentRows(ordinal)) {
-            if (!ReadsWhole(dependent)) { return false; }
+            if (!WritesWhole(dependent)) { return false; }
         }
         return true;
     }
-    /// <summary>Admits an incoming row declaration: the row it replaces or adds (<see cref="Admits(string)"/>) and every
-    /// row the declaration itself names (its token domain, its live audience, the token and code rows of a derived
-    /// board, the phase protocol it follows), since validating the declaration reads their current members whether or
-    /// not the row exists yet. A name that resolves to no row adds nothing; composition diagnoses it.</summary>
+    // The one write-side policy question: whether the row's declarations can withhold any member from this recipient.
+    // It is the read door's question without the ceiling and live observation (Includes), which restrict what the
+    // recipient's stream carries, never what its policy lets it read.
+    private bool WritesWhole(int row) => Observer.ReadsWhole(row);
+    /// <summary>Admits an incoming row declaration: the row it replaces (<see cref="Admits(string)"/>, which refuses a
+    /// name no row holds, so a recipient replaces a row it reads whole and adds none) and every row the declaration
+    /// itself names (its token domain, its live audience, the token and code rows of a derived board, the phase
+    /// protocol it follows), since validating the declaration reads their current members. A named row that does not
+    /// exist is refused as a withheld one is.</summary>
     /// <param name="declaration">The submitted row.</param>
     /// <param name="row">The first withheld row, or empty.</param>
     public bool AdmitsDeclaration(WorldStateRow declaration, out string row) {
@@ -60,16 +70,16 @@ public sealed partial class WorldRecipientView {
     }
     private bool AdmitsNamed(string? name, out string row) {
         row = name ?? string.Empty;
-        return (name is null) || !Arena.Catalog.TryResolve(StateLane.Document, name, out var handle) || ReadsWhole(handle.Ordinal);
+        return (name is null) || (Arena.Catalog.TryResolve(StateLane.Document, name, out var handle) && WritesWhole(handle.Ordinal));
     }
     // Keep the set-name predicate's capture off successful direct-row admission, including bound guest writes.
     private bool AdmitsSet(string row) {
-        if (Source.Sets.FirstOrDefault(set => set.Name.Value == row) is not { } set) { return true; }
+        if (Source.Sets.FirstOrDefault(set => set.Name.Value == row) is not { } set) { return false; }
         var reads = Writes.GetValue(this, static _ => new()).Sets;
         reads.Clear();
         RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(Source), set, reads);
         foreach (var ordinal in reads) {
-            if (!ReadsWhole(ordinal)) { return false; }
+            if (!WritesWhole(ordinal)) { return false; }
         }
         return true;
     }
@@ -79,21 +89,23 @@ public sealed partial class WorldRecipientView {
     /// cells before the kernel runs. A transform that does not resolve adds nothing here: its refusal comes from the
     /// declarations alone, at composition.</summary>
     /// <param name="transform">The authored transform.</param>
-    /// <param name="row">The first withheld row, or empty.</param>
     /// <returns><see langword="true"/> when every resolved row reads whole, or the transform does not resolve.</returns>
-    public bool AdmitsTransform(StateTransform transform, out string row) {
-        row = string.Empty;
+    /// <remarks>The rows checked here are derived from the document, never named by the submitter, so this answers no
+    /// row name for a refusal to carry.</remarks>
+    public bool AdmitsTransform(StateTransform transform) {
         if (Unrestricted) { return true; }
         var rows = Writes.GetValue(this, static _ => new()).Sets;
         rows.Clear();
         if (!RuleCompiler.TryCollectTransformRows(transform, WorldFactsCompiler.Context(Source), rows, out _)) { return true; }
         foreach (var ordinal in rows) {
-            if (!ReadsWhole(ordinal)) { row = Arena.Rows[ordinal].Name.Value; return false; }
+            if (!WritesWhole(ordinal)) { return false; }
         }
         return true;
     }
 
-    /// <summary>The one write refusal, independent of verb, key, membership, value and grants.</summary>
+    /// <summary>The one write refusal, independent of verb, key, membership, value and grants. <paramref name="row"/> is
+    /// a name the submission itself spelled (the mutation adapter, <c>WorldRecipientMutations.Admits</c>, names nothing else), so the
+    /// text carries nothing the submitter did not already hold.</summary>
     public string Refusal(string verb, string row, string? key = null) => $"'{row}' is not disclosed to {Recipient?.Describe() ?? "public"}";
 
     /// <summary>Checks every state-bound document value through the same row policy.</summary>
@@ -109,47 +121,46 @@ public sealed partial class WorldRecipientView {
         return true;
     }
 
-    /// <summary>Checks a complete or selected definition dependency before fingerprinting it.</summary>
+    /// <summary>Checks a definition dependency before fingerprinting it. A recipient's dependency names its rows: a
+    /// guard over the whole document would be admitted or refused by whether any declaration withholds from the
+    /// recipient, which tells a world with a withheld row from one without it, so it is refused by its shape, named as
+    /// the state section, whatever the document declares.</summary>
+    /// <param name="rows">The selected rows, or <see langword="null"/> for the whole document.</param>
+    /// <param name="row">The first refused name the submission spelled, or <c>state</c> for a whole-document guard.</param>
+    /// <returns><see langword="true"/> when every selected row admits.</returns>
     public bool AdmitsDefinition(IReadOnlyList<string>? rows, out string row) {
         row = string.Empty;
         if (Unrestricted) { return true; }
-        if (rows is not null) {
-            foreach (var name in rows) { if (!Admits(name)) { row = name; return false; } }
-        } else {
-            foreach (var declaration in Source.State) {
-                if (!Admits(declaration.Name.Value)) { row = declaration.Name.Value; return false; }
-            }
-        }
+        if (rows is null) { row = WholeDocument; return false; }
+        foreach (var name in rows) { if (!Admits(name)) { row = name; return false; } }
         return true;
     }
+    // The name a refused whole-document guard answers under: the section it reads, never a declaration in it.
+    private const string WholeDocument = "state";
 
     /// <summary>Checks the declared state dependencies, deal sources and parents included, of every placement any
     /// bounded spatial read could observe (<see cref="WorldDefinitionFingerprint.EntersSpatialCensus"/>). Which
     /// placements one region holds can itself depend on state (a bound centre or extent, a parent's bound frame), so
     /// the answer takes no region: a refusal never tells the recipient where withheld geometry lies.</summary>
-    /// <param name="row">The first withheld row, or empty when every dependency is admitted.</param>
     /// <returns><see langword="true"/> when every census-eligible placement's dependencies are admitted.</returns>
-    public bool AdmitsSpatial(out string row) {
-        row = string.Empty;
+    public bool AdmitsSpatial() {
         if (Unrestricted) { return true; }
         foreach (var placement in Source.Placements) {
-            if (WorldDefinitionFingerprint.EntersSpatialCensus(placement) && !AdmitsPlacement(placement, out row)) { return false; }
+            if (WorldDefinitionFingerprint.EntersSpatialCensus(placement) && !AdmitsPlacement(placement)) { return false; }
         }
         return true;
     }
 
     /// <summary>Checks a named placement's dependencies without reading its current values, for a removal or a read
-    /// of it: the installed placement's footprint (see <see cref="AdmitsPlacement(WorldPlacement, out string)"/>).</summary>
+    /// of it: the installed placement's footprint (see <see cref="AdmitsPlacement(WorldPlacement)"/>).</summary>
     /// <param name="id">The placement id, which may name no placement.</param>
-    /// <param name="row">The first withheld row, or empty.</param>
     /// <returns><see langword="true"/> when every row the footprint holds reads whole.</returns>
-    public bool AdmitsPlacement(string id, out string row) => AdmitsPlacementWrite(incoming: null, id, out row);
+    public bool AdmitsPlacement(string id) => AdmitsPlacementWrite(incoming: null, id, out _);
     /// <summary>Checks an upsert of a placement: the incoming declaration's state inputs and parent chain, and the
     /// installed placement under the same id, which the upsert replaces.</summary>
     /// <param name="placement">The incoming placement.</param>
-    /// <param name="row">The first withheld row, or empty.</param>
     /// <returns><see langword="true"/> when every row the footprint holds reads whole.</returns>
-    public bool AdmitsPlacement(WorldPlacement placement, out string row) => AdmitsPlacementWrite(placement, placement.Id, out row);
+    public bool AdmitsPlacement(WorldPlacement placement) => AdmitsPlacementWrite(placement, placement.Id, out _);
     // The one placement admission. The installed placement under the id is admitted whether the write replaces or
     // removes it: its state inputs (its deal and variants rows, whose membership decides which dealt children exist,
     // present or absent), its parent chain's, and the template every id on that chain spells as a dealt child. Composition
@@ -171,12 +182,10 @@ public sealed partial class WorldRecipientView {
     /// hardware a screen may show or hardware values into a cell, so each bound row is the write's footprint.</summary>
     /// <param name="incoming">The incoming machine, or <see langword="null"/> for a removal.</param>
     /// <param name="name">The machine's name.</param>
-    /// <param name="row">The first withheld row, or empty.</param>
     /// <returns><see langword="true"/> when every bound row admits.</returns>
-    public bool AdmitsMachine(WorldMachine? incoming, string name, out string row) {
-        row = string.Empty;
+    public bool AdmitsMachine(WorldMachine? incoming, string name) {
         if (Unrestricted) { return true; }
-        return AdmitsBindings(incoming, out row) && AdmitsBindings(WorldDefinitionRows.FindMachine(Source.Machines, name), out row);
+        return AdmitsBindings(incoming, out _) && AdmitsBindings(WorldDefinitionRows.FindMachine(Source.Machines, name), out _);
     }
     private bool AdmitsBindings(WorldMachine? machine, out string row) {
         row = string.Empty;
@@ -191,12 +200,10 @@ public sealed partial class WorldRecipientView {
     /// removes.</summary>
     /// <param name="incoming">The incoming kit, or <see langword="null"/> for a removal.</param>
     /// <param name="name">The kit's name.</param>
-    /// <param name="row">The first withheld row, or empty.</param>
     /// <returns><see langword="true"/> when every redrawn row admits.</returns>
-    public bool AdmitsKit(WorldKit? incoming, string name, out string row) {
-        row = string.Empty;
+    public bool AdmitsKit(WorldKit? incoming, string name) {
         if (Unrestricted) { return true; }
-        return AdmitsGenerates(incoming, out row) && AdmitsGenerates(WorldDefinitionRows.FindKit(Source.Kits, name), out row);
+        return AdmitsGenerates(incoming, out _) && AdmitsGenerates(WorldDefinitionRows.FindKit(Source.Kits, name), out _);
     }
     private bool AdmitsGenerates(WorldKit? kit, out string row) {
         row = string.Empty;

@@ -64,12 +64,18 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="publication">The owner's publication, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries a publication for <paramref name="owner"/>.</returns>
     public bool TryInput(Principal owner, out WorldInputPublication publication) {
-        using var image = m_images.Read();
+        var result = m_images.Read(state: owner, read: static (in SnapshotImage image, long version, Principal principal) => {
+            var found = image.Inputs.TryGetValue(key: principal, value: out var value);
 
-        return image.Value.Inputs.TryGetValue(key: owner, value: out publication);
+            return (Found: found, Value: value);
+        });
+
+        publication = result.Value;
+        return result.Found;
     }
 
     private readonly MarkedIndexSet m_pending = new();
+
     private bool m_pendingEverything;
     private ArenaTime? m_stateTime;
 
@@ -238,6 +244,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
     // One past the highest entity slot either writer has written; every slot above it is still as constructed.
     private int m_extent;
+
     private string m_authority = string.Empty;
     // A real (wall-clock) timestamp — Stopwatch.GetTimestamp() — captured the instant the CURRENT snapshot's poses
     // were copied in. Presentation-only, exactly like WorldClient's own render-pose interpolation is presentation
@@ -434,35 +441,36 @@ public sealed class WorldSessionMirror : IClientSink {
         out float stepSeconds,
         out long arrivalTimestamp
     ) {
-        using var lease = m_images.Read();
-        var image = lease.Value;
-        var looksTable = Definition.Looks;
-        var kitColliders = Volatile.Read(location: ref m_kitColliders);
-        var kitContacts = Volatile.Read(location: ref m_kitBodyContacts);
+        (tick, revision, stepSeconds, arrivalTimestamp) = m_images.Read(
+            state: (this, active, addresses, poseEpochs, placementIds, previousPositions, previousOrientations, currentPositions, currentOrientations, colors, looks, catalogRigs, colliders, bodyContacts),
+            read: static (in SnapshotImage image, long version, (WorldSessionMirror Mirror, bool[] Active, WorldEntityAddress[] Addresses, int[] PoseEpochs, string?[] PlacementIds, Vector3[] PreviousPositions, Quaternion[] PreviousOrientations, Vector3[] CurrentPositions, Quaternion[] CurrentOrientations, Vector3[] Colors, WorldLook[] Looks, byte[] CatalogRigs, FixedWorldCollider?[] Colliders, WorldBodyContactMode[] BodyContacts) state) => {
+                var (mirror, active, addresses, poseEpochs, placementIds, previousPositions, previousOrientations, currentPositions, currentOrientations, colors, looks, catalogRigs, colliders, bodyContacts) = state;
+                var looksTable = mirror.Definition.Looks;
+                var kitColliders = Volatile.Read(location: ref mirror.m_kitColliders);
+                var kitContacts = Volatile.Read(location: ref mirror.m_kitBodyContacts);
 
-        for (var index = 0; (index < EntityCapacity); index++) {
-            var entry = ((index < image.Extent) ? image.Entries[index] : SnapshotImage.Untouched);
+                for (var index = 0; (index < EntityCapacity); index++) {
+                    var entry = ((index < image.Extent) ? image.Entries[index] : SnapshotImage.Untouched);
 
-            active[index] = entry.Active;
-            addresses[index] = new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index);
-            poseEpochs[index] = entry.PoseEpoch;
-            placementIds[index] = entry.PlacementId;
-            previousPositions[index] = entry.PreviousPosition;
-            previousOrientations[index] = entry.PreviousOrientation;
-            currentPositions[index] = entry.CurrentPosition;
-            currentOrientations[index] = entry.CurrentOrientation;
-            colors[index] = entry.Color;
-            looks[index] = WorldDefinitionRows.ResolveLook(index: entry.Look, rows: looksTable);
-            catalogRigs[index] = entry.CatalogRig;
-            colliders[index] = ((entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null);
-            bodyContacts[index] = ((entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap);
-        }
+                    active[index] = entry.Active;
+                    addresses[index] = new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index);
+                    poseEpochs[index] = entry.PoseEpoch;
+                    placementIds[index] = entry.PlacementId;
+                    previousPositions[index] = entry.PreviousPosition;
+                    previousOrientations[index] = entry.PreviousOrientation;
+                    currentPositions[index] = entry.CurrentPosition;
+                    currentOrientations[index] = entry.CurrentOrientation;
+                    colors[index] = entry.Color;
+                    looks[index] = WorldDefinitionRows.ResolveLook(index: entry.Look, rows: looksTable);
+                    catalogRigs[index] = entry.CatalogRig;
+                    colliders[index] = ((entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null);
+                    bodyContacts[index] = ((entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap);
+                }
 
-        tick = image.Tick;
-        revision = image.Revision;
-        stepSeconds = image.StepSeconds;
-        arrivalTimestamp = image.ArrivalTimestamp;
+                return (image.Tick, image.Revision, image.StepSeconds, image.ArrivalTimestamp);
+            });
     }
+
     // Publishes the entity table, inputs and arrival history as one complete image (see m_images). Called by a writer
     // holding m_snapshotWriteGate once its writes are done.
     private void PublishImage() => m_images.Publish(state: this, fill: static (ref SnapshotImage image, WorldSessionMirror mirror) => mirror.FillImage(image: image));
@@ -539,16 +547,22 @@ public sealed class WorldSessionMirror : IClientSink {
         );
 
         public ImageEntry[] Entries = [];
+
         public int Extent;
+
         public string Authority = string.Empty;
+
         public ulong Tick;
         public int Revision;
         public float StepSeconds;
+
         public long ArrivalTimestamp = arrivalTimestamp;
         public readonly Dictionary<Principal, WorldInputPublication> Inputs = [];
         public readonly long[] Arrivals = new long[ArrivalHistory];
+
         public int ArrivalCount;
     }
+
     /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Quaternion CurrentOrientation(int index) => m_poses.CurrentOrientation(index: index);
@@ -945,20 +959,20 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="milliseconds">The destination, in milliseconds; at most its length are copied.</param>
     /// <returns>The number of intervals copied.</returns>
     public int SnapshotArrivalIntervals(Span<double> milliseconds) {
-        using var lease = m_images.Read();
-        var image = lease.Value;
-        var held = Math.Min(val1: image.ArrivalCount, val2: ArrivalHistory);
-        var count = Math.Min(val1: Math.Max(val1: (held - 1), val2: 0), val2: milliseconds.Length);
-        var first = ((image.ArrivalCount - count) - 1);
+        return m_images.Read(state: milliseconds, read: static (in SnapshotImage image, long version, scoped Span<double> milliseconds) => {
+            var held = Math.Min(val1: image.ArrivalCount, val2: ArrivalHistory);
+            var count = Math.Min(val1: Math.Max(val1: (held - 1), val2: 0), val2: milliseconds.Length);
+            var first = ((image.ArrivalCount - count) - 1);
 
-        for (var index = 0; (index < count); index++) {
-            var from = image.Arrivals[((first + index) % ArrivalHistory)];
-            var to = image.Arrivals[(((first + index) + 1) % ArrivalHistory)];
+            for (var index = 0; (index < count); index++) {
+                var from = image.Arrivals[((first + index) % ArrivalHistory)];
+                var to = image.Arrivals[(((first + index) + 1) % ArrivalHistory)];
 
-            milliseconds[index] = Stopwatch.GetElapsedTime(endingTimestamp: to, startingTimestamp: from).TotalMilliseconds;
-        }
+                milliseconds[index] = Stopwatch.GetElapsedTime(endingTimestamp: to, startingTimestamp: from).TotalMilliseconds;
+            }
 
-        return count;
+            return count;
+        });
     }
     /// <summary>Computes the honest presentation fraction through a delivered snapshot interval from its own step
     /// width and arrival time.</summary>

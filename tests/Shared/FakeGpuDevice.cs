@@ -39,10 +39,12 @@ internal sealed class FakeGpuDevice :
     IGpuTimestampFactory {
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
+
     // The queue order of held fences' submissions, and the latest one a wait has completed: one queue completes its
     // submissions in order, so a wait completes every submission made before the one it waits on.
     private long m_armed;
     private long m_waitedThrough;
+
     private readonly GpuObjectNaming m_naming;
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
@@ -125,6 +127,7 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets each wrapped member's call count, keyed <c>Interface.Member</c>; empty unless the device counts
     /// calls.</summary>
     public Dictionary<string, int> Calls { get; } = new(comparer: StringComparer.Ordinal);
+
     /// <summary>Gets or sets the list every host draw the device records is added to, in order, with the first word the
     /// recorder pushed before it (a mesh draw's index), or <see langword="null"/>, the default, to keep none.</summary>
     public List<(GpuDrawParameters Parameters, uint Pushed)>? Draws { get; set; }
@@ -139,6 +142,14 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>The native device handle the fake's tracked memory is counted under.</summary>
     public const nint DeviceHandle = 1;
+    // The fake device registers one discrete adapter's segments, so its device-local creations count in the local one.
+    private static GpuDeviceMemoryWork RegisteredMemory() {
+        var memory = new GpuDeviceMemoryWork(backend: "fake");
+
+        memory.BeginDevice(device: DeviceHandle, segments: GpuMemorySegments.FromDirectX(profile: default));
+
+        return memory;
+    }
 
     public GpuDeviceIdentity? Identity => null;
     /// <summary>Gets the fence created last.</summary>
@@ -150,10 +161,12 @@ internal sealed class FakeGpuDevice :
     public HashSet<Fence> SubmittedFences { get; } = [];
     /// <summary>Gets the device-local memory of the tracked images and device-local buffers: an image is its width times
     /// its height times four bytes, a buffer its size.</summary>
-    public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
+    public GpuDeviceMemoryWork Memory { get; } = RegisteredMemory();
 
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    public void RefreshMemoryReading() { }
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
 
@@ -224,7 +237,8 @@ internal sealed class FakeGpuDevice :
                 allocation: creation.Handle,
                 bytes: ((long)deviceLocalBytes),
                 device: DeviceHandle,
-                role: GpuMemoryRole.DeviceLocal
+                role: GpuMemoryRole.DeviceLocal,
+                segment: GpuMemorySegments.DirectXLocal
             );
         }
 
@@ -280,6 +294,7 @@ internal sealed class FakeGpuDevice :
         OnDispatch?.Invoke(groupCountX, groupCountY, groupCountZ);
     }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
+
     bool IGpuRecorder.CanDrawIndirectCount {
         get {
             Hit(key: "IGpuRecorder.CanDrawIndirectCount");
@@ -287,6 +302,7 @@ internal sealed class FakeGpuDevice :
             return true;
         }
     }
+
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => Hit(key: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
@@ -294,12 +310,14 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuRecorder.ClearStorageBuffer");
     }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
+
     uint IGpuRecorder.CopyRowAlignment {
         get {
             Hit(key: "IGpuRecorder.CopyRowAlignment");
             return 1U;
         }
     }
+
     void IGpuRecorder.CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) => Hit(key: "IGpuRecorder.CopyBufferToImage");
     void IGpuRecorder.CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) => Hit(key: "IGpuRecorder.CopyImageToBuffer");
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
@@ -392,6 +410,7 @@ internal sealed class FakeGpuDevice :
             return (DescriptorHeap?.ReleaseRevision ?? 0L);
         }
     }
+    ulong IGpuBindings.MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
 
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         Hit(key: "IGpuBindings.CreatePool");
@@ -880,6 +899,7 @@ internal sealed class FakeGpuDevice :
         private byte[] m_pixels = [];
 
         public ulong OwnedBytes => ((ulong)m_pixels.Length);
+
         public void Dispose() { }
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout) {
             var length = checked((int)GpuPixelFormats.ImageByteLength(format: format, height: height, width: width));

@@ -166,8 +166,9 @@ public readonly record struct GpuMemoryProfile(
         );
     }
 
-    // Whether heap's VkMemoryHeapFlags (the low half of its second ulong) carry VK_MEMORY_HEAP_DEVICE_LOCAL_BIT.
-    private static bool IsDeviceLocalHeap(int heap, ReadOnlySpan<ulong> memoryHeaps) =>
+    // Whether heap's VkMemoryHeapFlags (the low half of its second ulong) carry VK_MEMORY_HEAP_DEVICE_LOCAL_BIT: the one
+    // device-local rule the profile and the segments' pools (GpuMemorySegments.FromVulkan) share.
+    internal static bool IsDeviceLocalHeap(int heap, ReadOnlySpan<ulong> memoryHeaps) =>
         ((((uint)memoryHeaps[((heap * 2) + 1)]) & VulkanHeapDeviceLocal) != 0U);
 
     /// <summary>Appends the profile as <c>key=value</c> fields on one line, every field present:

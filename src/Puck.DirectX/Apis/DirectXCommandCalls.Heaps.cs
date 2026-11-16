@@ -11,6 +11,12 @@ public unsafe partial interface IDirectXCommandCalls {
     /// <param name="description">The resource's description.</param>
     /// <returns>Its size and alignment in a heap.</returns>
     D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(D3D12_RESOURCE_DESC* description);
+    /// <summary>Asks <c>ID3D12Device::GetCustomHeapProperties</c> for a standard heap type on node zero: the memory pool
+    /// that heap type's memory comes from on the device's adapter.</summary>
+    /// <param name="heapType">The heap type; not <c>D3D12_HEAP_TYPE_CUSTOM</c>.</param>
+    /// <returns>The equivalent custom heap properties; a pool of <c>D3D12_MEMORY_POOL_UNKNOWN</c> where the runtime
+    /// names none.</returns>
+    D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType);
     /// <summary>Asks <c>ID3D12Device::CreateHeap</c>.</summary>
     /// <param name="description">The heap's description.</param>
     /// <param name="heap">Receives the heap on success, owned by the caller.</param>
@@ -48,6 +54,7 @@ public unsafe partial interface IDirectXCommandCalls {
 public readonly unsafe partial struct DirectXDeviceCommandCalls {
     // ID3D12Device's slots, counted as CreateCommittedResource's (27) is.
     private const int DeviceGetResourceAllocationInfoSlot = 25;
+    private const int DeviceGetCustomHeapPropertiesSlot = 26;
     private const int DeviceCreateHeapSlot = 28;
     private const int DeviceCreatePlacedResourceSlot = 29;
     // ID3D12Object's slots, after IUnknown's three.
@@ -67,6 +74,21 @@ public readonly unsafe partial struct DirectXDeviceCommandCalls {
         );
 
         return info;
+    }
+    /// <inheritdoc/>
+    /// <remarks>The method returns a struct by value through the hidden-pointer x64 COM ABI the CsWin32 wrapper omits, so
+    /// its slot is invoked with the return-by-pointer signature, as <see cref="AllocationInfo"/>'s is.</remarks>
+    public D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType) {
+        D3D12_HEAP_PROPERTIES properties;
+
+        ((delegate* unmanaged[Stdcall]<ID3D12Device*, D3D12_HEAP_PROPERTIES*, uint, D3D12_HEAP_TYPE, D3D12_HEAP_PROPERTIES*>)VtableOf(instance: device)[DeviceGetCustomHeapPropertiesSlot])(
+            device,
+            &properties,
+            0U,
+            heapType
+        );
+
+        return properties;
     }
     /// <inheritdoc/>
     public HRESULT CreateHeap(D3D12_HEAP_DESC* description, ID3D12Heap** heap) {

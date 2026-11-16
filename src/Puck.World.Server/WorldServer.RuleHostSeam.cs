@@ -24,8 +24,9 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldRuleHost.Time"/>
     public ArenaTime Time => m_ruleHost.Time;
 
-    /// <inheritdoc cref="WorldRuleHost.Answer"/>
-    public QueryAnswer Answer(WorldQuery query) => m_ruleHost.Answer(query: query);
+    // The trusted composer, for the server's own internals (replay, transfer publication). It answers no one in
+    // particular, so it stays inside this assembly: every caller answering a principal crosses AnswerSubmittedQuery.
+    internal QueryAnswer Answer(WorldQuery query) => m_ruleHost.Answer(query: query);
     /// <inheritdoc cref="WorldRuleHost.AnswerSubmittedQuery"/>
     public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) =>
         m_ruleHost.AnswerSubmittedQuery(

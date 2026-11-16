@@ -75,26 +75,24 @@ public interface IServerLink {
     /// <param name="request">The session request.</param>
     /// <param name="completion">Invoked once with the server's reply.</param>
     void SubmitSession(SessionRequest request, Action<SessionReply> completion);
-    /// <summary>Asks the server a read-back query. <paramref name="completion"/> receives the composed answer string
-    /// (printed verbatim by the client) — fires inline for a local submitter, before this call returns.</summary>
+    /// <summary>Asks the server a read-back query as <paramref name="principal"/>, through the same envelope and query
+    /// door (<c>Server.WorldRuleHost.AnswerSubmittedQuery</c>) a wire peer's query crosses: the principal's
+    /// <see cref="WorldCapability.Observe"/> grant and, for a session, its live observation decide the answer.
+    /// <paramref name="completion"/> receives the composed answer string (printed verbatim by the client) — fires inline
+    /// for a local submitter, before this call returns.</summary>
+    /// <remarks>Every query names whom it answers: a console verb passes its invocation's stamped principal
+    /// (<see cref="CommandContext.Principal"/>), and only the operator's own presentation names
+    /// <see cref="Principal.Console"/>. A link whose remote authority identifies its submitter by credential (a
+    /// federated door) does not carry <paramref name="principal"/>, as it does not for
+    /// <see cref="SubmitEnvelope(WorldSubmissionPayload, Principal)"/>.</remarks>
     /// <param name="query">The read-back query.</param>
+    /// <param name="principal">The acting identity the answer is decided for.</param>
     /// <param name="completion">Invoked once with the composed answer.</param>
-    void Query(WorldQuery query, Action<QueryAnswer> completion);
+    void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion);
     /// <summary>Mints the operation id of a mutation whose caller named none, at the ingress that submits it.</summary>
     /// <param name="principal">The acting principal.</param>
     /// <returns>The id; never <see cref="Guid.Empty"/>.</returns>
     Guid NextOperationId(Principal principal) => WorldOperationIds.Random.Next(principal: principal);
-}
-/// <summary>An <see cref="IServerLink"/> that can attribute an in-process query to an explicit
-/// <see cref="Principal"/>. Use this boundary for embedded automation whose reads must cross the same
-/// <see cref="WorldCapability.Observe"/> gate as its writes; the ordinary <see cref="IServerLink.Query"/> remains the
-/// trusted local-console convenience surface.</summary>
-public interface IPrincipalServerLink : IServerLink {
-    /// <summary>Asks the server a read-back query as <paramref name="principal"/>.</summary>
-    /// <param name="query">The read-back query.</param>
-    /// <param name="principal">The acting identity whose Observe grant is checked.</param>
-    /// <param name="completion">Invoked once with the composed answer.</param>
-    void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion);
 }
 /// <summary>The ten fire-and-forget <see cref="IServerLink"/> submission members — every one a thin
 /// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, Principal)"/> wrapper that differs from the next only in which

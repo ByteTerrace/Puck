@@ -108,9 +108,8 @@ public sealed partial class WorldRuleHost {
             Payload: preferred
         );
     }
-    // The public Answer surface remains the trusted in-process read-back composer. An envelope, however, may have
-    // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
-    // Console and pass through the same check using the permissive local seed rather than a separate bypass.
+    // Answer is the trusted composer, internal to the server. Every submitted query, a peer's or a local link's, names
+    // its principal and crosses Observe here first; the operator's own presentation names the console.
     private QueryAnswer AnswerStateObservations(Principal? principal, string? row = null) {
         var rows = (Host.ReadView(principal).Observations() ?? [])
             .Where(predicate: r => ((row is null) || (r.Name == row))).ToArray();
