@@ -246,8 +246,9 @@ levers) are judged from their source.
 | `world.state`, `world.state.observe`, `world.observe`, `world.row`, `world.match`, `world.symmetry`, `world.symmetry.word`, `world.tabletop`, `world.topologies`, `world.timeline`, `world.projection`, `world.identify`, `world.hud.template`, `world.state.similar`, `world.status`, `world.budget`, `world.text`, `world.metadata`, `world.references`, `world.imports`, `world.admission`, `world.lighting`, `world.looks`, `world.curves`, `world.dynamics`, `world.contributions`, `world.kits`, `world.properties`, `world.addons` | Anyone | Read through the caller's `WorldStateReadView` (step 2); equal across every pair | None |
 | `world.placements`, `world.placement.get`, `world.inhabitants`, `world.attachments`, `world.faces`, `world.portals`, `world.destinations`, `world.adjacencies`, `world.reflow.preview`, `world.reflow.status`, `world.reflow.commit`, `world.reflow.cancel` | Anyone | Read the view's placements, re-dealt for a restricted template; a restricted template carries no spatial footprint, so it never reflows | None (step 4) |
 | `world.state.cell.set`, `world.state.cell.remove`, `world.state.transform`, `world.state.act`, `world.generate`, `world.row.set`, `world.row.add`, `world.row.remove`, `world.row.step`, `world.assign`, `world.kit.default`, `world.population.defaults`, `world.population.spawn`, `world.place`, `world.snap`, `world.nudge`, `world.turn`, `world.grid`, `player.row.set`, `player.state.cell.set`, `player.state.cell.toggle`, `creation.sculpt`, `creation.shape`, `pipeline.load`, `pipeline.commit` | Anyone | Answer the write door's verdict (step 3). An absent key answers one text whatever any row interns (`StateArena.MissingCellReason`) | Built |
-| `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.peers`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
-| `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them | Body disclosure step |
+| `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
+| `world.peers` | Operator | Live population membership (which bodies arrived, from which authority, and when they leave), other connections' endpoints and identities, and the door's refusal counts: the host's, with no recipient view to derive them from | Operator verb, off the silo's remote surface |
+| `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them. Their server queries ask as the caller: `IServerLink.Query` takes the principal and the trusted composer (`WorldServer.Answer`) is internal, so a session the query door refuses is refused here too | Body disclosure step |
 | `identity.*`, `chat.*` | Anyone | The caller's own identity documents, authorized per seat (`TryAuthorizedIdentity`); a whisper's inbox rows are what the deduction fixture exercises | None |
 | `help`, `console`, `run`, `world.affordances`, `world.refusals`, `world.extensions`, `world.extensions.catalog`, `world.devices`, `world.device-profiles`, `world.input-holds`, `world.watch`, `world.flag`, `forge.*`, `machine.default`, `update.*`, `storage.*`, `probe.*`, `backend` | Anyone or Local | Registry, catalogue, host configuration or the caller's own session; no state rows. `run` submits an authored command's lines under the caller's principal, so each line meets its own verb's audience | None |
 | `world.fps`, `world.target`, `world.cadence`, `world.residency`, `world.host`, `world.shaders.status`, `world.shaders.reload` | Anyone | Wall time or machine resources, outside the guarantee | None |
@@ -435,7 +436,32 @@ actual outcome, so the typed completion (`Refused`, code
 `world.mutation.undisclosed`, the one text), the replay tape's recorded
 outcome and the echo all say the same thing and nothing else, and the recipient
 is shown its own stream's version ([decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)),
-never the authority's. The view's `Admits(mutation)` is the one
+never the authority's.
+
+**The write door neither depends on observing nor names a row the writer did
+not.** Policy is the writer's declared readership, while a delivery ceiling and a
+live Observe grant restrict what its stream carries; so the door
+(`WorldServer.WriteView`) mints every principal's capability at the policy's own
+tier, and the view's write questions read policy alone (`WritesWhole`, the read
+question without the ceiling). A session admitted at `Frames` writes a public row
+the operator grants it Edit over, and nothing it is refused reads its observation.
+A name no row holds is refused exactly as a withheld row is (the key table's rule,
+below, applied to row names), so a recipient replaces a row it reads whole and adds
+none; and the refusal names only what the submission spelled: a placement, machine
+or kit by its own name, a transform by its first subject, a spatial guard as
+`placements`, never a row the footprint derived. A guard over the whole document is
+refused by its shape, as `state`, since whether any declaration withholds from its
+proposer would otherwise decide it. Enforcement: `WorldRecipientMutations.Admits`
+alone assigns the refusal name, and the view's derived-footprint checks
+(`AdmitsPlacement`, `AdmitsSpatial`, `AdmitsMachine`, `AdmitsKit`, `AdmitsTransform`)
+return no name to assign. Where it stops: the footprint relation is declared
+structure, so a write into a public row is still refused while some row keyed over
+it is withheld, which tells a recipient below `Replica` that such a declaration
+exists, never its name (filed under the open items below).
+`SessionWriteDoorLawTests` and the harness law
+`AWriteIntoAWithheldRowIsEchoedAsAWriteIntoAnAbsentOne` hold it.
+
+The view's `Admits(mutation)` is the one
 predicate, used by `TryAdmitCompleteMutation` ahead of grants, by the compose
 arms, by `WorldServer.WriteStateCell` and the addon runtime's bind, and by the
 forwarded submission door, replacing `ReadsThroughDisclosure`,
@@ -1282,6 +1308,15 @@ commit, as machine readings are not a repository baseline.
   any device; `pipeline.commit` changes the shared view. All take
   `CommandAudience.Anyone`. Decide them as `player.claim`, `player.cycle` and
   `pipeline.load` were decided.
+- The write footprint reads declarations, which only a `Replica` recipient is
+  delivered. A write into a public row is refused while a row keyed over it, a
+  census placement reading it, or a placement chain under it depends on a row
+  withheld from the writer, so a `Frames` or `Presentation` session holding
+  Edit learns that some such declaration exists (never its name, which the
+  refusal does not carry). Decide whether write grants below `Replica` are
+  allowed at all (the validator already refuses an admission row that mints
+  grants at `Frames`), or whether the footprint's verdict for such a writer is
+  computed over its own tier's declarations.
 - Growth and memory admission read reservations. Work prices read declarations
   only ([the costing decision](../decisions/state-and-language.md#costing)), but
   an arena growth is still charged `StateArena.ReservationWork` over the whole

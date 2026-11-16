@@ -37,9 +37,8 @@ built on the engine's systems stresses them, and what it surfaces is fixed at
 the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high, before any push to `main`] [Security review](#security-review):
-   the session read doors' remaining leaks, and with them the publication
-   buffer's two misuse cases ([engine job system](#engine-job-system)).
+1. [high, before any push to `main`] The publication buffer's two misuse
+   cases ([engine job system](#engine-job-system)).
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0 (a crossing read as a player takes it),
@@ -1794,21 +1793,15 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: the session read doors'
-remaining leaks, before any push to `main`; then the researcher brief's
-priorities ([security review](../development/security-review.md)).
+Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
+and 6; then the researcher brief's priorities
+([security review](../development/security-review.md)).
 
-- [high, before any push to `main`] The session read doors still leak, each
-  argued from source:
-  - Write admission for a session that cannot observe answers through a
-    refusal that names or reveals withheld rows
-    (`WorldDocument.StateTransformAdmission`), and a Frames session holding
-    Edit grants is still blocked from writing. One write door that neither
-    reveals a withheld row's existence nor depends on observing.
-  - `body.where` (`PlayerCommandModule.Movement`) answers through authority
-    queries stamped as the console instead of the session's read door.
-  - [medium] `world.peers` (`WorldNetworkCommandModule`) exposes live
-    population membership without a recipient read view.
+- [medium] The write footprint reads declarations a recipient below `Replica`
+  is not delivered, so a `Frames` or `Presentation` session holding Edit
+  learns that a withheld declaration sits in a write's footprint (never its
+  name). [The disclosure plan's open items](disclosure.md#open-items) hold the
+  two candidates.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
