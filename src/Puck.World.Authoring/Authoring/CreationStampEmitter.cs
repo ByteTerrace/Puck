@@ -433,7 +433,7 @@ public static partial class CreationStampEmitter {
             );
             var shapeScale = EffectiveScale(value: shape.Scale).ToVector3();
             var blend = (shape.Blend ?? SdfBlendOp.Union);
-            var smooth = (shape.Smooth ?? 0f);
+            var smooth = ((shape.Smooth ?? 0f) * frame.FacetScale);
 
             foreach (var copy in frames) {
                 var placed = copy.Compose(inner: local);
@@ -489,8 +489,8 @@ public static partial class CreationStampEmitter {
     /// <param name="noise">The creation's normalized noise facet.</param>
     /// <param name="transform">The stamp transform.</param>
     /// <remarks>The caller owns the surrounding <see cref="SdfProgramBuilder.PushField"/>/<see cref="SdfProgramBuilder.PopField"/>
-    /// pair — an unscoped field op would displace the whole composed world field. Amplitude is world units
-    /// (un-scaled by the stamp); the sampling point rides the stamp's frame.</remarks>
+    /// pair — an unscoped field op would displace the whole composed world field. Amplitude and wavelength are
+    /// creation units, scaled by the stamp; the sampling point rides the stamp's frame.</remarks>
     public static void EmitNoise(SdfProgramBuilder builder, CreationNoiseDocument noise, CreationStampTransform transform) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(noise);
@@ -516,7 +516,7 @@ public static partial class CreationStampEmitter {
             frame: frame
         )
             .NoiseDisplace(
-            amplitude: noise.Amplitude,
+            amplitude: (noise.Amplitude * frame.FacetScale),
             frequency: noise.Frequency,
             gain: (noise.Gain ?? 0.5f),
             lacunarity: (noise.Lacunarity ?? 2f),
@@ -845,16 +845,16 @@ public static partial class CreationStampEmitter {
             );
         }
 
-        // Noise relief grows the composed surface outward by up to its amplitude (world units, un-scaled), so the
+        // Noise relief grows the composed surface outward by up to its scaled amplitude, so the
         // bound charges it once up front.
-        var reach = (document.Noise?.Amplitude ?? 0f);
+        var reach = ((document.Noise?.Amplitude ?? 0f) * scale);
         var any = false;
         var shapes = (document.Shapes ?? []);
 
         for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
             var shape = shapes[shapeIndex];
-            // The shape's creation-unit reach, scaled with the stamp; the noise amplitude is world units, un-scaled.
-            var shapeReach = ((ShapeReach(shape: shape) * scale) + (document.Noise?.Amplitude ?? 0f));
+            // The shape and its relief share creation units and scale together.
+            var shapeReach = ((ShapeReach(shape: shape) + (document.Noise?.Amplitude ?? 0f)) * scale);
 
             reach = ((composeBlends && any)
                 ? SdfBoundAlgebra.Compose(

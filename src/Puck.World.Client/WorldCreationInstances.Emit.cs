@@ -199,6 +199,37 @@ public sealed partial class WorldCreationInstances {
             )
             : null
         );
+        if (document.Noise is not null) {
+            // CreationMotionPlan admits relief only when all shapes ride the root. Keep the same composed field
+            // as a static stamp, baked once in creation units; PackTransforms alone moves and scales that field.
+            var glass = document.HasGlass;
+            var opaqueHidden = (glass ? shapes.Select((shape, index) => document.IsGlassShape(shape) || (hidden?[index] ?? false)).ToArray() : hidden);
+            int MaterialFor(ShapeDocument shape) {
+                var index = -1;
+                if (screenMaterials is not null) {
+                    for (var candidate = 0; candidate < shapes.Count; candidate++) {
+                        if (shapes[candidate].Id == shape.Id) { index = candidate; break; }
+                    }
+                }
+                var material = (((screenMaterials is { } carried) && (index >= 0) && (carried[index] >= 0))
+                    ? carried[index] : paletteIds[(shape.Material ?? 0) % paletteIds.Length]);
+                return WorldPlacementStamper.MaterialForShape(builder, material, shape, materialScale);
+            }
+            int TextMaterial(TextRunDocument run) => paletteIds[(run.Material ?? 0) % paletteIds.Length];
+
+            if ((opaqueHidden is null) || opaqueHidden.Contains(false) || hasText) {
+                WorldPlacementStamper.EmitRootSurface(builder, document, rootSlot, opaqueHidden, hasText, textCatalog,
+                    MaterialFor, TextMaterial, textLayouts: textLayouts);
+            }
+            if (glass) {
+                var glassHidden = shapes.Select((shape, index) => !document.IsGlassShape(shape) || (hidden?[index] ?? false)).ToArray();
+                if (glassHidden.Contains(false)) {
+                    WorldPlacementStamper.EmitRootSurface(builder, document, rootSlot, glassHidden, false, textCatalog,
+                        MaterialFor, TextMaterial, glass: true);
+                }
+            }
+            return;
+        }
         var reach = CreationStampEmitter.RenderReach(
             document: document,
             scale: 1f,

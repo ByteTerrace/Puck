@@ -240,13 +240,13 @@ public sealed record CreationPartDocument(string Id, int ShapeId);
 /// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
 /// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
 /// scope — irregular rock, terrain, bark. A solid placement collides with the relieved surface: the analytic provider
-/// compiles each copy as one field collider over its contact shapes and this relief. Static-stamp placements only — the dynamic
-/// stamp pool emits per-shape instances a creation-level field op cannot span, so an animated (framed) creation, an
-/// attached or inhabited placement, and a body look all refuse it at validation. The noise samples the creation's
+/// compiles each copy as one field collider over its contact shapes and this relief. Whole-creation motion and scaling
+/// carry that composed field on one root; frames, drivers, effectors and followers that move individual parts refuse
+/// relief rather than displacing each part independently. The noise samples the creation's
 /// local frame, so every stamped copy carries identical relief; a mirrored copy samples the un-mirrored pattern.</summary>
 /// <param name="Frequency">The base lattice frequency, cells per creation unit (clamped to
 /// (0, <see cref="MaxFrequency"/>]).</param>
-/// <param name="Amplitude">The peak outward displacement, world units (clamped to (0, <see cref="MaxAmplitude"/>];
+/// <param name="Amplitude">The peak displacement in creation units, scaled with the stamp (clamped to (0, <see cref="MaxAmplitude"/>];
 /// zero drops the facet).</param>
 /// <param name="Octaves">The fBm octave count (null = 4; clamped to 1..<see cref="SdfProgramBuilder.MaxNoiseOctaves"/>).</param>
 /// <param name="Gain">The per-octave amplitude factor (null = 0.5; clamped to
@@ -262,7 +262,7 @@ public sealed record CreationNoiseDocument(
     float? Lacunarity = null,
     uint? Seed = null
 ) {
-    /// <summary>The largest authored amplitude, world units.</summary>
+    /// <summary>The largest authored amplitude, in creation units.</summary>
     public const float MaxAmplitude = 4f;
     /// <summary>The largest authored base frequency, cells per creation unit.</summary>
     public const float MaxFrequency = 8f;
@@ -278,7 +278,7 @@ public sealed record CreationNoiseDocument(
     public const float ResolvedOctaveShare = (1f / 16f);
 
     /// <summary>Returns the spacing a bake resolves this relief at: a quarter of the wavelength of the finest octave that
-    /// carries at least <see cref="ResolvedOctaveShare"/> of the amplitude, in creation units. A static creation declares
+    /// carries at least <see cref="ResolvedOctaveShare"/> of the amplitude, in creation units. A creation declares
     /// it as its detail (<c>SdfInstanceRange.Detail</c>), so a lattice sized by the creation's extent does not alias the
     /// relief away; fainter octaves fall under the lattice and are drawn only as the field's shading.</summary>
     /// <returns>The spacing, in creation units; zero for a facet with no positive frequency.</returns>

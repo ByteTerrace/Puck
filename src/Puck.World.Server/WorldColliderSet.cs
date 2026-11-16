@@ -106,6 +106,15 @@ public sealed partial class WorldColliderSet : IContactField {
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
+        m_attachedFields = new FixedStaticCollider?[attachedRows.Count];
+        for (var row = 0; row < attachedRows.Count; row++) {
+            var (placement, creation) = attachedRows[row];
+            if (CollidesAsField(creation.EngineDocument)) {
+                m_attachedFields[row] = ReliefCollider(creation.EngineDocument,
+                    new FixedCreationStampTransform(FixedVector3.Zero, FixedQuaternion.Identity, FixedQ4816.FromDouble(placement.Scale), null),
+                    placement.Solid!.Margin);
+            }
+        }
         m_attachedVisitor = RecordAttachedCopy;
         m_attachedOrigins = new FixedVector3[attachedRows.Count];
         m_previousAttachedOrigins = new FixedVector3[attachedRows.Count];
@@ -843,11 +852,13 @@ public sealed partial class WorldColliderSet : IContactField {
     private Fnv1aHash m_refreshHash;
     private FixedQ4816 m_refreshMargin;
     private int m_refreshRow;
+    // Immutable local composed fields; refresh only carries their fixed-point frame, never recompiles relief.
+    private readonly FixedStaticCollider?[] m_attachedFields;
 
     private void RecordAttachedCopy(FixedCreationStampPrimitiveCopy copy) {
-
-        var attached = CopyCollider(copy: copy, margin: m_refreshMargin);
-
+        RecordAttachedCollider(CopyCollider(copy: copy, margin: m_refreshMargin));
+    }
+    private void RecordAttachedCollider(FixedStaticCollider attached) {
         m_attachedColliders.Add(item: attached);
         m_attachedColliderRows.Add(item: m_refreshRow);
         FoldCollider(collider: in attached, hash: ref m_refreshHash);
@@ -869,8 +880,14 @@ public sealed partial class WorldColliderSet : IContactField {
             var colliders = new List<WorldDiagnosticCollider>();
             var pose = new WorldPosedSolid(Creation: creation, Origin: m_attachedOrigins[row], Placement: placement, Rotation: m_attachedRotations[row]);
 
-            CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument, transform: pose.Transform,
-                visitor: copy => colliders.Add(item: DiagnosticOf(collider: CopyCollider(copy: copy, margin: margin), copy: copy, creation: creation, placement: placement)));
+            if (CollidesAsField(creation.EngineDocument)) {
+                if (PosedAttachedField(row, pose.Origin, pose.Rotation) is { } field) {
+                    colliders.Add(new WorldDiagnosticCollider(field, placement.Id.ToString(), creation.Id.ToString(), "relief", "Field/relief", placement.Solid!.Margin));
+                }
+            } else {
+                CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument, transform: pose.Transform,
+                    visitor: copy => colliders.Add(item: DiagnosticOf(collider: CopyCollider(copy: copy, margin: margin), copy: copy, creation: creation, placement: placement)));
+            }
             rows.Add(item: new WorldAttachedDiagnostic(Colliders: colliders, Pose: pose));
         }
 

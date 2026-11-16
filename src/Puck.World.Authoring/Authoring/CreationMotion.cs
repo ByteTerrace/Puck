@@ -15,6 +15,20 @@ public readonly record struct CreationMovingBlend(int Shape, int Other, int Grou
 /// into rigid owner fields. No presentation motion is applied to simulation state.
 /// </summary>
 public static partial class CreationMotion {
+    /// <summary>Returns whether any shape moves within the creation's frame. Root motion and uniform size drivers
+    /// leave this false; shape drivers, effectors and frames that change a shape's pose leave it true.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <returns>Whether the creation's composed field changes in its own frame.</returns>
+    public static bool HasPartMotion(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+        var parents = new int[document.Shapes?.Count ?? 0];
+
+        ResolveParents(document.Shapes ?? [], parents);
+        for (var index = 0; index < parents.Length; index++) {
+            if (Owner(document, parents, index) >= 0) { return true; }
+        }
+        return false;
+    }
     /// <summary>Returns whether a creation animates: a driver or an inverse-kinematics effector moves it, or a timeline
     /// frame poses a shape away from its authored position or rotation (a state-bound value always differs from a
     /// literal). A creation whose frames carry no transforms, or only its shapes' authored poses, moves nothing.</summary>
@@ -132,7 +146,7 @@ public static partial class CreationMotion {
 
         var shapes = (document.Shapes ?? []);
 
-        if ((shapes.Count < 2) || !Animates(document: document)) { return []; }
+        if ((shapes.Count < 2) || !Animates(document: document) || (document.Noise is not null)) { return []; }
 
         var found = new List<int>();
 

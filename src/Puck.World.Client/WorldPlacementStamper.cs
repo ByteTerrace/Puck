@@ -16,7 +16,7 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
 /// font catalog. They count against <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
-public static class WorldPlacementStamper {
+public static partial class WorldPlacementStamper {
     /// <summary>Retains the static placements the contact evaluator can read. An unsupported placement excludes only
     /// itself, so a render-only fold cannot disable surface probes throughout the world.</summary>
     /// <param name="definition">The world supplying prototypes and placement frames.</param>
@@ -567,30 +567,31 @@ public static class WorldPlacementStamper {
     // A warped field stays separate from its neighbours under the existing static bake partition.
     internal static bool BakesAlone(ShapeDocument shape) => ShapePointOps.NeedsScope(shape: shape);
 
+    // The finest authored shape detail shared by static and root-bound instances.
+    internal static float CreationDetail(CreationDocument document, float scale, bool[]? hidden = null) {
+        var detail = float.PositiveInfinity;
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if ((hidden is not null) && hidden[index]) { continue; }
+
+            var own = WorldShapeDetail.Of(scale: scale, shape: shapes[index]);
+
+            if (own > 0f) { detail = MathF.Min(x: detail, y: own); }
+        }
+
+        return (float.IsFinite(f: detail) ? detail : 0f);
+    }
+    // A scoped creation's noise relief declares its own spacing (CreationNoiseDocument.DetailSpacing): the shapes'
+    // bounds size its lattice by the creation's extent, which steps over relief a few cells long.
+    internal static float ReliefDetail(float detail, CreationNoiseDocument? noise, float scale) {
+        var relief = ((noise is null) ? 0f : (noise.DetailSpacing() * scale));
+
+        return ((relief <= 0f) ? detail : ((detail <= 0f) ? relief : MathF.Min(x: detail, y: relief)));
+    }
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
     private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, bool[]? hiddenOpaque, bool[]? glassHidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
-        private static float CreationDetail(CreationDocument document, float scale, bool[]? hidden = null) {
-            var detail = float.PositiveInfinity;
-            var shapes = (document.Shapes ?? []);
-
-            for (var index = 0; (index < shapes.Count); index++) {
-                if ((hidden is not null) && hidden[index]) { continue; }
-
-                var own = WorldShapeDetail.Of(scale: scale, shape: shapes[index]);
-
-                if (own > 0f) { detail = MathF.Min(x: detail, y: own); }
-            }
-
-            return (float.IsFinite(f: detail) ? detail : 0f);
-        }
-        // A scoped creation's noise relief declares its own spacing (CreationNoiseDocument.DetailSpacing): the shapes'
-        // bounds size its lattice by the creation's extent, which steps over relief a few cells long.
-        private static float ReliefDetail(float detail, CreationNoiseDocument? noise, float scale) {
-            var relief = ((noise is null) ? 0f : (noise.DetailSpacing() * scale));
-
-            return ((relief <= 0f) ? detail : ((detail <= 0f) ? relief : MathF.Min(x: detail, y: relief)));
-        }
         // The creation's glass shapes, one static instance of their own after the opaque shapes and text: their own
         // group, so they never bake with an opaque shape, carve or are carved by one, and draw in the glass pass. They
         // take a field scope of their own only when one of them composes by something other than a union, so a hollow

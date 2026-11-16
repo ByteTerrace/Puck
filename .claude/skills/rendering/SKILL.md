@@ -170,6 +170,15 @@ one bake program, not a per-world render budget.
 
 ## Moving blends
 
+Creation noise relief requires all shapes to ride the root. `CreationMotionPlan` refuses a relieved document
+with part owners; validation reports the same boundary, including look part followers. Root drivers such as
+`sizeBy` keep one composed field through `WorldPlacementStamper.EmitRootSurface`, shared with rigid body assets.
+It bakes in creation units with the relief's detail spacing; only the root matrix changes with size or pose.
+Opaque relief follows shapes and text in their field scope; glass keeps its own surface, as static emission does.
+Amplitude and wavelength scale with the creation in both render and fixed contact emission. `sizeBy` remains
+presentation-only and is refused on solid placements; static placement scale and rigid attached contact use
+the relieved fixed-point field. Never feed a presentation driver's phase into collision.
+
 `CreationMotion.Envelope` bounds each cross-owner smooth seam; `CreationMotionPlan.RenderDocument`
 is the pooled emitter's partition. A rejected seam partitions its authored group by actual motion owner.
 PUCK122 prints the rotation and displacement bounds and whether it skins or creases. A regular-polygon
