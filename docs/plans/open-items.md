@@ -1871,8 +1871,9 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
-and 6; then the researcher brief's priorities
+Owner: an independent reviewer · high · Next: Claude review of disclosure
+decision 3a, then its single build table alongside disclosure steps 5 and 6;
+then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
 - [high] No principal but the host's console can declare a state row, moderate
@@ -1880,15 +1881,18 @@ and 6; then the researcher brief's priorities
   recipient declaration, and the operator is a principal kind.
   [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
   is the design (an operator grant, a host audience, contribution scopes with a
-  typed door and a reserved quota) and answers the write door's four review
-  findings. Next: a design review by another family, then its steps D1 to D7 as
+  restricted preparation door and a reserved quota) and answers the write door's
+  first four review findings and the later structural-footprint findings.
+  Next: the lead's Claude design review, then its steps D0a–D0d and D1–D7 as
   build briefs; a change to a trust boundary, so each step takes an adversarial
   review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
   learns that a withheld declaration sits in a write's footprint (never its
-  name). [The disclosure plan's open items](disclosure.md#open-items) hold the
-  two candidates.
+  name). [The structural write footprint](disclosure.md#the-structural-write-footprint)
+  chooses declaration entitlement for general writes and closed scopes for
+  lower-tier writes; D0c/D6 implements that choice with the authored input and
+  addon migration. Nothing enforces it yet.
 - [high, before any push to `main`] The write door's footprint is
   enumerated per field, and an Antigravity adversarial review of the read-door
   fix found five high and three medium leaks it missed: state-row references
@@ -1900,9 +1904,14 @@ and 6; then the researcher brief's priorities
   empty `ExpectedStateRows` passing `AdmitsDefinition` while the fingerprint
   hashes state-dependent placements and fields; console write verbs reading
   the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
-  definition; `world.parked` and `world.hud.template`. The design for one
-  derived write footprint, with granted row declaration and an operator grant,
-  is in [the disclosure plan](disclosure.md); the build follows its review.
+  definition; `world.parked` and `world.hud.template`.
+  [Decision 3a's structural write footprint](disclosure.md#the-structural-write-footprint)
+  records the reopened evidence, options, restricted transaction, derived
+  validation dependencies, cost counters and a finding-by-finding harness
+  witness. The review's one-versus-two `Placeholder` example is permitted
+  disclosure to its named seat; D0a recasts the actual guard-ceiling attack at
+  a lower tier and verifies every claimed reproduction. The design is complete,
+  not implemented; its one build table follows the Claude design review.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
