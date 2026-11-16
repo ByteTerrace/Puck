@@ -342,8 +342,7 @@ rebuild and allocation in active rigid scenes; unmeasured.
 wake (the existing pair sweep does this), so the wake order is unchanged.
 
 **Cost.** Small; the wake half is filed in the
-[refactoring packet](open-items.md#refactoring-campaign) and is a Codex-sized
-lane.
+[rigid bodies packet](open-items.md#rigid-bodies-and-physics).
 
 ### 5. Order-free merges and exact reductions for the parallel tick
 

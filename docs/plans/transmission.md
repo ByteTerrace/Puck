@@ -772,6 +772,9 @@ others run beside the second. The remaining review mediums are checks here.
   is a different look and could be a separate authored material term later.
 - **`solid: true | false` is author-facing vocabulary** on a prototype's
   `mesh`, for the geometry the test cannot settle, listed above.
+- **The Steam Deck's budgets.** The Deck is measured at Full quality, the
+  bar's highest quality, for three cascades inside its 22.2 ms frame, with a
+  live-byte budget at the portal stop. The owner confirms or sets the budgets.
 
 ## References
 

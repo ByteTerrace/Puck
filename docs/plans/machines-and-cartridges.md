@@ -124,7 +124,10 @@ hardware observations, addon watches, the execution and content receipt,
    decides how cabinets are stepped, parked and resumed. "Observed" there means
    authoritative state only: a seat, a binding read this tick, or an engagement.
    A viewer, a render or residency is never an observation, because who looks
-   must not change simulation state (the determinism rule).
+   must not change simulation state (the determinism rule). The work itself is
+   one item, in the
+   [machines as authored logic packet](open-items.md#machines-as-authored-logic);
+   this entry states the rule that item builds to.
 
 **Check:** two aliased cabinets with independent controls and state; a passive
 monitor grants no control; slot reuse cannot retarget a command; a coupled

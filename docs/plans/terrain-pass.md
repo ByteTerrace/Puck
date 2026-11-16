@@ -148,18 +148,11 @@ alone, a measurement request.
 2. **Terrain tiles as residency units.** A terrain placement declares a tile
    size and the stamper emits one static instance per tile, bounded by the
    tile's box, each its own group, so a tile is demanded, baked at the tier its
-   demand chooses, kept and evicted like any group. The unit and its seam rule
-   across tiers belong to one design, the streaming plan's
-   [step 10](streaming-and-memory.md#the-build-order), which terrain consumes
-   and does not take early for itself. Terrain's requirements of it: the
-   coarse tile draws while the fine one bakes; a tile's key does not depend on
-   its neighbours' tiers unless the seam rule needs it; and no seam shows from
-   the rim in normal play
-   ([the seam ruling](../decisions/residency.md#the-owners-rulings-on-look-and-policy)).
-   The candidates that step weighs: skirts hanging below each open edge by the
-   coarser spacing (cheapest, and they can show at grazing angles), a shared
-   border contoured at the coarser spacing (ties a tile's key to its
-   neighbours' tiers), and a coarser parent that replaces its children whole.
+   demand chooses, kept and evicted like any group. The unit and the rule where
+   two tiles meet are the streaming plan's
+   ([the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule):
+   neighbours overlap and each tile is closed on its own), built in its step
+   10; terrain consumes it and does not take it early for itself.
 3. **The finest tile spacing is the relief's geometric cut**, so contact and
    the nearest drawn mesh agree within the bake's error.
 
@@ -238,7 +231,8 @@ Risks:
   not the band a program chose
   ([the contract](../decisions/rendering.md#authored-shading)). Each terrain
   slot's base colour is authored as its lighting-representative value.
-- **Tile seams**, which the streaming plan's step 10 settles.
+- **Tile seams.** The seam rule admits a step no taller than two tiers' summed
+  error where neighbours differ; its rim check is the streaming plan's.
 
 Owner calls:
 

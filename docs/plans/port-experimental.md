@@ -65,8 +65,9 @@ so every optimization is measured on the load it exists for:
   view recording (the [job system](engine-job-system.md#6-build-order)'s R1),
   whose admission reading they supply;
 - the quilt (lane 2) with the [streaming plan](streaming-and-memory.md#the-build-order)'s
-  one reservation across residencies and staging by demand (its steps 3 and
-  4), since a neighbour authority's residency is the load both exist for;
+  staging by demand (its step 4) and the led demand point of its step 10,
+  since a neighbour authority's residency arriving ahead of a walker is the
+  load both exist for;
 - the rules arcade (lane 7) and the combat yard's pair primitive (lane 13) as
   the rule-VM and pair-rule workloads. The field workload is already in the
   debug world (the water chain).

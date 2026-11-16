@@ -132,6 +132,30 @@ on that device. `puck mesh audit --group stem-` selects no group, because the
 audit's rest scene labels a body's group by slot and does not name the
 meadow's placement blades; a per-part triangle count needs that fixed first.
 
+The same quiet window owes four more readings, each of which names something a
+V-step would otherwise assume:
+
+- **Session and nested nodes.** One screen or portal session node and one
+  nested-view node per pass (`world.counters gpu node`: candidates, selection
+  dispatches, pixel passes), whether session nodes draw cascades under
+  `ReducedQuality`, and which sessions are residencies of their own. Each
+  session is a separate residency, so V5's shared classification reaches only
+  the nested views, while V1a's compaction and the job system's burst spreading
+  reach the sessions.
+- **Where held poses save GPU time.** Holding poses dropped root GPU time at
+  the meadow, and nothing names where: re-staged records, motion-history
+  copies, the far cascade's refresh and the clipped temporal resolve are the
+  candidates. Take `world.gpu-timing` per pass with poses as authored and held
+  before V2a or V2b claims a GPU saving.
+- **Two unexplained readings** from when selection moved to the GPU: a
+  Direct3D 12 lobby produce well above its CPU-selection controls, and a stripe
+  difference beyond the pinned noise on the lobby's static striped monitor
+  face. Neither is attributed to the selection or to machine load until it is
+  read with no other load.
+- **A draw-count variance.** The meadow's validation reads once differed by an
+  order of magnitude between Vulkan and Direct3D 12 at the highest quality and
+  native scale; a later leg did not reproduce it and its cause is unconfirmed.
+
 ## GPU selection is the foundation
 
 Selection runs in a kernel for every raster pass (`SdfMeshOcclusion`), with
@@ -310,9 +334,10 @@ limit.
    `SdfMeshCollapse` stays the level source, and item 2's simplifier is one of
    the candidates for a level source past its floor. A field-contoured parent
    above a chunked union or a stand of copies is that plan's D3, measured
-   against the same clauses before it is built. How tiles and chunks meet
-   across tiers is the streaming plan's
-   [step 10](streaming-and-memory.md#the-build-order).
+   against the same clauses before it is built. How source tiles meet across
+   tiers is the streaming plan's
+   [seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule); a
+   chunk's locked seams hold inside one tier only.
 
 **Why:** fewer triangles cut bake time and GPU geometry together, and the
 coarsest level already keeps 6 % of the stored triangles

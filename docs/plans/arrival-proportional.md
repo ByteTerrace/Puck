@@ -480,7 +480,7 @@ The walks over every row are replaced by counts kept where rows are written:
 
 The copy comparisons (`SdfMeshPathBake.SameCopyLayout`, the dresser's copy
 comparison and input commit) walk the frame's instances, not rows, and are the
-derivation; [the refactoring packet](open-items.md#refactoring-campaign) holds
+derivation; [the frame-time findings](open-items.md#other-frame-time-findings) hold
 them.
 
 ### Packing and the canonical order
@@ -776,7 +776,7 @@ on a worker and a small upload, and 3d is structure without a reading. That is
 why S2 waits for R0's rule.
 
 **3e waits.** When probe placement moves to the GPU trace
-([the memory packet](open-items.md#memory-on-the-deck-tier)), the CPU scene
+([how memory is read](streaming-and-memory.md#what-adds-and-what-only-names)), the CPU scene
 goes and a GPU builder stops being a second one.
 
 ## Decision 4: the store decode

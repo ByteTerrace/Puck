@@ -289,7 +289,7 @@ mechanism is uncontested across the three records. Where they disagreed:
 10. **The cold-bake bar.** Claude: demand tiers pay only what the spawn views
     resolve, and whether the bar counts on-demand finest tiers is the owner's.
     [The cold-bake bar under demand tiers](#the-cold-bake-bar-under-demand-tiers)
-    states the working reading and the owner's call.
+    points at the bar's one definition.
 
 ## The decisions
 
@@ -722,7 +722,7 @@ fact in the key, `SdfMeshPathBake.Retier` and the `world.residency` columns.
 |---|---|---|---|
 | 7a. Demand-bounded tiers: a group's tier is the coarsest power of two at which its finest cell stays under half a display pixel at the nearest demand seen (`SdfMeshDemand` holds each view's eye and pixels a metre at one metre); the tier joins the geometry key as a fact (`SdfMeshGeometryBuilder.AppendFact`), so each tier is its own cache entry, prewarmable in a player's build; the frame draws the finest tier baked so far, a counter reports detail owed, and the demand-first queue bakes the next tier; the D1 chain hangs under each tier | Virtual texturing applied to geometry; the bake pays what views resolve; no finest-cell ceiling for a mirror-close view (Claude **[record]**: the nose's cell is a sixth of a pixel at the chase camera and over three pixels at 0.3 m on 2160 lines, arithmetic) | A tier per group in the key; a residency counter; the bake queue reads demand it already has | On-demand tiers sit outside the cold-bake bar ([the bar under demand tiers](#the-cold-bake-bar-under-demand-tiers)); a view outrunning the bake sees a coarser tier for a moment, reported, never refused |
 | 7b. A per-creation triangle or byte cap | Simple | A refusal by count | Contradicts "no scene ceiling is sized for a worst case ... Detail follows projected size (the one-pixel rule), never a body's index" (decisions) |
-| 7c. Spatial refinement: an octree of field-contoured nodes each at its depth's cell, nodes of one depth partitioning one lattice | Refines the nose without baking the back of the head | Seams between depths need D1's seam answers (skirts, or a parent above) | Later; the group tier needs no seam work and comes first |
+| 7c. Spatial refinement: an octree of field-contoured nodes each at its depth's cell, nodes of one depth partitioning one lattice | Refines the nose without baking the back of the head | Seams between depths need a rule of their own, as source tiles have ([the seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule)), or a parent above | Later; the group tier needs no seam work and comes first |
 
 **Favoured.** 7a, then 7c. **Decided.** Detail is budgeted by demand, never by
 a cap: the finest tier is a cache tier identified from its inputs (group
@@ -955,27 +955,14 @@ window.
 
 ## The cold-bake bar under demand tiers
 
-The bar is the owner's and absolute: "the debug world's meshes bake from an
-empty store in one minute at most per backend on the lead machine" (AGENTS.md).
 Demand tiers change what "the debug world's meshes" can mean, because a tier
 exists only when a view demands it and D7 sets no finest cell for a
-mirror-close view, so "every tier any view can demand" has no finite bake to
-time.
-
-**The working reading, which is the lead's and not an owner statement:** the
-bar times the wait a fresh machine sees. From an empty store, within one
-minute per backend, every group's floor tier is resident and every tier the
-boot's views demand has landed (`world.wait bakes` returns with `tiers-owed`
-at zero at the spawn). A view that later comes closer bakes the next tier on
-demand, a cache miss that is derived again and counted, never refused. The
-cold bake of every tier a tour of the places demands is reported beside the
-bar as the cost of streaming, and the bake's rate per unit of work is a
-diagnostic; neither replaces the one-minute reading.
-
-Whether the bar should instead time the tour's whole demanded set is the
-owner's call, listed in [open items](open-items.md#owner-decisions) with both
-readings. No plan relaxes the minute, and a lane that meets a rate while a
-fresh player waits minutes has not met the bar.
+mirror-close view. The bar has one definition, in
+[how the bars are read](streaming-and-memory.md#how-the-bars-are-read): the
+minute is absolute and times the boot's demanded set, a scope derived from the
+bar's words that the owner may widen. A finer tier a later view asks for is a
+cache miss, read as streaming cost; nothing on this page defines the bar a
+second time.
 
 ## Found while reading
 
@@ -1019,7 +1006,8 @@ whichever lane next touches its file:
 - G5's counted query latency exceeding a floor tier's period on the bar
   devices reopens the floor tier's choice (a higher floor, or a host-side
   test of the reach box against a reduced pyramid).
-- The owner's reading of the cold-bake bar sets what G8 must fit.
+- The owner widening the cold-bake bar's scope past the boot's demanded set
+  changes what the arrival contract must fit.
 
 ## Sources
 

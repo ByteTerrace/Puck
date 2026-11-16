@@ -7,7 +7,7 @@ work and storage an author causes. A small pressure patch does not close it.
 
 The owning mechanism plans remain [visibility](visibility.md),
 [frame queries](open-items.md#other-frame-time-findings),
-[memory](open-items.md#memory-on-the-deck-tier),
+[memory](streaming-and-memory.md),
 [baking](open-items.md#bake-proportional-to-change) and
 [terrain](terrain-pass.md). This page owns the landscape workload, current
 assessment, order of implementation and completion criteria. Historical run
@@ -28,12 +28,10 @@ and local density independently: connected 20×20, 40×40 and 80×80 m portions,
 then the belt; vary tree spacing, shrubs and grass separately. Count canopy
 coverage and uninterrupted under-canopy distance, not just placed trees.
 
-The existing bars are 60 FPS on RTX 2060/4070 and 45 FPS on Steam Deck at the
-highest quality, a cold debug-world bake within one minute per backend, and
-engine edit to running within 30 seconds. The Deck-tier memory work uses a
-10 GB budget; [its packet](open-items.md#memory-on-the-deck-tier)
-owns attribution and qualification. Record device resolution and every quality
-setting. A 4070 at Deck resolution does not qualify the Deck.
+The bars are the frame, cold-bake, memory and seam bars, each read by
+[the one recipe](streaming-and-memory.md#how-the-bars-are-read), and engine
+edit to running inside its bar (AGENTS.md). Record device resolution and every
+quality setting. A 4070 at Deck resolution does not qualify the Deck.
 
 ## Current status
 

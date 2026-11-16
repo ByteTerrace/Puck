@@ -183,7 +183,8 @@ with it.
 - **A style can follow state.** A palette row's `toonSelect` binds its style to
   a state cell, so a command that writes the cell swaps the look with no
   rebake. The Moth supports both cel and plain styles this way, swappable live
-  for playtesting as binding layouts are (the owner's ruling).
+  for playtesting as binding layouts are (the owner's ruling): `moth.style
+  Cel|Plain` writes the cell her palette rows read.
 - **The style becomes an authored program.** Under
   [authored shading](#authored-shading) the banding is the standard's `cel`
   program, the world default is `render.shade` with `world.shade default` as
@@ -584,6 +585,12 @@ picture enters its viewer's image at the brightness the window shares give
 it, so nested views compose with no special case. The neutral engine default
 averages the whole picture alike with no band (`SdfExposure.Default`); the
 debug world's basis authors its band, percentiles and centre weight.
+
+**How night reads is the author's (the owner's ruling).** Night exposure is
+the lead's call for the debug world, provided authors can style it as their
+vision demands: the exposure's floor and curve stay authored data, keyable on
+the day clock, and the engine fixes no night look. The debug world authors a
+readable deep-blue night.
 
 The readback rather than a GPU-resident exposure was chosen because the
 exposure is read on the host in the same frame by every consumer that divides

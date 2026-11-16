@@ -24,6 +24,16 @@ hardware vocabulary: neutral hosting is engine infrastructure, and cartridge
 formats, console models, memory maps, cable protocols, and forges belong to
 providers.
 
+**An emulator core is machinery (the owner's ruling).** The C# emulator cores
+are virtual machines, as the SDF VM is: engine machinery that runs authored
+programs. The cartridges, and whatever else runs on a machine, are the authored
+programs. A core written in C# is therefore not a second implementation of
+something an author programs: "Puck code over engine code" (AGENTS.md) governs
+what runs on the machine, which authors build and own, and the core is the
+machinery that runs, schedules and costs it. The emulator plans stand as
+written ([machines and cartridges](../plans/machines-and-cartridges.md),
+[the Humble Gaming Deck](../plans/humble-gaming-deck.md)).
+
 **Settled implementation contracts.**
 
 | Contract | Decision |

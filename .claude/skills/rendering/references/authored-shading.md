@@ -231,7 +231,7 @@ kernels' lifetime, publication or binning keeps all nine.
    World root holds its world residency for its whole life), and the residency's
    own pipeline set and a reload still in flight still wait on release
    (`SdfWorldPipelineSource.Release`, `CancelShaderReload`; the
-   [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign) holds that).
+   [frame-time findings](../../../../docs/plans/open-items.md#other-frame-time-findings) hold that).
 4. *Publication changes no scene revision and no render history.* Only the
    comparison levers `world.shaders.tier` and `world.shaders.bins` invalidate
    the shading passes, from the frame `PrepareShade` takes them on.

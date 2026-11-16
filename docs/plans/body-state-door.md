@@ -6,8 +6,7 @@ active body again, and the rule host compares every body's pose and facts on
 every pass. Each decision names its options, the evidence, the failure modes
 each option closes, the favoured option, the strongest case against it, the
 invariant and the one place that enforces it. It supersedes the design
-paragraphs of [the refactoring packet's item](open-items.md#refactoring-campaign)
-and [the test runner packet's order](open-items.md#test-runner-and-replay). A
+paragraphs of [the test runner packet's item](open-items.md#test-runner-and-replay). A
 review from another family has read it; [its answers](#review-answers) are at
 the end, and each one names the section that carries the change.
 

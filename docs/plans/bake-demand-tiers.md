@@ -43,7 +43,7 @@ nothing while the mesh region has room.
 
 The cold bake is the boot's views' bake: the plan a residency makes for its
 first frame takes that frame's demand points
-([the cold-bake bar under demand tiers](virtual-geometry.md#the-cold-bake-bar-under-demand-tiers)).
+([how the cold-bake bar is read](streaming-and-memory.md#how-the-bars-are-read)).
 
 ## The region's budget
 
@@ -79,8 +79,10 @@ budget per residency with one reservation:
   ([one reservation across residencies](streaming-and-memory.md#decision-3-one-reservation-across-residencies-with-floors-and-classes)).
 - **Lookahead and cancellation** (each eye advanced by the camera program's
   bound; a demand that leaves a view's reach cancelled) are unbuilt: a view
-  outrunning the bake sees the coarser tier for the owed interval, reported
-  ([prediction decides arrival](streaming-and-memory.md#decision-7-prediction-decides-arrival-and-observation-decides-retention)).
+  outrunning the bake sees the coarser tier for the owed interval, reported.
+  They are the streaming plan's
+  [step 10](streaming-and-memory.md#step-10-areas-tiles-then-the-moons), under
+  [prediction decides arrival](streaming-and-memory.md#decision-7-prediction-decides-arrival-and-observation-decides-retention).
 - **The material cut's lists** grow outside the memory account
   (`SdfMeshMaterialCut.Build`), so a bake's peak is unbounded by any budget
   here ([bake detail](open-items.md#bake-detail)).

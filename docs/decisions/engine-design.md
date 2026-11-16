@@ -468,7 +468,7 @@ surface collides as a field collider over the same fixed-point program the
 bake's field reads. Contact must place a body on the rock that is drawn rather
 than on the smooth masses under it. The current gradient quotient is a local
 estimate; conservative distance, composed bounds and degenerate gradients
-remain [open work](../plans/open-items.md#the-valleys-terrain).
+remain [open work](../plans/open-items.md#certified-field-contact).
 The chase camera clears against the drawn field, not the colliders, so an inset
 wall collider can't make the camera clip. A conservative approximation reports
 its computed bound. Within that bound it is a known approximation, not a red
@@ -605,6 +605,16 @@ player verifies content-addressed bytes without discovering a compiler. A cache
 miss derives with the installed tools, and a missing tool is a named refusal
 with the setup link. Prewarming is a shipping operation, never a repository
 exception or an output-comparison gate.
+
+**A distributed mesh cache waits (the owner's deferral).** Nothing is built to
+ship baked meshes between machines until a presenting client downloads
+packages. When one does, a self-hosted GPU runner bakes them, keeps only the
+entries a package uses and supplies an optional read-only package cache ahead
+of the user's store; a miss there is derived locally like any other, and
+deployment never waits on it. WARP and the fixed-point CPU audit are not
+substitutes for that GPU product. Until then every machine derives its own
+meshes ([the rendering plan](../plans/rendering.md#bake-quality) holds the
+work for that day).
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
 `SdfMeshPathBake.Complete` interprets sampler answers, `SdfMeshBakeGpuWork` carries a batch to the device and back as background GPU work outside the closure, and `SdfMeshBakeBlock` owns the

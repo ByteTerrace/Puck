@@ -53,11 +53,11 @@ which other plans cite:
    arithmetic is widened. The 8192 m cap rises only after the precision work.
 4. **Residency.** Terrain tiles as residency units, admitted and evicted across
    all views and planned against the authored flight speed and braking, then
-   the moons through routed residency. The unit, its seam rule across tiers and
-   its order are the streaming plan's
-   [step 10](streaming-and-memory.md#the-build-order); this phase is that step
-   read on the valley, and [the terrain pass](terrain-pass.md#what-the-bake-needs)
-   states what terrain requires of it.
+   the moons through routed residency. The unit and its seam rule are the
+   streaming plan's
+   ([the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule)),
+   built in its [step 10](streaming-and-memory.md#step-10-areas-tiles-then-the-moons);
+   this phase is that step read on the valley.
 5. **Atmosphere, clouds and flight.** A body-frame spherical-shell atmosphere
    with surface occlusion, keeping local valley mist; bounded clouds before
    flying through them; exposure continuous into vacuum. Flight reuses the

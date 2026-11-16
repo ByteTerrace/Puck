@@ -61,8 +61,9 @@ The [illumination plan](illumination.md) holds the lighting decisions and their
 build order. The [Lighting and GI packet](open-items.md#lighting-and-gi)
 owns the remaining coverage, visibility, exposure and bounce findings. The
 [engine job system](open-items.md#engine-job-system) owns its execution budget,
-and [the streaming plan](streaming-and-memory.md) owns what the lighting
-demands and keeps. No second scheduler is built for GI.
+and the streaming plan's
+[decision 9](streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)
+owns what the lighting demands and keeps. No second scheduler is built for GI.
 
 ### P13 — Hit-to-source mapping and input destinations
 
@@ -272,8 +273,9 @@ seams. Exercise them in the debug gallery on both backends.
 Per-pass box culling, depth occlusion, rated presentation, planar merging,
 quadric collapse, static-union chunks, per-view light range selection and
 near-first mesh demand are implemented. The
-[residency packet](open-items.md#residency-and-streaming) owns demand-point GI,
-mapped portal demand, byte-bounded eviction, authored areas and terrain units.
+[streaming plan](streaming-and-memory.md) owns lighting on the same demand (its
+decision 9), mapped portal demand, byte-bounded eviction, authored areas and
+terrain tiles.
 The [engine job system](open-items.md#engine-job-system) owns execution and
 memory ownership; the [rendering decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)
 owns the one-display-pixel detail rule. How the frame decides what to draw
