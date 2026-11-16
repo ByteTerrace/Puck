@@ -1,4 +1,4 @@
-using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -26,7 +26,7 @@ public static class SdfWorldRenderBuilder {
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
             // The views built over the same cache read this same deployed set, so a boot reads the kernels once.
-            kernels: pipelines.LoadDeployed(bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: spec.HostsOnDirectX)),
+            kernels: pipelines.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: spec.HostsOnDirectX)),
             name: spec.Name,
             pipelines: pipelines,
             programWordCapacity: spec.ProgramWordCapacity,

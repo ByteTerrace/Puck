@@ -69,7 +69,7 @@ public sealed class SdfMeshSkinSource {
 
         foreach (var part in parts) {
             if ((part.Slot != slot) || !poses.TryGetValue(key: part.Slot, value: out var pose)) { continue; }
-            var box = SdfMeshBox.Turned(center: (0.5f * (part.Low + part.High)), half: (0.5f * (part.High - part.Low)), offset: pose.Position, turn: ((pose.Orientation == default) ? Quaternion.Identity : pose.Orientation));
+            var box = SdfMeshBox.OfPart(part: part, pose: pose);
             var reach = box.AxisHalf;
 
             low = Vector3.Min(value1: low, value2: (box.Center - reach));

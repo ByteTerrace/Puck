@@ -17,7 +17,7 @@ public sealed class SdfMeshRasterPassLawTests {
     [Fact]
     public void TheDeployedStagesKeyEveryPipelineThePassLeases() {
         var pass = new SdfMeshRasterPass(
-            bytecodeExtension: ".spv",
+            target: ShaderTarget.Spirv,
             pipelines: new GpuPassPipelineCache()
         );
         var vertex = Stage(stage: "vert", stem: SdfMeshRasterPass.ShaderStem);

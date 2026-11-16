@@ -18,27 +18,27 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
     public void VulkanRefreshesALivePanoramaFromItsActualPublication() {
         using var device = HeadlessVulkanDevice.Create(nameof(SdfSkyEnvironmentDeviceLawTests));
 
-        VerifyLivePanorama(device: device, extension: ".spv");
+        VerifyLivePanorama(device: device, target: ShaderTarget.Spirv);
     }
     [Fact]
     public void DirectXRefreshesALivePanoramaFromItsActualPublication() {
         using var device = DirectXTestDevices.Hardware();
 
-        VerifyLivePanorama(device: device, extension: ".dxil");
+        VerifyLivePanorama(device: device, target: ShaderTarget.Dxil);
     }
 
     // The sky definition, mapping and dimensions are held while successful conversion publications change and the
     // source ring rotates. The production environment factory must refresh both retained buffers and their identity.
-    private static void VerifyLivePanorama(IGpuDeviceContext device, string extension) {
+    private static void VerifyLivePanorama(IGpuDeviceContext device, ShaderTarget target) {
         var cache = new GpuPassPipelineCache();
-        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: cache),
-            new SdfMeshRasterPass(bytecodeExtension: extension, pipelines: cache));
+        var pipelines = new SdfWorldPipelineCatalog(new GpuRegionCopyPass(target: target, pipelines: cache),
+            new SdfMeshRasterPass(target: target, pipelines: cache));
         var sky = new SdfSky();
 
         sky.ClearLayers();
         sky.Add(new SdfSkyPanorama { Intensity = 1, Screen = 0 }, "live", visibility: SdfSkyVisibility.Lighting);
         var frameSource = new PanoramaFrame(sky: sky);
-        using var residency = new SdfWorldResidency(pipelines, frameSource, pipelines.LoadDeployed(bytecodeExtension: extension),
+        using var residency = new SdfWorldResidency(pipelines, frameSource, pipelines.LoadDeployed(target: target),
             "panorama", 4, 4, screenSources: new PanoramaScreen());
         var views = new SdfWorldPasses(_ => new SdfWorldView(Residency: residency, View: 0));
         using var environment = new SdfSkyEnvironmentPasses(views: views);
@@ -60,7 +60,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
                 Refresh: RenderGraphRefresh.EveryFrame)],
             out var set, out var setRefusal), userMessage: setRefusal?.Message);
         Assert.True(condition: RenderGraphRuntime.TryCreate(set, [null, null, PixelGraph(Observer, environment: true)], "observer", packages,
-            cache, device, (extension == ".dxil"), out var runtime, out var refusal), userMessage: refusal?.Message);
+            cache, device, (target == ShaderTarget.Dxil), out var runtime, out var refusal), userMessage: refusal?.Message);
         using var graph = runtime;
         using var converter = graph.CreateConverter("panorama-live-pixels", LivePixels.Descriptor);
 
@@ -70,7 +70,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         var stage = "residency pipelines";
         string? previousStatus = null;
 
-        string Status() => (((((string)$"{extension} {stage}: frame={index}, residency={(residency.NotReadyReason ?? "ready")}; converter={(converter.Render.Reason ?? "rendered")}, source={converter.Publication.Sequence}; ") +
+        string Status() => (((((string)$"{target} {stage}: frame={index}, residency={(residency.NotReadyReason ?? "ready")}; converter={(converter.Render.Reason ?? "rendered")}, source={converter.Publication.Sequence}; ") +
             $"environment={NodeStatus(node: graph.Node(instance: 1))}, observer={NodeStatus(node: graph.Node(instance: 2))}; ") +
             $"submitted={residency.Tables?.SubmittedSkyEnvironment?.Sequence}, completed={residency.Tables?.CompletedSkyEnvironment.Sequence}; ") +
             $"graph={(graph.Render.Reason ?? "rendered")}");

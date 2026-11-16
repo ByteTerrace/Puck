@@ -30,4 +30,15 @@ public static class ShaderTargets {
     /// <param name="target">The target.</param>
     /// <returns>The extension with its leading dot, as <see cref="ShaderBytecode.FileExtension"/> spells it.</returns>
     public static string FileExtension(this ShaderTarget target) => ShaderBytecode.FileExtension(hostsOnDirectX: (target == ShaderTarget.Dxil));
+    /// <summary>Gets the path a deployed stage's compiled bytecode for a target is stored at: <c>{stem}.{stage}</c> and the
+    /// target's extension, in a directory.</summary>
+    /// <param name="target">The target.</param>
+    /// <param name="directory">The directory the stages are deployed in.</param>
+    /// <param name="stem">The stage's file stem.</param>
+    /// <param name="stage">The stage's file suffix, such as <c>comp</c>, <c>vert</c> or <c>frag</c>.</param>
+    /// <returns>The bytecode's path.</returns>
+    public static string DeployedPath(this ShaderTarget target, string directory, string stem, string stage) => Path.Combine(
+        path1: directory,
+        path2: $"{stem}.{stage}{target.FileExtension()}"
+    );
 }

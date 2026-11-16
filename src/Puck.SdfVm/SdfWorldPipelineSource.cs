@@ -302,7 +302,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         var set = SdfWorldPipelines.Acquire(
             cache: catalog.Pipelines,
             device: device,
-            kernels: (kernels ?? catalog.LoadDeployed(bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX)))
+            kernels: (kernels ?? catalog.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: hostsOnDirectX)))
         );
 
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;

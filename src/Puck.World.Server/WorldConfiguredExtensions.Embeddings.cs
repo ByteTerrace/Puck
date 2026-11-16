@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -9,8 +10,8 @@ public sealed partial class WorldConfiguredExtensions {
         public required IWorldEmbeddingSource Source { get; init; }
         public required StateSpace Space { get; init; }
 
-        public readonly Dictionary<string, LinkedListNode<LruEntry>> CacheLookup = new(comparer: StringComparer.Ordinal);
-        public readonly LinkedList<LruEntry> CacheOrder = new();
+        /// <summary>The vectors already embedded, by content key; null when no entries are cached. Read and written under <see cref="CacheGate"/>.</summary>
+        public ContentAddressedLruCache<string, StateVector>? Cache { get; init; }
         public readonly Lock CacheGate = new();
         public Task InFlightTask = Task.CompletedTask;
 
@@ -29,7 +30,6 @@ public sealed partial class WorldConfiguredExtensions {
             Source.Dispose();
         }
     }
-    private sealed record LruEntry(string Key, StateVector Vector);
     private sealed class KeyTracking {
         public string? LastFailedText { get; set; }
         public ulong? LastFailedTick { get; set; }
@@ -141,10 +141,8 @@ public sealed partial class WorldConfiguredExtensions {
                 var cacheKey = ComputeLruKey(identity: state.Source.Identity, text: text);
 
                 lock (state.CacheGate) {
-                    if ((state.Settings.CacheEntries > 0) && state.CacheLookup.TryGetValue(key: cacheKey, value: out var node)) {
-                        state.CacheOrder.Remove(node: node);
-                        state.CacheOrder.AddFirst(node: node);
-                        hits.Add(item: (key, text, node.Value.Vector));
+                    if ((state.Cache is { } cache) && cache.TryGet(hash: cacheKey, value: out var cached)) {
+                        hits.Add(item: (key, text, cached));
                         Interlocked.Increment(location: ref state.Cached);
                     } else {
                         misses.Add(item: (key, text));
@@ -268,24 +266,12 @@ public sealed partial class WorldConfiguredExtensions {
                         Text: miss.Text
                     ));
 
-                    if (state.Settings.CacheEntries > 0) {
-                        var cacheKey = ComputeLruKey(identity: state.Source.Identity, text: miss.Text);
-
+                    if (state.Cache is { } cache) {
                         lock (state.CacheGate) {
-                            if (state.CacheLookup.TryGetValue(key: cacheKey, value: out var existingNode)) {
-                                state.CacheOrder.Remove(node: existingNode);
-                            } else if (state.CacheLookup.Count >= state.Settings.CacheEntries) {
-                                var oldest = state.CacheOrder.Last;
-
-                                if (oldest is not null) {
-                                    state.CacheOrder.RemoveLast();
-                                    state.CacheLookup.Remove(key: oldest.Value.Key);
-                                }
-                            }
-                            var newNode = new LinkedListNode<LruEntry>(value: new LruEntry(Key: cacheKey, Vector: vec));
-
-                            state.CacheOrder.AddFirst(node: newNode);
-                            state.CacheLookup[cacheKey] = newNode;
+                            cache.Set(
+                                hash: ComputeLruKey(identity: state.Source.Identity, text: miss.Text),
+                                value: vec
+                            );
                         }
                     }
 

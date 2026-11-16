@@ -54,6 +54,8 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     );
     // The geometry the latest mesh of each dynamic form was held under, by bake identity (TryTakeForm).
     private readonly Dictionary<(UInt128 Identity, UInt128 Form), SdfMeshGeometry> m_forms = [];
+    // The forms of m_forms each held geometry is the latest of, so Release drops them without scanning every form.
+    private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), HashSet<UInt128>> m_formsOf = [];
     // Groups sharing geometry also share its disk decode; the variants below hold only material renumberings.
     private readonly ConcurrentDictionary<(UInt128 Identity, SdfMeshGeometry Geometry), Lazy<StoredMesh>> m_reads = new();
 
@@ -188,7 +190,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         // the library evicts it, and the store is read again only for a geometry it does not hold.
         if (HoldsEmpty(geometry: geometry, identity: identity)) { return true; }
         if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out var held)) {
-            if (form is { } heldForm) { lock (m_gate) { m_forms[(identity, heldForm)] = geometry; } }
+            if (form is { } heldForm) { lock (m_gate) { SetForm(form: heldForm, geometry: geometry, identity: identity); } }
             mesh = held;
             return true;
         }
@@ -215,12 +217,12 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
             try {
                 if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) {
-                    if (form is { } heldForm) { lock (m_gate) { m_forms[(identity, heldForm)] = geometry; } }
+                    if (form is { } heldForm) { lock (m_gate) { SetForm(form: heldForm, geometry: geometry, identity: identity); } }
                     return true;
                 }
                 if (owns) {
                     // The library let go of the geometry between the hold and the take (a trim): the decode is the mesh.
-                    if (form is { } lostForm) { lock (m_gate) { m_forms[(identity, lostForm)] = geometry; } }
+                    if (form is { } lostForm) { lock (m_gate) { SetForm(form: lostForm, geometry: geometry, identity: identity); } }
                     mesh = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh.Acquire() : Renumber(from: result.Materials, mesh: result.Mesh, to: materials));
                     return true;
                 }
@@ -308,7 +310,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         var key = (identity, geometry);
 
         lock (m_gate) {
-            if (form is { } shapes) { m_forms[(identity, shapes)] = geometry; }
+            if (form is { } shapes) { SetForm(form: shapes, geometry: geometry, identity: identity); }
             if (m_held.Contains(hash: key)) { return false; }
             Admit(held: new Held(geometry: geometry, identity: identity, library: this, variants: [new Variant(Materials: materials, Mesh: mesh.Acquire(cached: true))]) { Bytes = mesh.StorageBytes });
 
@@ -335,7 +337,23 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         foreach (var variant in held.Variants) { variant.Mesh.Release(cached: true); }
         _ = m_reads.TryRemove(key: key, value: out _);
         if (m_clearing) { return; }
-        foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == key.Identity) && entry.Value.Equals(other: key.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
+        if (m_formsOf.Remove(key: key, value: out var forms)) {
+            foreach (var form in forms) { _ = m_forms.Remove(key: (key.Identity, form)); }
+        }
+    }
+    // Makes a geometry the latest of a form under an identity, keeping m_formsOf its exact inverse, under the gate.
+    private void SetForm(UInt128 form, SdfMeshGeometry geometry, UInt128 identity) {
+        if (m_forms.TryGetValue(key: (identity, form), value: out var previous)) {
+            if (previous.Equals(other: geometry)) { return; }
+            if (m_formsOf.TryGetValue(key: (identity, previous), value: out var siblings) && siblings.Remove(item: form) && (siblings.Count == 0)) {
+                _ = m_formsOf.Remove(key: (identity, previous));
+            }
+        }
+        m_forms[(identity, form)] = geometry;
+        if (!m_formsOf.TryGetValue(key: (identity, geometry), value: out var forms)) {
+            m_formsOf.Add(key: (identity, geometry), value: forms = []);
+        }
+        _ = forms.Add(item: form);
     }
     /// <summary>Gets a count that moves each time a published mesh's store entry could not restore its normals and
     /// levels (<see cref="Lose"/>): a bake holding the library restarts when it moves, baking again each group whose
@@ -375,6 +393,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             try { m_held.Clear(); } finally { m_clearing = false; }
             m_reads.Clear();
             m_forms.Clear();
+            m_formsOf.Clear();
         }
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
