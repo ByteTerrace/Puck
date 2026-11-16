@@ -34,11 +34,12 @@ public static class WorldAdmission {
     /// <param name="reserve">Whether an admitted start reserves its expected peak.</param>
     /// <param name="stage">Receives what the wait is on, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
+    /// <param name="checkout">The start's checkout, or null for the current checkout.</param>
     /// <returns><see langword="true"/> once admitted; <see langword="false"/> when the bound passed first.</returns>
-    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartKind kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken) {
+    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartKind kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken, string? checkout = null) {
         if (Installed is not { } admit) { return Task.FromResult(result: true); }
 
-        var checkout = (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory);
+        checkout ??= (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory);
 
         return admit(checkout: checkout, step: step, device: device, heavySuite: heavySuite, kind: kind, bound: bound, reserve: reserve, progress: Console.Error, stage: stage, cancellationToken: cancellationToken);
     }

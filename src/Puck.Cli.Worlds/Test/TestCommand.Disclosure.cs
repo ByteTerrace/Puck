@@ -146,7 +146,6 @@ public static partial class TestCommand {
             return 2;
         }
         using var held = lease;
-        using var heavy = AcquireHeavy(path: world, repositoryRoot: repositoryRoot, worlds: legs.Length);
         var started = Stopwatch.GetTimestamp();
 
         foreach (var (_, directory) in legs) { Puck.Confinement.ConfinedDirectory.RemoveTree(path: directory); }

@@ -1871,15 +1871,28 @@ enforces it today.
 
 ### Security review
 
-Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
-and 6; then the researcher brief's priorities
+Owner: an independent reviewer · high · Next: Claude review of disclosure
+decision 3a, then its single build table alongside disclosure steps 5 and 6;
+then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high] No principal but the host's console can declare a state row, moderate
+  a hosted world or operate a world it owns: the write door refuses every
+  recipient declaration, and the operator is a principal kind.
+  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is the design (an operator grant, a host audience, contribution scopes with a
+  restricted preparation door and a reserved quota) and answers the write door's
+  first four review findings and the later structural-footprint findings.
+  Next: the lead's Claude design review, then its steps D0a–D0d and D1–D7 as
+  build briefs; a change to a trust boundary, so each step takes an adversarial
+  review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
   learns that a withheld declaration sits in a write's footprint (never its
-  name). [The disclosure plan's open items](disclosure.md#open-items) hold the
-  two candidates.
+  name). [The structural write footprint](disclosure.md#the-structural-write-footprint)
+  chooses declaration entitlement for general writes and closed scopes for
+  lower-tier writes; D0c/D6 implements that choice with the authored input and
+  addon migration. Nothing enforces it yet.
 - [high, before any push to `main`] The write door's footprint is
   enumerated per field, and an Antigravity adversarial review of the read-door
   fix found five high and three medium leaks it missed: state-row references
@@ -1891,9 +1904,14 @@ and 6; then the researcher brief's priorities
   empty `ExpectedStateRows` passing `AdmitsDefinition` while the fingerprint
   hashes state-dependent placements and fields; console write verbs reading
   the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
-  definition; `world.parked` and `world.hud.template`. The design for one
-  derived write footprint, with granted row declaration and an operator grant,
-  is in [the disclosure plan](disclosure.md); the build follows its review.
+  definition; `world.parked` and `world.hud.template`.
+  [Decision 3a's structural write footprint](disclosure.md#the-structural-write-footprint)
+  records the reopened evidence, options, restricted transaction, derived
+  validation dependencies, cost counters and a finding-by-finding harness
+  witness. The review's one-versus-two `Placeholder` example is permitted
+  disclosure to its named seat; D0a recasts the actual guard-ceiling attack at
+  a lower tier and verifies every claimed reproduction. The design is complete,
+  not implemented; its one build table follows the Claude design review.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
@@ -1960,7 +1978,10 @@ and 6; then the researcher brief's priorities
   to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
-  rows if the grant vocabulary allows.
+  rows if the grant vocabulary allows. The `contribution:` subject of
+  [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is that vocabulary where the rows can sit in a scope, which no rule may
+  read.
 
 ### Test runner and replay
 
@@ -2419,13 +2440,6 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
-- [high] `puck test` takes the heavy lease and then waits up to 120 minutes for
-  host capacity while holding it ("gate: waiting for host capacity before test
-  worker"), so every other lane's heavy run queues behind a run that is itself
-  waiting: a lead `puck test` held the heavy lease 18 minutes behind a
-  windowed World's admission while a lane's scenario run waited 8 minutes for
-  it. Admit before acquiring an exclusive lease, or release the lease while
-  waiting on admission and requeue at the same ticket.
 - [medium] `puck integrate`: the lead's integration steps as one verb under
   one report: the build, each generator's `--check`, `puck docs links`, a
   headless boot of the debug world, windowed Direct3D 12 and Vulkan boots, and
@@ -2497,10 +2511,6 @@ Launch and process lifecycles, each a [low]:
 - `WorldProcess` has no state between running and drained: `WaitFor` treats
   exit as drained after one rescan, so a final line arriving later reads as no
   answer. Count end-of-stream per stream and end on drained.
-- A joiner of a faulted GPU hold gets an instant `TimeoutException`
-  (`WorldGpuHold.AcquireAsync` never replaces an entry whose lease failed),
-  and under a shared hold the requeue loop logs "released it" while the lease
-  stays held (`LeasedAdmission.AcquireAsync`).
 - `WorldReadiness.Observe` sets its marked flag before the mark write, so a
   failed write is never retried; and a windowed World nobody asks to wait
   counts as still growing for its whole life, since only the `world.wait`
@@ -3302,6 +3312,10 @@ screen and see the change hot reload.
   need no compiler.
 - Development only: editing C# runs arbitrary code, so it needs the SDK and an
   explicit grant to the owner's seat; published builds do not hot reload.
+- A seat that edits the world's own document is its operator:
+  [decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  designs that as an `Operate` grant the world gives, in place of the console's
+  principal kind.
 
 ### Media and capture
 
