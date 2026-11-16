@@ -3443,7 +3443,7 @@ waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
 and `world.residency [radius]` reads its measures.
 
-Open on the windows that render for a bake (`WorldViewGraphHost.ReserveBakes`):
+Open on the windows that render for a bake (`WorldViewGraphHost.ReserveArrivals`):
 
 - The search walks through session windows only, so a world behind a camera
   view that its rate holds back has no window rendering for its bake.

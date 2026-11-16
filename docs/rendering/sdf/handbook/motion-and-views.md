@@ -303,11 +303,11 @@ stays scheduled. A residency bakes its meshes in whichever of its views the
 graph records first, so a residency whose first view is a level out of view
 still bakes for the views that show. A window whose glass is out of sight keeps
 rendering at a sixteenth of its consumer's extent while its world still bakes
-(`WorldPortalVisibility.BakingShare`) where nothing else would record one of
+(`WorldPortalVisibility.ArrivalShare`) where nothing else would record one of
 that world's views. Each frame the graph host walks outward from the views
 that render, through session windows, a level a pass
-(`WorldViewGraphHost.ReserveBakes`): the first window reached onto a baking
-world its consumer does not render (`IWorldViewScenes.BakingWorld`) is that
+(`WorldViewGraphHost.ReserveArrivals`): the first window reached onto a baking
+world its consumer does not render (`IWorldViewScenes.ArrivingWorld`) is that
 world's one window, and it renders with every window on the way to it. So the
 garden behind the debug world's spawn camera bakes as fast as it does in view,
 the hearth behind the garden's frame bakes although two windows hide it, a

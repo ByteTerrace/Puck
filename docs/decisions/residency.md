@@ -56,8 +56,8 @@ and a door onto another world adds the crossing transaction.
 
 Across worlds the node exists: the world, whose routed residency
 (`routed$<digest>`) lives while a session or seat shows it, and whose unseen
-window keeps baking at the least share (`WorldPortalVisibility.BakingShare`,
-`WorldViewGraphHost.ReserveBakes`: one window a baking world, with the windows
+window keeps baking at the least share (`WorldPortalVisibility.ArrivalShare`,
+`WorldViewGraphHost.ReserveArrivals`: one window a baking world, with the windows
 on the way to it) so it is ready before its glass comes into view. Within one world there is no node, and that is the gap.
 
 Making every room a world would turn each doorway into a reserve-and-commit

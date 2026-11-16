@@ -187,6 +187,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
-        public object? BakingWorld(string view, string consumer) => null;
+        public object? ArrivingWorld(string view, string consumer) => null;
     }
 }
