@@ -14,6 +14,8 @@ public sealed partial class SdfProgramBuilder {
         internal SdfSampledBinding[] Samples { get; init; } = [];
         internal int First { get; init; }
         internal (int InstructionIndex, int ReachPerUnit, int RawValue)? Fold { get; init; }
+        // The atlas pixels the emission's glyphs sample (SdfProgram.GlyphAtlas), default when it holds no glyph.
+        internal Puck.Assets.AssetContentHash GlyphAtlas { get; init; }
         internal SdfInstanceRange[] Instances { get; init; } = [];
         internal SdfInstruction[] Instructions { get; init; } = [];
         internal int Materials { get; init; }
@@ -48,9 +50,12 @@ public sealed partial class SdfProgramBuilder {
             }
             windows[index] = (window.Op, window.Material, window.MaxDelta, (window.Scope is not null));
         }
+        var instructions = m_instructions.GetRange(mark.Instructions, (m_instructions.Count - mark.Instructions)).ToArray();
+
         return new Emission {
             First = mark.Instructions,
-            Instructions = m_instructions.GetRange(mark.Instructions, (m_instructions.Count - mark.Instructions)).ToArray(),
+            GlyphAtlas = (Array.Exists(array: instructions, match: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)))) ? m_glyphAtlas : default),
+            Instructions = instructions,
             Instances = m_instances.GetRange(mark.Instances, (m_instances.Count - mark.Instances)).ToArray(),
             Polygons = m_convexPolygonProfiles.GetRange(mark.Polygons, (m_convexPolygonProfiles.Count - mark.Polygons)).ToArray(),
             Paths = m_paths.GetRange(mark.Paths, (m_paths.Count - mark.Paths)).ToArray(),
@@ -76,6 +81,7 @@ public sealed partial class SdfProgramBuilder {
         if ((m_instances.Count + emission.Instances.Length) > MaxInstances) {
             throw new SdfProgramCapacityException(capacity: "instances", limit: MaxInstances, message: $"A program may declare at most {MaxInstances} instances.");
         }
+        if (emission.GlyphAtlas != default) { SampleGlyphAtlas(atlas: emission.GlyphAtlas); }
         var offset = (m_instructions.Count - emission.First);
 
         m_instructions.AddRange(collection: emission.Instructions);

@@ -17,7 +17,10 @@ namespace Puck.SdfVm;
 /// its store can restore (<see cref="SdfMesh"/>'s payload and restorable storage), which own a mesh's memory once it is made; at the bake's report
 /// (<see cref="SdfMeshBakeReport"/>), which words, counts and writes what the bake says about itself and so changes no
 /// mesh, however its text or counters change; at the GPU region and its owed
-/// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at the kernels' interfaces and
+/// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at
+/// memory accounting and storage (the process memory account and the machine's free memory, which pace when a group is
+/// admitted to hold its final lattice, never what it meshes, and the allocators and owned buffers that hold the words the
+/// bake's own code writes and reads), as the runtime's arrays are; at the kernels' interfaces and
 /// the render graph's package, whose declarations reach the bake through the kernels' bytecode; and at assemblies outside
 /// <c>Puck</c>: the runtime is the platform the bake runs on, as the driver is for its kernels. A type a parameter, a
 /// local or a field merely carries joins the closure only where code makes, converts or calls into it, and a record's
@@ -54,6 +57,14 @@ public sealed class SdfMeshBakeClosure {
     private static readonly HashSet<string> StopTypes = new(collection: [
         "Puck.Abstractions.Gpu.GpuRegion",
         "Puck.Abstractions.Gpu.GpuUploadRuns",
+        // Memory accounting and storage: admission paces when a group holds its final lattice, never what it meshes, and a
+        // buffer allocates and holds the words the bake's code writes and reads through it.
+        "Puck.Abstractions.Memory.GuardedAllocator",
+        "Puck.Abstractions.Memory.IAllocationObserver",
+        "Puck.Abstractions.Memory.IAllocator",
+        "Puck.Abstractions.Memory.OwnedBuffer`1",
+        "Puck.Hosting.HostMemory",
+        "Puck.Hosting.Jobs.MemoryAccount",
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMesh/Payload",
         "Puck.SdfVm.SdfMesh/Restorable",

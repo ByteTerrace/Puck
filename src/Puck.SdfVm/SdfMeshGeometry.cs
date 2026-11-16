@@ -219,8 +219,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <summary>Gets whether an appended instruction reads a dynamic slot, so the geometry depends on the frame's
     /// transforms.</summary>
     public bool ReadsSlots { get; private set; }
-    /// <summary>Gets whether an appended shape samples a glyph. Such groups use a tighter crease and material-edge
-    /// error budget at every distance to protect counters and thin strokes while simplifying face interiors.</summary>
+    /// <summary>Gets whether an appended shape samples a glyph. Such a group's geometry holds the content identity of the
+    /// atlas pixels the glyphs sample (<see cref="SdfProgram.GlyphAtlas"/>), and the group uses a tighter crease and
+    /// material-edge error budget at every distance to protect counters and thin strokes while simplifying face
+    /// interiors.</summary>
     public bool ContainsGlyph { get; private set; }
     /// <summary>Gets the geometry of everything appended so far.</summary>
     public SdfMeshGeometry Geometry => new(Dynamic: dynamic, Hash: ((m_hash is { } hash) ? hash.GetCurrentHashAsUInt128() : m_sealedHash));
@@ -336,7 +338,14 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     // pose in the group's frame, a lane erosion with the lanes it reads, a side-table entry's values for its offset, and a
     // sampled field's snapshot for its handle.
     private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
-        ContainsGlyph |= ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)));
+        // A glyph's instruction holds its cell's UVs; the pixels under them are the program's one bound atlas, keyed once a
+        // group by their content.
+        if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)) && !ContainsGlyph) {
+            var atlas = program.GlyphAtlas.Value;
+
+            ContainsGlyph = true;
+            Hash(fact: Fact.GlyphAtlas, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<ulong>(reference: in atlas)));
+        }
         switch (instruction.Op) {
             case SdfOp.ResetPoint:
                 m_chainSlot = -1;
@@ -478,6 +487,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         Part,
         Tier,
         Fitted,
+        GlyphAtlas,
     }
     // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
     [StructLayout(LayoutKind.Sequential)]

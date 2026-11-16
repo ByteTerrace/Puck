@@ -27,6 +27,8 @@ public sealed partial class SdfProgram {
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
     /// <param name="sampledBindings">Each sampled instruction's field (<see cref="SampledFields"/>).</param>
+    /// <param name="glyphAtlas">The content identity of the atlas pixels the glyph shapes sample (<see cref="GlyphAtlas"/>);
+    /// <see langword="default"/> when no glyph names an atlas that carries pixels.</param>
     /// <returns>The program.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instructions"/> or <paramref name="appearance"/> is
     /// <see langword="null"/>.</exception>
@@ -37,12 +39,13 @@ public sealed partial class SdfProgram {
     /// two instance ranges claim one instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException">An instance bound is not finite and non-negative, or a trapezoid's
     /// profile slant vanishes in the deterministic field's representation.</exception>
-    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null) {
+    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, Puck.Assets.AssetContentHash glyphAtlas = default) {
         ArgumentNullException.ThrowIfNull(argument: appearance);
 
         var program = new SdfProgram(
             appearance: appearance.Outline,
             convexPolygonProfiles: convexPolygonProfiles,
+            glyphAtlas: glyphAtlas,
             instances: instances,
             instructions: instructions,
             paths: paths,
@@ -58,8 +61,9 @@ public sealed partial class SdfProgram {
     }
 
     /// <summary>Gets the program's appearance: its materials, paints and screen surfaces.</summary>
-    /// <exception cref="InvalidOperationException">The field derivation reads it, which it never may.</exception>
-    public SdfAppearance Appearance => (m_appearance ?? throw new InvalidOperationException(message: "A program's field is derived without its appearance; only SdfProgram.Of attaches it, after the field constructor returns."));
+    /// <exception cref="InvalidOperationException">The field derivation reads it, which it never may, or the program is an
+    /// <see cref="Excerpt"/>, which is a field alone.</exception>
+    public SdfAppearance Appearance => (m_appearance ?? throw new InvalidOperationException(message: "A program's field is derived without its appearance, and an excerpt carries none; only SdfProgram.Of attaches it, after the field constructor returns."));
 
     /// <summary>Gets whether any drawn shape of the program carries a glass material (<see cref="SdfMaterial.IsGlass"/>):
     /// a view of such a program runs the glass passes (<c>SdfWorldPackage.WithGlass</c>), and a view of any other pays

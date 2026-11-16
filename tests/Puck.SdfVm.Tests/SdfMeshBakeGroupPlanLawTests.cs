@@ -53,6 +53,40 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
     }
 
     [Fact]
+    public void AGlyphGroupKeysTheContentOfTheAtlasPixelsItSamples() {
+        static FontAtlas Atlas(byte alpha) => new(FontAtlasKind.Mtsdf, "test://glyph", 32, 8, 2, 2, default, [], [],
+            new FontAtlasImageData(rgbaPixels: [0, 0, 0, alpha, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 0], height: 2, width: 2));
+        static IReadOnlyList<SdfMeshBakeGroup> Plan(FontAtlas atlas) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.BeginInstance(Vector3.Zero, 1f).ResetPoint().Glyph(atlas, Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, material).EndInstance();
+            _ = builder.BeginInstance(Vector3.Zero, 1f).ResetPoint().Sphere(0.5f, material).EndInstance();
+            _ = builder.BeginInstanceDynamic(0, Vector3.Zero, 1f).ResetPoint().TransformDynamic(0).Glyph(atlas, Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, material).EndInstance();
+            return SdfMeshBakeGroup.Plan(builder.Build(), [new DynamicTransform(Vector3.Zero, Quaternion.Identity)], 50f, Create);
+        }
+        static SdfMeshGeometry[] Keys(IReadOnlyList<SdfMeshBakeGroup> groups, bool glyphs) =>
+            [.. groups.Where(group => (group.Geometry.ContainsGlyph == glyphs)).Select(static group => group.Sealed)];
+
+        var first = Plan(atlas: Atlas(alpha: 0));
+        var other = Plan(atlas: Atlas(alpha: 128));
+        var same = Plan(atlas: Atlas(alpha: 0));
+
+        // The pixels decide a glyph group's key by their content, and only a glyph group's.
+        Assert.Equal(2, Keys(groups: first, glyphs: true).Length);
+        Assert.Equal(Keys(groups: first, glyphs: true), Keys(groups: same, glyphs: true));
+        Assert.All(Keys(groups: first, glyphs: true).Zip(Keys(groups: other, glyphs: true)), static pair => Assert.NotEqual(pair.First, pair.Second));
+        Assert.Equal(Keys(groups: first, glyphs: false), Keys(groups: other, glyphs: false));
+
+        // One atlas binds for a program, so glyphs of two atlas images refuse to share one.
+        var mixed = new SdfProgramBuilder();
+        var white = mixed.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        _ = mixed.ResetPoint().Glyph(Atlas(alpha: 0), Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, white);
+        _ = Assert.Throws<InvalidOperationException>(() => mixed.ResetPoint().Glyph(Atlas(alpha: 128), Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, white));
+    }
+
+    [Fact]
     public void ARefreshedPlanHoldsTheWholePlanOfTheGroupsItNames() {
         var builder = new SdfProgramBuilder();
         var white = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
