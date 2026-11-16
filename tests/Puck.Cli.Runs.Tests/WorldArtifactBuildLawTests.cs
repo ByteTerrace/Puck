@@ -563,43 +563,40 @@ public sealed class WorldArtifactBuildLawTests {
         }
     }
     [Fact]
-    public void APublishThatLosesTheRaceDiscardsItsOwnBuildAndTakesTheWinners() {
+    public void APublishOfAnAlreadyPublishedKeyDiscardsItsOwnBuildAndTakesTheFirst() {
         using var checkout = new Checkout();
         var store = checkout.Store;
         var clock = Stopwatch.StartNew();
         var key = checkout.Key();
-        var winner = store.CreateStaging(key: key);
-        var loser = store.CreateStaging(key: key);
+        (WorldArtifact? Artifact, string Staging) Build(string contents) {
+            using var claim = store.AcquireBuild(budget: TimeSpan.FromSeconds(value: 30), clock: clock, key: key, waited: out _);
+            var staging = store.CreateStaging(claim: claim!);
 
-        File.WriteAllText(
-            contents: "winner",
-            path: Path.Combine(
-                path1: winner,
-                path2: WorldArtifactBuild.ArtifactName
-            )
-        );
-        File.WriteAllText(
-            contents: "loser",
-            path: Path.Combine(
-                path1: loser,
-                path2: WorldArtifactBuild.ArtifactName
-            )
-        );
+            File.WriteAllText(
+                contents: contents,
+                path: Path.Combine(
+                    path1: staging,
+                    path2: WorldArtifactBuild.ArtifactName
+                )
+            );
+            var published = store.Publish(
+                artifactName: WorldArtifactBuild.ArtifactName,
+                budget: TimeSpan.FromSeconds(value: 30),
+                claim: claim!,
+                clock: clock,
+                staging: staging
+            );
 
-        using var first = store.Publish(
-            artifactName: WorldArtifactBuild.ArtifactName,
-            budget: TimeSpan.FromSeconds(value: 30),
-            clock: clock,
-            key: key,
-            staging: winner
-        );
-        using var second = store.Publish(
-            artifactName: WorldArtifactBuild.ArtifactName,
-            budget: TimeSpan.FromSeconds(value: 30),
-            clock: clock,
-            key: key,
-            staging: loser
-        );
+            return (published, staging);
+        }
+
+        var (first, kept) = Build(contents: "winner");
+        var (second, discarded) = Build(contents: "loser");
+
+        using var firstLease = first;
+        using var secondLease = second;
+        Assert.True(condition: Directory.Exists(path: kept));
+        Assert.False(condition: Directory.Exists(path: discarded));
 
         Assert.NotNull(@object: first);
         Assert.NotNull(@object: second);
@@ -611,7 +608,6 @@ public sealed class WorldArtifactBuildLawTests {
             actual: File.ReadAllText(path: second.Path),
             expected: "winner"
         );
-        Assert.False(condition: Directory.Exists(path: loser));
     }
     [Fact]
     public void PruningKeepsTheMostRecentlyUsedBuildsAndEveryLeasedOne() {
@@ -658,7 +654,7 @@ public sealed class WorldArtifactBuildLawTests {
         }
     }
     [Fact]
-    public void LeftoversOfAKilledRunAreSweptOnlyOnceTheyAreSixHoursOld() {
+    public void StagingIsSweptOnceItsBuildLockIsFreeAndSidecarsOnceTheyAreSixHoursOld() {
         using var checkout = new Checkout();
         var store = checkout.Store;
         var old = DateTime.UtcNow.AddHours(value: -7);
@@ -697,8 +693,11 @@ public sealed class WorldArtifactBuildLawTests {
 
         var agedBuilding = Leftover(aged: true, directory: true, name: "dead.building-0");
         var freshBuilding = Leftover(aged: false, directory: true, name: "live.building-0");
+        var ownedBuilding = Leftover(aged: true, directory: true, name: "held.building-0");
+        var freshPruned = Leftover(aged: false, directory: true, name: "gone.pruned-0");
         var agedLock = Leftover(aged: true, directory: false, name: "dead.build.lock");
         var agedLease = Leftover(aged: true, directory: false, name: "dead.lease");
+        var freshLease = Leftover(aged: false, directory: false, name: "idle.lease");
         var freshLock = Leftover(aged: false, directory: false, name: "live.build.lock");
         var heldLock = Leftover(aged: true, directory: false, name: "held.build.lock");
 
@@ -715,13 +714,17 @@ public sealed class WorldArtifactBuildLawTests {
             );
         }
 
+        // Staging whose build lock nobody holds is abandoned whatever its age; the staging of a held lock is a live build.
         Assert.False(condition: Directory.Exists(path: agedBuilding));
+        Assert.False(condition: Directory.Exists(path: freshBuilding));
+        Assert.True(condition: Directory.Exists(path: ownedBuilding));
+        Assert.False(condition: Directory.Exists(path: freshPruned));
         // A build lock nobody holds is deleted whatever its age, with the hold itself; a held one stays.
         Assert.False(condition: File.Exists(path: agedLock));
-        Assert.False(condition: File.Exists(path: agedLease));
-        Assert.True(condition: Directory.Exists(path: freshBuilding));
         Assert.False(condition: File.Exists(path: freshLock));
         Assert.True(condition: File.Exists(path: heldLock));
+        Assert.False(condition: File.Exists(path: agedLease));
+        Assert.True(condition: File.Exists(path: freshLease));
     }
     [Fact]
     public void AnOrphanSidecarThatCannotBeOpenedNeverFailsTheTakeThatPrunedBesideIt() {
