@@ -29,7 +29,9 @@ internal sealed record WorldRecipientImageContent(StateCell[] Cells, WorldObserv
 
 /// <summary>World-owned, content-interned row images and the disclosed definitions composed from them. Compositions are
 /// shared by ceiling, authority bypass and the policies admitting the reader. Current audience images keep their content
-/// alive; replaced content is weakly retained.</summary>
+/// alive; replaced content is weakly retained. The table learns of a replaced arena or policy index only when a read next
+/// brings it current, so until then it holds the images composed before; no read reaches them, since every lookup is
+/// keyed by an audience that bringing the table current produces.</summary>
 public sealed class WorldDisclosureImages {
     /// <summary>The name a counters report heads this table's monotonic work with.</summary>
     public const string SourceName = "world.disclosure";
