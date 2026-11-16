@@ -40,6 +40,9 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <summary>Gets what the device can bind, as its physical device reported it when the device was created;
     /// its uniform-buffer view limit also bounds admission. <see langword="null"/> for a device created without one.</summary>
     public GpuDeviceCapabilities? Capabilities { get; init; }
+    /// <summary>Gets the physical device's uniform-buffer view limit, refusing a device whose limit was never read.</summary>
+    public ulong MaxConstantBufferBytes => (Capabilities?.MaxConstantBufferBytes
+        ?? throw new InvalidOperationException(message: "The Vulkan device has no reported uniform-buffer view limit."));
     /// <summary>Gets what the device's memory is, as its physical device reported it when the device was created;
     /// residency selection branches on it. The default profile, which reports nothing, for a device created without
     /// one.</summary>

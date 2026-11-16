@@ -55,7 +55,7 @@ public interface IDirectXDeviceApi {
     /// (<c>D3D12_FEATURE_SHADER_MODEL</c>), and options 19's shader-visible heap sizes
     /// (<c>D3D12_FEATURE_D3D12_OPTIONS19</c>).</summary>
     /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
-    /// <returns>The device's capabilities, recorded and never branched on.</returns>
+    /// <returns>The device's capabilities for diagnostics and resource admission.</returns>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     Puck.Abstractions.Gpu.GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle);
 }

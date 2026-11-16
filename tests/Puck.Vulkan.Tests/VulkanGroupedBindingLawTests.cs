@@ -73,6 +73,9 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => rig.Bindings.WriteConstantBuffer(
             arrayElement: 0, binding: 0, bufferHandle: 0x61, bufferSize: (16384UL + 256UL), descriptorSetHandle: GroupSet));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new VulkanDescriptorAllocator(descriptorApi: rig.Descriptors).WriteUniformBuffer(
+            device: rig.Device, arrayElement: 0, binding: 0, bufferHandle: 0x61,
+            bufferSize: (16384UL + 256UL), descriptorSetHandle: GroupSet));
         Assert.Single(collection: rig.Descriptors.Buffers);
     }
     [Fact]
