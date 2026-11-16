@@ -341,7 +341,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         // A glyph's instruction holds its cell's UVs; the pixels under them are the program's one bound atlas, keyed once a
         // group by their content.
         if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)) && !ContainsGlyph) {
-            var atlas = program.GlyphAtlas.Value;
+            var atlas = program.GlyphAtlas;
 
             ContainsGlyph = true;
             Hash(fact: Fact.GlyphAtlas, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<ulong>(reference: in atlas)));

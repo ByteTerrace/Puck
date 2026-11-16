@@ -1222,7 +1222,7 @@ public sealed partial class SdfProgramBuilder {
         return SdfProgram.Of(
             appearance: new SdfAppearance(materials: m_materials, screenSurfaces: m_screenSurfaces),
             convexPolygonProfiles: m_convexPolygonProfiles,
-            glyphAtlas: m_glyphAtlas,
+            glyphAtlas: m_glyphAtlas.Value,
             instances: m_instances,
             instructions: m_instructions,
             paths: m_paths,
