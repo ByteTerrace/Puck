@@ -80,6 +80,22 @@ public sealed class ContinuationSectionLawTests {
             }
             return variants;
         }
+        if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Collections.Immutable.ImmutableArray<>))) {
+            var element = type.GetGenericArguments()[0];
+            var create = typeof(System.Collections.Immutable.ImmutableArray).GetMethods()
+                .Single(predicate: static method => ((method.Name == nameof(System.Collections.Immutable.ImmutableArray.Create)) && (method.GetParameters() is [{ ParameterType.IsArray: true }])))
+                .MakeGenericMethod(typeArguments: element);
+            var variants = new List<(string, object?, object?)>();
+
+            foreach (var (path, baseline, mutated) in Variants(type: element)) {
+                variants.Add(item: (
+                    $"[0]{path}",
+                    create.Invoke(obj: null, parameters: [ArrayOf(element: element, value: baseline)]),
+                    create.Invoke(obj: null, parameters: [ArrayOf(element: element, value: mutated)])
+                ));
+            }
+            return variants;
+        }
         if (type.IsGenericType && ((type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>)) || (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)))) {
             var element = type.GetGenericArguments()[0];
             var memory = (type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>));

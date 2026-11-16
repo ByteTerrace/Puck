@@ -23,6 +23,7 @@ public sealed partial class WorldBody {
     internal void BindPopulation(int index, WorldPopulation? population) {
         m_populationIndex = index;
         m_population = population;
+        m_action.Binding.Bind(notes: population?.SlotNotes, slot: index);
     }
     internal void ParkRigidIsland(int rootPlusOne, ulong contactFieldVersion) {
         m_rigidSleepRootPlusOne = rootPlusOne;

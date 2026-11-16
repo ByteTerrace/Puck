@@ -10,6 +10,10 @@ internal sealed class WorldContinuationFoldWork {
     internal readonly long[] SectionBytes = new long[SectionCount];
     /// <summary>The times each section was encoded, by <see cref="WorldContinuationSectionKind"/>.</summary>
     internal readonly long[] SectionEncodes = new long[SectionCount];
+    /// <summary>What the digest reads of the sections kept behind holders did, by <see cref="WorldContinuationSectionKind"/>.</summary>
+    internal readonly SectionDigestWork[] Held = new SectionDigestWork[SectionCount];
+    /// <summary>The scratch one slot's held digests are read into, by <see cref="WorldContinuationSectionKind"/>.</summary>
+    internal readonly ulong[] HeldDigests = new ulong[SectionCount];
 
     /// <summary>The slots whose sections were encoded.</summary>
     internal long Slots;
@@ -25,10 +29,21 @@ internal sealed class WorldContinuationFoldWork {
         var bytes = (ProfileBytes + TailBytes);
 
         for (var section = 0; (section < SectionCount); section++) {
-            if (SectionEncodes[section] == 0L) { continue; }
-            bytes += SectionBytes[section];
-            WorldTickWork.Process.Add(amount: SectionEncodes[section], kind: WorldTickWork.SectionEncodes[section]);
-            WorldTickWork.Process.Add(amount: SectionBytes[section], kind: WorldTickWork.SectionBytes[section]);
+            ref var held = ref Held[section];
+            var encodes = (SectionEncodes[section] + held.Encodes);
+            var encoded = (SectionBytes[section] + held.EncodedBytes);
+
+            if (encodes != 0L) {
+                bytes += encoded;
+                WorldTickWork.Process.Add(amount: encodes, kind: WorldTickWork.SectionEncodes[section]);
+                WorldTickWork.Process.Add(amount: encoded, kind: WorldTickWork.SectionBytes[section]);
+            }
+            if ((held.ComparedBytes | held.FilteredCompares | held.UnchangedEncodes) != 0L) {
+                WorldTickWork.Process.Add(amount: held.ComparedBytes, kind: WorldTickWork.SectionComparedBytes[section]);
+                WorldTickWork.Process.Add(amount: held.FilteredCompares, kind: WorldTickWork.SectionFilteredCompares[section]);
+                WorldTickWork.Process.Add(amount: held.UnchangedEncodes, kind: WorldTickWork.SectionUnchangedEncodes[section]);
+            }
+            held = default;
             SectionBytes[section] = 0L;
             SectionEncodes[section] = 0L;
         }

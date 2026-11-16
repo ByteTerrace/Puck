@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Networking;
 
 namespace Puck.World.Server;
@@ -75,6 +76,17 @@ public interface IContinuationSection<TSelf> : IVersionedSection where TSelf : s
     /// <returns>The section.</returns>
     static abstract TSelf Read(ref WireReader reader);
 }
+/// <summary>A continuation section that is one table and nothing else, so a body may keep the table itself behind a
+/// table holder (<see cref="VersionedArray{T}"/>) and digest it without building the section.</summary>
+/// <typeparam name="TSelf">The section type.</typeparam>
+/// <typeparam name="TElement">The table's element type.</typeparam>
+public interface IContinuationTableSection<TSelf, TElement> : IContinuationSection<TSelf> where TSelf : struct, IContinuationTableSection<TSelf, TElement> {
+    /// <summary>Writes the section whose table holds the given elements: the bytes <see cref="IContinuationSection{TSelf}.Write"/>
+    /// writes for that section.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="elements">The table's elements.</param>
+    static abstract void WriteTable(WireWriter writer, ReadOnlySpan<TElement> elements);
+}
 /// <summary>Receives each section of a slot, in the continuation's fixed order
 /// (<see cref="WorldPopulationEntryCheckpoint.VisitSections"/>).</summary>
 public interface IContinuationSectionVisitor {
@@ -82,4 +94,31 @@ public interface IContinuationSectionVisitor {
     /// <typeparam name="TSection">The section type.</typeparam>
     /// <param name="section">The section, which a reading visitor assigns.</param>
     void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection>;
+}
+/// <summary>The codec a state holder digests a continuation section through: the section's own static encoder into the
+/// fold's scratch writer, so a holder's cached digest is the digest a fresh fold of the section takes.</summary>
+/// <typeparam name="TSection">The section type.</typeparam>
+internal readonly struct ContinuationSectionCodec<TSection> : ISectionCodec<TSection, WireWriter> where TSection : struct, IContinuationSection<TSection> {
+    /// <inheritdoc/>
+    public static ulong Digest(WireWriter writer, in TSection section, out int bytes) {
+        var digest = WorldAuthorityCheckpointCodec.SectionDigest(section: in section, writer: writer);
+
+        bytes = writer.WrittenSpan.Length;
+        return digest;
+    }
+}
+/// <summary>The codec a table holder digests a one-table continuation section through
+/// (<see cref="ContinuationSectionCodec{TSection}"/> for a table).</summary>
+/// <typeparam name="TSection">The section type.</typeparam>
+/// <typeparam name="TElement">The table's element type.</typeparam>
+internal readonly struct ContinuationTableCodec<TSection, TElement> : ISectionTableCodec<TElement, WireWriter> where TSection : struct, IContinuationTableSection<TSection, TElement> {
+    /// <inheritdoc/>
+    public static ulong Digest(WireWriter writer, ReadOnlySpan<TElement> elements, out int bytes) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        writer.Reset();
+        TSection.WriteTable(elements: elements, writer: writer);
+        bytes = writer.WrittenSpan.Length;
+        return Fnv1aHash.Compute(values: writer.WrittenSpan);
+    }
 }

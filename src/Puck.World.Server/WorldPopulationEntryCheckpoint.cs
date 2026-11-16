@@ -3,7 +3,7 @@ namespace Puck.World.Server;
 /// <summary>What a slot's checkpoint carries beside its sections: state of the slot's continuation that no section
 /// holds, because another store owns it or because it is a relation to the process that captured it. No slot digest
 /// folds any of it; a continuation fold reads each part afresh beside the slots
-/// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash)"/>).</summary>
+/// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash, bool)"/>).</summary>
 /// <param name="ContactFieldObservationCurrent">Whether a resting body had observed the contact field as it stood at
 /// capture; always <see langword="true"/> for an awake body, which overwrites its observation before any read. The
 /// counters behind it are process-local, so this relation is what a restore preserves.</param>

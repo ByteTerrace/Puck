@@ -22,7 +22,7 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the population slots whose pose or facts a fact derivation compared.</summary>
     public static WorkKind FactSlots { get; } = new(name: "world.tick.fact-slots", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting continuation folds: one per hash that folded bodies' simulation continuations
-    /// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash)"/>), the whole population's or a replay scope's.</summary>
+    /// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash, bool)"/>), the whole population's or a replay scope's.</summary>
     public static WorkKind ContinuationFolds { get; } = new(name: "world.tick.continuation-folds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the population slots a continuation fold visited to find the ones it folds.</summary>
     public static WorkKind ContinuationSlots { get; } = new(name: "world.tick.continuation-slots", unit: "count", workClass: WorkClass.Deterministic);
@@ -44,6 +44,15 @@ public static class WorldTickWork {
     /// <summary>Gets, per folded section in <see cref="WorldContinuationSectionKind"/> order, the kind counting the
     /// bytes that section encoded to.</summary>
     public static IReadOnlyList<WorkKind> SectionBytes { get; } = SectionKinds(measure: "bytes", unit: "bytes");
+    /// <summary>Gets, per section a holder keeps, the kind counting the raw bytes a digest read compared with the
+    /// bytes the section's digest was taken from.</summary>
+    public static IReadOnlyList<WorkKind> SectionComparedBytes { get; } = SectionKinds(measure: "compared-bytes", unit: "bytes");
+    /// <summary>Gets, per section a holder keeps, the kind counting the digest reads that found a moved version over
+    /// unchanged content: a write that changed nothing, answered by the compare without an encode.</summary>
+    public static IReadOnlyList<WorkKind> SectionFilteredCompares { get; } = SectionKinds(measure: "filtered-compares", unit: "count");
+    /// <summary>Gets, per section a holder keeps, the kind counting the encodes that produced the digest the section
+    /// already had: a section's first move, before its holder keeps the bytes a later move is compared with.</summary>
+    public static IReadOnlyList<WorkKind> SectionUnchangedEncodes { get; } = SectionKinds(measure: "unchanged-encodes", unit: "count");
     /// <summary>Gets the kind counting the perception images frozen: one per tick a population with a flock steps, and
     /// one per tick a rule family with a neighbour-reading decision evaluates.</summary>
     public static WorkKind PerceptionFreezes { get; } = new(name: "world.tick.perception-freezes", unit: "count", workClass: WorkClass.Deterministic);
@@ -58,6 +67,7 @@ public static class WorldTickWork {
         kinds: [
             FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
+            .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,
         ],
         name: SourceName
     );
