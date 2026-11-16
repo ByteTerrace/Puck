@@ -9,7 +9,7 @@ namespace Puck.World.Azure;
 /// <summary>The one authenticated ARM pipeline and bounded response gate every Azure resource adapter reads and writes
 /// through: an HTTPS ARM origin, a default transport that never follows redirects, SDK logging and tracing off, an
 /// unbuffered JSON request, and a response body read under a byte budget before it is parsed.</summary>
-/// <remarks>A remote body never reaches the JSON parser past its budget: <see cref="ReadJsonAsync"/> refuses as soon
+/// <remarks>A remote body never reaches the JSON parser past its budget: <see cref="ReadJsonAsync(Stream, int, CancellationToken)"/> refuses as soon
 /// as the bytes read exceed it, and it is the only reader the adapters hold.</remarks>
 internal sealed class AzureArmPipeline : IDisposable {
     private readonly HttpClient? m_httpClient;
@@ -115,8 +115,23 @@ internal sealed class AzureArmPipeline : IDisposable {
     /// an empty one.</returns>
     /// <exception cref="IOException">The body exceeds <paramref name="maximumBytes"/>.</exception>
     /// <exception cref="JsonException">The body is not JSON.</exception>
-    internal static async ValueTask<JsonDocument?> ReadJsonAsync(Response response, int maximumBytes, CancellationToken cancellationToken) {
-        if (response.ContentStream is not { } stream) { return null; }
+    internal static ValueTask<JsonDocument?> ReadJsonAsync(Response response, int maximumBytes, CancellationToken cancellationToken) => ((response.ContentStream is { } stream)
+        ? ReadJsonAsync(
+            cancellationToken: cancellationToken,
+            maximumBytes: maximumBytes,
+            stream: stream
+        )
+        : ValueTask.FromResult<JsonDocument?>(result: null)
+    );
+    /// <summary>Reads a body stream to its end under a byte budget and parses it as JSON: the one bounded reader, which
+    /// the ARM responses and the instance-metadata responses both read through.</summary>
+    /// <param name="stream">The body stream.</param>
+    /// <param name="maximumBytes">The largest body, in bytes, that is parsed.</param>
+    /// <param name="cancellationToken">The token that cancels the read.</param>
+    /// <returns>The parsed document, owned by the caller; <see langword="null"/> when the body is empty.</returns>
+    /// <exception cref="IOException">The body exceeds <paramref name="maximumBytes"/>.</exception>
+    /// <exception cref="JsonException">The body is not JSON.</exception>
+    internal static async ValueTask<JsonDocument?> ReadJsonAsync(Stream stream, int maximumBytes, CancellationToken cancellationToken) {
         using var bytes = new MemoryStream();
         var buffer = new byte[Math.Min(
             val1: 8192,

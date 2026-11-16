@@ -720,13 +720,16 @@ public static partial class WorldPlacementStamp {
     );
     /// <summary>Returns the placement's shared lattice declaration.</summary>
     public static CreationStampPattern? PatternFor(WorldPlacement placement) => ((placement.Distribution?.Region is WorldDistributionRegion.Lattice lattice)
-        ? new CreationStampPattern(
-            StepA: lattice.StepA,
-            CountA: lattice.CountA,
-            StepB: lattice.StepB,
-            CountB: lattice.CountB
-        )
+        ? PatternOf(lattice: lattice)
         : null
+    );
+    /// <summary>Returns a lattice region's declaration as a stamp pattern.</summary>
+    /// <param name="lattice">The lattice region.</param>
+    public static CreationStampPattern PatternOf(WorldDistributionRegion.Lattice lattice) => new(
+        StepA: lattice.StepA,
+        CountA: lattice.CountA,
+        StepB: lattice.StepB,
+        CountB: lattice.CountB
     );
     /// <summary>Resolves a Noise/Scatter distribution's placement-local offsets in fixed point — the deterministic,
     /// Q48.16-only instance decision (see <see cref="CreationStampSampling"/>). <see langword="null"/> when the
