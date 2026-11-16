@@ -79,10 +79,7 @@ public sealed class GpuRegionCopyPass {
     public static ReadOnlyMemory<byte> Load(ShaderTarget target, string directory) {
         ArgumentException.ThrowIfNullOrEmpty(argument: directory);
 
-        return File.ReadAllBytes(path: Path.Combine(
-            path1: directory,
-            path2: $"{KernelStem}.comp{target.FileExtension()}"
-        ));
+        return File.ReadAllBytes(path: target.DeployedPath(directory: directory, stage: "comp", stem: KernelStem));
     }
     /// <summary>Takes a lease on <paramref name="device"/>'s copy pipeline, joining the entry another owner already
     /// leases or starting its build on the thread pool. Safe on any thread, and reads no file.</summary>

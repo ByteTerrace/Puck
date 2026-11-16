@@ -264,10 +264,7 @@ public sealed class SdfMeshRasterPass {
         ArgumentException.ThrowIfNullOrEmpty(argument: directory);
         ArgumentException.ThrowIfNullOrEmpty(argument: stage);
 
-        return File.ReadAllBytes(path: Path.Combine(
-            path1: directory,
-            path2: $"{stem}.{stage}{target.FileExtension()}"
-        ));
+        return File.ReadAllBytes(path: target.DeployedPath(directory: directory, stage: stage, stem: stem));
     }
     /// <summary>Takes a lease on the pipeline for a device, joining its build or starting it on the thread pool.</summary>
     /// <param name="device">The device.</param>

@@ -201,14 +201,10 @@ public sealed class SdfKernelSet {
 
         work.Count(kind: Loads);
 
-        var bytecodeExtension = target.FileExtension();
         var bytecode = new ReadOnlyMemory<byte>[Kernels.Count];
 
         foreach (var kernel in Kernels) {
-            var path = Path.Combine(
-                path1: directory,
-                path2: $"{StemOf(kernel: kernel)}.comp{bytecodeExtension}"
-            );
+            var path = target.DeployedPath(directory: directory, stage: "comp", stem: StemOf(kernel: kernel));
 
             // A Windows development build of one project ships DXIL alone (build/Shaders.targets).
             if ((target == ShaderTarget.Spirv) && !File.Exists(path: path)) {
