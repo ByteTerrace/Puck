@@ -442,8 +442,8 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
 22. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-23. [Test runner and replay](#test-runner-and-replay): review
-    [the body's write door memo](body-state-door.md), then its step D1.
+23. [Test runner and replay](#test-runner-and-replay): step D1 of
+    [the body's write door memo](body-state-door.md).
 24. [Bake detail](#bake-detail): the flare's bound.
 25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
@@ -2617,10 +2617,13 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   pass. A rest-epoch cache of the fold missed four writes to sleeping bodies
   and was deleted, so the door has to be one the compiler holds.
   [The design memo](body-state-door.md) holds the writer inventory, the door
-  (sections of value-type state behind a holder whose read side refuses writes
-  and whose write side moves a version), the digest cache and its recompute
-  check, what a tick changes in the debug world, and [the steps](body-state-door.md#steps),
-  D1 to D11. Next: a review of the memo by another family, then D1.
+  (sections of value-type state behind a holder whose read side refuses writes,
+  whose write side moves a version, and which compares a moved section's bytes
+  before it encodes), the digest cache and its recompute check, what a tick
+  changes in the debug world, its review's answers, and
+  [the steps](body-state-door.md#steps), D1 to D12. D6 changes the rigid
+  solver's interface in `Puck.Physics`, and D12 (the step writes on change) is
+  the physics lane's. Next: D1.
   One finding the door does not close: the checkpoint image of an all-default
   array or input image is written whole, and a sparse encoding would cut a
   slot's bytes about tenfold and shrink every checkpoint with it. It changes
@@ -3244,9 +3247,8 @@ colliders report's only red findings left are the valley's relief
 ### Test runner and replay
 
 Owner: test runner and replay specialist · high to low ·
-Next: a review of [the body's write door memo](body-state-door.md), then its
-steps in order (the body's sections, then the rule latch, then the input
-owners).
+Next: the steps of [the body's write door memo](body-state-door.md) in order
+(the body's sections, then the rule latch, then the input owners).
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
 - [high] The per-tick authority hash is most of what a recording adds to a
