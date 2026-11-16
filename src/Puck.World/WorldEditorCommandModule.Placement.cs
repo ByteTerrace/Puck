@@ -30,11 +30,6 @@ public sealed partial class WorldEditorCommandModule {
         "z" => 2,
         _ => null,
     };
-    private static float Component(Vector3 value, int axis) => axis switch {
-        0 => value.X,
-        1 => value.Y,
-        _ => value.Z,
-    };
     // Where a placement put down along a seat's aim lands: the first solid surface the aim meets, else a fixed distance
     // ahead; snapped through GridSnap. When snapping rests placements on surfaces and the aim met an upward-facing one,
     // the vertical axis is left to the surface: the snapped column is dropped back onto the surface beneath it.
@@ -172,7 +167,7 @@ public sealed partial class WorldEditorCommandModule {
                 if (ReferenceFor(definition: definition, world: world.Name, excluding: id, pitch: pitch, slot: slot) is { } reference) {
                     var local = Vector3.Transform(rotation: Quaternion.Inverse(value: reference.Frame), value: (position - reference.Origin));
 
-                    local += (unit * (steps * Component(axis: axis, value: reference.Pitch)));
+                    local += (unit * (steps * reference.Pitch[axis]));
 
                     if (snap.Enabled) {
                         local = GridSnap.SnapToWorldLattice(p: local, pitch: (reference.Pitch * unit));
@@ -180,7 +175,7 @@ public sealed partial class WorldEditorCommandModule {
 
                     moved = (reference.Origin + Vector3.Transform(rotation: reference.Frame, value: local));
                 } else {
-                    moved = (position + (unit * (steps * Component(axis: axis, value: pitch))));
+                    moved = (position + (unit * (steps * pitch[axis])));
 
                     if (snap.Enabled) {
                         moved = GridSnap.SnapToWorldLattice(p: moved, pitch: (pitch * unit));

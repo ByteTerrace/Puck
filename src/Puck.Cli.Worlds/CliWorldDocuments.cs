@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
 
@@ -62,8 +63,8 @@ public static class CliWorldDocuments {
     /// <returns><see langword="true"/> when the backend is <c>directx</c> or <c>vulkan</c>.</returns>
     public static bool TryExtension(string verb, string backend, out string extension) {
         extension = (backend switch {
-            "directx" => ".dxil",
-            "vulkan" => ".spv",
+            "directx" => ShaderBytecode.FileExtension(hostsOnDirectX: true),
+            "vulkan" => ShaderBytecode.FileExtension(hostsOnDirectX: false),
             _ => string.Empty,
         });
 

@@ -6,6 +6,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Illumination;
 using Puck.SignedDistance.Queries;
 
 namespace Puck.SdfVm;
@@ -255,7 +256,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SWEEP_SAMPLES", value: SdfFieldEvaluator.SweepSamples);
         declarations.Count(name: "SDF_SWEEP_ROUNDS", value: SdfFieldEvaluator.SweepRounds);
         declarations.Count(name: "SDF_ELLIPSE_ROOT_STEPS", value: SdfFieldEvaluator.EllipseRootSteps);
-        declarations.Section(title: "The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).");
+        declarations.Section(title: "The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, and the 3D value noise's seed streams.");
         declarations.Bits(name: "SDF_PCG_MULTIPLIER", value: Pcg3dLatticeNoise.PcgMultiplier);
         declarations.Bits(name: "SDF_PCG_INCREMENT", value: Pcg3dLatticeNoise.PcgIncrement);
         declarations.Bits(name: "SDF_HASH_STREAM_A", value: Pcg3dLatticeNoise.HashStreamA);
@@ -263,8 +264,6 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_HASH_TUMBLE", value: Pcg3dLatticeNoise.HashTumble);
         declarations.Bits(name: "SDF_NOISE_SEED_STREAM_Y", value: Pcg3dLatticeNoise.NoiseSeedStreamY);
         declarations.Bits(name: "SDF_NOISE_SEED_STREAM_Z", value: Pcg3dLatticeNoise.NoiseSeedStreamZ);
-        declarations.Bits(name: "SDF_R2_ALPHA1", value: LowDiscrepancy.R2AlphaXQ32);
-        declarations.Bits(name: "SDF_R2_ALPHA2", value: LowDiscrepancy.R2AlphaYQ32);
 
         return declarations;
     }
@@ -336,10 +335,6 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
         declarations.Tuning(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
-        declarations.Real(name: "SDF_LUMINANCE_RED", value: SdfPhotometry.LuminanceRed);
-        declarations.Real(name: "SDF_LUMINANCE_GREEN", value: SdfPhotometry.LuminanceGreen);
-        declarations.Real(name: "SDF_LUMINANCE_BLUE", value: SdfPhotometry.LuminanceBlue);
-        declarations.Expression(name: "SDF_LUMINANCE", value: "float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)");
         declarations.Tuning(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
         declarations.Tuning(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
         declarations.Tuning(name: "SDF_REFERENCE_WHITE", value: SdfExposure.ReferenceWhite);
@@ -369,7 +364,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);
         declarations.Count(name: "SDF_SHADOW_FADE_CAPACITY", value: SdfShadowSlots.MaxFadeSlots);
         declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
-        declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfVisibility.NormalScale);
+        declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfOctahedral.SignedScale(bits: SdfVisibility.NormalBits));
         declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
         declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
@@ -431,7 +426,7 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH_FADE_START", value: SdfMeshIrradianceProbe.SurfaceReachFadeStart);
-        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfOctahedral.SignedScale(bits: SdfMeshIrradianceProbe.DepthNormalBits));
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE", value: SdfMeshIrradianceProbe.DepthSurfaceFade);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP", value: SdfMeshIrradianceProbe.DepthSurfaceJoinGap);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START", value: SdfMeshIrradianceProbe.DepthCoverageStart);

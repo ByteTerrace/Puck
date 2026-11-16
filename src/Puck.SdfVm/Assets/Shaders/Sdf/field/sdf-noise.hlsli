@@ -1,18 +1,8 @@
-// The deterministic hashes' noise and dither: the R2 dither, value, lattice and cellular noise.
+// The deterministic hashes' noise: value, lattice and cellular noise.
 #ifndef FIELD_SDF_NOISE_HLSLI
 #define FIELD_SDF_NOISE_HLSLI
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
-// One R2 dither sample in [0, 1] from integer pixel coordinates: a "blue-ish" low-discrepancy pattern the volumes jitter
-// their samples with, the same sequence the display encode dithers its quantization with (display-encode.frag.hlsl in
-// Puck.Shaders). Fixed-point, so both backends compute the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
-// diverge and break cross-backend parity).
-precise float sdfR2Dither(uint2 pixel) {
-    uint h = ((pixel.x * SDF_R2_ALPHA1) + (pixel.y * SDF_R2_ALPHA2));
-
-    return ((float)h * SDF_INV_2POW32);
-}
-
 // 3D value noise on the integer lattice (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace and
 // SdfProgram.NoiseDisplaceLipschitz): one integer-only sdfPcg3d per corner keyed on the two's-complement lattice cell
 // xored with the seed streams (bit-identical across both DXC targets), quintic-smoothed trilinear blend (float

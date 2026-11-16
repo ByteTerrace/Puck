@@ -139,7 +139,7 @@ float3 sdfGlassReceived(SdfMaterialData material, float3 position, float3 normal
 
     indirect = sdfMeshIndirectSeen(probes, normal);
 
-    incoming = dot((radiance + indirect), SDF_LUMINANCE);
+    incoming = dot((radiance + indirect), PuckRec709Luminance);
 
     return (radiance + (indirect * (passGroup.indirectApply.rgb * (material.receive * passGroup.indirectApply.w))));
 }
@@ -362,7 +362,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float3 cover = (((sdfShadeBound(shadeBinding) ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
             shown = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance, rim, highlights, attenuation,
                 indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12)) * air;
-            float luminous = ((1.0 - fresnel) * dot(transmittance, SDF_LUMINANCE));
+            float luminous = ((1.0 - fresnel) * dot(transmittance, PuckRec709Luminance));
 
             if (isNear) {
                 nearShown = shown;

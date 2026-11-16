@@ -188,7 +188,7 @@
 #define SDF_SWEEP_ROUNDS       12u
 #define SDF_ELLIPSE_ROOT_STEPS 96u
 
-// The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, the 3D value noise's seed streams, and the R2 lattice's increments (LowDiscrepancy).
+// The integer hash (Pcg3dLatticeNoise): PCG3D's LCG step, the stream decorrelators, and the 3D value noise's seed streams.
 #define SDF_PCG_MULTIPLIER      0x0019660Du
 #define SDF_PCG_INCREMENT       0x3C6EF35Fu
 #define SDF_HASH_STREAM_A       0x9E3779B9u
@@ -196,7 +196,5 @@
 #define SDF_HASH_TUMBLE         0x27D4EB2Fu
 #define SDF_NOISE_SEED_STREAM_Y 0x9E3779B9u
 #define SDF_NOISE_SEED_STREAM_Z 0x85EBCA77u
-#define SDF_R2_ALPHA1           0xC13FA9A9u
-#define SDF_R2_ALPHA2           0x91E10DA6u
 
 #endif // SDF_ISA_HLSLI
