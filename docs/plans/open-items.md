@@ -2764,8 +2764,7 @@ validation that makes the skill suites believable.
 
 ### Refactoring campaign
 
-Owner: the lead, one implementer lane per group · high · Next: the body
-gate-program merge and the groups below, largest payoff first; the two snapshot
+Owner: the lead, one implementer lane per group · high · Next: the groups below, largest payoff first; the two snapshot
 mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
@@ -2777,7 +2776,15 @@ proves itself with `puck compile` lowering to the same document.
   an rf2 reference experiment rewrote 52 lock files and advanced System.IO.Hashing
   and FSharp.Core without `--update`. The experiment was backed up and reverted;
   rf2's final project graph needs no lock changes. Fix the non-update path in
-  `src/Puck.Cli.Gate/Locks/LockFiles.cs`, or correct its advertised contract.
+  `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
+- [medium] `host.memory heap` (`ManagedHeapWalk`) brings
+  `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
+  players run, for one diagnostic verb. Read the runtime's heap-dump events
+  in process without the package (an `EventListener` on the runtime provider
+  with the GC heap-dump keyword is the lead to check, unverified), or move
+  the walk to a `puck` verb attached over the diagnostics port, and drop the
+  reference. The verb also blocks the World for the walk (671 to 926 ms on a
+  headless debug world), since commands have no asynchronous form.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers
