@@ -61,6 +61,7 @@ internal sealed partial class PlayerCommandModule {
         );
 
         return TargetsResult(
+            caller: context.Principal,
             index: index,
             verb: "body.designate"
         );
@@ -122,15 +123,17 @@ internal sealed partial class PlayerCommandModule {
         return ((player is null)
             ? CommandResult.Error(output: error!)
             : TargetsResult(
+                caller: context.Principal,
                 index: index,
                 verb: "body.targets"
             )
         );
     }
-    private CommandResult TargetsResult(int index, string verb) {
+    private CommandResult TargetsResult(int index, string verb, Principal caller) {
         var result = default(CommandResult);
 
         m_link.Query(
+            principal: caller,
             query: new WorldQuery.PlayerTargets(Index: index),
             completion: answer => {
                 const string Prefix = "[body.targets:";

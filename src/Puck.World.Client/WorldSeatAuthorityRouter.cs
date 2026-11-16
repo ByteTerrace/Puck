@@ -189,9 +189,9 @@ public sealed class WorldSeatAuthorityRouter {
     /// <param name="tagInstance">Whether a non-boot answer is suffixed with its routed instance identity.</param>
     /// <param name="result">The routed answer, on success.</param>
     /// <returns>Whether the slot held a published claim to route through.</returns>
-    /// <param name="caller">The principal whose Observe grant the claim's authority checks, or <see langword="null"/> for
-    /// the door's own principal.</param>
-    public bool TryRouteQuery(int slot, Func<int, WorldQuery> factory, bool tagInstance, out CommandResult result, Principal? caller = null) {
+    /// <param name="caller">The principal the claim's authority answers: its Observe grant and, for a session, its live
+    /// observation decide the answer.</param>
+    public bool TryRouteQuery(int slot, Func<int, WorldQuery> factory, bool tagInstance, Principal caller, out CommandResult result) {
         if (TryRoute(slot: slot) is not { } route) {
             result = default;
 
@@ -220,22 +220,11 @@ public sealed class WorldSeatAuthorityRouter {
             routed = new CommandResult(Output: text) { IsError = answer.Refused };
         }
 
-        if (
-            (caller is { } principal) &&
-            (route.Endpoint.Submissions is IPrincipalServerLink principals)
-        ) {
-            principals.Query(
-                completion: Complete,
-                principal: principal,
-                query: factory(route.QueryIndex)
-            );
-        } else {
-            route.Endpoint.Submissions.Query(
-                completion: Complete,
-                query: factory(route.QueryIndex)
-            );
-        }
-
+        route.Endpoint.Submissions.Query(
+            completion: Complete,
+            principal: caller,
+            query: factory(route.QueryIndex)
+        );
         result = routed;
 
         return true;

@@ -37,7 +37,7 @@ public sealed partial class WorldDocument {
     private bool TryStateMembers(WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
         reason = string.Empty; evicted = null;
         if (!mutation.Principal.IsAuthority) {
-            var view = Host.RecipientView(mutation.Principal);
+            var view = Host.WriteView(mutation.Principal);
             if (!view.Admits(mutation, out var withheld)) {
                 m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
                 reason = view.Refusal("mutation", withheld);
@@ -93,5 +93,5 @@ public sealed partial class WorldDocument {
         }
     }
     private bool CheckStateExpectations(WorldMutation.Batch batch, in ArenaTime time, out string reason) =>
-        Host.RecipientView(batch.Principal).CheckGuards(batch, out reason);
+        Host.WriteView(batch.Principal).CheckGuards(batch, out reason);
 }

@@ -8,12 +8,9 @@ internal sealed partial class WorldPlacementCommandModule {
     private static readonly CommandForms WorldReflowPreviewForms = CommandForms.Of(verb: "world.reflow.preview", "<template|request-json>");
 
     private CommandResult ReflowQuery(WorldQuery query, Principal principal) {
-        if (link is not IPrincipalServerLink attributed) {
-            return CommandResult.Error(output: "[world.reflow: this link cannot attribute authoring queries]");
-        }
         var result = default(CommandResult);
 
-        attributed.Query(
+        link.Query(
             query,
             principal,
             answer => result = new CommandResult(answer.Text) { IsError = answer.Refused }

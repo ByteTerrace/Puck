@@ -261,11 +261,14 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     // Fetches the whole owned-world identity catalog over the link (WorldQuery.ProfileCatalog) and rehydrates it as
     // WorldIdentity via WorldIdentity.FromProjection — the same rehydration a federation arrival already uses.
     // Called at construction and again on a FindProfile miss. Fires inline over loopback (see IServerLink.Query's
-    // own remarks).
+    // own remarks). The roster's own bookkeeping queries (this catalog, preferences, grant and handle lookups) ask as
+    // the console: the roster is the host's local presentation, the operator's. A reply composed for a caller asks as
+    // that caller (Describe).
     private WorldIdentity[] QueryCatalog() {
         IReadOnlyList<WorldIdentityProjection>? projections = null;
 
         m_link.Query(
+            principal: Principal.Console,
             query: new WorldQuery.ProfileCatalog(),
             completion: answer => projections = (answer.Payload as IReadOnlyList<WorldIdentityProjection>)
         );
@@ -292,6 +295,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         string? name = null;
 
         m_link.Query(
+            principal: Principal.Console,
             query: new WorldQuery.PreferredControllerProfile(Device: device),
             completion: answer => name = (answer.Payload as WorldIdentityProjection?)?.Name
         );
@@ -306,6 +310,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         var verdict = default(GrantVerdict);
 
         m_link.Query(
+            principal: Principal.Console,
             query: new WorldQuery.GrantAllows(
                 Capability: capability,
                 Principal: principal,
@@ -323,6 +328,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         WorldHandle? handle = null;
 
         m_link.Query(
+            principal: Principal.Console,
             query: new WorldQuery.GrantHandleMint(
                 Capability: capability,
                 Index: index,
@@ -339,6 +345,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         GrantSubject? subject = null;
 
         m_link.Query(
+            principal: Principal.Console,
             query: new WorldQuery.GrantHandleResolve(Handle: handle),
             completion: answer => subject = (answer.Payload as GrantSubject?)
         );
@@ -1314,8 +1321,10 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     }
     /// <summary>Formats the roster for the <c>world.players</c> verb — one segment per slot, each joined slot carrying
     /// its profile name, state, owned devices (or origin), and pose.</summary>
+    /// <param name="caller">The principal the reply is composed for; each pose is asked through the query door as it,
+    /// so a pose its Observe grant or live observation does not admit reads back as that refusal.</param>
     /// <returns>A line of the form <c>[world.players: p1 amber active(keyboard1) pos=(...) yaw=...° | p2 empty | ...]</c>.</returns>
-    public string Describe() {
+    public string Describe(Principal caller) {
         var segments = new string[MaxSlots];
 
         for (var slot = 0; (slot < MaxSlots); slot++) {
@@ -1340,6 +1349,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             // WorldQuery.PlayerWhere.Index is the 0-based body index — identical to slot for a local seat, so no
             // display-number conversion is needed here (the body.* verb family's addressing convention).
             m_link.Query(
+                principal: caller,
                 query: new WorldQuery.PlayerWhere(Index: slot),
                 completion: answer => live = (answer.Payload as (IntentSource Source, string Pose)?)
             );

@@ -240,10 +240,10 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.Verb(
-            audience: CommandAudience.Anyone,
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.peers",
-            description: "Lists every body the admission door admitted: whether the host is listening (and on what endpoint), one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint — then one line per arrived traveller, naming the body, its peer principal, and the authenticated source authority its verdict was decided against, then every federation refusal this door has written, counted by its stable name. Identity fields are only ever what the door verified, never what a payload asserted. Not listening (no host.listen/--listen) prints that plainly rather than an empty table.",
+            description: "Lists every body the admission door admitted: whether the host is listening (and on what endpoint), one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint — then one line per arrived traveller, naming the body, its peer principal, and the authenticated source authority its verdict was decided against, then every federation refusal this door has written, counted by its stable name. Identity fields are only ever what the door verified, never what a payload asserted. Not listening (no host.listen/--listen) prints that plainly rather than an empty table. An operator read: live population membership, other connections' endpoints and identities and the door's refusal counts are the host's, never a recipient's.",
             valueKind: CommandValueKind.Digital,
             handler: context => {
                 if (!authority.TryResolve(

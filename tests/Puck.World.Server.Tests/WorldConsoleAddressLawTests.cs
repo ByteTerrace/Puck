@@ -28,7 +28,7 @@ public sealed class WorldConsoleAddressLawTests {
     private sealed class CountingLink(IServerLink target) : IServerLink {
         public List<WorldSubmissionPayload> Submitted { get; } = [];
 
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) => target.Query(completion: completion, query: query);
+        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => target.Query(completion: completion, principal: principal, query: query);
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
             completion: null,
             operationId: Guid.Empty,

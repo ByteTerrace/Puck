@@ -50,10 +50,7 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
 
                 var result = default(CommandResult);
 
-                if (link is not IPrincipalServerLink queryLink) {
-                    return CommandResult.Error(output: "[world.properties: no principal-scoped query door]");
-                }
-                queryLink.Query(
+                link.Query(
                     principal: context.Principal,
                     query: new WorldQuery.Properties(BodyIndex: bodyIndex),
                     completion: answer => {
@@ -71,10 +68,11 @@ internal sealed class WorldInteractionCommandModule(IServerLink link) : ICommand
             audience: CommandAudience.Operator,
             description: "Reads every live compiled interaction back (Immediate): its name, its mode, its gate-held latch (latch=held means the co-occurrence held at the last evaluation — the 'an interaction fired' echo, on the SAME terms world.rules gives a rule), its co-occurrence (which tag rows or region, and the range), and its effects.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => {
+            handler: context => {
                 var result = default(CommandResult);
 
                 link.Query(
+                    principal: context.Principal,
                     query: new WorldQuery.Interactions(),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };

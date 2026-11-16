@@ -265,7 +265,7 @@ public sealed class RestScene {
     /// an audio sink that plays nothing, and no neighbouring worlds, every body solid.</summary>
     public sealed class Inert : IServerLink, IWorldAudioCueSink, IWorldAdjacencySource {
         /// <inheritdoc/>
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) { }
+        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) { }
         /// <inheritdoc/>
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => 0L;
         /// <inheritdoc/>

@@ -55,7 +55,7 @@ internal sealed class RecordingLink : IServerLink {
     /// <param name="index">The envelope's submission index.</param>
     /// <returns>The placement row.</returns>
     public WorldPlacement Placement(int index) => ((WorldMutation.UpsertPlacement)((WorldSubmissionPayload.Mutation)Submitted[index]).Value).Placement;
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) {
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
     }
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         completion: null,
@@ -158,7 +158,7 @@ internal sealed class SwitchingLink(IServerLink target) : IServerLink {
     /// <summary>Gets or sets the link every submission goes to now.</summary>
     public IServerLink Target { get; set; } = target;
 
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) => Target.Query(completion: completion, query: query);
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => Target.Query(completion: completion, principal: principal, query: query);
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => Target.SubmitEnvelope(payload: payload, principal: principal);
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) => Target.SubmitEnvelope(operationId: operationId, payload: payload, principal: principal);
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) => Target.SubmitEnvelope(
@@ -189,7 +189,7 @@ internal sealed class GatedLink(IServerLink target) : IServerLink {
     public Task ArmHold() => (m_holding = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)).Task;
     /// <summary>Releases a held verdict to its completion, and every later one.</summary>
     public void Release() => m_released.TrySetResult();
-    public void Query(WorldQuery query, Action<QueryAnswer> completion) => target.Query(completion: completion, query: query);
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => target.Query(completion: completion, principal: principal, query: query);
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         completion: null,
         operationId: Guid.Empty,
