@@ -1,8 +1,10 @@
 # Memory budgets on Puck's target devices (brief s1-research-budgets)
 
 Research only: no source edited, no build, no World. Written for the streaming
-and memory campaign's step 2 (`docs/plans/streaming-and-memory.md`, "One byte
-authority with device readings").
+and memory campaign's device readings (`docs/plans/streaming-and-memory.md`,
+decisions 1 and 2).
+
+Step numbers in this report are the campaign outline's as it stood when the round ran: 2 one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction, 6 mapped portal demand, 7 shared lighting demand, 8 areas, terrain and moons, 9 managed churn. [The plan](../streaming-and-memory.md#the-build-order) builds the same work as its steps 1 and 3, 2, 6, 5, 4, 9, 10 and 11, in that order.
 
 How to read the citations. Every external claim carries the sentence it rests
 on and its URL. Microsoft Learn and .NET pages came back as the page's own
@@ -11,7 +13,7 @@ that returns extracted quotes; those quotes are the tool's verbatim extracts, an
 where it only paraphrased I say so. "Search summary" marks a claim seen only in
 a search engine's summary, never opened. "Inference" and "hypothesis" mark my
 own reasoning. Puck code is cited `file:line` from Read and Grep output in the
-lane's worktree at c4b40378e8.
+lane's worktree when the round ran; line numbers drift, symbols do not.
 
 ## 1. Direct3D 12 and DXGI
 

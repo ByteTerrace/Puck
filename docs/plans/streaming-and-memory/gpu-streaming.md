@@ -12,8 +12,10 @@ Local constraints from the requested documents:
 
 - `residency.md`: one selector across views and residencies; byte reservation from one physical accounting owner; offscreen shadow casters and GI blockers remain demand; misses degrade presentation only. Decision step 5 is byte-budget eviction.
 - `bake-demand-tiers.md`: bake **tier** and draw **collapse level** are different. Each tier is a complete, input-identified mesh carrying collapse levels. Whole-tier publication is currently the safety boundary. Root demand is deliberately omnidirectional so a turn can reveal any nearby group; portal demand is aperture-bounded. GPU classification exists but is not yet read back per group for demand.
-- `streaming-and-memory.md`: campaign step 2 is one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction/compacted coarse vertices, 6 mapped portal demand, 7 shared lighting demand, 8 areas/terrain/moons, 9 managed churn. These campaign numbers differ from the residency decision's numbers.
+- `streaming-and-memory.md`, as its outline stood when the round ran: campaign step 2 is one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction/compacted coarse vertices, 6 mapped portal demand, 7 shared lighting demand, 8 areas/terrain/moons, 9 managed churn. These campaign numbers differ from the residency decision's numbers.
 - Mesh-bake reference: field sampling on GPU, contouring on CPU, stored meshes; one GPU mesh region. Derived bytes are caches: eviction loses rebuild/load time, never authored truth.
+
+Step numbers in this report are the campaign outline's as it stood when the round ran: 2 one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction, 6 mapped portal demand, 7 shared lighting demand, 8 areas, terrain and moons, 9 managed churn. [The plan](../streaming-and-memory.md#the-build-order) builds the same work as its steps 1 and 3, 2, 6, 5, 4, 9, 10 and 11, in that order.
 
 ## Evidence method
 
