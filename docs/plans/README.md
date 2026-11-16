@@ -24,8 +24,10 @@ This directory holds the work that remains to be scheduled. Current architecture
 - **[Open items](open-items.md) is the queue**: one ranked Next list, the work beside it, every open owner decision, and the work packets, each one lane's worth of defects and leads. It is the only place that ranks work across programmes.
 - **A plan holds one programme's open work**: its decisions still to build, its steps, and the check that closes each. A plan states what its steps depend on, never a rank among programmes, and never a second list of what is next.
 - **This page is the only index of the plans.** A new plan is added here in the change that creates it, and a finished one leaves in the change that deletes it.
+- **A step id is unique within its plan.** Outside the plan, cite the plan's name or a link with the id.
+- **A research round's reports are records, not plans.** They are snapshots with no step, queue or owner call, and they lose to the decision and the code. They live in a folder beside the plan they feed only while that plan has open steps. The change that closes the plan writes the sources its decision rests on into the decision and deletes the folder. A review of a memo is deleted once its findings are answered.
 
-A plan's citations are evidence about the code they were written against; recheck the code before scheduling work from them. Every forcing artifact and check runs on the debug world. The quilt, the island and the One World stay quarantined in `experimental/`; what they have that the debug world lacks is ported into it ([the port packet](open-items.md#port-the-experimental-worlds-missing-features)). Research records kept beside a plan, in a folder of its name, are evidence for that plan and schedule nothing.
+A plan's citations are evidence about the code they were written against; recheck the code before scheduling work from them. Every forcing artifact and check runs on the debug world. The quilt, the island and the One World stay quarantined in `experimental/`; what they have that the debug world lacks is ported into it ([the port packet](open-items.md#port-the-experimental-worlds-missing-features)).
 
 ## State, language and rules
 
@@ -34,7 +36,6 @@ Decisions: [state and language](../decisions/state-and-language.md).
 - [State and language](state-and-language.md): the state system, its ceilings and costs, the authoring language, and the games that prove them. Forcing artifact: the debug world's rules, with Go at 19×19 and the card tables running in it.
 - [Records and pools](records-and-pools.md): the record traits rows still carry alone, and remote home adoption.
 - [Remaining rule-fault work](rule-faults.md): what the rule-fault design leaves unbuilt, differing or unmeasured.
-- [Rule evaluation proportional to change](rule-evaluation-cost.md): the rule phase's cost by mechanism, and what the landed schedules leave open.
 - [A body's state behind one write door](body-state-door.md): a body's continuation as versioned sections the compiler will not let a write bypass, and the followers that read those versions.
 - [Disclosure](disclosure.md): one per-recipient view that every read, write admission, layout and delta derives from, with a noninterference harness as the definition of done.
 - [Milestone 1 acceptance laws](acceptance-laws.md): the cross-system scenarios still unbuilt; dormant while test requirements are suspended.
@@ -66,10 +67,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 - [Bake detail bounded by demand](bake-demand-tiers.md): the demand tiers' remaining steps and the region's budget.
 - [Blends between parts that move](moving-blends.md): a blended seam that holds under continuous motion, as a skinned seam.
 - [Arrival work proportional to change](arrival-proportional.md): draw rows that keep their place, the trace scene's top level, and what a hand-over rewrites.
-- [Illumination](illumination.md): cached probe hits with a budgeted GPU relight, direct light at author scale, ambient occlusion and area lights.
-- [Graphics architecture](graphics-architecture.md): the round over probe lighting, geometry residency and submission.
-- [GI source lessons](gi-source-lessons.md) and [far-field irradiance](far-field-irradiance.md): what open GI codebases and the coarse probe levels' research teach the probe path.
-- [Frame structure lessons from open renderers](frame-source-lessons.md): submission, completion, memory admission and resource lifetime compared with open renderers.
+- [Illumination](illumination.md): direct light at author scale, ambient occlusion and area lights, and what the GPU probe trace still owes.
 - [Transmission and self-shadow](transmission.md): the shadow term a wrapped material reads past the terminator, by a body identity per cascade texel.
 - [Author shaders](author-shaders.md): a `shade` program in `.puck` over a fixed surface interface, interpreted at once and specialized in the background; its research record is in `author-shaders/`.
 - [The water feature](water.md): the debug world's water as one feature, from the arc's specification to its lanes.
@@ -91,6 +89,5 @@ Decisions: [runtime and delivery](../decisions/runtime-and-delivery.md), [machin
 Decisions: [UI](../decisions/ui.md), [input channels](../decisions/input-channels.md).
 
 - [Modeling authoring](modeling-authoring.md): the engine limits authors met and the constructs that make common modeling mistakes impossible or obvious; it awaits the owner's review.
-- [The creation library](creation-library.md): what a library of creations is in Puck's model, and the steps that pay inside one author's packages; its records are in `creation-library/`.
 - [The UI overhaul](ui.md): one retained UI tree for worlds, the engine's own surfaces, mods and diegetic screens.
 - [Editor](editor.md): the running World as the editor and debugger a builder needs.

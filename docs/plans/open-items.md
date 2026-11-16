@@ -41,15 +41,15 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the session read doors' remaining leaks, and with them the publication
    buffer's two misuse cases ([engine job system](#engine-job-system)).
 2. [high] [Residency and streaming](#residency-and-streaming): the
-   [streaming and memory campaign](streaming-and-memory.md), agreed with the
-   owner. Its review's findings are fixed in the plan first, then step 1
-   (device readings and pools) is briefed as written, with step 2 beside it.
+   [streaming and memory campaign](streaming-and-memory.md#the-build-order),
+   agreed with the owner: step 0 (a crossing read as a player takes it),
+   steps 1 and 2 beside each other, and step 7's prototype with a GPU grant.
 3. [high] [Bake detail](#bake-detail): a contour that holds a crease at any
    lattice alignment (the tour's mesh-audit reds, the Moth's shin groups),
    then moving blends step 4.
-4. [high] [Engine job system](#engine-job-system): the control plane's
-   guaranteed phase and a deadline on every cross-subsystem wait, then the
-   memo's build order from its next step.
+4. [high] [Engine job system](#engine-job-system): the memo's next step,
+   which after the scheduling stage's remainder is the control plane's phase
+   and bounded waits, then the pool's design.
 5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
@@ -59,9 +59,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    proof, built by [Water](#water)'s lanes A2 to A5.
 8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-9. [high] [Lighting and GI](#lighting-and-gi): the GPU trace and relight's
-   acceptance under a moving sun, then a cold area lit the moment a view
-   arrives.
+9. [high] [Lighting and GI](#lighting-and-gi): the probe cache reader's spin
+   now, then what the GPU trace still owes under a moving sun, then a cold
+   area lit the moment a view arrives.
 10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
     V1a, with `lane/g5` landed beside them.
@@ -148,10 +148,10 @@ running a World. A tip-only reading runs
 ([reference](../reference/cli.md#puck-bench-frames)); a before-and-after pair
 is filed with `puck measure`.
 
-- The frozen glass-shadow falls and meadow-rates requests wait on
-  [the residency wait](#residency-and-streaming), which refuses them; freeze
-  the affected World builds again once it is repaired. A longer harness wait
-  does not establish residency.
+- The frozen glass-shadow falls and meadow-rates requests wait on the
+  streaming plan's step 4, which rebuilds the `world.wait residency` that
+  refuses them; freeze the affected World builds again after it. A longer
+  harness wait does not establish residency.
 - The frame bar's readings on the RTX 2060 and the Steam Deck, which the
   [rendering plan](rendering.md) still owes.
 - The cold bake against the one-minute bar,
@@ -218,21 +218,17 @@ Sittings, each the owner's eye on a running World:
 
 Open calls, each with its sides:
 
-- **The mirror construct.** A `side` template that renumbers the Moth's right
-  half as the left's exact mirror (S11's G16, the recorded choice), or the
-  [modeling authoring plan](modeling-authoring.md)'s `mirror` block through the
-  engine's frame classification, which would supersede G16. It rides on the
-  owner's review of that plan, which comes before its slices are dispatched.
+- **The mirror construct.** G16 as recorded: each limb a template over `side`,
+  with nothing new in the language. Or the
+  [modeling authoring plan](modeling-authoring.md)'s `mirror` block, lowered
+  through `CreationFrame`, on the evidence that three lanes hand-mirrored three
+  creatures; it would supersede G16. It rides on the owner's review of that
+  plan, which comes before its slices are dispatched.
 - **Which of the Moth's halves is right** where they do not mirror: the right
   back pod's 40 parts (ids 1200 to 1240) are rotated differently from the left
   pod's (1100 to 1140), and `sideLock`'s position, `blinkCrease`'s position and
   `kneeGuard`'s profile differ. Either construct above then mirrors the chosen
   half.
-- **The cold-bake bar under demand tiers.** The one-minute bar counts what the
-  boot's views demand, with finer tiers baked as a view comes closer and
-  reported as owed detail (what [virtual geometry](virtual-geometry.md)
-  derives from the recorded rulings), or it counts every tier a tour of the
-  places can demand.
 - **The chase camera with its back to the stair wall**: swing the boom, rise
   over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -258,10 +254,8 @@ Open calls, each with its sides:
 - **A companion's wait at a door** while its hop home stays pending: the
   player may wait for it, or goes on alone and is told
   ([custody protocol](companion-redesign.md#10-owner-calls)).
-- **Transmission's looks**, each with the design's choice first
-  ([the plan's calls](transmission.md#the-owners-calls)); and the Steam Deck's
-  budgets at Full quality, three cascades inside 22.2 ms with a live-byte
-  budget at the portal stop, to confirm or set.
+- **Transmission's looks and the Steam Deck's budgets**, each with the
+  design's choice first ([the plan's calls](transmission.md#the-owners-calls)).
 - **The terrain pass's looks**: whether the +2.5 EV compensation stays now the
   meter reads the image, and how strongly distance fades toward blue
   ([terrain pass](terrain-pass.md#risks-and-owner-calls)).
@@ -310,29 +304,20 @@ and job-system plans own the mechanisms.
 ### Engine job system
 
 Owner: principal designs, another family reviews the design before any build,
-a specialist builds · high · Next: the control plane's guaranteed phase and
-the wait deadlines (first item below), then
-[the memo's build order](engine-job-system.md#6-build-order) from its next
-step. The replay burst's tick budget and `CodeDerivedTable`'s generations run
-as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
+a specialist builds · high · Next: the next step of
+[the memo's build order](engine-job-system.md#6-build-order), which states the
+order once: the scheduling stage's remainder, the control plane's phase and
+bounded waits (C0), then the pool's design (J1). The garbage-collection cuts
+below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
+beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
 - [high] Concurrency is hand-rolled across the engine (`lock`, `Task.Run`,
   `new Thread`, `ThreadPool`, `Parallel.For`), densest in the bake and
-  irradiance code. The walkthrough tour's stall was one case: presentation
-  waiting on lighting convergence starved the console, against the host
-  loop's contract that control work progresses on held iterations. In order:
-  - give the control plane (console, MCP, input) a guaranteed phase of the
-    host loop, and every cross-subsystem wait a deadline and a named reason;
-    headless, and not yet a step of the memo;
-  - move every pool and handoff onto `Puck.Hosting.Jobs` (the memo's J1) and
-    refuse `Task.Run`, `new Thread` and `ThreadPool` outside it with an
-    analyzer, switched on with `puck scan`'s `LockAnalyzer` per migrated
-    project, with no recorded allowlist;
-  - make thread ownership of the state arena, the frame thread and each GPU
-    queue a checked type, and prefer publish-once handoff to shared state
-    under locks;
-  - research a systematic schedule explorer for .NET (Microsoft Coyote)
-    beside the `--workers` harness, since these defects rarely show in one run.
+  irradiance code; the memo's C0 and J1 move it. Beside them: make thread
+  ownership of the state arena, the frame thread and each GPU queue a checked
+  type, prefer publish-once handoff to shared state under locks, and research
+  a systematic schedule explorer for .NET (Microsoft Coyote) beside the
+  `--workers` harness, since these defects rarely show in one run.
 - [high] `PublishBuffer<T>` admits two misuses its stress harness reproduced
   (every balanced race passed): a `Lease` disposed twice decrements its slot's
   reader count twice, which corrupts another reader's count and strands the
@@ -346,16 +331,13 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   writes run under it. A frame-thread attach (loopback transport, a session
   screen) could read the arena while a federation or socket thread writes it.
   Route the attach through the authority operation as a peer's attach does,
-  with a lock-order audit of its callers; it goes with the guaranteed phase.
+  with a lock-order audit of its callers; it goes with C0.
 - [high] Remaining managed allocation churn, read on the windowed Release
   debug World with `dotnet-trace --profile gc-verbose`; zero steady gen0 is
   not reached. In measured order:
-  - Steady frame: the landed probe blocks (`SdfMeshIrradiance.Batch`'s
-    `ProbeBlock` and `LightBlock`) are the probe cache's own storage, held
-    whole by readers outside the gate, so recycling needs an epoch or a slab
-    with per-entry ownership (the memo's M2b; recheck it against the GPU
-    trace's ownership first). `ProbeCache.Retain` replaces the cache's table
-    whole and `Grow` again as probes land. Then the dressed `SdfFrame` copies.
+  - Steady frame: `ProbeCache.Retain` replaces the probe cache's table whole
+    and `Grow` again as probes land (what the cache keeps is the streaming
+    plan's lighting step's). Then the dressed `SdfFrame` copies.
     On the bake writer thread `CacheRetention.EnforceSetsCore` enumerates the
     store on every write. Small: `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,
@@ -398,13 +380,8 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   and selector commits synchronize every owner (`WorldInputRuntime.Effects.cs`).
   It is a State and Server design with its own cross-family review, taken
   after T1 to T3 measure what remains serial.
-- [medium] The rule phase's remaining volatile and visit costs, as
-  `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
-  version (the chess sweeps), a placement-pose move marks its readers in full
-  (`go-read-stones` is visited every tick), and a moved row re-judges every
-  binding of a sweep. [The rule-evaluation memo](rule-evaluation-cost.md#what-it-leaves-open)
-  lists each. Speculated gates on the pool wait for a sheet that shows
-  hundreds of non-firing versioned evaluations a tick.
+- [medium] The rule phase's remaining volatile and visit costs are the memo's
+  ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most lies in the serial tail or the subscribers'
   `DeliverSnapshot`: profile it before T3 or R1 assumes otherwise. The
@@ -415,11 +392,6 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   and a held body shows its held pose for the one frame the rate views lag a
   camera cut, since the cameras resolve after the pack
   (`PresentationRate.Holds`, `MotionReach`).
-- [low · held] Parallel recording of the frame's nodes (the memo's R1) waits
-  until a workload's serial record sum (`render.record`'s
-  `record-microseconds`) is several milliseconds with its critical path well
-  below it. It also needs a thread-safe pipeline cache lookup, a counting
-  recorder and per-worker command pools first.
 - A remote `WorldSessionMirror`'s per-property pose reads
   (`WorldSessionSceneEmitter`) against its socket thread's in-place delivery
   can compose a frame from two ticks. Use the coherent-copy path the adjacency
@@ -563,17 +535,8 @@ The frame thread's CPU work, largest first:
   motion faster than any seen shows one step past the two-pixel rule. Draw
   count is V1's. The meadow is also R1's forcing workload: measure produce's
   draw-recording share before and after.
-- [medium] The visibility measurements still owed
-  ([measure first](visibility.md#measure-first)): M2 on the RTX 2060 and the
-  Deck; one screen or portal session node and one nested-view node per pass
-  (`world.counters gpu node`), whether session nodes draw cascades under
-  `ReducedQuality`, and which sessions are residencies of their own;
-  `world.gpu-timing` per pass with poses as authored and held, since nothing
-  names where holding poses saved GPU time. Unexplained in the same
-  quiet-machine trace: a Direct3D 12 lobby produce well above its
-  CPU-selection controls, a stripe difference beyond the pinned noise on the
-  lobby's static striped monitor face, and a draw count at the meadow that
-  once differed by an order of magnitude between backends.
+- The visibility measurements still owed, and the unexplained readings beside
+  them, are [the visibility plan](visibility.md#what-the-measurements-showed)'s.
 - [medium] `PackagesBeginFrame` carries milliseconds of host work a frame
   (`RenderGraphRuntime`): the residency's capture
   (`SdfWorldResidency.Capture`), the pack and `StageChangedDraws`. Attribute
@@ -866,35 +829,12 @@ reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 1, device readings and pools on the account, once its review's findings
-are fixed in the plan. The plan owns the decisions, the build order and each
-step's reading, on [the residency decision](../decisions/residency.md). This
-packet holds the defects and leads beside it.
+step 0, the seam walk as a run, with steps 1 and 2 beside each other and step
+7's prototype under a GPU grant. The plan owns the decisions, the build order
+and each step's check, on [the residency decision](../decisions/residency.md):
+the residency wait, background GPU work's budget, the region's budget, staging
+and every memory owner are its steps. This packet holds the defects beside it.
 
-- [medium · unconfirmed] `world.wait residency` refuses or times out after
-  `world.wait bakes` succeeds and presented captures complete: in the painting
-  wing on both backends, and under two frozen measurement requests. The plan's
-  step 4 rewrites the wait over every held residency; first tell continuous
-  new demand from an upload completion that cannot retire
-  (`WorldWaitCommandModule`'s `ArmBakes` predicate).
-- [medium] Background GPU work is paced by presentation. `SdfGpuWork`'s jobs
-  run on the presenting queue and take work only at frame pumps, so a slow
-  present paces the bake and probe lighting arbitrarily slowly, a job that
-  completes mid-frame waits for the next frame, and
-  `SdfGpuWork.MostCreditSeconds` turns the budget into a fixed amount per pump
-  below 60 Hz, against the class's contract that budgets are rates of wall
-  time. Its submissions also sit outside the frame's batch, about one
-  unbatched execute a frame. Service it during the host's present wait or on
-  its own queue, with the credit cap and the bake's admission
-  (`SdfMeshPathBake.Backlogged`) made rates; a waiter on the slots' fences
-  needs thread-safe submission. It belongs with the plan's one background GPU
-  budget (step 3).
-- [medium] What the region's budget leaves beside the plan's observed-use
-  step: the detail bias is taken back only after `SdfMeshTier.BiasQuietFrames`
-  quiet frames, so a place left under pressure stays coarse that long; a warm
-  start's first plan lands before the residency reports its limit; and
-  `world.wait bakes` returns before the lighting's trace scene has rebuilt
-  over the swapped meshes.
 - `world.instance.stop` on a routed world leaves that world's per-view
   residencies (`session$N$2`) in `world.residency`, and at the meadow stop the
   garden painting's windows stay scheduled as `waiting` for hundreds of ticks.
@@ -912,9 +852,10 @@ packet holds the defects and leads beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
-- Readings residency leaves untaken: program build and replan against more
-  than one placement count, and time to the occupied area after a document
-  edit that renumbers materials.
+- A hand-over's draw-list rebuild is
+  [arrival work proportional to change](arrival-proportional.md)'s, filed
+  under [frame-time findings](#other-frame-time-findings); the capture feed's
+  idle cost is [media](#media-and-capture)'s.
 
 Lifecycle lows, each argued from source and not run:
 
@@ -940,50 +881,31 @@ Lifecycle lows, each argued from source and not run:
 
 #### Memory on the Deck tier
 
-[high] The debug world's process plus GPU memory stays at or under 10 GB on
-the Deck tier at every settled checkpoint. A warm windowed World holds well
-past that on a unified-memory device, a tour roughly doubles it and the cold
-bake passes it by a wide margin; headless is a fraction of a gigabyte. The
-plan owns the work: readings and pools (step 1), an owner for every gigabyte
-(step 2), one reservation (step 3), what a landed mesh keeps on the CPU
-(step 6) and the lighting's bytes (step 9).
-
-Until step 2's owner rows replace it, a reading starts with
-`host.memory collect`. The layers overlap and are never added: process private
-bytes include the device heaps' write-combined address space, and the backend
-ledger (`GpuDeviceMemoryWork`, in `host.memory owners 0`) agrees with the OS
-`GPU Process Memory` counters up to driver and swapchain memory. A page walk
-splits process regions by type and residency, and a suspended ClrMD walk names
-managed owners.
-
-Leads the plan's steps do not name:
-
-- After a cold bake the host-visible ledger stays above a warm boot's: placed
-  host-visible buffers released inside a shared arena heap free their range
-  but keep the heap while any other buffer sits in it (`DirectXHeapArena`),
-  and region staging buffers grow with landing.
-- A pagefile-backed 1 GiB section is created by no Puck code; the .NET
-  executable allocator's double mapping and the driver are the candidates.
-- A player's build keeps the composed-document store for the life of the
-  process: nothing calls `WorldDefinitionFileSource.ForgetComposedDocuments`,
-  and the authoring document tree may stay after compiling too. Confirm what a
-  reload reads, and release what a booted compiled world no longer does.
-- The tour's memory peak at the garden crossing is in
-  [sweep](#sweep-and-visual-checks).
+The memory bar and every owner under it are the plan's: the bar is read by
+[its recipe](streaming-and-memory.md#how-the-bars-are-read), and
+[what adds and what only names](streaming-and-memory.md#what-adds-and-what-only-names)
+says how a reading is taken. The tour's memory peak at the garden crossing is
+in [sweep](#sweep-and-visual-checks).
 
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
-the GPU trace and relight's acceptance
-([illumination](illumination.md#the-build-order), step 3): attribute the
-remaining lockstep relight cost under a moving sun and the outdoor
-CPU-reference discrepancy; then light a cold area from the coarser levels or
-the sky term the moment a view arrives. The
+the probe cache reader's spin, dispatched now; then
+[what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
+plan's step 3: the moving-sun lockstep drain and the outdoor difference from
+the CPU reference; then a cold area lit from the coarser levels or the sky
+term the moment a view arrives.
+[The plan](illumination.md#the-build-order) owns the steps, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
+- [high, dispatch now] The probe cache's reader retries with
+  `Thread.SpinWait` while an entry is published, which breaks the host rule
+  (AGENTS.md: no spinning in place of a wait). Replace it with stable
+  publication or a host wait; it does not wait for the streaming plan's
+  lighting step.
 - [high] A view-driven retier relights the whole window: a landed retier is a
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
@@ -997,10 +919,11 @@ The volume's cost and convergence:
   and a residency no scheduled render reads is not driven (`SdfGpuWork.Drive`
   runs from a view's staging). Propagate the hold to the consumers the
   schedule shows, and drive every residency that owes lighting.
-- Attribute `SdfMeshIrradiance.DescribeRelightReference`'s outdoor next-bounce
-  discrepancy at `world.probe -3 1 -5 0 1 0`, after the fixed outdoor visit
-  with the day held. Separate retraced hit differences, shadow rays and the
-  CPU and GPU feedback gathers before naming a cause.
+- A lead for the plan's outdoor attribution:
+  `SdfMeshIrradiance.DescribeRelightReference`'s next-bounce discrepancy shows
+  at `world.probe -3 1 -5 0 1 0` after the fixed outdoor visit with the day
+  held; separate retraced hit differences, shadow rays and the CPU and GPU
+  feedback gathers before naming a cause.
 - [medium] A camera sample is traced and relit on the frame thread, under the
   volume's gate, whenever the lighting version advances
   (`SdfMeshIrradiance.CameraRadiance`), outside the relight budget: always
@@ -1038,10 +961,6 @@ The volume's cost and convergence:
   night, since ranges follow the darkest exposure any key reaches
   (`WorldRenderExposure.Resolve`). Size ranges by the live floor if the cost
   shows.
-- [medium · unconfirmed cause] The resolve pass has read many times the GPU
-  cost reference's figure on the main view under a loaded CPU; repeat it
-  quiet ([step 0](illumination.md#step-0-open-checks), whose Deck leg is also
-  unmeasured).
 
 What the light gets wrong:
 
@@ -1114,16 +1033,14 @@ What the light gets wrong:
   patch on a middle tread, absent in its baseline; isolate geometry and the
   moving bake from probe interpolation. The Vulkan sweep also flags the
   cumulative moving-bake cap counter rising, cause unisolated.
-- [medium] The coarse probe levels' far field: the 32 m level still answers 18
-  corners across a slab at the four-storey hall's end (`far-exact-blocked`),
-  taps that never met the slab; a per-probe visibility lattice would remove
-  them. The level table is engine data (`SdfMeshIrradiance.LevelsOf`) a world
-  cannot choose. Also open from [the far-field memo](far-field-irradiance.md):
-  a sparse finest level, an authored `indirect` region, higher angular
-  resolution for coarse surface maps. Re-check the far-wall stops
-  (`finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`,
-  `rate-range`, `camera-course`, `stage`, `jump`, `flight`, `noclip`, the
-  garden return portal).
+- [medium] The coarse probe levels' far field, beside the plan's
+  coarse-level visibility step: the level table is engine data
+  (`SdfMeshIrradiance.LevelsOf`) a world cannot choose beside
+  `render.indirect`'s tier, and coarse surface maps may want higher angular
+  resolution if an atrium taller than its probe planes still seams. Re-check
+  the far-wall stops (`finding-teal-roof`, `gallery-entrance`, `devices`,
+  `desktop`, `rate-range`, `camera-course`, `stage`, `jump`, `flight`,
+  `noclip`, the garden return portal).
 - [low] At a camera cut the exposure snaps to the first image rendered after
   it, shaded with the previous place's held `airLight`, so walking indoors
   gives a short dim transient. Snap only after a fresh camera sample
@@ -1138,11 +1055,8 @@ What the light gets wrong:
   converges toward the multi-bounce limit, so interiors lit mostly by bounce
   may read brighter than intended and a switched-off lamp's bounce fades over
   the sweeps.
-- Indoors a cel style tints bounced light as its shadow band;
-  `world.debug-view shadow` paints unqueried pixels white like lit ones; the
-  valley waits for the terrain pass's static cascade, since stretching the far
-  cascade over it costs too much. The direct-light checks and the frame bar
-  are owed again on the moving day cycle.
+- Indoors a cel style tints bounced light as its shadow band, and
+  `world.debug-view shadow` paints unqueried pixels white like lit ones.
 - The day cycle's hold is `world.row.set state day advance …`, which no
   authored command may run. A rule effect that writes a row's advance rate
   would make it a `commands` row or a binding.
@@ -1272,14 +1186,16 @@ frame and the pixel-pass gap at locked clocks.
 - [low · unconfirmed] `SdfMeshProbeGpuWork.Scene.cs` fills a merged upload gap
   with the new export's view of the words, so words only the old published
   scene owns would be zeroed if that upload were cancelled.
+- Full GPU-based validation at the standard stops after the Direct3D 12
+  caller-stated layouts and batched submission: the attempted run did not
+  complete.
 
 ### Author shaders
 
-Owner: rendering · ordinary · Next: [the memo](author-shaders.md#6-implementation-steps)'s
-step 2 readings on the RTX 2060 and the Deck, then step 5, the work bound
+Owner: rendering · ordinary · Next: [the memo](author-shaders.md#the-remaining-steps)'s
+step 2 legs on the RTX 2060 and the Deck, then step 5, the work bound
 calibrated and the device-loss quarantine, then step 6, the engine's layers
-migrated to standard programs. Step 6 names what replaces the live `toonSelect`
-style switch before it deletes the toon style's shading half.
+migrated to standard programs.
 
 - [medium · unconfirmed] One authored program edit compiles two sets:
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
@@ -1491,9 +1407,10 @@ collider, then the lifecycle lows as one pass.
 ### The valley's terrain
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the [terrain pass](terrain-pass.md#order-of-work)'s step 1 remaining
-checks, with steps 2 and 3 and step 4's bound fix in parallel; its material
-step waits on authored shading, which owns that mechanism. Relief contact is
+Next: the [terrain pass](terrain-pass.md#order-of-work)'s step 1 checks, with
+step 2 and step 4's bound fix in parallel; step 3's kernel edit is batched
+behind the bake fundamental, and step 6's terrain programs wait on the shader
+plan's bins. Relief contact is
 [certified field contact](#certified-field-contact).
 
 - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal`
@@ -1529,10 +1446,11 @@ intent is in its guide.
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
   where they are missing ([water](#water)).
-- [parked, the owner's ruling] Cel shading stays off: no fourth attempt at the
-  treatment and no step that turns it on, until the owner raises it again.
-  What lands on its own is `lane/toon-3`'s fix to `world.toon off`, which
-  suppresses every cel style, a material's own included. Waiting with it:
+- [parked] Cel shading stays off until the owner raises it again
+  ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
+  The one step
+  that lands is `lane/toon-3`'s fix to `world.toon off`, which suppresses
+  every cel style, a material's own included. Waiting with the treatment:
   which of the Moth's slots band (all 31 do today through `toonSelect`), and
   the third model's record, which fixed the washed-out shade and then broke
   shade into blotches, with near-black planes where the direction wants warm
@@ -1648,6 +1566,10 @@ does not.
   falls; inspect those witnesses through the audit's image output.
 - [low] `water.speed 60` also runs the day clock, so stage captures come out
   at night; the tour's rows must pin the day.
+- [low] A stage checkpoint: a verb that saves and restores a live arena with
+  its lattices and bodies (what `replay.record` snapshots at its arm,
+  `WorldPersistence`), so a stage of a long simulated arc is a file a windowed
+  World loads. Build it when a second long-arc feature wants it.
 - [low] A pixel shades two glass interfaces; past three front faces only the
   nearest is shaded. A 64-bit atomic k-buffer would lift the count. The glass
   kernel's register count on the RTX 2060 decides whether a third fits.
@@ -1730,6 +1652,19 @@ Federation and transfers:
   edits and active `Observe`, `Reserve` and `Route` sessions in
   `WorldPeerHost`, and handle `WorldDisclosureTier.Frames` in
   `WorldFederationCodec.EncodeDocument` without throwing.
+- [medium] Held input does not carry across an authority crossing:
+  `WorldTransferActionContinuity` resets holds, edges and partial patterns,
+  where the seam ruling names dropped input as a seam and
+  [valley and moons](valley-and-moons.md#phases)' phase 6 says held input
+  carries exactly once. Carry it through the seat's existing command path,
+  never a second input route.
+- [medium] Sound does not carry across a crossing: `WorldAudioDirector`
+  re-enters an emitter from silence when its identity changes, and no plan
+  owns continuity; the [audio reference](../reference/audio.md) is the
+  mixer's contract.
+- [medium] Prediction and rollback for remote play has no design.
+  [Readable interaction](readable-interaction.md)'s step 5 depends on it, and
+  its step 0 research round covers it.
 - Signed remote write-back is
   [remote home adoption](records-and-pools.md#remote-home-adoption); it needs
   the hub plan's write door and award commit and
@@ -1965,6 +1900,10 @@ lane's.
   machines its stopped-machines import does not stop, and each root tick
   advances four authorities. Remove the avoidable companion workload, keeping
   the scenarios' claims.
+- [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
+  cannot capture pumped addon guests or a stepped machine without durable
+  checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
+  stepped machine: the message names a condition that no longer refuses.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.
@@ -2017,9 +1956,9 @@ hang, then the spelling pairs, then the unreproduced language findings.
   - `ternary-fold`: a compile-time constant condition in a gate is not folded,
     so it lowers to a dearer rule program
     ([G14](state-and-language.md#designs-chosen)).
-  - A literal `rotation` is lowered in one sign on shape rows only
-    (`WorldDocumentRowDefaults.CanonicalizeRotation`); text runs, placements
-    and animation frames keep the authored sign.
+  - A literal `rotation` is lowered in one sign on shape rows only; the
+    [modeling plan's S2](modeling-authoring.md#5-implementation-slices)
+    applies the one helper to text runs, placements and animation frames.
   - The cost pairs two documents cannot share (static placements against one
     creation, `wall - opening` against its box tiling, a mirrored pair against
     a `symmetry` fold, union shape order, `x += 3` against `x = x + 3`) need a
@@ -2070,10 +2009,6 @@ hang, then the spelling pairs, then the unreproduced language findings.
   has no implementation: no code puts or gets a creation document outside a
   projection. Build it when a creation-library step needs it, or delete the
   remark.
-- Creation steps that pay inside one author's packages
-  ([the memo](creation-library.md)): declared controls and presets, field
-  extents in `creation stats`, the recorded expansion on each emitted
-  prototype, a shared role table, and creations in the cost report.
 - Decide (the language lane's call): whether a rule's effect list merges by
   `key` when a template is re-expanded over a basis. A rule whose effects
   write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses
@@ -2232,8 +2167,6 @@ retirement.
   ([toolchain cautions](../development/contributing.md#hardware-and-toolchain-cautions));
   on each SDK bump, scan a running World's jitted methods for the pattern
   before removing the attribute.
-- Deferred by the owner: mesh shipping. Nothing is built until a presenting
-  client downloads packages, and then on a self-hosted GPU runner.
 
 ### Provider independence
 
@@ -2370,8 +2303,10 @@ Boot:
   bubble, removing the first crossing's JIT and the `System.Text.Json` generic
   instantiations (`WorldJsonSourceContext`), about a third of a headless
   boot's first-compiled methods; a windowed World compiles about three times
-  a headless one's. Local builds stay IL. Measure JIT count, the first
-  crossing's frame, boot time, publish size and publish time before and after.
+  a headless one's, partly from `WorldCodeWarmer`. Local builds stay IL.
+  Measure JIT count, the first crossing's frame, boot time, publish size and
+  publish time before and after; the streaming plan's seam walk reads the
+  first crossing's JIT, loader and pipeline-state hitch in a fresh process.
 - Prepare machine content once per input: every boot compiles the debug
   world's `.puck` cartridges again (`CartridgeSource.Prepare`). Key a cache by
   the inputs the compile read, as `WorldCompileCache` keys a world compile; it
@@ -2735,6 +2670,15 @@ validation that makes the skill suites believable.
   capability table (`maths-usage`'s Choose table is the model), starting where
   copies were found: the world deal and placement code, and collections and
   comparers.
+- [low] Landed history the plans consolidation left in place, for a next
+  pass: `state-and-language.md`'s S11 descriptions of landed G-items; the
+  "(landed)" markers in section 6 of `mmo-foundations/synthesis.md`;
+  `hub-and-saves.md`'s M1 narrative; `acceptance-laws.md`'s implemented
+  fixtures; `machines-and-cartridges.md`'s "In place:" status;
+  `editor.md`'s red-leg law tests; and reference moves owed:
+  `records-and-pools.md` sections 1 to 4 to `docs/reference/state`,
+  `updater-policy.md`, editor E5 and E9, the demand tiers' invariants, and
+  water's "as built" sections.
 - [low] Pages still cite canaries that moved to
   `experimental/tests/Puck.World.Canaries` (`docs/reference/audio.md`,
   `src/Puck.World/Audio/README.md`, `docs/reference/physics.md`,
@@ -2942,6 +2886,37 @@ Looks and rules of play held in engine code:
 
 The standard's own surface:
 
+- [ordinary] The standard package's families as a library (the owner's answer:
+  the library is this repository;
+  [decision](../decisions/engine-design.md#the-creation-library-is-this-repository)).
+  Each is a step with its check:
+  - `puck creation stats` prints a creation's field extent and ground contact.
+    Check: `puck creation stats --world worlds/debug/debug.puck --prototype
+    lawn-oak-0` prints an extent, and the walker's reads its authored height.
+  - Declared controls and presets on the standard's families: a parameter's
+    unit, range and meaning, and named presets. Check: the lawn's three oaks
+    are presets by name with unchanged pins, and `puck lint` refuses an
+    argument outside a declared range by name.
+  - The compiler records the template and arguments that produced a prototype,
+    in the compiled document beside its pin. Check: two worlds' expansions of
+    one call show one recorded expansion and one pin; a hand-written prototype
+    shows none.
+  - A shared role table in the standard that every family reads by default.
+    Check: one override by id recolours every foliage family in a scratch
+    world, and the mesh store gains no entry.
+  - Creations in the source-attributed cost report (`WorldCostAnalysis`), with
+    a bake-independent estimate per item, since shape count is no cost proxy.
+    Check: `world.budget` names the `.puck` span that wrote the Moth's largest
+    group.
+  - A browser of placeable creations: the gallery is hand-built, and nothing
+    lists what a package offers to place.
+  - Named attachment frames are
+    [the modeling plan's S5](modeling-authoring.md#5-implementation-slices).
+- [low] The inline mesh path (`WorldPrototypeMesh`) is validated, pinned and
+  extended by the transmission plan's `solid`, and no world authors one. It is
+  a product capability nothing calls, so it is wired or covered, not deleted
+  (AGENTS.md, "Unreached is not unwanted"); the transmission plan is its
+  nearest owner.
 - Overlay text is spread too wide: each character advances a padded atlas
   cell, not the font's advance. Decide whether overlay mono text renders at
   its nominal size (a 12 px run's em is 10.4 px today).
@@ -2973,7 +2948,7 @@ The standard's own surface:
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the authored render passes (lane 1)
 and the second seat (lane 5) ahead of parallel view recording, then the quilt
-(lane 2) with the streaming plan's areas-and-chunks step, in
+(lane 2) with the streaming plan's areas-and-tiles step, in
 [the plan's order](port-experimental.md#lanes-in-order). Each lane opens by
 confirming its site in the debug world and its work-budget share.
 
@@ -3274,6 +3249,11 @@ content on the owner's call.
   embedded outside the tick); and an agent playtest participant that tours the
   world and reports what it cannot reach or read. The wiring runs on the
   `puck-fixture` generator and a stub chat client.
+- [medium] The streaming campaign's scale workloads and walk
+  ([the seam walk](streaming-and-memory.md#the-seam-walk)): a hub of large
+  worlds and a crowd of distinct looks, and the three seam-walk route
+  segments: the valley into the gallery, a painting portal into the garden,
+  and the lift.
 - [medium] The lift (`worlds/debug/hall.puck`), the owner's example of polish
   as engine systems doing real work, on the owner's go: its displays as one
   emulated machine running an authored cartridge, mirrored to every panel and

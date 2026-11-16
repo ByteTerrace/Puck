@@ -792,7 +792,7 @@ laws exercise that boundary.
   becoming retained slack) and the claims move with it
   (`SdfMeshClaims.Move`). A replacement that changes a group's piece or
   copy count rebuilds the dresser's topology and stages every record once
-  ([open](../../../../docs/plans/open-items.md#residency-and-streaming)).
+  ([open](../../../../docs/plans/open-items.md#other-frame-time-findings)).
   `SdfMeshPathBake.Pending` stays true while a product waits, so
   `world.wait bakes` and a lockstep frame wait for it;
   `SdfMeshPathBake.DrawsPending` leaves the waiting products out, and a
